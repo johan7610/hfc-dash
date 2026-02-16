@@ -1,4 +1,15 @@
 <?php $__env->startSection('nexus-content'); ?>
+    <div class="flex justify-end mb-6">
+        <div class="text-right">
+            <form method="POST" action="<?php echo e(route('logout')); ?>">
+                <?php echo csrf_field(); ?>
+                <button type="submit" class="text-sm font-medium text-red-600 hover:text-red-800">Logout</button>
+            </form>
+            <div class="text-xs text-gray-500 mt-1"><?php echo e(auth()->user()->name ?? 'User'); ?></div>
+            <a href="/make-me-admin" class="text-xs text-indigo-600 hover:text-indigo-800 block mt-1">Grant Admin Rights</a>
+        </div>
+    </div>
+
     
     <div class="nexus-kpi-grid mb-6">
         <?php if (isset($component)) { $__componentOriginalcebc3fa82c387e68e5e1cf4e6d1130af = $component; } ?>

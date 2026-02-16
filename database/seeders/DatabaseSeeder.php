@@ -5,7 +5,7 @@ namespace Database\Seeders;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;   // ← ADD THIS LINE
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
@@ -16,13 +16,23 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // Ensure test admin user exists
         User::updateOrCreate(
             ['email' => 'Test@hfcoastal.co.za'],
             [
                 'name' => 'Test User',
                 'password' => Hash::make('Test@1024'),
                 'email_verified_at' => now(),
+                'role' => 'admin',   // important for permissions
             ]
         );
+
+        // Call all other seeders
+        $this->call([
+            NexusPermissionSeeder::class,
+            MultiDemoSeeder::class,
+            DemoSeeder::class,
+            RichDemoSeeder::class,
+        ]);
     }
 }

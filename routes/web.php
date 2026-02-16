@@ -33,6 +33,15 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
+    // TEMP: Grant admin rights to current user
+    Route::get('/make-me-admin', function () {
+        /** @var \App\Models\User $user */
+        $user = auth()->user();
+        $user->role = 'admin';
+        $user->save();
+        return redirect()->route('nexus.dashboard')->with('success', 'You are now an Admin.');
+    });
+
     // Ellie (AI Assistant)
     Route::get('/ellie', [\App\Http\Controllers\EllieController::class, 'index'])
         ->middleware('verified')
@@ -424,4 +433,3 @@ Route::middleware(['auth', 'verified'])->prefix('nexus')->group(function () {
     Route::post('/role-manager/user-role', [NexusRoleManagerController::class, 'updateUserRole'])
         ->middleware('admin')->name('nexus.role-manager.user-role');
 });
-

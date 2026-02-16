@@ -1,6 +1,17 @@
 @extends('layouts.nexus')
 
 @section('nexus-content')
+    <div class="flex justify-end mb-6">
+        <div class="text-right">
+            <form method="POST" action="{{ route('logout') }}">
+                @csrf
+                <button type="submit" class="text-sm font-medium text-red-600 hover:text-red-800">Logout</button>
+            </form>
+            <div class="text-xs text-gray-500 mt-1">{{ auth()->user()->name ?? 'User' }}</div>
+            <a href="/make-me-admin" class="text-xs text-indigo-600 hover:text-indigo-800 block mt-1">Grant Admin Rights</a>
+        </div>
+    </div>
+
     {{-- KPI Cards --}}
     <div class="nexus-kpi-grid mb-6">
         <x-nexus-kpi-card
