@@ -78,12 +78,6 @@
                     <div class="text-lg font-semibold text-gray-900">{{ $branchName }}</div>
                     <div class="text-xs text-gray-600 mt-1">
                         Deal Register Market Averages
-                        @php
-                            $st = [];
-                            if (!empty($sf['pending'])) $st[] = 'Pending';
-                            if (!empty($sf['granted'])) $st[] = 'Granted';
-                            if (!empty($sf['registered'])) $st[] = 'Registered';
-                        @endphp
                         @if(!empty($dateFrom) && !empty($dateTo))
                             <span class="ml-2"><b>Window:</b> {{ $dateFrom }} -> {{ $dateTo }}</span>
                         @endif

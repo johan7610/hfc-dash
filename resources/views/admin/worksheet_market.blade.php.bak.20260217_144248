@@ -31,7 +31,10 @@
       </div>
     </div>
 
-    <form method="GET" class="flex flex-wrap gap-3 items-end">      <input type="hidden" name="period" value="{{ $period }}" />
+    <form method="GET" class="flex flex-wrap gap-3 items-end">      <div>
+        <label class="block text-xs font-medium text-gray-700">Period (YYYY-MM)</label>
+        <input name="period" value="{{ $period }}" class="mt-1 border rounded p-2 text-sm w-28" />
+      </div>
 <div>
         <label class="block text-xs font-medium text-gray-700">Window</label>
         <select name="avg_window" class="mt-1 border rounded p-2 text-sm">
@@ -78,12 +81,6 @@
                     <div class="text-lg font-semibold text-gray-900">{{ $branchName }}</div>
                     <div class="text-xs text-gray-600 mt-1">
                         Deal Register Market Averages
-                        @php
-                            $st = [];
-                            if (!empty($sf['pending'])) $st[] = 'Pending';
-                            if (!empty($sf['granted'])) $st[] = 'Granted';
-                            if (!empty($sf['registered'])) $st[] = 'Registered';
-                        @endphp
                         @if(!empty($dateFrom) && !empty($dateTo))
                             <span class="ml-2"><b>Window:</b> {{ $dateFrom }} -> {{ $dateTo }}</span>
                         @endif
@@ -110,7 +107,10 @@
             </div>
 
             <form method="POST" action="{{ route('admin.worksheet-market.store', request()->query()) }}">
-                @csrf      <input type="hidden" name="period" value="{{ $period }}" />
+                @csrf      <div>
+        <label class="block text-xs font-medium text-gray-700">Period (YYYY-MM)</label>
+        <input name="period" value="{{ $period }}" class="mt-1 border rounded p-2 text-sm w-28" />
+      </div>
 <input type="hidden" name="branch_id" value="{{ $bid }}"/>
 <div class="overflow-x-auto">
     <table class="min-w-full text-sm">
@@ -207,5 +207,4 @@ document.addEventListener('change', function (e) {
 });
 </script>
 </x-app-layout>
-
 

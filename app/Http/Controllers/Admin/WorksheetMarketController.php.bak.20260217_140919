@@ -53,27 +53,30 @@ $agents = DB::table('users')
                   'avg_sale_price_ex_vat' => (float) $r->avg_sale_price_ex_vat,
                   'effective_commission_percent_ex_vat' => (float) $r->effective_commission_percent_ex_vat,
               ])->all();
-        // ---- Admin: per-branch market averages (uses Deal Register + branch-local market) ----
-        $avgWindow = (string) $request->get('avg_window', 'period'); // period|3m|6m|all
+// ---- Admin: per-branch market averages (uses Deal Register + branch-local market) ----
+        $avgWindow = (string) $request->get('avg_window', 'period'); // period|3m|6m|all        // Stage filters: because the view posts hidden 0/1 fields, read VALUES (not has()).
+        $rawPending    = $request->input('st_pending', null);
+$rawGranted    = $request->input('st_granted', null);
+        $rawRegistered = $request->input('st_registered', null);
 
-        // Stage filters: read input values (checkboxes may be absent on GET).
-                $hasStageParams =
-            $request->has('st_pending') ||
-            $request->has('st_granted') ||
-            $request->has('st_registered');
+        $hasStageParams =
+            ($rawPending -ne null) -or
+            ($rawGranted -ne null) -or
+            ($rawRegistered -ne null);
 
         $stageFilter = $hasStageParams
             ? [
-                'pending'    => $request->has('st_pending'),
-                'granted'    => $request->has('st_granted'),
-                'registered' => $request->has('st_registered'),
+                'pending'    => ((string) $rawPending    -eq '1'),
+                'granted'    => ((string) $rawGranted    -eq '1'),
+                'registered' => ((string) $rawRegistered -eq '1'),
               ]
             : [
                 'pending'    => true,
                 'granted'    => true,
                 'registered' => true,
               ];
-$periodStart = \Carbon\Carbon::createFromFormat('Y-m', $period)->startOfMonth();
+
+        $periodStart = \Carbon\Carbon::createFromFormat('Y-m', $period)->startOfMonth();
         $periodEnd   = \Carbon\Carbon::createFromFormat('Y-m', $period)->endOfMonth();
 
         if ($avgWindow === '3m') {
@@ -242,6 +245,73 @@ $periodStart = \Carbon\Carbon::createFromFormat('Y-m', $period)->startOfMonth();
             ];
         }
 
+
+          // ---- Deal Register market averages (admin, per-branch) ----
+          $avgWindow = (string) $request->get('avg_window', 'period');
+          $stageFilter = [
+              'pending'    => (bool) $request->get('st_pending', 1),
+              'granted'    => (bool) $request->get('st_granted', 1),
+              'registered' => (bool) $request->get('st_registered', 1),
+          ];
+
+          $dateFrom = null; $dateTo = null;
+          if (preg_match('/^\d{4}-\d{2}$/', $period)) {
+              $start = \Carbon\Carbon::createFromFormat('Y-m', $period)->startOfMonth();
+              $end = (clone $start)->endOfMonth();
+
+              if ($avgWindow === 'period') { $dateFrom = $start->toDateString(); $dateTo = $end->toDateString(); }
+              elseif ($avgWindow === '3m') { $dateFrom = (clone $start)->subMonthsNoOverflow(2)->startOfMonth()->toDateString(); $dateTo = $end->toDateString(); }
+              elseif ($avgWindow === '6m') { $dateFrom = (clone $start)->subMonthsNoOverflow(5)->startOfMonth()->toDateString(); $dateTo = $end->toDateString(); }
+              elseif ($avgWindow === 'all') { $dateFrom = null; $dateTo = null; }
+          }
+
+          $stages = [];
+          if (!empty($stageFilter['pending'])) $stages[] = 'pending';
+          if (!empty($stageFilter['granted'])) $stages[] = 'granted';
+          if (!empty($stageFilter['registered'])) $stages[] = 'registered';
+
+          $marketByBranch = [];
+          foreach ($branches as $bid => $b) {
+              $q = \App\Models\Deal::query()->where('branch_id', (int)$bid);
+
+              if (!empty($stages)) $q->whereIn('status', $stages);
+
+              if ($dateFrom && $dateTo) {
+                  $q->where(function($qq) use ($dateFrom, $dateTo) {
+                      $qq->whereBetween('registered_at', [$dateFrom, $dateTo])
+                         ->orWhereBetween('granted_at', [$dateFrom, $dateTo])
+                         ->orWhereBetween('created_at', [$dateFrom, $dateTo]);
+                  });
+              }
+
+              $deals = $q->get();
+              $count = $deals->count();
+
+              $avgInc = $count ? (float) $deals->avg(function($d){ return (float)($d->sale_price_inc_vat ?? $d->sale_price ?? 0); }) : 0.0;
+              $avgEx  = $count ? (float) $deals->avg(function($d){ return (float)($d->sale_price_ex_vat ?? 0); }) : 0.0;
+
+              $effPct = 0.0;
+              if ($count) {
+                  $sum = 0.0; $n = 0;
+                  foreach ($deals as $d) {
+                      $p = $d->effective_commission_percent_ex_vat ?? null;
+                      if ($p === null) {
+                          $saleEx = (float)($d->sale_price_ex_vat ?? 0);
+                          $commEx = (float)($d->commission_ex_vat ?? 0);
+                          if ($saleEx > 0 && $commEx > 0) $p = ($commEx / $saleEx) * 100.0;
+                      }
+                      if ($p !== null) { $sum += (float)$p; $n++; }
+                  }
+                  $effPct = $n ? ($sum / $n) : 0.0;
+              }
+
+              $marketByBranch[$bid] = [
+                  'deals_count' => $count,
+                  'avg_sale_price_inc_vat' => $avgInc,
+                  'avg_sale_price_ex_vat' => $avgEx,
+                  'effective_commission_percent_ex_vat' => $effPct,
+              ];
+          }
         return view('admin.worksheet_market', [
             'agentMarketByBranch' => $agentMarketByBranch,
 

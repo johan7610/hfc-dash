@@ -17,7 +17,7 @@
     </head>
     <body class="font-sans antialiased">
         
-        <div x-data="{ sidebarOpen: false }" class="flex h-screen overflow-hidden bg-gray-100">
+        <div x-data="{ sidebarOpen: false, sidebarCollapsed: false }" class="flex h-screen overflow-hidden bg-gray-100">
 
             
             <div x-show="sidebarOpen" x-transition:enter="transition-opacity ease-linear duration-200"
@@ -29,7 +29,8 @@
 
             
             <aside :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
-                   class="fixed inset-y-0 left-0 z-50 w-60 transform transition-transform duration-200 ease-in-out lg:relative lg:translate-x-0 lg:flex-shrink-0">
+                   :class="sidebarCollapsed ? 'lg:w-16' : 'lg:w-60'"
+                   class="fixed inset-y-0 left-0 z-50 transform transition-all duration-200 ease-in-out lg:relative lg:translate-x-0 lg:flex-shrink-0">
                 <?php echo $__env->make('layouts.nexus-sidebar', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
             </aside>
 
@@ -65,4 +66,5 @@
         <?php endif; ?>
     </body>
 </html>
+
 <?php /**PATH C:\Users\johan\OneDrive\Documents\GitHub\hfc-dash\resources\views/layouts/nexus.blade.php ENDPATH**/ ?>

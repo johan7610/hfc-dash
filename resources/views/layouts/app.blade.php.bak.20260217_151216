@@ -1,11 +1,11 @@
 ﻿<!DOCTYPE html>
-<html lang="<?php echo e(str_replace('_', '-', app()->getLocale())); ?>">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="csrf-token" content="<?php echo e(csrf_token()); ?>">
+        <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title><?php echo e(config('app.name', 'Laravel')); ?></title>
+        <title>{{ config('app.name', 'Laravel') }}</title>
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
@@ -182,7 +182,7 @@
         </style>
 
         <!-- Scripts -->
-        <?php echo app('Illuminate\Foundation\Vite')(['resources/css/app.css', 'resources/js/app.js']); ?>
+        @vite(['resources/css/app.css', 'resources/js/app.js'])
     
     <!-- GLOBAL_UI_LAYER_2026 -->
     <style>
@@ -367,36 +367,34 @@ thead th {
   <link rel="stylesheet" href="/css/paye-fix.css">
 </head>
     <body class="font-sans antialiased">
-        <div id="appShell" class="min-h-screen hfc-shell">
+        <div class="min-h-screen hfc-shell">
             <!-- TOP_NAV_HIDDEN_2026 -->
 
             <!-- Page Heading -->
-            <?php if(isset($header)): ?>
+            @isset($header)
                 <header class="hfc-header">
                     <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
                         <div class="hfc-onblue-strong">
-                            <?php echo e($header); ?>
-
+                            {{ $header }}
                         </div>
                     </div>
                 </header>
-            <?php endif; ?>
+            @endisset
 
                         <!-- Page Content -->
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <div class="flex gap-6">
         <aside x-data="{ collapsed: false }" :class="collapsed ? 'w-20' : 'w-72'" class="block shrink-0 transition-all duration-200"> <!-- SIDEBAR_FORCE_VISIBLE_2026 -->
-            <?php echo $__env->make('layouts.sidebar', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
+            @include('layouts.sidebar')
         </aside>
 
-        <main id="appScroll" class="flex-1 min-w-0">
+        <main class="flex-1 min-w-0">
             <div class="hfc-card p-4 sm:p-6">
-                <?php if (! empty(trim($__env->yieldContent('content')))): ?>
-                    <?php echo $__env->yieldContent('content'); ?>
-                <?php else: ?>
-                    <?php echo e($slot ?? ''); ?>
-
-                <?php endif; ?>
+                @hasSection('content')
+                    @yield('content')
+                @else
+                    {{ $slot ?? '' }}
+                @endif
             </div>
         </main>
     </div>
@@ -641,154 +639,41 @@ thead th {
 <script>
 (function () {
   const KEY = "scrollY";
-const KEY_URL = "scrollURL";
+  const KEY_PATH = "scrollPath";
 
-function candidates() {
-  const list = [];
-  const shell = document.getElementById("appShell");
-  const main = document.getElementById("appScroll");
-  if (shell) list.push(shell);
-  if (main) list.push(main);
-  if (document.scrollingElement) list.push(document.scrollingElement);
-  list.push(document.documentElement);
-  list.push(document.body);
-  return Array.from(new Set(list)).filter(Boolean);
-}
-
-function pickScroller() {
-  const c = candidates();
-  // Prefer: a scrollable element that is currently scrolled
-  for (const el of c) {
+  window.addEventListener("load", () => {
     try {
-      if ((el.scrollHeight - el.clientHeight) > 5 && el.scrollTop > 0) return el;
-    } catch (e) {}
-  }
-  // Otherwise: any scrollable element
-  for (const el of c) {
-    try {
-      if ((el.scrollHeight - el.clientHeight) > 5) return el;
-    } catch (e) {}
-  }
-  return document.scrollingElement || document.documentElement;
-}
-
-function save() {
-  try {
-    const el = pickScroller();
-    const y = (el && typeof el.scrollTop === "number") ? el.scrollTop : (window.scrollY || 0);
-    sessionStorage.setItem(KEY_URL, location.pathname + location.search);
-    sessionStorage.setItem(KEY, String(y || 0));
-  } catch (e) {}
-}
-
-function restore() {
-  try {
-    const url = sessionStorage.getItem(KEY_URL);
-    const y = sessionStorage.getItem(KEY);
-    if (!url || y === null) return;
-
-    if (url !== (location.pathname + location.search)) return;
-
-    const yy = parseInt(y, 10) || 0;
-    const els = candidates();
-
-    const attempt = () => {
-      for (const el of els) {
-        try { if (el && typeof el.scrollTop === "number") el.scrollTop = yy; } catch (e) {}
+      const path = sessionStorage.getItem(KEY_PATH);
+      const y = sessionStorage.getItem(KEY);
+      if (path === location.pathname && y !== null) {
+        sessionStorage.removeItem(KEY_PATH);
+        sessionStorage.removeItem(KEY);
+        window.scrollTo(0, parseInt(y, 10) || 0);
       }
-      try { window.scrollTo(0, yy); } catch (e) {}
-    };
-
-    attempt();
-    setTimeout(attempt, 50);
-    setTimeout(attempt, 200);
-    setTimeout(attempt, 500);
-
-    sessionStorage.removeItem(KEY_URL);
-    sessionStorage.removeItem(KEY);
-  } catch (e) {}
-}
-
-document.addEventListener("submit", (e) => {
-  if (e.target && e.target.tagName === "FORM") save();
-}, true);
-
-document.addEventListener("click", (e) => {
-  const btn = e.target.closest("button, input[type='submit']");
-  if (btn && btn.form) save();
-}, true);
-
-window.addEventListener("pageshow", restore);
-window.addEventListener("load", restore);
-</script>
-<!-- SCROLL_RESTORE_GLOBAL_2026 -->
-<script>
-(() => {
-  try { history.scrollRestoration = "manual"; } catch (e) {}
-
-  const KEY = "hfc_scroll_v2";
-  const urlKey = () => location.pathname + location.search;
-
-  function getScroller() {
-    const el = document.getElementById("appScroll");
-    if (el && (el.scrollHeight - el.clientHeight) > 5) return el; // appScroll is scroll container
-    return null;
-  }
-
-  function saveScroll() {
-    try {
-      const sc = getScroller();
-      const y = sc ? sc.scrollTop : (window.scrollY || document.documentElement.scrollTop || 0);
-      sessionStorage.setItem(KEY, JSON.stringify({ u: urlKey(), y: Math.max(0, parseInt(y, 10) || 0) }));
     } catch (e) {}
-  }
+  });
 
-  function restoreScroll() {
+  document.addEventListener("submit", (e) => {
+    const form = e.target;
+    if (!form || form.tagName !== "FORM") return;
     try {
-      const raw = sessionStorage.getItem(KEY);
-      if (!raw) return;
-      const data = JSON.parse(raw);
-      if (!data || data.u !== urlKey()) return;
-
-      const sc = getScroller();
-      const y = Math.max(0, parseInt(data.y, 10) || 0);
-
-      const doIt = () => {
-        if (sc) sc.scrollTop = y;
-        else window.scrollTo(0, y);
-      };
-
-      // multiple attempts to beat layout shifts
-      doIt();
-      setTimeout(doIt, 0);
-      setTimeout(doIt, 50);
-      setTimeout(doIt, 200);
-      setTimeout(() => { doIt(); sessionStorage.removeItem(KEY); }, 600);
+      sessionStorage.setItem(KEY_PATH, location.pathname);
+      sessionStorage.setItem(KEY, String(window.scrollY || 0));
     } catch (e) {}
-  }
-
-  // Save before navigation/submission
-  document.addEventListener("submit", () => saveScroll(), true);
-  document.addEventListener("click", (e) => {
-    const btn = e.target && e.target.closest ? e.target.closest('button, input[type="submit"], a') : null;
-    if (!btn) return;
-    // only save on actions likely to navigate / submit
-    if (btn.tagName === "A" || btn.type === "submit" || btn.getAttribute("type") === "submit") saveScroll();
   }, true);
-  window.addEventListener("beforeunload", () => saveScroll());
 
-  // Restore on load + bfcache
-  window.addEventListener("load", () => restoreScroll());
-  window.addEventListener("pageshow", () => restoreScroll());
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest("button, input[type=""submit""]");
+    if (!btn) return;
+    const form = btn.form;
+    if (!form) return;
+    try {
+      sessionStorage.setItem(KEY_PATH, location.pathname);
+      sessionStorage.setItem(KEY, String(window.scrollY || 0));
+    } catch (e) {}
+  }, true);
 })();
 </script>
-<!-- /SCROLL_RESTORE_GLOBAL_2026 -->
 </body>
 </html>
 
-
-
-
-
-
-<?php /**PATH C:\Users\johan\OneDrive\Documents\GitHub\hfc-dash\resources\views/layouts/app.blade.php ENDPATH**/ ?>

@@ -27,6 +27,94 @@
             </button>
         </div>
 
+        <div class="mt-3 space-y-1" x-show="!collapsed" x-transition.opacity>
+
+
+<?php
+    use Illuminate\Support\Facades\DB;
+
+    $impersonatorId   = (int) session('impersonator_id', 0);
+    $isImpersonating  = $impersonatorId > 0;
+
+    // Show "switch back" even while impersonating a non-admin.
+    $canSwitchUsers = !$isImpersonating && (($navIsAdmin ?? false) || (bool)($u->is_admin ?? 0));
+
+    $impersonatorName = null;
+    if ($isImpersonating) {
+        $impersonatorName = DB::table('users')->where('id', $impersonatorId)->value('name');
+    }
+
+    $switchUsers = collect();
+    if ($canSwitchUsers) {
+        $switchUsers = DB::table('users')
+            ->where('is_active', 1)
+            ->orderBy('name')
+            ->get(['id','name','email','role']);
+    }
+?>
+
+<div class="mt-4 space-y-2" x-data="{ openSwitch:false }">
+    <?php if($isImpersonating): ?>
+        <div class="rounded-xl border border-white/15 bg-white/5 px-3 py-2">
+            <div class="text-xs text-white/70" x-show="!collapsed" x-transition.opacity>
+                <span class="font-semibold text-white/90">Switched to:</span>
+                <span class="text-white/90"><?php echo e($u->name ?? 'User'); ?></span>
+            </div>
+            <div class="text-xs text-white/60 mt-1" x-show="!collapsed" x-transition.opacity>
+                <span class="font-semibold">Back to:</span> <?php echo e($impersonatorName ?? ('User #' . $impersonatorId)); ?>
+
+            </div>
+
+            <form method="POST" action="<?php echo e(route('impersonate.stop')); ?>" class="mt-2">
+                <?php echo csrf_field(); ?>
+                <button type="submit"
+                    class="w-full rounded-lg bg-white/10 hover:bg-white/15 border border-white/15 px-3 py-2 text-sm text-white/90">
+                    <span x-show="collapsed">↩</span>
+                    <span x-show="!collapsed" x-transition.opacity>Switch back to admin</span>
+                </button>
+            </form>
+        </div>
+    <?php elseif($canSwitchUsers): ?>
+        <div class="rounded-xl border border-white/15 bg-white/5">
+            <button type="button"
+                @click="openSwitch = !openSwitch"
+                class="w-full flex items-center justify-between px-3 py-2 text-sm text-white/90 hover:bg-white/5 rounded-xl">
+                <span>
+                    <span x-show="collapsed">⇄</span>
+                    <span x-show="!collapsed" x-transition.opacity>Switch user</span>
+                </span>
+                <span class="text-white/60" x-show="!collapsed" x-transition.opacity x-text="openSwitch ? '▲' : '▼'"></span>
+            </button>
+
+            <div x-show="openSwitch && !collapsed" x-transition.opacity class="px-2 pb-2 space-y-1 max-h-64 overflow-auto">
+                <?php $__currentLoopData = $switchUsers; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $su): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                    <?php if((int)$su->id !== (int)($u->id ?? 0)): ?>
+                        <form method="POST" action="<?php echo e(route('impersonate.start', ['user' => $su->id])); ?>">
+                            <?php echo csrf_field(); ?>
+                            <button type="submit"
+                                class="w-full text-left rounded-lg px-2 py-2 hover:bg-white/10 border border-transparent hover:border-white/10">
+                                <div class="text-sm text-white/90"><?php echo e($su->name); ?></div>
+                                <div class="text-xs text-white/60"><?php echo e($su->email); ?> · <?php echo e($su->role); ?></div>
+                            </button>
+                        </form>
+                    <?php endif; ?>
+                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+            </div>
+        </div>
+    <?php endif; ?>
+</div>
+
+
+            <a href="<?php echo e(route('profile.edit')); ?>" class="block px-3 py-2 rounded-lg text-white/90 hover:bg-white/10 <?php echo e(request()->routeIs('profile.edit') ? 'bg-white/10' : ''); ?>">
+                Profile</a>
+
+            <form method="POST" action="<?php echo e(route('logout')); ?>">
+                <?php echo csrf_field(); ?>
+                <button type="submit" class="w-full text-left px-3 py-2 rounded-lg text-white/90 hover:bg-white/10">
+                    Log Out
+                </button>
+            </form>
+        </div>
     </div>
 
     <div class="space-y-1">

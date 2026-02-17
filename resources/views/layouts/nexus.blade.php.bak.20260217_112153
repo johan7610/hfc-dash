@@ -17,7 +17,7 @@
     </head>
     <body class="font-sans antialiased">
         {{-- Mobile sidebar toggle --}}
-        <div x-data="{ sidebarOpen: false, sidebarCollapsed: false }" class="flex h-screen overflow-hidden bg-gray-100">
+        <div x-data="{ sidebarOpen: false }" class="flex h-screen overflow-hidden bg-gray-100">
 
             {{-- Mobile overlay --}}
             <div x-show="sidebarOpen" x-transition:enter="transition-opacity ease-linear duration-200"
@@ -29,8 +29,7 @@
 
             {{-- Sidebar --}}
             <aside :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
-                   :class="sidebarCollapsed ? 'lg:w-16' : 'lg:w-60'"
-                   class="fixed inset-y-0 left-0 z-50 transform transition-all duration-200 ease-in-out lg:relative lg:translate-x-0 lg:flex-shrink-0">
+                   class="fixed inset-y-0 left-0 z-50 w-60 transform transition-transform duration-200 ease-in-out lg:relative lg:translate-x-0 lg:flex-shrink-0">
                 @include('layouts.nexus-sidebar')
             </aside>
 
@@ -65,4 +64,3 @@
         @endauth
     </body>
 </html>
-
