@@ -139,6 +139,7 @@
                   CMA Certificate Generator</a>
 
               <a href="<?php echo e(route('tools.commission')); ?>?section=history"
+              <a href="<?php echo e(route('tools.pdf_splitter.index')); ?>?section=history"
                  class="block px-3 py-2 rounded-lg text-white/90 hover:bg-white/10 <?php echo e((request()->routeIs('tools.commission') && request()->query('section') === 'history') ? 'bg-white/10' : ''); ?>">
                   History & Logs</a>
 </div>

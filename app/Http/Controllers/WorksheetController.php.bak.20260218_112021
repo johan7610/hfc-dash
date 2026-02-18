@@ -73,17 +73,7 @@ class WorksheetController extends Controller
 
 
         
-        
-        // ---- Branch market averages (fallback when agent has no deals) ----
-        $branchMarket = null;
-        if ($user->branch_id && $worksheets->first()) {
-            $branchMarket = \App\Models\Deal::marketAveragesForBranch(
-                (int)$user->branch_id,
-                (string)$periodForStats,
-                ['pending','granted','registered']
-            );
-        }
-// ---- Company requirement awareness (read-only, no enforcement yet) ----
+        // ---- Company requirement awareness (read-only, no enforcement yet) ----
         $companyRequirement = [
             'branch_budget' => 0,
             'agents' => 0,
@@ -180,9 +170,7 @@ class WorksheetController extends Controller
             'calc' => $calc,
             'user' => $user,
             'dealStats' => $dealStats,
-            
-            'branchMarket' => $branchMarket,
-'companyRequirement' => $companyRequirement,
+            'companyRequirement' => $companyRequirement,
         ]);
     }
 
@@ -730,7 +718,7 @@ class WorksheetController extends Controller
             
 
 
-            // pipeline (ALL-TIME, NOT PAID) Ã¢â‚¬â€ money + counts
+            // pipeline (ALL-TIME, NOT PAID) — money + counts
             'pipeline_not_paid_all_time' => [
                 'counts' => $pipeCounts,
                 'agent_net_ex_vat_by_stage' => $pipeAgentNetByStage,
@@ -1241,7 +1229,7 @@ catch (\Throwable $e) {
 
                   self::syncTargetsFromWorksheet($w, $user);
 
-          return redirect()->back()->with('status', 'Branch default applied Ã¢â‚¬â€ targets set to meet company requirement.');
+          return redirect()->back()->with('status', 'Branch default applied — targets set to meet company requirement.');
     }
 
 

@@ -441,5 +441,3 @@ Route::middleware(['auth', 'verified'])->prefix('nexus')->group(function () {
     Route::post('/role-manager/user-role', [NexusRoleManagerController::class, 'updateUserRole'])
         ->middleware('admin')->name('nexus.role-manager.user-role');
 });
-
-Route::get('tools/pdf-splitter/download', [\App\Http\Controllers\Tools\PdfSplitterController::class, 'downloadLastZip'])->name('tools.pdf_splitter.download');
