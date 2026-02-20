@@ -15,6 +15,7 @@ use App\Services\MarketAnalytics\Helpers\SuburbNormalizer;
 use App\Services\MarketAnalytics\Adapters\ImportedListingsAdapter;
 use App\Services\MarketAnalytics\Metrics\AbsorptionRateMetric;
 use App\Services\MarketAnalytics\Metrics\DomCurveMetric;
+use App\Services\MarketAnalytics\Metrics\PricePerSqmDeviationMetric;
 use App\Services\MarketAnalytics\Metrics\StockPressureIndexMetric;
 use App\Services\MarketAnalytics\Support\ComparableSetBuilder;
 use Carbon\Carbon;
@@ -136,13 +137,23 @@ class MarketAnalyticsService
             tier2DomMap:   [],
         );
 
-        // ── 10. Assemble result ──────────────────────────────────────────────
+        // ── 10. Price/m² deviation metric ───────────────────────────────────
+        $pricePerSqm       = new PricePerSqmDeviationMetric();
+        $pricePerSqmResult = $pricePerSqm->compute(
+            subjectSizeM2:   $input->subjectSizeM2,
+            subjectPriceInc: $input->subjectPriceInc,
+            compRows:        $comps->rows,
+            compsHash:       $comps->compsHash,
+        );
+
+        // ── 11. Assemble result ──────────────────────────────────────────────
         $result = MarketAnalyticsResult::empty();
 
-        $result->monthsOfInventory = $metricResult['value'];
-        $result->demandSupplyRatio = $stockPressureResult['value'];
-        $result->domCurve          = $domCurveResult['value'];
-        $result->skipReason        = $metricResult['skip_reason'];
+        $result->monthsOfInventory      = $metricResult['value'];
+        $result->demandSupplyRatio      = $stockPressureResult['value'];
+        $result->domCurve               = $domCurveResult['value'];
+        $result->pricePerSqmDeviationPct = $pricePerSqmResult['value'];
+        $result->skipReason             = $metricResult['skip_reason'];
 
         $result->setBreakdown([
             // Context
@@ -157,11 +168,12 @@ class MarketAnalyticsService
             'absorption_rate'      => $metricResult['breakdown'],
             'stock_pressure'       => $stockPressureResult['breakdown'],
             'dom_curve'            => $domCurveResult['breakdown'],
+            'price_per_sqm'        => $pricePerSqmResult['breakdown'],
         ]);
 
         $result->setDataSources($dataSources);
 
-        // ── 11. Persist ──────────────────────────────────────────────────────
+        // ── 12. Persist ──────────────────────────────────────────────────────
         MarketAnalyticsRun::create([
             'model_version'     => self::MODEL_VERSION,
             'inputs_hash'       => $inputsHash,

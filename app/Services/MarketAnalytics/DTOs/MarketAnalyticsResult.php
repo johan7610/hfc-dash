@@ -13,8 +13,9 @@ class MarketAnalyticsResult
     public ?float  $medianListPrice     = null;
     public ?float  $monthsOfInventory   = null;  // absorption rate (step 2.3)
     public ?float  $demandSupplyRatio   = null;  // stock pressure index (step 2.4)
-    public ?array  $domCurve            = null;  // DOM p25/p50/p75 (step 2.5)
-    public ?string $skipReason          = null;
+    public ?array  $domCurve                = null;  // DOM p25/p50/p75 (step 2.5)
+    public ?float  $pricePerSqmDeviationPct = null;  // price/m² deviation % (step 2.6)
+    public ?string $skipReason              = null;
 
     // Breakdown and source detail arrays (empty until metric phase)
     private array $breakdown    = [];
@@ -45,8 +46,9 @@ class MarketAnalyticsResult
             'median_list_price'    => $this->medianListPrice,
             'months_of_inventory'  => $this->monthsOfInventory,
             'demand_supply_ratio'  => $this->demandSupplyRatio,
-            'dom_curve'            => $this->domCurve,
-            'skip_reason'          => $this->skipReason,
+            'dom_curve'                  => $this->domCurve,
+            'price_per_sqm_deviation_pct' => $this->pricePerSqmDeviationPct,
+            'skip_reason'                => $this->skipReason,
         ];
     }
 
