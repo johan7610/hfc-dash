@@ -15,9 +15,11 @@ use App\Services\MarketAnalytics\Helpers\SuburbNormalizer;
 use App\Services\MarketAnalytics\Adapters\ImportedListingsAdapter;
 use App\Services\MarketAnalytics\Metrics\AbsorptionRateMetric;
 use App\Services\MarketAnalytics\Metrics\DomCurveMetric;
+use App\Services\MarketAnalytics\Metrics\ElasticityProxyMetric;
 use App\Services\MarketAnalytics\Metrics\PricePerSqmDeviationMetric;
 use App\Services\MarketAnalytics\Metrics\StockPressureIndexMetric;
 use App\Services\MarketAnalytics\Support\ComparableSetBuilder;
+use App\Services\MarketAnalytics\Support\DealListingMatcher;
 use Carbon\Carbon;
 
 class MarketAnalyticsService
@@ -127,17 +129,32 @@ class MarketAnalyticsService
             snapshotCreatedAt: $snapshotCreatedAt,
         );
 
-        // ── 9. DOM curve metric ───────────────────────────────────────────────
-        // Tier 2 (proxy from imported listings) has no safe match key yet;
-        // tier2Available=false until a deterministic match strategy is added.
+        // ── 9. Deal↔Listing match (Tier 2 DOM resolution) ───────────────────
+        // Matches comp rows that have no listed_date against listing_stocks using
+        // address similarity + price proximity. Skipped when no sourceBranchId.
+        $tier2FullMap = [];
+        if ($input->sourceBranchId !== null) {
+            $tier2FullMap = (new DealListingMatcher())->buildDomResolutionMap(
+                compRows:   $comps->rows,
+                branchId:   $input->sourceBranchId,
+                periodFrom: $dateFrom,
+                periodTo:   $referenceDate,
+            );
+        }
+
+        // Simplified map consumed by metrics: row_hash → dom_days (int)
+        $tier2DomSimple = array_map(fn (array $v): int => $v['dom_days'], $tier2FullMap);
+        $tier2Available  = !empty($tier2DomSimple);
+
+        // ── 10. DOM curve metric ─────────────────────────────────────────────
         $domCurve       = new DomCurveMetric();
         $domCurveResult = $domCurve->compute(
-            rows:          $comps->rows,
-            tier2Available: false,
-            tier2DomMap:   [],
+            rows:           $comps->rows,
+            tier2Available: $tier2Available,
+            tier2DomMap:    $tier2DomSimple,
         );
 
-        // ── 10. Price/m² deviation metric ───────────────────────────────────
+        // ── 11. Price/m² deviation metric ───────────────────────────────────
         $pricePerSqm       = new PricePerSqmDeviationMetric();
         $pricePerSqmResult = $pricePerSqm->compute(
             subjectSizeM2:   $input->subjectSizeM2,
@@ -146,14 +163,24 @@ class MarketAnalyticsService
             compsHash:       $comps->compsHash,
         );
 
-        // ── 11. Assemble result ──────────────────────────────────────────────
+        // ── 12. Elasticity proxy metric ──────────────────────────────────────
+        $elasticity       = new ElasticityProxyMetric();
+        $elasticityResult = $elasticity->compute(
+            compRows:         $comps->rows,
+            compsHash:        $comps->compsHash,
+            domResolutionMap: $tier2DomSimple ?: null,
+        );
+
+        // ── 13. Assemble result ──────────────────────────────────────────────
         $result = MarketAnalyticsResult::empty();
 
-        $result->monthsOfInventory      = $metricResult['value'];
-        $result->demandSupplyRatio      = $stockPressureResult['value'];
-        $result->domCurve               = $domCurveResult['value'];
+        $result->monthsOfInventory       = $metricResult['value'];
+        $result->demandSupplyRatio       = $stockPressureResult['value'];
+        $result->domCurve                = $domCurveResult['value'];
         $result->pricePerSqmDeviationPct = $pricePerSqmResult['value'];
-        $result->skipReason             = $metricResult['skip_reason'];
+        $result->elasticityDaysPerPct    = $elasticityResult['value'];
+        $result->elasticityRSquared      = $elasticityResult['breakdown']['r_squared'];
+        $result->skipReason              = $metricResult['skip_reason'];
 
         $result->setBreakdown([
             // Context
@@ -164,17 +191,22 @@ class MarketAnalyticsService
             'comps_hash'           => $comps->compsHash,
             'comps_count'          => $comps->count,
             'active_listing_count' => $listings->count(),
+            // Tier 2 match metadata
+            'dom_tier2_available'        => $tier2Available,
+            'dom_tier2_matches'          => count($tier2FullMap),
+            'deal_listing_match_version' => DealListingMatcher::MATCH_VERSION,
             // Metric detail (nested per metric)
             'absorption_rate'      => $metricResult['breakdown'],
             'stock_pressure'       => $stockPressureResult['breakdown'],
             'dom_curve'            => $domCurveResult['breakdown'],
             'price_per_sqm'        => $pricePerSqmResult['breakdown'],
+            'elasticity'           => $elasticityResult['breakdown'],
         ]);
 
         $result->setDataSources($dataSources);
 
-        // ── 12. Persist ──────────────────────────────────────────────────────
-        MarketAnalyticsRun::create([
+        // ── 14. Persist ──────────────────────────────────────────────────────
+        $maRun = MarketAnalyticsRun::create([
             'model_version'     => self::MODEL_VERSION,
             'inputs_hash'       => $inputsHash,
             'inputs_json'       => $input->toCanonicalArray(),

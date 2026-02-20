@@ -450,4 +450,12 @@ Route::middleware(['auth'])->group(function () {
         ->name('presentations.index');
     Route::post('/presentations/{presentation}/upload', [\App\Http\Controllers\Presentation\PresentationController::class, 'upload'])
         ->name('presentations.upload');
+    Route::post('/presentations/{presentation}/compute', [\App\Http\Controllers\Presentation\PresentationController::class, 'compute'])
+        ->name('presentations.compute');
+
+    // Phase 5.2 — Snapshot Lock
+    Route::post('/presentations/{presentation}/snapshots', [\App\Http\Controllers\Presentation\PresentationSnapshotController::class, 'saveSnapshot'])
+        ->name('presentations.snapshots.save');
+    Route::get('/presentations/{presentation}/snapshots/{snapshot}', [\App\Http\Controllers\Presentation\PresentationSnapshotController::class, 'showSnapshot'])
+        ->name('presentations.snapshots.show');
 });

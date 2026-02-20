@@ -15,6 +15,8 @@ class MarketAnalyticsResult
     public ?float  $demandSupplyRatio   = null;  // stock pressure index (step 2.4)
     public ?array  $domCurve                = null;  // DOM p25/p50/p75 (step 2.5)
     public ?float  $pricePerSqmDeviationPct = null;  // price/m² deviation % (step 2.6)
+    public ?float  $elasticityDaysPerPct    = null;  // elasticity proxy slope (step 2.7)
+    public ?float  $elasticityRSquared      = null;  // elasticity proxy R²   (step 2.7)
     public ?string $skipReason              = null;
 
     // Breakdown and source detail arrays (empty until metric phase)
@@ -48,6 +50,8 @@ class MarketAnalyticsResult
             'demand_supply_ratio'  => $this->demandSupplyRatio,
             'dom_curve'                  => $this->domCurve,
             'price_per_sqm_deviation_pct' => $this->pricePerSqmDeviationPct,
+            'elasticity_days_per_pct'    => $this->elasticityDaysPerPct,
+            'elasticity_r_squared'       => $this->elasticityRSquared,
             'skip_reason'                => $this->skipReason,
         ];
     }

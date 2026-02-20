@@ -119,53 +119,6 @@
 
     @endif {{-- end @if($presentation) --}}
 
-    {{-- Snapshot Listing --}}
-    <div class="bg-white rounded-xl shadow p-6 mb-6">
-        <h2 class="text-base font-semibold text-gray-700 mb-3">Recent Snapshots</h2>
-        @if($snapshots->isEmpty())
-            <p class="text-sm text-gray-400">No snapshots saved yet.</p>
-        @else
-            <table class="w-full text-sm text-left text-gray-600">
-                <thead>
-                    <tr class="border-b">
-                        <th class="pb-2 pr-4">#</th>
-                        <th class="pb-2 pr-4">Presentation</th>
-                        <th class="pb-2 pr-4">MA Run</th>
-                        <th class="pb-2 pr-4">SP Run</th>
-                        <th class="pb-2 pr-4">P60</th>
-                        <th class="pb-2">Saved</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach($snapshots as $snap)
-                        @php $snapSummary = $snap->getOutputSummaryArray(); @endphp
-                        <tr class="border-b last:border-0">
-                            <td class="py-2 pr-4">
-                                <a href="{{ route('presentations.snapshots.show', [$snap->presentation_id, $snap]) }}"
-                                   class="text-indigo-600 hover:underline font-medium">#{{ $snap->id }}</a>
-                            </td>
-                            <td class="py-2 pr-4 text-gray-500 text-xs">#{{ $snap->presentation_id }}</td>
-                            <td class="py-2 pr-4 text-gray-400 text-xs">
-                                {{ $snap->market_analytics_run_id ? '#'.$snap->market_analytics_run_id : '—' }}
-                            </td>
-                            <td class="py-2 pr-4 text-gray-400 text-xs">
-                                {{ $snap->sale_probability_run_id ? '#'.$snap->sale_probability_run_id : '—' }}
-                            </td>
-                            <td class="py-2 pr-4">
-                                @if(isset($snapSummary['p60']) && $snapSummary['p60'] !== null)
-                                    <span class="font-semibold text-indigo-700">{{ number_format($snapSummary['p60'] * 100, 0) }}%</span>
-                                @else
-                                    <span class="text-gray-300">—</span>
-                                @endif
-                            </td>
-                            <td class="py-2 text-gray-400 text-xs">{{ $snap->created_at->format('Y-m-d H:i') }}</td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        @endif
-    </div>
-
     {{-- Uploads List --}}
     <div class="bg-white rounded-xl shadow p-6">
         <h2 class="text-base font-semibold text-gray-700 mb-3">Uploaded Documents</h2>
