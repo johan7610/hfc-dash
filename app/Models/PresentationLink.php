@@ -27,6 +27,7 @@ class PresentationLink extends Model
         'override_json',
         'override_by_user_id',
         'override_at',
+        'portal_capture_id',
     ];
 
     protected $casts = [
@@ -90,5 +91,10 @@ class PresentationLink extends Model
     public function presentation()
     {
         return $this->belongsTo(Presentation::class);
+    }
+
+    public function portalCapture()
+    {
+        return $this->belongsTo(PortalCapture::class);
     }
 }

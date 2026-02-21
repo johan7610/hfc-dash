@@ -7,6 +7,7 @@ use App\Services\Presentations\Evidence\Parsers\CmaParserV1;
 use App\Services\Presentations\Evidence\Parsers\SalesReportParserV1;
 use App\Services\Presentations\Evidence\Parsers\SuburbStockParserV1;
 use App\Services\Presentations\Evidence\Parsers\UnknownParser;
+use App\Support\Presentation\DocumentExtractor;
 
 /**
  * Routes a PresentationUpload to the correct deterministic parser,
@@ -25,7 +26,35 @@ class UploadExtractionService
     {
         $docType = $this->detectDocType($upload->original_filename ?? '');
 
-        if ($upload->extraction_status !== 'ok') {
+        // If text extraction failed, try PHP-based extraction via DocumentExtractor
+        if ($upload->extraction_status !== 'ok' && config('features.presentation_doc_extract_v1', false)) {
+            $extractor = new DocumentExtractor();
+            $fields = $extractor->extract($upload);
+            $upload->refresh();
+
+            // If DocumentExtractor recovered text, proceed with normal parsing
+            if ($upload->extraction_status === 'ok' && !empty($upload->text_extracted)) {
+                $docType = $this->detectDocType($upload->original_filename ?? '');
+            } else {
+                $result = [
+                    'parser_version' => self::SERVICE_VERSION,
+                    'doc_type_guess' => $docType,
+                    'parsed_counts'  => [],
+                    'errors'         => ['text_extraction_failed'],
+                ];
+                if (!empty($fields)) {
+                    $result['extracted_version'] = DocumentExtractor::EXTRACTED_VERSION;
+                    $result['fields'] = $fields;
+                }
+                $upload->update([
+                    'extraction_json'  => $result,
+                    'extraction_error' => empty($fields) ? 'Text extraction failed — parser could not read document.' : null,
+                    'extraction_status' => empty($fields) ? 'failed' : 'ok',
+                    'extracted_at'     => now(),
+                ]);
+                return;
+            }
+        } elseif ($upload->extraction_status !== 'ok') {
             $upload->update([
                 'extraction_json'  => [
                     'parser_version' => self::SERVICE_VERSION,
@@ -39,10 +68,28 @@ class UploadExtractionService
             return;
         }
 
-        $text   = $upload->text_extracted ?? '';
-        $result = $this->runParser($docType, $text, $upload);
+        $text = $upload->text_extracted ?? '';
+
+        // Wrap legacy parser in try/catch — never crash the upload pipeline
+        try {
+            $result = $this->runParser($docType, $text, $upload);
+        } catch (\Throwable $e) {
+            $result = [
+                'parser_version' => self::SERVICE_VERSION,
+                'doc_type_guess' => $docType,
+                'parsed_counts'  => [],
+                'aggregates'     => [],
+                'errors'         => ['parser_exception: ' . $e->getMessage()],
+            ];
+        }
 
         $hasUseful = $this->hasUsefulData($result);
+
+        // Run doc_extract_v1 if feature flag is on
+        if (config('features.presentation_doc_extract_v1', false)) {
+            $this->runDocExtractor($upload, $result);
+            return;
+        }
 
         $upload->update([
             'extraction_json'   => $result,
@@ -105,6 +152,42 @@ class UploadExtractionService
         }
 
         return UnknownParser::DOC_TYPE;
+    }
+
+    /**
+     * Run doc_extract_v1: extract structured fields and merge into extraction_json.
+     */
+    private function runDocExtractor(PresentationUpload $upload, array $parserResult): void
+    {
+        try {
+            $extractor = new DocumentExtractor();
+            $fields = $extractor->extract($upload);
+
+            if (!empty($fields)) {
+                $parserResult['extracted_version'] = DocumentExtractor::EXTRACTED_VERSION;
+                $parserResult['fields'] = $fields;
+            }
+
+            $hasUseful = $this->hasUsefulData($parserResult) || !empty($fields);
+
+            $upload->update([
+                'extraction_json'   => $parserResult,
+                'extraction_status' => $hasUseful ? 'ok' : 'failed',
+                'extraction_error'  => $hasUseful ? null : 'No extractable fields found (check PDF format)',
+                'extracted_at'      => now(),
+            ]);
+        } catch (\Throwable $e) {
+            // Never throw — persist parser result without doc_extract fields
+            $parserResult['extraction_error'] = 'doc_extract_v1: ' . $e->getMessage();
+            $hasUseful = $this->hasUsefulData($parserResult);
+
+            $upload->update([
+                'extraction_json'   => $parserResult,
+                'extraction_status' => $hasUseful ? 'ok' : 'failed',
+                'extraction_error'  => 'doc_extract_v1 failed: ' . $e->getMessage(),
+                'extracted_at'      => now(),
+            ]);
+        }
     }
 
     private function runParser(string $docType, string $text, PresentationUpload $upload): array

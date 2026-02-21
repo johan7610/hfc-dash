@@ -36,6 +36,7 @@ use App\Services\Presentations\PPIService;
 use App\Services\SaleProbability\ConfidenceScoringService;
 use App\Services\SaleProbability\InterpretationService;
 use App\Services\SaleProbability\SaleProbabilityService;
+use App\Support\Presentation\LinkImportedFieldPresenter;
 use Illuminate\Http\Request;
 
 class PresentationController extends Controller
@@ -141,8 +142,26 @@ class PresentationController extends Controller
             ];
         }
 
+        // ── Link Imported Field Views (feature-flagged) ────────────────
+        $linkViews = [];
+        if (config('features.presentation_link_details_v1', true)) {
+            $presenter = new LinkImportedFieldPresenter();
+            foreach ($links as $link) {
+                $linkViews[$link->id] = $presenter->build($link);
+            }
+        }
+
+        $isAdmin = auth()->user()->isEffectiveAdmin();
+
+        // Polling cursor init values for live updates
+        $maxCaptureId        = $presentation->portalCaptures()->max('id') ?? 0;
+        $maxCaptureUpdatedAt = $presentation->portalCaptures()->max('updated_at') ?? '';
+        $maxLinkUpdatedAt    = $links->max('updated_at')?->toIso8601String() ?? '';
+
         return view('presentations.show', compact(
-            'presentation', 'latestSnapshot', 'snapshotCount', 'links', 'readiness', 'powerPanel'
+            'presentation', 'latestSnapshot', 'snapshotCount', 'links', 'readiness', 'powerPanel',
+            'linkViews', 'isAdmin',
+            'maxCaptureId', 'maxCaptureUpdatedAt', 'maxLinkUpdatedAt'
         ));
     }
 
@@ -238,6 +257,22 @@ class PresentationController extends Controller
             if (!empty($prefill)) {
                 $presentation->update($prefill);
             }
+        }
+
+        // Return JSON for AJAX requests, redirect otherwise
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'link'    => [
+                    'id'                => $link->id,
+                    'type'              => $link->type,
+                    'url'               => $link->url,
+                    'notes'             => $link->notes,
+                    'extraction_status' => $link->extraction_status ?? 'pending',
+                    'portal_capture_id' => $link->portal_capture_id,
+                    'extracted_at'      => $link->extracted_at?->toIso8601String(),
+                ],
+            ]);
         }
 
         return redirect()->route('presentations.show', $presentation)

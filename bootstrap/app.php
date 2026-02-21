@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->validateCsrfTokens(except: [
             '/internal/ai-chat-proxy',
+            'portal-captures/ingest',
         ]);
 
     })

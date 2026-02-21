@@ -111,7 +111,13 @@ class SalesReportParserV1
 
     private function extractAggrPrice(string $text, string $label): ?int
     {
-        if (preg_match('/' . $label . '[\s\w]*?(?:price|sale)?[\s:]*R\s*([\d\s,]+)/i', $text, $m)) {
+        // Wrap $label in non-capturing group to prevent alternation precedence issues
+        // e.g. 'average|avg|mean' must become '(?:average|avg|mean)' so the capture group
+        // is always part of the matched pattern.
+        if (preg_match('/(?:' . $label . ')[\s\w]*?(?:price|sale)?[\s:]*R\s*([\d\s,]+)/i', $text, $m)) {
+            if (!isset($m[1])) {
+                return null;
+            }
             $cleaned = (int) preg_replace('/[\s,]/', '', $m[1]);
             return ($cleaned >= 10000) ? $cleaned : null;
         }

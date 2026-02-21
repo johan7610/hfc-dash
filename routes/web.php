@@ -534,6 +534,22 @@ Route::middleware(['auth'])->prefix('presentations')->name('presentations.')->gr
         ->name('portal-captures.index');
     Route::post('/{presentation}/portal-captures/{capture}/attach', [\App\Http\Controllers\Presentation\PortalCaptureController::class, 'attach'])
         ->name('portal-captures.attach');
+
+    // Live snapshot polling (B1 — zero-refresh updates)
+    Route::get('/{presentation}/live-snapshot', [\App\Http\Controllers\Presentation\PortalCaptureController::class, 'liveSnapshot'])
+        ->name('live-snapshot');
+});
+
+// ===== DOCUMENT LIBRARY =====
+Route::middleware(['auth'])->prefix('documents')->name('documents.')->group(function () {
+    Route::get('/library', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'index'])
+        ->name('library.index');
+    Route::post('/library/upload', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'upload'])
+        ->name('library.upload');
+    Route::get('/library/{item}/download', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'download'])
+        ->name('library.download');
+    Route::post('/library/attach', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'attach'])
+        ->name('library.attach');
 });
 
 // Portal capture ingest endpoint (outside presentation prefix — extension posts here)

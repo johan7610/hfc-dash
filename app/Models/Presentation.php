@@ -65,6 +65,11 @@ class Presentation extends Model
         return $this->hasMany(PresentationLink::class);
     }
 
+    public function portalCaptures()
+    {
+        return $this->hasMany(PortalCapture::class);
+    }
+
     public function soldComps()
     {
         return $this->hasMany(PresentationSoldComp::class);
@@ -83,6 +88,18 @@ class Presentation extends Model
     public function articles()
     {
         return $this->hasMany(PresentationArticle::class);
+    }
+
+    public function documentLibraryAttachments()
+    {
+        return $this->hasMany(PresentationDocumentLibraryItem::class);
+    }
+
+    public function documentLibraryItems()
+    {
+        return $this->belongsToMany(DocumentLibraryItem::class, 'presentation_document_library_items')
+            ->withPivot('attached_by_user_id', 'note', 'created_at')
+            ->withTimestamps();
     }
 
     /**

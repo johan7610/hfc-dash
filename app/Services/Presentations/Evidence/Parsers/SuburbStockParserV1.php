@@ -109,8 +109,11 @@ class SuburbStockParserV1
 
     private function extractAggrPrice(string $text, string $label): ?int
     {
-        // "Median price: R1,450,000" or "Median: R 1 450 000"
-        if (preg_match('/' . $label . '[\s\w]*?(?:price)?[\s:]*R\s*([\d\s,]+)/i', $text, $m)) {
+        // Wrap $label in non-capturing group to prevent alternation precedence issues
+        if (preg_match('/(?:' . $label . ')[\s\w]*?(?:price)?[\s:]*R\s*([\d\s,]+)/i', $text, $m)) {
+            if (!isset($m[1])) {
+                return null;
+            }
             $cleaned = (int) preg_replace('/[\s,]/', '', $m[1]);
             return ($cleaned >= 10000) ? $cleaned : null;
         }

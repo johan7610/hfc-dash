@@ -2,7 +2,9 @@
     $currentPath = request()->path();
     $nexusSection = 'agency-tracker'; // default for all existing routes
 
-    if ($currentPath === 'nexus' || $currentPath === 'nexus/') {
+    if (str_starts_with($currentPath, 'documents/library')) {
+        $nexusSection = 'document-library';
+    } elseif ($currentPath === 'nexus' || $currentPath === 'nexus/') {
         $nexusSection = 'dashboard';
     } elseif (str_starts_with($currentPath, 'nexus/documents')) {
         $nexusSection = 'documents';
@@ -160,6 +162,19 @@
                 <path d="M12 14v6"/>
             </svg>
             <span>Presentations</span>
+            <svg class="nexus-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m9 18 6-6-6-6"/>
+            </svg>
+        </a>
+        @endif
+
+        {{-- Document Library (feature-flagged) --}}
+        @if(config('features.document_library_v1'))
+        <a href="{{ route('documents.library.index') }}" class="nexus-nav-item {{ request()->is('documents/library*') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>
+            </svg>
+            <span>Document Library</span>
             <svg class="nexus-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m9 18 6-6-6-6"/>
             </svg>

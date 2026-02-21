@@ -116,30 +116,41 @@
         } catch (e) { /* skip invalid URLs */ }
     });
 
-    // Page type detection (best-effort, deterministic)
+    // Page type detection (deterministic URL + DOM signals)
     result.detected_page_type = 'unknown';
     var path = window.location.pathname.toLowerCase();
     var host = window.location.hostname.toLowerCase();
 
-    // Property24 patterns
+    // Property24 patterns — check search FIRST (search URLs also end in digits)
     if (host.includes('property24.com')) {
-        if (/\/\d+$/.test(path)) {
-            result.detected_page_type = 'property';
-        } else if (path.includes('/for-sale/') || path.includes('/to-rent/') || path.includes('/properties/')) {
+        if (path.includes('/for-sale/') || path.includes('/to-rent/') || path.includes('/properties/')) {
             result.detected_page_type = 'search';
+        } else if (/\/\d{6,}\/?$/.test(path)) {
+            // Listing IDs are 6+ digits; area codes are 4-5 digits
+            result.detected_page_type = 'property';
         }
     }
-    // PrivateProperty patterns
+    // PrivateProperty patterns — check search FIRST
     else if (host.includes('privateproperty.co.za')) {
-        if (/\/\d+$/.test(path) || path.includes('/property-detail')) {
-            result.detected_page_type = 'property';
-        } else if (path.includes('/for-sale') || path.includes('/to-rent') || path.includes('/results')) {
+        if (path.includes('/for-sale') || path.includes('/to-rent') || path.includes('/results')) {
             result.detected_page_type = 'search';
+        } else if (/\/\d+\/?$/.test(path) || path.includes('/property-detail')) {
+            result.detected_page_type = 'property';
         }
     }
-    // Generic: if path ends in a number, likely a listing
-    else if (/\/\d+\/?$/.test(path)) {
+    // Generic fallback: long number in path = listing
+    else if (/\/\d{6,}\/?$/.test(path)) {
         result.detected_page_type = 'property';
+    }
+
+    // DOM-based tiebreaker: multiple listing tiles → search page
+    if (result.detected_page_type === 'unknown' || result.detected_page_type === 'property') {
+        var tileSelectors = '.p24_regularTile, .js_resultTile, [data-testid="tile"], .listing-result, .search-result, .property-card';
+        var tiles = document.querySelectorAll(tileSelectors);
+        var paging = document.querySelector('.pagination, [class*="paging"], [class*="Pagination"], nav[aria-label*="page"]');
+        if (tiles.length >= 4 || (tiles.length >= 2 && paging)) {
+            result.detected_page_type = 'search';
+        }
     }
 
     // Return result to popup

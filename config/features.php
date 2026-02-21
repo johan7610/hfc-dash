@@ -21,4 +21,9 @@ return [
     'presentation_link_extraction_v2' => (bool) env('PRESENTATION_LINK_EXTRACTION_V2_ENABLED', true),
     'portal_headless_fetch_v1'        => (bool) env('PORTAL_HEADLESS_FETCH_V1', false),
     'portal_extension_capture_v1'     => (bool) env('PORTAL_EXTENSION_CAPTURE_V1', true),
+    'portal_search_extract_p24_v1'    => (bool) env('PORTAL_SEARCH_EXTRACT_P24_V1', true),
+    'presentation_live_updates_v1'    => (bool) env('PRESENTATION_LIVE_UPDATES_V1', true),
+    'presentation_link_details_v1'    => (bool) env('PRESENTATION_LINK_DETAILS_V1', true),
+    'presentation_doc_extract_v1'     => (bool) env('PRESENTATION_DOC_EXTRACT_V1', true),
+    'document_library_v1'             => (bool) env('DOCUMENT_LIBRARY_V1', true),
 ];

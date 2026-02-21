@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class PortalCapture extends Model
 {
+    use HasFactory;
     protected $fillable = [
         'user_id',
         'presentation_id',
@@ -41,5 +43,21 @@ class PortalCapture extends Model
     public function presentation()
     {
         return $this->belongsTo(Presentation::class);
+    }
+
+    public function listingObservations()
+    {
+        return $this->hasMany(PortalListingObservation::class, 'capture_id');
+    }
+
+    /**
+     * Count price changes detected by this capture.
+     */
+    public function priceChangeCount(): int
+    {
+        return $this->listingObservations()
+            ->whereNotNull('changed_fields_json')
+            ->whereRaw("json_extract(changed_fields_json, '$.price') IS NOT NULL")
+            ->count();
     }
 }

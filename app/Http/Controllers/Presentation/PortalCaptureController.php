@@ -5,7 +5,11 @@ namespace App\Http\Controllers\Presentation;
 use App\Http\Controllers\Controller;
 use App\Models\PortalCapture;
 use App\Models\Presentation;
+use App\Models\PresentationLink;
+use App\Services\Presentations\Evidence\Extractors\Property24SearchExtractorV1;
+use App\Services\PortalListingTrackingService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class PortalCaptureController extends Controller
@@ -74,12 +78,290 @@ class PortalCaptureController extends Controller
 
         $capture->save();
 
+        // Refine page_type classification server-side (more reliable than extension guess)
+        $classifiedType = $this->classifyPageType($capture);
+        if ($classifiedType !== $capture->page_type) {
+            $capture->update(['page_type' => $classifiedType]);
+        }
+
+        // Run server-side DOM extraction based on classified page type
+        $extractionResult = null;
+        $trackingSummary = null;
+
+        if ($classifiedType === 'search' && $this->isProperty24Capture($capture)) {
+            // SEARCH extraction: extract listing cards from search results
+            try {
+                $extractor = new Property24SearchExtractorV1();
+                $extractionResult = $extractor->extract($capture);
+
+                if ($extractionResult !== null) {
+                    // Add search summary fields for UI
+                    $extractionResult['_page_type'] = 'search';
+                    $extractionResult['listing_urls_count'] = $extractionResult['search']['items_on_page'] ?? 0;
+
+                    $capture->update([
+                        'parse_status'          => 'parsed',
+                        'extracted_fields_json' => $extractionResult,
+                    ]);
+
+                    // Track listings for identity + change detection
+                    $items = $extractionResult['search']['items'] ?? [];
+                    if (count($items) > 0) {
+                        $tracker = new PortalListingTrackingService();
+                        $trackingSummary = $tracker->processItems(
+                            $capture,
+                            $this->normalizeSourceSite($capture->source_site),
+                            $items
+                        );
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Portal search extraction failed', [
+                    'capture_id' => $capture->id,
+                    'error'      => $e->getMessage(),
+                ]);
+            }
+        } elseif ($classifiedType === 'property' && $this->isProperty24Capture($capture)) {
+            // LISTING extraction: extract listing detail fields
+            try {
+                $listingFields = $this->extractProperty24ListingFields($capture);
+                if ($listingFields !== null) {
+                    $extractionResult = $listingFields;
+                    $capture->update([
+                        'parse_status'          => 'parsed',
+                        'extracted_fields_json' => $listingFields,
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Portal listing extraction failed', [
+                    'capture_id' => $capture->id,
+                    'error'      => $e->getMessage(),
+                ]);
+                $capture->update([
+                    'parse_status' => 'unparsed_error',
+                ]);
+            }
+        }
+
+        // Link capture to matching presentation link by URL
+        $linkedLinkId = null;
+        if ($capture->presentation_id) {
+            $linkedLinkId = $this->linkCaptureToLink($capture);
+        }
+
+        Log::info('[PortalCapture:ingest] Capture ingested', [
+            'capture_id'      => $capture->id,
+            'presentation_id' => $capture->presentation_id,
+            'source_url'      => $capture->source_url,
+            'parse_status'    => $capture->parse_status,
+            'linked_link_id'  => $linkedLinkId,
+        ]);
+
         return response()->json([
-            'success'    => true,
-            'capture_id' => $capture->id,
-            'dom_hash'   => $domHash,
-            'html_bytes' => $htmlBytes,
+            'success'          => true,
+            'capture_id'       => $capture->id,
+            'dom_hash'         => $domHash,
+            'html_bytes'       => $htmlBytes,
+            'linked_link_id'   => $linkedLinkId,
+            'extraction'       => $extractionResult !== null ? [
+                'items_on_page' => $extractionResult['search']['items_on_page'] ?? 0,
+                'extractor'     => Property24SearchExtractorV1::VERSION,
+            ] : null,
+            'tracking'         => $trackingSummary,
         ], 201);
+    }
+
+    /**
+     * GET /presentations/{presentation}/live-snapshot
+     * Returns delta captures + updated links since the given cursors.
+     */
+    public function liveSnapshot(Request $request, Presentation $presentation)
+    {
+        if (!config('features.presentation_live_updates_v1', true)) {
+            return response()->json(['enabled' => false], 200);
+        }
+
+        $afterCaptureId        = (int) $request->query('after_capture_id', 0);
+        $afterLinkUpdatedAtRaw = $request->query('after_link_updated_at');
+        $afterCaptureUpdatedAtRaw = $request->query('after_capture_updated_at');
+
+        // Parse cursor strings to Carbon for correct DB comparison.
+        // ISO8601 strings (e.g. "2026-02-21T15:30:00.000000Z") break SQLite
+        // string comparison against stored "Y-m-d H:i:s" format.
+        $afterLinkUpdatedAt = null;
+        if ($afterLinkUpdatedAtRaw) {
+            try {
+                $afterLinkUpdatedAt = \Carbon\Carbon::parse($afterLinkUpdatedAtRaw);
+            } catch (\Exception $e) {
+                $afterLinkUpdatedAt = null;
+            }
+        }
+        if (!$afterLinkUpdatedAt) {
+            $afterLinkUpdatedAt = now()->subMinutes(5);
+        }
+
+        $afterCaptureUpdatedAt = null;
+        if ($afterCaptureUpdatedAtRaw) {
+            try {
+                $afterCaptureUpdatedAt = \Carbon\Carbon::parse($afterCaptureUpdatedAtRaw);
+            } catch (\Exception $e) {
+                $afterCaptureUpdatedAt = null;
+            }
+        }
+
+        // New captures since the given cursor (max 50)
+        $newCaptures = PortalCapture::where('presentation_id', $presentation->id)
+            ->where('id', '>', $afterCaptureId)
+            ->orderBy('id')
+            ->limit(50)
+            ->get(['id', 'source_site', 'page_type', 'source_url', 'captured_at',
+                    'html_bytes', 'screenshot_path', 'parse_status', 'extracted_fields_json', 'updated_at'])
+            ->map(function ($c) {
+                return [
+                    'id'                  => $c->id,
+                    'page_type'           => $c->page_type,
+                    'source_site'         => $c->source_site,
+                    'source_url'          => $c->source_url,
+                    'captured_at'         => $c->captured_at?->toIso8601String(),
+                    'html_bytes'          => $c->html_bytes,
+                    'screenshot_exists'   => !empty($c->screenshot_path),
+                    'parse_status'        => $c->parse_status,
+                    'extraction_summary'  => $this->captureExtractionSummary($c),
+                    'price_change_count'  => $c->priceChangeCount(),
+                    'updated_at'          => $c->updated_at->toIso8601String(),
+                ];
+            });
+
+        // Updated captures: already-known captures whose fields changed (max 200)
+        $updatedCaptures = collect();
+        if ($afterCaptureUpdatedAt) {
+            $updatedCaptures = PortalCapture::where('presentation_id', $presentation->id)
+                ->where('id', '<=', $afterCaptureId)
+                ->where('updated_at', '>', $afterCaptureUpdatedAt)
+                ->orderBy('updated_at')
+                ->limit(200)
+                ->get(['id', 'parse_status', 'extracted_fields_json', 'updated_at'])
+                ->map(function ($c) {
+                    return [
+                        'id'                  => $c->id,
+                        'parse_status'        => $c->parse_status,
+                        'extraction_summary'  => $this->captureExtractionSummary($c),
+                        'price_change_count'  => $c->priceChangeCount(),
+                        'updated_at'          => $c->updated_at->toIso8601String(),
+                    ];
+                });
+        }
+
+        // Updated links since the given timestamp (max 200)
+        $updatedLinks = PresentationLink::where('presentation_id', $presentation->id)
+            ->where('updated_at', '>', $afterLinkUpdatedAt)
+            ->limit(200)
+            ->get(['id', 'url', 'portal_capture_id', 'extraction_status', 'extracted_at', 'extracted_json', 'updated_at'])
+            ->map(function ($link) {
+                $priceChange = false;
+                if ($link->portal_capture_id) {
+                    $capture = PortalCapture::find($link->portal_capture_id);
+                    if ($capture) {
+                        $priceChange = $capture->priceChangeCount() > 0;
+                    }
+                }
+                return [
+                    'id'                   => $link->id,
+                    'url'                  => $link->url,
+                    'portal_capture_id'    => $link->portal_capture_id,
+                    'extraction_status'    => $link->extraction_status,
+                    'extracted_at'         => $link->extracted_at?->toIso8601String(),
+                    'price_change_indicator' => $priceChange,
+                    'updated_at'           => $link->updated_at->toIso8601String(),
+                ];
+            });
+
+        // Compute latest cursors
+        $latestCaptureId = $newCaptures->isNotEmpty()
+            ? $newCaptures->max('id')
+            : $afterCaptureId;
+
+        $latestLinkUpdatedAt = $updatedLinks->isNotEmpty()
+            ? $updatedLinks->max('updated_at')
+            : $afterLinkUpdatedAt->toIso8601String();
+
+        // Capture updated_at cursor: max across new + updated captures
+        $allCaptureUpdatedAts = $newCaptures->pluck('updated_at')
+            ->merge($updatedCaptures->pluck('updated_at'));
+        $latestCaptureUpdatedAt = $allCaptureUpdatedAts->isNotEmpty()
+            ? $allCaptureUpdatedAts->max()
+            : ($afterCaptureUpdatedAt ? $afterCaptureUpdatedAt->toIso8601String() : now()->toIso8601String());
+
+        $response = [
+            'server_time'                => now()->toIso8601String(),
+            'latest_capture_id'          => $latestCaptureId,
+            'latest_link_updated_at'     => $latestLinkUpdatedAt,
+            'latest_capture_updated_at'  => $latestCaptureUpdatedAt,
+            'new_captures'               => $newCaptures->values(),
+            'updated_captures'           => $updatedCaptures->values(),
+            'updated_links'              => $updatedLinks->values(),
+            'counts'                     => [
+                'total_captures'      => PortalCapture::where('presentation_id', $presentation->id)->count(),
+                'new_captures'        => $newCaptures->count(),
+                'updated_captures'    => $updatedCaptures->count(),
+                'updated_links'       => $updatedLinks->count(),
+            ],
+        ];
+
+        // Include debug info when ?debug=1
+        if ($request->query('debug')) {
+            $response['debug'] = [
+                'after_capture_id'                 => $afterCaptureId,
+                'after_capture_updated_at_raw'     => $afterCaptureUpdatedAtRaw,
+                'after_capture_updated_at_parsed'  => $afterCaptureUpdatedAt?->toIso8601String(),
+                'after_link_updated_at_raw'        => $afterLinkUpdatedAtRaw,
+                'after_link_updated_at_parsed'     => $afterLinkUpdatedAt->toIso8601String(),
+                'new_captures'                     => $newCaptures->count(),
+                'updated_captures'                 => $updatedCaptures->count(),
+                'updated_links'                    => $updatedLinks->count(),
+                'all_link_updated_ats'             => PresentationLink::where('presentation_id', $presentation->id)
+                    ->pluck('updated_at')
+                    ->map(fn($d) => $d->toIso8601String())
+                    ->toArray(),
+            ];
+        }
+
+        return response()->json($response);
+    }
+
+    /**
+     * Build a brief extraction summary for a capture.
+     */
+    private function captureExtractionSummary(PortalCapture $capture): ?array
+    {
+        $fields = $capture->extracted_fields_json;
+        if (empty($fields)) {
+            return null;
+        }
+
+        // Explicit page type marker
+        $pageType = $fields['_page_type'] ?? null;
+
+        // Search page
+        if ($pageType === 'search' || isset($fields['search'])) {
+            return [
+                'type'           => 'search',
+                'items_on_page'  => $fields['search']['items_on_page'] ?? ($fields['listing_urls_count'] ?? 0),
+            ];
+        }
+
+        // Listing page (new format with 'price' key)
+        if ($pageType === 'listing' || isset($fields['price']) || isset($fields['asking_price'])) {
+            return [
+                'type'         => 'listing',
+                'asking_price' => $fields['price'] ?? $fields['asking_price'] ?? null,
+                'suburb'       => $fields['suburb'] ?? null,
+                'bedrooms'     => $fields['bedrooms'] ?? null,
+                'bathrooms'    => $fields['bathrooms'] ?? null,
+            ];
+        }
+
+        return ['type' => 'raw', 'keys' => count($fields)];
     }
 
     /**
@@ -119,6 +401,643 @@ class PortalCaptureController extends Controller
     {
         $capture->update(['presentation_id' => $presentation->id]);
 
+        // Attempt to link to a matching presentation link
+        $this->linkCaptureToLink($capture);
+
         return response()->json(['success' => true, 'capture_id' => $capture->id]);
+    }
+
+    /**
+     * Match a capture to a presentation link by URL and update the link.
+     * Returns the linked link ID or null.
+     */
+    private function linkCaptureToLink(PortalCapture $capture): ?int
+    {
+        if (!$capture->presentation_id) {
+            return null;
+        }
+
+        $links = PresentationLink::where('presentation_id', $capture->presentation_id)->get();
+
+        if ($links->isEmpty()) {
+            Log::info('[PortalCapture:linkMatch] No links found for presentation', [
+                'capture_id' => $capture->id,
+                'presentation_id' => $capture->presentation_id,
+            ]);
+            return null;
+        }
+
+        $matched = null;
+        $matchMethod = 'none';
+
+        // Pass 1: Property24 listing ID match (most deterministic)
+        $captureListingId = $this->extractProperty24ListingId($capture->source_url);
+        if ($captureListingId) {
+            foreach ($links as $link) {
+                $linkListingId = $this->extractProperty24ListingId($link->url);
+                if ($linkListingId && $linkListingId === $captureListingId) {
+                    $matched = $link;
+                    $matchMethod = 'p24_listing_id';
+                    break;
+                }
+            }
+        }
+
+        // Pass 2: exact normalized URL match
+        if (!$matched) {
+            $captureUrl = $this->normalizeUrl($capture->source_url);
+            foreach ($links as $link) {
+                $linkNorm = $this->normalizeUrl($link->url);
+                if ($linkNorm === $captureUrl) {
+                    $matched = $link;
+                    $matchMethod = 'normalized_exact';
+                    break;
+                }
+            }
+
+            // Pass 3: match without query string
+            if (!$matched) {
+                $captureUrlBase = strtok($captureUrl, '?');
+                foreach ($links as $link) {
+                    $linkNormBase = strtok($this->normalizeUrl($link->url), '?');
+                    if ($linkNormBase === $captureUrlBase) {
+                        $matched = $link;
+                        $matchMethod = 'base_url_no_query';
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!$matched) {
+            Log::info('[PortalCapture:linkMatch] No URL match found', [
+                'capture_id'          => $capture->id,
+                'presentation_id'     => $capture->presentation_id,
+                'capture_source_url'  => $capture->source_url,
+                'capture_listing_id'  => $captureListingId,
+                'link_urls'           => $links->map(fn($l) => ['id' => $l->id, 'url' => $l->url])->toArray(),
+            ]);
+            return null;
+        }
+
+        // Build extracted_json from capture fields
+        $extractedJson = $capture->extracted_fields_json;
+        if ($extractedJson) {
+            $extractedJson['_capture_source'] = 'portal_extension';
+            $extractedJson['_capture_id'] = $capture->id;
+
+            // For listing captures, also map to link-standard keys for compatibility
+            $pageType = $extractedJson['_page_type'] ?? ($capture->page_type === 'property' ? 'listing' : null);
+            if ($pageType === 'listing') {
+                if (!empty($extractedJson['price']) && empty($extractedJson['asking_price'])) {
+                    $extractedJson['asking_price'] = $extractedJson['price'];
+                }
+                if (!empty($extractedJson['bedrooms']) && empty($extractedJson['beds'])) {
+                    $extractedJson['beds'] = $extractedJson['bedrooms'];
+                }
+                if (!empty($extractedJson['bathrooms']) && empty($extractedJson['baths'])) {
+                    $extractedJson['baths'] = $extractedJson['bathrooms'];
+                }
+            }
+        }
+
+        $matched->update([
+            'portal_capture_id' => $capture->id,
+            'extraction_status' => 'ok',
+            'extracted_json'    => $extractedJson ?: $matched->extracted_json,
+            'extraction_error'  => null,
+            'extracted_at'      => now(),
+        ]);
+
+        Log::info('[PortalCapture:linkMatch] Linked capture to link', [
+            'capture_id'         => $capture->id,
+            'presentation_id'    => $capture->presentation_id,
+            'link_id'            => $matched->id,
+            'link_url'           => $matched->url,
+            'capture_source_url' => $capture->source_url,
+            'capture_listing_id' => $captureListingId,
+            'match_method'       => $matchMethod,
+            'updated_at'         => $matched->updated_at->toIso8601String(),
+        ]);
+
+        return $matched->id;
+    }
+
+    /**
+     * Normalize a URL for comparison: lowercase host, strip utm_* / tracking params, remove fragment, trim trailing slash.
+     */
+    private function normalizeUrl(string $url): string
+    {
+        $url = trim($url);
+        $parsed = parse_url($url);
+        if (!$parsed || empty($parsed['host'])) {
+            return rtrim(strtolower($url), '/');
+        }
+
+        $scheme = strtolower($parsed['scheme'] ?? 'https');
+        $host   = strtolower($parsed['host']);
+        $path   = rtrim($parsed['path'] ?? '', '/');
+
+        // Parse query string and remove tracking params
+        $query = '';
+        if (!empty($parsed['query'])) {
+            parse_str($parsed['query'], $params);
+            // Remove utm_*, fbclid, gclid, ref, P24 tracking params, etc.
+            $stripPrefixes = ['utm_', 'fbclid', 'gclid', 'ref', 'source', 'medium', 'campaign',
+                              'plid', 'plt', 'plsids', 'plloc'];
+            $filtered = [];
+            foreach ($params as $k => $v) {
+                $dominated = false;
+                foreach ($stripPrefixes as $prefix) {
+                    if (str_starts_with(strtolower($k), $prefix)) {
+                        $dominated = true;
+                        break;
+                    }
+                }
+                if (!$dominated) {
+                    $filtered[$k] = $v;
+                }
+            }
+            if (!empty($filtered)) {
+                ksort($filtered);
+                $query = '?' . http_build_query($filtered);
+            }
+        }
+
+        return $scheme . '://' . $host . $path . $query;
+    }
+
+    /**
+     * Extract the Property24 listing ID from a URL.
+     * P24 property URLs: /for-sale/.../12345 — listing ID is the last numeric segment (5-12 digits).
+     */
+    private function extractProperty24ListingId(string $url): ?string
+    {
+        $parsed = parse_url($url);
+        $host = strtolower($parsed['host'] ?? '');
+
+        if (!str_contains($host, 'property24.com')) {
+            return null;
+        }
+
+        $path = $parsed['path'] ?? '';
+
+        if (preg_match('/\/(\d{5,12})(?:\/|$)/', $path, $matches)) {
+            return $matches[1];
+        }
+
+        return null;
+    }
+
+    /**
+     * Check if capture is from Property24.
+     */
+    private function isProperty24Capture(PortalCapture $capture): bool
+    {
+        return str_contains(strtolower($capture->source_site), 'property24')
+            || str_contains(strtolower($capture->source_url), 'property24.com');
+    }
+
+    /**
+     * Classify capture page type deterministically from URL patterns.
+     * Returns 'search', 'property', or 'unknown'.
+     */
+    private function classifyPageType(PortalCapture $capture): string
+    {
+        $url = $capture->source_url;
+
+        if ($this->isProperty24Capture($capture)) {
+            if ($this->isProperty24ListingUrl($url)) {
+                return 'property';
+            }
+            if ($this->isProperty24SearchUrl($url)) {
+                return 'search';
+            }
+        }
+
+        // Fall back to whatever the extension sent
+        return $capture->page_type;
+    }
+
+    /**
+     * Determine if a URL is a Property24 individual listing page.
+     * Listing URLs: /for-sale/.../12345678 (5-12 digit ID at end of path)
+     * Must NOT have search query params like plId, plt, plsIds.
+     */
+    private function isProperty24ListingUrl(string $url): bool
+    {
+        $parsed = parse_url($url);
+        $host = strtolower($parsed['host'] ?? '');
+        if (!str_contains($host, 'property24.com')) {
+            return false;
+        }
+
+        $path = $parsed['path'] ?? '';
+        $query = $parsed['query'] ?? '';
+
+        // Must have a listing ID in the path (5-12 digit numeric segment at end)
+        if (!preg_match('#/(\d{5,12})(?:/|$)#', $path)) {
+            return false;
+        }
+
+        // Must NOT have search-specific query params
+        $searchParams = ['plid', 'plt', 'plsids', 'sp'];
+        $queryLower = strtolower($query);
+        foreach ($searchParams as $param) {
+            if (str_contains($queryLower, $param . '=')) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Determine if a URL is a Property24 search results page.
+     */
+    private function isProperty24SearchUrl(string $url): bool
+    {
+        $parsed = parse_url($url);
+        $host = strtolower($parsed['host'] ?? '');
+        if (!str_contains($host, 'property24.com')) {
+            return false;
+        }
+
+        $path = strtolower($parsed['path'] ?? '');
+        $query = strtolower($parsed['query'] ?? '');
+
+        // Explicit search patterns
+        $searchParams = ['plid', 'plt', 'plsids', 'sp'];
+        foreach ($searchParams as $param) {
+            if (str_contains($query, $param . '=')) {
+                return true;
+            }
+        }
+
+        // Path patterns for search: /for-sale/suburb/region (no listing ID at end)
+        if (preg_match('#^/for-sale/[^/]+/?$#', $path) || preg_match('#^/for-sale/[^/]+/[^/]+/?$#', $path)) {
+            // Only if path does NOT end with a listing ID
+            if (!preg_match('#/\d{5,12}/?$#', $path)) {
+                return true;
+            }
+        }
+
+        // Property search path
+        if (str_contains($path, '/property-search') || str_contains($path, '/properties-for-sale')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Extract listing detail fields from a Property24 listing page capture.
+     * Uses DOMDocument/XPath for deterministic parsing.
+     *
+     * @return array|null Extracted fields or null on failure
+     */
+    private function extractProperty24ListingFields(PortalCapture $capture): ?array
+    {
+        $html = $this->loadCaptureHtml($capture);
+        if ($html === null || trim($html) === '') {
+            return null;
+        }
+
+        $dom = new \DOMDocument();
+        libxml_use_internal_errors(true);
+        $dom->loadHTML('<?xml encoding="utf-8"?>' . $html, LIBXML_NOWARNING | LIBXML_NOERROR);
+        libxml_clear_errors();
+        $xpath = new \DOMXPath($dom);
+
+        $fields = [
+            '_page_type' => 'listing',
+            '_extractor' => 'p24_listing_dom_v1',
+        ];
+
+        // ── Listing ID from URL ──
+        $listingId = $this->extractProperty24ListingId($capture->source_url);
+        if ($listingId) {
+            $fields['listing_id'] = $listingId;
+        }
+
+        // ── Price ──
+        $fields['price'] = $this->extractListingPrice($xpath);
+
+        // ── Title / Description ──
+        $titleNodes = $xpath->query('//h1[contains(@class,"p24_listing") or contains(@class,"listingTitle")]');
+        if ($titleNodes->length > 0) {
+            $fields['title'] = trim($titleNodes->item(0)->textContent);
+        }
+
+        // ── Address / Suburb ──
+        $addrNodes = $xpath->query('//*[contains(@class,"p24_address") or contains(@class,"address")]');
+        if ($addrNodes->length > 0) {
+            $addr = trim($addrNodes->item(0)->textContent);
+            if ($addr !== '') {
+                $fields['suburb'] = $addr;
+            }
+        }
+        // Fallback: breadcrumb or location element
+        if (empty($fields['suburb'])) {
+            $locNodes = $xpath->query('//*[contains(@class,"p24_location") or contains(@class,"location")]');
+            if ($locNodes->length > 0) {
+                $fields['suburb'] = trim($locNodes->item(0)->textContent);
+            }
+        }
+
+        // ── Property type ──
+        $typeNodes = $xpath->query('//*[contains(@class,"p24_propertyType") or contains(@class,"propertyType")]');
+        if ($typeNodes->length > 0) {
+            $fields['property_type'] = trim($typeNodes->item(0)->textContent);
+        }
+        // Fallback: look in JSON-LD
+        if (empty($fields['property_type']) && !empty($capture->jsonld_json)) {
+            $jsonld = $capture->jsonld_json;
+            if (is_array($jsonld)) {
+                // Could be array of objects
+                $ld = isset($jsonld['@type']) ? $jsonld : ($jsonld[0] ?? []);
+                if (!empty($ld['@type'])) {
+                    $fields['property_type'] = str_replace(['SingleFamilyResidence', 'Apartment', 'House'], ['House', 'Apartment', 'House'], $ld['@type']);
+                }
+            }
+        }
+
+        // ── Bedrooms / Bathrooms / Parking ──
+        $fields['bedrooms'] = $this->extractListingFeatureInt($xpath, 'bed', 'Bedrooms');
+        $fields['bathrooms'] = $this->extractListingFeatureInt($xpath, 'bath', 'Bathrooms');
+
+        // ── Floor size / Erf size ──
+        $fields['floor_m2'] = $this->extractListingSize($xpath, 'floor');
+        $fields['erf_m2'] = $this->extractListingSize($xpath, 'erf');
+
+        // ── Agent details ──
+        $agentNodes = $xpath->query('//*[contains(@class,"p24_agentName") or contains(@class,"agentName")]');
+        if ($agentNodes->length > 0) {
+            $fields['agent_name'] = trim($agentNodes->item(0)->textContent);
+        }
+        $phoneNodes = $xpath->query('//*[contains(@class,"p24_agentPhone") or contains(@class,"agentPhone")]//a | //*[contains(@class,"p24_phoneNumber")]');
+        if ($phoneNodes->length > 0) {
+            $phone = trim($phoneNodes->item(0)->textContent);
+            if ($phone !== '') {
+                $fields['agent_phone'] = $phone;
+            }
+        }
+
+        // ── Canonical URL ──
+        $fields['url'] = $capture->source_url;
+
+        // ── JSON-LD enrichment (price, beds, baths if not found via DOM) ──
+        if (!empty($capture->jsonld_json)) {
+            $this->enrichFromJsonLd($fields, $capture->jsonld_json);
+        }
+
+        // ── Fallback: regex extraction from raw HTML for key fields ──
+        if (empty($fields['price'])) {
+            $fields['price'] = $this->extractPriceFromHtml($html);
+        }
+        if (empty($fields['bedrooms'])) {
+            $fields['bedrooms'] = $this->extractIntFromHtmlPattern($html, '/(\d{1,2})\s*(?:Bedroom|Bed)/i');
+        }
+        if (empty($fields['bathrooms'])) {
+            $fields['bathrooms'] = $this->extractIntFromHtmlPattern($html, '/(\d{1,2})\s*(?:Bathroom|Bath)/i');
+        }
+        if (empty($fields['floor_m2'])) {
+            if (preg_match('/(\d[\d\s]*)\s*m[²2]\s*(?:floor|house)/i', $html, $m)) {
+                $v = (int) preg_replace('/\s/', '', $m[1]);
+                if ($v >= 10 && $v <= 99999) $fields['floor_m2'] = $v;
+            }
+        }
+        if (empty($fields['erf_m2'])) {
+            if (preg_match('/(?:erf|land|stand)[^<]{0,30}?(\d[\d\s]*)\s*m[²2]/i', $html, $m)) {
+                $v = (int) preg_replace('/\s/', '', $m[1]);
+                if ($v >= 10 && $v <= 99999) $fields['erf_m2'] = $v;
+            }
+        }
+
+        // Remove null/empty values
+        $fields = array_filter($fields, fn($v) => $v !== null && $v !== '');
+
+        // Validate: must have at least price OR (beds AND baths)
+        $hasPrice = !empty($fields['price']);
+        $hasFeatures = !empty($fields['bedrooms']) || !empty($fields['bathrooms']);
+        if (!$hasPrice && !$hasFeatures) {
+            Log::info('[PortalCapture:listingExtract] Could not extract core listing fields', [
+                'capture_id' => $capture->id,
+                'keys_found' => array_keys($fields),
+            ]);
+            return null;
+        }
+
+        return $fields;
+    }
+
+    /**
+     * Extract price from listing page DOM.
+     */
+    private function extractListingPrice(\DOMXPath $xpath): ?int
+    {
+        // Strategy 1: p24_price class
+        $priceNodes = $xpath->query('//*[contains(@class,"p24_price") or contains(@class,"listingPrice")]');
+        foreach ($priceNodes as $node) {
+            $v = $this->parsePriceText($node->textContent);
+            if ($v !== null) return $v;
+        }
+
+        // Strategy 2: any element with itemprop="price"
+        $itemNodes = $xpath->query('//*[@itemprop="price" or @content][@itemprop="price"]');
+        foreach ($itemNodes as $node) {
+            $content = $node->getAttribute('content') ?: $node->textContent;
+            $v = $this->parsePriceText($content);
+            if ($v !== null) return $v;
+        }
+
+        return null;
+    }
+
+    /**
+     * Parse a price text string to integer.
+     */
+    private function parsePriceText(string $text): ?int
+    {
+        $cleaned = preg_replace('/[^\d]/', '', trim($text));
+        if ($cleaned !== '' && strlen($cleaned) >= 5) {
+            $v = (int) $cleaned;
+            if ($v >= 10000 && $v <= 999999999) {
+                return $v;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Extract a feature integer (beds, baths) from listing page DOM.
+     */
+    private function extractListingFeatureInt(\DOMXPath $xpath, string $iconKeyword, string $altKeyword): ?int
+    {
+        // Icon-based: img with icon_bed / icon_bath
+        $imgNodes = $xpath->query('//img[contains(@src,"icon_' . $iconKeyword . '") or contains(@alt,"' . $altKeyword . '")]');
+        foreach ($imgNodes as $img) {
+            $sibling = $img->nextSibling;
+            while ($sibling) {
+                if ($sibling->nodeType === XML_TEXT_NODE) {
+                    $txt = trim($sibling->textContent);
+                    if ($txt !== '' && preg_match('/\b(\d{1,2})\b/', $txt, $m)) {
+                        return (int) $m[1];
+                    }
+                }
+                if ($sibling->nodeType === XML_ELEMENT_NODE) {
+                    // Check element text
+                    $txt = trim($sibling->textContent);
+                    if ($txt !== '' && preg_match('/\b(\d{1,2})\b/', $txt, $m)) {
+                        return (int) $m[1];
+                    }
+                    break;
+                }
+                $sibling = $sibling->nextSibling;
+            }
+            // Parent span fallback
+            if ($img->parentNode && $img->parentNode->nodeName === 'span') {
+                $spanText = trim($img->parentNode->textContent);
+                if (preg_match('/\b(\d{1,2})\b/', $spanText, $m)) {
+                    return (int) $m[1];
+                }
+            }
+        }
+
+        // Class-based fallback
+        $nodes = $xpath->query('//*[contains(@class,"p24_featureDetails")]//*[contains(@class,"' . $iconKeyword . '")]');
+        foreach ($nodes as $n) {
+            $text = trim($n->textContent);
+            if (preg_match('/\b(\d{1,2})\b/', $text, $m)) {
+                return (int) $m[1];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract size (floor or erf) from listing page DOM.
+     */
+    private function extractListingSize(\DOMXPath $xpath, string $keyword): ?int
+    {
+        $imgNodes = $xpath->query(
+            '//img[contains(@src,"icon_' . $keyword . '") or contains(@alt,"' . ucfirst($keyword) . '")]'
+        );
+        foreach ($imgNodes as $img) {
+            $sibling = $img->nextSibling;
+            while ($sibling) {
+                if ($sibling->nodeType === XML_TEXT_NODE || $sibling->nodeType === XML_ELEMENT_NODE) {
+                    $txt = trim($sibling->textContent);
+                    if (preg_match('/(\d[\d\s]*)\s*m[²2]/i', $txt, $m)) {
+                        $v = (int) preg_replace('/\s/', '', $m[1]);
+                        return ($v >= 1 && $v <= 99999) ? $v : null;
+                    }
+                }
+                if ($sibling->nodeType === XML_ELEMENT_NODE) break;
+                $sibling = $sibling->nextSibling;
+            }
+            // Parent span fallback
+            if ($img->parentNode) {
+                $spanText = trim($img->parentNode->textContent);
+                if (preg_match('/(\d[\d\s]*)\s*m[²2]/i', $spanText, $m)) {
+                    $v = (int) preg_replace('/\s/', '', $m[1]);
+                    return ($v >= 1 && $v <= 99999) ? $v : null;
+                }
+            }
+        }
+
+        // Feature details class fallback
+        $nodes = $xpath->query('//*[contains(@class,"p24_size") or contains(@class,"' . $keyword . 'Size")]');
+        foreach ($nodes as $n) {
+            $text = trim($n->textContent);
+            if (preg_match('/(\d[\d\s]*)\s*m[²2]/i', $text, $m)) {
+                $v = (int) preg_replace('/\s/', '', $m[1]);
+                return ($v >= 1 && $v <= 99999) ? $v : null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Enrich extracted fields from JSON-LD data.
+     */
+    private function enrichFromJsonLd(array &$fields, array $jsonld): void
+    {
+        // Normalize: JSON-LD may be a single object or array
+        $ld = isset($jsonld['@type']) ? $jsonld : ($jsonld[0] ?? []);
+
+        if (empty($fields['price']) && !empty($ld['offers']['price'])) {
+            $v = $this->parsePriceText((string) $ld['offers']['price']);
+            if ($v !== null) $fields['price'] = $v;
+        }
+        if (empty($fields['bedrooms']) && !empty($ld['numberOfRooms'])) {
+            $v = (int) $ld['numberOfRooms'];
+            if ($v >= 1 && $v <= 20) $fields['bedrooms'] = $v;
+        }
+        if (empty($fields['floor_m2']) && !empty($ld['floorSize']['value'])) {
+            $v = (int) $ld['floorSize']['value'];
+            if ($v >= 10 && $v <= 99999) $fields['floor_m2'] = $v;
+        }
+        if (empty($fields['suburb']) && !empty($ld['address']['addressLocality'])) {
+            $fields['suburb'] = $ld['address']['addressLocality'];
+        }
+    }
+
+    /**
+     * Extract price from raw HTML as fallback.
+     */
+    private function extractPriceFromHtml(string $html): ?int
+    {
+        if (preg_match('/R\s*([\d\s,]+)/', $html, $m)) {
+            $cleaned = preg_replace('/[^\d]/', '', $m[1]);
+            if (strlen($cleaned) >= 5) {
+                $v = (int) $cleaned;
+                if ($v >= 10000 && $v <= 999999999) return $v;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Extract an integer from HTML using a regex pattern.
+     */
+    private function extractIntFromHtmlPattern(string $html, string $pattern): ?int
+    {
+        if (preg_match($pattern, $html, $m)) {
+            $v = (int) $m[1];
+            return ($v >= 1 && $v <= 99) ? $v : null;
+        }
+        return null;
+    }
+
+    /**
+     * Load raw HTML from capture's stored file.
+     */
+    private function loadCaptureHtml(PortalCapture $capture): ?string
+    {
+        if (empty($capture->raw_html_path)) {
+            return null;
+        }
+        if (!Storage::disk('local')->exists($capture->raw_html_path)) {
+            return null;
+        }
+        return Storage::disk('local')->get($capture->raw_html_path);
+    }
+
+    /**
+     * Normalize source_site to a consistent domain (e.g. www.property24.com).
+     */
+    private function normalizeSourceSite(string $sourceSite): string
+    {
+        $site = strtolower(trim($sourceSite));
+
+        // Ensure it has www. prefix for property24
+        if ($site === 'property24.com') {
+            return 'www.property24.com';
+        }
+
+        return $site;
     }
 }

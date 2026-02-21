@@ -1,10 +1,10 @@
-{
+﻿{
   "manifest_version": 3,
   "name": "Portal Capture for HFC",
   "version": "1.0.0",
   "description": "Capture property portal pages (Property24, PrivateProperty, etc.) for HF Coastal presentations",
-  "permissions": ["activeTab", "scripting", "tabs"],
-  "host_permissions": [
+  "permissions": ["storage", "activeTab", "scripting", "tabs"],
+  "host_permissions": ["http://127.0.0.1:8000/*", 
     "<all_urls>"
   ],
   "action": {
@@ -12,3 +12,4 @@
     "default_title": "Capture Portal Page"
   }
 }
+
