@@ -4,25 +4,23 @@
 
 @php
     $statusClasses = match($presentation->status) {
-        'presented' => 'bg-indigo-50 text-indigo-600',
-        'locked'    => 'pres-badge-success',
-        default     => 'bg-slate-100 text-slate-500',
+        'presented' => 'bg-blue-100 text-blue-700',
+        'locked'    => 'bg-green-100 text-green-700',
+        default     => 'bg-gray-100 text-gray-600',
     };
     $lastSummary = $latestSnapshot ? $latestSnapshot->getOutputSummaryArray() : null;
 @endphp
 
-<div class="pres-page -m-6 p-6">
-
 {{-- PAGE HEADER --}}
-<div class="mb-8 flex items-start justify-between">
+<div class="mb-6 flex items-start justify-between">
     <div>
-        <div class="flex items-center gap-3 mb-1.5">
-            <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">{{ $presentation->title }}</h1>
-            <span class="pres-badge {{ $statusClasses }}">
+        <div class="flex items-center gap-3 mb-1">
+            <h1 class="text-2xl font-bold text-gray-800">{{ $presentation->title }}</h1>
+            <span class="px-2 py-0.5 rounded text-xs font-medium {{ $statusClasses }}">
                 {{ ucfirst($presentation->status) }}
             </span>
         </div>
-        <p class="text-sm text-slate-600 font-medium">{{ $presentation->property_address ?? 'No address set' }}</p>
+        <p class="text-sm text-gray-600">{{ $presentation->property_address ?? 'No address set' }}</p>
 
         {{-- Property details row --}}
         @php
@@ -34,233 +32,221 @@
             ]);
         @endphp
         @if(!empty($propDetails))
-            <p class="text-xs text-slate-400 mt-1">{{ implode(' · ', $propDetails) }}</p>
+            <p class="text-xs text-gray-500 mt-0.5">{{ implode(' · ', $propDetails) }}</p>
         @endif
 
         @if($presentation->seller_name)
-            <p class="text-xs text-slate-400 mt-0.5">Seller: {{ $presentation->seller_name }}</p>
+            <p class="text-xs text-gray-400 mt-0.5">Seller: {{ $presentation->seller_name }}</p>
         @endif
-        <p class="text-xs text-slate-400 mt-0.5">Created {{ $presentation->created_at->format('Y-m-d') }}</p>
+        <p class="text-xs text-gray-400 mt-0.5">Created {{ $presentation->created_at->format('Y-m-d') }}</p>
     </div>
     <a href="{{ route('presentations.index') }}"
-       class="pres-btn pres-btn-secondary text-xs">← All Presentations</a>
+       class="text-xs text-indigo-600 hover:underline mt-1">← All Presentations</a>
 </div>
 
 @if(session('success'))
-    <div class="mb-5 px-4 py-3 rounded-xl text-sm font-medium" style="background:var(--pres-success-bg);border:1px solid #bbf7d0;color:#166534">
+    <div class="mb-4 px-4 py-3 bg-green-50 border border-green-200 text-green-800 rounded text-sm">
         {{ session('success') }}
     </div>
 @endif
 
 {{-- ACTION BUTTONS --}}
-<div class="pres-card mb-8">
-    <div class="flex flex-wrap items-center gap-3 px-5 py-3.5">
-        @if($readiness['can_compile'])
-            <a href="{{ route('presentations.analysis', $presentation) }}"
-               class="pres-btn pres-btn-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" /></svg>
-                {{ $latestSnapshot ? 'Re-run Analysis' : 'Run Analysis' }}
+<div class="flex flex-wrap gap-3 mb-6">
+    @if($readiness['can_compile'])
+        <a href="{{ route('presentations.analysis', $presentation) }}"
+           class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700">
+            {{ $latestSnapshot ? 'Re-run Analysis' : 'Run Analysis' }}
+        </a>
+    @else
+        <span class="px-4 py-2 bg-gray-400 text-white text-sm font-medium rounded cursor-not-allowed"
+              title="Complete the required evidence items below before running analysis">
+            {{ $latestSnapshot ? 'Re-run Analysis' : 'Run Analysis' }}
+        </span>
+    @endif
+    @if($latestSnapshot)
+        <a href="{{ route('presentations.snapshots.show', [$presentation, $latestSnapshot]) }}"
+           class="px-4 py-2 border border-gray-300 text-gray-600 text-sm font-medium rounded hover:bg-gray-50">
+            Latest Snapshot →
+        </a>
+    @endif
+    @if(config('features.presentation_brain_ui_v1'))
+        @if($latestSnapshot)
+            <a href="{{ route('presentations.brain', $presentation) }}"
+               class="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded hover:bg-purple-700">
+                Brain Simulation
             </a>
         @else
-            <span class="pres-btn pres-btn-disabled"
-                  title="Complete the required evidence items below before running analysis">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" /></svg>
-                {{ $latestSnapshot ? 'Re-run Analysis' : 'Run Analysis' }}
+            <span class="px-4 py-2 bg-gray-400 text-white text-sm font-medium rounded cursor-not-allowed"
+                  title="Run analysis and save a snapshot first">
+                Brain Simulation
             </span>
         @endif
-        @if($latestSnapshot)
-            <a href="{{ route('presentations.snapshots.show', [$presentation, $latestSnapshot]) }}"
-               class="pres-btn pres-btn-secondary">
-                Latest Snapshot →
-            </a>
-        @endif
-        @if(config('features.presentation_brain_ui_v1'))
-            @if($latestSnapshot)
-                <a href="{{ route('presentations.brain', $presentation) }}"
-                   class="pres-btn pres-btn-purple">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" /></svg>
-                    Brain Simulation
-                </a>
-            @else
-                <span class="pres-btn pres-btn-disabled"
-                      title="Run analysis and save a snapshot first">
-                    Brain Simulation
-                </span>
-            @endif
-        @endif
-        @if(config('features.presentation_blueprint'))
-            <form method="POST" action="{{ route('presentations.compile', $presentation) }}" class="inline">
-                @csrf
-                <button type="submit"
-                        class="pres-btn {{ $readiness['can_compile'] ? 'pres-btn-green' : 'pres-btn-disabled' }}"
-                        {{ $readiness['can_compile'] ? '' : 'disabled title="Missing required evidence — see checklist below"' }}>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
-                    Compile Pack
-                </button>
-            </form>
-        @endif
-    </div>
+    @endif
+    @if(config('features.presentation_blueprint'))
+        <form method="POST" action="{{ route('presentations.compile', $presentation) }}" class="inline">
+            @csrf
+            <button type="submit"
+                    class="px-4 py-2 {{ $readiness['can_compile'] ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400 cursor-not-allowed' }} text-white text-sm font-medium rounded"
+                    {{ $readiness['can_compile'] ? '' : 'disabled title="Missing required evidence — see checklist below"' }}>
+                Compile Pack
+            </button>
+        </form>
+    @endif
 </div>
 
 @if(session('error'))
-    <div class="mb-5 px-4 py-3 bg-red-50 border border-red-200 text-red-800 rounded-xl text-sm font-medium">
+    <div class="mb-4 px-4 py-3 bg-red-50 border border-red-200 text-red-800 rounded text-sm">
         {{ session('error') }}
     </div>
 @endif
 
 {{-- ── READINESS CHECKLIST (P16) ──────────────────────────────────────────── --}}
-<div class="pres-card mb-8">
-    <div class="pres-card-header">
-        <h2>Pack Readiness</h2>
-        <span class="pres-badge {{ $readiness['completed_percent'] >= 100 ? 'pres-badge-success' : '' }}" style="{{ $readiness['completed_percent'] < 100 ? 'background:#eef2ff;color:var(--pres-brand)' : '' }}">
+<div class="mb-6 bg-white rounded-xl shadow p-5">
+    <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-gray-700">Pack Readiness</h2>
+        <span class="text-xs font-medium {{ $readiness['completed_percent'] >= 100 ? 'text-green-600' : ($readiness['completed_percent'] >= 57 ? 'text-amber-600' : 'text-red-500') }}">
             {{ $readiness['completed_percent'] }}% complete
         </span>
     </div>
-    <div class="pres-card-body">
-        {{-- Progress bar --}}
-        <div class="pres-progress-bar mb-5">
-            <div class="pres-progress-fill"
-                 style="width: {{ $readiness['completed_percent'] }}%; background: var(--pres-brand)"></div>
-        </div>
 
-        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            {{-- Required --}}
-            <div>
-                <p class="text-[11px] font-semibold text-slate-400 mb-2.5 uppercase tracking-widest">Required</p>
-                <ul class="space-y-2">
-                    @foreach($readiness['required_items'] as $item)
-                        <li class="flex items-start gap-2.5 text-xs">
-                            <span class="mt-0.5 shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] {{ $item['satisfied'] ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400' }}">
-                                {{ $item['satisfied'] ? '✓' : '✗' }}
-                            </span>
-                            <span class="{{ $item['satisfied'] ? 'text-slate-500' : 'text-slate-700 font-medium' }}">
-                                {{ $item['label'] }}
-                            </span>
-                        </li>
-                    @endforeach
-                </ul>
-            </div>
-
-            {{-- Optional --}}
-            <div>
-                <p class="text-[11px] font-semibold text-slate-400 mb-2.5 uppercase tracking-widest">Optional</p>
-                <ul class="space-y-2">
-                    @foreach($readiness['optional_items'] as $item)
-                        <li class="flex items-start gap-2.5 text-xs">
-                            <span class="mt-0.5 shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] {{ $item['satisfied'] ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-300' }}">
-                                {{ $item['satisfied'] ? '✓' : '○' }}
-                            </span>
-                            <span class="text-slate-500">{{ $item['label'] }}</span>
-                        </li>
-                    @endforeach
-                </ul>
-            </div>
-        </div>
-
-        @if($readiness['can_compile'])
-            <div class="mt-4 px-3 py-2 rounded-lg" style="background: var(--pres-success-bg)">
-                <p class="text-xs font-semibold" style="color: var(--pres-success)">All required items present — ready to compile.</p>
-            </div>
-        @else
-            <div class="mt-4 px-3 py-2 bg-slate-50 rounded-lg">
-                <p class="text-xs text-slate-600 font-medium">
-                    Missing: {{ implode(', ', array_column($readiness['missing_required'], 'label')) }}
-                </p>
-            </div>
-        @endif
+    {{-- Progress bar --}}
+    <div class="w-full bg-gray-100 rounded-full h-1.5 mb-4">
+        <div class="h-1.5 rounded-full {{ $readiness['can_compile'] ? 'bg-green-500' : 'bg-amber-400' }}"
+             style="width: {{ $readiness['completed_percent'] }}%"></div>
     </div>
+
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {{-- Required --}}
+        <div>
+            <p class="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Required</p>
+            <ul class="space-y-1.5">
+                @foreach($readiness['required_items'] as $item)
+                    <li class="flex items-start gap-2 text-xs">
+                        <span class="{{ $item['satisfied'] ? 'text-green-500' : 'text-red-400' }} mt-0.5 shrink-0">
+                            {{ $item['satisfied'] ? '✓' : '✗' }}
+                        </span>
+                        <span class="{{ $item['satisfied'] ? 'text-gray-600' : 'text-gray-700 font-medium' }}">
+                            {{ $item['label'] }}
+                        </span>
+                    </li>
+                @endforeach
+            </ul>
+        </div>
+
+        {{-- Optional --}}
+        <div>
+            <p class="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Optional</p>
+            <ul class="space-y-1.5">
+                @foreach($readiness['optional_items'] as $item)
+                    <li class="flex items-start gap-2 text-xs">
+                        <span class="{{ $item['satisfied'] ? 'text-green-500' : 'text-gray-300' }} mt-0.5 shrink-0">
+                            {{ $item['satisfied'] ? '✓' : '○' }}
+                        </span>
+                        <span class="text-gray-500">{{ $item['label'] }}</span>
+                    </li>
+                @endforeach
+            </ul>
+        </div>
+    </div>
+
+    @if($readiness['can_compile'])
+        <p class="mt-3 text-xs text-green-600 font-medium">All required items present — ready to compile.</p>
+    @else
+        <p class="mt-3 text-xs text-red-500">
+            Missing: {{ implode(', ', array_column($readiness['missing_required'], 'label')) }}
+        </p>
+    @endif
 </div>
 
 {{-- ── POWER PANEL (UI1) ──────────────────────────────────────────────── --}}
 @if($powerPanel)
-<div class="pres-card mb-8">
-    <div class="pres-card-header">
-        <h2>Power Panel</h2>
-        <span class="text-xs text-slate-400 font-medium">Snapshot {{ $powerPanel['snapshot_at']->format('Y-m-d H:i') }}</span>
+<div class="mb-6 bg-white rounded-xl shadow p-5">
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-gray-700">Power Panel</h2>
+        <span class="text-xs text-gray-400">Snapshot {{ $powerPanel['snapshot_at']->format('Y-m-d H:i') }}</span>
     </div>
-    <div class="pres-card-body">
 
     {{-- Row 1: Probability + Confidence + PPI --}}
-    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 mb-5">
+    <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 mb-4">
         {{-- P30 --}}
-        <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
-            <p class="pres-stat-label mb-1">P30</p>
-            <p class="pres-stat-value {{ ($powerPanel['p30'] ?? 0) >= 0.5 ? 'text-indigo-600' : 'text-slate-800' }}">
+        <div class="text-center">
+            <p class="text-xs text-gray-400 mb-1">P30</p>
+            <p class="text-lg font-bold {{ ($powerPanel['p30'] ?? 0) >= 0.5 ? 'text-green-600' : 'text-gray-800' }}">
                 @if($powerPanel['p30'] !== null)
                     {{ number_format($powerPanel['p30'] * 100, 0) }}%
                 @else
-                    <span class="text-slate-300">--</span>
+                    <span class="text-gray-300">--</span>
                 @endif
             </p>
         </div>
         {{-- P60 --}}
-        <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
-            <p class="pres-stat-label mb-1">P60</p>
-            <p class="pres-stat-value {{ ($powerPanel['p60'] ?? 0) >= 0.5 ? 'text-indigo-600' : 'text-slate-800' }}">
+        <div class="text-center">
+            <p class="text-xs text-gray-400 mb-1">P60</p>
+            <p class="text-lg font-bold {{ ($powerPanel['p60'] ?? 0) >= 0.5 ? 'text-green-600' : 'text-gray-800' }}">
                 @if($powerPanel['p60'] !== null)
                     {{ number_format($powerPanel['p60'] * 100, 0) }}%
                 @else
-                    <span class="text-slate-300">--</span>
+                    <span class="text-gray-300">--</span>
                 @endif
             </p>
         </div>
         {{-- P90 --}}
-        <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
-            <p class="pres-stat-label mb-1">P90</p>
-            <p class="pres-stat-value {{ ($powerPanel['p90'] ?? 0) >= 0.65 ? 'text-indigo-600' : 'text-slate-800' }}">
+        <div class="text-center">
+            <p class="text-xs text-gray-400 mb-1">P90</p>
+            <p class="text-lg font-bold {{ ($powerPanel['p90'] ?? 0) >= 0.65 ? 'text-green-600' : 'text-gray-800' }}">
                 @if($powerPanel['p90'] !== null)
                     {{ number_format($powerPanel['p90'] * 100, 0) }}%
                 @else
-                    <span class="text-slate-300">--</span>
+                    <span class="text-gray-300">--</span>
                 @endif
             </p>
         </div>
         {{-- Expected Days --}}
-        <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
-            <p class="pres-stat-label mb-1">Exp. Days</p>
-            <p class="pres-stat-value text-slate-800">
+        <div class="text-center">
+            <p class="text-xs text-gray-400 mb-1">Exp. Days</p>
+            <p class="text-lg font-bold text-gray-800">
                 @if($powerPanel['expected_days'] !== null)
                     {{ $powerPanel['expected_days'] }}
                 @else
-                    <span class="text-slate-300">--</span>
+                    <span class="text-gray-300">--</span>
                 @endif
             </p>
         </div>
         {{-- Confidence --}}
-        <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
-            <p class="pres-stat-label mb-1">Confidence</p>
+        <div class="text-center">
+            <p class="text-xs text-gray-400 mb-1">Confidence</p>
             @if($powerPanel['confidence'])
                 @php
                     $confScore = $powerPanel['confidence']['confidence_score'] ?? 0;
                     $confGrade = $powerPanel['confidence']['confidence_grade'] ?? '-';
                     $confColor = match($confGrade) {
-                        'A' => 'text-indigo-600',
-                        'B' => 'text-indigo-500',
-                        'C' => 'text-slate-500',
-                        default => 'text-slate-400',
+                        'A' => 'text-green-600',
+                        'B' => 'text-blue-600',
+                        'C' => 'text-amber-600',
+                        default => 'text-red-500',
                     };
                 @endphp
-                <p class="pres-stat-value {{ $confColor }}">{{ $confScore }} <span class="text-xs font-medium">({{ $confGrade }})</span></p>
+                <p class="text-lg font-bold {{ $confColor }}">{{ $confScore }} <span class="text-xs">({{ $confGrade }})</span></p>
             @else
-                <p class="pres-stat-value text-slate-300">--</p>
+                <p class="text-lg font-bold text-gray-300">--</p>
             @endif
         </div>
         {{-- PPI --}}
-        <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
-            <p class="pres-stat-label mb-1">PPI</p>
+        <div class="text-center">
+            <p class="text-xs text-gray-400 mb-1">PPI</p>
             @if($powerPanel['ppi'])
                 @php
                     $ppiScore = $powerPanel['ppi']['ppi_score'] ?? 0;
                     $ppiLabel = $powerPanel['ppi']['ppi_label'] ?? '-';
                     $ppiColor = match($ppiLabel) {
-                        'Strong' => 'text-indigo-600',
-                        'Balanced' => 'text-slate-600',
-                        default => 'text-slate-400',
+                        'Strong' => 'text-green-600',
+                        'Balanced' => 'text-amber-600',
+                        default => 'text-red-500',
                     };
                 @endphp
-                <p class="pres-stat-value {{ $ppiColor }}">{{ $ppiScore }} <span class="text-xs font-medium">({{ $ppiLabel }})</span></p>
+                <p class="text-lg font-bold {{ $ppiColor }}">{{ $ppiScore }} <span class="text-xs">({{ $ppiLabel }})</span></p>
             @else
-                <p class="pres-stat-value text-slate-300">--</p>
+                <p class="text-lg font-bold text-gray-300">--</p>
             @endif
         </div>
     </div>
@@ -271,25 +257,25 @@
         $holdingCost = $powerPanel['holding_cost'] ?? null;
     @endphp
     @if($compStock || $holdingCost)
-    <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-5 pt-4 border-t border-slate-100">
+    <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-4 pt-3 border-t border-gray-100">
         @if($compStock)
-            <div class="bg-slate-50 rounded-lg px-3 py-2">
-                <p class="pres-stat-label">Active Stock</p>
-                <p class="text-sm font-bold text-slate-700 mt-0.5">{{ $compStock['total_active_stock'] ?? '--' }}</p>
+            <div>
+                <p class="text-xs text-gray-400">Active Stock</p>
+                <p class="text-sm font-semibold text-gray-700">{{ $compStock['total_active_stock'] ?? '--' }}</p>
             </div>
-            <div class="bg-slate-50 rounded-lg px-3 py-2">
-                <p class="pres-stat-label">Below Subject</p>
-                <p class="text-sm font-bold text-slate-700 mt-0.5">{{ $compStock['below_subject_count'] ?? '--' }}</p>
+            <div>
+                <p class="text-xs text-gray-400">Below Subject</p>
+                <p class="text-sm font-semibold text-gray-700">{{ $compStock['below_subject_count'] ?? '--' }}</p>
             </div>
-            <div class="bg-slate-50 rounded-lg px-3 py-2">
-                <p class="pres-stat-label">Above Subject</p>
-                <p class="text-sm font-bold text-slate-700 mt-0.5">{{ $compStock['above_subject_count'] ?? '--' }}</p>
+            <div>
+                <p class="text-xs text-gray-400">Above Subject</p>
+                <p class="text-sm font-semibold text-gray-700">{{ $compStock['above_subject_count'] ?? '--' }}</p>
             </div>
         @endif
         @if($holdingCost)
-            <div class="bg-slate-50 rounded-lg px-3 py-2">
-                <p class="pres-stat-label">Monthly Hold Cost</p>
-                <p class="text-sm font-bold text-slate-700 mt-0.5">R{{ number_format($holdingCost['monthly_total'] ?? 0, 0) }}</p>
+            <div>
+                <p class="text-xs text-gray-400">Monthly Hold Cost</p>
+                <p class="text-sm font-semibold text-gray-700">R{{ number_format($holdingCost['monthly_total'] ?? 0, 0) }}</p>
             </div>
         @endif
     </div>
@@ -298,16 +284,16 @@
     {{-- Row 3: Explainability --}}
     @if($powerPanel['explainability'])
         @php $explain = $powerPanel['explainability']; @endphp
-        <div class="pt-4 border-t border-slate-100">
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div class="pt-3 border-t border-gray-100">
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {{-- Key Drivers --}}
                 @if(!empty($explain['key_drivers']))
-                    <div class="bg-indigo-50 rounded-lg p-3">
-                        <p class="text-[11px] font-semibold text-indigo-700 mb-2 uppercase tracking-widest">Key Drivers</p>
-                        <ul class="space-y-1.5">
+                    <div>
+                        <p class="text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Key Drivers</p>
+                        <ul class="space-y-1">
                             @foreach($explain['key_drivers'] as $driver)
-                                <li class="text-xs text-slate-600 flex items-start gap-2">
-                                    <span class="text-indigo-500 mt-0.5 shrink-0 font-bold">+</span>
+                                <li class="text-xs text-gray-600 flex items-start gap-1.5">
+                                    <span class="text-green-500 mt-0.5 shrink-0">+</span>
                                     {{ $driver }}
                                 </li>
                             @endforeach
@@ -316,12 +302,12 @@
                 @endif
                 {{-- Risk Factors --}}
                 @if(!empty($explain['risk_factors']))
-                    <div class="bg-amber-50 rounded-lg p-3">
-                        <p class="text-[11px] font-semibold text-amber-700 mb-2 uppercase tracking-widest">Risk Factors</p>
-                        <ul class="space-y-1.5">
+                    <div>
+                        <p class="text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Risk Factors</p>
+                        <ul class="space-y-1">
                             @foreach($explain['risk_factors'] as $risk)
-                                <li class="text-xs text-slate-600 flex items-start gap-2">
-                                    <span class="text-amber-500 mt-0.5 shrink-0 font-bold">!</span>
+                                <li class="text-xs text-gray-600 flex items-start gap-1.5">
+                                    <span class="text-red-400 mt-0.5 shrink-0">!</span>
                                     {{ $risk }}
                                 </li>
                             @endforeach
@@ -331,89 +317,80 @@
             </div>
             {{-- Position summary --}}
             @if(!empty($explain['position_summary']))
-                <p class="mt-3 text-xs text-slate-500 italic bg-slate-50 rounded-lg px-3 py-2">{{ $explain['position_summary'] }}</p>
+                <p class="mt-2 text-xs text-gray-500 italic">{{ $explain['position_summary'] }}</p>
             @endif
         </div>
     @endif
-    </div>
 </div>
 @endif
 
-<div class="grid grid-cols-1 gap-6 md:grid-cols-2 mb-8">
+<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
 
     {{-- LAST ANALYSIS SUMMARY --}}
-    <div class="pres-card">
-        <div class="pres-card-header">
-            <h2>Last Analysis</h2>
-        </div>
-        <div class="pres-card-body">
+    <div class="bg-white rounded-xl shadow p-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Last Analysis</h2>
         @if($lastSummary)
-            <dl class="space-y-3 text-sm">
-                <div class="flex justify-between items-center py-1.5 border-b border-slate-50">
-                    <dt class="text-slate-400 text-xs font-medium">60-day sale probability</dt>
-                    <dd class="font-bold text-slate-800">
+            <dl class="space-y-2 text-sm">
+                <div class="flex justify-between">
+                    <dt class="text-gray-400 text-xs">60-day sale probability</dt>
+                    <dd class="font-semibold text-gray-800">
                         @if(isset($lastSummary['p60']) && $lastSummary['p60'] !== null)
                             {{ number_format($lastSummary['p60'] * 100, 0) }}%
                         @else
-                            <span class="text-slate-300">—</span>
+                            <span class="text-gray-300">—</span>
                         @endif
                     </dd>
                 </div>
-                <div class="flex justify-between items-center py-1.5 border-b border-slate-50">
-                    <dt class="text-slate-400 text-xs font-medium">Expected Days to Sell</dt>
-                    <dd class="font-bold text-slate-800">
+                <div class="flex justify-between">
+                    <dt class="text-gray-400 text-xs">Expected Days to Sell</dt>
+                    <dd class="font-semibold text-gray-800">
                         @if(isset($lastSummary['expected_days']) && $lastSummary['expected_days'] !== null)
                             {{ $lastSummary['expected_days'] }} days
                         @else
-                            <span class="text-slate-300">—</span>
+                            <span class="text-gray-300">—</span>
                         @endif
                     </dd>
                 </div>
-                <div class="flex justify-between items-center py-1.5">
-                    <dt class="text-slate-400 text-xs font-medium">Months of Inventory</dt>
-                    <dd class="font-bold text-slate-800">
+                <div class="flex justify-between">
+                    <dt class="text-gray-400 text-xs">Months of Inventory</dt>
+                    <dd class="font-semibold text-gray-800">
                         @if(isset($lastSummary['months_of_inventory']) && $lastSummary['months_of_inventory'] !== null)
                             {{ number_format($lastSummary['months_of_inventory'], 1) }} mo
                         @else
-                            <span class="text-slate-300">—</span>
+                            <span class="text-gray-300">—</span>
                         @endif
                     </dd>
                 </div>
             </dl>
-            <p class="mt-4 text-xs text-slate-400 font-medium">
+            <p class="mt-3 text-xs text-gray-400">
                 Snapshot saved {{ $latestSnapshot->created_at->format('Y-m-d H:i') }}
             </p>
         @else
-            <p class="text-sm text-slate-400 italic">No analysis run yet.</p>
+            <p class="text-sm text-gray-400 italic">No analysis run yet.</p>
             @if($readiness['can_compile'])
                 <a href="{{ route('presentations.analysis', $presentation) }}"
-                   class="mt-3 inline-block text-xs text-indigo-600 hover:underline font-medium">
+                   class="mt-3 inline-block text-xs text-indigo-600 hover:underline">
                     Run first analysis →
                 </a>
             @else
-                <p class="mt-2 text-xs text-slate-400">Complete the required evidence items above to unlock analysis.</p>
+                <p class="mt-2 text-xs text-gray-400">Complete the required evidence items above to unlock analysis.</p>
             @endif
         @endif
-        </div>
     </div>
 
     {{-- SNAPSHOTS --}}
-    <div class="pres-card">
-        <div class="pres-card-header">
-            <h2>Snapshots</h2>
-        </div>
-        <div class="pres-card-body flex flex-col items-start">
-            <p class="pres-stat-value text-slate-800 mb-1">{{ $snapshotCount }}</p>
-            <p class="text-xs text-slate-400 font-medium">
-                {{ $snapshotCount === 1 ? 'snapshot saved' : 'snapshots saved' }}
-            </p>
-            @if($latestSnapshot)
-                <a href="{{ route('presentations.snapshots.show', [$presentation, $latestSnapshot]) }}"
-                   class="mt-4 inline-block text-xs text-indigo-600 hover:underline font-medium">
-                    View latest →
-                </a>
-            @endif
-        </div>
+    <div class="bg-white rounded-xl shadow p-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Snapshots</h2>
+        <p class="text-2xl font-bold text-gray-800 mb-1">{{ $snapshotCount }}</p>
+        <p class="text-xs text-gray-400">
+            {{ $snapshotCount === 1 ? 'snapshot saved' : 'snapshots saved' }}
+        </p>
+        @if($latestSnapshot)
+            <a href="{{ route('presentations.snapshots.show', [$presentation, $latestSnapshot]) }}"
+               class="mt-3 inline-block text-xs text-indigo-600 hover:underline">
+                View latest →
+            </a>
+        @endif
     </div>
 
 </div>
@@ -423,26 +400,25 @@
 ══════════════════════════════════════════════════════════════════════════ --}}
 
     {{-- LINKS (full width) --}}
-    <div class="pres-card mb-8">
-        <div class="pres-card-header">
-            <h2>Property Links</h2>
+    <div class="mt-6 bg-white rounded-xl shadow p-5">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-semibold text-gray-700">Property Links</h2>
             @if(config('features.portal_extension_capture_v1'))
                 <div class="flex gap-2">
                     <a href="https://www.property24.com" target="_blank" rel="noopener noreferrer"
-                       class="pres-btn pres-btn-primary text-xs py-1.5 px-3">
+                       class="px-2 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700">
                         Property24
                     </a>
                     <a href="https://www.privateproperty.co.za" target="_blank" rel="noopener noreferrer"
-                       class="pres-btn pres-btn-primary text-xs py-1.5 px-3">
+                       class="px-2 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700">
                         PrivateProperty
                     </a>
                 </div>
             @endif
         </div>
-        <div class="pres-card-body">
 
         @if($links->isEmpty())
-            <p class="text-xs text-slate-400 italic mb-3">No links added yet.</p>
+            <p class="text-xs text-gray-400 italic mb-3">No links added yet.</p>
         @else
             @php
                 $linkTypeLabels = [
@@ -456,15 +432,15 @@
             @endphp
             <ul class="space-y-3 mb-4" id="links-list">
                 @foreach($links as $link)
-                    <li class="pres-link-row text-xs" data-link-id="{{ $link->id }}">
+                    <li class="border border-gray-100 rounded-lg p-2 text-xs" data-link-id="{{ $link->id }}">
                         {{-- Row 1: Link header --}}
                         <div class="flex items-start justify-between gap-2">
                             <div class="min-w-0 flex items-center gap-1 flex-wrap">
                                 @php
                                     $linkColor = in_array($link->type, ['active_listing', 'competitor_listing'])
-                                        ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-500';
+                                        ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500';
                                 @endphp
-                                <span class="pres-badge {{ $linkColor }}">
+                                <span class="inline-block px-1.5 py-0.5 rounded text-xs font-medium {{ $linkColor }}">
                                     {{ $linkTypeLabels[$link->type] ?? ucfirst($link->type) }}
                                 </span>
 
@@ -473,13 +449,13 @@
                                     $lHasCapture = !empty($link->portal_capture_id);
                                     $lExtStatus = $link->extraction_status ?? 'pending';
                                     if ($lHasCapture) {
-                                        $lExtBadge = 'bg-indigo-50 text-indigo-600';
+                                        $lExtBadge = 'bg-blue-100 text-blue-700';
                                         $lExtLabel = 'Captured';
                                     } else {
                                         $lExtBadge = match($lExtStatus) {
-                                            'ok'     => 'bg-indigo-50 text-indigo-600',
-                                            'failed' => 'bg-slate-100 text-slate-500',
-                                            default  => 'bg-slate-50 text-slate-400',
+                                            'ok'     => 'bg-green-100 text-green-700',
+                                            'failed' => 'bg-red-100 text-red-600',
+                                            default  => 'bg-yellow-100 text-yellow-700',
                                         };
                                         $lExtLabel = match($lExtStatus) {
                                             'ok'     => 'Extracted',
@@ -488,7 +464,7 @@
                                         };
                                     }
                                 @endphp
-                                <span class="pres-badge {{ $lExtBadge }}" data-link-badge="{{ $link->id }}">
+                                <span class="inline-block px-1.5 py-0.5 rounded text-xs font-medium {{ $lExtBadge }}" data-link-badge="{{ $link->id }}">
                                     {{ $lExtLabel }}
                                 </span>
 
@@ -504,7 +480,7 @@
                                 @endunless
 
                                 @if($link->isOverridden())
-                                    <span class="pres-badge pres-badge-warn">
+                                    <span class="inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">
                                         Override
                                     </span>
                                 @endif
@@ -517,19 +493,19 @@
                                     <span class="text-gray-400"> — {{ $link->notes }}</span>
                                 @endif
                             </div>
-                            <div class="flex items-center gap-1.5 shrink-0">
+                            <div class="flex items-center gap-1 shrink-0">
                                 <form method="POST"
                                       action="{{ route('presentations.links.update-type', [$presentation, $link]) }}"
-                                      class="flex items-center gap-1.5">
+                                      class="flex items-center gap-1">
                                     @csrf
                                     @method('PATCH')
-                                    <select name="type" class="pres-select text-xs">
+                                    <select name="type" class="border border-gray-200 rounded px-1 py-0.5 text-xs">
                                         @foreach($linkTypeLabels as $val => $label)
                                             <option value="{{ $val }}" {{ $link->type === $val ? 'selected' : '' }}>{{ $label }}</option>
                                         @endforeach
                                     </select>
                                     <button type="submit"
-                                            class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold">Save</button>
+                                            class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Save</button>
                                 </form>
                                 <form method="POST"
                                       action="{{ route('presentations.links.destroy', [$presentation, $link]) }}">
@@ -567,11 +543,11 @@
                                 if (!empty($lVerified['price_median'])) $lParts[] = 'Median: R' . number_format($lVerified['price_median'], 0);
                             @endphp
                             @if(!empty($lParts))
-                                <div class="mt-1.5 text-xs text-slate-600 bg-indigo-50 rounded px-2 py-1">
+                                <div class="mt-1.5 text-xs text-gray-600 bg-purple-50 rounded px-2 py-1">
                                     Search capture | {{ implode(' | ', $lParts) }}
                                 </div>
                             @else
-                                <div class="mt-1.5 text-xs text-slate-600 bg-indigo-50 rounded px-2 py-1">
+                                <div class="mt-1.5 text-xs text-gray-600 bg-purple-50 rounded px-2 py-1">
                                     Search capture
                                 </div>
                             @endif
@@ -589,7 +565,7 @@
                                 if ($lFloor) $lParts[] = $lFloor . 'm²';
                                 if (!empty($lVerified['suburb'])) $lParts[] = $lVerified['suburb'];
                             @endphp
-                            <div class="mt-1.5 text-xs text-slate-600 bg-slate-50 rounded px-2 py-1">
+                            <div class="mt-1.5 text-xs text-gray-600 bg-green-50 rounded px-2 py-1">
                                 {{ implode(' | ', $lParts) }}
                             </div>
                         @elseif($lVerified)
@@ -615,7 +591,7 @@
                         @if($lHasCapture)
                             @php $lCapture = $link->portalCapture; @endphp
                             @if($lCapture)
-                                <div class="mt-1.5 bg-indigo-50 border border-indigo-200 rounded px-2 py-1.5 text-xs text-indigo-700 flex items-center justify-between gap-2">
+                                <div class="mt-1.5 bg-blue-50 border border-blue-200 rounded px-2 py-1.5 text-xs text-blue-700 flex items-center justify-between gap-2">
                                     <div class="flex-1">
                                         <span class="font-semibold">Captured via extension</span>
                                         — {{ number_format($lCapture->html_bytes) }} bytes
@@ -626,7 +602,7 @@
                                     </div>
                                 </div>
                                 @php $lPriceChanges = $lCapture->priceChangeCount(); @endphp
-                                <div class="mt-1 rounded px-2 py-1 text-xs font-medium {{ $lPriceChanges > 0 ? '' : 'hidden' }}" data-price-change="{{ $link->id }}" style="background:var(--pres-warn-bg);color:#92400e;border:1px solid #fcd34d">
+                                <div class="mt-1 bg-amber-50 border border-amber-300 rounded px-2 py-1 text-xs text-amber-800 font-medium {{ $lPriceChanges > 0 ? '' : 'hidden' }}" data-price-change="{{ $link->id }}">
                                     Price Change Detected — <span data-price-change-count="{{ $link->id }}">{{ $lPriceChanges }}</span> listing{{ $lPriceChanges > 1 ? 's' : '' }} changed
                                 </div>
                             @endif
@@ -634,12 +610,12 @@
                         @if($lExtStatus === 'failed' && !$lHasCapture)
                             @if(config('features.portal_extension_capture_v1') && $link->type === 'property24')
                                 {{-- Portal extension capture mode: no headless retry --}}
-                                <div class="mt-1.5 bg-indigo-50 border border-indigo-200 rounded px-2 py-1.5 text-xs text-indigo-700 flex items-center justify-between gap-2">
+                                <div class="mt-1.5 bg-blue-50 border border-blue-200 rounded px-2 py-1.5 text-xs text-blue-700 flex items-center justify-between gap-2">
                                     <div class="flex-1">
                                         <span class="font-semibold">Capture via Browser Extension</span> — open the portal and use the capture extension
                                     </div>
                                     <a href="{{ $link->url }}" target="_blank" rel="noopener noreferrer"
-                                       class="px-2 py-0.5 text-white text-xs rounded font-medium shrink-0" style="background:var(--pres-brand)">
+                                       class="px-2 py-0.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 font-medium shrink-0">
                                         Open Portal
                                     </a>
                                 </div>
@@ -654,7 +630,7 @@
                                     $lIsBlocked = $lBlockedReason || ($lHttpStatus && $lHttpStatus >= 400);
                                     $lIsTimeout = $lTimedOut;
                                 @endphp
-                                <div class="mt-1.5 {{ $lIsBlocked ? 'bg-red-50 border-red-200' : ($lIsTimeout ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200') }} border rounded px-2 py-1.5 text-xs {{ $lIsBlocked ? 'text-red-700' : ($lIsTimeout ? 'text-amber-700' : 'text-red-700') }} flex items-center justify-between gap-2">
+                                <div class="mt-1.5 {{ $lIsBlocked ? 'bg-red-50 border-red-300' : ($lIsTimeout ? 'bg-orange-50 border-orange-300' : 'bg-red-50 border-red-200') }} border rounded px-2 py-1.5 text-xs {{ $lIsBlocked ? 'text-red-800' : ($lIsTimeout ? 'text-orange-700' : 'text-red-700') }} flex items-center justify-between gap-2">
                                     <div class="flex-1">
                                         @if(str_starts_with($lBlockedReason ?? '', 'headless_service_'))
                                             <span class="font-semibold">Portal fetch engine offline</span> — start the headless service and retry
@@ -684,7 +660,7 @@
 
                         {{-- Override audit info --}}
                         @if($link->isOverridden())
-                            <p class="mt-1 text-xs text-slate-500">
+                            <p class="mt-1 text-xs text-orange-500">
                                 Overridden {{ $link->override_at ? $link->override_at->format('Y-m-d H:i') : '' }}
                                 @if($link->override_by_user_id)
                                     by user #{{ $link->override_by_user_id }}
@@ -707,37 +683,37 @@
 
                                     @if(($lView['capture_page_type'] ?? null) === 'search')
                                         {{-- ═══ SEARCH CAPTURE SUMMARY ═══ --}}
-                                        <div class="bg-indigo-50 border border-indigo-200 rounded p-3">
-                                            <p class="text-xs font-semibold text-indigo-700 mb-2 uppercase tracking-wide">Search Capture Summary</p>
+                                        <div class="bg-purple-50 border border-purple-200 rounded p-3">
+                                            <p class="text-xs font-semibold text-purple-700 mb-2 uppercase tracking-wide">Search Capture Summary</p>
                                             @if(!empty($lView['search_summary']))
                                                 <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
                                                     @if(!empty($lView['search_summary']['listings_found']))
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Listings found</dt>
-                                                        <dd class="text-indigo-800 font-medium">{{ $lView['search_summary']['listings_found'] }}</dd>
+                                                        <dt class="text-purple-400 whitespace-nowrap">Listings found</dt>
+                                                        <dd class="text-purple-800 font-medium">{{ $lView['search_summary']['listings_found'] }}</dd>
                                                     @endif
                                                     @if(!empty($lView['search_summary']['total_results']))
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Total results</dt>
-                                                        <dd class="text-indigo-800 font-medium">{{ $lView['search_summary']['total_results'] }}</dd>
+                                                        <dt class="text-purple-400 whitespace-nowrap">Total results</dt>
+                                                        <dd class="text-purple-800 font-medium">{{ $lView['search_summary']['total_results'] }}</dd>
                                                     @endif
                                                     @if(!empty($lView['search_summary']['price_change_count']))
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Price changes</dt>
+                                                        <dt class="text-purple-400 whitespace-nowrap">Price changes</dt>
                                                         <dd class="text-amber-700 font-semibold">{{ $lView['search_summary']['price_change_count'] }}</dd>
                                                     @endif
                                                     @if(!empty($lView['search_summary']['capture_time']))
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Captured</dt>
-                                                        <dd class="text-indigo-800">{{ $lView['search_summary']['capture_time'] }}</dd>
+                                                        <dt class="text-purple-400 whitespace-nowrap">Captured</dt>
+                                                        <dd class="text-purple-800">{{ $lView['search_summary']['capture_time'] }}</dd>
                                                     @endif
                                                     @if(!empty($lView['search_summary']['html_bytes']))
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Page size</dt>
-                                                        <dd class="text-indigo-800">{{ number_format($lView['search_summary']['html_bytes']) }} bytes</dd>
+                                                        <dt class="text-purple-400 whitespace-nowrap">Page size</dt>
+                                                        <dd class="text-purple-800">{{ number_format($lView['search_summary']['html_bytes']) }} bytes</dd>
                                                     @endif
                                                     @if(!empty($lView['search_summary']['parse_status']))
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Status</dt>
-                                                        <dd class="text-indigo-800">{{ $lView['search_summary']['parse_status'] }}</dd>
+                                                        <dt class="text-purple-400 whitespace-nowrap">Status</dt>
+                                                        <dd class="text-purple-800">{{ $lView['search_summary']['parse_status'] }}</dd>
                                                     @endif
                                                 </dl>
                                             @endif
-                                            <p class="mt-2 text-xs text-indigo-500 italic">
+                                            <p class="mt-2 text-xs text-purple-500 italic">
                                                 Search captures monitor competitor changes. To see listing details, open the listing page and capture it.
                                             </p>
                                         </div>
@@ -773,10 +749,10 @@
                                         @if(!empty($lView['override_fields']))
                                             <form method="POST"
                                                   action="{{ route('presentations.links.override', [$presentation, $link]) }}"
-                                                  class="border border-slate-200 rounded p-2 bg-slate-50">
+                                                  class="border border-orange-200 rounded p-2 bg-orange-50">
                                                 @csrf
                                                 @method('PATCH')
-                                                <p class="text-xs font-medium text-slate-600 mb-1.5">Override values</p>
+                                                <p class="text-xs font-medium text-orange-700 mb-1.5">Override values</p>
                                                 <table class="w-full text-xs border-collapse">
                                                     <thead>
                                                         <tr class="text-left text-gray-400 border-b">
@@ -791,7 +767,7 @@
                                                             <tr class="border-b border-gray-100">
                                                                 <td class="py-1.5 pr-2 text-gray-500 whitespace-nowrap">{{ $oField['label'] }}</td>
                                                                 <td class="py-1.5 pr-2 text-gray-700">{{ $oField['current'] ?? '—' }}</td>
-                                                                <td class="py-1.5 pr-2 {{ $oField['imported'] ? 'text-indigo-600' : 'text-gray-300' }}">
+                                                                <td class="py-1.5 pr-2 {{ $oField['imported'] ? 'text-blue-600' : 'text-gray-300' }}">
                                                                     {{ $oField['imported'] ?? ($oField['imported_missing_label'] ?? 'No imported value yet') }}
                                                                 </td>
                                                                 <td class="py-1.5">
@@ -813,7 +789,7 @@
                                                 @endif
                                                 <div class="flex gap-2 mt-1.5">
                                                     <button type="submit"
-                                                            class="px-2 py-1 text-white text-xs rounded" style="background:var(--pres-brand)">
+                                                            class="px-2 py-1 bg-orange-600 text-white text-xs rounded hover:bg-orange-700">
                                                         Save Override
                                                     </button>
                                                 </div>
@@ -823,10 +799,10 @@
                                             @php $lOverride = $link->override_json ?? $link->extracted_json ?? []; @endphp
                                             <form method="POST"
                                                   action="{{ route('presentations.links.override', [$presentation, $link]) }}"
-                                                  class="border border-slate-200 rounded p-2 bg-slate-50">
+                                                  class="border border-orange-200 rounded p-2 bg-orange-50">
                                                 @csrf
                                                 @method('PATCH')
-                                                <p class="text-xs font-medium text-slate-600 mb-1.5">Override values</p>
+                                                <p class="text-xs font-medium text-orange-700 mb-1.5">Override values</p>
                                                 <div class="grid grid-cols-2 gap-1.5">
                                                     @if($link->type === 'market_article')
                                                         <input type="text" name="override_data[headline]" placeholder="Headline"
@@ -840,7 +816,7 @@
                                                 </div>
                                                 <div class="flex gap-2 mt-1.5">
                                                     <button type="submit"
-                                                            class="px-2 py-1 text-white text-xs rounded" style="background:var(--pres-brand)">
+                                                            class="px-2 py-1 bg-orange-600 text-white text-xs rounded hover:bg-orange-700">
                                                         Save Override
                                                     </button>
                                                 </div>
@@ -894,10 +870,10 @@
                                     @php $lOverride = $link->override_json ?? $link->extracted_json ?? []; @endphp
                                     <form method="POST"
                                           action="{{ route('presentations.links.override', [$presentation, $link]) }}"
-                                          class="border border-slate-200 rounded p-2 bg-slate-50">
+                                          class="border border-orange-200 rounded p-2 bg-orange-50">
                                         @csrf
                                         @method('PATCH')
-                                        <p class="text-xs font-medium text-slate-600 mb-1.5">Override values</p>
+                                        <p class="text-xs font-medium text-orange-700 mb-1.5">Override values</p>
                                         <div class="grid grid-cols-2 gap-1.5">
                                             @if(in_array($link->type, ['property24', 'active_listing', 'competitor_listing']))
                                                 <input type="number" name="override_data[asking_price]" placeholder="Asking price (R)"
@@ -930,7 +906,7 @@
                                         </div>
                                         <div class="flex gap-2 mt-1.5">
                                             <button type="submit"
-                                                    class="px-2 py-1 text-white text-xs rounded" style="background:var(--pres-brand)">
+                                                    class="px-2 py-1 bg-orange-600 text-white text-xs rounded hover:bg-orange-700">
                                                 Save Override
                                             </button>
                                         </div>
@@ -956,11 +932,10 @@
             </ul>
         @endif
 
-        <div class="mt-4 pt-4 border-t border-slate-100">
-        <form method="POST" action="{{ route('presentations.links.store', $presentation) }}" id="add-link-form" class="space-y-2.5">
+        <form method="POST" action="{{ route('presentations.links.store', $presentation) }}" id="add-link-form" class="space-y-2">
             @csrf
             <div class="flex gap-2">
-                <select name="type" id="link-type" class="pres-select text-xs">
+                <select name="type" id="link-type" class="border border-gray-300 rounded px-2 py-1.5 text-xs">
                     <option value="property24">Property24</option>
                     <option value="lightstone">Lightstone</option>
                     <option value="active_listing">Active Listing</option>
@@ -969,21 +944,21 @@
                     <option value="other">Other</option>
                 </select>
                 <input type="url" name="url" id="link-url" placeholder="https://..." required
-                       class="pres-input flex-1 min-w-0">
+                       class="flex-1 border border-gray-300 rounded px-2 py-1.5 text-xs min-w-0">
                 <a href="#" id="open-link-btn" target="_blank" rel="noopener noreferrer"
-                   class="pres-btn pres-btn-secondary text-xs py-1.5 px-2 shrink-0"
+                   class="px-2 py-1.5 border border-gray-300 text-xs rounded text-gray-500 hover:bg-gray-50 shrink-0"
                    title="Open link in new tab">↗</a>
             </div>
             <div class="flex gap-2">
                 <input type="text" name="notes" placeholder="Notes (optional)"
-                       class="pres-input flex-1">
+                       class="flex-1 border border-gray-300 rounded px-2 py-1.5 text-xs">
                 <button type="submit" id="add-link-btn"
-                        class="pres-btn pres-btn-primary text-xs shrink-0">
+                        class="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded hover:bg-indigo-700 shrink-0">
                     Add Link
                 </button>
             </div>
             <p id="add-link-error" class="text-xs text-red-600 hidden"></p>
-            <p id="add-link-success" class="text-xs text-indigo-600 hidden"></p>
+            <p id="add-link-success" class="text-xs text-green-600 hidden"></p>
 
             @error('url')
                 <p class="text-xs text-red-600">{{ $message }}</p>
@@ -1065,17 +1040,17 @@
                     // Build new link row and insert into DOM
                     var link = data.link;
                     var typeColor = ['active_listing', 'competitor_listing'].indexOf(link.type) >= 0
-                        ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-500';
+                        ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500';
                     var extBadge = link.portal_capture_id
-                        ? 'bg-indigo-50 text-indigo-600'
-                        : (link.extraction_status === 'ok' ? 'bg-indigo-50 text-indigo-600' : (link.extraction_status === 'failed' ? 'bg-slate-100 text-slate-500' : 'bg-slate-50 text-slate-400'));
+                        ? 'bg-blue-100 text-blue-700'
+                        : (link.extraction_status === 'ok' ? 'bg-green-100 text-green-700' : (link.extraction_status === 'failed' ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-700'));
                     var extLabel = link.portal_capture_id
                         ? 'Captured'
                         : (link.extraction_status === 'ok' ? 'Extracted' : (link.extraction_status === 'failed' ? 'Failed' : 'Pending'));
                     var shortUrl = link.url.length > 50 ? link.url.substring(0, 50) + '...' : link.url;
 
                     var li = document.createElement('li');
-                    li.className = 'pres-link-row text-xs';
+                    li.className = 'border border-gray-100 rounded-lg p-2 text-xs';
                     li.setAttribute('data-link-id', link.id);
                     li.style.backgroundColor = '#eef2ff';
                     li.innerHTML = '<div class="flex items-start justify-between gap-2">'
@@ -1130,21 +1105,19 @@
             });
         })();
         </script>
-        </div>
-    </div>
     </div>
 
     {{-- PORTAL CAPTURES (admin-only, collapsed) --}}
     @if($isAdmin && config('features.portal_extension_capture_v1'))
-    <div class="mb-8">
-    <details class="pres-card">
-        <summary class="px-5 py-3.5 text-sm font-semibold text-slate-500 cursor-pointer hover:text-slate-700 select-none">
+    <div class="mt-6">
+    <details class="bg-white rounded-xl shadow">
+        <summary class="px-5 py-3 text-sm font-semibold text-gray-500 cursor-pointer hover:text-gray-700 select-none">
             Portal captures (admin)
         </summary>
         <div class="px-5 pb-5">
         <div class="flex items-center justify-end mb-3">
                 <button type="button" id="refresh-captures-btn"
-                        class="pres-btn pres-btn-secondary text-xs">
+                        class="px-2 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded hover:bg-gray-200 border border-gray-300">
                     Refresh
                 </button>
         </div>
@@ -1204,16 +1177,16 @@
                     var shortUrl = (c.source_url || '').length > 45 ? c.source_url.substring(0, 45) + '...' : c.source_url;
                     var capturedAt = c.captured_at ? c.captured_at.substring(0, 16).replace('T', ' ') : '';
                     var statusBadge = c.parse_status === 'parsed'
-                        ? '<span class="px-1 py-0.5 rounded bg-indigo-50 text-indigo-600" data-capture-status>parsed</span>'
-                        : '<span class="px-1 py-0.5 rounded bg-slate-50 text-slate-400" data-capture-status>' + esc(c.parse_status || 'unknown') + '</span>';
+                        ? '<span class="px-1 py-0.5 rounded bg-green-50 text-green-700" data-capture-status>parsed</span>'
+                        : '<span class="px-1 py-0.5 rounded bg-yellow-50 text-yellow-700" data-capture-status>' + esc(c.parse_status || 'unknown') + '</span>';
                     t += '<tr class="border-b border-gray-50" data-capture-id="' + c.id + '">';
                     t += '<td class="py-1.5 pr-2 text-gray-600">' + esc(c.source_site || '') + '</td>';
-                    t += '<td class="py-1.5 pr-2"><span class="px-1 py-0.5 rounded bg-indigo-50 text-indigo-600">' + esc(c.page_type) + '</span></td>';
+                    t += '<td class="py-1.5 pr-2"><span class="px-1 py-0.5 rounded bg-blue-50 text-blue-700">' + esc(c.page_type) + '</span></td>';
                     t += '<td class="py-1.5 pr-2"><a href="' + esc(c.source_url) + '" target="_blank" class="text-indigo-600 hover:underline">' + esc(shortUrl) + '</a></td>';
                     t += '<td class="py-1.5 pr-2">' + statusBadge + '</td>';
                     t += '<td class="py-1.5 pr-2 text-gray-500">' + capturedAt + '</td>';
                     if (showAttach) {
-                        t += '<td class="py-1.5"><button class="px-2 py-0.5 text-white rounded text-xs" style="background:var(--pres-brand)" onclick="attachCapture(' + c.id + ')">Attach</button></td>';
+                        t += '<td class="py-1.5"><button class="px-2 py-0.5 bg-green-600 text-white rounded hover:bg-green-700 text-xs" onclick="attachCapture(' + c.id + ')">Attach</button></td>';
                     } else {
                         t += '<td class="py-1.5 text-gray-500">' + (c.html_bytes ? Number(c.html_bytes).toLocaleString() + 'b' : '-') + '</td>';
                     }
@@ -1254,11 +1227,8 @@
     @endif
 
     {{-- DOCUMENT UPLOAD --}}
-    <div class="pres-card mb-8" id="documents">
-        <div class="pres-card-header">
-            <h2>Documents</h2>
-        </div>
-        <div class="pres-card-body">
+    <div class="mt-6 bg-white rounded-xl shadow p-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Documents</h2>
 
         @php
             $docTypeLabels = [
@@ -1271,17 +1241,18 @@
         @endphp
 
         @if($presentation->uploads->isEmpty())
-            <p class="text-xs text-slate-400 italic mb-3">No documents uploaded yet.</p>
+            <p class="text-xs text-gray-400 italic mb-3">No documents uploaded yet.</p>
         @else
-            <ul class="space-y-3 mb-4 text-xs text-slate-600">
+            <ul class="space-y-3 mb-4 text-xs text-gray-600">
                 @foreach($presentation->uploads as $upload)
-                    <li class="pres-doc-row">
+                    <li class="border border-gray-100 rounded-lg p-2">
                         {{-- Row 1: File header --}}
                         <div class="flex items-start justify-between gap-2">
                             <div class="flex items-center gap-2 min-w-0 flex-wrap">
                                 <span class="text-gray-400 shrink-0">📄</span>
                                 <span class="truncate">{{ $upload->original_filename ?? basename($upload->file_path) }}</span>
-                                <span class="pres-badge {{ isset($docTypeLabels[$upload->type]) && $upload->type !== 'other' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-500' }}">
+                                <span class="inline-block px-1.5 py-0.5 rounded text-xs font-medium
+                                    {{ isset($docTypeLabels[$upload->type]) && $upload->type !== 'other' ? 'bg-indigo-50 text-indigo-600' : 'bg-gray-100 text-gray-500' }}">
                                     {{ $docTypeLabels[$upload->type] ?? $upload->type }}
                                 </span>
 
@@ -1289,9 +1260,9 @@
                                 @php
                                     $uExtStatus = $upload->extraction_status ?? 'pending';
                                     $uExtBadge = match($uExtStatus) {
-                                        'ok'     => 'bg-indigo-50 text-indigo-600',
-                                        'failed' => 'bg-slate-100 text-slate-500',
-                                        default  => 'bg-slate-50 text-slate-400',
+                                        'ok'     => 'bg-green-100 text-green-700',
+                                        'failed' => 'bg-red-100 text-red-600',
+                                        default  => 'bg-yellow-100 text-yellow-700',
                                     };
                                     $uExtLabel = match($uExtStatus) {
                                         'ok'     => 'Extracted',
@@ -1299,7 +1270,7 @@
                                         default  => 'Pending',
                                     };
                                 @endphp
-                                <span class="pres-badge {{ $uExtBadge }}">
+                                <span class="inline-block px-1.5 py-0.5 rounded text-xs font-medium {{ $uExtBadge }}">
                                     {{ $uExtLabel }}
                                 </span>
 
@@ -1313,23 +1284,23 @@
                                 </form>
 
                                 @if($upload->isOverridden())
-                                    <span class="pres-badge pres-badge-warn">
+                                    <span class="inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">
                                         Override
                                     </span>
                                 @endif
                             </div>
                             <form method="POST"
                                   action="{{ route('presentations.uploads.update-type', [$presentation, $upload]) }}"
-                                  class="flex items-center gap-1.5 shrink-0">
+                                  class="flex items-center gap-1 shrink-0">
                                 @csrf
                                 @method('PATCH')
-                                <select name="type" class="pres-select text-xs">
+                                <select name="type" class="border border-gray-200 rounded px-1 py-0.5 text-xs">
                                     @foreach($docTypeLabels as $val => $label)
                                         <option value="{{ $val }}" {{ $upload->type === $val ? 'selected' : '' }}>{{ $label }}</option>
                                     @endforeach
                                 </select>
                                 <button type="submit"
-                                        class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold">Save</button>
+                                        class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Save</button>
                             </form>
                         </div>
 
@@ -1344,7 +1315,7 @@
 
                         @if($hasDocExtract && $upload->type === 'cma')
                             {{-- ── CMA Valuation Summary Card ── --}}
-                            <div class="mt-2 bg-indigo-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
+                            <div class="mt-2 bg-blue-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
                                 <div class="font-semibold text-indigo-700">CMA Valuation Summary</div>
                                 @if(isset($uFields['cma.lower_range']) || isset($uFields['cma.middle_range']) || isset($uFields['cma.upper_range']))
                                     <div>
@@ -1391,7 +1362,7 @@
 
                         @elseif($hasDocExtract && $upload->type === 'suburb_stats')
                             {{-- ── Suburb Sales Summary Card ── --}}
-                            <div class="mt-2 bg-indigo-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
+                            <div class="mt-2 bg-blue-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
                                 <div class="font-semibold text-indigo-700">
                                     Suburb Sales Summary
                                     @if(isset($uFields['suburb.latest_year']))
@@ -1418,7 +1389,7 @@
 
                         @elseif($hasDocExtract && $upload->type === 'vicinity_sales')
                             {{-- ── Vicinity Sales Summary Card ── --}}
-                            <div class="mt-2 bg-indigo-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
+                            <div class="mt-2 bg-blue-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
                                 <div class="font-semibold text-indigo-700">Vicinity Sales Summary</div>
                                 @if(isset($uFields['vicinity.lower_range']) || isset($uFields['vicinity.middle_range']) || isset($uFields['vicinity.upper_range']))
                                     <div>
@@ -1451,7 +1422,7 @@
                                 if (!empty($uAgg['months_of_inventory'])) $uParts[] = 'MOI: ' . $uAgg['months_of_inventory'];
                                 if (!empty($uCounts['active_listings'])) $uParts[] = 'Rows: ' . $uCounts['active_listings'];
                             @endphp
-                            <div class="mt-1.5 text-xs text-slate-600 bg-slate-50 rounded px-2 py-1">
+                            <div class="mt-1.5 text-xs text-gray-600 bg-blue-50 rounded px-2 py-1">
                                 {{ implode(' | ', $uParts) }}
                             </div>
                         @elseif($uVerified && ($upload->type === 'vicinity_sales') && !empty($uAgg))
@@ -1467,7 +1438,7 @@
                                 }
                                 if (!empty($uCounts['sold_comps'])) $uParts[] = 'Rows: ' . $uCounts['sold_comps'];
                             @endphp
-                            <div class="mt-1.5 text-xs text-slate-600 bg-slate-50 rounded px-2 py-1">
+                            <div class="mt-1.5 text-xs text-gray-600 bg-blue-50 rounded px-2 py-1">
                                 {{ implode(' | ', $uParts) }}
                             </div>
                         @elseif($uVerified && ($upload->type === 'cma') && !empty($uVerified['suggested_band']))
@@ -1475,7 +1446,7 @@
                             @php
                                 $band = $uVerified['suggested_band'];
                             @endphp
-                            <div class="mt-1.5 text-xs text-slate-600 bg-slate-50 rounded px-2 py-1">
+                            <div class="mt-1.5 text-xs text-gray-600 bg-blue-50 rounded px-2 py-1">
                                 Band: R{{ number_format($band['low'], 0) }} – R{{ number_format($band['high'], 0) }}
                                 @if(!empty($uVerified['notes']))
                                     @foreach($uVerified['notes'] as $note)
@@ -1502,7 +1473,7 @@
 
                         {{-- Override audit info --}}
                         @if($upload->isOverridden())
-                            <p class="mt-1 text-xs text-slate-500">
+                            <p class="mt-1 text-xs text-orange-500">
                                 Overridden {{ $upload->override_at ? $upload->override_at->format('Y-m-d H:i') : '' }}
                                 @if($upload->override_by_user_id)
                                     by user #{{ $upload->override_by_user_id }}
@@ -1556,10 +1527,10 @@
                                     {{-- Override form --}}
                                     <form method="POST"
                                           action="{{ route('presentations.uploads.override', [$presentation, $upload]) }}"
-                                          class="border border-slate-200 rounded p-2 bg-slate-50">
+                                          class="border border-orange-200 rounded p-2 bg-orange-50">
                                         @csrf
                                         @method('PATCH')
-                                        <p class="text-xs font-medium text-slate-600 mb-1.5">Override values</p>
+                                        <p class="text-xs font-medium text-orange-700 mb-1.5">Override values</p>
                                         @php
                                             $uOverrideSource = $upload->override_json ?? [];
                                             $uAggPrefill = $uVerified['aggregates'] ?? [];
@@ -1601,7 +1572,7 @@
                                         </div>
                                         <div class="flex gap-2 mt-1.5">
                                             <button type="submit"
-                                                    class="px-2 py-1 text-white text-xs rounded" style="background:var(--pres-brand)">
+                                                    class="px-2 py-1 bg-orange-600 text-white text-xs rounded hover:bg-orange-700">
                                                 Save Override
                                             </button>
                                         </div>
@@ -1626,21 +1597,20 @@
             </ul>
         @endif
 
-        <div class="mt-4 pt-4 border-t border-slate-100">
         <form method="POST" action="{{ route('presentations.upload', $presentation) }}"
-              enctype="multipart/form-data" class="space-y-2.5">
+              enctype="multipart/form-data" class="space-y-2">
             @csrf
             <div class="flex gap-2 items-center">
-                <select name="doc_type" class="pres-select text-xs" required>
+                <select name="doc_type" class="border border-gray-300 rounded px-2 py-1.5 text-xs" required>
                     <option value="" disabled selected>Document type...</option>
                     @foreach($docTypeLabels as $val => $label)
                         <option value="{{ $val }}">{{ $label }}</option>
                     @endforeach
                 </select>
                 <input type="file" name="documents[]" multiple
-                       class="pres-input flex-1 text-xs" required>
+                       class="flex-1 text-xs text-gray-600 border border-gray-300 rounded px-2 py-1.5" required>
                 <button type="submit"
-                        class="pres-btn pres-btn-secondary text-xs shrink-0">
+                        class="px-3 py-1.5 bg-gray-600 text-white text-xs font-medium rounded hover:bg-gray-700 shrink-0">
                     Upload
                 </button>
             </div>
@@ -1655,13 +1625,11 @@
             @enderror
         </form>
 
-        </div>
-
         {{-- Document Library button (feature-flagged) --}}
         @if(config('features.document_library_v1'))
-            <div class="mt-4 pt-4 border-t border-slate-100">
+            <div class="mt-3 pt-3 border-t border-gray-100">
                 <a href="{{ route('documents.library.index', ['presentation_id' => $presentation->id, 'return' => url()->current() . '#documents']) }}"
-                   class="pres-btn pres-btn-primary text-xs">
+                   class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-medium rounded hover:bg-indigo-100 border border-indigo-200">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                     </svg>
@@ -1674,22 +1642,22 @@
                 $libraryDocs = $presentation->documentLibraryItems()->with('uploader')->get();
             @endphp
             @if($libraryDocs->isNotEmpty())
-                <div class="mt-4 pt-4 border-t border-slate-100">
-                    <h3 class="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2.5">Attached from Library</h3>
-                    <ul class="space-y-2 text-xs text-slate-600">
+                <div class="mt-4 pt-3 border-t border-gray-100">
+                    <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Attached from Library</h3>
+                    <ul class="space-y-2 text-xs text-gray-600">
                         @foreach($libraryDocs as $libDoc)
-                            <li class="pres-doc-row flex items-center justify-between">
+                            <li class="flex items-center justify-between border border-gray-100 rounded-lg px-2 py-1.5">
                                 <div class="flex items-center gap-2 min-w-0">
-                                    <span class="text-slate-400 shrink-0">&#128206;</span>
-                                    <span class="truncate font-medium">{{ $libDoc->title ?? $libDoc->original_name }}</span>
-                                    <span class="pres-badge bg-indigo-50 text-indigo-600">
+                                    <span class="text-gray-400 shrink-0">&#128206;</span>
+                                    <span class="truncate">{{ $libDoc->title ?? $libDoc->original_name }}</span>
+                                    <span class="inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-600">
                                         {{ $libDoc->doc_type }}
                                     </span>
-                                    <span class="text-slate-400">{{ $libDoc->uploader->name ?? '' }}</span>
-                                    <span class="text-slate-400">{{ $libDoc->pivot->created_at ? \Carbon\Carbon::parse($libDoc->pivot->created_at)->format('d M Y') : '' }}</span>
+                                    <span class="text-gray-400">{{ $libDoc->uploader->name ?? '' }}</span>
+                                    <span class="text-gray-400">{{ $libDoc->pivot->created_at ? \Carbon\Carbon::parse($libDoc->pivot->created_at)->format('d M Y') : '' }}</span>
                                 </div>
                                 <a href="{{ route('documents.library.download', $libDoc) }}"
-                                   class="text-indigo-600 hover:text-indigo-800 font-semibold shrink-0 ml-2">
+                                   class="text-indigo-600 hover:text-indigo-800 font-medium shrink-0 ml-2">
                                     Download
                                 </a>
                             </li>
@@ -1699,67 +1667,64 @@
             @endif
         @endif
     </div>
-    </div>
 
 {{-- ── HOLDING COST INPUTS (P15) ─────────────────────────────────────────── --}}
-<div class="mb-8">
-    <div class="pres-card">
-        <div class="pres-card-header">
-            <h2>Holding Cost Inputs (monthly, ZAR)</h2>
-        </div>
-        <div class="pres-card-body">
-        <form method="POST" action="{{ route('presentations.holding-cost.update', $presentation) }}" class="space-y-4">
+<div class="mt-6">
+    <div class="bg-white rounded-xl shadow p-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">Holding Cost Inputs (monthly, ZAR)</h2>
+
+        <form method="POST" action="{{ route('presentations.holding-cost.update', $presentation) }}" class="space-y-3">
             @csrf
             @method('PATCH')
 
-            <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1.5 font-medium">Bond payment</label>
+                    <label class="block text-xs text-gray-500 mb-1">Bond payment</label>
                     <input type="number" name="monthly_bond" min="0" step="0.01"
                            value="{{ $presentation->monthly_bond ?? '' }}"
                            placeholder="0"
-                           class="pres-input w-full">
+                           class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs">
                 </div>
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1.5 font-medium">Rates</label>
+                    <label class="block text-xs text-gray-500 mb-1">Rates</label>
                     <input type="number" name="monthly_rates" min="0" step="0.01"
                            value="{{ $presentation->monthly_rates ?? '' }}"
                            placeholder="0"
-                           class="pres-input w-full">
+                           class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs">
                 </div>
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1.5 font-medium">Levies</label>
+                    <label class="block text-xs text-gray-500 mb-1">Levies</label>
                     <input type="number" name="monthly_levies" min="0" step="0.01"
                            value="{{ $presentation->monthly_levies ?? '' }}"
                            placeholder="0"
-                           class="pres-input w-full">
+                           class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs">
                 </div>
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1.5 font-medium">Insurance</label>
+                    <label class="block text-xs text-gray-500 mb-1">Insurance</label>
                     <input type="number" name="monthly_insurance" min="0" step="0.01"
                            value="{{ $presentation->monthly_insurance ?? '' }}"
                            placeholder="0"
-                           class="pres-input w-full">
+                           class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs">
                 </div>
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1.5 font-medium">Utilities</label>
+                    <label class="block text-xs text-gray-500 mb-1">Utilities</label>
                     <input type="number" name="monthly_utilities" min="0" step="0.01"
                            value="{{ $presentation->monthly_utilities ?? '' }}"
                            placeholder="0"
-                           class="pres-input w-full">
+                           class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs">
                 </div>
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1.5 font-medium">Opportunity cost</label>
+                    <label class="block text-xs text-gray-500 mb-1">Opportunity cost</label>
                     <input type="number" name="monthly_opportunity_cost" min="0" step="0.01"
                            value="{{ $presentation->monthly_opportunity_cost ?? '' }}"
                            placeholder="0"
-                           class="pres-input w-full">
+                           class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs">
                 </div>
             </div>
 
-            <div class="flex items-center gap-3 pt-2">
+            <div class="flex items-center gap-3 pt-1">
                 <button type="submit"
-                        class="pres-btn pres-btn-primary text-xs">
+                        class="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded hover:bg-indigo-700">
                     Save Holding Cost
                 </button>
                 @php
@@ -1773,13 +1738,12 @@
                     ])->sum();
                 @endphp
                 @if($hcTotal > 0)
-                    <span class="text-xs text-slate-500 font-medium bg-slate-50 px-2.5 py-1 rounded-lg">
+                    <span class="text-xs text-gray-500">
                         Monthly total: R{{ number_format($hcTotal, 0) }}
                     </span>
                 @endif
             </div>
         </form>
-        </div>
     </div>
 </div>
 
@@ -1858,13 +1822,13 @@
         if (!badgeEl) return;
 
         if (linkData.portal_capture_id) {
-            badgeEl.className = 'inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-600';
+            badgeEl.className = 'inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700';
             badgeEl.textContent = 'Captured';
         } else {
             var statusMap = {
-                'ok':      { cls: 'bg-indigo-50 text-indigo-600', label: 'Extracted' },
-                'failed':  { cls: 'bg-slate-100 text-slate-500',  label: 'Failed' },
-                'pending': { cls: 'bg-slate-50 text-slate-400',   label: 'Pending' },
+                'ok':      { cls: 'bg-green-100 text-green-700', label: 'Extracted' },
+                'failed':  { cls: 'bg-red-100 text-red-600',     label: 'Failed' },
+                'pending': { cls: 'bg-yellow-100 text-yellow-700', label: 'Pending' },
             };
             var st = statusMap[linkData.extraction_status] || statusMap['pending'];
             badgeEl.className = 'inline-block px-1.5 py-0.5 rounded text-xs font-medium ' + st.cls;
@@ -1888,10 +1852,10 @@
         var statusEl = row.querySelector('[data-capture-status]');
         if (statusEl) {
             if (c.parse_status === 'parsed') {
-                statusEl.className = 'px-1 py-0.5 rounded bg-indigo-50 text-indigo-600';
+                statusEl.className = 'px-1 py-0.5 rounded bg-green-50 text-green-700';
                 statusEl.textContent = 'parsed';
             } else {
-                statusEl.className = 'px-1 py-0.5 rounded bg-slate-50 text-slate-400';
+                statusEl.className = 'px-1 py-0.5 rounded bg-yellow-50 text-yellow-700';
                 statusEl.textContent = c.parse_status || 'unknown';
             }
         }
@@ -1911,12 +1875,12 @@
             : c.source_url;
         var capturedAt = c.captured_at ? c.captured_at.substring(0, 16).replace('T', ' ') : '';
         var statusBadge = c.parse_status === 'parsed'
-            ? '<span class="px-1 py-0.5 rounded bg-indigo-50 text-indigo-600" data-capture-status>parsed</span>'
-            : '<span class="px-1 py-0.5 rounded bg-slate-50 text-slate-400" data-capture-status>' + esc(c.parse_status || 'unknown') + '</span>';
+            ? '<span class="px-1 py-0.5 rounded bg-green-50 text-green-700" data-capture-status>parsed</span>'
+            : '<span class="px-1 py-0.5 rounded bg-yellow-50 text-yellow-700" data-capture-status>' + esc(c.parse_status || 'unknown') + '</span>';
 
         var row = '<tr class="border-b border-gray-50 live-capture-new" data-capture-id="' + c.id + '">';
         row += '<td class="py-1.5 pr-2 text-gray-600">' + esc(c.source_site || '') + '</td>';
-        row += '<td class="py-1.5 pr-2"><span class="px-1 py-0.5 rounded bg-indigo-50 text-indigo-600">' + esc(c.page_type) + '</span></td>';
+        row += '<td class="py-1.5 pr-2"><span class="px-1 py-0.5 rounded bg-blue-50 text-blue-700">' + esc(c.page_type) + '</span></td>';
         row += '<td class="py-1.5 pr-2"><a href="' + esc(c.source_url) + '" target="_blank" class="text-indigo-600 hover:underline">' + esc(shortUrl) + '</a></td>';
         row += '<td class="py-1.5 pr-2">' + statusBadge + '</td>';
         row += '<td class="py-1.5 pr-2 text-gray-500">' + capturedAt + '</td>';
@@ -2182,7 +2146,5 @@
 })();
 </script>
 @endif
-
-</div>{{-- /.pres-page --}}
 
 @endsection
