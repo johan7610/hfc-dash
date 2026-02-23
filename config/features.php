@@ -8,7 +8,7 @@ return [
     'article_ingestion'              => (bool) env('ARTICLE_INGESTION_ENABLED', true),
     'presentation_simulate_snapshot' => (bool) env('PRESENTATION_SIMULATE_SNAPSHOT_ENABLED', false),
     'presentation_readiness_check'   => (bool) env('PRESENTATION_READINESS_CHECK_ENABLED', false),
-    'presentation_pdf_v1'            => (bool) env('PRESENTATION_PDF_V1_ENABLED', false),
+    'presentation_pdf_v1'            => (bool) env('PRESENTATION_PDF_V1_ENABLED', true),
     'listing_dedupe_v1'              => (bool) env('LISTING_DEDUPE_V1_ENABLED', false),
     'listing_lifecycle_v1'           => (bool) env('LISTING_LIFECYCLE_V1_ENABLED', false),
     'listing_data_quality_v1'        => (bool) env('LISTING_DATA_QUALITY_V1_ENABLED', false),

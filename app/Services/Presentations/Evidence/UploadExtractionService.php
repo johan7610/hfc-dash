@@ -2,6 +2,9 @@
 
 namespace App\Services\Presentations\Evidence;
 
+use App\Models\PresentationActiveListing;
+use App\Models\PresentationField;
+use App\Models\PresentationSoldComp;
 use App\Models\PresentationUpload;
 use App\Services\Presentations\Evidence\Parsers\CmaParserV1;
 use App\Services\Presentations\Evidence\Parsers\SalesReportParserV1;
@@ -52,6 +55,10 @@ class UploadExtractionService
                     'extraction_status' => empty($fields) ? 'failed' : 'ok',
                     'extracted_at'     => now(),
                 ]);
+
+                // Propagate recovered fields into presentation_fields table
+                $this->propagateFields($upload);
+                $this->propagateRows($upload);
                 return;
             }
         } elseif ($upload->extraction_status !== 'ok') {
@@ -176,6 +183,10 @@ class UploadExtractionService
                 'extraction_error'  => $hasUseful ? null : 'No extractable fields found (check PDF format)',
                 'extracted_at'      => now(),
             ]);
+
+            // Propagate DocumentExtractor fields into presentation_fields table
+            $this->propagateFields($upload);
+            $this->propagateRows($upload);
         } catch (\Throwable $e) {
             // Never throw — persist parser result without doc_extract fields
             $parserResult['extraction_error'] = 'doc_extract_v1: ' . $e->getMessage();
@@ -198,5 +209,178 @@ class UploadExtractionService
             CmaParserV1::DOC_TYPE          => (new CmaParserV1())->parse($text, $upload),
             default                        => (new UnknownParser())->parse($text),
         };
+    }
+
+    /**
+     * Propagate extraction_json.fields into the presentation_fields table.
+     *
+     * Only propagates DocumentExtractor output (extraction_json.fields).
+     * Legacy parser aggregates and suggested_band are NOT propagated.
+     *
+     * Upserts on (presentation_id, field_key):
+     *   - extracted_value = value from DocumentExtractor
+     *   - override_value  = preserved if already set by agent
+     *   - final_value     = coalesce(override_value, extracted_value)
+     *   - confidence      = 0.90 (deterministic parser, high confidence)
+     *   - source_upload_id = which upload produced the field
+     */
+    public function propagateFields(PresentationUpload $upload): void
+    {
+        $json = $upload->extraction_json;
+        if (is_string($json)) {
+            $json = json_decode($json, true);
+        }
+
+        $fields = $json['fields'] ?? [];
+        if (empty($fields)) {
+            return;
+        }
+
+        $presentationId = $upload->presentation_id;
+
+        foreach ($fields as $fieldKey => $value) {
+            // Skip null/empty values
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            $existing = PresentationField::where('presentation_id', $presentationId)
+                ->where('field_key', $fieldKey)
+                ->first();
+
+            if ($existing) {
+                $existing->update([
+                    'extracted_value'  => (string) $value,
+                    'source_upload_id' => $upload->id,
+                    'confidence'       => 0.90,
+                    'final_value'      => $existing->override_value ?? (string) $value,
+                ]);
+            } else {
+                PresentationField::create([
+                    'presentation_id'  => $presentationId,
+                    'field_key'        => $fieldKey,
+                    'extracted_value'  => (string) $value,
+                    'override_value'   => null,
+                    'final_value'      => (string) $value,
+                    'source_upload_id' => $upload->id,
+                    'confidence'       => 0.90,
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Extract comp rows and active listings from upload text, persist to DB.
+     *
+     * Clears existing rows for this upload (by source_upload_id + parser_version prefix)
+     * before inserting, so re-extraction is idempotent.
+     *
+     * Routes by upload type:
+     *   - vicinity_sales → extractVicinityRows() → presentation_sold_comps
+     *   - cma → extractCmaCompRows() + extractStreetSalesRows() → presentation_sold_comps
+     *           + extractCmaActiveListings() → presentation_active_listings
+     */
+    public function propagateRows(PresentationUpload $upload): void
+    {
+        $text = $upload->text_extracted ?? '';
+        if ($text === '') {
+            return;
+        }
+
+        $extractor = new DocumentExtractor();
+        $presentationId = $upload->presentation_id;
+
+        if ($upload->type === 'vicinity_sales') {
+            $this->persistSoldComps(
+                $extractor->extractVicinityRows($text),
+                $presentationId,
+                $upload->id,
+                'doc_extract_v1:vicinity_sales'
+            );
+        } elseif ($upload->type === 'cma') {
+            $this->persistSoldComps(
+                $extractor->extractCmaCompRows($text),
+                $presentationId,
+                $upload->id,
+                'doc_extract_v1:cma_comps'
+            );
+            $this->persistSoldComps(
+                $extractor->extractStreetSalesRows($text),
+                $presentationId,
+                $upload->id,
+                'doc_extract_v1:street_sales'
+            );
+            $this->persistActiveListings(
+                $extractor->extractCmaActiveListings($text),
+                $presentationId,
+                $upload->id,
+                'doc_extract_v1:cma_active'
+            );
+        }
+    }
+
+    /**
+     * Clear + insert sold comp rows for a given parser_version tag.
+     */
+    private function persistSoldComps(array $rows, int $presentationId, int $uploadId, string $parserVersion): void
+    {
+        // Clear existing rows from same source
+        PresentationSoldComp::where('presentation_id', $presentationId)
+            ->where('parser_version', $parserVersion)
+            ->delete();
+
+        foreach ($rows as $row) {
+            // Parse suburb from address (text after last comma)
+            $suburb = null;
+            if (!empty($row['address']) && str_contains($row['address'], ',')) {
+                $suburb = trim(substr($row['address'], strrpos($row['address'], ',') + 1));
+            }
+
+            PresentationSoldComp::create([
+                'presentation_id'  => $presentationId,
+                'source_upload_id' => $uploadId,
+                'sold_date'        => $row['sale_date'] ?? null,
+                'sold_price_inc'   => $row['sale_price'] ?? null,
+                'suburb'           => $suburb,
+                'size_m2'          => $row['extent_m2'] ?? null,
+                'raw_row_json'     => json_encode($row),
+                'parser_version'   => $parserVersion,
+            ]);
+        }
+    }
+
+    /**
+     * Clear + insert active listing rows for a given parser_version tag.
+     */
+    private function persistActiveListings(array $rows, int $presentationId, int $uploadId, string $parserVersion): void
+    {
+        // Clear existing rows from same source
+        PresentationActiveListing::where('presentation_id', $presentationId)
+            ->where('parser_version', $parserVersion)
+            ->delete();
+
+        foreach ($rows as $row) {
+            $suburb = null;
+            if (!empty($row['address']) && str_contains($row['address'], ',')) {
+                $suburb = trim(substr($row['address'], strrpos($row['address'], ',') + 1));
+            }
+
+            PresentationActiveListing::create([
+                'presentation_id'    => $presentationId,
+                'source_upload_id'   => $uploadId,
+                'listing_date'       => $row['list_date'] ?? null,
+                'list_price_inc'     => $row['list_price'] ?? null,
+                'suburb'             => $suburb,
+                'property_type'      => $row['property_type'] ?? null,
+                'size_m2'            => $row['extent_m2'] ?? null,
+                'status'             => 'active',
+                'raw_row_json'       => json_encode($row),
+                'parser_version'     => $parserVersion,
+                'extraction_method'  => 'doc_extract_v1',
+                'is_active'          => true,
+                'first_seen_at'      => now(),
+                'last_seen_at'       => now(),
+            ]);
+        }
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Services\Presentations;
 
+use App\Models\Presentation;
 use App\Models\PresentationVersion;
 use Illuminate\Support\Facades\Storage;
 
@@ -10,10 +11,6 @@ use Illuminate\Support\Facades\Storage;
  *
  * No external PDF library is required. The output is a self-contained HTML
  * document that browsers can print to PDF (Ctrl+P → Save as PDF).
- *
- * To upgrade to a proper PDF binary (dompdf, wkhtmltopdf, etc.) in the future,
- * replace generate() internals only — the public interface and storage path
- * contract remain stable.
  *
  * Storage path: presentations/{presentationId}/versions/{versionId}.html
  */
@@ -50,51 +47,108 @@ class PresentationPdfService
     }
 
     /**
-     * Build the full HTML document from the snapshot data.
+     * Build the full HTML document from the presentation + analysis data.
      */
-    private function buildHtml(PresentationVersion $version): string
+    public function buildHtml(PresentationVersion $version): string
     {
-        $snapshot     = $version->getSnapshotArray();
-        $presentation = $snapshot['presentation']  ?? [];
-        $analytics    = $snapshot['analytics']     ?? [];
-        $evidence     = $snapshot['evidence']      ?? [];
-        $holdingCost  = $snapshot['holding_cost']  ?? null;
-        $confidence   = $snapshot['confidence']    ?? null;
-        $ppi          = $snapshot['ppi']           ?? null;
-        $articles     = $snapshot['articles']      ?? [];
-        $compiledAt   = $version->compiled_at?->format('Y-m-d H:i') ?? now()->format('Y-m-d H:i');
+        // Load the presentation with all relations
+        $presentation = Presentation::with([
+            'fields', 'soldComps', 'activeListings', 'links',
+        ])->findOrFail($version->presentation_id);
 
-        $title        = htmlspecialchars($presentation['title'] ?? 'Untitled Presentation', ENT_QUOTES);
-        $address      = htmlspecialchars($presentation['property_address'] ?? '', ENT_QUOTES);
-        $suburb       = htmlspecialchars($presentation['suburb'] ?? '', ENT_QUOTES);
-        $propertyType = htmlspecialchars(ucfirst($presentation['property_type'] ?? ''), ENT_QUOTES);
-        $sellerName   = htmlspecialchars($presentation['seller_name'] ?? '', ENT_QUOTES);
-        $currency     = htmlspecialchars($presentation['currency'] ?? 'ZAR', ENT_QUOTES);
+        // Get the agent who created this presentation
+        $agent = \App\Models\User::find($presentation->created_by_user_id);
+        $agentName = $agent->name ?? 'Agent';
+        $agentEmail = $agent->email ?? '';
 
-        // ── Key metric formatting helpers ─────────────────────────────────
-        $fmt = fn ($val, $suffix = '') => $val !== null ? (is_float($val) ? number_format($val, 2) : $val) . $suffix : '—';
-        $pct = fn ($val) => $val !== null ? number_format($val * 100, 0) . '%' : '—';
+        // Compile analysis data from AnalysisDataService (real extracted data)
+        $data = (new AnalysisDataService())->compile($presentation);
 
-        $p60 = $analytics['p60'] ?? null;
-        $p30 = $analytics['p30'] ?? null;
-        $p90 = $analytics['p90'] ?? null;
-        $expectedDays = $analytics['expected_days'] ?? null;
-        $monthsInv    = $analytics['months_of_inventory'] ?? null;
-        $ppiScore     = $ppi['ppi_score'] ?? null;
-        $ppiLabel     = $ppi['ppi_label'] ?? null;
-        $confScore    = $confidence['confidence_score'] ?? null;
+        $subject     = $data['subject_property']   ?? [];
+        $suburb      = $data['suburb_overview']     ?? [];
+        $comps       = $data['comparable_sales']    ?? [];
+        $cma         = $data['cma_valuation']       ?? [];
+        $competition = $data['active_competition']  ?? [];
+        $holding     = $data['holding_cost']        ?? [];
+        $insights    = $data['key_insights']        ?? [];
 
-        $hcMonthly    = $holdingCost['monthly_total'] ?? null;
-        $hc6mo        = $holdingCost['six_month_total'] ?? null;
-        $hc12mo       = $holdingCost['twelve_month_total'] ?? null;
+        $compiledAt = $version->compiled_at?->format('d F Y') ?? now()->format('d F Y');
 
-        $soldCount   = $evidence['sold_comps_count']      ?? 0;
-        $activeCount = $evidence['active_listings_count'] ?? 0;
-        $uploadCount = $evidence['upload_count']          ?? 0;
-        $linkCount   = $evidence['links_count']           ?? 0;
+        // ── Formatting helpers ──────────────────────────────────────────────
+        $zar = function (?int $val): string {
+            if ($val === null || $val === 0) return '—';
+            return 'R ' . number_format($val, 0, '.', ' ');
+        };
+        $zarFloat = function (?float $val): string {
+            if ($val === null || $val == 0) return '—';
+            return 'R ' . number_format((int) round($val), 0, '.', ' ');
+        };
+        $pct = function (?float $val): string {
+            if ($val === null) return '—';
+            $sign = $val > 0 ? '+' : '';
+            return $sign . number_format($val, 1) . '%';
+        };
+        $esc = function (?string $val): string {
+            return htmlspecialchars((string) ($val ?? ''), ENT_QUOTES, 'UTF-8');
+        };
 
-        // ── Sections list for internal TOC ────────────────────────────────
-        $sections = $snapshot['sections'] ?? [];
+        // ── Build data for each page ────────────────────────────────────────
+        $address     = $esc($subject['address'] ?? $presentation->property_address ?? '');
+        $suburbName  = $esc($subject['suburb'] ?? $presentation->suburb ?? '');
+        $sellerName  = $esc($presentation->seller_name ?? '');
+        $propType    = $esc(ucfirst($presentation->property_type ?? ''));
+        $bedrooms    = $presentation->bedrooms;
+        $bathrooms   = null; // not on model currently
+        $erfSize     = $subject['extent_m2'] ?? $presentation->floor_area_m2;
+        $askingPrice = $subject['asking_price'] ?? $presentation->asking_price_inc;
+
+        // CMA values
+        $cmaLower  = $cma['cma_lower'] ?? null;
+        $cmaMiddle = $cma['cma_middle'] ?? null;
+        $cmaUpper  = $cma['cma_upper'] ?? null;
+        $askVsCmaPct = $cma['asking_vs_cma_pct'] ?? null;
+
+        // Suburb overview
+        $suburbMedian    = $suburb['median_price'] ?? null;
+        $suburbSales     = $suburb['sales_count'] ?? null;
+        $suburbYear      = $suburb['latest_year'] ?? date('Y');
+        $suburbLow       = $suburb['low_range'] ?? null;
+        $suburbHigh      = $suburb['high_range'] ?? null;
+        $suburbMax       = $suburb['max_price'] ?? null;
+
+        // Competition
+        $activeCount   = $competition['count'] ?? 0;
+        $avgAskPrice   = $competition['avg_asking_price'] ?? null;
+
+        // Holding cost
+        $monthlyTotal  = $holding['monthly_total'] ?? 0;
+        $projected6m   = $holding['projected_6m'] ?? 0;
+        $projected12m  = $holding['projected_12m'] ?? 0;
+        $breakdown     = $holding['breakdown'] ?? [];
+
+        // Comparable sales
+        $vicinitySales = $comps['vicinity']['rows'] ?? [];
+        $vicAvgPrice   = $comps['vicinity']['avg_price'] ?? null;
+        $vicAvgPpm2    = $comps['vicinity']['avg_price_per_m2'] ?? null;
+        $cmaComps      = $comps['cma_comps']['rows'] ?? [];
+        $streetSales   = $comps['street_sales']['rows'] ?? [];
+
+        // Active listings
+        $activeRows    = $competition['rows'] ?? [];
+
+        // Absorption rate calculation
+        $absorptionRate = null;
+        $yearsOfSupply  = null;
+        if ($suburbSales && $suburbSales > 0 && $activeCount > 0) {
+            $monthlySales = $suburbSales / 12;
+            if ($monthlySales > 0) {
+                $absorptionRate = round($monthlySales, 1);
+                $yearsOfSupply = round($activeCount / $suburbSales, 1);
+            }
+        }
+
+        // Links for references
+        $p24Links = $presentation->links->where('type', 'property24')->values();
 
         ob_start();
         ?>
@@ -102,130 +156,963 @@ class PresentationPdfService
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title><?= $title ?> — Presentation Pack</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Market Analysis — <?= $address ?></title>
 <style>
-  body { font-family: Georgia, serif; margin: 40px; color: #1a1a1a; font-size: 13px; line-height: 1.6; }
-  h1 { font-size: 22px; margin-bottom: 4px; }
-  h2 { font-size: 16px; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 36px; }
-  h3 { font-size: 14px; margin-top: 20px; }
-  .meta { color: #555; font-size: 11px; margin-bottom: 24px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-  th { background: #f5f5f5; text-align: left; padding: 6px 10px; font-size: 11px; text-transform: uppercase; color: #555; }
-  td { padding: 6px 10px; border-bottom: 1px solid #eee; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
-  .badge-strong { background: #d1fae5; color: #065f46; }
-  .badge-balanced { background: #fef3c7; color: #92400e; }
-  .badge-risky { background: #fee2e2; color: #991b1b; }
-  .section-toc { margin: 12px 0; padding: 12px; background: #f9f9f9; border-radius: 4px; }
-  .section-toc li { margin: 4px 0; }
-  @media print { .no-print { display: none; } }
+/* ── RESET & BASE ────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+    --brand: #0b2a4a;
+    --brand-light: #1a4a73;
+    --brand-accent: #4f46e5;
+    --text: #1e293b;
+    --text-muted: #64748b;
+    --text-light: #94a3b8;
+    --bg: #ffffff;
+    --bg-alt: #f8fafc;
+    --border: #e2e8f0;
+    --border-light: #f1f5f9;
+    --success: #059669;
+    --success-bg: #ecfdf5;
+    --warning: #d97706;
+    --warning-bg: #fffbeb;
+    --danger: #dc2626;
+    --danger-bg: #fef2f2;
+}
+
+@page {
+    size: A4 portrait;
+    margin: 15mm 18mm 20mm 18mm;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 11px;
+    line-height: 1.55;
+    color: var(--text);
+    background: var(--bg);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+/* ── PAGE BREAK HELPERS ──────────────────────────────────────────────── */
+.page-break { page-break-before: always; }
+.avoid-break { page-break-inside: avoid; }
+
+/* ── TYPOGRAPHY ──────────────────────────────────────────────────────── */
+h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: 14px; font-weight: 600; }
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 18px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--brand);
+}
+.section-header h2 { color: var(--brand); }
+.section-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--brand);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+/* ── TABLES ──────────────────────────────────────────────────────────── */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-size: 10.5px;
+}
+th {
+    background: var(--brand);
+    color: #fff;
+    text-align: left;
+    padding: 7px 10px;
+    font-size: 9.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border-light);
+    vertical-align: top;
+}
+tr:nth-child(even) td { background: var(--bg-alt); }
+.table-summary td {
+    background: var(--brand) !important;
+    color: #fff;
+    font-weight: 700;
+    font-size: 11px;
+}
+td.num, th.num { text-align: right; }
+
+/* ── METRIC CARDS ────────────────────────────────────────────────────── */
+.metric-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin: 14px 0;
+}
+.metric-card {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    text-align: center;
+}
+.metric-card .label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+.metric-card .value {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--brand);
+    letter-spacing: -0.02em;
+}
+.metric-card .sub {
+    font-size: 9px;
+    color: var(--text-light);
+    margin-top: 3px;
+}
+.metric-card.highlight {
+    background: var(--brand);
+    border-color: var(--brand);
+}
+.metric-card.highlight .label { color: rgba(255,255,255,0.7); }
+.metric-card.highlight .value { color: #fff; }
+.metric-card.highlight .sub { color: rgba(255,255,255,0.6); }
+
+.metric-card.danger { border-color: var(--danger); }
+.metric-card.danger .value { color: var(--danger); }
+.metric-card.warning { border-color: var(--warning); }
+.metric-card.warning .value { color: var(--warning); }
+.metric-card.success { border-color: var(--success); }
+.metric-card.success .value { color: var(--success); }
+
+/* ── VALUATION BAR ───────────────────────────────────────────────────── */
+.val-bar-container { margin: 16px 0; position: relative; }
+.val-bar {
+    display: flex;
+    height: 40px;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 6px;
+}
+.val-bar .segment {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+}
+.val-bar .seg-lower { background: #64748b; flex: 1; }
+.val-bar .seg-middle { background: var(--brand); flex: 1; }
+.val-bar .seg-upper { background: var(--brand-light); flex: 1; }
+.val-bar-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+/* ── CALLOUT ─────────────────────────────────────────────────────────── */
+.callout {
+    padding: 12px 16px;
+    border-radius: 6px;
+    border-left: 4px solid;
+    margin: 12px 0;
+    font-size: 11px;
+    line-height: 1.5;
+}
+.callout-info { background: #eff6ff; border-color: #3b82f6; color: #1e40af; }
+.callout-warning { background: var(--warning-bg); border-color: var(--warning); color: #92400e; }
+.callout-danger { background: var(--danger-bg); border-color: var(--danger); color: #991b1b; }
+.callout-success { background: var(--success-bg); border-color: var(--success); color: #065f46; }
+
+/* ── COVER PAGE ──────────────────────────────────────────────────────── */
+.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 90vh;
+    text-align: left;
+    padding: 40px 0;
+}
+.cover-brand {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--brand);
+    margin-bottom: 12px;
+}
+.cover-bar {
+    width: 80px;
+    height: 4px;
+    background: var(--brand);
+    border-radius: 2px;
+    margin: 20px 0 24px;
+}
+.cover h1 {
+    font-size: 32px;
+    color: var(--brand);
+    margin-bottom: 8px;
+    line-height: 1.15;
+}
+.cover-address {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+}
+.cover-details {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 32px;
+    line-height: 1.7;
+}
+.cover-meta {
+    font-size: 11px;
+    color: var(--text-light);
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    margin-top: auto;
+    line-height: 1.8;
+}
+
+/* ── FOOTER ──────────────────────────────────────────────────────────── */
+@media print {
+    .page-footer { display: none; }
+    @page { @bottom-center { content: counter(page); } }
+}
+.page-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 8.5px;
+    color: var(--text-light);
+    padding: 8px 18mm;
+    border-top: 1px solid var(--border-light);
+}
+
+/* ── COMPARISON INDICATOR ────────────────────────────────────────────── */
+.cmp-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 700;
+}
+.cmp-danger { background: var(--danger-bg); color: var(--danger); }
+.cmp-warning { background: var(--warning-bg); color: var(--warning); }
+.cmp-success { background: var(--success-bg); color: var(--success); }
+
+/* ── LINKS ───────────────────────────────────────────────────────────── */
+a { color: var(--brand-accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ── GRID ────────────────────────────────────────────────────────────── */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+/* ── HOLDING COST TIMELINE ───────────────────────────────────────────── */
+.timeline-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.timeline-month {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+.timeline-bar {
+    height: 10px;
+    background: var(--danger);
+    border-radius: 3px;
+    opacity: 0.7;
+}
+.timeline-amount {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+}
 </style>
 </head>
 <body>
 
-<!-- ══ COVER ══════════════════════════════════════════════════════════════ -->
-<h1><?= $title ?></h1>
-<div class="meta">
-  <?php if ($sellerName): ?>Prepared for: <strong><?= $sellerName ?></strong> &nbsp;·&nbsp; <?php endif ?>
-  <?= $address ?> <?php if ($suburb): ?>· <?= $suburb ?><?php endif ?>
-  <br>
-  Blueprint: <?= htmlspecialchars($version->blueprint_version ?? 'v1') ?> &nbsp;·&nbsp;
-  Compiled: <?= $compiledAt ?>
+<?php // ══════════════════════════════════════════════════════════════════════
+      // PAGE 1 — COVER
+      // ══════════════════════════════════════════════════════════════════════ ?>
+<div class="cover">
+    <div class="cover-brand">Home Finders Coastal</div>
+    <div class="cover-bar"></div>
+    <h1>Market Analysis<br>&amp; Pricing Strategy</h1>
+    <div style="height:24px"></div>
+    <div class="cover-address"><?= $address ?></div>
+    <div class="cover-details">
+        <?= $suburbName ?>
+        <?php if ($erfSize): ?>&nbsp;&middot;&nbsp;<?= number_format((int) $erfSize) ?> m²<?php endif ?>
+        <?php if ($propType): ?>&nbsp;&middot;&nbsp;<?= $propType ?><?php endif ?>
+        <?php if ($bedrooms): ?>&nbsp;&middot;&nbsp;<?= $bedrooms ?> Bedroom<?= $bedrooms > 1 ? 's' : '' ?><?php endif ?>
+    </div>
+    <?php if ($sellerName): ?>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">Prepared for <strong style="color:var(--text)"><?= $sellerName ?></strong></p>
+    <?php endif ?>
+    <div class="cover-meta">
+        Prepared by <strong><?= $esc($agentName) ?></strong><br>
+        Home Finders Coastal — Shelly Beach, KZN South Coast<br>
+        <?php if ($agentEmail): ?><?= $esc($agentEmail) ?><br><?php endif ?>
+        <?= $compiledAt ?>
+    </div>
 </div>
 
-<!-- ══ EXECUTIVE SUMMARY ══════════════════════════════════════════════════ -->
-<h2 id="executive-summary">Executive Summary</h2>
-<table>
-  <tr><th>Metric</th><th>Value</th></tr>
-  <tr><td>Property</td><td><?= $address ?> · <?= $propertyType ?></td></tr>
-  <tr><td>30-day sale probability</td><td><?= $pct($p30) ?></td></tr>
-  <tr><td>60-day sale probability</td><td><?= $pct($p60) ?></td></tr>
-  <tr><td>90-day sale probability</td><td><?= $pct($p90) ?></td></tr>
-  <tr><td>Expected days on market</td><td><?= $fmt($expectedDays, ' days') ?></td></tr>
-  <tr><td>Months of inventory</td><td><?= $fmt($monthsInv, ' mo') ?></td></tr>
-  <?php if ($ppiScore !== null): ?>
-  <tr><td>Presentation Performance Index</td>
-      <td><?= $ppiScore ?>
-        <span class="badge badge-<?= strtolower((string) $ppiLabel) ?>"><?= htmlspecialchars((string) $ppiLabel) ?></span>
-      </td>
-  </tr>
-  <?php endif ?>
-  <?php if ($confScore !== null): ?>
-  <tr><td>Confidence score</td><td><?= $confScore ?>/100</td></tr>
-  <?php endif ?>
-</table>
+<?php // ══════════════════════════════════════════════════════════════════════
+      // PAGE 2 — EXECUTIVE SUMMARY
+      // ══════════════════════════════════════════════════════════════════════ ?>
+<div class="page-break"></div>
+<div class="section-header">
+    <span class="section-number">1</span>
+    <h2>Executive Summary</h2>
+</div>
 
-<!-- ══ HOLDING COST ════════════════════════════════════════════════════════ -->
-<?php if ($holdingCost): ?>
-<h2 id="holding-cost">Holding Cost</h2>
-<table>
-  <tr><th>Period</th><th>Total (<?= $currency ?>)</th></tr>
-  <tr><td>Monthly</td><td><?= number_format((float) $hcMonthly, 2) ?></td></tr>
-  <tr><td>6 months</td><td><?= number_format((float) $hc6mo, 2) ?></td></tr>
-  <tr><td>12 months</td><td><?= number_format((float) $hc12mo, 2) ?></td></tr>
-</table>
-<?php endif ?>
+<p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">
+    A data-driven overview of your property's market position. This summary draws on
+    <?= count($vicinitySales) + count($cmaComps) + count($streetSales) ?> comparable sales,
+    <?= $activeCount ?> active listing<?= $activeCount !== 1 ? 's' : '' ?>,
+    and current suburb statistics.
+</p>
 
-<!-- ══ MARKET ANALYTICS ════════════════════════════════════════════════════ -->
-<?php if (!empty($analytics)): ?>
-<h2 id="market-analytics">Market Analytics</h2>
-<table>
-  <tr><th>Indicator</th><th>Value</th></tr>
-  <tr><td>Months of inventory</td><td><?= $fmt($analytics['months_of_inventory'] ?? null) ?></td></tr>
-  <tr><td>Demand / supply ratio</td><td><?= $fmt($analytics['demand_supply_ratio'] ?? null) ?></td></tr>
-  <tr><td>Price/sqm deviation</td><td><?= $fmt($analytics['price_per_sqm_deviation_pct'] ?? null, '%') ?></td></tr>
-  <tr><td>DOM P25 / P50 / P75</td>
-      <td><?= $fmt($analytics['dom_p25'] ?? null) ?> / <?= $fmt($analytics['dom_p50'] ?? null) ?> / <?= $fmt($analytics['dom_p75'] ?? null) ?> days</td>
-  </tr>
-</table>
-<?php endif ?>
-
-<!-- ══ EVIDENCE APPENDIX ═══════════════════════════════════════════════════ -->
-<h2 id="evidence-appendix">Appendix — Evidence Sources</h2>
-<table>
-  <tr><th>Source type</th><th>Count</th></tr>
-  <tr><td>Sold comparables</td><td><?= (int) $soldCount ?></td></tr>
-  <tr><td>Active listings</td><td><?= (int) $activeCount ?></td></tr>
-  <tr><td>Uploaded documents</td><td><?= (int) $uploadCount ?></td></tr>
-  <tr><td>Property links</td><td><?= (int) $linkCount ?></td></tr>
-  <?php if (!empty($articles)): ?>
-  <tr><td>Market articles</td><td><?= count($articles) ?></td></tr>
-  <?php endif ?>
-</table>
-
-<?php if (!empty($articles)): ?>
-<h3>Article Sources</h3>
-<table>
-  <tr><th>URL</th><th>Fetched</th><th>Content hash</th></tr>
-  <?php foreach ($articles as $article): ?>
-  <tr>
-    <td><a href="<?= htmlspecialchars($article['url'] ?? '', ENT_QUOTES) ?>"><?= htmlspecialchars($article['url'] ?? '', ENT_QUOTES) ?></a></td>
-    <td><?= htmlspecialchars($article['fetched_at'] ?? '—', ENT_QUOTES) ?></td>
-    <td style="font-family:monospace;font-size:10px"><?= htmlspecialchars(substr($article['snapshot_hash'] ?? '', 0, 16), ENT_QUOTES) ?>…</td>
-  </tr>
-  <?php endforeach ?>
-</table>
-<?php endif ?>
-
-<!-- ══ SECTIONS ════════════════════════════════════════════════════════════ -->
-<?php if (!empty($sections)): ?>
-<h2 id="sections">Pack Sections</h2>
-<div class="section-toc">
-<ol>
-<?php foreach ($sections as $section): ?>
-  <li><?= htmlspecialchars($section['title'] ?? $section['key'] ?? '', ENT_QUOTES) ?></li>
-<?php endforeach ?>
-</ol>
+<?php // PROPERTY VALUE — CMA Band ?>
+<?php if ($cmaLower || $cmaMiddle || $cmaUpper): ?>
+<div class="avoid-break" style="margin-bottom:18px;">
+    <h3 style="margin-bottom:8px;color:var(--brand);">Property Valuation (CMA)</h3>
+    <div class="val-bar-container">
+        <div class="val-bar">
+            <div class="segment seg-lower"><?= $zar($cmaLower) ?></div>
+            <div class="segment seg-middle"><?= $zar($cmaMiddle) ?></div>
+            <div class="segment seg-upper"><?= $zar($cmaUpper) ?></div>
+        </div>
+        <div class="val-bar-labels">
+            <span>Lower Range</span>
+            <span>CMA Valuation</span>
+            <span>Upper Range</span>
+        </div>
+    </div>
 </div>
 <?php endif ?>
 
-<div class="meta" style="margin-top:40px;border-top:1px solid #eee;padding-top:12px;">
-  Generated by HF Coastal Nexus &nbsp;·&nbsp; Version ID: <?= $version->id ?> &nbsp;·&nbsp; <?= $compiledAt ?>
+<?php // ASKING PRICE vs CMA ?>
+<?php if ($askingPrice): ?>
+<div class="avoid-break metric-grid" style="grid-template-columns: 1fr 1fr;">
+    <div class="metric-card <?= $askVsCmaPct !== null && $askVsCmaPct > 10 ? 'danger' : ($askVsCmaPct !== null && $askVsCmaPct > 5 ? 'warning' : 'success') ?>">
+        <div class="label">Your Asking Price</div>
+        <div class="value"><?= $zar($askingPrice) ?></div>
+        <?php if ($askVsCmaPct !== null): ?>
+        <div class="sub"><?= $pct($askVsCmaPct) ?> vs CMA valuation</div>
+        <?php endif ?>
+    </div>
+    <div class="metric-card highlight">
+        <div class="label">CMA Valuation (Middle)</div>
+        <div class="value"><?= $zar($cmaMiddle) ?></div>
+        <div class="sub">Independent market assessment</div>
+    </div>
+</div>
+<?php endif ?>
+
+<?php // KEY METRICS ROW ?>
+<div class="metric-grid" style="margin-top:14px;">
+    <div class="metric-card">
+        <div class="label">Suburb Median</div>
+        <div class="value"><?= $zar($suburbMedian) ?></div>
+        <div class="sub"><?= (int) $suburbSales ?> sales in <?= $esc((string) $suburbYear) ?></div>
+    </div>
+    <div class="metric-card">
+        <div class="label">Active Competition</div>
+        <div class="value"><?= $activeCount ?></div>
+        <div class="sub">listing<?= $activeCount !== 1 ? 's' : '' ?> in area</div>
+    </div>
+    <div class="metric-card <?= $monthlyTotal > 20000 ? 'danger' : ($monthlyTotal > 10000 ? 'warning' : '') ?>">
+        <div class="label">Monthly Holding Cost</div>
+        <div class="value"><?= $zarFloat($monthlyTotal) ?></div>
+        <div class="sub">12-month: <?= $zarFloat($projected12m) ?></div>
+    </div>
+</div>
+
+<?php // ABSORPTION RATE ?>
+<?php if ($yearsOfSupply !== null): ?>
+<div class="callout <?= $yearsOfSupply > 3 ? 'callout-danger' : ($yearsOfSupply > 1.5 ? 'callout-warning' : 'callout-info') ?>" style="margin-top:14px;">
+    <strong>Market Absorption:</strong>
+    At <?= $absorptionRate ?> sales per month, the current stock of <?= $activeCount ?> listing<?= $activeCount !== 1 ? 's' : '' ?>
+    represents approximately <strong><?= $yearsOfSupply ?> year<?= $yearsOfSupply != 1 ? 's' : '' ?> of supply</strong>.
+    <?php if ($yearsOfSupply > 2): ?>
+    This is a buyer's market — pricing strategy is critical.
+    <?php endif ?>
+</div>
+<?php endif ?>
+
+<?php // RECOMMENDATION PREVIEW ?>
+<?php if ($cmaMiddle && $cmaUpper): ?>
+<div class="callout callout-info" style="margin-top:10px;">
+    <strong>Recommended Price Band:</strong> <?= $zar($cmaMiddle) ?> — <?= $zar($cmaUpper) ?>
+    <br>Based on CMA valuation, recent sales data, and current market conditions.
+</div>
+<?php endif ?>
+
+<?php // ══════════════════════════════════════════════════════════════════════
+      // PAGE 3 — MARKET OVERVIEW
+      // ══════════════════════════════════════════════════════════════════════ ?>
+<div class="page-break"></div>
+<div class="section-header">
+    <span class="section-number">2</span>
+    <h2>Market Overview — <?= $suburbName ?></h2>
+</div>
+
+<p style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">
+    <?= $suburbName ?> recorded <strong><?= (int) $suburbSales ?> residential sales</strong> in <?= $esc((string) $suburbYear) ?>
+    at a median price of <strong><?= $zar($suburbMedian) ?></strong>.
+</p>
+
+<div class="avoid-break">
+<h3 style="margin-bottom:8px;">Suburb Price Summary (<?= $esc((string) $suburbYear) ?>)</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Metric</th>
+            <th class="num">Value</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr><td>Total Residential Sales</td><td class="num"><strong><?= (int) $suburbSales ?></strong></td></tr>
+        <tr><td>Median Sale Price</td><td class="num"><strong><?= $zar($suburbMedian) ?></strong></td></tr>
+        <tr><td>Low Range</td><td class="num"><?= $zar($suburbLow) ?></td></tr>
+        <tr><td>High Range</td><td class="num"><?= $zar($suburbHigh) ?></td></tr>
+        <tr><td>Maximum Sale Price</td><td class="num"><?= $zar($suburbMax) ?></td></tr>
+    </tbody>
+</table>
+</div>
+
+<?php if ($askingPrice && $suburbMedian && $suburbMedian > 0): ?>
+<?php $askVsMedianPct = round(($askingPrice - $suburbMedian) / $suburbMedian * 100, 1); ?>
+<div class="callout <?= $askVsMedianPct > 50 ? 'callout-danger' : ($askVsMedianPct > 20 ? 'callout-warning' : 'callout-info') ?>" style="margin-top:14px;">
+    <strong>Your asking price of <?= $zar($askingPrice) ?> is <?= $pct($askVsMedianPct) ?> <?= $askVsMedianPct > 0 ? 'above' : 'below' ?> the suburb median.</strong>
+    <?php if ($askVsMedianPct > 50): ?>
+    Properties priced significantly above the suburb median typically experience extended market times.
+    <?php endif ?>
+</div>
+<?php endif ?>
+
+<?php // Subject property context ?>
+<?php if ($subject['erf'] || $subject['municipal_value'] || $subject['indexed_value']): ?>
+<div class="avoid-break" style="margin-top:18px;">
+<h3 style="margin-bottom:8px;">Subject Property Context</h3>
+<table>
+    <thead><tr><th>Detail</th><th class="num">Value</th></tr></thead>
+    <tbody>
+        <?php if ($subject['erf']): ?><tr><td>Erf Number</td><td class="num"><?= $esc($subject['erf']) ?></td></tr><?php endif ?>
+        <?php if ($erfSize): ?><tr><td>Erf Extent</td><td class="num"><?= number_format((int) $erfSize) ?> m²</td></tr><?php endif ?>
+        <?php if ($subject['purchase_date']): ?><tr><td>Purchase Date</td><td class="num"><?= $esc($subject['purchase_date']) ?></td></tr><?php endif ?>
+        <?php if ($subject['purchase_price']): ?><tr><td>Purchase Price</td><td class="num"><?= $zar($subject['purchase_price']) ?></td></tr><?php endif ?>
+        <?php if ($subject['indexed_value']): ?><tr><td>Indexed Value</td><td class="num"><?= $zar($subject['indexed_value']) ?></td></tr><?php endif ?>
+        <?php if ($subject['cagr']): ?><tr><td>CAGR</td><td class="num"><?= number_format($subject['cagr'], 2) ?>%</td></tr><?php endif ?>
+        <?php if ($subject['municipal_value']): ?><tr><td>Municipal Valuation<?php if ($subject['municipal_year']): ?> (<?= $esc($subject['municipal_year']) ?>)<?php endif ?></td><td class="num"><?= $zar($subject['municipal_value']) ?></td></tr><?php endif ?>
+    </tbody>
+</table>
+</div>
+<?php endif ?>
+
+<?php // ══════════════════════════════════════════════════════════════════════
+      // PAGE 4 — RECENT SALES NEAR YOUR PROPERTY
+      // ══════════════════════════════════════════════════════════════════════ ?>
+<div class="page-break"></div>
+<div class="section-header">
+    <span class="section-number">3</span>
+    <h2>Recent Sales Near Your Property</h2>
+</div>
+
+<?php
+    // Combine vicinity + street sales, sort by date desc, take top 15
+    $allSales = array_merge($vicinitySales, $streetSales);
+    usort($allSales, function ($a, $b) {
+        return strcmp($b['sale_date'] ?? '', $a['sale_date'] ?? '');
+    });
+    $topSales = array_slice($allSales, 0, 15);
+?>
+
+<?php if (!empty($topSales)): ?>
+<p style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">
+    The <?= count($topSales) ?> most recent sales within the vicinity of your property,
+    sorted by date (most recent first).
+</p>
+
+<table>
+    <thead>
+        <tr>
+            <th>Address</th>
+            <th>Dist.</th>
+            <th class="num">Erf m²</th>
+            <th>Sale Date</th>
+            <th class="num">Sale Price</th>
+            <th class="num">R/m²</th>
+        </tr>
+    </thead>
+    <tbody>
+        <?php foreach ($topSales as $sale): ?>
+        <tr>
+            <td><?= $esc($sale['address'] ?? '—') ?></td>
+            <td><?= $sale['distance_m'] ? $sale['distance_m'] . 'm' : '—' ?></td>
+            <td class="num"><?= $sale['extent_m2'] ? number_format((int) $sale['extent_m2']) : '—' ?></td>
+            <td><?= $esc($sale['sale_date'] ?? '—') ?></td>
+            <td class="num"><?= $zar($sale['sale_price'] ?? null) ?></td>
+            <td class="num"><?= $sale['price_per_m2'] ? 'R ' . number_format((int) $sale['price_per_m2']) : '—' ?></td>
+        </tr>
+        <?php endforeach ?>
+    </tbody>
+    <?php if ($vicAvgPrice || $vicAvgPpm2): ?>
+    <tfoot>
+        <tr class="table-summary">
+            <td colspan="4"><strong>Average</strong></td>
+            <td class="num"><?= $zar($vicAvgPrice) ?></td>
+            <td class="num"><?= $vicAvgPpm2 ? 'R ' . number_format($vicAvgPpm2) : '—' ?></td>
+        </tr>
+    </tfoot>
+    <?php endif ?>
+</table>
+
+<?php if ($vicAvgPrice && $askingPrice && $vicAvgPrice > 0): ?>
+<?php $askVsVicPct = round(($askingPrice - $vicAvgPrice) / $vicAvgPrice * 100, 1); ?>
+<div class="callout <?= $askVsVicPct > 30 ? 'callout-danger' : ($askVsVicPct > 10 ? 'callout-warning' : 'callout-info') ?>" style="margin-top:12px;">
+    The average vicinity sale price is <strong><?= $zar($vicAvgPrice) ?></strong> (R <?= $vicAvgPpm2 ? number_format($vicAvgPpm2) . '/m²' : '—' ?>).
+    Your asking price is <strong><?= $pct($askVsVicPct) ?></strong> <?= $askVsVicPct > 0 ? 'above' : 'below' ?> this average.
+</div>
+<?php endif ?>
+
+<?php else: ?>
+<div class="callout callout-info">No vicinity sales data available for this property.</div>
+<?php endif ?>
+
+<?php // ══════════════════════════════════════════════════════════════════════
+      // PAGE 5 — COMPARATIVE MARKET ANALYSIS
+      // ══════════════════════════════════════════════════════════════════════ ?>
+<div class="page-break"></div>
+<div class="section-header">
+    <span class="section-number">4</span>
+    <h2>Comparative Market Analysis</h2>
+</div>
+
+<?php if ($cmaLower || $cmaMiddle || $cmaUpper): ?>
+<h3 style="margin-bottom:10px;color:var(--brand);">CMA Valuation Range</h3>
+
+<div class="metric-grid">
+    <div class="metric-card">
+        <div class="label">Lower Range</div>
+        <div class="value"><?= $zar($cmaLower) ?></div>
+    </div>
+    <div class="metric-card highlight">
+        <div class="label">CMA Valuation</div>
+        <div class="value"><?= $zar($cmaMiddle) ?></div>
+    </div>
+    <div class="metric-card">
+        <div class="label">Upper Range</div>
+        <div class="value"><?= $zar($cmaUpper) ?></div>
+    </div>
+</div>
+
+<?php if ($subject['municipal_value']): ?>
+<p style="font-size:11px;color:var(--text-muted);margin:8px 0;">
+    Municipal Valuation<?php if ($subject['municipal_year']): ?> (<?= $esc($subject['municipal_year']) ?>)<?php endif ?>:
+    <strong><?= $zar($subject['municipal_value']) ?></strong>
+</p>
+<?php endif ?>
+
+<?php // Vicinity ranges if different from CMA ?>
+<?php if ($cma['vicinity_lower'] || $cma['vicinity_middle'] || $cma['vicinity_upper']): ?>
+<div class="avoid-break" style="margin-top:14px;">
+<h3 style="margin-bottom:8px;">Vicinity Sales Range</h3>
+<table>
+    <thead><tr><th>Measure</th><th class="num">Value</th></tr></thead>
+    <tbody>
+        <tr><td>Lower Range</td><td class="num"><?= $zar($cma['vicinity_lower']) ?></td></tr>
+        <tr><td>Middle Range</td><td class="num"><?= $zar($cma['vicinity_middle']) ?></td></tr>
+        <tr><td>Upper Range</td><td class="num"><?= $zar($cma['vicinity_upper']) ?></td></tr>
+        <?php if ($cma['vicinity_ppm2']): ?>
+        <tr><td>Average R/m²</td><td class="num">R <?= number_format($cma['vicinity_ppm2']) ?></td></tr>
+        <?php endif ?>
+    </tbody>
+</table>
+</div>
+<?php endif ?>
+<?php endif ?>
+
+<?php // CMA Comps table ?>
+<?php if (!empty($cmaComps)): ?>
+<div class="avoid-break" style="margin-top:18px;">
+<h3 style="margin-bottom:8px;">CMA Comparable Properties (<?= count($cmaComps) ?>)</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Address</th>
+            <th>Dist.</th>
+            <th class="num">Erf m²</th>
+            <th>Sale Date</th>
+            <th class="num">Sale Price</th>
+            <th class="num">R/m²</th>
+        </tr>
+    </thead>
+    <tbody>
+        <?php foreach ($cmaComps as $comp): ?>
+        <tr>
+            <td><?= $esc($comp['address'] ?? '—') ?></td>
+            <td><?= $comp['distance_m'] ? $comp['distance_m'] . 'm' : '—' ?></td>
+            <td class="num"><?= $comp['extent_m2'] ? number_format((int) $comp['extent_m2']) : '—' ?></td>
+            <td><?= $esc($comp['sale_date'] ?? '—') ?></td>
+            <td class="num"><?= $zar($comp['sale_price'] ?? null) ?></td>
+            <td class="num"><?= isset($comp['price_per_m2']) && $comp['price_per_m2'] ? 'R ' . number_format((int) $comp['price_per_m2']) : '—' ?></td>
+        </tr>
+        <?php endforeach ?>
+    </tbody>
+    <?php
+        $cmaPrices = array_filter(array_column($cmaComps, 'sale_price'), fn($v) => $v > 0);
+        $cmaPpm2   = array_filter(array_column($cmaComps, 'price_per_m2'), fn($v) => $v > 0);
+        $cmaAvgP   = count($cmaPrices) > 0 ? (int) round(array_sum($cmaPrices) / count($cmaPrices)) : null;
+        $cmaAvgPpm2 = count($cmaPpm2) > 0 ? (int) round(array_sum($cmaPpm2) / count($cmaPpm2)) : null;
+    ?>
+    <?php if ($cmaAvgP): ?>
+    <tfoot>
+        <tr class="table-summary">
+            <td colspan="4"><strong>Average</strong></td>
+            <td class="num"><?= $zar($cmaAvgP) ?></td>
+            <td class="num"><?= $cmaAvgPpm2 ? 'R ' . number_format($cmaAvgPpm2) : '—' ?></td>
+        </tr>
+    </tfoot>
+    <?php endif ?>
+</table>
+</div>
+<?php endif ?>
+
+<?php // ══════════════════════════════════════════════════════════════════════
+      // PAGE 6 — ACTIVE COMPETITION
+      // ══════════════════════════════════════════════════════════════════════ ?>
+<div class="page-break"></div>
+<div class="section-header">
+    <span class="section-number">5</span>
+    <h2>Active Competition</h2>
+</div>
+
+<p style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">
+    These are the properties buyers are comparing yours against.
+    There <?= $activeCount === 1 ? 'is' : 'are' ?> currently <strong><?= $activeCount ?> active listing<?= $activeCount !== 1 ? 's' : '' ?></strong> in the area.
+    <?php if ($avgAskPrice): ?>Average asking price: <strong><?= $zar($avgAskPrice) ?></strong>.<?php endif ?>
+</p>
+
+<?php if (!empty($activeRows)): ?>
+<table>
+    <thead>
+        <tr>
+            <th>Address</th>
+            <th>Type</th>
+            <th class="num">Erf m²</th>
+            <th>Listed</th>
+            <th class="num">Asking Price</th>
+            <th class="num">DOM</th>
+        </tr>
+    </thead>
+    <tbody>
+        <?php foreach ($activeRows as $listing): ?>
+        <tr>
+            <td><?= $esc($listing['address'] ?? '—') ?></td>
+            <td><?= $esc($listing['property_type'] ?? '—') ?></td>
+            <td class="num"><?= isset($listing['extent_m2']) && $listing['extent_m2'] ? number_format((int) $listing['extent_m2']) : '—' ?></td>
+            <td><?= $esc($listing['list_date'] ?? '—') ?></td>
+            <td class="num"><?= $zar($listing['list_price'] ?? null) ?></td>
+            <td class="num"><?= $listing['days_on_market'] ?? '—' ?></td>
+        </tr>
+        <?php endforeach ?>
+    </tbody>
+    <?php if ($avgAskPrice): ?>
+    <tfoot>
+        <tr class="table-summary">
+            <td colspan="4"><strong>Average</strong></td>
+            <td class="num"><?= $zar($avgAskPrice) ?></td>
+            <td class="num"></td>
+        </tr>
+    </tfoot>
+    <?php endif ?>
+</table>
+<?php else: ?>
+<div class="callout callout-info">No active listing data available. Add Property24 links or portal captures to populate this section.</div>
+<?php endif ?>
+
+<?php // P24 Links ?>
+<?php if ($p24Links->isNotEmpty()): ?>
+<div class="avoid-break" style="margin-top:14px;">
+<h3 style="margin-bottom:6px;font-size:11px;color:var(--text-muted);">Property24 Sources</h3>
+<ul style="font-size:10px;list-style:none;padding:0;">
+    <?php foreach ($p24Links as $link): ?>
+    <li style="margin-bottom:4px;">
+        <a href="<?= $esc($link->url) ?>" target="_blank"><?= $esc($link->url) ?></a>
+    </li>
+    <?php endforeach ?>
+</ul>
+</div>
+<?php endif ?>
+
+<?php if ($yearsOfSupply !== null): ?>
+<div class="callout <?= $yearsOfSupply > 3 ? 'callout-danger' : ($yearsOfSupply > 1.5 ? 'callout-warning' : 'callout-info') ?>" style="margin-top:14px;">
+    <strong>Stock Absorption:</strong>
+    With <?= (int) $suburbSales ?> sales per year and <?= $activeCount ?> active listings,
+    this represents <strong><?= $yearsOfSupply ?> year<?= $yearsOfSupply != 1 ? 's' : '' ?> of supply</strong>
+    at the current absorption rate.
+</div>
+<?php endif ?>
+
+<?php // ══════════════════════════════════════════════════════════════════════
+      // PAGE 7 — HOLDING COST ANALYSIS
+      // ══════════════════════════════════════════════════════════════════════ ?>
+<div class="page-break"></div>
+<div class="section-header">
+    <span class="section-number">6</span>
+    <h2>Holding Cost Analysis</h2>
+</div>
+
+<p style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">
+    Every month on the market at the current asking price costs
+    <strong style="color:var(--danger)"><?= $zarFloat($monthlyTotal) ?></strong>.
+</p>
+
+<?php if ($monthlyTotal > 0): ?>
+<div class="two-col">
+    <div class="avoid-break">
+        <h3 style="margin-bottom:8px;">Monthly Breakdown</h3>
+        <table>
+            <thead><tr><th>Expense</th><th class="num">Monthly (ZAR)</th></tr></thead>
+            <tbody>
+                <?php foreach ($breakdown as $label => $amount): ?>
+                <?php if ($amount > 0): ?>
+                <tr>
+                    <td><?= $esc($label) ?></td>
+                    <td class="num"><?= $zarFloat($amount) ?></td>
+                </tr>
+                <?php endif ?>
+                <?php endforeach ?>
+            </tbody>
+            <tfoot>
+                <tr class="table-summary">
+                    <td><strong>Monthly Total</strong></td>
+                    <td class="num"><?= $zarFloat($monthlyTotal) ?></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <div class="avoid-break">
+        <h3 style="margin-bottom:8px;">Cumulative Cost</h3>
+        <table>
+            <thead><tr><th>Period</th><th class="num">Total Cost (ZAR)</th></tr></thead>
+            <tbody>
+                <?php for ($m = 1; $m <= 12; $m++): ?>
+                <tr<?= in_array($m, [6, 12]) ? ' style="font-weight:700"' : '' ?>>
+                    <td>Month <?= $m ?></td>
+                    <td class="num"><?= $zarFloat($monthlyTotal * $m) ?></td>
+                </tr>
+                <?php endfor ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="metric-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top:16px;">
+    <div class="metric-card warning">
+        <div class="label">At 3 Months</div>
+        <div class="value"><?= $zarFloat($holding['projected_3m'] ?? $monthlyTotal * 3) ?></div>
+    </div>
+    <div class="metric-card danger">
+        <div class="label">At 6 Months</div>
+        <div class="value"><?= $zarFloat($projected6m) ?></div>
+    </div>
+    <div class="metric-card danger">
+        <div class="label">At 12 Months</div>
+        <div class="value"><?= $zarFloat($projected12m) ?></div>
+    </div>
+</div>
+
+<div class="callout callout-danger" style="margin-top:14px;">
+    <strong>The cost of waiting:</strong>
+    If this property remains on the market for 12 months, the total holding cost
+    will be <strong><?= $zarFloat($projected12m) ?></strong>.
+    <?php if ($projected12m && $askingPrice && $askingPrice > 0): ?>
+    That's <strong><?= number_format($projected12m / $askingPrice * 100, 1) ?>%</strong> of the asking price.
+    <?php endif ?>
+</div>
+
+<?php else: ?>
+<div class="callout callout-info">
+    No holding cost data has been entered. Add monthly expenses on the presentation page to populate this section.
+</div>
+<?php endif ?>
+
+<?php // ══════════════════════════════════════════════════════════════════════
+      // PAGE 8 — PRICING STRATEGY & RECOMMENDATION
+      // ══════════════════════════════════════════════════════════════════════ ?>
+<div class="page-break"></div>
+<div class="section-header">
+    <span class="section-number">7</span>
+    <h2>Pricing Strategy &amp; Recommendation</h2>
+</div>
+
+<?php if ($cmaMiddle && $cmaUpper): ?>
+<div class="avoid-break" style="margin-bottom:18px;">
+<h3 style="margin-bottom:10px;color:var(--brand);">Recommended Price Band</h3>
+<div class="metric-grid" style="grid-template-columns: 1fr 1fr;">
+    <div class="metric-card highlight">
+        <div class="label">Recommended Range</div>
+        <div class="value" style="font-size:17px;"><?= $zar($cmaMiddle) ?> — <?= $zar($cmaUpper) ?></div>
+        <div class="sub">Based on CMA valuation + market conditions</div>
+    </div>
+    <?php if ($askingPrice): ?>
+    <div class="metric-card <?= $askVsCmaPct !== null && $askVsCmaPct > 10 ? 'danger' : ($askVsCmaPct !== null && $askVsCmaPct > 5 ? 'warning' : 'success') ?>">
+        <div class="label">Current Asking Price</div>
+        <div class="value"><?= $zar($askingPrice) ?></div>
+        <div class="sub"><?php if ($askVsCmaPct !== null): ?><?= $pct($askVsCmaPct) ?> vs CMA middle<?php endif ?></div>
+    </div>
+    <?php endif ?>
+</div>
+</div>
+<?php endif ?>
+
+<div class="avoid-break" style="margin-bottom:18px;">
+<h3 style="margin-bottom:10px;">Why This Range?</h3>
+<table>
+    <thead><tr><th>Evidence Source</th><th class="num">Indicated Value</th><th>Status</th></tr></thead>
+    <tbody>
+        <?php if ($cmaMiddle): ?>
+        <tr>
+            <td>CMA Valuation (Middle)</td>
+            <td class="num"><?= $zar($cmaMiddle) ?></td>
+            <td><span class="cmp-badge cmp-success">Primary</span></td>
+        </tr>
+        <?php endif ?>
+        <?php if ($vicAvgPrice): ?>
+        <tr>
+            <td>Vicinity Sales Average</td>
+            <td class="num"><?= $zar($vicAvgPrice) ?></td>
+            <td><span class="cmp-badge cmp-success">Supporting</span></td>
+        </tr>
+        <?php endif ?>
+        <?php if ($suburbMedian): ?>
+        <tr>
+            <td>Suburb Median (<?= $esc((string) $suburbYear) ?>)</td>
+            <td class="num"><?= $zar($suburbMedian) ?></td>
+            <td><span class="cmp-badge cmp-success">Context</span></td>
+        </tr>
+        <?php endif ?>
+        <?php if ($subject['municipal_value']): ?>
+        <tr>
+            <td>Municipal Valuation</td>
+            <td class="num"><?= $zar($subject['municipal_value']) ?></td>
+            <td><span class="cmp-badge cmp-warning">Reference</span></td>
+        </tr>
+        <?php endif ?>
+        <?php if ($subject['indexed_value']): ?>
+        <tr>
+            <td>Indexed Value (CAGR <?= $subject['cagr'] ? number_format($subject['cagr'], 2) . '%' : '—' ?>)</td>
+            <td class="num"><?= $zar($subject['indexed_value']) ?></td>
+            <td><span class="cmp-badge cmp-warning">Reference</span></td>
+        </tr>
+        <?php endif ?>
+    </tbody>
+</table>
+</div>
+
+<?php // Key Insights from comparisons ?>
+<?php if (!empty($insights['comparisons'])): ?>
+<div class="avoid-break" style="margin-bottom:18px;">
+<h3 style="margin-bottom:8px;">Price Position Analysis</h3>
+<table>
+    <thead><tr><th>Comparison</th><th class="num">Benchmark</th><th class="num">Asking</th><th class="num">Difference</th><th>Status</th></tr></thead>
+    <tbody>
+        <?php foreach ($insights['comparisons'] as $cmp): ?>
+        <tr>
+            <td><?= $esc($cmp['label']) ?></td>
+            <td class="num"><?= $zar($cmp['benchmark']) ?></td>
+            <td class="num"><?= $zar($cmp['asking']) ?></td>
+            <td class="num"><?= $pct($cmp['pct_difference']) ?></td>
+            <td><span class="cmp-badge cmp-<?= $cmp['status'] ?>"><?= ucfirst($cmp['status']) ?></span></td>
+        </tr>
+        <?php endforeach ?>
+    </tbody>
+</table>
+</div>
+<?php endif ?>
+
+<?php // Source Reports ?>
+<?php $allLinks = $presentation->links; ?>
+<?php if ($allLinks->isNotEmpty()): ?>
+<div class="avoid-break" style="margin-top:18px;">
+<h3 style="margin-bottom:6px;">Source Reports &amp; References</h3>
+<table>
+    <thead><tr><th>Type</th><th>URL</th></tr></thead>
+    <tbody>
+        <?php foreach ($allLinks as $link): ?>
+        <tr>
+            <td><span class="cmp-badge" style="background:#eef2ff;color:var(--brand-accent)"><?= $esc(ucfirst(str_replace('_', ' ', $link->type))) ?></span></td>
+            <td><a href="<?= $esc($link->url) ?>" target="_blank"><?= $esc($link->url) ?></a></td>
+        </tr>
+        <?php endforeach ?>
+    </tbody>
+</table>
+</div>
+<?php endif ?>
+
+<div style="margin-top:24px;padding:20px;background:var(--bg-alt);border:1px solid var(--border);border-radius:8px;text-align:center;">
+    <p style="font-size:13px;font-weight:700;color:var(--brand);margin-bottom:6px;">
+        Ready to discuss your pricing strategy?
+    </p>
+    <p style="font-size:12px;color:var(--text-muted);">
+        <strong><?= $esc($agentName) ?></strong> &middot; Home Finders Coastal<br>
+        <?php if ($agentEmail): ?><?= $esc($agentEmail) ?><br><?php endif ?>
+        Shelly Beach, KZN South Coast
+    </p>
+</div>
+
+<div style="margin-top:30px;text-align:center;font-size:8.5px;color:var(--text-light);border-top:1px solid var(--border-light);padding-top:12px;">
+    Prepared by <?= $esc($agentName) ?> &middot; Home Finders Coastal &middot; <?= $compiledAt ?>
+    &middot; Version #<?= $version->id ?>
+    <br>
+    This report is based on publicly available data and independent CMA valuation.
+    All values are in South African Rand (ZAR). Data sources include CMA Info and Property24.
 </div>
 
 </body>
 </html>
-        <?php
+<?php
         return (string) ob_get_clean();
     }
 }

@@ -99,6 +99,14 @@
                 </button>
             </form>
         @endif
+        @if(config('features.presentation_pdf_v1') && isset($latestVersion) && $latestVersion)
+            <a href="{{ route('presentations.versions.pdf', [$presentation, $latestVersion]) }}"
+               class="pres-btn pres-btn-primary"
+               target="_blank">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                Download PDF (v{{ $latestVersion->id }})
+            </a>
+        @endif
     </div>
 </div>
 
@@ -1700,6 +1708,42 @@
         @endif
     </div>
     </div>
+
+{{-- ── ASKING PRICE ─────────────────────────────────────────────────────── --}}
+<div class="mb-8">
+    <div class="pres-card">
+        <div class="pres-card-header">
+            <h2>Asking Price (ZAR)</h2>
+        </div>
+        <div class="pres-card-body">
+        <form method="POST" action="{{ route('presentations.holding-cost.update', $presentation) }}" class="space-y-4">
+            @csrf
+            @method('PATCH')
+            <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1.5 font-medium">Asking Price (R)</label>
+                    <input type="number" name="asking_price_inc" min="0" step="1"
+                           value="{{ $presentation->asking_price_inc ?? '' }}"
+                           placeholder="e.g. 2500000"
+                           class="pres-input w-full">
+                    <p class="mt-1 text-xs text-slate-400">Whole rands, no cents. Used by analysis and pack compilation.</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 pt-2">
+                <button type="submit"
+                        class="pres-btn pres-btn-primary text-xs">
+                    Save Asking Price
+                </button>
+                @if($presentation->asking_price_inc)
+                    <span class="text-xs text-slate-500 font-medium bg-slate-50 px-2.5 py-1 rounded-lg">
+                        Current: R {{ number_format($presentation->asking_price_inc) }}
+                    </span>
+                @endif
+            </div>
+        </form>
+        </div>
+    </div>
+</div>
 
 {{-- ── HOLDING COST INPUTS (P15) ─────────────────────────────────────────── --}}
 <div class="mb-8">

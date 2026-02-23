@@ -25,6 +25,7 @@ use App\Services\Presentations\PresentationBlueprintService;
 use App\Services\Presentations\PresentationCompilerService;
 use App\Services\Presentations\PresentationNarrativeService;
 use App\Services\Presentations\PresentationReadinessService;
+use App\Services\Presentations\AnalysisDataService;
 use App\Services\Presentations\RecommendationService;
 use App\Services\Presentations\PriceBandService;
 use App\Services\Presentations\TrajectorySimulationService;
@@ -122,6 +123,7 @@ class PresentationController extends Controller
         $snapshotCount  = $presentation->snapshots()->count();
         $links          = $presentation->links()->orderBy('created_at')->get();
         $readiness      = (new PresentationReadinessService())->evaluate($presentation);
+        $latestVersion  = $presentation->versions()->latest('compiled_at')->first();
 
         // ── Power Panel (UI1) — feature-flagged ──────────────────────────
         $powerPanel = null;
@@ -160,7 +162,7 @@ class PresentationController extends Controller
 
         return view('presentations.show', compact(
             'presentation', 'latestSnapshot', 'snapshotCount', 'links', 'readiness', 'powerPanel',
-            'linkViews', 'isAdmin',
+            'linkViews', 'isAdmin', 'latestVersion',
             'maxCaptureId', 'maxCaptureUpdatedAt', 'maxLinkUpdatedAt'
         ));
     }
@@ -180,26 +182,47 @@ class PresentationController extends Controller
                 ->with('error', 'Add the following before running analysis: ' . $missing);
         }
 
-        $isAdmin        = auth()->user()->isEffectiveAdmin();
-        $branches       = $isAdmin ? Branch::orderBy('name')->get() : collect();
         $latestSnapshot = $presentation->snapshots()->latest()->first();
 
-        if ($latestSnapshot) {
-            $lastInputs = $latestSnapshot->getInputsArray();
-        } else {
-            // Pre-fill from the presentation's own stored fields
-            $lastInputs = array_filter([
-                'suburb'    => $presentation->suburb,
-                'type'      => $presentation->property_type,
-                'bedrooms'  => $presentation->bedrooms,
-                'size_m2'   => $presentation->floor_area_m2,
-                'branch_id' => $presentation->branch_id,
-            ], fn($v) => $v !== null);
-        }
+        // Compile extracted-data review (all computation in service, not Blade)
+        // AnalysisDataService reads asking_price directly from the presentation record
+        $analysisData = (new AnalysisDataService())->compile($presentation);
 
-        $hasSoldData = false; // no analysis run yet on GET
+        return view('presentations.analysis', compact(
+            'presentation', 'analysisData', 'latestSnapshot'
+        ));
+    }
 
-        return view('presentations.analysis', compact('presentation', 'branches', 'lastInputs', 'isAdmin', 'hasSoldData'));
+    /**
+     * Run Analysis: save asking price, compile analysis data, freeze snapshot, redirect back.
+     */
+    public function runAnalysis(Request $request, Presentation $presentation)
+    {
+        $validated = $request->validate([
+            'asking_price_inc' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        // Save asking price to the presentation record
+        $presentation->update([
+            'asking_price_inc' => $validated['asking_price_inc'] ?? null,
+        ]);
+        $presentation->refresh();
+
+        // Compile analysis data from all extracted sources
+        $analysisData = (new AnalysisDataService())->compile($presentation);
+
+        // Save snapshot with computed_json + timestamp
+        PresentationSnapshot::create([
+            'presentation_id'      => $presentation->id,
+            'generated_by_user_id' => auth()->id(),
+            'created_by_user_id'   => auth()->id(),
+            'computed_json'        => json_encode($analysisData, JSON_THROW_ON_ERROR),
+            'snapshot_json'        => '{}',
+            'generated_at'         => now(),
+        ]);
+
+        return redirect()->route('presentations.analysis', $presentation)
+            ->with('success', 'Analysis complete — snapshot saved.');
     }
 
     /**
@@ -314,6 +337,7 @@ class PresentationController extends Controller
     public function updateHoldingCost(Request $request, Presentation $presentation)
     {
         $validated = $request->validate([
+            'asking_price_inc'         => ['nullable', 'integer', 'min:0'],
             'monthly_bond'             => ['nullable', 'numeric', 'min:0'],
             'monthly_rates'            => ['nullable', 'numeric', 'min:0'],
             'monthly_levies'           => ['nullable', 'numeric', 'min:0'],
@@ -322,17 +346,30 @@ class PresentationController extends Controller
             'monthly_opportunity_cost' => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        $presentation->update([
-            'monthly_bond'             => isset($validated['monthly_bond'])             ? (float) $validated['monthly_bond']             : null,
-            'monthly_rates'            => isset($validated['monthly_rates'])            ? (float) $validated['monthly_rates']            : null,
-            'monthly_levies'           => isset($validated['monthly_levies'])           ? (float) $validated['monthly_levies']           : null,
-            'monthly_insurance'        => isset($validated['monthly_insurance'])        ? (float) $validated['monthly_insurance']        : null,
-            'monthly_utilities'        => isset($validated['monthly_utilities'])        ? (float) $validated['monthly_utilities']        : null,
-            'monthly_opportunity_cost' => isset($validated['monthly_opportunity_cost']) ? (float) $validated['monthly_opportunity_cost'] : null,
-        ]);
+        $updates = [];
+
+        // Asking price (whole rands, bigint)
+        if ($request->has('asking_price_inc')) {
+            $updates['asking_price_inc'] = isset($validated['asking_price_inc']) ? (int) $validated['asking_price_inc'] : null;
+        }
+
+        // Holding cost fields (floats)
+        foreach (['monthly_bond', 'monthly_rates', 'monthly_levies', 'monthly_insurance', 'monthly_utilities', 'monthly_opportunity_cost'] as $field) {
+            if ($request->has($field)) {
+                $updates[$field] = isset($validated[$field]) ? (float) $validated[$field] : null;
+            }
+        }
+
+        if (!empty($updates)) {
+            $presentation->update($updates);
+        }
+
+        $message = $request->has('asking_price_inc') && !$request->has('monthly_bond')
+            ? 'Asking price saved.'
+            : 'Holding cost inputs saved.';
 
         return redirect()->route('presentations.show', $presentation)
-            ->with('success', 'Holding cost inputs saved.');
+            ->with('success', $message);
     }
 
     /**
@@ -730,8 +767,11 @@ class PresentationController extends Controller
             auth()->id(),
         );
 
+        // Generate the PDF HTML file
+        (new \App\Services\Presentations\PresentationPdfService())->generate($version);
+
         return redirect()->route("presentations.show", $presentation)
-            ->with("success", "Version #" . $version->id . " compiled successfully.");
+            ->with("success", "Pack compiled — Version #" . $version->id . ". Use the Download PDF button to view.");
     }
 
     /**

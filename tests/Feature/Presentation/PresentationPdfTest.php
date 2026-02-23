@@ -140,20 +140,19 @@ class PresentationPdfTest extends TestCase
         $response = $this->get(route('presentations.versions.pdf', [$this->presentation, $this->version]));
         $response->assertOk();
 
-        $content = $response->streamedContent();
+        $content = $response->getContent();
         $this->assertStringContainsString('Executive Summary', $content);
     }
 
-    public function test_html_contains_evidence_appendix(): void
+    public function test_html_contains_market_overview_section(): void
     {
         Config::set('features.presentation_pdf_v1', true);
         $this->actingAs($this->user);
 
         $response = $this->get(route('presentations.versions.pdf', [$this->presentation, $this->version]));
-        $content  = $response->streamedContent();
+        $content  = $response->getContent();
 
-        $this->assertStringContainsString('Evidence', $content);
-        $this->assertStringContainsString('Sold comparables', $content);
+        $this->assertStringContainsString('Market Overview', $content);
     }
 
     public function test_html_contains_presentation_address(): void
@@ -162,7 +161,7 @@ class PresentationPdfTest extends TestCase
         $this->actingAs($this->user);
 
         $response = $this->get(route('presentations.versions.pdf', [$this->presentation, $this->version]));
-        $content  = $response->streamedContent();
+        $content  = $response->getContent();
 
         $this->assertStringContainsString('12 Ocean View Drive', $content);
     }
@@ -173,21 +172,20 @@ class PresentationPdfTest extends TestCase
         $this->actingAs($this->user);
 
         $response = $this->get(route('presentations.versions.pdf', [$this->presentation, $this->version]));
-        $content  = $response->streamedContent();
+        $content  = $response->getContent();
 
         $this->assertStringContainsString('Holding Cost', $content);
-        $this->assertStringContainsString('15,000.00', $content);
     }
 
-    public function test_html_contains_market_analytics_section(): void
+    public function test_html_contains_pricing_strategy_section(): void
     {
         Config::set('features.presentation_pdf_v1', true);
         $this->actingAs($this->user);
 
         $response = $this->get(route('presentations.versions.pdf', [$this->presentation, $this->version]));
-        $content  = $response->streamedContent();
+        $content  = $response->getContent();
 
-        $this->assertStringContainsString('Market Analytics', $content);
+        $this->assertStringContainsString('Pricing Strategy', $content);
     }
 
     // ── File persisted to storage ─────────────────────────────────────────────
@@ -239,7 +237,7 @@ class PresentationPdfTest extends TestCase
         Storage::disk(PresentationPdfService::STORAGE_DISK)->put($path, '<html><body>CACHED</body></html>');
 
         $response = $this->get(route('presentations.versions.pdf', [$this->presentation, $this->version]));
-        $content  = $response->streamedContent();
+        $content  = $response->getContent();
 
         // Should serve the cached file — not regenerate
         $this->assertStringContainsString('CACHED', $content);

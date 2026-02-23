@@ -7,8 +7,8 @@ use App\Models\Presentation;
 use App\Models\PresentationVersion;
 use App\Services\Presentations\PresentationPdfService;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Serves the HTML presentation pack for a compiled version (P18).
@@ -21,11 +21,11 @@ class PresentationPdfController extends Controller
     public function __construct(private readonly PresentationPdfService $pdfService) {}
 
     /**
-     * Generate (or regenerate) the pack file and stream it to the browser.
+     * Serve the pack HTML inline in the browser for viewing/printing.
      *
      * GET /presentations/{presentation}/versions/{version}/pdf
      */
-    public function download(Request $request, Presentation $presentation, PresentationVersion $version): StreamedResponse
+    public function download(Request $request, Presentation $presentation, PresentationVersion $version): Response
     {
         abort_unless(config('features.presentation_pdf_v1', false), 404);
 
@@ -39,13 +39,9 @@ class PresentationPdfController extends Controller
             $path = $this->pdfService->generate($version);
         }
 
-        $filename = sprintf(
-            'presentation-%d-v%d.html',
-            $presentation->id,
-            $version->id,
-        );
+        $html = Storage::disk(PresentationPdfService::STORAGE_DISK)->get($path);
 
-        return Storage::disk(PresentationPdfService::STORAGE_DISK)->download($path, $filename, [
+        return response($html, 200, [
             'Content-Type' => 'text/html; charset=UTF-8',
         ]);
     }

@@ -124,20 +124,26 @@ class DocumentExtractor
             }
         }
 
-        // Subject property: Address
-        if (preg_match('/(?:Property\s*)?Address\s*[:\-]\s*(.+?)(?:\r?\n|$)/i', $text, $m)) {
+        // Subject property: Address — CMA Info uses newline (not colon) as separator
+        if (preg_match('/(?:Property\s*)?Address\s*[:\-\t]?\s*(.+?)(?:\r?\n|$)/i', $text, $m)) {
             $addr = trim($m[1]);
             if (strlen($addr) >= 5 && strlen($addr) <= 200) {
                 $fields['subject.address'] = $addr;
             }
         }
 
-        // Subject property: Suburb
-        if (preg_match('/Suburb\s*[:\-]\s*(.+?)(?:\r?\n|$)/i', $text, $m)) {
+        // Subject property: Suburb — CMA Info uses newline (not colon) as separator
+        // Use [^\r\n]+ to stop at first newline and avoid grabbing multi-line junk.
+        if (preg_match('/\bSuburb\s*[:\-\t]?\s*([A-Z][A-Za-z ]{1,98})[^\S\r\n]*(?:\r?\n|$)/m', $text, $m)) {
             $suburb = trim($m[1]);
             if (strlen($suburb) >= 2 && strlen($suburb) <= 100) {
                 $fields['subject.suburb'] = $suburb;
             }
+        }
+
+        // GPS coordinates — "30.384764°E 30.838421°S"
+        if (preg_match('/\bGPS\s*[:\-\t]?\s*([\d.]+\s*°\s*[ENSW]\s+[\d.]+\s*°\s*[ENSW])/i', $text, $m)) {
+            $fields['subject.gps'] = trim($m[1]);
         }
 
         // Subject property: Erf / Stand
@@ -156,8 +162,10 @@ class DocumentExtractor
             }
         }
 
-        // Purchase date
+        // Purchase date — try same-line first, then cross-line (pdftotext puts address between label and date)
         if (preg_match('/(?:Purchase|Transfer|Acquisition)\s*Date\s*[:\-]?\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}|\d{4}[\/\-\.]\d{2}[\/\-\.]\d{2})/i', $text, $m)) {
+            $fields['subject.purchase_date'] = trim($m[1]);
+        } elseif (preg_match('/(?:Purchase|Transfer|Acquisition)\s*Date[\s\S]{0,200}?(\d{4}[\/\-]\d{2}[\/\-]\d{2})/i', $text, $m)) {
             $fields['subject.purchase_date'] = trim($m[1]);
         }
 
@@ -184,55 +192,8 @@ class DocumentExtractor
     {
         $fields = [];
 
-        // Strategy: parse tabular rows from "Residential Price Ranges" section.
-        // Each row: Year  NoOfSales  R Low  R Median  R High  R Maximum
-        // Price format: R X XXX XXX (1-3 leading digits then groups of 3 separated by space/comma).
-        // Using specific pattern to avoid lazy quantifier issues.
-        $priceRe = 'R\s*(\d{1,3}(?:[\s,]\d{3})+)';
-        $rowPattern = '/\b(20\d{2})\s+(\d{1,4})\s+' . $priceRe . '\s+' . $priceRe . '\s+' . $priceRe . '\s+' . $priceRe . '/i';
-
-        $rows = [];
-        if (preg_match_all($rowPattern, $text, $matches, PREG_SET_ORDER)) {
-            foreach ($matches as $m) {
-                $year  = (int) $m[1];
-                $count = (int) $m[2];
-                $low   = (int) preg_replace('/[\s,]/', '', $m[3]);
-                $med   = (int) preg_replace('/[\s,]/', '', $m[4]);
-                $high  = (int) preg_replace('/[\s,]/', '', $m[5]);
-                $max   = (int) preg_replace('/[\s,]/', '', $m[6]);
-
-                if ($year >= 2000 && $year <= 2030 && $count > 0 && $med >= 10000) {
-                    $rows[] = compact('year', 'count', 'low', 'med', 'high', 'max');
-                }
-            }
-        }
-
-        if (!empty($rows)) {
-            // Pick the latest year with a meaningful sample (>= 10 sales).
-            // Fall back to the absolute latest year if none qualifies.
-            usort($rows, fn ($a, $b) => $b['year'] <=> $a['year']);
-            $best = null;
-            foreach ($rows as $row) {
-                if ($row['count'] >= 10) {
-                    $best = $row;
-                    break;
-                }
-            }
-            if ($best === null) {
-                $best = $rows[0]; // latest year regardless
-            }
-
-            $fields['suburb.latest_year']         = (string) $best['year'];
-            $fields['suburb.latest_sales_count']   = (string) $best['count'];
-            $fields['suburb.latest_median_price']  = (string) $best['med'];
-            $fields['suburb.latest_low']           = (string) $best['low'];
-            $fields['suburb.latest_high']          = (string) $best['high'];
-            $fields['suburb.latest_max']           = (string) $best['max'];
-
-            return $fields;
-        }
-
-        // Fallback: parse "Residential Sales Analysis" table rows.
+        // Step 1: Parse "Residential Sales Analysis" table (Page 1 — authoritative source).
+        // This table filters out extreme/abnormal sales, so its count is the correct one.
         // Pattern: Year  NoOfSales  R MedianPrice  Percentage  Index
         $salesPattern = '/\b(20\d{2})\s+(\d{1,4})\s+R\s*(\d{1,3}(?:[\s,]\d{3})+)\s+[\-\d]/i';
         $salesRows = [];
@@ -247,22 +208,80 @@ class DocumentExtractor
             }
         }
 
+        $bestSales = null;
         if (!empty($salesRows)) {
             usort($salesRows, fn ($a, $b) => $b['year'] <=> $a['year']);
-            $best = null;
             foreach ($salesRows as $row) {
                 if ($row['count'] >= 10) {
-                    $best = $row;
+                    $bestSales = $row;
                     break;
                 }
             }
-            if ($best === null) {
-                $best = $salesRows[0];
+            if ($bestSales === null) {
+                $bestSales = $salesRows[0];
+            }
+        }
+
+        // Step 2: Parse "Residential Price Ranges" table for supplementary fields (low, high, max).
+        // This table may have a higher count (includes all sales), but we use Sales Analysis count.
+        // Pattern: Year  NoOfSales  R Low  R Median  R High  R Maximum
+        $priceRe = 'R\s*(\d{1,3}(?:[\s,]\d{3})+)';
+        $rowPattern = '/\b(20\d{2})\s+(\d{1,4})\s+' . $priceRe . '\s+' . $priceRe . '\s+' . $priceRe . '\s+' . $priceRe . '/i';
+        $rangeByYear = [];
+        if (preg_match_all($rowPattern, $text, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $year  = (int) $m[1];
+                $count = (int) $m[2];
+                $low   = (int) preg_replace('/[\s,]/', '', $m[3]);
+                $med   = (int) preg_replace('/[\s,]/', '', $m[4]);
+                $high  = (int) preg_replace('/[\s,]/', '', $m[5]);
+                $max   = (int) preg_replace('/[\s,]/', '', $m[6]);
+
+                if ($year >= 2000 && $year <= 2030 && $count > 0 && $med >= 10000) {
+                    $rangeByYear[$year] = compact('year', 'count', 'low', 'med', 'high', 'max');
+                }
+            }
+        }
+
+        // Step 3: Build fields — Sales Analysis is authoritative for year/count/median.
+        if ($bestSales !== null) {
+            $fields['suburb.latest_year']         = (string) $bestSales['year'];
+            $fields['suburb.latest_sales_count']  = (string) $bestSales['count'];
+            $fields['suburb.latest_median_price'] = (string) $bestSales['med'];
+
+            // Supplement with price range data for the same year (low, high, max only)
+            if (isset($rangeByYear[$bestSales['year']])) {
+                $range = $rangeByYear[$bestSales['year']];
+                $fields['suburb.latest_low']  = (string) $range['low'];
+                $fields['suburb.latest_high'] = (string) $range['high'];
+                $fields['suburb.latest_max']  = (string) $range['max'];
             }
 
+            return $fields;
+        }
+
+        // Step 4: Fallback — no Sales Analysis rows, use Price Ranges only.
+        if (!empty($rangeByYear)) {
+            $years = array_keys($rangeByYear);
+            rsort($years);
+            $bestYear = null;
+            foreach ($years as $y) {
+                if ($rangeByYear[$y]['count'] >= 10) {
+                    $bestYear = $y;
+                    break;
+                }
+            }
+            if ($bestYear === null) {
+                $bestYear = $years[0];
+            }
+
+            $best = $rangeByYear[$bestYear];
             $fields['suburb.latest_year']         = (string) $best['year'];
-            $fields['suburb.latest_sales_count']   = (string) $best['count'];
-            $fields['suburb.latest_median_price']  = (string) $best['med'];
+            $fields['suburb.latest_sales_count']  = (string) $best['count'];
+            $fields['suburb.latest_median_price'] = (string) $best['med'];
+            $fields['suburb.latest_low']          = (string) $best['low'];
+            $fields['suburb.latest_high']         = (string) $best['high'];
+            $fields['suburb.latest_max']          = (string) $best['max'];
         }
 
         return $fields;
@@ -281,6 +300,26 @@ class DocumentExtractor
 
         // Average price — "Average: R 1 687 000" (may not have the word "Price")
         $this->matchPrice($text, '(?:Average|Avg|Mean)\s*(?:Sale\s*)?(?:Price)?', $fields, 'vicinity.average_price');
+
+        // Cross-line fallback: pdftotext column mangling can put "Average:" and its value
+        // on separate lines with other text in between. Search after "Lower Range" for
+        // a standalone price >= 500,000 that isn't already captured as another field.
+        if (!isset($fields['vicinity.average_price'])) {
+            $lowerPos = stripos($text, 'Lower Range');
+            if ($lowerPos !== false) {
+                $afterLower = substr($text, $lowerPos + 30, 600);
+                $knownValues = array_values($fields);
+                if (preg_match_all('/R\s*(\d{1,3}(?:[\s,]\d{3}){2,})/i', $afterLower, $avgMatches)) {
+                    foreach ($avgMatches[1] as $pm) {
+                        $cleaned = (int) preg_replace('/[\s,]/', '', $pm);
+                        if ($cleaned >= 500000 && $cleaned <= 50000000 && !in_array((string) $cleaned, $knownValues, true)) {
+                            $fields['vicinity.average_price'] = (string) $cleaned;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
 
         // Average price per m² — "Average R/m²: R 1 232" or "Average R/m²:\tR 1 232"
         // Use [^\s:\-]* after 'm' to safely skip ²/2/sqm without UTF-8 byte issues.
@@ -340,6 +379,252 @@ class DocumentExtractor
         }
 
         return $fields;
+    }
+
+    // ── Row Extraction Methods ───────────────────────────────────────────────
+    // m² in UTF-8 = bytes 0xC2 0xB2. Use m(?:\xC2\xB2|2) in patterns.
+    // CRITICAL: price/extent captures use [ ,] (space+comma) NOT [\s,] to avoid
+    // consuming newlines and bleeding into the next row.
+
+    /**
+     * Extract vicinity comp rows from vicinity sales PDF text.
+     * Source tag: 'vicinity_sales'.
+     * @return array<int, array<string, mixed>>
+     */
+    public function extractVicinityRows(string $text): array
+    {
+        $rows = [];
+
+        // row_num  distance  erf_no  address,SUBURB  Residential  [Type]  extent m²  date  R price  R r/m²
+        // (?:Type\s+)? handles optional property type field present on some rows.
+        $pattern = '/(\d{1,2})\s+(\d+\s*m|-)\s+(\d{3,5})\s+(.+?,\s*\w+)\s+(?:Residential|Commercial|Industrial|Agricultural)\s+(?:Type\s+)?(\d[\d ,]*)\s*m(?:\xC2\xB2|2)\s+(\d{4}\/\d{2}\/\d{2})\s+R[ ]([\d ,]+\d)\s+R[ ]([\d ,]+\d)/si';
+
+        if (preg_match_all($pattern, $text, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $distRaw = trim($m[2]);
+                $distM = ($distRaw === '-') ? null : (int) preg_replace('/\D/', '', $distRaw);
+                $extent = (int) preg_replace('/[ ,]/', '', $m[5]);
+                $price = (int) preg_replace('/[ ,]/', '', $m[7]);
+                $rpm2 = (int) preg_replace('/[ ,]/', '', $m[8]);
+
+                if ($price >= 10000 && $extent >= 10) {
+                    $rows[] = [
+                        'row_number'   => (int) $m[1],
+                        'distance_m'   => $distM,
+                        'erf_no'       => trim($m[3]),
+                        'address'      => trim($m[4]),
+                        'extent_m2'    => $extent,
+                        'sale_date'    => trim($m[6]),
+                        'sale_price'   => $price,
+                        'price_per_m2' => $rpm2,
+                        'source'       => 'vicinity_sales',
+                    ];
+                }
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Extract CMA comp rows from CMA PDF text (Page 4).
+     * Source tag: 'cma_comps'. No R/m² column.
+     * @return array<int, array<string, mixed>>
+     */
+    public function extractCmaCompRows(string $text): array
+    {
+        $rows = [];
+
+        // Limit to section between "COMPARATIVE PROPERTIES" and "Comparative Market Analysis Value"
+        $startPos = stripos($text, 'COMPARATIVE PROPERTIES');
+        $endPos = stripos($text, 'Comparative Market Analysis Value');
+        if ($startPos === false) {
+            return [];
+        }
+        $section = ($endPos !== false)
+            ? substr($text, $startPos, $endPos - $startPos)
+            : substr($text, $startPos, 3000);
+
+        // row_num  distance  erf_no  address,SUBURB  Residential  extent m²  date  R price
+        $pattern = '/(\d{1,2})\s+(\d+\s*m|-)\s+(\d{3,5})\s+(.+?,\s*\w+)\s+(?:Residential|Commercial|Industrial|Agricultural)\s+(\d[\d ,]*)\s*m(?:\xC2\xB2|2)\s+(\d{4}\/\d{2}\/\d{2})\s+R[ ]([\d ,]+\d)/si';
+
+        if (preg_match_all($pattern, $section, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $distRaw = trim($m[2]);
+                $distM = ($distRaw === '-') ? null : (int) preg_replace('/\D/', '', $distRaw);
+                $extent = (int) preg_replace('/[ ,]/', '', $m[5]);
+                $price = (int) preg_replace('/[ ,]/', '', $m[7]);
+
+                if ($price >= 10000 && $extent >= 10) {
+                    $rows[] = [
+                        'row_number'   => (int) $m[1],
+                        'distance_m'   => $distM,
+                        'erf_no'       => trim($m[3]),
+                        'address'      => trim($m[4]),
+                        'extent_m2'    => $extent,
+                        'sale_date'    => trim($m[6]),
+                        'sale_price'   => $price,
+                        'price_per_m2' => null,
+                        'source'       => 'cma_comps',
+                    ];
+                }
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Extract street sales rows from CMA PDF text (Page 7).
+     * No row number or distance column.
+     * Source tag: 'street_sales'.
+     * @return array<int, array<string, mixed>>
+     */
+    public function extractStreetSalesRows(string $text): array
+    {
+        $rows = [];
+
+        // Limit to section between "most recent sales in" and "Page X of Y" or "Price Ranges"
+        $startPos = stripos($text, 'most recent sales in');
+        if ($startPos === false) {
+            return [];
+        }
+        $endPos = strpos($text, 'Price Ranges', $startPos);
+        $section = ($endPos !== false)
+            ? substr($text, $startPos, $endPos - $startPos)
+            : substr($text, $startPos, 5000);
+
+        // erf_no  address,SUBURB  Residential  extent m²  date  R price  R r/m²
+        $pattern = '/(\d{3,5})\s+(.+?,\s*\w+)\s+(?:Residential|Commercial|Industrial|Agricultural)\s+(\d[\d ,]*)\s*m(?:\xC2\xB2|2)\s+(\d{4}\/\d{2}\/\d{2})\s+R[ ]([\d ,]+\d)\s+R[ ]([\d ,]+\d)/si';
+
+        if (preg_match_all($pattern, $section, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $extent = (int) preg_replace('/[ ,]/', '', $m[3]);
+                $price = (int) preg_replace('/[ ,]/', '', $m[5]);
+                $rpm2 = (int) preg_replace('/[ ,]/', '', $m[6]);
+
+                if ($price >= 10000 && $extent >= 10) {
+                    $rows[] = [
+                        'row_number'   => null,
+                        'distance_m'   => null,
+                        'erf_no'       => trim($m[1]),
+                        'address'      => trim($m[2]),
+                        'extent_m2'    => $extent,
+                        'sale_date'    => trim($m[4]),
+                        'sale_price'   => $price,
+                        'price_per_m2' => $rpm2,
+                        'source'       => 'street_sales',
+                    ];
+                }
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Extract active listing rows from CMA PDF text (Page 9).
+     * pdftotext interleaves column headers with data, so we extract
+     * each field individually from the FOR SALE section.
+     * Source tag: 'cma_active'.
+     * @return array<int, array<string, mixed>>
+     */
+    public function extractCmaActiveListings(string $text): array
+    {
+        $rows = [];
+
+        $startPos = stripos($text, 'FOR SALE');
+        if ($startPos === false) {
+            $startPos = stripos($text, 'recently listed');
+        }
+        if ($startPos === false) {
+            return [];
+        }
+        $section = substr($text, $startPos, 3000);
+
+        // Find all prices >= 100,000 in the section — each represents one listing.
+        if (!preg_match_all('/R[ ]([\d ,]+\d)/i', $section, $priceMatches, PREG_OFFSET_CAPTURE)) {
+            return [];
+        }
+
+        foreach ($priceMatches[0] as $idx => $match) {
+            $priceStr = $priceMatches[1][$idx][0];
+            $pricePos = $match[1];
+            $price = (int) preg_replace('/[ ,]/', '', $priceStr);
+            if ($price < 100000) {
+                continue;
+            }
+
+            $before = substr($section, 0, $pricePos);
+            $after = substr($section, $pricePos + strlen($match[0]), 200);
+
+            // DOM: first standalone number on its own line after the price
+            $dom = null;
+            if (preg_match('/\n(\d{1,4})\s*\n/', $after, $dm)) {
+                $val = (int) $dm[1];
+                if ($val <= 3650) {
+                    $dom = $val;
+                }
+            }
+
+            // List date: last YYYY/MM/DD before the price
+            $listDate = null;
+            if (preg_match_all('/(\d{4}\/\d{2}\/\d{2})/', $before, $dm)) {
+                $listDate = end($dm[1]);
+            }
+
+            // Extent: last NUMBER m² before the price
+            $extent = null;
+            if (preg_match_all('/(\d[\d ,]*)\s*m(?:\xC2\xB2|2)/s', $before, $dm)) {
+                $extent = (int) preg_replace('/[ ,]/', '', end($dm[1]));
+            }
+
+            // Address: NUMBER STREET, SUBURB
+            $address = null;
+            if (preg_match_all('/(\d+\s+[A-Z][A-Z\s]+,\s*[A-Z]+)/i', $before, $dm)) {
+                $address = trim(end($dm[1]));
+            }
+
+            // Erf number: 3-5 digit number on its own line (not part of date or extent)
+            $erfNo = null;
+            if (preg_match_all('/\n(\d{3,5})\s*\n/', $before, $dm)) {
+                foreach (array_reverse($dm[1]) as $candidate) {
+                    $cInt = (int) $candidate;
+                    if ($cInt >= 100 && ($cInt < 2000 || $cInt > 2030)) {
+                        $erfNo = $candidate;
+                        break;
+                    }
+                }
+            }
+
+            // Distance: first NNN m match (appears before erf in the text)
+            $distM = null;
+            if (preg_match('/(\d{1,4})\s*m\b/', $before, $dm)) {
+                $distM = (int) $dm[1];
+            }
+
+            // Property type
+            $propType = null;
+            if (preg_match('/(DS\s+House|House|Unit|Flat|Townhouse|Stand|Vacant\s+Land|Apartment)/i', $before, $dm)) {
+                $propType = trim($dm[1]);
+            }
+
+            if ($extent && $extent >= 10) {
+                $rows[] = [
+                    'distance_m'     => $distM,
+                    'erf_no'         => $erfNo,
+                    'address'        => $address,
+                    'property_type'  => $propType,
+                    'extent_m2'      => $extent,
+                    'list_date'      => $listDate,
+                    'list_price'     => $price,
+                    'days_on_market' => $dom,
+                    'source'         => 'cma_active',
+                ];
+            }
+        }
+
+        return $rows;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

@@ -74,9 +74,8 @@ class UploadProcessor
 
         $upload->save();
 
-        if ($upload->extraction_status === 'ok') {
-            $this->detectFields($text, $presentation, $upload);
-        }
+        // Field propagation is now handled by UploadExtractionService::propagateFields()
+        // after DocumentExtractor runs, replacing the old detectFields() proof-of-concept.
 
         return $upload;
     }
