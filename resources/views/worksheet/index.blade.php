@@ -489,7 +489,8 @@
                 $actual = \App\Http\Controllers\WorksheetController::calculateWithOverrides(
                     $w,
                     (float)($dealStats['avg_sale_price_inc_vat'] ?? 0),
-                    (float)($dealStats['effective_commission_percent_ex_vat'] ?? 0)
+                    (float)($dealStats['effective_commission_percent_ex_vat'] ?? 0),
+                    true // commission percent is already ex-VAT from dealRegisterStats
                 );
 
                 // -------------------------------------------------------

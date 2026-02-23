@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Services\Admin\CompanyPerformanceService;
+use App\Services\Finance\CommissionCalculator;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -66,36 +67,26 @@ class AgentPerformanceController extends Controller
                 'deals.property_value','deals.total_commission',
                 'deals.listing_external','deals.listing_our_share_percent',
                 'deals.selling_external','deals.selling_our_share_percent',
+                'deals.listing_split_percent','deals.selling_split_percent',
                 'deal_user.side','deal_user.agent_split_percent','deal_user.agent_cut_percent',
                 'users.agent_cut_percent as user_default_split_percent'
             )
             ->get()
             ->map(function ($d) {
-                $side = strtolower(trim((string)($d->side ?? '')));
-                $ourSharePct = 100.0;
+                // Side-based company income ex VAT via CommissionCalculator (respects listing/selling split + externals)
+                $sideIncomeExVat = (float) CommissionCalculator::companyIncomeExVatForSide($d, $d->side ?? null);
 
-                if ($side === 'listing' && (int)($d->listing_external ?? 0) === 1) {
-                    $ourSharePct = (float)($d->listing_our_share_percent ?? 0);
-                } elseif ($side === 'selling' && (int)($d->selling_external ?? 0) === 1) {
-                    $ourSharePct = (float)($d->selling_our_share_percent ?? 0);
-                }
-
-                $vatRatePercent = (float) \App\Models\PerformanceSetting::get('vat_rate', 15);
-                $vatRate = $vatRatePercent / 100;
-                $grossIncVat = (float)($d->total_commission ?? 0);
-                $grossExVat = ($grossIncVat > 0) ? ($grossIncVat / (1 + $vatRate)) : 0.0;
-                $companyIncome = $grossExVat * max(0.0, min(1.0, $ourSharePct / 100.0));
                 $split = (float)($d->agent_split_percent ?? 0);
-                if ($split <= 0) $split = (float)($d->user_default_split_percent ?? 50);
-                if ($split <= 0) $split = 50.0;
+                if ($split < 0) $split = 0;
+                if ($split > 100) $split = 100;
 
-                $agentIncome = $companyIncome * max(0.0, min(1.0, $split / 100.0));
-                $retained = max(0.0, $companyIncome - $agentIncome);
+                $agentIncome = round($sideIncomeExVat * ($split / 100.0), 2);
+                $retained = round(max(0.0, $sideIncomeExVat - $agentIncome), 2);
 
                 // attach computed fields used by WOW blade totals/footer
-                $d->company_income_ex_vat = round($companyIncome, 2);
-                $d->agent_income_ex_vat = round($agentIncome, 2);
-                $d->company_retained_ex_vat = round($retained, 2);
+                $d->company_income_ex_vat = round($sideIncomeExVat, 2);
+                $d->agent_income_ex_vat = $agentIncome;
+                $d->company_retained_ex_vat = $retained;
 
                 return $d;
             });

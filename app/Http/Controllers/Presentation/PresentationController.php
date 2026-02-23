@@ -183,15 +183,16 @@ class PresentationController extends Controller
      */
     public function analysis(Presentation $presentation)
     {
+        $latestSnapshot = $presentation->snapshots()->latest()->first();
+
         // Readiness gate — redirect to intake if evidence is insufficient
-        if (!$presentation->isAnalysisReady()) {
+        // BUT allow access if a snapshot already exists (agent can view previous analysis)
+        if (!$latestSnapshot && !$presentation->isAnalysisReady()) {
             $readiness = (new PresentationReadinessService())->evaluate($presentation);
             $missing   = implode(', ', array_column($readiness['missing_required'], 'label'));
             return redirect()->route('presentations.show', $presentation)
                 ->with('error', 'Add the following before running analysis: ' . $missing);
         }
-
-        $latestSnapshot = $presentation->snapshots()->latest()->first();
 
         // Compile extracted-data review (all computation in service, not Blade)
         // AnalysisDataService reads asking_price directly from the presentation record
@@ -234,8 +235,8 @@ class PresentationController extends Controller
             'generated_at'         => now(),
         ]);
 
-        return redirect()->route('presentations.analysis', $presentation)
-            ->with('success', 'Analysis complete — snapshot saved.');
+        return redirect()->route('presentations.show', $presentation)
+            ->with('success', 'Analysis complete — snapshot saved. Click "View Analysis" to review results.');
     }
 
     /**

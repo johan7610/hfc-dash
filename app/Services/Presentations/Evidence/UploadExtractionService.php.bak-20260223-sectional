@@ -2,7 +2,6 @@
 
 namespace App\Services\Presentations\Evidence;
 
-use App\Models\Presentation;
 use App\Models\PresentationActiveListing;
 use App\Models\PresentationField;
 use App\Models\PresentationSoldComp;
@@ -395,24 +394,16 @@ class UploadExtractionService
         $presentationId = $upload->presentation_id;
 
         if ($upload->type === 'vicinity_sales') {
-            // Detect sectional title first for correct column layout
-            $isSectional = $extractor->isSectionalTitle($text);
-            if ($isSectional) {
+            // Try residential format first, then sectional title
+            $rows = $extractor->extractVicinityRows($text);
+            $parserTag = 'doc_extract_v1:vicinity_sales';
+            if (empty($rows)) {
                 $rows = $extractor->extractSectionalVicinityRows($text);
-                $parserTag = 'doc_extract_v1:vicinity_sales_sectional';
-            } else {
-                $rows = $extractor->extractVicinityRows($text);
-                $parserTag = 'doc_extract_v1:vicinity_sales';
-            }
-            $this->persistSoldComps($rows, $presentationId, $upload->id, $parserTag);
-
-            // Set property_type on presentation when sectional detected (if not already set)
-            if ($isSectional) {
-                $presentation = Presentation::find($presentationId);
-                if ($presentation && !in_array($presentation->property_type, ['sectional', 'apartment', 'unit'])) {
-                    $presentation->update(['property_type' => 'sectional']);
+                if (!empty($rows)) {
+                    $parserTag = 'doc_extract_v1:vicinity_sales_sectional';
                 }
             }
+            $this->persistSoldComps($rows, $presentationId, $upload->id, $parserTag);
         } elseif ($upload->type === 'cma') {
             $this->persistSoldComps(
                 $extractor->extractCmaCompRows($text),

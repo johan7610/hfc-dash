@@ -186,10 +186,6 @@ class Property24SearchExtractorV1
         // Extract image
         $image = $this->extractImage($tile, $xpath);
 
-        // Extract address and location (P24: p24_address = street, p24_location = suburb)
-        $address = $this->extractByClass($tile, $xpath, 'p24_address');
-        $location = $this->extractByClass($tile, $xpath, 'p24_location');
-
         // Extract feature fields
         $beds = $this->extractIntByIcon($tile, $xpath, 'bed', 'Bedrooms');
         $baths = $this->extractIntByIcon($tile, $xpath, 'bath', 'Bathrooms');
@@ -208,8 +204,6 @@ class Property24SearchExtractorV1
             'size_m2'           => $sizeM2,
             'erf_m2'            => $erfM2,
             'title'             => $title,
-            'address'           => $address,
-            'location'          => $location,
             'image'             => $image,
         ];
     }
@@ -280,25 +274,7 @@ class Property24SearchExtractorV1
     }
 
     /**
-     * Extract text from an element by CSS class name.
-     */
-    private function extractByClass(\DOMElement $tile, \DOMXPath $xpath, string $className): ?string
-    {
-        $nodes = $xpath->query('.//*[contains(@class,"' . $className . '")]', $tile);
-        foreach ($nodes as $node) {
-            $text = trim($node->textContent);
-            if ($text !== '' && strlen($text) <= 500) {
-                return $text;
-            }
-        }
-        return null;
-    }
-
-    /**
      * Extract integer value next to an icon (beds, baths, parking).
-     *
-     * P24 uses SVG <image> elements (not <img>) for beds/baths/parking icons
-     * inside <span class="p24_featureDetails" title="Bedrooms"> wrappers.
      */
     private function extractIntByIcon(
         \DOMElement $tile,
@@ -306,26 +282,8 @@ class Property24SearchExtractorV1
         string $iconKeyword,
         string $altKeyword
     ): ?int {
-        // Strategy 1: P24 featureDetails wrapper with title attribute (most reliable)
-        $featureSpans = $xpath->query('.//span[contains(@class,"p24_featureDetails") and contains(@title,"' . $altKeyword . '")]', $tile);
-        foreach ($featureSpans as $span) {
-            $text = trim($span->textContent);
-            if (preg_match('/\b(\d{1,2})\b/', $text, $m)) {
-                return (int) $m[1];
-            }
-        }
-
-        // Strategy 2: SVG <image> elements (P24 uses these instead of <img> for icons)
-        $svgImages = $xpath->query('.//image[contains(@src,"icon_' . $iconKeyword . '") or contains(@alt,"' . $altKeyword . '")]', $tile);
-        foreach ($svgImages as $img) {
-            $v = $this->extractNumberNearElement($img);
-            if ($v !== null) {
-                return $v;
-            }
-        }
-
-        // Strategy 3: Classic <img> elements
-        $imgNodes = $xpath->query('.//img[contains(@src,"icon_' . $iconKeyword . '") or contains(@alt,"' . $altKeyword . '")]', $tile);
+        // Icon src pattern
+        $imgNodes = $xpath->query('.//img[contains(@src,"icon_' . $iconKeyword . '")]', $tile);
         foreach ($imgNodes as $img) {
             $v = $this->extractNumberNextToImg($img);
             if ($v !== null) {
@@ -333,7 +291,16 @@ class Property24SearchExtractorV1
             }
         }
 
-        // Strategy 4: Class-based fallback
+        // Icon alt text pattern
+        $imgNodes = $xpath->query('.//img[contains(@alt,"' . $altKeyword . '")]', $tile);
+        foreach ($imgNodes as $img) {
+            $v = $this->extractNumberNextToImg($img);
+            if ($v !== null) {
+                return $v;
+            }
+        }
+
+        // Class-based fallback
         $nodes = $xpath->query('.//*[contains(@class,"' . $iconKeyword . '")]', $tile);
         foreach ($nodes as $n) {
             $text = trim($n->textContent);
@@ -371,45 +338,10 @@ class Property24SearchExtractorV1
     }
 
     /**
-     * Extract a number near an SVG <image> element.
-     * Walks up to the containing p24_featureDetails span and reads its text.
-     */
-    private function extractNumberNearElement(\DOMElement $element): ?int
-    {
-        // Walk up to the containing span (SVG → svg → span.p24_featureDetails)
-        $current = $element->parentNode;
-        $depth = 0;
-        while ($current instanceof \DOMElement && $depth < 4) {
-            if ($current->nodeName === 'span' || $current->nodeName === 'div') {
-                $text = trim($current->textContent);
-                if (preg_match('/\b(\d{1,2})\b/', $text, $m)) {
-                    return (int) $m[1];
-                }
-            }
-            $current = $current->parentNode;
-            $depth++;
-        }
-        return null;
-    }
-
-    /**
      * Extract size (floor or erf) in m².
-     *
-     * P24 uses <span class="p24_size" title="Erf Size"> wrappers with <img> or <image> inside.
      */
     private function extractSize(\DOMElement $tile, \DOMXPath $xpath, string $keyword): ?int
     {
-        // Strategy 1: P24 size wrapper with title attribute (most reliable)
-        $sizeSpans = $xpath->query('.//span[contains(@class,"p24_size") and contains(@title,"' . ucfirst($keyword) . '")]', $tile);
-        foreach ($sizeSpans as $span) {
-            $text = trim($span->textContent);
-            if (preg_match('/(\d[\d\s]*)\s*m[²2]/i', $text, $m)) {
-                $v = (int) preg_replace('/\s/', '', $m[1]);
-                if ($v >= 1 && $v <= 99999) return $v;
-            }
-        }
-
-        // Strategy 2: <img> with icon src/alt
         $imgNodes = $xpath->query(
             './/img[contains(@src,"icon_' . $keyword . '") or contains(@alt,"' . ucfirst($keyword) . '")]',
             $tile
@@ -436,28 +368,6 @@ class Property24SearchExtractorV1
                     $v = (int) preg_replace('/\s/', '', $m[1]);
                     return ($v >= 1 && $v <= 99999) ? $v : null;
                 }
-            }
-        }
-
-        // Strategy 3: SVG <image> with icon src/alt
-        $svgImages = $xpath->query(
-            './/image[contains(@src,"icon_' . $keyword . '") or contains(@alt,"' . ucfirst($keyword) . '")]',
-            $tile
-        );
-        foreach ($svgImages as $img) {
-            // Walk up to containing span and look for m² pattern
-            $current = $img->parentNode;
-            $depth = 0;
-            while ($current instanceof \DOMElement && $depth < 4) {
-                if ($current->nodeName === 'span' || $current->nodeName === 'div') {
-                    $text = trim($current->textContent);
-                    if (preg_match('/(\d[\d\s]*)\s*m[²2]/i', $text, $m)) {
-                        $v = (int) preg_replace('/\s/', '', $m[1]);
-                        if ($v >= 1 && $v <= 99999) return $v;
-                    }
-                }
-                $current = $current->parentNode;
-                $depth++;
             }
         }
 
@@ -562,32 +472,34 @@ class Property24SearchExtractorV1
     /**
      * Try to extract total results count from the page.
      *
-     * P24 patterns (raw HTML wraps numbers in <span class="p24_bold">):
-     *   - "Showing : <span>1 - 20</span>\nof <span>50</span>"
+     * P24 patterns:
+     *   - "Showing 1 - 20 of 48"
      *   - "48 Properties" / "48 properties for sale"
      *   - "Browse 48 properties"
      *   - "Results 1 – 20 of 48"
      */
     private function extractTotalCount(string $html): ?int
     {
-        // Strip HTML tags and normalise whitespace so regexes can match across
-        // P24's <span class="p24_bold"> wrappers and line breaks.
-        $stripped = preg_replace('/\s+/', ' ', strip_tags($html));
-
-        // Strategy 1: "Showing ... of X" pattern from pagination text (most specific)
-        if (preg_match('/(?:showing|results)\s*:?\s*.{1,60}of\s+(\d[\d\s,]*)/i', $stripped, $m)) {
+        // Strategy 1: "of X" pattern from pagination text (most specific)
+        if (preg_match('/(?:showing|results)[^<]{0,40}of\s+(\d[\d\s,]*)/i', $html, $m)) {
             $v = (int) preg_replace('/[^\d]/', '', $m[1]);
             if ($v > 0 && $v < 100000) return $v;
         }
 
         // Strategy 2: "X Properties" or "X properties for sale"
-        if (preg_match('/(\d[\d\s,]*)\s*(?:propert(?:y|ies)|results?\s*(?:found|for\s*sale))/i', $stripped, $m)) {
+        if (preg_match('/(\d[\d\s,]*)\s*(?:propert(?:y|ies)|results?\s*(?:found|for\s*sale))/i', $html, $m)) {
             $v = (int) preg_replace('/[^\d]/', '', $m[1]);
             if ($v > 0 && $v < 100000) return $v;
         }
 
         // Strategy 3: "Browse X properties" / "showing X properties"
-        if (preg_match('/(?:browse|found|showing)\s+(\d[\d\s,]*)\s*(?:propert|listing|result)/i', $stripped, $m)) {
+        if (preg_match('/(?:browse|found|showing)\s+(\d[\d\s,]*)\s*(?:propert|listing|result)/i', $html, $m)) {
+            $v = (int) preg_replace('/[^\d]/', '', $m[1]);
+            if ($v > 0 && $v < 100000) return $v;
+        }
+
+        // Strategy 4: generic "of X" (broader fallback)
+        if (preg_match('/of\s+(\d[\d\s,]*)/i', $html, $m)) {
             $v = (int) preg_replace('/[^\d]/', '', $m[1]);
             if ($v > 0 && $v < 100000) return $v;
         }

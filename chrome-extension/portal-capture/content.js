@@ -291,7 +291,11 @@
         // Build URL template with /p{page} in path (P24 pattern)
         // Strip any existing /pN from path to get base
         var basePath = window.location.pathname.replace(/\/p\d+(?=[?\/]|$)/, '');
-        pagination.page_url_template = window.location.origin + basePath + '/p{page}' + window.location.search;
+        // Strip any ?p=N / &p=N from query string — P24 uses ONLY /pN in the path
+        var tplParams = new URLSearchParams(window.location.search);
+        tplParams.delete('p');
+        var cleanQs = tplParams.toString();
+        pagination.page_url_template = window.location.origin + basePath + '/p{page}' + (cleanQs ? '?' + cleanQs : '');
 
         if (pagination.total_pages > 1) {
             result.extracted_fields.pagination = pagination;

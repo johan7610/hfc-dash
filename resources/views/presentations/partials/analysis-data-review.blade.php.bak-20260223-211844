@@ -14,9 +14,6 @@
     $holding  = $analysisData['holding_cost'];
     $insights = $analysisData['key_insights'];
     $counts   = $analysisData['data_counts'];
-    $isSectional = ($analysisData['is_sectional'] ?? false)
-                || stripos($presentation->property_type ?? '', 'sectional') !== false;
-    $sizeLabel   = $isSectional ? 'Unit m²' : 'Erf m²';
 @endphp
 
 <div class="mb-6">
@@ -341,7 +338,7 @@
                             <tr class="text-left text-xs text-gray-400 border-b">
                                 <th class="pb-2 pr-3 font-medium">Address</th>
                                 <th class="pb-2 pr-3 font-medium text-right">Dist (m)</th>
-                                <th class="pb-2 pr-3 font-medium text-right">{{ $sizeLabel }}</th>
+                                <th class="pb-2 pr-3 font-medium text-right">Erf m&sup2;</th>
                                 <th class="pb-2 pr-3 font-medium">Sale Date</th>
                                 <th class="pb-2 pr-3 font-medium text-right">Sale Price</th>
                                 <th class="pb-2 font-medium text-right">R/m&sup2;</th>
@@ -493,7 +490,7 @@
                         <th class="pb-2 pr-3 font-medium">Type</th>
                         <th class="pb-2 pr-3 font-medium text-center">Beds</th>
                         <th class="pb-2 pr-3 font-medium text-center">Baths</th>
-                        <th class="pb-2 pr-3 font-medium text-right">{{ $sizeLabel }}</th>
+                        <th class="pb-2 pr-3 font-medium text-right">Erf m&sup2;</th>
                         <th class="pb-2 pr-3 font-medium">List Date</th>
                         <th class="pb-2 pr-3 font-medium text-right">List Price</th>
                         <th class="pb-2 font-medium text-right">DOM</th>

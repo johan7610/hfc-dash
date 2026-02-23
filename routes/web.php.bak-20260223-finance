@@ -366,20 +366,6 @@ Route::middleware(['auth','verified','admin'])->group(function () {
         ->name('admin.designations.delete');
 });
 
-// ===== FINANCE ENGINE & AUDIT (Admin only) =====
-Route::middleware(['auth','verified','admin'])->group(function () {
-    Route::get('/admin/finance/definitions', [\App\Http\Controllers\Admin\FinanceAuditController::class, 'definitions'])
-        ->name('admin.finance.definitions');
-    Route::get('/admin/finance/audit', [\App\Http\Controllers\Admin\FinanceAuditController::class, 'index'])
-        ->name('admin.finance.audit.index');
-    Route::get('/admin/finance/audit/runs/{run}', [\App\Http\Controllers\Admin\FinanceAuditController::class, 'run'])
-        ->name('admin.finance.audit.run');
-    Route::get('/admin/finance/audit/deals/{deal}', [\App\Http\Controllers\Admin\FinanceAuditController::class, 'deal'])
-        ->name('admin.finance.audit.deal');
-    Route::post('/admin/finance/recalculate', [\App\Http\Controllers\Admin\FinanceAuditController::class, 'recalculate'])
-        ->name('admin.finance.recalculate');
-});
-
 
     // ---- Admin: Worksheet Market (per-branch / per-agent market inputs) ----
     Route::get('/admin/worksheet-market', [\App\Http\Controllers\Admin\WorksheetMarketController::class, 'index'])

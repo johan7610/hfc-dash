@@ -98,9 +98,6 @@ class PresentationPdfService
         $suburbName  = $esc($subject['suburb'] ?? $presentation->suburb ?? '');
         $sellerName  = $esc($presentation->seller_name ?? '');
         $propType    = $esc(ucfirst($presentation->property_type ?? ''));
-        $isSectional = ($data['is_sectional'] ?? false)
-            || stripos($presentation->property_type ?? '', 'sectional') !== false;
-        $sizeLabel   = $isSectional ? 'Unit m²' : 'Erf m²';
         $bedrooms    = $presentation->bedrooms;
         $bathrooms   = null; // not on model currently
         $erfSize     = $subject['extent_m2'] ?? $presentation->floor_area_m2;
@@ -794,7 +791,7 @@ a:hover { text-decoration: underline; }
     <thead><tr><th>Detail</th><th class="num">Value</th></tr></thead>
     <tbody>
         <?php if ($subject['erf']): ?><tr><td>Erf Number</td><td class="num"><?= $esc($subject['erf']) ?></td></tr><?php endif ?>
-        <?php if ($erfSize): ?><tr><td><?= $isSectional ? 'Unit Size' : 'Erf Extent' ?></td><td class="num"><?= number_format((int) $erfSize) ?> m²</td></tr><?php endif ?>
+        <?php if ($erfSize): ?><tr><td>Erf Extent</td><td class="num"><?= number_format((int) $erfSize) ?> m²</td></tr><?php endif ?>
         <?php if ($subject['purchase_date']): ?><tr><td>Purchase Date</td><td class="num"><?= $esc($subject['purchase_date']) ?></td></tr><?php endif ?>
         <?php if ($subject['purchase_price']): ?><tr><td>Purchase Price</td><td class="num"><?= $zar($subject['purchase_price']) ?></td></tr><?php endif ?>
         <?php if ($subject['indexed_value']): ?><tr><td>Indexed Value</td><td class="num"><?= $zar($subject['indexed_value']) ?></td></tr><?php endif ?>
@@ -861,7 +858,7 @@ a:hover { text-decoration: underline; }
         <tr>
             <th>Address</th>
             <th>Dist.</th>
-            <th class="num"><?= $esc($sizeLabel) ?></th>
+            <th class="num">Erf m²</th>
             <th>Sale Date</th>
             <th class="num">Sale Price</th>
             <th class="num">R/m²</th>
@@ -1008,7 +1005,7 @@ a:hover { text-decoration: underline; }
         <tr>
             <th>Address</th>
             <th>Dist.</th>
-            <th class="num"><?= $esc($sizeLabel) ?></th>
+            <th class="num">Erf m²</th>
             <th>Sale Date</th>
             <th class="num">Sale Price</th>
             <th class="num">R/m²</th>
@@ -1106,7 +1103,7 @@ a:hover { text-decoration: underline; }
         <tr>
             <th>Address</th>
             <th>Type</th>
-            <th class="num"><?= $esc($sizeLabel) ?></th>
+            <th class="num">Erf m²</th>
             <th>Listed</th>
             <th class="num">Asking Price</th>
             <th class="num">DOM</th>

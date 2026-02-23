@@ -55,10 +55,7 @@
 {{-- ══════════════════════════════════════════════════════════════════════════
      STOCK CONTEXT BANNER
 ══════════════════════════════════════════════════════════════════════════ --}}
-@php
-    $stock = $analysisData['stock_absorption'] ?? [];
-    $pricePos = $analysisData['price_position'] ?? [];
-@endphp
+@php $stock = $analysisData['stock_absorption'] ?? []; @endphp
 @if(!empty($stock['total_active_stock']) && !empty($stock['monthly_sales']))
 @php
     $stockColorClass = match($stock['absorption_color'] ?? '') {
@@ -70,7 +67,7 @@
     };
 @endphp
 <div class="rounded-lg border p-4 mb-6 {{ $stockColorClass }}">
-    <div class="flex items-center flex-wrap gap-3 text-sm">
+    <div class="flex items-center gap-3 text-sm">
         <span class="font-bold text-lg">{{ $stock['total_active_stock'] }}</span>
         <span>competing listings</span>
         <span class="text-gray-400">|</span>
@@ -80,15 +77,6 @@
         <span class="text-gray-400">|</span>
         <span class="font-semibold">{{ $stock['absorption_label'] }}</span>
     </div>
-    @if(!empty($pricePos['has_data']))
-    <div class="flex items-center gap-3 text-sm mt-2 pt-2 border-t border-current border-opacity-20">
-        <span>Price rank: <strong>#{{ $pricePos['price_rank'] }}</strong> of {{ $pricePos['total_listings'] }}</span>
-        <span class="text-gray-400">|</span>
-        <span>{{ $pricePos['listings_more_expensive'] }} priced higher, {{ $pricePos['listings_cheaper'] }} lower</span>
-        <span class="text-gray-400">|</span>
-        <span class="font-semibold">{{ $pricePos['position_label'] }}</span>
-    </div>
-    @endif
     @if($stock['search_total_count'] && $stock['listings_with_price'] < $stock['search_total_count'])
     <p class="text-xs mt-1 opacity-75">
         {{ $stock['listings_with_price'] }} of {{ $stock['search_total_count'] }} listings have price data &mdash; "Competing" column counts listings with known prices at or below each scenario.

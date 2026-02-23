@@ -43,11 +43,23 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
 
     // Build correct P24 pagination URL.
     // Template has /p{page} in path. Page 1 has no /p1 — strip it.
+    // Also strips any &p=N query param — P24 uses ONLY /pN in the path.
     function buildPageUrl(tpl, pageNum) {
+        var url;
         if (pageNum <= 1) {
-            return tpl.replace('/p{page}', '');
+            url = tpl.replace('/p{page}', '');
+        } else {
+            url = tpl.replace('{page}', String(pageNum));
         }
-        return tpl.replace('{page}', String(pageNum));
+        // Strip ?p=N or &p=N query param if present (safety net)
+        url = url.replace(/([?&])p=\d+(&?)/g, function (match, pre, post) {
+            if (pre === '?' && post === '&') return '?';
+            if (pre === '?' && post === '') return '';
+            return post ? '' : '';
+        });
+        url = url.replace(/[?&]$/, '');
+        console.log('[Portal Capture] buildPageUrl page=' + pageNum + ' → ' + url);
+        return url;
     }
 
     function buildHeaders() {

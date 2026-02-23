@@ -40,6 +40,12 @@ class PortalListingTrackingService
                 continue;
             }
 
+            // Normalize: strip any leading non-numeric characters (P prefix on sponsored copies)
+            $portalListingId = preg_replace('/^[^0-9]+/', '', (string) $portalListingId);
+            if ($portalListingId === '') {
+                continue;
+            }
+
             $result = $this->upsertListing($capture, $sourceSite, $portalListingId, $item);
 
             $summary['processed']++;

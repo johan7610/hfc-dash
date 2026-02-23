@@ -90,11 +90,40 @@ class PresentationReadinessService
             'satisfied' => $presentation->uploads->where('type', 'cma')->count() >= 1,
         ];
 
+        // Count competitor data points from ALL sources
         $competitorLinks = $presentation->links->whereIn('type', ['active_listing', 'competitor_listing'])->count();
+
+        // Count individual property captures (each is a competitor data point)
+        $propertyCaptures = PortalCapture::where('presentation_id', $presentation->id)
+            ->where('parse_status', 'parsed')
+            ->where('page_type', 'property')
+            ->count();
+
+        // Count extracted listings from search captures
+        $searchExtractedCount = 0;
+        $searchCaptures = PortalCapture::where('presentation_id', $presentation->id)
+            ->where('parse_status', 'parsed')
+            ->where('page_type', 'search')
+            ->get();
+        foreach ($searchCaptures as $cap) {
+            $fields = $cap->extracted_fields_json;
+            if (!empty($fields['search']['items'])) {
+                $searchExtractedCount += count($fields['search']['items']);
+            }
+        }
+
+        // Also count presentation_active_listings
+        $activeListingRows = $presentation->activeListings->count();
+
+        $totalCompetitorDataPoints = $competitorLinks + $propertyCaptures + $searchExtractedCount + $activeListingRows;
+        $hasSearchWithListings = $searchCaptures->count() > 0 && $searchExtractedCount > 0;
+
         $optional['competitor_urls'] = [
             'key'       => 'competitor_urls',
             'label'     => '3 or more competitor listing links',
-            'satisfied' => $competitorLinks >= self::COMPETITOR_URLS_THRESHOLD,
+            'satisfied' => $totalCompetitorDataPoints >= self::COMPETITOR_URLS_THRESHOLD
+                || $hasSearchWithListings
+                || $propertyCaptures >= self::COMPETITOR_URLS_THRESHOLD,
         ];
 
         // ── Aggregates ────────────────────────────────────────────────────────

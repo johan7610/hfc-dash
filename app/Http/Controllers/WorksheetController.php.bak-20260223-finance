@@ -771,7 +771,7 @@ class WorksheetController extends Controller
     }
 
   
-    public static function calculateWithOverrides(Worksheet $w, float $avgSalePriceOverride, float $commissionPercentOverride, bool $commissionIsExVat = false): array
+    public static function calculateWithOverrides(Worksheet $w, float $avgSalePriceOverride, float $commissionPercentOverride): array
     {
         $personal = (float) $w->personal_net_target;
         $business = (float) $w->business_net_target;
@@ -811,12 +811,9 @@ class WorksheetController extends Controller
         $listingsPerSale = (float) \App\Models\PerformanceSetting::get('listings_per_sale', 5);
 
 
-        // Commission per sale: if the caller already passed an ex-VAT percentage
-        // (e.g. effective_commission_percent_ex_vat from dealRegisterStats), skip VAT removal.
+        // Commission always treated as GROSS first, then excl VAT
         $grossCommissionPerSale = $avgSalePrice * ($commissionPercent / 100);
-        $commissionPerSale = $commissionIsExVat
-            ? $grossCommissionPerSale
-            : ($grossCommissionPerSale / (1 + $vatRate));
+        $commissionPerSale = $grossCommissionPerSale / (1 + $vatRate);
 
         $agentGrossPerSale = $commissionPerSale * $agentShareFactor;
         $payePerSale = $agentGrossPerSale * ($payePercent / 100);

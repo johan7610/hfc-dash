@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Deal;
 use App\Models\FinanceAuditRun;
 use App\Models\FinanceAuditItem;
+use App\Models\FinanceDefinition;
+use App\Models\FinanceComputedValue;
+use App\Services\Finance\AuditService;
 use Illuminate\Http\Request;
 
 class FinanceAuditController extends Controller
@@ -79,5 +82,39 @@ class FinanceAuditController extends Controller
             ->get();
 
         return view('admin.finance.audit.deal', compact('run', 'deal', 'items'));
+    }
+
+    public function definitions()
+    {
+        $definitions = FinanceDefinition::orderBy('key')->get();
+        $computedCount = FinanceComputedValue::count();
+
+        return view('admin.finance.definitions', compact('definitions', 'computedCount'));
+    }
+
+    public function recalculate(Request $request, AuditService $auditService)
+    {
+        $period = $request->input('period', now()->format('Y-m'));
+
+        if (!preg_match('/^\d{4}-\d{2}$/', $period)) {
+            return redirect()->back()->with('error', "Invalid period format: {$period}");
+        }
+
+        try {
+            $run = $auditService->run($period, 200, ['audit_scope' => 'all'], [
+                'audit_scope'   => 'all',
+                'rollup_roles'  => ['agent', 'bm', 'admin'],
+                'rollup_stages' => ['pending', 'granted', 'registered', 'declined'],
+            ]);
+
+            $itemCount  = $run->items()->count();
+            $errorCount = $run->items()->where('severity', 'error')->count();
+            $computedCount = FinanceComputedValue::where('audit_run_id', $run->id)->count();
+
+            return redirect()->route('admin.finance.audit.index')
+                ->with('status', "Recalculation complete for {$period}. Run #{$run->id}: {$itemCount} items, {$errorCount} errors, {$computedCount} computed values written.");
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('error', "Recalculation failed: " . $e->getMessage());
+        }
     }
 }

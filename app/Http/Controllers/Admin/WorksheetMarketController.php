@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\PerformanceSetting;
 use App\Models\Worksheet;
 use App\Models\Deal;
 use Illuminate\Http\Request;
@@ -35,15 +36,17 @@ $agents = DB::table('users')
 
         $branches = DB::table('branches')->select('id','name')->get()->keyBy('id');
 
-        
+
           // Market averages per branch from Deal Register (schema: deals.period, property_value, total_commission)
+          $vatDivisor = 1 + (float) PerformanceSetting::get('vat_rate', 15) / 100;
+
           $mb = Deal::query()
               ->where('period', $period)
               ->whereNotNull('branch_id')
               ->selectRaw('branch_id, COUNT(*) as deals_count')
               ->selectRaw('AVG(property_value) as avg_sale_price_inc_vat')
-              ->selectRaw('AVG(property_value/1.15) as avg_sale_price_ex_vat')
-              ->selectRaw('AVG((total_commission / NULLIF(property_value/1.15,0))*100.0) as effective_commission_percent_ex_vat')
+              ->selectRaw('AVG(property_value / ?) as avg_sale_price_ex_vat', [$vatDivisor])
+              ->selectRaw('AVG((total_commission / NULLIF(property_value / ?,0))*100.0) as effective_commission_percent_ex_vat', [$vatDivisor])
               ->groupBy('branch_id')
               ->get()
               ->keyBy(fn($r) => (string) $r->branch_id)
@@ -155,7 +158,7 @@ $periodStart = \Carbon\Carbon::createFromFormat('Y-m', $period)->startOfMonth();
                 if ($pv <= 0) continue;
 
                 // EX VAT commission, same as BM
-                $commEx = $tc / 1.15;
+                $commEx = $tc / $vatDivisor;
                 $pct = ($commEx / $pv) * 100.0;
 
                 $sumPrice[$uid] = ($sumPrice[$uid] ?? 0.0) + $pv;
@@ -168,7 +171,7 @@ $periodStart = \Carbon\Carbon::createFromFormat('Y-m', $period)->startOfMonth();
             foreach ($dealSet as $uid => $set) {
                 $count = count($set);
                 $avgInc = $count ? (($sumPrice[$uid] ?? 0.0) / $count) : 0.0;
-                $avgEx  = $avgInc ? ($avgInc / 1.15) : 0.0;
+                $avgEx  = $avgInc ? ($avgInc / $vatDivisor) : 0.0;
                 $avgPct = $count ? (($sumPct[$uid] ?? 0.0) / $count) : 0.0;
 
                 if (!isset($agentMarketByBranch[$bid])) $agentMarketByBranch[$bid] = [];
@@ -225,12 +228,10 @@ $periodStart = \Carbon\Carbon::createFromFormat('Y-m', $period)->startOfMonth();
 
             $avgPriceInc = $count ? ($sumPriceInc / $count) : 0.0;
 
-            // SA VAT 15%
-            $vatDiv = 1.15;
-            $avgPriceEx = $avgPriceInc ? ($avgPriceInc / $vatDiv) : 0.0;
+            $avgPriceEx = $avgPriceInc ? ($avgPriceInc / $vatDivisor) : 0.0;
 
-            $sumPriceEx = $sumPriceInc ? ($sumPriceInc / $vatDiv) : 0.0;
-            $sumCommEx  = $sumCommInc  ? ($sumCommInc  / $vatDiv) : 0.0;
+            $sumPriceEx = $sumPriceInc ? ($sumPriceInc / $vatDivisor) : 0.0;
+            $sumCommEx  = $sumCommInc  ? ($sumCommInc  / $vatDivisor) : 0.0;
 
             $effPctEx = ($sumPriceEx > 0) ? (($sumCommEx / $sumPriceEx) * 100.0) : 0.0;
 

@@ -14,9 +14,6 @@
     $holding  = $analysisData['holding_cost'];
     $insights = $analysisData['key_insights'];
     $counts   = $analysisData['data_counts'];
-    $isSectional = ($analysisData['is_sectional'] ?? false)
-                || stripos($presentation->property_type ?? '', 'sectional') !== false;
-    $sizeLabel   = $isSectional ? 'Unit m²' : 'Erf m²';
 @endphp
 
 <div class="mb-6">
@@ -25,7 +22,7 @@
         <span class="text-xs text-gray-400">
             {{ $counts['fields'] }} fields &middot;
             {{ $counts['sold_comps'] }} comps &middot;
-            {{ $counts['active_listings'] }} properties
+            {{ $counts['active_listings'] }} active
         </span>
     </div>
 
@@ -240,79 +237,6 @@
     </div>
     @endif
 
-    {{-- ── PRICE POSITION & BRACKETS ─────────────────────────────────────── --}}
-    @php
-        $pricePos = $analysisData['price_position'] ?? [];
-        $priceBrk = $analysisData['price_brackets'] ?? [];
-    @endphp
-    @if(!empty($pricePos['has_data']) || !empty($priceBrk['has_data']))
-    <div class="bg-white rounded-xl shadow p-6 mb-4">
-        <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Market Position & Price Distribution</h3>
-
-        {{-- Price Position Ranking --}}
-        @if(!empty($pricePos['has_data']))
-        @php
-            $posColors = match($pricePos['position_color'] ?? '') {
-                'green'  => ['bg' => 'bg-emerald-50', 'border' => 'border-emerald-200', 'text' => 'text-emerald-700', 'badge' => 'bg-emerald-100 text-emerald-800'],
-                'amber'  => ['bg' => 'bg-amber-50',   'border' => 'border-amber-200',   'text' => 'text-amber-700',   'badge' => 'bg-amber-100 text-amber-800'],
-                'orange' => ['bg' => 'bg-orange-50',  'border' => 'border-orange-200',  'text' => 'text-orange-700',  'badge' => 'bg-orange-100 text-orange-800'],
-                'red'    => ['bg' => 'bg-red-50',     'border' => 'border-red-200',     'text' => 'text-red-700',     'badge' => 'bg-red-100 text-red-800'],
-                default  => ['bg' => 'bg-gray-50',    'border' => 'border-gray-200',    'text' => 'text-gray-700',    'badge' => 'bg-gray-100 text-gray-800'],
-            };
-        @endphp
-        <div class="{{ $posColors['bg'] }} {{ $posColors['border'] }} border rounded-lg p-4 mb-4">
-            <div class="flex items-center justify-between mb-2">
-                <p class="text-xs font-medium {{ $posColors['text'] }}">Your Price Position</p>
-                <span class="text-xs px-2.5 py-1 rounded-full font-semibold {{ $posColors['badge'] }}">{{ $pricePos['position_label'] }}</span>
-            </div>
-            <div class="grid grid-cols-2 gap-4 md:grid-cols-4">
-                <div class="text-center">
-                    <span class="text-xs text-gray-400 block">Rank</span>
-                    <p class="text-xl font-bold {{ $posColors['text'] }}">{{ $pricePos['price_rank'] }} <span class="text-sm font-normal text-gray-400">of {{ $pricePos['total_listings'] }}</span></p>
-                </div>
-                <div class="text-center">
-                    <span class="text-xs text-gray-400 block">Priced Higher</span>
-                    <p class="text-xl font-bold text-gray-800">{{ $pricePos['listings_more_expensive'] }}</p>
-                </div>
-                <div class="text-center">
-                    <span class="text-xs text-gray-400 block">Priced Lower</span>
-                    <p class="text-xl font-bold text-gray-800">{{ $pricePos['listings_cheaper'] }}</p>
-                </div>
-                <div class="text-center">
-                    <span class="text-xs text-gray-400 block">Percentile</span>
-                    <p class="text-xl font-bold {{ $posColors['text'] }}">{{ $pricePos['price_percentile'] }}%</p>
-                    <span class="text-xs text-gray-400">more expensive than</span>
-                </div>
-            </div>
-        </div>
-        @endif
-
-        {{-- Price Bracket Distribution --}}
-        @if(!empty($priceBrk['has_data']) && !empty($priceBrk['brackets']))
-        <div>
-            <p class="text-xs text-gray-400 mb-2 font-medium">Price Distribution (R 500K brackets) — {{ $priceBrk['total_priced'] }} listings with price data</p>
-            <div class="space-y-1.5">
-                @foreach($priceBrk['brackets'] as $bracket)
-                <div class="flex items-center gap-3 {{ $bracket['contains_asking'] ? 'bg-indigo-50 rounded-lg px-2 py-1.5 -mx-2 border border-indigo-200' : '' }}">
-                    <span class="text-xs text-gray-500 w-44 flex-shrink-0 text-right font-mono">{{ $bracket['label'] }}</span>
-                    <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
-                        @if($bracket['bar_pct'] > 0)
-                        <div class="h-full rounded-full {{ $bracket['contains_asking'] ? 'bg-indigo-500' : 'bg-gray-400' }}"
-                             style="width: {{ max($bracket['bar_pct'], 4) }}%"></div>
-                        @endif
-                    </div>
-                    <span class="text-xs font-semibold text-gray-700 w-8 text-right">{{ $bracket['count'] }}</span>
-                    @if($bracket['contains_asking'])
-                        <span class="text-xs text-indigo-600 font-medium flex-shrink-0">Your price</span>
-                    @endif
-                </div>
-                @endforeach
-            </div>
-        </div>
-        @endif
-    </div>
-    @endif
-
     {{-- ── 3. COMPARABLE SALES ──────────────────────────────────────────── --}}
     @if($comps['vicinity']['count'] > 0 || $comps['cma_comps']['count'] > 0 || $comps['street_sales']['count'] > 0)
     <div class="bg-white rounded-xl shadow p-6 mb-4">
@@ -341,7 +265,7 @@
                             <tr class="text-left text-xs text-gray-400 border-b">
                                 <th class="pb-2 pr-3 font-medium">Address</th>
                                 <th class="pb-2 pr-3 font-medium text-right">Dist (m)</th>
-                                <th class="pb-2 pr-3 font-medium text-right">{{ $sizeLabel }}</th>
+                                <th class="pb-2 pr-3 font-medium text-right">Erf m&sup2;</th>
                                 <th class="pb-2 pr-3 font-medium">Sale Date</th>
                                 <th class="pb-2 pr-3 font-medium text-right">Sale Price</th>
                                 <th class="pb-2 font-medium text-right">R/m&sup2;</th>
@@ -493,7 +417,7 @@
                         <th class="pb-2 pr-3 font-medium">Type</th>
                         <th class="pb-2 pr-3 font-medium text-center">Beds</th>
                         <th class="pb-2 pr-3 font-medium text-center">Baths</th>
-                        <th class="pb-2 pr-3 font-medium text-right">{{ $sizeLabel }}</th>
+                        <th class="pb-2 pr-3 font-medium text-right">Erf m&sup2;</th>
                         <th class="pb-2 pr-3 font-medium">List Date</th>
                         <th class="pb-2 pr-3 font-medium text-right">List Price</th>
                         <th class="pb-2 font-medium text-right">DOM</th>
@@ -514,9 +438,6 @@
                                 <a href="{{ $row['url'] }}" target="_blank" class="text-indigo-600 hover:underline" title="{{ $row['address'] ?? '' }}">{{ $row['address'] ?? '—' }}</a>
                             @else
                                 {{ $row['address'] ?? '—' }}
-                            @endif
-                            @if(!empty($row['is_multi_agency']))
-                                <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium" title="{{ $row['listing_ids_in_group'] }} agencies list this property">{{ $row['listing_ids_in_group'] }}x</span>
                             @endif
                         </td>
                         <td class="py-2 pr-3 text-gray-600 text-xs">{{ $row['property_type'] ?? '—' }}</td>
@@ -539,13 +460,10 @@
                     <tr class="border-t-2 border-gray-200 font-semibold text-xs" id="active-summary">
                         <td class="pt-2" colspan="2"></td>
                         <td class="pt-2 text-gray-500" colspan="5">
-                            <span id="active-count">{{ $active['count'] }}</span> unique
-                            {{ $active['count'] === 1 ? 'property' : 'properties' }}
-                            @if(($active['raw_listing_count'] ?? 0) > ($active['total_count'] ?? $active['count']))
-                                <span class="text-gray-400">({{ ($active['raw_listing_count'] ?? 0) - ($active['total_count'] ?? $active['count']) }} multi-agency dupes removed)</span>
-                            @endif
+                            <span id="active-count">{{ $active['count'] }}</span> active
+                            {{ $active['count'] === 1 ? 'listing' : 'listings' }}
                             @if(($active['total_count'] ?? $active['count']) > $active['count'])
-                                <span class="text-gray-400">&middot; {{ ($active['total_count'] ?? $active['count']) - $active['count'] }} excluded</span>
+                                <span class="text-gray-400">({{ ($active['total_count'] ?? $active['count']) - $active['count'] }} excluded)</span>
                             @endif
                         </td>
                         <td class="pt-2 pr-3 text-right text-gray-800">

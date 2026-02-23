@@ -44,10 +44,6 @@ class AnalysisDataService
         $suburbOverview = $this->compileSuburbOverview($fields);
         $stockAbsorption = $this->compileStockAbsorption($portalCaptures, $activeCompetition, $suburbOverview);
 
-        // Detect sectional title from extracted fields or presentation property_type
-        $isSectional = ($fields->get('vicinity.property_type')?->final_value === 'sectional')
-            || stripos($presentation->property_type ?? '', 'sectional') !== false;
-
         return [
             'subject_property'   => $this->compileSubjectProperty($presentation, $fields, $askingPrice),
             'suburb_overview'    => $suburbOverview,
@@ -59,7 +55,6 @@ class AnalysisDataService
             'price_brackets'     => $this->compilePriceBrackets($activeCompetition, $askingPrice),
             'holding_cost'       => $this->compileHoldingCost($presentation),
             'key_insights'       => $this->compileKeyInsights($fields, $askingPrice, $cmaSelectedRange, $vicinitySelectedRange),
-            'is_sectional'       => $isSectional,
             'data_counts'        => [
                 'fields'          => $fields->count(),
                 'sold_comps'      => $soldComps->count(),
@@ -144,7 +139,7 @@ class AnalysisDataService
             ];
 
             $key = match ($source) {
-                'vicinity_sales', 'vicinity_sales_sectional' => 'vicinity',
+                'vicinity_sales' => 'vicinity',
                 'cma_comps'      => 'cma_comps',
                 'street_sales'   => 'street_sales',
                 default          => 'vicinity',

@@ -18,14 +18,6 @@ class DocumentExtractor
     public const EXTRACTED_VERSION = 'doc_extract_v1';
 
     /**
-     * Detect if text is from a Sectional Title vicinity report.
-     */
-    public function isSectionalTitle(string $text): bool
-    {
-        return (bool) preg_match('/Sectional\s+Title\s+sales\s+within/i', $text);
-    }
-
-    /**
      * Run extraction on an upload. Returns field_key => field_value pairs.
      * Uses already-extracted text if available; falls back to PHP-based extraction.
      */
@@ -301,11 +293,6 @@ class DocumentExtractor
     {
         $fields = [];
 
-        // Detect sectional title and store property_type
-        if ($this->isSectionalTitle($text)) {
-            $fields['vicinity.property_type'] = 'sectional';
-        }
-
         // Price ranges — "Lower Range: R 1 206 000"
         $this->matchPrice($text, 'Lower\s*Range', $fields, 'vicinity.lower_range');
         $this->matchPrice($text, 'Middle\s*Range', $fields, 'vicinity.middle_range');
@@ -322,7 +309,7 @@ class DocumentExtractor
             if ($lowerPos !== false) {
                 $afterLower = substr($text, $lowerPos + 30, 600);
                 $knownValues = array_values($fields);
-                if (preg_match_all('/R\s*(\d{1,3}(?:[\s,]\d{3})+)/i', $afterLower, $avgMatches)) {
+                if (preg_match_all('/R\s*(\d{1,3}(?:[\s,]\d{3}){2,})/i', $afterLower, $avgMatches)) {
                     foreach ($avgMatches[1] as $pm) {
                         $cleaned = (int) preg_replace('/[\s,]/', '', $pm);
                         if ($cleaned >= 500000 && $cleaned <= 50000000 && !in_array((string) $cleaned, $knownValues, true)) {
@@ -391,14 +378,6 @@ class DocumentExtractor
             }
         }
 
-        // Sectional title comps count: count "Residence" type tokens as proxy for row count
-        if (!isset($fields['vicinity.comps_count']) && isset($fields['vicinity.property_type'])) {
-            $compsCount = preg_match_all('/\bResidence\b/i', $text);
-            if ($compsCount && $compsCount > 0 && $compsCount < 1000) {
-                $fields['vicinity.comps_count'] = (string) $compsCount;
-            }
-        }
-
         return $fields;
     }
 
@@ -419,11 +398,6 @@ class DocumentExtractor
      */
     public function extractVicinityRows(string $text): array
     {
-        // Sectional title has a different column layout — use extractSectionalVicinityRows
-        if ($this->isSectionalTitle($text)) {
-            return [];
-        }
-
         $rows = [];
 
         // Split text into tokens by double-newline (pdftotext column separator)
@@ -513,129 +487,88 @@ class DocumentExtractor
 
     /**
      * Extract sectional title vicinity comp rows from CMA Info "Sectional Title sales within" PDF.
-     * Table columns: Scheme Name | Section [Flat] No | SS No | SS Year | Type | Extent | Sale Date | Sale Price | R/m²
+     * Table format: Scheme Name, Section [Flat] No, SS No, SS Year, Type, Extent, Last Sale Date, Last Sale, R/m²
      * Source tag: 'vicinity_sales_sectional'.
-     *
-     * Uses token-based parsing: pdftotext outputs each column value as a separate
-     * token separated by double newlines. Anchors on date + R price + R r/m² triplets
-     * and walks backwards to find extent, type, numeric metadata, and scheme name (address).
-     *
      * @return array<int, array<string, mixed>>
      */
     public function extractSectionalVicinityRows(string $text): array
     {
         $rows = [];
 
-        if (!$this->isSectionalTitle($text)) {
+        // Detect if this is a sectional title document
+        if (!preg_match('/Sectional\s+Title\s+sales\s+within/i', $text)) {
             return [];
         }
 
-        // Token-based: split by double-newline (pdftotext column separator)
-        $tokens = preg_split('/\n{2,}/', $text);
-        $tokens = array_values(array_filter(array_map('trim', $tokens), fn($t) => $t !== ''));
-        $numTokens = count($tokens);
-        $rowNum = 0;
+        // Sectional title rows have variable format. Common patterns from pdftotext:
+        // SCHEME_NAME  FLAT_NO  SS_NO  SS_YEAR  Type  EXTENT m²  DATE  R PRICE  R R/m²
+        // The scheme name can be multi-word with commas. Key anchors: date pattern + price pattern.
+        // Strategy: find all lines with a date (YYYY/MM/DD) followed by R price and R r/m².
+        $linePattern = '/(.+?)\s+(\d{4}\/\d{2}\/\d{2})\s+R[ ]([\d ,]+\d)\s+R[ ]([\d ,]+\d)/';
 
-        for ($i = 0; $i < $numTokens; $i++) {
-            // Anchor: date token YYYY/MM/DD
-            if (!preg_match('/^\d{4}\/\d{2}\/\d{2}$/', $tokens[$i])) {
-                continue;
-            }
+        if (preg_match_all($linePattern, $text, $matches, PREG_SET_ORDER)) {
+            $rowNum = 0;
+            foreach ($matches as $m) {
+                $prefix = trim($m[1]);
+                $saleDate = trim($m[2]);
+                $price = (int) preg_replace('/[ ,]/', '', $m[3]);
+                $rpm2 = (int) preg_replace('/[ ,]/', '', $m[4]);
 
-            $saleDate = $tokens[$i];
+                if ($price < 10000) continue;
 
-            // After date: R price (i+1), R r/m² (i+2)
-            if ($i + 2 >= $numTokens) continue;
-            if (!preg_match('/^R[ ]([\d ,]+\d)$/', $tokens[$i + 1], $pm)) continue;
-            if (!preg_match('/^R[ ]([\d ,]+\d)$/', $tokens[$i + 2], $rm)) continue;
-
-            $price = (int) preg_replace('/[ ,]/', '', $pm[1]);
-            $rpm2  = (int) preg_replace('/[ ,]/', '', $rm[1]);
-
-            if ($price < 10000) continue;
-
-            // Before date: extent m² (i-1) — unit floor area for sectional (can be small, 30+m²)
-            $extent = null;
-            if ($i >= 1 && preg_match('/^(\d[\d ,]*)\s*m(?:\xC2\xB2|2)$/i', $tokens[$i - 1], $em)) {
-                $extent = (int) preg_replace('/[ ,]/', '', $em[1]);
-            }
-            if ($extent === null || $extent < 5) continue;
-
-            // Before extent: type token (Residence, Residential, etc.)
-            $typeIdx = null;
-            for ($j = $i - 2; $j >= max(0, $i - 4); $j--) {
-                if (preg_match('/^(Residence|Residential|Commercial|Industrial)$/i', $tokens[$j])) {
-                    $typeIdx = $j;
-                    break;
+                // Try to extract unit floor area (m²) from the prefix — last number with m² suffix
+                // For sectional title, this is UNIT FLOOR AREA, not erf extent.
+                $extent = null;
+                if (preg_match('/(\d[\d ,]*)\s*m(?:\xC2\xB2|2)\s*$/i', $prefix, $extM)) {
+                    $extent = (int) preg_replace('/[ ,]/', '', $extM[1]);
+                    $prefix = trim(substr($prefix, 0, -strlen($extM[0])));
                 }
-            }
-            if ($typeIdx === null) continue;
+                // Strip trailing "Sectional" or "Full Title" type indicator from prefix
+                $prefix = preg_replace('/\s+(?:Sectional|Full\s+Title)\s*$/i', '', $prefix);
 
-            // Walk backwards from type: collect numeric tokens (SS year, SS no, section no)
-            // then find address (scheme name — contains uppercase letters, often has comma)
-            $address = null;
-            $sectionNo = null;
-            $ssNo = null;
-            $ssYear = null;
-            $numericTokens = [];
-
-            for ($j = $typeIdx - 1; $j >= max(0, $typeIdx - 6); $j--) {
-                $tok = str_replace("\n", ' ', $tokens[$j]);
-                $tok = preg_replace('/\s+/', ' ', $tok);
-                $tok = trim($tok);
-
-                if (preg_match('/^\d{1,6}$/', $tok)) {
-                    $numericTokens[] = $tok;
-                } elseif (preg_match('/[A-Z]/', $tok) && strlen($tok) >= 3) {
-                    // Skip header tokens and page markers
-                    if (preg_match('/^(Scheme\s*Name|Section|Page\s+\d|Home\s+Finders|Type|Extent|Last\s+Sale)/i', $tok)) {
-                        break;
+                // Strip trailing bare numbers (SS year, SS number, flat/section number)
+                // These follow the scheme name: SCHEME  FLAT_NO  SS_NO  SS_YEAR
+                // Work backwards stripping numeric tokens
+                $sectionNo = null;
+                while (preg_match('/\s+(\d{1,6})\s*$/', $prefix, $numM)) {
+                    $val = (int) $numM[1];
+                    // Capture the first number stripped as section/flat number
+                    if ($sectionNo === null && $val >= 1 && $val <= 99999) {
+                        $sectionNo = $numM[1];
                     }
-                    $address = $tok;
-                    break;
-                } else {
-                    break; // Unknown token type — stop walking
+                    $prefix = trim(substr($prefix, 0, -strlen($numM[0])));
+                }
+
+                // Extract scheme name (address) from remaining prefix
+                $address = preg_replace('/^\d{1,3}\s+/', '', $prefix); // strip leading row number
+                $address = trim($address, " ,\t\n\r");
+
+                // If address is empty or too short, skip
+                if (strlen($address) < 2) {
+                    $address = null;
+                }
+
+                // Append section/unit number to address for identification
+                if ($address !== null && $sectionNo !== null) {
+                    $address = $address . ' (Unit ' . $sectionNo . ')';
+                }
+
+                if ($price >= 10000) {
+                    $rowNum++;
+                    $rows[] = [
+                        'row_number'    => $rowNum,
+                        'distance_m'    => null,
+                        'erf_no'        => null,
+                        'address'       => $address,
+                        'extent_m2'     => ($extent && $extent >= 5) ? $extent : null,
+                        'sale_date'     => $saleDate,
+                        'sale_price'    => $price,
+                        'price_per_m2'  => $rpm2,
+                        'property_type' => 'Sectional',
+                        'source'        => 'vicinity_sales_sectional',
+                    ];
                 }
             }
-
-            // Numeric tokens collected closest-to-type first:
-            // [0] = SS year (closest to type), [1] = SS number, [2] = section/flat number
-            if (count($numericTokens) >= 1) $ssYear = $numericTokens[0];
-            if (count($numericTokens) >= 2) $ssNo = $numericTokens[1];
-            if (count($numericTokens) >= 3) $sectionNo = $numericTokens[2];
-
-            // If no address found, skip this row
-            if ($address === null || strlen($address) < 3) continue;
-
-            // Strip leading row number from address if present (e.g. "1 TRIGER GARDENS...")
-            // Only strip if the number is 1-3 digits followed by space+uppercase letter
-            $address = preg_replace('/^\d{1,3}\s+(?=[A-Z])/', '', $address);
-            $address = trim($address, " ,\t\r\n");
-
-            // Append section/unit number for identification
-            if ($sectionNo !== null) {
-                $address = $address . ' (Unit ' . $sectionNo . ')';
-            }
-
-            $rowNum++;
-            $rows[] = [
-                'row_number'    => $rowNum,
-                'distance_m'    => null,
-                'erf_no'        => null,
-                'address'       => $address,
-                'extent_m2'     => $extent,
-                'sale_date'     => $saleDate,
-                'sale_price'    => $price,
-                'price_per_m2'  => $rpm2,
-                'property_type' => 'Sectional',
-                'ss_no'         => $ssNo,
-                'ss_year'       => $ssYear,
-                'section_no'    => $sectionNo,
-                'source'        => 'vicinity_sales_sectional',
-            ];
-
-            // Skip past consumed tokens (date + price + rpm2)
-            $i += 2;
         }
 
         return $rows;

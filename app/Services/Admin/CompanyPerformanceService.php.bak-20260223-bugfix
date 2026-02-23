@@ -300,6 +300,81 @@ foreach ($rows as &$r) {
         }
         unset($r);
 
+        /* MONEY_ALLOC_BY_USER_PERIOD */
+        // Per-agent money allocations for this period (ex VAT, using total_commission + external-side our_share %)
+        // This powers Admin branch cards (TEAM reality) and keeps drilldowns consistent.
+        $allocByUser = [];
+        $userIds = array_values(array_filter(array_map(fn($r) => (int)($r['user_id'] ?? 0), $rows)));
+
+        if (!empty($userIds)) {
+            $allocRows = DB::table('deal_user')
+                ->join('deals','deals.id','=','deal_user.deal_id')
+                ->leftJoin('users','users.id','=','deal_user.user_id')
+                ->whereIn('deal_user.user_id', $userIds)
+                ->whereBetween('deals.deal_date', [$start->toDateString(), $end->toDateString()])
+                ->whereRaw("COALESCE(deals.accepted_status,'') != 'D'") // DECLINED_FILTER_PATCH_20260212
+                ->select(
+                    'deal_user.user_id',
+                    'deal_user.side',
+                    'deal_user.agent_split_percent',
+                    'users.agent_cut_percent as user_default_split_percent',
+                    'deals.total_commission',
+                    'deals.listing_external',
+                    'deals.listing_our_share_percent',
+                    'deals.selling_external',
+                    'deals.selling_our_share_percent'
+                ,
+                      'deals.listing_split_percent',
+                      'deals.selling_split_percent'
+                  )
+                ->get();
+
+            foreach ($allocRows as $a) {
+                $uid = (int)($a->user_id ?? 0);
+                if ($uid <= 0) continue;
+
+                $side = strtolower(trim((string)($a->side ?? "")));
+                $ourSharePct = 100.0;
+
+                if ($side === "listing" && (int)($a->listing_external ?? 0) === 1) {
+                    $ourSharePct = (float)($a->listing_our_share_percent ?? 0);
+                } elseif ($side === "selling" && (int)($a->selling_external ?? 0) === 1) {
+                    $ourSharePct = (float)($a->selling_our_share_percent ?? 0);
+                }
+
+                $vatRatePercent = (float) \App\Models\PerformanceSetting::get("vat_rate", 15);
+                $vatRate = $vatRatePercent / 100;
+
+                $grossIncVat = (float)($a->total_commission ?? 0);
+                $grossExVat = ($grossIncVat > 0) ? ($grossIncVat / (1 + $vatRate)) : 0.0;
+
+                $companyIncome = $grossExVat * max(0.0, min(1.0, $ourSharePct / 100.0));
+                $split = (float)($a->agent_split_percent ?? 0);
+                if ($split <= 0) $split = (float)($a->user_default_split_percent ?? 50);
+                if ($split <= 0) $split = 50.0;
+
+                $agentIncome = $companyIncome * max(0.0, min(1.0, $split / 100.0));
+                $retained = max(0.0, $companyIncome - $agentIncome);
+
+                if (!isset($allocByUser[$uid])) {
+                    $allocByUser[$uid] = ['company_income'=>0.0,'agent_income'=>0.0,'company_retained'=>0.0];
+                }
+
+                $allocByUser[$uid]['company_income'] += $companyIncome;
+                $allocByUser[$uid]['agent_income'] += $agentIncome;
+                $allocByUser[$uid]['company_retained'] += $retained;
+            }
+        }
+
+        // Attach money numbers onto each agent row so branches can sum TEAM reality
+        foreach ($rows as &$rr) {
+            $uid = (int)($rr['user_id'] ?? 0);
+            $rr['actuals']['company_income']   = round((float)($allocByUser[$uid]['company_income'] ?? 0), 2);
+            $rr['actuals']['agent_income']     = round((float)($allocByUser[$uid]['agent_income'] ?? 0), 2);
+            $rr['actuals']['company_retained'] = round((float)($allocByUser[$uid]['company_retained'] ?? 0), 2);
+        }
+        unset($rr);
+
         $tot = [
             'targets' => [
                 'deals' => array_sum(array_map(fn($r)=>$r['targets']['deals'], $rows)),

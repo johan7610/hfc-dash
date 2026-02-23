@@ -5,6 +5,7 @@ namespace App\Http\Controllers\BM;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Deal;
+use App\Models\PerformanceSetting;
 use App\Models\Worksheet;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -124,6 +125,8 @@ class WorksheetMarketController extends Controller
 
             $dealIds = $dq->pluck('id')->all();
 
+            $vatDivisor = 1 + (float) PerformanceSetting::get('vat_rate', 15) / 100;
+
             if (!empty($dealIds)) {
                 // Distinct agent+deal (so listing+selling doesn't double count)
                 $rows = \DB::table('deal_user')
@@ -148,7 +151,7 @@ class WorksheetMarketController extends Controller
 
                     if ($pv <= 0) continue;
 
-                    $commEx = $tc / 1.15;
+                    $commEx = $tc / $vatDivisor;
                     $pct = ($commEx / $pv) * 100.0;
 
                     $sumPrice[$uid] = ($sumPrice[$uid] ?? 0.0) + $pv;
@@ -161,7 +164,7 @@ class WorksheetMarketController extends Controller
                 foreach ($dealSet as $uid => $set) {
                     $count = count($set);
                     $avgInc = $count ? (($sumPrice[$uid] ?? 0.0) / $count) : 0.0;
-                    $avgEx  = $avgInc ? ($avgInc / 1.15) : 0.0;
+                    $avgEx  = $avgInc ? ($avgInc / $vatDivisor) : 0.0;
                     $avgPct = $count ? (($sumPct[$uid] ?? 0.0) / $count) : 0.0;
 
                     $agentMarket[(int)$uid] = [

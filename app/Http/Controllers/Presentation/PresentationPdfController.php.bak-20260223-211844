@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Presentation;
 use App\Models\PresentationVersion;
 use App\Services\Presentations\PresentationPdfService;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
@@ -79,7 +81,7 @@ class PresentationPdfController extends Controller
 
         $counter = 1;
 
-        // 1. Market analysis report as PDF (rendered via headless Edge/Chromium)
+        // 1. Market analysis report as PDF (converted from HTML via dompdf)
         $htmlFullPath = Storage::disk(PresentationPdfService::STORAGE_DISK)->path($htmlPath);
         $pdfReportPath = $this->convertHtmlToPdf($htmlFullPath);
         $zip->addFile($pdfReportPath, sprintf('%02d_Market_Analysis_%s.pdf', $counter, $cleanAddress));
@@ -134,30 +136,25 @@ class PresentationPdfController extends Controller
     }
 
     /**
-     * Convert a self-contained HTML file to PDF using headless Edge (Chromium)
-     * via puppeteer-core. Produces output identical to Ctrl+P → Save as PDF.
-     *
+     * Convert a self-contained HTML file to PDF using dompdf.
      * Returns the path to the generated temporary PDF file.
      */
     private function convertHtmlToPdf(string $htmlFilePath): string
     {
+        $html = file_get_contents($htmlFilePath);
+
+        $options = new Options();
+        $options->set('isRemoteEnabled', false);
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('defaultFont', 'sans-serif');
+
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($html);
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+
         $tmpPath = storage_path('app/tmp_market_analysis_' . uniqid() . '.pdf');
-        $scriptPath = base_path('scripts/html-to-pdf.mjs');
-
-        $command = sprintf(
-            'node %s %s %s 2>&1',
-            escapeshellarg(str_replace('\\', '/', $scriptPath)),
-            escapeshellarg(str_replace('\\', '/', $htmlFilePath)),
-            escapeshellarg(str_replace('\\', '/', $tmpPath))
-        );
-
-        $output = shell_exec($command);
-
-        if (!file_exists($tmpPath)) {
-            $errorMsg = $output ?: 'unknown error';
-            logger()->error('PDF generation failed', ['command' => $command, 'output' => $errorMsg]);
-            abort(500, 'PDF generation failed. Check that Node.js and Microsoft Edge are installed.');
-        }
+        file_put_contents($tmpPath, $dompdf->output());
 
         return $tmpPath;
     }

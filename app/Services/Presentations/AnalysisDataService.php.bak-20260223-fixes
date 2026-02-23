@@ -44,14 +44,10 @@ class AnalysisDataService
         $suburbOverview = $this->compileSuburbOverview($fields);
         $stockAbsorption = $this->compileStockAbsorption($portalCaptures, $activeCompetition, $suburbOverview);
 
-        // Detect sectional title from extracted fields or presentation property_type
-        $isSectional = ($fields->get('vicinity.property_type')?->final_value === 'sectional')
-            || stripos($presentation->property_type ?? '', 'sectional') !== false;
-
         return [
             'subject_property'   => $this->compileSubjectProperty($presentation, $fields, $askingPrice),
             'suburb_overview'    => $suburbOverview,
-            'comparable_sales'   => $this->compileComparableSales($soldComps, $presentation->property_address),
+            'comparable_sales'   => $this->compileComparableSales($soldComps),
             'cma_valuation'      => $this->compileCmaValuation($fields, $askingPrice, $cmaSelectedRange),
             'active_competition' => $activeCompetition,
             'stock_absorption'   => $stockAbsorption,
@@ -59,7 +55,6 @@ class AnalysisDataService
             'price_brackets'     => $this->compilePriceBrackets($activeCompetition, $askingPrice),
             'holding_cost'       => $this->compileHoldingCost($presentation),
             'key_insights'       => $this->compileKeyInsights($fields, $askingPrice, $cmaSelectedRange, $vicinitySelectedRange),
-            'is_sectional'       => $isSectional,
             'data_counts'        => [
                 'fields'          => $fields->count(),
                 'sold_comps'      => $soldComps->count(),
@@ -107,7 +102,7 @@ class AnalysisDataService
 
     // ── 3. COMPARABLE SALES ──────────────────────────────────────────────
 
-    private function compileComparableSales(Collection $soldComps, ?string $subjectAddress = null): array
+    private function compileComparableSales(Collection $soldComps): array
     {
         $groups = [
             'vicinity'     => [],
@@ -115,23 +110,13 @@ class AnalysisDataService
             'street_sales' => [],
         ];
 
-        // Normalise subject address for exclusion matching
-        $normalSubject = $subjectAddress ? strtolower(trim($subjectAddress)) : null;
-
         foreach ($soldComps as $comp) {
             $raw    = is_string($comp->raw_row_json) ? json_decode($comp->raw_row_json, true) : ($comp->raw_row_json ?? []);
             $source = $raw['source'] ?? 'unknown';
             $sizeM2 = $comp->size_m2 ?: ($raw['extent_m2'] ?? null);
 
-            $rowAddress = $raw['address'] ?? null;
-
-            // Exclude subject property from comps
-            if ($normalSubject && $rowAddress && str_contains(strtolower(trim($rowAddress)), $normalSubject)) {
-                continue;
-            }
-
             $row = [
-                'address'      => $rowAddress,
+                'address'      => $raw['address'] ?? null,
                 'distance_m'   => $raw['distance_m'] ?? null,
                 'erf_no'       => $raw['erf_no'] ?? null,
                 'extent_m2'    => $sizeM2 ? (int) $sizeM2 : null,
@@ -144,30 +129,13 @@ class AnalysisDataService
             ];
 
             $key = match ($source) {
-                'vicinity_sales', 'vicinity_sales_sectional' => 'vicinity',
+                'vicinity_sales' => 'vicinity',
                 'cma_comps'      => 'cma_comps',
                 'street_sales'   => 'street_sales',
                 default          => 'vicinity',
             };
 
             $groups[$key][] = $row;
-        }
-
-        // Dedup across source groups: same address + sale_date + sale_price = same row
-        $allRows = [];
-        foreach ($groups as $key => $rows) {
-            foreach ($rows as $row) {
-                $allRows[] = array_merge($row, ['_source' => $key]);
-            }
-        }
-        $allRows = $this->deduplicateComps($allRows);
-
-        // Re-split into groups after dedup
-        $groups = ['vicinity' => [], 'cma_comps' => [], 'street_sales' => []];
-        foreach ($allRows as $row) {
-            $src = $row['_source'];
-            unset($row['_source']);
-            $groups[$src][] = $row;
         }
 
         // Compute summary stats per group
@@ -185,59 +153,6 @@ class AnalysisDataService
         }
 
         return $result;
-    }
-
-    /**
-     * Dedup comparable sale rows: if two rows have the same address + sale_date + sale_price,
-     * keep only the one with more data fields populated.
-     */
-    private function deduplicateComps(array $rows): array
-    {
-        $seen = [];   // dedupKey => index in $result
-        $result = [];
-
-        foreach ($rows as $row) {
-            $addr  = strtolower(trim($row['address'] ?? ''));
-            $date  = $row['sale_date'] ?? '';
-            $price = (int) ($row['sale_price'] ?? 0);
-
-            // Can't dedup without address
-            if ($addr === '') {
-                $result[] = $row;
-                continue;
-            }
-
-            $dedupKey = $addr . '|' . $date . '|' . $price;
-
-            if (isset($seen[$dedupKey])) {
-                // Keep the one with more populated fields
-                $existingIdx = $seen[$dedupKey];
-                if ($this->compRowDataScore($row) > $this->compRowDataScore($result[$existingIdx])) {
-                    $result[$existingIdx] = $row;
-                }
-                continue;
-            }
-
-            $seen[$dedupKey] = count($result);
-            $result[] = $row;
-        }
-
-        return $result;
-    }
-
-    /**
-     * Score comp row data richness for dedup preference.
-     */
-    private function compRowDataScore(array $row): int
-    {
-        $score = 0;
-        if (!empty($row['sale_price']))   $score += 3;
-        if (!empty($row['address']))      $score += 2;
-        if (!empty($row['distance_m']))   $score++;
-        if (!empty($row['extent_m2']))    $score++;
-        if (!empty($row['price_per_m2'])) $score++;
-        if (!empty($row['erf_no']))       $score++;
-        return $score;
     }
 
     // ── 4. CMA VALUATION ─────────────────────────────────────────────────
@@ -299,25 +214,14 @@ class AnalysisDataService
             }
         }
 
-        // Check if we have portal captures that provide richer data
-        $hasPortalData = $portalCaptures->where('parse_status', 'parsed')->count() > 0;
-
         // 1. Rows from presentation_active_listings (CMA/upload extraction)
-        // If portal captures exist, skip upload rows that have no address (they'd show as blanks)
         foreach ($activeListings as $al) {
             $raw = is_string($al->raw_row_json) ? json_decode($al->raw_row_json, true) : ($al->raw_row_json ?? []);
             $key = $al->external_key;
-            $address = $raw['address'] ?? null;
-
-            // Skip rows without address if portal data is available (prefer richer data)
-            if ($hasPortalData && empty($address) && empty($raw['property_type'])) {
-                continue;
-            }
-
             if ($key) $seenKeys[$key] = true;
 
             $rows[] = [
-                'address'        => $address,
+                'address'        => $raw['address'] ?? null,
                 'property_type'  => $raw['property_type'] ?? $al->property_type,
                 'beds'           => $al->beds ?: ($raw['beds'] ?? null),
                 'baths'          => $al->baths ?: ($raw['baths'] ?? null),
@@ -369,21 +273,9 @@ class AnalysisDataService
                     ? $propertyDetailLookup[$listingId]
                     : null;
 
-                // Build address: prefer p24_address ("20 Broadway St") over title ("4 Bed House")
-                $itemAddress = $item['address'] ?? null;
-                $itemLocation = $item['location'] ?? null;
-                $displayAddress = $detail['title'] ?? $detail['suburb'] ?? null;
-                if ($itemAddress && $itemLocation) {
-                    $displayAddress = $itemAddress . ', ' . $itemLocation;
-                } elseif ($itemAddress) {
-                    $displayAddress = $itemAddress;
-                } elseif (!$displayAddress) {
-                    $displayAddress = $item['title'] ?? $itemLocation ?? null;
-                }
-
                 $rows[] = [
-                    'address'        => $displayAddress,
-                    'property_type'  => $detail['property_type'] ?? $item['title'] ?? null,
+                    'address'        => $detail['title'] ?? $detail['suburb'] ?? $item['title'] ?? null,
+                    'property_type'  => $detail['property_type'] ?? $item['property_type'] ?? null,
                     'beds'           => $detail['bedrooms'] ?? $item['beds'] ?? null,
                     'baths'          => $detail['bathrooms'] ?? $item['baths'] ?? null,
                     'extent_m2'      => $detail['erf_m2'] ?? $item['erf_m2'] ?? $item['size_m2'] ?? null,
@@ -825,49 +717,19 @@ class AnalysisDataService
             return ['has_data' => false, 'brackets' => []];
         }
 
-        $minPrice = min($prices);
+        $bracketSize = 500000; // R500K
         $maxPrice = max($prices);
-        $ceiling  = max($maxPrice, $askingPrice ?? 0);
-        $floor    = min($minPrice, $askingPrice ?? $minPrice);
-
-        // Adaptive bracket sizing: divide range into ~6 equal brackets, round to clean boundaries
-        $range = $ceiling - $floor;
-        if ($range <= 0) {
-            $range = $ceiling > 0 ? $ceiling * 0.5 : 500000;
-        }
-
-        // Choose bracket size based on price range
-        if ($range < 1000000) {
-            $bracketSize = 100000;      // R100k for small ranges
-        } elseif ($range < 3000000) {
-            $bracketSize = 250000;      // R250k for medium ranges
-        } elseif ($range < 10000000) {
-            $bracketSize = 500000;      // R500k for larger ranges
-        } else {
-            $bracketSize = 1000000;     // R1M for very large ranges
-        }
-
-        // Ensure we get 5-8 brackets; adjust if needed
-        $rawBracketCount = (int) ceil($range / $bracketSize);
-        if ($rawBracketCount < 4 && $bracketSize > 50000) {
-            $bracketSize = max(50000, (int) (ceil($range / 6 / 50000) * 50000));
-        } elseif ($rawBracketCount > 10) {
-            $bracketSize = (int) (ceil($range / 7 / 100000) * 100000);
-            if ($bracketSize < 100000) $bracketSize = 100000;
-        }
-
-        // Start from a clean boundary below the minimum price
-        $startFrom = (int) (floor($floor / $bracketSize) * $bracketSize);
-        $numBrackets = (int) ceil(($ceiling - $startFrom) / $bracketSize);
-        if ($numBrackets < 1) $numBrackets = 1;
-
         $askingBracketIdx = null;
+
+        // Determine bracket range (start from 0, go up to cover max price and asking price)
+        $ceiling = max($maxPrice, $askingPrice ?? 0);
+        $numBrackets = (int) ceil($ceiling / $bracketSize);
+        if ($numBrackets < 1) $numBrackets = 1;
 
         // Build brackets
         $brackets = [];
         foreach ($prices as $p) {
-            $idx = min((int) floor(($p - $startFrom) / $bracketSize), $numBrackets - 1);
-            if ($idx < 0) $idx = 0;
+            $idx = min((int) floor($p / $bracketSize), $numBrackets - 1);
             if (!isset($brackets[$idx])) {
                 $brackets[$idx] = 0;
             }
@@ -876,16 +738,15 @@ class AnalysisDataService
 
         // Determine which bracket the asking price falls in
         if ($askingPrice && $askingPrice > 0) {
-            $askingBracketIdx = min((int) floor(($askingPrice - $startFrom) / $bracketSize), $numBrackets - 1);
-            if ($askingBracketIdx < 0) $askingBracketIdx = 0;
+            $askingBracketIdx = min((int) floor($askingPrice / $bracketSize), $numBrackets - 1);
         }
 
         // Build the result array
         $result = [];
         $maxCount = max(array_values($brackets + [0 => 1])); // for bar width calc
-        for ($i = 0; $i < $numBrackets; $i++) {
-            $lower = $startFrom + ($i * $bracketSize);
-            $upper = $startFrom + (($i + 1) * $bracketSize);
+        for ($i = 0; $i <= $numBrackets; $i++) {
+            $lower = $i * $bracketSize;
+            $upper = ($i + 1) * $bracketSize;
             $count = $brackets[$i] ?? 0;
 
             // Only include brackets that have listings OR contain the asking price
