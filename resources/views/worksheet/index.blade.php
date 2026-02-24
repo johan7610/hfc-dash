@@ -1,7 +1,7 @@
 <x-app-layout>
 
 <div class="max-w-5xl mx-auto p-6">
-    <h1 class="text-2xl font-bold mb-2">Income â†’ Sales â†’ Stock (Worksheet)</h1>
+    <h1 class="text-2xl font-bold mb-2">Income → Sales → Stock (Worksheet)</h1>
 
 <div class="bg-white shadow rounded p-5 mb-6 border-l-4 {{ (data_get($companyRequirement, 'shortfall', 0) > 0) ? 'border-red-600' : 'border-green-600' }}">
     
@@ -143,7 +143,7 @@
         <div>
             <div class="text-gray-500">Company Earns from You</div>
             <div class="font-bold">R {{ number_format($companyRequirement['current_company_income'], 2) }}</div>
-            <div class="text-xs text-gray-500">Ex VAT â€¢ if you hit your current budget</div>
+            <div class="text-xs text-gray-500">Ex VAT • if you hit your current budget</div>
         </div>
 
         <div>
@@ -157,11 +157,11 @@
 
     @if($companyRequirement['shortfall'] > 0)
         <div class="mt-3 text-sm text-red-600 font-medium">
-            âš  Your targets do not currently meet the branch/company requirement.
+            ⚠ Your targets do not currently meet the branch/company requirement.
         </div>
     @else
         <div class="mt-3 text-sm text-green-600 font-medium">
-            âœ“ Your targets meet or exceed the company requirement.
+            ✓ Your targets meet or exceed the company requirement.
         </div>
 </div>
 @endif
@@ -230,7 +230,7 @@
         </div>
 
         
-        <h2 class="text-lg font-semibold mb-2">Deal Register Summary (Whatâ€™s Happening)</h2>
+        <h2 class="text-lg font-semibold mb-2">Deal Register Summary (What's Happening)</h2>
           <div class="text-xs text-gray-600 mb-3">
               This section reports your captured Deal Register performance for the selected period (sales, commission, stages, and pipeline).
           </div>
@@ -306,7 +306,7 @@
             <div class="w-full border rounded p-2 bg-blue-50 text-gray-900">
                 {{ number_format((float)($dealStats['effective_commission_percent_ex_vat'] ?? 0), 2) }}%
                 <div class="text-xs text-gray-600 mt-1">
-                    Actual commission Ã· sales value (based on captured totals).
+                    Actual commission ÷ sales value (based on captured totals).
                 </div>
                 <div class="text-xs text-gray-700 mt-2">
                     Lost vs 7.5%: <b>R {{ number_format((float)($dealStats['lost_commission_ex_vat_vs_7_5'] ?? 0), 2) }}</b>
@@ -317,7 +317,7 @@
                 <div class="text-xs text-gray-600 mb-1"><b>All-time</b></div>
                 {{ $fmtPct($all['effective_commission_percent_ex_vat'] ?? 0) }}
                 <div class="text-xs text-gray-600 mt-1">
-                    Actual commission Ã· sales value (all captured totals).
+                    Actual commission ÷ sales value (all captured totals).
                 </div>
                 @if(array_key_exists('lost_commission_ex_vat_vs_7_5', $all))
                     <div class="text-xs text-gray-700 mt-2">
@@ -331,7 +331,7 @@
     {{-- ROW: Deals --}}
     <div class="grid grid-cols-3 gap-3 items-start py-2 border-b">
         <div class="text-sm font-medium">Deals (count)</div>
-        <div class="w-full border rounded p-2 bg-gray-50 text-gray-500">â€”</div>
+        <div class="w-full border rounded p-2 bg-gray-50 text-gray-500">—</div>
 
         <div class="text-sm">
             <div><b>Period total:</b> {{ (int)($dealStats['counts']['total'] ?? 0) }}</div>
@@ -358,7 +358,7 @@
     {{-- ROW: Sales Value --}}
     <div class="grid grid-cols-3 gap-3 items-start py-2 border-b">
         <div class="text-sm font-medium">Sales Value</div>
-        <div class="w-full border rounded p-2 bg-gray-50 text-gray-500">â€”</div>
+        <div class="w-full border rounded p-2 bg-gray-50 text-gray-500">—</div>
 
         <div class="text-sm">
             <div><b>Period (Sale Price):</b> R {{ number_format((float)($dealStats['sales_value_inc_vat'] ?? 0), 2) }}</div>
@@ -385,7 +385,7 @@
     {{-- ROW: Total Commission --}}
     <div class="grid grid-cols-3 gap-3 items-start py-2 border-b">
         <div class="text-sm font-medium">Total Commission</div>
-        <div class="w-full border rounded p-2 bg-gray-50 text-gray-500">â€”</div>
+        <div class="w-full border rounded p-2 bg-gray-50 text-gray-500">—</div>
 
         <div class="text-sm">
             <div><b>Period Incl VAT:</b> R {{ number_format((float)($dealStats['total_commission_inc_vat'] ?? 0), 2) }}</div>
@@ -402,10 +402,10 @@
     <div class="grid grid-cols-3 gap-3 items-start py-2">
         <div>
             <div class="text-sm font-medium">Pipeline (Net)</div>
-            <div class="text-xs text-gray-500">Always ALL-TIME â€¢ only NOT PAID deals</div>
+            <div class="text-xs text-gray-500">Always ALL-TIME • only NOT PAID deals</div>
         </div>
 
-        <div class="w-full border rounded p-2 bg-gray-50 text-gray-500">â€”</div>
+        <div class="w-full border rounded p-2 bg-gray-50 text-gray-500">—</div>
 
         <div class="text-sm">
             @php
@@ -467,7 +467,7 @@
         </div>
 <div class="mt-8 flex flex-col md:flex-row items-start md:items-center gap-4">
             <button id="saveWorksheetBtn" class="bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-lg font-bold text-lg shadow-lg border-2 border-green-800">
-                ðŸ’¾ SAVE WORKSHEET
+                💾 SAVE WORKSHEET
             </button>
 
             <div class="text-sm text-gray-700 bg-yellow-100 border border-yellow-300 px-3 py-2 rounded">
@@ -617,7 +617,7 @@ $cp = max(0.01, $cp);
                           </div>
                           <div class="mt-2"><b>Gross Commission Needed (Ex VAT):</b> R {{ number_format($plannedTotalCommissionNeededEx, 2) }}</div>
                           <div><b>Sales Value Needed:</b> R {{ number_format($plannedSalesValueNeededInc, 2) }} <span class="text-xs text-gray-500">(Inc VAT)</span></div>
-                          <div class="text-xs text-gray-500">Ex VAT: R {{ number_format($plannedSalesValueNeededEx, 2) }} â€¢ Comm% used: {{ number_format($planCommissionPercent, 2) }}%</div>
+                          <div class="text-xs text-gray-500">Ex VAT: R {{ number_format($plannedSalesValueNeededEx, 2) }} • Comm% used: {{ number_format($planCommissionPercent, 2) }}%</div>
 
                           <div class="text-xs text-gray-500">
                               Uses your budget unless the company-floor requires more.
@@ -649,7 +649,7 @@ $cp = max(0.01, $cp);
                           </div>
                           <div class="mt-2"><b>Gross Commission Needed (Ex VAT):</b> R {{ number_format($actualTotalCommissionNeededEx, 2) }}</div>
                           <div><b>Sales Value Needed:</b> R {{ number_format($actualSalesValueNeededInc, 2) }} <span class="text-xs text-gray-500">(Inc VAT)</span></div>
-                          <div class="text-xs text-gray-500">Ex VAT: R {{ number_format($actualSalesValueNeededEx, 2) }} â€¢ Comm% used: {{ number_format($marketCommissionPercentEx, 2) }}%</div>
+                          <div class="text-xs text-gray-500">Ex VAT: R {{ number_format($actualSalesValueNeededEx, 2) }} • Comm% used: {{ number_format($marketCommissionPercentEx, 2) }}%</div>
 
                           <div class="text-xs text-gray-500">
                               Same budget logic, but per-sale performance comes from Deal Register averages.

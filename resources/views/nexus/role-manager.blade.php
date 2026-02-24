@@ -80,7 +80,7 @@
                                         @php $lastSection = $perm->section; @endphp
                                         <tr class="bg-gray-50/80">
                                             <td colspan="{{ count($roles) + 1 }}" class="py-2 px-4">
-                                                <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">
+                                                <span class="text-xs font-bold text-[#00b4d8] uppercase tracking-wider">
                                                     {{ str_replace('-', ' ', $perm->section) }}
                                                 </span>
                                             </td>
@@ -100,7 +100,7 @@
                                                            name="permissions[{{ $perm->key }}][{{ $role }}]"
                                                            value="1"
                                                            {{ isset($granted[$perm->key][$role]) ? 'checked' : '' }}
-                                                           class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                                                           class="w-4 h-4 rounded border-gray-300 text-[#00b4d8] focus:ring-[#00b4d8] cursor-pointer">
                                                 </label>
                                             </td>
                                         @endforeach

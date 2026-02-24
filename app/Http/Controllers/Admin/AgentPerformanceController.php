@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Services\Admin\CompanyPerformanceService;
 use App\Services\Finance\CommissionCalculator;
+use App\Services\Finance\FinanceReadModel;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -97,11 +98,19 @@ class AgentPerformanceController extends Controller
             ->where('period', $period)
             ->count();
 
-        // Money tiles: use service truth (rollup points struct already computed money for this agent rollup)
-        // If service doesn't include money (older install), fall back to deal-derived sums.
-        $moneyCompanyIncome   = (float) $deals->sum('company_income_ex_vat');
-        $moneyAgentIncome     = (float) $deals->sum('agent_income_ex_vat');
-        $moneyCompanyRetained = (float) $deals->sum('company_retained_ex_vat');
+        // Money tiles: Finance Engine primary, deal-derived fallback
+        $readModel = app(FinanceReadModel::class);
+        $agentMap = $readModel->getAgentPeriodMap((int)$agent->id, $period);
+        if (!empty($agentMap)) {
+            $moneyCompanyIncome   = (float)($agentMap['agent_period.money.total_nondeclined.company_income_ex_vat'] ?? 0);
+            $moneyAgentIncome     = (float)($agentMap['agent_period.money.total_nondeclined.agent_income_ex_vat'] ?? 0);
+            $moneyCompanyRetained = (float)($agentMap['agent_period.money.total_nondeclined.retained_ex_vat'] ?? 0);
+        } else {
+            // Fallback: sum from per-deal CommissionCalculator results
+            $moneyCompanyIncome   = (float) $deals->sum('company_income_ex_vat');
+            $moneyAgentIncome     = (float) $deals->sum('agent_income_ex_vat');
+            $moneyCompanyRetained = (float) $deals->sum('company_retained_ex_vat');
+        }
         $actuals = [
             'deals'            => $dealsDone,
             'sales_value'      => $salesValue,

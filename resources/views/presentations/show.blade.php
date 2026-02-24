@@ -9,7 +9,7 @@
 
 @php
     $statusClasses = match($presentation->status) {
-        'presented' => 'bg-indigo-50 text-indigo-600',
+        'presented' => 'bg-sky-50 text-[#00b4d8]',
         'locked'    => 'pres-badge-success',
         default     => 'bg-slate-100 text-slate-500',
     };
@@ -151,7 +151,7 @@
                 <ul class="space-y-2">
                     @foreach($readiness['required_items'] as $item)
                         <li class="flex items-start gap-2.5 text-xs">
-                            <span class="mt-0.5 shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] {{ $item['satisfied'] ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400' }}">
+                            <span class="mt-0.5 shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] {{ $item['satisfied'] ? 'bg-sky-100 text-[#00b4d8]' : 'bg-slate-100 text-slate-400' }}">
                                 {{ $item['satisfied'] ? '✓' : '✗' }}
                             </span>
                             <span class="{{ $item['satisfied'] ? 'text-slate-500' : 'text-slate-700 font-medium' }}">
@@ -168,7 +168,7 @@
                 <ul class="space-y-2">
                     @foreach($readiness['optional_items'] as $item)
                         <li class="flex items-start gap-2.5 text-xs">
-                            <span class="mt-0.5 shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] {{ $item['satisfied'] ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-300' }}">
+                            <span class="mt-0.5 shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] {{ $item['satisfied'] ? 'bg-sky-100 text-[#00b4d8]' : 'bg-slate-100 text-slate-300' }}">
                                 {{ $item['satisfied'] ? '✓' : '○' }}
                             </span>
                             <span class="text-slate-500">{{ $item['label'] }}</span>
@@ -206,7 +206,7 @@
         {{-- P30 --}}
         <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
             <p class="pres-stat-label mb-1">P30</p>
-            <p class="pres-stat-value {{ ($powerPanel['p30'] ?? 0) >= 0.5 ? 'text-indigo-600' : 'text-slate-800' }}">
+            <p class="pres-stat-value {{ ($powerPanel['p30'] ?? 0) >= 0.5 ? 'text-[#00b4d8]' : 'text-slate-800' }}">
                 @if($powerPanel['p30'] !== null)
                     {{ number_format($powerPanel['p30'] * 100, 0) }}%
                 @else
@@ -217,7 +217,7 @@
         {{-- P60 --}}
         <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
             <p class="pres-stat-label mb-1">P60</p>
-            <p class="pres-stat-value {{ ($powerPanel['p60'] ?? 0) >= 0.5 ? 'text-indigo-600' : 'text-slate-800' }}">
+            <p class="pres-stat-value {{ ($powerPanel['p60'] ?? 0) >= 0.5 ? 'text-[#00b4d8]' : 'text-slate-800' }}">
                 @if($powerPanel['p60'] !== null)
                     {{ number_format($powerPanel['p60'] * 100, 0) }}%
                 @else
@@ -228,7 +228,7 @@
         {{-- P90 --}}
         <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
             <p class="pres-stat-label mb-1">P90</p>
-            <p class="pres-stat-value {{ ($powerPanel['p90'] ?? 0) >= 0.65 ? 'text-indigo-600' : 'text-slate-800' }}">
+            <p class="pres-stat-value {{ ($powerPanel['p90'] ?? 0) >= 0.65 ? 'text-[#00b4d8]' : 'text-slate-800' }}">
                 @if($powerPanel['p90'] !== null)
                     {{ number_format($powerPanel['p90'] * 100, 0) }}%
                 @else
@@ -255,8 +255,8 @@
                     $confScore = $powerPanel['confidence']['confidence_score'] ?? 0;
                     $confGrade = $powerPanel['confidence']['confidence_grade'] ?? '-';
                     $confColor = match($confGrade) {
-                        'A' => 'text-indigo-600',
-                        'B' => 'text-indigo-500',
+                        'A' => 'text-[#00b4d8]',
+                        'B' => 'text-[#00b4d8]',
                         'C' => 'text-slate-500',
                         default => 'text-slate-400',
                     };
@@ -274,7 +274,7 @@
                     $ppiScore = $powerPanel['ppi']['ppi_score'] ?? 0;
                     $ppiLabel = $powerPanel['ppi']['ppi_label'] ?? '-';
                     $ppiColor = match($ppiLabel) {
-                        'Strong' => 'text-indigo-600',
+                        'Strong' => 'text-[#00b4d8]',
                         'Balanced' => 'text-slate-600',
                         default => 'text-slate-400',
                     };
@@ -323,12 +323,12 @@
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {{-- Key Drivers --}}
                 @if(!empty($explain['key_drivers']))
-                    <div class="bg-indigo-50 rounded-lg p-3">
-                        <p class="text-[11px] font-semibold text-indigo-700 mb-2 uppercase tracking-widest">Key Drivers</p>
+                    <div class="bg-sky-50 rounded-lg p-3">
+                        <p class="text-[11px] font-semibold text-[#0b2a4a] mb-2 uppercase tracking-widest">Key Drivers</p>
                         <ul class="space-y-1.5">
                             @foreach($explain['key_drivers'] as $driver)
                                 <li class="text-xs text-slate-600 flex items-start gap-2">
-                                    <span class="text-indigo-500 mt-0.5 shrink-0 font-bold">+</span>
+                                    <span class="text-[#00b4d8] mt-0.5 shrink-0 font-bold">+</span>
                                     {{ $driver }}
                                 </li>
                             @endforeach
@@ -408,7 +408,7 @@
             <p class="text-sm text-slate-400 italic">No analysis run yet.</p>
             @if($readiness['can_compile'])
                 <a href="{{ route('presentations.analysis', $presentation) }}"
-                   class="mt-3 inline-block text-xs text-indigo-600 hover:underline font-medium">
+                   class="mt-3 inline-block text-xs text-[#00b4d8] hover:underline font-medium">
                     Run first analysis →
                 </a>
             @else
@@ -430,7 +430,7 @@
             </p>
             @if($latestSnapshot)
                 <a href="{{ route('presentations.snapshots.show', [$presentation, $latestSnapshot]) }}"
-                   class="mt-4 inline-block text-xs text-indigo-600 hover:underline font-medium">
+                   class="mt-4 inline-block text-xs text-[#00b4d8] hover:underline font-medium">
                     View latest →
                 </a>
             @endif
@@ -559,7 +559,7 @@
                     }
                 }
             @endphp
-            <div class="mb-5 p-4 rounded-xl border-2 border-indigo-200 bg-indigo-50/50">
+            <div class="mb-5 p-4 rounded-xl border-2 border-sky-200 bg-sky-50/50">
                 <div class="flex items-center justify-between gap-4 flex-wrap">
                     <div>
                         <p class="text-xs font-semibold text-slate-600 mb-1">Quick Search — find competing listings</p>
@@ -584,7 +584,7 @@
                                 <a href="{{ $p24WideUrl }}"
                                    target="_blank"
                                    rel="noopener noreferrer"
-                                   class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-indigo-700 text-xs font-bold border border-indigo-300 bg-white hover:bg-indigo-50 shadow-sm hover:shadow transition-all">
+                                   class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[#0b2a4a] text-xs font-bold border border-sky-300 bg-white hover:bg-sky-50 shadow-sm hover:shadow transition-all">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
                                     {{ $p24Suburb }} + Surrounding
                                 </a>
@@ -629,7 +629,7 @@
                             <div class="min-w-0 flex items-center gap-1 flex-wrap">
                                 @php
                                     $linkColor = in_array($link->type, ['active_listing', 'competitor_listing'])
-                                        ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-500';
+                                        ? 'bg-sky-50 text-[#00b4d8]' : 'bg-slate-100 text-slate-500';
                                 @endphp
                                 <span class="pres-badge {{ $linkColor }}">
                                     {{ $linkTypeLabels[$link->type] ?? ucfirst($link->type) }}
@@ -640,11 +640,11 @@
                                     $lHasCapture = !empty($link->portal_capture_id);
                                     $lExtStatus = $link->extraction_status ?? 'pending';
                                     if ($lHasCapture) {
-                                        $lExtBadge = 'bg-indigo-50 text-indigo-600';
+                                        $lExtBadge = 'bg-sky-50 text-[#00b4d8]';
                                         $lExtLabel = 'Captured';
                                     } else {
                                         $lExtBadge = match($lExtStatus) {
-                                            'ok'     => 'bg-indigo-50 text-indigo-600',
+                                            'ok'     => 'bg-sky-50 text-[#00b4d8]',
                                             'failed' => 'bg-slate-100 text-slate-500',
                                             default  => 'bg-slate-50 text-slate-400',
                                         };
@@ -665,7 +665,7 @@
                                           class="inline">
                                         @csrf
                                         <button type="submit"
-                                                class="inline-block px-1 py-0.5 text-xs text-indigo-500 hover:text-indigo-700"
+                                                class="inline-block px-1 py-0.5 text-xs text-[#00b4d8] hover:text-[#0b2a4a]"
                                                 title="Re-run extraction">&#x27F3;</button>
                                     </form>
                                 @endunless
@@ -677,7 +677,7 @@
                                 @endif
 
                                 <a href="{{ $link->url }}" target="_blank" rel="noopener noreferrer"
-                                   class="text-indigo-600 hover:underline break-all">
+                                   class="text-[#00b4d8] hover:underline break-all">
                                     {{ \Illuminate\Support\Str::limit($link->url, 50) }}
                                 </a>
                                 @if($link->notes)
@@ -696,7 +696,7 @@
                                         @endforeach
                                     </select>
                                     <button type="submit"
-                                            class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold">Save</button>
+                                            class="text-xs text-[#00b4d8] hover:text-[#0b2a4a] font-semibold">Save</button>
                                 </form>
                                 <form method="POST"
                                       action="{{ route('presentations.links.destroy', [$presentation, $link]) }}">
@@ -734,11 +734,11 @@
                                 if (!empty($lVerified['price_median'])) $lParts[] = 'Median: R' . number_format($lVerified['price_median'], 0);
                             @endphp
                             @if(!empty($lParts))
-                                <div class="mt-1.5 text-xs text-slate-600 bg-indigo-50 rounded px-2 py-1">
+                                <div class="mt-1.5 text-xs text-slate-600 bg-sky-50 rounded px-2 py-1">
                                     Search capture | {{ implode(' | ', $lParts) }}
                                 </div>
                             @else
-                                <div class="mt-1.5 text-xs text-slate-600 bg-indigo-50 rounded px-2 py-1">
+                                <div class="mt-1.5 text-xs text-slate-600 bg-sky-50 rounded px-2 py-1">
                                     Search capture
                                 </div>
                             @endif
@@ -782,7 +782,7 @@
                         @if($lHasCapture)
                             @php $lCapture = $link->portalCapture; @endphp
                             @if($lCapture)
-                                <div class="mt-1.5 bg-indigo-50 border border-indigo-200 rounded px-2 py-1.5 text-xs text-indigo-700 flex items-center justify-between gap-2">
+                                <div class="mt-1.5 bg-sky-50 border border-sky-200 rounded px-2 py-1.5 text-xs text-[#0b2a4a] flex items-center justify-between gap-2">
                                     <div class="flex-1">
                                         <span class="font-semibold">Captured via extension</span>
                                         — {{ number_format($lCapture->html_bytes) }} bytes
@@ -801,7 +801,7 @@
                         @if($lExtStatus === 'failed' && !$lHasCapture)
                             @if(config('features.portal_extension_capture_v1') && $link->type === 'property24')
                                 {{-- Portal extension capture mode: no headless retry --}}
-                                <div class="mt-1.5 bg-indigo-50 border border-indigo-200 rounded px-2 py-1.5 text-xs text-indigo-700 flex items-center justify-between gap-2">
+                                <div class="mt-1.5 bg-sky-50 border border-sky-200 rounded px-2 py-1.5 text-xs text-[#0b2a4a] flex items-center justify-between gap-2">
                                     <div class="flex-1">
                                         <span class="font-semibold">Capture via Browser Extension</span> — open the portal and use the capture extension
                                     </div>
@@ -863,7 +863,7 @@
                         @if(config('features.presentation_link_details_v1') && isset($linkViews[$link->id]))
                             @php $lView = $linkViews[$link->id]; @endphp
                             <details class="mt-1.5">
-                                <summary class="text-xs text-indigo-500 cursor-pointer hover:underline">
+                                <summary class="text-xs text-[#00b4d8] cursor-pointer hover:underline">
                                     @if(($lView['capture_page_type'] ?? null) === 'search')
                                         View search summary
                                     @else
@@ -874,37 +874,37 @@
 
                                     @if(($lView['capture_page_type'] ?? null) === 'search')
                                         {{-- ═══ SEARCH CAPTURE SUMMARY ═══ --}}
-                                        <div class="bg-indigo-50 border border-indigo-200 rounded p-3">
-                                            <p class="text-xs font-semibold text-indigo-700 mb-2 uppercase tracking-wide">Search Capture Summary</p>
+                                        <div class="bg-sky-50 border border-sky-200 rounded p-3">
+                                            <p class="text-xs font-semibold text-[#0b2a4a] mb-2 uppercase tracking-wide">Search Capture Summary</p>
                                             @if(!empty($lView['search_summary']))
                                                 <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
                                                     @if(!empty($lView['search_summary']['listings_found']))
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Listings found</dt>
-                                                        <dd class="text-indigo-800 font-medium">{{ $lView['search_summary']['listings_found'] }}</dd>
+                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Listings found</dt>
+                                                        <dd class="text-[#0b2a4a] font-medium">{{ $lView['search_summary']['listings_found'] }}</dd>
                                                     @endif
                                                     @if(!empty($lView['search_summary']['total_results']))
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Total results</dt>
-                                                        <dd class="text-indigo-800 font-medium">{{ $lView['search_summary']['total_results'] }}</dd>
+                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Total results</dt>
+                                                        <dd class="text-[#0b2a4a] font-medium">{{ $lView['search_summary']['total_results'] }}</dd>
                                                     @endif
                                                     @if(!empty($lView['search_summary']['price_change_count']))
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Price changes</dt>
+                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Price changes</dt>
                                                         <dd class="text-amber-700 font-semibold">{{ $lView['search_summary']['price_change_count'] }}</dd>
                                                     @endif
                                                     @if(!empty($lView['search_summary']['capture_time']))
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Captured</dt>
-                                                        <dd class="text-indigo-800">{{ $lView['search_summary']['capture_time'] }}</dd>
+                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Captured</dt>
+                                                        <dd class="text-[#0b2a4a]">{{ $lView['search_summary']['capture_time'] }}</dd>
                                                     @endif
                                                     @if(!empty($lView['search_summary']['html_bytes']))
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Page size</dt>
-                                                        <dd class="text-indigo-800">{{ number_format($lView['search_summary']['html_bytes']) }} bytes</dd>
+                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Page size</dt>
+                                                        <dd class="text-[#0b2a4a]">{{ number_format($lView['search_summary']['html_bytes']) }} bytes</dd>
                                                     @endif
                                                     @if(!empty($lView['search_summary']['parse_status']))
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Status</dt>
-                                                        <dd class="text-indigo-800">{{ $lView['search_summary']['parse_status'] }}</dd>
+                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Status</dt>
+                                                        <dd class="text-[#0b2a4a]">{{ $lView['search_summary']['parse_status'] }}</dd>
                                                     @endif
                                                 </dl>
                                             @endif
-                                            <p class="mt-2 text-xs text-indigo-500 italic">
+                                            <p class="mt-2 text-xs text-[#00b4d8] italic">
                                                 Search captures monitor competitor changes. To see listing details, open the listing page and capture it.
                                             </p>
                                         </div>
@@ -958,7 +958,7 @@
                                                             <tr class="border-b border-gray-100">
                                                                 <td class="py-1.5 pr-2 text-gray-500 whitespace-nowrap">{{ $oField['label'] }}</td>
                                                                 <td class="py-1.5 pr-2 text-gray-700">{{ $oField['current'] ?? '—' }}</td>
-                                                                <td class="py-1.5 pr-2 {{ $oField['imported'] ? 'text-indigo-600' : 'text-gray-300' }}">
+                                                                <td class="py-1.5 pr-2 {{ $oField['imported'] ? 'text-[#00b4d8]' : 'text-gray-300' }}">
                                                                     {{ $oField['imported'] ?? ($oField['imported_missing_label'] ?? 'No imported value yet') }}
                                                                 </td>
                                                                 <td class="py-1.5">
@@ -1049,7 +1049,7 @@
                         @else
                             {{-- Legacy fallback (feature flag off) --}}
                             <details class="mt-1.5">
-                                <summary class="text-xs text-indigo-500 cursor-pointer hover:underline">
+                                <summary class="text-xs text-[#00b4d8] cursor-pointer hover:underline">
                                     {{ $link->isOverridden() ? 'Edit override' : 'View details / Override' }}
                                 </summary>
                                 <div class="mt-2 space-y-2">
@@ -1150,7 +1150,7 @@
                 </button>
             </div>
             <p id="add-link-error" class="text-xs text-red-600 hidden"></p>
-            <p id="add-link-success" class="text-xs text-indigo-600 hidden"></p>
+            <p id="add-link-success" class="text-xs text-[#00b4d8] hidden"></p>
 
             @error('url')
                 <p class="text-xs text-red-600">{{ $message }}</p>
@@ -1232,10 +1232,10 @@
                     // Build new link row and insert into DOM
                     var link = data.link;
                     var typeColor = ['active_listing', 'competitor_listing'].indexOf(link.type) >= 0
-                        ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-500';
+                        ? 'bg-sky-50 text-[#00b4d8]' : 'bg-slate-100 text-slate-500';
                     var extBadge = link.portal_capture_id
-                        ? 'bg-indigo-50 text-indigo-600'
-                        : (link.extraction_status === 'ok' ? 'bg-indigo-50 text-indigo-600' : (link.extraction_status === 'failed' ? 'bg-slate-100 text-slate-500' : 'bg-slate-50 text-slate-400'));
+                        ? 'bg-sky-50 text-[#00b4d8]'
+                        : (link.extraction_status === 'ok' ? 'bg-sky-50 text-[#00b4d8]' : (link.extraction_status === 'failed' ? 'bg-slate-100 text-slate-500' : 'bg-slate-50 text-slate-400'));
                     var extLabel = link.portal_capture_id
                         ? 'Captured'
                         : (link.extraction_status === 'ok' ? 'Extracted' : (link.extraction_status === 'failed' ? 'Failed' : 'Pending'));
@@ -1249,7 +1249,7 @@
                         + '<div class="min-w-0 flex items-center gap-1 flex-wrap">'
                         + '<span class="inline-block px-1.5 py-0.5 rounded text-xs font-medium ' + typeColor + '">' + esc(linkTypeLabels[link.type] || link.type) + '</span>'
                         + '<span class="inline-block px-1.5 py-0.5 rounded text-xs font-medium ' + extBadge + '" data-link-badge="' + link.id + '">' + extLabel + '</span>'
-                        + '<a href="' + esc(link.url) + '" target="_blank" rel="noopener noreferrer" class="text-indigo-600 hover:underline break-all">' + esc(shortUrl) + '</a>'
+                        + '<a href="' + esc(link.url) + '" target="_blank" rel="noopener noreferrer" class="text-[#00b4d8] hover:underline break-all">' + esc(shortUrl) + '</a>'
                         + (link.notes ? '<span class="text-gray-400"> — ' + esc(link.notes) + '</span>' : '')
                         + '</div></div>';
 
@@ -1323,7 +1323,7 @@
         {{-- Summary line --}}
         <div id="captures-summary" class="mb-4 hidden">
             <div class="flex items-center gap-4 text-xs">
-                <span id="captures-summary-listings" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-semibold"></span>
+                <span id="captures-summary-listings" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-50 text-[#0b2a4a] font-semibold"></span>
                 <span id="captures-summary-searches" class="text-slate-400 font-medium"></span>
             </div>
         </div>
@@ -1512,18 +1512,18 @@
             function buildSearchCard(c) {
                 var desc = extractSearchDescription(c);
                 var count = extractListingCount(c);
-                var statusClass = c.parse_status === 'parsed' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400';
+                var statusClass = c.parse_status === 'parsed' ? 'bg-sky-50 text-[#00b4d8]' : 'bg-slate-100 text-slate-400';
                 var statusLabel = c.parse_status === 'parsed' ? 'Parsed' : (c.parse_status || 'Pending');
 
                 var html = '<div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">';
-                html += '<div class="shrink-0 w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">';
-                html += '<svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>';
+                html += '<div class="shrink-0 w-8 h-8 rounded-lg bg-sky-100 flex items-center justify-center">';
+                html += '<svg class="w-4 h-4 text-[#00b4d8]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>';
                 html += '</div>';
                 html += '<div class="flex-1 min-w-0">';
                 html += '<p class="text-xs font-semibold text-slate-700 truncate">' + esc(desc) + '</p>';
                 html += '<div class="flex items-center gap-2 mt-0.5">';
                 if (count !== null) {
-                    html += '<span class="text-[11px] text-indigo-600 font-medium">' + count + ' properties found</span>';
+                    html += '<span class="text-[11px] text-[#00b4d8] font-medium">' + count + ' properties found</span>';
                     html += '<span class="text-slate-300">·</span>';
                 }
                 html += '<span class="text-[11px] text-slate-400">' + shortDate(c.captured_at) + '</span>';
@@ -1531,7 +1531,7 @@
                 html += '</div>';
                 html += '<div class="flex items-center gap-2 shrink-0">';
                 html += '<span class="px-1.5 py-0.5 rounded text-[10px] font-medium ' + statusClass + '">' + esc(statusLabel) + '</span>';
-                html += '<a href="' + esc(c.source_url) + '" target="_blank" class="text-indigo-500 hover:text-indigo-700" title="Open on portal">';
+                html += '<a href="' + esc(c.source_url) + '" target="_blank" class="text-[#00b4d8] hover:text-[#0b2a4a]" title="Open on portal">';
                 html += '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>';
                 html += '</a>';
                 html += '<button type="button" onclick="deleteCapture(' + c.id + ')" class="text-slate-300 hover:text-red-500 transition-colors" title="Delete capture">';
@@ -1544,7 +1544,7 @@
 
             function buildPropertyCard(c) {
                 var f = extractPropertyFields(c);
-                var statusClass = c.parse_status === 'parsed' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400';
+                var statusClass = c.parse_status === 'parsed' ? 'bg-sky-50 text-[#00b4d8]' : 'bg-slate-100 text-slate-400';
                 var statusLabel = c.parse_status === 'parsed' ? 'Parsed' : (c.parse_status || 'Pending');
                 var priceStr = formatPrice(f.price);
                 var title = (f.name || '').replace(/\s*[-|–].*(Property24|PrivateProperty).*$/i, '').trim();
@@ -1600,7 +1600,7 @@
                 html += '<span class="px-1.5 py-0.5 rounded text-[10px] font-medium ' + statusClass + '">' + esc(statusLabel) + '</span>';
                 html += '</div>';
                 html += '<div class="flex items-center gap-2">';
-                html += '<a href="' + esc(c.source_url) + '" target="_blank" class="text-indigo-500 hover:text-indigo-700" title="View on portal">';
+                html += '<a href="' + esc(c.source_url) + '" target="_blank" class="text-[#00b4d8] hover:text-[#0b2a4a]" title="View on portal">';
                 html += '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>';
                 html += '</a>';
                 html += '<button type="button" onclick="deleteCapture(' + c.id + ')" class="text-slate-300 hover:text-red-500 transition-colors" title="Delete capture">';
@@ -1645,12 +1645,12 @@
                     var shortUrl = (c.source_url || '').length > 45 ? c.source_url.substring(0, 45) + '...' : c.source_url;
                     var capturedAt = shortDate(c.captured_at);
                     var statusBadge = c.parse_status === 'parsed'
-                        ? '<span class="px-1 py-0.5 rounded bg-indigo-50 text-indigo-600" data-capture-status>parsed</span>'
+                        ? '<span class="px-1 py-0.5 rounded bg-sky-50 text-[#00b4d8]" data-capture-status>parsed</span>'
                         : '<span class="px-1 py-0.5 rounded bg-slate-50 text-slate-400" data-capture-status>' + esc(c.parse_status || 'unknown') + '</span>';
                     t += '<tr class="border-b border-gray-50" data-capture-id="' + c.id + '">';
                     t += '<td class="py-1.5 pr-2 text-gray-600">' + esc(c.source_site || '') + '</td>';
-                    t += '<td class="py-1.5 pr-2"><span class="px-1 py-0.5 rounded bg-indigo-50 text-indigo-600">' + esc(c.page_type) + '</span></td>';
-                    t += '<td class="py-1.5 pr-2"><a href="' + esc(c.source_url) + '" target="_blank" class="text-indigo-600 hover:underline">' + esc(shortUrl) + '</a></td>';
+                    t += '<td class="py-1.5 pr-2"><span class="px-1 py-0.5 rounded bg-sky-50 text-[#00b4d8]">' + esc(c.page_type) + '</span></td>';
+                    t += '<td class="py-1.5 pr-2"><a href="' + esc(c.source_url) + '" target="_blank" class="text-[#00b4d8] hover:underline">' + esc(shortUrl) + '</a></td>';
                     t += '<td class="py-1.5 pr-2">' + statusBadge + '</td>';
                     t += '<td class="py-1.5 pr-2 text-gray-500">' + capturedAt + '</td>';
                     t += '<td class="py-1.5 text-gray-500">' + (c.html_bytes ? Number(c.html_bytes).toLocaleString() + 'b' : '-') + '</td>';
@@ -1898,10 +1898,10 @@
 
         {{-- Upload status summary --}}
         @if($totalUploads > 0)
-            <div class="mb-4 px-3 py-2 rounded-lg {{ empty($missingTypes) ? 'bg-indigo-50' : 'bg-slate-50' }}">
+            <div class="mb-4 px-3 py-2 rounded-lg {{ empty($missingTypes) ? 'bg-sky-50' : 'bg-slate-50' }}">
                 <div class="flex items-center gap-2 text-xs">
                     @if(empty($missingTypes))
-                        <span class="text-indigo-600 font-semibold">Documents: {{ count($presentTypes) }}/3 uploaded ✓</span>
+                        <span class="text-[#00b4d8] font-semibold">Documents: {{ count($presentTypes) }}/3 uploaded ✓</span>
                     @else
                         <span class="text-slate-600 font-semibold">Documents: {{ count($presentTypes) }}/3</span>
                         <span class="text-slate-400">— missing:
@@ -1925,7 +1925,7 @@
                             $uIsKnownType = in_array($upload->type, ['suburb_stats', 'vicinity_sales', 'cma', 'market_article', 'other']);
                             $uExtStatus = $upload->extraction_status ?? 'pending';
                             $uExtBadge = match($uExtStatus) {
-                                'ok'     => 'bg-indigo-50 text-indigo-600',
+                                'ok'     => 'bg-sky-50 text-[#00b4d8]',
                                 'failed' => 'bg-red-50 text-red-600',
                                 default  => 'bg-amber-50 text-amber-600',
                             };
@@ -1952,7 +1952,7 @@
                                       class="inline">
                                     @csrf
                                     <button type="submit"
-                                            class="inline-block px-1 py-0.5 text-xs text-indigo-500 hover:text-indigo-700"
+                                            class="inline-block px-1 py-0.5 text-xs text-[#00b4d8] hover:text-[#0b2a4a]"
                                             title="Re-run extraction">&#x27F3;</button>
                                 </form>
 
@@ -1989,12 +1989,12 @@
                                         @endforeach
                                     </select>
                                     <button type="submit"
-                                            class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold">Save</button>
+                                            class="text-xs text-[#00b4d8] hover:text-[#0b2a4a] font-semibold">Save</button>
                                 </form>
                             @else
                                 {{-- Known type: small "Change type" toggle --}}
                                 <details class="shrink-0">
-                                    <summary class="text-[11px] text-slate-400 cursor-pointer hover:text-indigo-600">Change type</summary>
+                                    <summary class="text-[11px] text-slate-400 cursor-pointer hover:text-[#00b4d8]">Change type</summary>
                                     <form method="POST"
                                           action="{{ route('presentations.uploads.update-type', [$presentation, $upload]) }}"
                                           class="flex items-center gap-1.5 mt-1">
@@ -2006,7 +2006,7 @@
                                             @endforeach
                                         </select>
                                         <button type="submit"
-                                                class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold">Save</button>
+                                                class="text-xs text-[#00b4d8] hover:text-[#0b2a4a] font-semibold">Save</button>
                                     </form>
                                 </details>
                             @endif
@@ -2023,8 +2023,8 @@
 
                         @if($hasDocExtract && $upload->type === 'cma')
                             {{-- ── CMA Valuation Summary Card ── --}}
-                            <div class="mt-2 bg-indigo-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
-                                <div class="font-semibold text-indigo-700">CMA Valuation Summary</div>
+                            <div class="mt-2 bg-sky-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
+                                <div class="font-semibold text-[#0b2a4a]">CMA Valuation Summary</div>
                                 @if(isset($uFields['cma.lower_range']) || isset($uFields['cma.middle_range']) || isset($uFields['cma.upper_range']))
                                     <div>
                                         <span class="text-gray-500">Price Range:</span>
@@ -2070,8 +2070,8 @@
 
                         @elseif($hasDocExtract && $upload->type === 'suburb_stats')
                             {{-- ── Suburb Sales Summary Card ── --}}
-                            <div class="mt-2 bg-indigo-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
-                                <div class="font-semibold text-indigo-700">
+                            <div class="mt-2 bg-sky-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
+                                <div class="font-semibold text-[#0b2a4a]">
                                     Suburb Sales Summary
                                     @if(isset($uFields['suburb.latest_year']))
                                         <span class="font-normal text-gray-400">({{ $uFields['suburb.latest_year'] }})</span>
@@ -2097,8 +2097,8 @@
 
                         @elseif($hasDocExtract && $upload->type === 'vicinity_sales')
                             {{-- ── Vicinity Sales Summary Card ── --}}
-                            <div class="mt-2 bg-indigo-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
-                                <div class="font-semibold text-indigo-700">Vicinity Sales Summary</div>
+                            <div class="mt-2 bg-sky-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
+                                <div class="font-semibold text-[#0b2a4a]">Vicinity Sales Summary</div>
                                 @if(isset($uFields['vicinity.lower_range']) || isset($uFields['vicinity.middle_range']) || isset($uFields['vicinity.upper_range']))
                                     <div>
                                         <span class="text-gray-500">Price Range:</span>
@@ -2191,7 +2191,7 @@
 
                         {{-- Expand: details + diagnostics + override form --}}
                             <details class="mt-1.5">
-                                <summary class="text-xs text-indigo-500 cursor-pointer hover:underline">
+                                <summary class="text-xs text-[#00b4d8] cursor-pointer hover:underline">
                                     {{ $upload->isOverridden() ? 'Edit override' : 'Details' }}
                                 </summary>
                                 <div class="mt-2 space-y-2">
@@ -2362,14 +2362,14 @@
                                 <div class="flex items-center gap-2 min-w-0">
                                     <span class="text-slate-400 shrink-0">&#128206;</span>
                                     <span class="truncate font-medium">{{ $libDoc->title ?? $libDoc->original_name }}</span>
-                                    <span class="pres-badge bg-indigo-50 text-indigo-600">
+                                    <span class="pres-badge bg-sky-50 text-[#00b4d8]">
                                         {{ $libDoc->doc_type }}
                                     </span>
                                     <span class="text-slate-400">{{ $libDoc->uploader->name ?? '' }}</span>
                                     <span class="text-slate-400">{{ $libDoc->pivot->created_at ? \Carbon\Carbon::parse($libDoc->pivot->created_at)->format('d M Y') : '' }}</span>
                                 </div>
                                 <a href="{{ route('documents.library.download', $libDoc) }}"
-                                   class="text-indigo-600 hover:text-indigo-800 font-semibold shrink-0 ml-2">
+                                   class="text-[#00b4d8] hover:text-[#0b2a4a] font-semibold shrink-0 ml-2">
                                     Download
                                 </a>
                             </li>
@@ -2502,7 +2502,7 @@
 {{-- ── LIVE UPDATES POLLING (B1) ────────────────────────────────────────── --}}
 @if(config('features.presentation_live_updates_v1') && config('features.portal_extension_capture_v1'))
 {{-- New captures banner (fixed at top of captures section) --}}
-<div id="live-new-captures-banner" class="hidden fixed bottom-4 right-4 z-50 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg shadow-lg cursor-pointer hover:bg-indigo-700 transition-colors"
+<div id="live-new-captures-banner" class="hidden fixed bottom-4 right-4 z-50 px-4 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded-lg shadow-lg cursor-pointer hover:bg-[#081f36] transition-colors"
      onclick="window.__liveUpdates && window.__liveUpdates.scrollToCaptures()">
     <span id="live-banner-text">0 new captures</span>
 </div>
@@ -2574,11 +2574,11 @@
         if (!badgeEl) return;
 
         if (linkData.portal_capture_id) {
-            badgeEl.className = 'inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-600';
+            badgeEl.className = 'inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-sky-50 text-[#00b4d8]';
             badgeEl.textContent = 'Captured';
         } else {
             var statusMap = {
-                'ok':      { cls: 'bg-indigo-50 text-indigo-600', label: 'Extracted' },
+                'ok':      { cls: 'bg-sky-50 text-[#00b4d8]', label: 'Extracted' },
                 'failed':  { cls: 'bg-slate-100 text-slate-500',  label: 'Failed' },
                 'pending': { cls: 'bg-slate-50 text-slate-400',   label: 'Pending' },
             };
@@ -2604,7 +2604,7 @@
         var statusEl = row.querySelector('[data-capture-status]');
         if (statusEl) {
             if (c.parse_status === 'parsed') {
-                statusEl.className = 'px-1 py-0.5 rounded bg-indigo-50 text-indigo-600';
+                statusEl.className = 'px-1 py-0.5 rounded bg-sky-50 text-[#00b4d8]';
                 statusEl.textContent = 'parsed';
             } else {
                 statusEl.className = 'px-1 py-0.5 rounded bg-slate-50 text-slate-400';
@@ -2627,13 +2627,13 @@
             : c.source_url;
         var capturedAt = c.captured_at ? c.captured_at.substring(0, 16).replace('T', ' ') : '';
         var statusBadge = c.parse_status === 'parsed'
-            ? '<span class="px-1 py-0.5 rounded bg-indigo-50 text-indigo-600" data-capture-status>parsed</span>'
+            ? '<span class="px-1 py-0.5 rounded bg-sky-50 text-[#00b4d8]" data-capture-status>parsed</span>'
             : '<span class="px-1 py-0.5 rounded bg-slate-50 text-slate-400" data-capture-status>' + esc(c.parse_status || 'unknown') + '</span>';
 
         var row = '<tr class="border-b border-gray-50 live-capture-new" data-capture-id="' + c.id + '">';
         row += '<td class="py-1.5 pr-2 text-gray-600">' + esc(c.source_site || '') + '</td>';
-        row += '<td class="py-1.5 pr-2"><span class="px-1 py-0.5 rounded bg-indigo-50 text-indigo-600">' + esc(c.page_type) + '</span></td>';
-        row += '<td class="py-1.5 pr-2"><a href="' + esc(c.source_url) + '" target="_blank" class="text-indigo-600 hover:underline">' + esc(shortUrl) + '</a></td>';
+        row += '<td class="py-1.5 pr-2"><span class="px-1 py-0.5 rounded bg-sky-50 text-[#00b4d8]">' + esc(c.page_type) + '</span></td>';
+        row += '<td class="py-1.5 pr-2"><a href="' + esc(c.source_url) + '" target="_blank" class="text-[#00b4d8] hover:underline">' + esc(shortUrl) + '</a></td>';
         row += '<td class="py-1.5 pr-2">' + statusBadge + '</td>';
         row += '<td class="py-1.5 pr-2 text-gray-500">' + capturedAt + '</td>';
         row += '<td class="py-1.5 text-gray-500">' + (c.html_bytes ? Number(c.html_bytes).toLocaleString() + 'b' : '-') + '</td>';

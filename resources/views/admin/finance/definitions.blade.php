@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('layouts.nexus')
 
 @section('content')
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -12,18 +12,32 @@
             </p>
         </div>
 
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 flex-wrap">
             <a href="{{ route('admin.finance.audit.index') }}"
                class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800">
                 Audit History
             </a>
-            <form method="POST" action="{{ route('admin.finance.recalculate') }}" class="inline"
-                  onsubmit="return confirm('Run full recalculation for the current period? This may take a moment.')">
+            <form method="POST" action="{{ route('admin.finance.recalculate') }}" class="flex items-center gap-2"
+                  id="recalcForm">
                 @csrf
-                <input type="hidden" name="period" value="{{ now()->format('Y-m') }}">
+                <input type="hidden" name="mode" id="recalcMode" value="single">
+                <select name="period"
+                        class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm">
+                    @foreach($availablePeriods as $p)
+                        <option value="{{ $p }}" {{ $p === now()->format('Y-m') ? 'selected' : '' }}>
+                            {{ \Carbon\Carbon::createFromFormat('Y-m', $p)->format('F Y') }}
+                        </option>
+                    @endforeach
+                </select>
                 <button type="submit"
-                        class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold">
-                    Recalculate All ({{ now()->format('Y-m') }})
+                        onclick="document.getElementById('recalcMode').value='single'"
+                        class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold whitespace-nowrap">
+                    Recalculate Period
+                </button>
+                <button type="submit"
+                        onclick="if(!confirm('This will recalculate ALL periods with deals. This may take a while. Continue?')){event.preventDefault();return;}document.getElementById('recalcMode').value='all'"
+                        class="rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 text-sm font-semibold whitespace-nowrap">
+                    Recalculate ALL Periods
                 </button>
             </form>
         </div>

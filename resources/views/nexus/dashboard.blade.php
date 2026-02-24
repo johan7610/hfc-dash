@@ -8,7 +8,7 @@
                 <button type="submit" class="text-sm font-medium text-red-600 hover:text-red-800">Logout</button>
             </form>
             <div class="text-xs text-gray-500 mt-1">{{ auth()->user()->name ?? 'User' }}</div>
-            <a href="/make-me-admin" class="text-xs text-indigo-600 hover:text-indigo-800 block mt-1">Grant Admin Rights</a>
+            <a href="/make-me-admin" class="text-xs text-[#00b4d8] hover:text-[#0b2a4a] block mt-1">Grant Admin Rights</a>
         </div>
     </div>
 
@@ -19,7 +19,7 @@
             :value="$activeDeals"
             :trend="$dealsTrend"
             :trend-up="$dealsTrend >= 0"
-            icon-bg="bg-indigo-100 text-indigo-600"
+            icon-bg="bg-sky-100 text-[#00b4d8]"
         >
             <x-slot:icon>
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -92,7 +92,7 @@
         <div class="nexus-panel">
             <div class="nexus-panel-header">
                 <h3 class="nexus-panel-title">Approval Queue</h3>
-                <a href="{{ route('admin.deals') }}" class="text-xs text-indigo-600 font-medium hover:underline">View all</a>
+                <a href="{{ route('admin.deals') }}" class="text-xs text-[#00b4d8] font-medium hover:underline">View all</a>
             </div>
             <div class="nexus-panel-body">
                 @forelse($approvalQueue as $deal)

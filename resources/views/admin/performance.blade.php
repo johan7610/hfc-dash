@@ -21,14 +21,6 @@
     $pointsPerDayNeeded = (float)($pts['per_day_needed'] ?? 0);
     $todayPoints = (float)($pts['today_points'] ?? 0);
 
-    $pointsBarClass = 'bg-gray-900';
-    if ($pointsTarget > 0) {
-        if ($pointsActual >= $pointsTarget) $pointsBarClass = 'bg-green-600';
-        elseif ($pointsStatus === 'Ahead' || $pointsStatus === 'On pace') $pointsBarClass = 'bg-green-600';
-        elseif ($pointsPct >= 75) $pointsBarClass = 'bg-amber-500';
-        else $pointsBarClass = 'bg-red-600';
-    }
-
     // Company targets/actuals (agent target sum -> progress)
     $companyValueTarget_agentsum = (float)($r['totals']['targets']['value'] ?? 0);
     $companyDealsTarget_agentsum = (int)($r['totals']['targets']['deals'] ?? 0);
@@ -47,98 +39,98 @@
     $valuePct = $companyValueTarget_agentsum > 0 ? (($companyValueActual / $companyValueTarget_agentsum) * 100) : 0;
     $dealsPct = $companyDealsTarget_agentsum > 0 ? (($companyDealsActual / $companyDealsTarget_agentsum) * 100) : 0;
 
-    $valueBar = $valuePct >= 95 ? 'bg-green-600' : ($valuePct >= 75 ? 'bg-amber-500' : 'bg-red-600');
-    $dealsBar = $dealsPct >= 95 ? 'bg-green-600' : ($dealsPct >= 75 ? 'bg-amber-500' : 'bg-red-600');
+    $valueBar = $valuePct >= 80 ? 'ds-bar-navy' : ($valuePct >= 50 ? 'ds-bar-amber' : 'ds-bar-crimson');
+    $dealsBar = $dealsPct >= 80 ? 'ds-bar-navy' : ($dealsPct >= 50 ? 'ds-bar-amber' : 'ds-bar-crimson');
 
     $statusSummary = $statusSummary ?? [];
 @endphp
 
 <x-app-layout>
     <x-slot name="header">
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div>
-                <h2 class="font-semibold text-xl text-gray-200 leading-tight">
-                    Company Dashboard — {{ $r['period'] ?? now()->format('Y-m') }}
-                </h2>
-                <div class="text-sm text-gray-400">Admin view (BM-clone layout)</div>
-            </div>
-
-            <div class="flex flex-wrap md:flex-nowrap items-center gap-2">
-                <form method="GET" action="{{ route('admin.performance') }}" class="flex flex-wrap md:flex-nowrap items-center gap-2">
-                    <label class="text-sm font-semibold text-gray-200">Period</label>
-                    <input type="month" name="period" value="{{ $r['period'] ?? now()->format('Y-m') }}" />
-                    <button type="submit" class="btn-primary px-4 py-2">Go</button>
-                </form>
+        <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                <div>
+                    <h2 class="text-xl font-bold text-white leading-tight">
+                        Company Dashboard — {{ $r['period'] ?? now()->format('Y-m') }}
+                    </h2>
+                    <div class="text-sm text-white/60">Admin view</div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <form method="GET" action="{{ route('admin.performance') }}" class="flex items-center gap-2">
+                        <input type="month" name="period" value="{{ $r['period'] ?? now()->format('Y-m') }}" class="h-8 text-sm rounded border border-white/20 bg-white/10 text-white px-2" />
+                        <button type="submit" class="px-3 py-1.5 text-sm font-semibold rounded bg-white/20 text-white hover:bg-white/30">Go</button>
+                    </form>
+                </div>
             </div>
         </div>
     </x-slot>
 
-    <div class="space-y-6">
+    <div class="space-y-8">
 
-        {{-- STATUS TILES (match BM) --}}
+        {{-- STATUS TILES --}}
         <div class="space-y-3">
             {{-- Set 1: Period (counts) --}}
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
 
                 <a href="/admin/deals?status=Declined&period={{ $r['period'] ?? now()->format('Y-m') }}" class="block">
-                    <div class="rounded-2xl bg-red-900 text-white p-4 shadow">
-                        <div class="text-xs opacity-80 mb-2">Declined</div>
+                    <div class="ds-status-card ds-status-declined">
+                        <div class="ds-label mb-2">Declined</div>
                         <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <div class="text-[11px] opacity-80">Period</div>
-                                <div class="text-2xl font-extrabold leading-tight">{{ $statusSummary['declined_period'] ?? 0 }}</div>
+                                <div class="ds-label" style="font-size:0.6875rem">Period</div>
+                                <div class="ds-value-lg">{{ $statusSummary['declined_period'] ?? 0 }}</div>
                             </div>
                             <div class="text-right">
-                                <div class="text-[11px] opacity-80">All time</div>
-                                <div class="text-2xl font-extrabold leading-tight opacity-60">—</div>
+                                <div class="ds-label" style="font-size:0.6875rem">All time</div>
+                                <div class="ds-value-lg" style="opacity:0.4">—</div>
                             </div>
                         </div>
                     </div>
                 </a>
 
                 <a href="/admin/deals?status=Pending&period={{ $r['period'] ?? now()->format('Y-m') }}" class="block">
-                    <div class="rounded-2xl bg-amber-700 text-white p-4 shadow">
-                        <div class="text-xs opacity-80 mb-2">Pending</div>
+                    <div class="ds-status-card ds-status-pending">
+                        <div class="ds-label mb-2">Pending</div>
                         <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <div class="text-[11px] opacity-80">Period</div>
-                                <div class="text-2xl font-extrabold leading-tight">{{ $statusSummary['pending_period'] ?? 0 }}</div>
+                                <div class="ds-label" style="font-size:0.6875rem">Period</div>
+                                <div class="ds-value-lg">{{ $statusSummary['pending_period'] ?? 0 }}</div>
                             </div>
                             <div class="text-right">
-                                <div class="text-[11px] opacity-80">All time</div>
-                                <div class="text-2xl font-extrabold leading-tight">{{ $statusSummary['pending_total'] ?? 0 }}</div>
+                                <div class="ds-label" style="font-size:0.6875rem">All time</div>
+                                <div class="ds-value-lg">{{ $statusSummary['pending_total'] ?? 0 }}</div>
                             </div>
                         </div>
                     </div>
                 </a>
 
                 <a href="/admin/deals?status=Granted&period={{ $r['period'] ?? now()->format('Y-m') }}" class="block">
-                    <div class="rounded-2xl bg-blue-800 text-white p-4 shadow">
-                        <div class="text-xs opacity-80 mb-2">Granted</div>
+                    <div class="ds-status-card ds-status-granted">
+                        <div class="ds-label mb-2">Granted</div>
                         <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <div class="text-[11px] opacity-80">Period</div>
-                                <div class="text-2xl font-extrabold leading-tight">{{ $statusSummary['granted_period'] ?? 0 }}</div>
+                                <div class="ds-label" style="font-size:0.6875rem">Period</div>
+                                <div class="ds-value-lg">{{ $statusSummary['granted_period'] ?? 0 }}</div>
                             </div>
                             <div class="text-right">
-                                <div class="text-[11px] opacity-80">All time</div>
-                                <div class="text-2xl font-extrabold leading-tight">{{ $statusSummary['granted_total'] ?? 0 }}</div>
+                                <div class="ds-label" style="font-size:0.6875rem">All time</div>
+                                <div class="ds-value-lg">{{ $statusSummary['granted_total'] ?? 0 }}</div>
                             </div>
                         </div>
                     </div>
                 </a>
 
                 <a href="/admin/deals?status=Registered&period={{ $r['period'] ?? now()->format('Y-m') }}" class="block">
-                    <div class="rounded-2xl bg-green-800 text-white p-4 shadow">
-                        <div class="text-xs opacity-80 mb-2">Registered</div>
+                    <div class="ds-status-card ds-status-registered">
+                        <div class="ds-label mb-2">Registered</div>
                         <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <div class="text-[11px] opacity-80">Period</div>
-                                <div class="text-2xl font-extrabold leading-tight">{{ $statusSummary['registered_period'] ?? 0 }}</div>
+                                <div class="ds-label" style="font-size:0.6875rem">Period</div>
+                                <div class="ds-value-lg">{{ $statusSummary['registered_period'] ?? 0 }}</div>
                             </div>
                             <div class="text-right">
-                                <div class="text-[11px] opacity-80">All time</div>
-                                <div class="text-2xl font-extrabold leading-tight opacity-60">—</div>
+                                <div class="ds-label" style="font-size:0.6875rem">All time</div>
+                                <div class="ds-value-lg" style="opacity:0.4">—</div>
                             </div>
                         </div>
                     </div>
@@ -149,33 +141,33 @@
             {{-- Set 2: Outstanding (Not Paid) — Company ex VAT --}}
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <a href="/admin/deals?status=Pending&commission_status=Not%20Paid" class="block">
-                    <div class="rounded-2xl bg-amber-700 text-white p-4 shadow">
-                        <div class="text-xs opacity-80">Pending (Not Paid) — Company ex VAT</div>
-                        <div class="text-3xl font-extrabold">
+                    <div class="ds-status-card ds-money-pending">
+                        <div class="ds-label">Pending (Not Paid) — Company ex VAT</div>
+                        <div class="ds-value-xl mt-1" style="color:#0b2a4a">
                             R {{ number_format((float)($statusSummary['pending_unpaid_company_ex_vat'] ?? 0), 0) }}
                         </div>
                     </div>
                 </a>
 
                 <a href="/admin/deals?status=Granted&commission_status=Not%20Paid" class="block">
-                    <div class="rounded-2xl bg-blue-800 text-white p-4 shadow">
-                        <div class="text-xs opacity-80">Granted (Not Paid) — Company ex VAT</div>
-                        <div class="text-3xl font-extrabold">
+                    <div class="ds-status-card ds-money-granted">
+                        <div class="ds-label">Granted (Not Paid) — Company ex VAT</div>
+                        <div class="ds-value-xl mt-1" style="color:#0b2a4a">
                             R {{ number_format((float)($statusSummary['granted_unpaid_company_ex_vat'] ?? 0), 0) }}
                         </div>
-                        <div class="mt-1 text-xs opacity-80">
+                        <div class="mt-1 ds-label" style="text-transform:none;font-size:0.75rem">
                             Paid this period: R {{ number_format((float)($statusSummary['granted_paid_company_ex_vat_period'] ?? 0), 0) }}
                         </div>
                     </div>
                 </a>
 
                 <a href="/admin/deals?status=Registered&commission_status=Not%20Paid" class="block">
-                    <div class="rounded-2xl bg-green-800 text-white p-4 shadow">
-                        <div class="text-xs opacity-80">Registered (Not Paid) — Company ex VAT</div>
-                        <div class="text-3xl font-extrabold">
+                    <div class="ds-status-card ds-money-registered">
+                        <div class="ds-label">Registered (Not Paid) — Company ex VAT</div>
+                        <div class="ds-value-xl mt-1" style="color:#0b2a4a">
                             R {{ number_format((float)($statusSummary['registered_unpaid_company_ex_vat'] ?? 0), 0) }}
                         </div>
-                        <div class="mt-1 text-xs opacity-80">
+                        <div class="mt-1 ds-label" style="text-transform:none;font-size:0.75rem">
                             Paid this period: R {{ number_format((float)($statusSummary['registered_paid_company_ex_vat_period'] ?? 0), 0) }}
                         </div>
                     </div>
@@ -196,90 +188,86 @@
         @endif
 
         {{-- Company Listing Stock (Propcon) --}}
-        <div class="card">
-            <div class="flex items-center justify-between mb-3">
-                <div class="text-gray-900 font-semibold text-lg">Listing Stock (Company)</div>
-                <a href="{{ route('admin.listings.stock') }}" class="text-sm text-blue-600 hover:underline">View all</a>
+        <div>
+            <div class="ds-section-header">Listing Stock (Company)</div>
+            <div class="ds-section-sub mb-4">
+                <a href="{{ route('admin.listings.stock') }}" class="ds-link text-sm hover:underline">View all</a>
             </div>
 
             <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-                <a href="{{ route('admin.listings.stock', ['filter' => 'active']) }}" class="p-4 rounded-2xl bg-gray-50 border border-black/10 hover:bg-gray-100 transition block">
-                    <div class="text-xs text-gray-500">Active</div>
-                    <div class="text-2xl font-extrabold text-gray-900">{{ (int)($listingStats['total'] ?? 0) }}</div>
+                <a href="{{ route('admin.listings.stock', ['filter' => 'active']) }}" class="ds-status-card hover:shadow-md transition block">
+                    <div class="ds-label">Active</div>
+                    <div class="ds-value-lg mt-1">{{ (int)($listingStats['total'] ?? 0) }}</div>
                 </a>
 
-                <a href="{{ route('admin.listings.stock', ['filter' => 'dom']) }}" class="p-4 rounded-2xl bg-gray-50 border border-black/10 hover:bg-gray-100 transition block">
-                    <div class="text-xs text-gray-500">Avg DOM</div>
-                    <div class="text-2xl font-extrabold text-gray-900">{{ (int)($listingStats['avg_days_on_market'] ?? 0) }}</div>
+                <a href="{{ route('admin.listings.stock', ['filter' => 'dom']) }}" class="ds-status-card hover:shadow-md transition block">
+                    <div class="ds-label">Avg DOM</div>
+                    <div class="ds-value-lg mt-1">{{ (int)($listingStats['avg_days_on_market'] ?? 0) }}</div>
                 </a>
 
-                <a href="{{ route('admin.listings.stock', ['filter' => 'stale']) }}" class="p-4 rounded-2xl bg-gray-50 border border-black/10 hover:bg-gray-100 transition block">
-                    <div class="text-xs text-gray-500">Stale</div>
-                    <div class="text-2xl font-extrabold text-gray-900">{{ (int)($listingStats['stale'] ?? 0) }}</div>
+                <a href="{{ route('admin.listings.stock', ['filter' => 'stale']) }}" class="ds-status-card hover:shadow-md transition block">
+                    <div class="ds-label">Stale</div>
+                    <div class="ds-value-lg mt-1">{{ (int)($listingStats['stale'] ?? 0) }}</div>
                 </a>
 
-                <a href="{{ route('admin.listings.stock', ['filter' => 'expiring']) }}" class="p-4 rounded-2xl bg-gray-50 border border-black/10 hover:bg-gray-100 transition block">
-                    <div class="text-xs text-gray-500">Expiring</div>
-                    <div class="text-2xl font-extrabold text-gray-900">{{ (int)($listingStats['expiring_soon'] ?? 0) }}</div>
+                <a href="{{ route('admin.listings.stock', ['filter' => 'expiring']) }}" class="ds-status-card hover:shadow-md transition block">
+                    <div class="ds-label">Expiring</div>
+                    <div class="ds-value-lg mt-1">{{ (int)($listingStats['expiring_soon'] ?? 0) }}</div>
                 </a>
 
-                <a href="{{ route('admin.listings.stock', ['filter' => 'expired']) }}" class="p-4 rounded-2xl bg-gray-50 border border-black/10 hover:bg-gray-100 transition block">
-                    <div class="text-xs text-gray-500">Expired</div>
-                    <div class="text-2xl font-extrabold text-gray-900">{{ (int)($listingStats['expired'] ?? 0) }}</div>
+                <a href="{{ route('admin.listings.stock', ['filter' => 'expired']) }}" class="ds-status-card hover:shadow-md transition block">
+                    <div class="ds-label">Expired</div>
+                    <div class="ds-value-lg mt-1">{{ (int)($listingStats['expired'] ?? 0) }}</div>
                 </a>
             </div>
         </div>
 
 
         {{-- HERO: Money (company) --}}
-        <div class="card">
-            <div class="text-2xl md:text-3xl font-extrabold text-gray-900 leading-tight">Company focus — Money</div>
-            <div class="text-sm text-gray-600 mt-1">
+        <div>
+            <div class="ds-section-header">Company Focus — Money</div>
+            <div class="ds-section-sub mb-4">
                 Value is priority. Targets below are based on what agents planned for the month (agent target sum).
             </div>
 
-            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div class="rounded-2xl border border-black/10 bg-gray-50 p-4">
-                    <div class="text-sm text-gray-600 font-semibold">Company Value (Actual / Agent-Sum Target)</div>
-                    <div class="text-3xl font-extrabold text-gray-900 leading-tight">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="card">
+                    <div class="ds-label mb-1">Company Value (Actual / Agent-Sum Target)</div>
+                    <div class="ds-value-xl">
                         R {{ number_format($companyValueActual, 0) }}
-                        <span class="text-gray-400 font-bold">/ R {{ number_format($companyValueTarget_agentsum, 0) }}</span>
+                        <span style="color:#94a3b8;font-weight:600">/ R {{ number_format($companyValueTarget_agentsum, 0) }}</span>
                     </div>
-                    <div class="mt-2 h-3 rounded bg-gray-200 overflow-hidden">
-                        <div class="h-3 {{ $valueBar }}" style="width: {{ min(100, max(0, $valuePct)) }}%"></div>
+                    <div class="ds-progress-track mt-3">
+                        <div class="ds-progress-bar {{ $valueBar }}" style="width: {{ min(100, max(0, $valuePct)) }}%"></div>
                     </div>
-                    <div class="mt-2 text-sm text-gray-700 font-semibold">Progress {{ number_format($valuePct, 1) }}%</div>
+                    <div class="mt-2 text-sm ds-value">Progress {{ number_format($valuePct, 1) }}%</div>
                 </div>
 
-                <div class="rounded-2xl border border-black/10 bg-gray-50 p-4">
-                    <div class="text-sm text-gray-600 font-semibold">Company Deals (Actual / Agent-Sum Target)</div>
-                    <div class="text-3xl font-extrabold text-gray-900 leading-tight">
+                <div class="card">
+                    <div class="ds-label mb-1">Company Deals (Actual / Agent-Sum Target)</div>
+                    <div class="ds-value-xl">
                         {{ (int)$companyDealsActual }}
-                        <span class="text-gray-400 font-bold">/ {{ (int)$companyDealsTarget_agentsum }}</span>
+                        <span style="color:#94a3b8;font-weight:600">/ {{ (int)$companyDealsTarget_agentsum }}</span>
                     </div>
-                    <div class="mt-2 h-3 rounded bg-gray-200 overflow-hidden">
-                        <div class="h-3 {{ $dealsBar }}" style="width: {{ min(100, max(0, $dealsPct)) }}%"></div>
+                    <div class="ds-progress-track mt-3">
+                        <div class="ds-progress-bar {{ $dealsBar }}" style="width: {{ min(100, max(0, $dealsPct)) }}%"></div>
                     </div>
-                    <div class="mt-2 text-sm text-gray-700 font-semibold">Progress {{ number_format($dealsPct, 1) }}%</div>
+                    <div class="mt-2 text-sm ds-value">Progress {{ number_format($dealsPct, 1) }}%</div>
                 </div>
             </div>
         </div>
 
         {{-- EXTRA: Branch progress tiles (value + points) --}}
-        <div class="card">
-            <div class="text-2xl md:text-3xl font-extrabold text-gray-900 leading-tight">Branches — Progress</div>
-            <div class="text-sm text-gray-600 mt-1">Value and points progress per branch for the selected period.</div>
+        <div>
+            <div class="ds-section-header">Branches — Progress</div>
+            <div class="ds-section-sub mb-4">Value and points progress per branch for the selected period.</div>
 
-            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 @foreach(($r['branches'] ?? []) as $b)
                     @php
                         $bid = (int)($b['branch_id'] ?? 0);
                         $bName = (string)($b['branch_name'] ?? 'Branch');
 
-                        // Branch rows from CompanyPerformanceService are shaped as:
-                        //   $b['targets'], $b['actuals'], $b['progress']
-                        // Older admin cards used $b['totals']['targets|actuals'].
-                        // Support both, but prefer the new shape.
                         $bTotals = $b['totals'] ?? ['actuals'=>[], 'targets'=>[]];
                         $bA = $b['actuals'] ?? ($bTotals['actuals'] ?? []);
                         $bT = $b['targets'] ?? ($bTotals['targets'] ?? []);
@@ -287,35 +275,35 @@
                         $bValueTarget = (float)($bT['value'] ?? 0);
                         $bValueActual = (float)($bA['value'] ?? $bA['sales_value'] ?? 0);
                         $bValuePct = $bValueTarget > 0 ? (($bValueActual / $bValueTarget) * 100) : 0;
-                        $bValueBar  = $bValuePct >= 95 ? 'bg-green-600' : ($bValuePct >= 75 ? 'bg-amber-500' : 'bg-red-600');
+                        $bValueBar  = $bValuePct >= 80 ? 'ds-bar-navy' : ($bValuePct >= 50 ? 'ds-bar-amber' : 'ds-bar-crimson');
 
                         $bPointsTarget = (float)($bT['points'] ?? 0);
                         $bPointsActual = (float)($bA['points'] ?? 0);
                         $bPointsPct = $bPointsTarget > 0 ? (($bPointsActual / $bPointsTarget) * 100) : 0;
-                        $bPointsBar  = $bPointsPct >= 95 ? 'bg-green-600' : ($bPointsPct >= 75 ? 'bg-amber-500' : 'bg-red-600');
+                        $bPointsBar  = $bPointsPct >= 80 ? 'ds-bar-navy' : ($bPointsPct >= 50 ? 'ds-bar-amber' : 'ds-bar-crimson');
                     @endphp
 
                     <a href="{{ route('admin.branch.performance', ['branchId' => $bid, 'period' => ($r['period'] ?? now()->format('Y-m'))]) }}"
-                       class="block rounded-2xl border border-black/10 bg-gray-50 p-4 hover:bg-black/5">
-                        <div class="text-xs font-bold text-gray-500 tracking-wide">BRANCH</div>
-                        <div class="text-xl font-extrabold text-gray-900 leading-tight">{{ $bName }}</div>
+                       class="card block hover:shadow-lg transition">
+                        <div class="ds-label">BRANCH</div>
+                        <div class="text-lg font-bold" style="color:#0b2a4a">{{ $bName }}</div>
 
                         <div class="mt-4">
-                            <div class="text-sm text-gray-600 font-semibold">Value</div>
-                            <div class="mt-1 h-3 rounded bg-gray-200 overflow-hidden">
-                                <div class="h-3 {{ $bValueBar }}" style="width: {{ min(100, max(0, $bValuePct)) }}%"></div>
+                            <div class="ds-label mb-1">Value</div>
+                            <div class="ds-progress-track">
+                                <div class="ds-progress-bar {{ $bValueBar }}" style="width: {{ min(100, max(0, $bValuePct)) }}%"></div>
                             </div>
-                            <div class="mt-1 text-xs text-gray-600">
+                            <div class="mt-1 text-xs" style="color:#64748b">
                                 R {{ number_format($bValueActual,0) }} / R {{ number_format($bValueTarget,0) }} ({{ number_format($bValuePct,1) }}%)
                             </div>
                         </div>
 
                         <div class="mt-4">
-                            <div class="text-sm text-gray-600 font-semibold">Points</div>
-                            <div class="mt-1 h-3 rounded bg-gray-200 overflow-hidden">
-                                <div class="h-3 {{ $bPointsBar }}" style="width: {{ min(100, max(0, $bPointsPct)) }}%"></div>
+                            <div class="ds-label mb-1">Points</div>
+                            <div class="ds-progress-track">
+                                <div class="ds-progress-bar {{ $bPointsBar }}" style="width: {{ min(100, max(0, $bPointsPct)) }}%"></div>
                             </div>
-                            <div class="mt-1 text-xs text-gray-600">
+                            <div class="mt-1 text-xs" style="color:#64748b">
                                 {{ number_format($bPointsActual,0) }} / {{ number_format($bPointsTarget,0) }} ({{ number_format($bPointsPct,1) }}%)
                             </div>
                         </div>
@@ -325,107 +313,185 @@
         </div>
 
         {{-- Excel-style Agents table (company) --}}
-        <div class="card overflow-hidden">
-            <div class="p-4">
-                <div class="text-gray-900 font-semibold text-lg">Agents (targets vs actuals)</div>
-                <div class="text-sm text-gray-600">This is the management view: who is on pace, who is behind, and where to intervene.</div>
-            </div>
+        <div>
+            <div class="ds-section-header">Agents — Targets vs Actuals</div>
+            <div class="ds-section-sub mb-4">This is the management view: who is on pace, who is behind, and where to intervene.</div>
 
-            <div class="overflow-x-auto">
-                <table class="min-w-full text-sm text-gray-900">
-                    <thead class="bg-gray-50 text-gray-700">
-                        <tr>
-                            <th class="text-left px-4 py-3">Agent</th>
-                            <th class="text-right px-4 py-3">Deals (A/T)</th>
-                            <th class="text-right px-4 py-3">Sales Value (A/T)</th>
-                            <th class="text-right px-4 py-3">Points (A/T)</th>
-                            <th class="text-right px-4 py-3">Company Retained</th>
-                            <th class="text-right px-4 py-3">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr class="border-t border-black/10 bg-gray-50">
-                            <td class="px-4 py-3 font-extrabold">COMPANY TOTAL</td>
-                            <td class="px-4 py-3 text-right font-bold">
-                                {{ (int)($companyDealsActual ?? 0) }} / {{ (int)($r['totals']['targets']['deals'] ?? 0) }}
-                            </td>
-                            <td class="px-4 py-3 text-right font-bold">
-                                R {{ number_format((float)($r['totals']['actuals']['value'] ?? $r['totals']['actuals']['sales_value'] ?? 0), 0) }}
-                                / R {{ number_format((float)($r['totals']['targets']['value'] ?? 0), 0) }}
-                            </td>
-                            <td class="px-4 py-3 text-right font-bold">
-                                {{ number_format((float)($r['totals']['actuals']['points'] ?? 0), 0) }}
-                                / {{ number_format((float)($r['totals']['targets']['points'] ?? 0), 0) }}
-                            </td>
-                            <td class="px-4 py-3 text-right font-extrabold">
-                                R {{ number_format((float)($r['totals']['actuals']['team_company_retained'] ?? 0), 0) }}
-                                <div class="text-[11px] text-gray-500 font-semibold">
-                                    Ledger: R {{ number_format((float)($r['totals']['actuals']['ledger_company_retained'] ?? 0), 0) }}
-                                </div>
-                            </td>
-                            <td class="px-4 py-3 text-right text-gray-700 font-bold">—</td>
-                        </tr>
-
-                        @foreach(($r['rows'] ?? []) as $row)
-                            @php
-                                $pointsTargetRow = (float)($row['targets']['points'] ?? 0);
-                                $pointsActualRow = (float)($row['actuals']['points'] ?? 0);
-                                $pct = ($pointsTargetRow > 0) ? round(($pointsActualRow/$pointsTargetRow)*100, 1) : 0;
-                                $status = (string)($row['progress']['points_status'] ?? '—');
-
-                                $statusClass = 'text-gray-700';
-                                if (in_array($status, ['Achieved','Ahead','On pace'])) $statusClass = 'text-green-700';
-                                if ($status === 'Behind') $statusClass = 'text-red-700';
-
-                                $retained = (float)($row['actuals']['company_retained'] ?? 0);
-                                $agentIncome = (float)($row['actuals']['agent_income'] ?? 0);
-                                $valueActualRow = (float)($row['actuals']['value'] ?? $row['actuals']['sales_value'] ?? 0);
-                                $valueTargetRow = (float)($row['targets']['value'] ?? 0);
-                            @endphp
-
-                            <tr class="border-t border-black/10">
-                                <td class="px-4 py-3">
-                                    <div class="font-semibold">
-                                        <a class="text-indigo-600 hover:underline"
-                                           href="{{ route('admin.agent.performance', ['userId' => $row['user_id'], 'period' => ($r['period'] ?? now()->format('Y-m'))]) }}">
-                                            {{ $row['name'] }}
-                                        </a>
-                                    </div>
-                                    <div class="text-xs text-gray-500">
-                                        Per-day needed: {{ number_format((float)($row['progress']['points_per_day_needed'] ?? 0), 1) }}
-                                    </div>
-                                </td>
-
-                                <td class="px-4 py-3 text-right font-semibold">
-                                    {{ (int)($row['actuals']['deals'] ?? 0) }} / {{ (int)($row['targets']['deals'] ?? 0) }}
-                                </td>
-
-                                <td class="px-4 py-3 text-right font-semibold">
-                                    R {{ number_format($valueActualRow, 0) }} / R {{ number_format($valueTargetRow, 0) }}
-                                </td>
-
-                                <td class="px-4 py-3 text-right font-semibold">
-                                    {{ number_format($pointsActualRow, 0) }} / {{ number_format($pointsTargetRow, 0) }}
-                                    <div class="mt-1 h-2 rounded bg-gray-200 overflow-hidden">
-                                        <div class="h-2 {{ $pct >= 95 ? 'bg-green-600' : ($pct >= 75 ? 'bg-amber-500' : 'bg-red-600') }}"
-                                             style="width: {{ min(100, max(0, $pct)) }}%"></div>
-                                    </div>
-                                </td>
-
-                                <td class="px-4 py-3 text-right font-extrabold">
-                                    R {{ number_format($retained, 0) }}
-                                    <div class="text-[11px] text-gray-500 font-semibold">
-                                        Agent: R {{ number_format($agentIncome, 0) }}
-                                    </div>
-                                </td>
-
-                                <td class="px-4 py-3 text-right font-extrabold {{ $statusClass }}">
-                                    {{ $status }}
-                                </td>
+            <div class="card overflow-hidden" style="padding:0">
+                <div class="overflow-x-auto">
+                    <table class="ds-table min-w-full text-sm">
+                        <thead>
+                            <tr>
+                                <th class="text-left px-4 py-3">Agent</th>
+                                <th class="text-right px-4 py-3">Deals (A/T)</th>
+                                <th class="text-right px-4 py-3">Sales Value (A/T)</th>
+                                <th class="text-right px-4 py-3">Points (A/T)</th>
+                                <th class="text-right px-4 py-3">Company Retained</th>
+                                <th class="text-right px-4 py-3">Status</th>
                             </tr>
-                        @endforeach
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            <tr style="background:#f8fafc">
+                                <td class="px-4 py-3 font-extrabold" style="color:#0b2a4a">COMPANY TOTAL</td>
+                                <td class="px-4 py-3 text-right font-bold ds-value">
+                                    {{ (int)($companyDealsActual ?? 0) }} / {{ (int)($r['totals']['targets']['deals'] ?? 0) }}
+                                </td>
+                                <td class="px-4 py-3 text-right font-bold ds-value">
+                                    R {{ number_format((float)($r['totals']['actuals']['value'] ?? $r['totals']['actuals']['sales_value'] ?? 0), 0) }}
+                                    / R {{ number_format((float)($r['totals']['targets']['value'] ?? 0), 0) }}
+                                </td>
+                                <td class="px-4 py-3 text-right font-bold ds-value">
+                                    {{ number_format((float)($r['totals']['actuals']['points'] ?? 0), 0) }}
+                                    / {{ number_format((float)($r['totals']['targets']['points'] ?? 0), 0) }}
+                                </td>
+                                <td class="px-4 py-3 text-right font-extrabold ds-value">
+                                    R {{ number_format((float)($r['totals']['actuals']['team_company_retained'] ?? 0), 0) }}
+                                    <div class="text-[11px]" style="color:#94a3b8;font-weight:600">
+                                        Ledger: R {{ number_format((float)($r['totals']['actuals']['ledger_company_retained'] ?? 0), 0) }}
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 text-right font-bold" style="color:#94a3b8">—</td>
+                            </tr>
+
+                            @foreach(($r['rows'] ?? []) as $row)
+                                @php
+                                    $pointsTargetRow = (float)($row['targets']['points'] ?? 0);
+                                    $pointsActualRow = (float)($row['actuals']['points'] ?? 0);
+                                    $pct = ($pointsTargetRow > 0) ? round(($pointsActualRow/$pointsTargetRow)*100, 1) : 0;
+                                    $status = (string)($row['progress']['points_status'] ?? '—');
+
+                                    $badgeClass = 'ds-badge-default';
+                                    if (in_array($status, ['Achieved'])) $badgeClass = 'ds-badge-achieved';
+                                    elseif (in_array($status, ['Ahead'])) $badgeClass = 'ds-badge-ahead';
+                                    elseif (in_array($status, ['On pace'])) $badgeClass = 'ds-badge-ontrack';
+                                    elseif ($status === 'Behind') $badgeClass = 'ds-badge-behind';
+
+                                    $rowBar = $pct >= 80 ? 'ds-bar-navy' : ($pct >= 50 ? 'ds-bar-amber' : 'ds-bar-crimson');
+
+                                    $retained = (float)($row['actuals']['company_retained'] ?? 0);
+                                    $agentIncome = (float)($row['actuals']['agent_income'] ?? 0);
+                                    $valueActualRow = (float)($row['actuals']['value'] ?? $row['actuals']['sales_value'] ?? 0);
+                                    $valueTargetRow = (float)($row['targets']['value'] ?? 0);
+                                @endphp
+
+                                <tr>
+                                    <td class="px-4 py-3">
+                                        <div class="font-semibold">
+                                            <a class="ds-agent-link"
+                                               href="{{ route('admin.agent.performance', ['userId' => $row['user_id'], 'period' => ($r['period'] ?? now()->format('Y-m'))]) }}">
+                                                {{ $row['name'] }}
+                                            </a>
+                                        </div>
+                                        <div class="text-xs" style="color:#94a3b8">
+                                            Per-day needed: {{ number_format((float)($row['progress']['points_per_day_needed'] ?? 0), 1) }}
+                                        </div>
+                                    </td>
+
+                                    <td class="px-4 py-3 text-right font-semibold ds-value">
+                                        {{ (int)($row['actuals']['deals'] ?? 0) }} / {{ (int)($row['targets']['deals'] ?? 0) }}
+                                    </td>
+
+                                    <td class="px-4 py-3 text-right font-semibold ds-value">
+                                        R {{ number_format($valueActualRow, 0) }} / R {{ number_format($valueTargetRow, 0) }}
+                                    </td>
+
+                                    <td class="px-4 py-3 text-right font-semibold ds-value">
+                                        {{ number_format($pointsActualRow, 0) }} / {{ number_format($pointsTargetRow, 0) }}
+                                        <div class="ds-progress-track mt-1">
+                                            <div class="ds-progress-bar {{ $rowBar }}"
+                                                 style="width: {{ min(100, max(0, $pct)) }}%"></div>
+                                        </div>
+                                    </td>
+
+                                    <td class="px-4 py-3 text-right font-extrabold ds-value">
+                                        R {{ number_format($retained, 0) }}
+                                        <div class="text-[11px]" style="color:#94a3b8;font-weight:600">
+                                            Agent: R {{ number_format($agentIncome, 0) }}
+                                        </div>
+                                    </td>
+
+                                    <td class="px-4 py-3 text-right">
+                                        <span class="ds-badge {{ $badgeClass }}">{{ $status }}</span>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        {{-- ── TV ACCESS CODES ── --}}
+        <div class="space-y-3">
+            <h3 class="ds-section-header">TV Access Codes</h3>
+
+            <div class="card p-5">
+                @if(isset($tvCodes) && $tvCodes->count())
+                    <div class="overflow-x-auto">
+                        <table class="ds-table w-full text-sm">
+                            <thead>
+                                <tr class="ds-table-header">
+                                    <th class="px-4 py-2 text-left">Branch</th>
+                                    <th class="px-4 py-2 text-left">Code</th>
+                                    <th class="px-4 py-2 text-left">Generated by</th>
+                                    <th class="px-4 py-2 text-left">Created</th>
+                                    <th class="px-4 py-2 text-left">Last used</th>
+                                    <th class="px-4 py-2 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($tvCodes as $tc)
+                                    <tr class="{{ $loop->even ? 'bg-slate-800/30' : '' }}">
+                                        <td class="px-4 py-2 font-semibold" style="color:#0b2a4a">{{ $tc->branch->name ?? 'Unknown' }}</td>
+                                        <td class="px-4 py-2">
+                                            <span class="font-mono text-lg font-black tracking-widest" style="color:#0b2a4a">{{ $tc->code }}</span>
+                                        </td>
+                                        <td class="px-4 py-2 ds-label">{{ $tc->creator->name ?? '—' }}</td>
+                                        <td class="px-4 py-2 ds-label">{{ $tc->created_at->format('d M Y H:i') }}</td>
+                                        <td class="px-4 py-2 ds-label">
+                                            @if($tc->last_used_at)
+                                                <span class="text-green-600">{{ $tc->last_used_at->diffForHumans() }}</span>
+                                            @else
+                                                Never
+                                            @endif
+                                        </td>
+                                        <td class="px-4 py-2 text-right">
+                                            <form method="POST" action="{{ route('admin.tv-code.revoke') }}" class="inline">
+                                                @csrf
+                                                <input type="hidden" name="code_id" value="{{ $tc->id }}">
+                                                <button type="submit" class="px-2 py-1 rounded bg-red-700 text-white text-xs font-semibold hover:bg-red-800"
+                                                        onclick="return confirm('Revoke this code?')">
+                                                    Revoke
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @else
+                    <div class="text-sm text-gray-400">No active TV codes.</div>
+                @endif
+
+                {{-- Generate for any branch --}}
+                <div class="mt-4 flex items-center gap-3">
+                    <form method="POST" action="{{ route('admin.tv-code.generate') }}" class="flex items-center gap-2">
+                        @csrf
+                        <select name="branch_id" class="border rounded px-3 py-1.5 text-sm">
+                            <option value="">Select branch...</option>
+                            @foreach($branches ?? [] as $branch)
+                                <option value="{{ $branch->id }}">{{ $branch->name }}</option>
+                            @endforeach
+                        </select>
+                        <button type="submit" class="px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">
+                            Generate Code
+                        </button>
+                    </form>
+                    <div class="text-xs text-gray-400">
+                        TV entry: <span class="font-mono">{{ url('/tv') }}</span>
+                    </div>
+                </div>
             </div>
         </div>
 

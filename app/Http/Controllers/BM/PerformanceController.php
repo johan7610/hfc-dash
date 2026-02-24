@@ -24,6 +24,8 @@ class PerformanceController extends Controller
         // Existing rollup service (do NOT change weights system)
         $rollup = $service->getBranchRollup($branchId, $period);
 
+        $branchName = \App\Models\Branch::where('id', $branchId)->value('name') ?? 'Branch';
+
         $branchGoal = MonthlyTargetGoal::firstOrCreate(
             ['branch_id' => $branchId, 'period' => $period],
             ['listings_target' => 0, 'deals_target' => 0, 'value_target' => 0, 'branch_budget' => 0]
@@ -121,14 +123,26 @@ class PerformanceController extends Controller
         ];
 
 
-        return view('bm.performance', [            'stageFilter' => $stageFilter,
+        // Active TV code for this branch (for the TV Code component)
+        $tvCode = \App\Models\TvAccessCode::where('branch_id', $branchId)
+            ->where('is_active', true)
+            ->where(function ($q) {
+                $q->whereNull('expires_at')
+                  ->orWhere('expires_at', '>', now());
+            })
+            ->with('creator:id,name')
+            ->first();
+
+        return view('bm.performance', [
+            'branchName' => $branchName,
+            'stageFilter' => $stageFilter,
             'avgWindow' => $avgWindow,
             'avgWindowFrom' => $dateFrom,
             'avgWindowTo' => $dateTo,
             'marketAverages' => $marketAverages,
 
             'listingStats' => $listingStats,
-            'tvUrl' => url("/tv/branch/{$branchId}?token=" . env("TV_TOKEN") . "&period={$period}"),
+            'tvCode' => $tvCode,
             'statusSummary' => $statusSummary,
             'rollup' => $rollup,
             'branchGoal' => $branchGoal,

@@ -262,6 +262,10 @@ Route::get('/bm/listings', [\App\Http\Controllers\BM\ListingStockController::cla
         Route::post('/admin/tv-messages', [\App\Http\Controllers\TvMessageController::class, 'adminStore'])->name('admin.tv-messages.store');
         Route::post('/admin/tv-messages/{tvMessage}', [\App\Http\Controllers\TvMessageController::class, 'adminUpdate'])->name('admin.tv-messages.update');
         Route::post('/admin/tv-messages/{tvMessage}/delete', [\App\Http\Controllers\TvMessageController::class, 'adminDelete'])->name('admin.tv-messages.delete');
+
+        // Admin: TV Code Management (all branches)
+        Route::post('/admin/tv-code/generate', [\App\Http\Controllers\Admin\TvCodeController::class, 'generate'])->name('admin.tv-code.generate');
+        Route::post('/admin/tv-code/revoke', [\App\Http\Controllers\Admin\TvCodeController::class, 'revoke'])->name('admin.tv-code.revoke');
     });
 
     Route::middleware(['branch_manager'])->group(function () {
@@ -312,15 +316,26 @@ Route::get('/admin/targets/activity-definitions', [TargetController::class, 'act
 Route::post('bm/performance/set-agent-targets', [\App\Http\Controllers\BM\PerformanceController::class, 'setAgentTargets'])
     ->middleware('branch_manager')->name('bm.performance.setAgentTargets');
 
+// --- BM: TV Code Management ---
+Route::post('/bm/tv-code/generate', [\App\Http\Controllers\BM\TvCodeController::class, 'generate'])
+    ->middleware('branch_manager')->name('bm.tv-code.generate');
+Route::post('/bm/tv-code/revoke', [\App\Http\Controllers\BM\TvCodeController::class, 'revoke'])
+    ->middleware('branch_manager')->name('bm.tv-code.revoke');
+
 Route::post('bm/performance/align-agent-to-company', [\App\Http\Controllers\BM\PerformanceController::class, 'alignAgentToCompany'])
     ->middleware('branch_manager')->name('bm.performance.alignAgentToCompany');
 
 Route::post('bm/performance/align-targets', [\App\Http\Controllers\BM\PerformanceController::class, 'alignTargets'])->name('bm.performance.align');
 
-// --- TV (no login, token-protected) ---
+// --- TV (no login, token-protected — legacy) ---
 Route::get('/tv/branch/{branchId}', [\App\Http\Controllers\TV\BranchTvController::class, 'show'])
     ->middleware('tv')
     ->name('tv.branch');
+
+// --- TV (code-based auth — new) ---
+Route::get('/tv', [\App\Http\Controllers\TV\TvController::class, 'index'])->name('tv.index');
+Route::post('/tv/verify', [\App\Http\Controllers\TV\TvController::class, 'verify'])->name('tv.verify');
+Route::get('/tv/display/{code}', [\App\Http\Controllers\TV\TvController::class, 'display'])->name('tv.display');
 
 
 Route::post('/worksheet/align-company-target', [\App\Http\Controllers\WorksheetController::class, 'alignToCompany'])

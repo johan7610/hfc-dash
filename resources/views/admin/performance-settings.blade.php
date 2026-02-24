@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('layouts.nexus')
 
 @section('content')
 <div class="max-w-3xl mx-auto py-6">

@@ -10,6 +10,70 @@ use Illuminate\Support\Facades\DB;
 
 class DealMoneyLineRebuilder
 {
+    /**
+     * Compute deal-level VAT stripping, side pools, and external payables.
+     * Used by DealController settlement methods (settle, saveSettlement,
+     * printSettlement, printAgentPayslip) as the single source of truth
+     * for pool-level calculations.
+     *
+     * NOTE: This method does NOT round intermediate values, matching the
+     * settlement controller's existing behavior. The rebuildSingleDeal()
+     * method rounds to 2dp at each step for deal_money_lines storage.
+     * For most deals the results are identical, but edge cases with
+     * unusual commission amounts may differ by up to ~R0.01.
+     */
+    public static function computeDealPools(Deal $deal): array
+    {
+        $vatRatePercent = (float) \App\Models\PerformanceSetting::get('vat_rate', 15);
+        $vatRate = $vatRatePercent / 100;
+        $totalCommissionIncVat = (float) $deal->total_commission;
+        $totalCommissionExVat = ($totalCommissionIncVat > 0) ? ($totalCommissionIncVat / (1.0 + $vatRate)) : 0.0;
+
+        $vatAmt = (float)$totalCommissionIncVat - (float)$totalCommissionExVat;
+
+        $listingSplitPct = max(0.0, min(100.0, (float)($deal->listing_split_percent ?? 50)));
+        $sellingSplitPct = max(0.0, min(100.0, (float)($deal->selling_split_percent ?? 50)));
+
+        $listingSideInc = (float)$totalCommissionIncVat * ($listingSplitPct / 100.0);
+        $sellingSideInc = (float)$totalCommissionIncVat * ($sellingSplitPct / 100.0);
+
+        $listingSideEx = ($listingSideInc > 0) ? ($listingSideInc / (1.0 + $vatRate)) : 0.0;
+        $sellingSideEx = ($sellingSideInc > 0) ? ($sellingSideInc / (1.0 + $vatRate)) : 0.0;
+
+        $listingOurPct = max(0.0, min(100.0, (float)($deal->listing_our_share_percent ?? 100)));
+        $sellingOurPct = max(0.0, min(100.0, (float)($deal->selling_our_share_percent ?? 100)));
+
+        if ($deal->listing_external) {
+            $listingPool = 0.0;
+            $listingExternalPayable = $listingSideInc;
+        } else {
+            $listingPool = $listingSideEx * ($listingOurPct / 100.0);
+            $listingExternalPayable = max(0, $listingSideInc * (1.0 - ($listingOurPct / 100.0)));
+        }
+
+        if ($deal->selling_external) {
+            $sellingPool = 0.0;
+            $sellingExternalPayable = $sellingSideInc;
+        } else {
+            $sellingPool = $sellingSideEx * ($sellingOurPct / 100.0);
+            $sellingExternalPayable = max(0, $sellingSideInc * (1.0 - ($sellingOurPct / 100.0)));
+        }
+
+        $externalPayableTotal = $listingExternalPayable + $sellingExternalPayable;
+
+        return [
+            'vatRate' => $vatRate,
+            'totalCommissionIncVat' => $totalCommissionIncVat,
+            'totalCommissionExVat' => $totalCommissionExVat,
+            'vatAmt' => $vatAmt,
+            'listingPool' => $listingPool,
+            'sellingPool' => $sellingPool,
+            'listingExternalPayable' => $listingExternalPayable,
+            'sellingExternalPayable' => $sellingExternalPayable,
+            'externalPayableTotal' => $externalPayableTotal,
+        ];
+    }
+
     public static function rebuild(?string $period = null, ?int $dealId = null, bool $dryRun = false): int
     {
         $q = Deal::query();

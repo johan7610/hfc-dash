@@ -143,7 +143,7 @@
                         <div class="flex items-center gap-2">
                             <div class="font-semibold">{{ $a->name }}</div>
                             @if(($a->role ?? '') === 'branch_manager')
-                                <span class="text-[10px] px-2 py-0.5 rounded bg-indigo-100 text-indigo-800">BM</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded bg-sky-100 text-[#0b2a4a]">BM</span>
                             @endif
                         </div>
                     </td>

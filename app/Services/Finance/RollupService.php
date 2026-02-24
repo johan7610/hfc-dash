@@ -39,6 +39,35 @@ class RollupService
     private const MATCH_TOLERANCE = 0.01;
 
     /**
+     * Lightweight period refresh — auto-triggered after deal changes.
+     * Creates a minimal audit run and recomputes all rollups for the period.
+     */
+    public function refreshPeriod(string $period): void
+    {
+        $run = FinanceAuditRun::create([
+            'period'         => $period,
+            'scope'          => json_encode(['trigger' => 'auto']),
+            'status'         => 'running',
+            'engine_version' => FinanceEngine::ENGINE_VERSION,
+            'started_at'     => now(),
+        ]);
+
+        try {
+            $this->computeRollups($run, $period, 500, [
+                'roles'  => ['agent', 'bm', 'admin'],
+                'stages' => self::ALL_STAGES,
+            ]);
+            $run->update(['status' => 'complete', 'finished_at' => now()]);
+        } catch (\Throwable $e) {
+            $run->update(['status' => 'failed', 'finished_at' => now()]);
+            \Log::error('RollupService::refreshPeriod failed', [
+                'period' => $period,
+                'error'  => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
      * Canonical stage derivation — matches Deal::statusSummaryForBranch logic exactly.
      */
     public static function dealStage(Deal $deal): string
@@ -100,8 +129,10 @@ class RollupService
         $branchData  = [];
         $companyData = [];
 
+        $ledgerData  = []; // Ledger view: keyed by deal.branch_id (accounting truth)
+
         foreach ($stages as $s) {
-            $companyData[$s] = ['count' => 0, 'income' => 0.0, 'property_value' => 0.0, 'deals' => []];
+            $companyData[$s] = ['count' => 0, 'income' => 0.0, 'company_income' => 0.0, 'retained' => 0.0, 'property_value' => 0.0, 'deals' => []];
         }
 
         foreach ($deals as $deal) {
@@ -125,12 +156,21 @@ class RollupService
             $propertyValueShare = round($propertyValue / $agentCount, 4);
 
             // ---- Company rollup ----
+            // income = agent_income (sum of agent shares), company_income = full side pool (CommissionCalculator)
+            $dealFullCompanyIncome = (float) CommissionCalculator::companyIncomeExVat($deal);
+            if ($stage === 'declined') {
+                $dealFullCompanyIncome = 0.0;
+            }
+            $dealAgentIncomeTotal = round(array_sum($byAgent), 2);
+            $dealRetainedTotal    = round($dealFullCompanyIncome - $dealAgentIncomeTotal, 2);
+
             if ($doCompany) {
-                $dealCompanyIncome = round(array_sum($byAgent), 2);
                 $companyData[$stage]['count']++;
-                $companyData[$stage]['income']          = round($companyData[$stage]['income'] + $dealCompanyIncome, 2);
+                $companyData[$stage]['income']          = round($companyData[$stage]['income'] + $dealAgentIncomeTotal, 2);
+                $companyData[$stage]['company_income']  = round($companyData[$stage]['company_income'] + $dealFullCompanyIncome, 2);
+                $companyData[$stage]['retained']        = round($companyData[$stage]['retained'] + $dealRetainedTotal, 2);
                 $companyData[$stage]['property_value']  = round($companyData[$stage]['property_value'] + $propertyValue, 2);
-                $companyData[$stage]['deals'][$deal->id] = $dealCompanyIncome;
+                $companyData[$stage]['deals'][$deal->id] = $dealAgentIncomeTotal;
             }
 
             // ---- Build uid→branch_id map (one lookup per agent, regardless of pivot row count) ----
@@ -144,12 +184,14 @@ class RollupService
 
             // ---- Agent + branch rollup — iterate byAgent keys (already deduplicated per agent) ----
             // $byAgent[uid] = combined income across all sides for this deal; must only be added once.
-            $branchDealIncome        = []; // [branch_id => income for this deal]
-            $branchDealPropertyValue = []; // [branch_id => property_value_share for this deal]
+            $branchDealIncome         = []; // [branch_id => agent_income for this deal]
+            $branchDealRetained       = []; // [branch_id => retained for this deal]
+            $branchDealCompanyIncome  = []; // [branch_id => company_income for this deal]
+            $branchDealPropertyValue  = []; // [branch_id => property_value_share for this deal]
 
             // Retained per agent — canonical computation via CommissionCalculator.
-            $byAgentRetained = $doAgent ? CommissionCalculator::dealRetainedByAgentExVat($deal) : [];
-            if ($doAgent && $stage === 'declined') {
+            $byAgentRetained = ($doAgent || $doBranch) ? CommissionCalculator::dealRetainedByAgentExVat($deal) : [];
+            if (($doAgent || $doBranch) && $stage === 'declined') {
                 $byAgentRetained = array_map(fn($v) => 0.0, $byAgentRetained);
             }
 
@@ -175,7 +217,10 @@ class RollupService
 
                 // ---- Branch accumulation (aggregate all agents per branch per deal) ----
                 if ($doBranch && $branchId > 0) {
+                    $agentRetained = (float)($byAgentRetained[$uid] ?? 0.0);
                     $branchDealIncome[$branchId]        = round(($branchDealIncome[$branchId]        ?? 0.0) + $agentInc, 2);
+                    $branchDealRetained[$branchId]      = round(($branchDealRetained[$branchId]      ?? 0.0) + $agentRetained, 2);
+                    $branchDealCompanyIncome[$branchId]  = round(($branchDealCompanyIncome[$branchId]  ?? 0.0) + $agentInc + $agentRetained, 2);
                     $branchDealPropertyValue[$branchId] = round(($branchDealPropertyValue[$branchId] ?? 0.0) + $propertyValueShare, 2);
                 }
             }
@@ -185,7 +230,7 @@ class RollupService
                 foreach ($branchDealIncome as $branchId => $income) {
                     if (!isset($branchData[$branchId])) {
                         foreach ($stages as $s) {
-                            $branchData[$branchId][$s] = ['count' => 0, 'income' => 0.0, 'property_value' => 0.0, 'deals' => []];
+                            $branchData[$branchId][$s] = ['count' => 0, 'income' => 0.0, 'company_income' => 0.0, 'retained' => 0.0, 'property_value' => 0.0, 'deals' => []];
                         }
                     }
                     // Count each deal once per branch
@@ -194,9 +239,27 @@ class RollupService
                     }
                     $prev = $branchData[$branchId][$stage]['deals'][$deal->id] ?? 0.0;
                     $branchData[$branchId][$stage]['deals'][$deal->id] = round($prev + $income, 2);
-                    $branchData[$branchId][$stage]['income']         = round($branchData[$branchId][$stage]['income'] + $income, 2);
-                    $branchData[$branchId][$stage]['property_value'] = round($branchData[$branchId][$stage]['property_value'] + ($branchDealPropertyValue[$branchId] ?? 0.0), 2);
+                    $branchData[$branchId][$stage]['income']          = round($branchData[$branchId][$stage]['income'] + $income, 2);
+                    $branchData[$branchId][$stage]['company_income']  = round($branchData[$branchId][$stage]['company_income'] + ($branchDealCompanyIncome[$branchId] ?? 0.0), 2);
+                    $branchData[$branchId][$stage]['retained']        = round($branchData[$branchId][$stage]['retained'] + ($branchDealRetained[$branchId] ?? 0.0), 2);
+                    $branchData[$branchId][$stage]['property_value']  = round($branchData[$branchId][$stage]['property_value'] + ($branchDealPropertyValue[$branchId] ?? 0.0), 2);
                 }
+            }
+
+            // ---- Ledger accumulation (by deal.branch_id — accounting truth) ----
+            $dealBranchId = (int)($deal->branch_id ?? 0);
+            if ($dealBranchId > 0) {
+                if (!isset($ledgerData[$dealBranchId])) {
+                    foreach ($stages as $s) {
+                        $ledgerData[$dealBranchId][$s] = ['count' => 0, 'company_income' => 0.0, 'agent_income' => 0.0, 'deals' => []];
+                    }
+                }
+                if (!isset($ledgerData[$dealBranchId][$stage]['deals'][$deal->id])) {
+                    $ledgerData[$dealBranchId][$stage]['count']++;
+                }
+                $ledgerData[$dealBranchId][$stage]['company_income'] = round($ledgerData[$dealBranchId][$stage]['company_income'] + $dealFullCompanyIncome, 2);
+                $ledgerData[$dealBranchId][$stage]['agent_income']   = round($ledgerData[$dealBranchId][$stage]['agent_income'] + $dealAgentIncomeTotal, 2);
+                $ledgerData[$dealBranchId][$stage]['deals'][$deal->id] = $dealFullCompanyIncome;
             }
         }
 
@@ -219,6 +282,13 @@ class RollupService
                         "agent_period.money.{$stage}.agent_income_ex_vat", $data['income'], null);
                     $this->upsertComputedValue($run, $agentDefs, 'agent_period', $uid, $period,
                         "agent_period.money.{$stage}.breakdown_json", null, $breakdown);
+
+                    // company_income = income + retained (full side pool before agent/company split)
+                    $stageCompanyIncome = round($data['income'] + ($data['retained'] ?? 0.0), 2);
+                    $this->writeNumericItem($run, 'agent_period', $uid, $period,
+                        "agent_period.money.{$stage}.company_income_ex_vat", $stageCompanyIncome);
+                    $this->upsertComputedValue($run, $agentDefs, 'agent_period', $uid, $period,
+                        "agent_period.money.{$stage}.company_income_ex_vat", $stageCompanyIncome, null);
                 }
             }
         }
@@ -241,6 +311,39 @@ class RollupService
                         "branch_period.money.{$stage}.team_agent_income_ex_vat", $data['income'], null);
                     $this->upsertComputedValue($run, $branchDefs, 'branch_period', $branchId, $period,
                         "branch_period.money.{$stage}.breakdown_json", null, $breakdown);
+
+                    // Team company_income and retained
+                    $this->writeNumericItem($run, 'branch_period', $branchId, $period,
+                        "branch_period.money.{$stage}.team_company_income_ex_vat", $data['company_income']);
+                    $this->upsertComputedValue($run, $branchDefs, 'branch_period', $branchId, $period,
+                        "branch_period.money.{$stage}.team_company_income_ex_vat", $data['company_income'], null);
+                    $this->writeNumericItem($run, 'branch_period', $branchId, $period,
+                        "branch_period.money.{$stage}.team_company_retained_ex_vat", $data['retained']);
+                    $this->upsertComputedValue($run, $branchDefs, 'branch_period', $branchId, $period,
+                        "branch_period.money.{$stage}.team_company_retained_ex_vat", $data['retained'], null);
+                }
+            }
+        }
+
+        // ---- Write per-stage ledger keys (by deal.branch_id) into branch_period ----
+        if ($doBranch && !empty($ledgerData)) {
+            $branchDefs = $branchDefs ?? $this->ensureBranchPeriodDefinitions($stages);
+            foreach ($ledgerData as $branchId => $stageBuckets) {
+                foreach ($stageBuckets as $stage => $data) {
+                    $this->writeNumericItem($run, 'branch_period', $branchId, $period,
+                        "branch_period.money.{$stage}.ledger_company_income_ex_vat", $data['company_income']);
+                    $this->upsertComputedValue($run, $branchDefs, 'branch_period', $branchId, $period,
+                        "branch_period.money.{$stage}.ledger_company_income_ex_vat", $data['company_income'], null);
+                    $this->writeNumericItem($run, 'branch_period', $branchId, $period,
+                        "branch_period.money.{$stage}.ledger_agent_income_ex_vat", $data['agent_income']);
+                    $this->upsertComputedValue($run, $branchDefs, 'branch_period', $branchId, $period,
+                        "branch_period.money.{$stage}.ledger_agent_income_ex_vat", $data['agent_income'], null);
+
+                    $ledgerRetained = round($data['company_income'] - $data['agent_income'], 2);
+                    $this->writeNumericItem($run, 'branch_period', $branchId, $period,
+                        "branch_period.money.{$stage}.ledger_company_retained_ex_vat", $ledgerRetained);
+                    $this->upsertComputedValue($run, $branchDefs, 'branch_period', $branchId, $period,
+                        "branch_period.money.{$stage}.ledger_company_retained_ex_vat", $ledgerRetained, null);
                 }
             }
         }
@@ -262,6 +365,42 @@ class RollupService
                     "company_period.money.{$stage}.team_agent_income_ex_vat", $data['income'], null);
                 $this->upsertComputedValue($run, $companyDefs, 'company_period', 1, $period,
                     "company_period.money.{$stage}.breakdown_json", null, $breakdown);
+
+                // Company-level company_income and retained per-stage
+                $this->writeNumericItem($run, 'company_period', 1, $period,
+                    "company_period.money.{$stage}.team_company_income_ex_vat", $data['company_income']);
+                $this->upsertComputedValue($run, $companyDefs, 'company_period', 1, $period,
+                    "company_period.money.{$stage}.team_company_income_ex_vat", $data['company_income'], null);
+                $this->writeNumericItem($run, 'company_period', 1, $period,
+                    "company_period.money.{$stage}.team_company_retained_ex_vat", $data['retained']);
+                $this->upsertComputedValue($run, $companyDefs, 'company_period', 1, $period,
+                    "company_period.money.{$stage}.team_company_retained_ex_vat", $data['retained'], null);
+            }
+
+            // ---- Company-level ledger per-stage (aggregate ledgerData across all branches) ----
+            if (!empty($ledgerData)) {
+                foreach ($stages as $stage) {
+                    $compLedgerCompanyIncome = 0.0;
+                    $compLedgerAgentIncome   = 0.0;
+                    foreach ($ledgerData as $branchId => $lBuckets) {
+                        $compLedgerCompanyIncome = round($compLedgerCompanyIncome + ($lBuckets[$stage]['company_income'] ?? 0.0), 2);
+                        $compLedgerAgentIncome   = round($compLedgerAgentIncome + ($lBuckets[$stage]['agent_income'] ?? 0.0), 2);
+                    }
+                    $this->writeNumericItem($run, 'company_period', 1, $period,
+                        "company_period.money.{$stage}.ledger_company_income_ex_vat", $compLedgerCompanyIncome);
+                    $this->upsertComputedValue($run, $companyDefs, 'company_period', 1, $period,
+                        "company_period.money.{$stage}.ledger_company_income_ex_vat", $compLedgerCompanyIncome, null);
+                    $this->writeNumericItem($run, 'company_period', 1, $period,
+                        "company_period.money.{$stage}.ledger_agent_income_ex_vat", $compLedgerAgentIncome);
+                    $this->upsertComputedValue($run, $companyDefs, 'company_period', 1, $period,
+                        "company_period.money.{$stage}.ledger_agent_income_ex_vat", $compLedgerAgentIncome, null);
+
+                    $compLedgerRetained = round($compLedgerCompanyIncome - $compLedgerAgentIncome, 2);
+                    $this->writeNumericItem($run, 'company_period', 1, $period,
+                        "company_period.money.{$stage}.ledger_company_retained_ex_vat", $compLedgerRetained);
+                    $this->upsertComputedValue($run, $companyDefs, 'company_period', 1, $period,
+                        "company_period.money.{$stage}.ledger_company_retained_ex_vat", $compLedgerRetained, null);
+                }
             }
         }
 
@@ -291,6 +430,26 @@ class RollupService
                     'agent_period.money.total_nondeclined.retained_ex_vat', $retainedTotal);
                 $this->upsertComputedValue($run, $agentDefsForTotal, 'agent_period', $uid, $period,
                     'agent_period.money.total_nondeclined.retained_ex_vat', $retainedTotal, null);
+
+                // total_nondeclined company_income (income + retained)
+                $companyIncomeTotal = round($engineTotal + $retainedTotal, 2);
+                $this->writeNumericItem($run, 'agent_period', $uid, $period,
+                    'agent_period.money.total_nondeclined.company_income_ex_vat', $companyIncomeTotal);
+                $this->upsertComputedValue($run, $agentDefsForTotal, 'agent_period', $uid, $period,
+                    'agent_period.money.total_nondeclined.company_income_ex_vat', $companyIncomeTotal, null);
+
+                // total_nondeclined deal count
+                $nondeclinedDealCount = 0.0;
+                foreach ($stageBuckets as $cntStage => $cntData) {
+                    if ($cntStage !== 'declined') {
+                        $nondeclinedDealCount += $cntData['count'];
+                    }
+                }
+                $this->writeNumericItem($run, 'agent_period', $uid, $period,
+                    'agent_period.deals.total_nondeclined.count', $nondeclinedDealCount);
+                $this->upsertComputedValue($run, $agentDefsForTotal, 'agent_period', $uid, $period,
+                    'agent_period.deals.total_nondeclined.count', $nondeclinedDealCount, null);
+
                 $regGrantedTotal = round(
                     ($stageBuckets['registered']['income'] ?? 0.0) +
                     ($stageBuckets['granted']['income']    ?? 0.0),
@@ -371,6 +530,54 @@ class RollupService
                     'branch_period.value.registered_granted.property_value_inc_vat', $regGrantedPvBranch);
                 $this->upsertComputedValue($run, $branchDefsForTotal, 'branch_period', $branchId, $period,
                     'branch_period.value.registered_granted.property_value_inc_vat', $regGrantedPvBranch, null);
+
+                // total_nondeclined team company_income and retained
+                $branchCompanyIncomeTotal = 0.0;
+                $branchRetainedTotal      = 0.0;
+                $branchNondeclinedCount   = 0.0;
+                foreach ($stageBuckets as $ndStage => $ndData) {
+                    if ($ndStage !== 'declined') {
+                        $branchCompanyIncomeTotal = round($branchCompanyIncomeTotal + ($ndData['company_income'] ?? 0.0), 2);
+                        $branchRetainedTotal      = round($branchRetainedTotal + ($ndData['retained'] ?? 0.0), 2);
+                        $branchNondeclinedCount  += $ndData['count'];
+                    }
+                }
+                $this->writeNumericItem($run, 'branch_period', $branchId, $period,
+                    'branch_period.money.total_nondeclined.team_company_income_ex_vat', $branchCompanyIncomeTotal);
+                $this->upsertComputedValue($run, $branchDefsForTotal, 'branch_period', $branchId, $period,
+                    'branch_period.money.total_nondeclined.team_company_income_ex_vat', $branchCompanyIncomeTotal, null);
+                $this->writeNumericItem($run, 'branch_period', $branchId, $period,
+                    'branch_period.money.total_nondeclined.team_company_retained_ex_vat', $branchRetainedTotal);
+                $this->upsertComputedValue($run, $branchDefsForTotal, 'branch_period', $branchId, $period,
+                    'branch_period.money.total_nondeclined.team_company_retained_ex_vat', $branchRetainedTotal, null);
+                $this->writeNumericItem($run, 'branch_period', $branchId, $period,
+                    'branch_period.deals.total_nondeclined.count', $branchNondeclinedCount);
+                $this->upsertComputedValue($run, $branchDefsForTotal, 'branch_period', $branchId, $period,
+                    'branch_period.deals.total_nondeclined.count', $branchNondeclinedCount, null);
+
+                // total_nondeclined ledger keys for this branch
+                $ledgerBranchBuckets = $ledgerData[$branchId] ?? [];
+                $branchLedgerCompanyIncomeTotal = 0.0;
+                $branchLedgerAgentIncomeTotal   = 0.0;
+                foreach ($ledgerBranchBuckets as $lStage => $lData) {
+                    if ($lStage !== 'declined') {
+                        $branchLedgerCompanyIncomeTotal = round($branchLedgerCompanyIncomeTotal + ($lData['company_income'] ?? 0.0), 2);
+                        $branchLedgerAgentIncomeTotal   = round($branchLedgerAgentIncomeTotal + ($lData['agent_income'] ?? 0.0), 2);
+                    }
+                }
+                $branchLedgerRetainedTotal = round($branchLedgerCompanyIncomeTotal - $branchLedgerAgentIncomeTotal, 2);
+                $this->writeNumericItem($run, 'branch_period', $branchId, $period,
+                    'branch_period.money.total_nondeclined.ledger_company_income_ex_vat', $branchLedgerCompanyIncomeTotal);
+                $this->upsertComputedValue($run, $branchDefsForTotal, 'branch_period', $branchId, $period,
+                    'branch_period.money.total_nondeclined.ledger_company_income_ex_vat', $branchLedgerCompanyIncomeTotal, null);
+                $this->writeNumericItem($run, 'branch_period', $branchId, $period,
+                    'branch_period.money.total_nondeclined.ledger_agent_income_ex_vat', $branchLedgerAgentIncomeTotal);
+                $this->upsertComputedValue($run, $branchDefsForTotal, 'branch_period', $branchId, $period,
+                    'branch_period.money.total_nondeclined.ledger_agent_income_ex_vat', $branchLedgerAgentIncomeTotal, null);
+                $this->writeNumericItem($run, 'branch_period', $branchId, $period,
+                    'branch_period.money.total_nondeclined.ledger_company_retained_ex_vat', $branchLedgerRetainedTotal);
+                $this->upsertComputedValue($run, $branchDefsForTotal, 'branch_period', $branchId, $period,
+                    'branch_period.money.total_nondeclined.ledger_company_retained_ex_vat', $branchLedgerRetainedTotal, null);
             }
         }
 
@@ -421,6 +628,55 @@ class RollupService
                 'company_period.value.registered_granted.property_value_inc_vat', $regGrantedPvCompany);
             $this->upsertComputedValue($run, $companyDefsForTotal, 'company_period', 1, $period,
                 'company_period.value.registered_granted.property_value_inc_vat', $regGrantedPvCompany, null);
+
+            // total_nondeclined company_income, retained, count
+            $companyCompanyIncomeTotal = 0.0;
+            $companyRetainedTotal      = 0.0;
+            $companyNondeclinedCount   = 0.0;
+            foreach ($companyData as $ndStage => $ndData) {
+                if ($ndStage !== 'declined') {
+                    $companyCompanyIncomeTotal = round($companyCompanyIncomeTotal + ($ndData['company_income'] ?? 0.0), 2);
+                    $companyRetainedTotal      = round($companyRetainedTotal + ($ndData['retained'] ?? 0.0), 2);
+                    $companyNondeclinedCount  += $ndData['count'];
+                }
+            }
+            $this->writeNumericItem($run, 'company_period', 1, $period,
+                'company_period.money.total_nondeclined.team_company_income_ex_vat', $companyCompanyIncomeTotal);
+            $this->upsertComputedValue($run, $companyDefsForTotal, 'company_period', 1, $period,
+                'company_period.money.total_nondeclined.team_company_income_ex_vat', $companyCompanyIncomeTotal, null);
+            $this->writeNumericItem($run, 'company_period', 1, $period,
+                'company_period.money.total_nondeclined.team_company_retained_ex_vat', $companyRetainedTotal);
+            $this->upsertComputedValue($run, $companyDefsForTotal, 'company_period', 1, $period,
+                'company_period.money.total_nondeclined.team_company_retained_ex_vat', $companyRetainedTotal, null);
+            $this->writeNumericItem($run, 'company_period', 1, $period,
+                'company_period.deals.total_nondeclined.count', $companyNondeclinedCount);
+            $this->upsertComputedValue($run, $companyDefsForTotal, 'company_period', 1, $period,
+                'company_period.deals.total_nondeclined.count', $companyNondeclinedCount, null);
+
+            // total_nondeclined ledger keys (aggregate across all branches)
+            $companyLedgerCompanyIncomeTotal = 0.0;
+            $companyLedgerAgentIncomeTotal   = 0.0;
+            foreach ($ledgerData as $lBranchId => $lBuckets) {
+                foreach ($lBuckets as $lStage => $lData) {
+                    if ($lStage !== 'declined') {
+                        $companyLedgerCompanyIncomeTotal = round($companyLedgerCompanyIncomeTotal + ($lData['company_income'] ?? 0.0), 2);
+                        $companyLedgerAgentIncomeTotal   = round($companyLedgerAgentIncomeTotal + ($lData['agent_income'] ?? 0.0), 2);
+                    }
+                }
+            }
+            $companyLedgerRetainedTotal = round($companyLedgerCompanyIncomeTotal - $companyLedgerAgentIncomeTotal, 2);
+            $this->writeNumericItem($run, 'company_period', 1, $period,
+                'company_period.money.total_nondeclined.ledger_company_income_ex_vat', $companyLedgerCompanyIncomeTotal);
+            $this->upsertComputedValue($run, $companyDefsForTotal, 'company_period', 1, $period,
+                'company_period.money.total_nondeclined.ledger_company_income_ex_vat', $companyLedgerCompanyIncomeTotal, null);
+            $this->writeNumericItem($run, 'company_period', 1, $period,
+                'company_period.money.total_nondeclined.ledger_agent_income_ex_vat', $companyLedgerAgentIncomeTotal);
+            $this->upsertComputedValue($run, $companyDefsForTotal, 'company_period', 1, $period,
+                'company_period.money.total_nondeclined.ledger_agent_income_ex_vat', $companyLedgerAgentIncomeTotal, null);
+            $this->writeNumericItem($run, 'company_period', 1, $period,
+                'company_period.money.total_nondeclined.ledger_company_retained_ex_vat', $companyLedgerRetainedTotal);
+            $this->upsertComputedValue($run, $companyDefsForTotal, 'company_period', 1, $period,
+                'company_period.money.total_nondeclined.ledger_company_retained_ex_vat', $companyLedgerRetainedTotal, null);
         }
     }
 
@@ -496,6 +752,10 @@ class RollupService
                 "agent_period.money.{$stage}.breakdown_json", 'agent_period', 'json',
                 "Agent income breakdown by deal — {$stage} stage"
             );
+            $defs["agent_period.money.{$stage}.company_income_ex_vat"] = FinanceEngine::ensureDefinition(
+                "agent_period.money.{$stage}.company_income_ex_vat", 'agent_period', 'money_ex_vat',
+                "Agent company income ex VAT (income + retained) — {$stage} stage"
+            );
         }
         $defs['agent_period.money.total_nondeclined.agent_income_ex_vat'] = FinanceEngine::ensureDefinition(
             'agent_period.money.total_nondeclined.agent_income_ex_vat', 'agent_period', 'money_ex_vat',
@@ -504,6 +764,14 @@ class RollupService
         $defs['agent_period.money.total_nondeclined.retained_ex_vat'] = FinanceEngine::ensureDefinition(
             'agent_period.money.total_nondeclined.retained_ex_vat', 'agent_period', 'money_ex_vat',
             'Company retained ex VAT from agent deals — total non-declined'
+        );
+        $defs['agent_period.money.total_nondeclined.company_income_ex_vat'] = FinanceEngine::ensureDefinition(
+            'agent_period.money.total_nondeclined.company_income_ex_vat', 'agent_period', 'money_ex_vat',
+            'Agent company income ex VAT (income + retained) — total non-declined'
+        );
+        $defs['agent_period.deals.total_nondeclined.count'] = FinanceEngine::ensureDefinition(
+            'agent_period.deals.total_nondeclined.count', 'agent_period', 'count',
+            'Agent deals — total non-declined count'
         );
         $defs['agent_period.money.registered_granted.agent_income_ex_vat'] = FinanceEngine::ensureDefinition(
             'agent_period.money.registered_granted.agent_income_ex_vat', 'agent_period', 'money_ex_vat',
@@ -540,6 +808,26 @@ class RollupService
                 "branch_period.money.{$stage}.breakdown_json", 'branch_period', 'json',
                 "Branch income breakdown by deal — {$stage} stage"
             );
+            $defs["branch_period.money.{$stage}.team_company_income_ex_vat"] = FinanceEngine::ensureDefinition(
+                "branch_period.money.{$stage}.team_company_income_ex_vat", 'branch_period', 'money_ex_vat',
+                "Branch team company income ex VAT — {$stage} stage"
+            );
+            $defs["branch_period.money.{$stage}.team_company_retained_ex_vat"] = FinanceEngine::ensureDefinition(
+                "branch_period.money.{$stage}.team_company_retained_ex_vat", 'branch_period', 'money_ex_vat',
+                "Branch team company retained ex VAT — {$stage} stage"
+            );
+            $defs["branch_period.money.{$stage}.ledger_company_income_ex_vat"] = FinanceEngine::ensureDefinition(
+                "branch_period.money.{$stage}.ledger_company_income_ex_vat", 'branch_period', 'money_ex_vat',
+                "Branch ledger company income ex VAT — {$stage} stage"
+            );
+            $defs["branch_period.money.{$stage}.ledger_agent_income_ex_vat"] = FinanceEngine::ensureDefinition(
+                "branch_period.money.{$stage}.ledger_agent_income_ex_vat", 'branch_period', 'money_ex_vat',
+                "Branch ledger agent income ex VAT — {$stage} stage"
+            );
+            $defs["branch_period.money.{$stage}.ledger_company_retained_ex_vat"] = FinanceEngine::ensureDefinition(
+                "branch_period.money.{$stage}.ledger_company_retained_ex_vat", 'branch_period', 'money_ex_vat',
+                "Branch ledger company retained ex VAT — {$stage} stage"
+            );
         }
         $defs['branch_period.money.total_nondeclined.team_agent_income_ex_vat'] = FinanceEngine::ensureDefinition(
             'branch_period.money.total_nondeclined.team_agent_income_ex_vat', 'branch_period', 'money_ex_vat',
@@ -548,6 +836,30 @@ class RollupService
         $defs['branch_period.money.registered_granted.team_agent_income_ex_vat'] = FinanceEngine::ensureDefinition(
             'branch_period.money.registered_granted.team_agent_income_ex_vat', 'branch_period', 'money_ex_vat',
             'Branch team agent income ex VAT — registered + granted stages combined'
+        );
+        $defs['branch_period.money.total_nondeclined.team_company_income_ex_vat'] = FinanceEngine::ensureDefinition(
+            'branch_period.money.total_nondeclined.team_company_income_ex_vat', 'branch_period', 'money_ex_vat',
+            'Branch team company income ex VAT — total non-declined'
+        );
+        $defs['branch_period.money.total_nondeclined.team_company_retained_ex_vat'] = FinanceEngine::ensureDefinition(
+            'branch_period.money.total_nondeclined.team_company_retained_ex_vat', 'branch_period', 'money_ex_vat',
+            'Branch team company retained ex VAT — total non-declined'
+        );
+        $defs['branch_period.deals.total_nondeclined.count'] = FinanceEngine::ensureDefinition(
+            'branch_period.deals.total_nondeclined.count', 'branch_period', 'count',
+            'Branch deals — total non-declined count'
+        );
+        $defs['branch_period.money.total_nondeclined.ledger_company_income_ex_vat'] = FinanceEngine::ensureDefinition(
+            'branch_period.money.total_nondeclined.ledger_company_income_ex_vat', 'branch_period', 'money_ex_vat',
+            'Branch ledger company income ex VAT — total non-declined'
+        );
+        $defs['branch_period.money.total_nondeclined.ledger_agent_income_ex_vat'] = FinanceEngine::ensureDefinition(
+            'branch_period.money.total_nondeclined.ledger_agent_income_ex_vat', 'branch_period', 'money_ex_vat',
+            'Branch ledger agent income ex VAT — total non-declined'
+        );
+        $defs['branch_period.money.total_nondeclined.ledger_company_retained_ex_vat'] = FinanceEngine::ensureDefinition(
+            'branch_period.money.total_nondeclined.ledger_company_retained_ex_vat', 'branch_period', 'money_ex_vat',
+            'Branch ledger company retained ex VAT — total non-declined'
         );
         $defs['branch_period.value.total_nondeclined.property_value_inc_vat'] = FinanceEngine::ensureDefinition(
             'branch_period.value.total_nondeclined.property_value_inc_vat', 'branch_period', 'money_inc_vat',
@@ -580,6 +892,26 @@ class RollupService
                 "company_period.money.{$stage}.breakdown_json", 'company_period', 'json',
                 "Company income breakdown by deal — {$stage} stage"
             );
+            $defs["company_period.money.{$stage}.team_company_income_ex_vat"] = FinanceEngine::ensureDefinition(
+                "company_period.money.{$stage}.team_company_income_ex_vat", 'company_period', 'money_ex_vat',
+                "Company team company income ex VAT — {$stage} stage"
+            );
+            $defs["company_period.money.{$stage}.team_company_retained_ex_vat"] = FinanceEngine::ensureDefinition(
+                "company_period.money.{$stage}.team_company_retained_ex_vat", 'company_period', 'money_ex_vat',
+                "Company team company retained ex VAT — {$stage} stage"
+            );
+            $defs["company_period.money.{$stage}.ledger_company_income_ex_vat"] = FinanceEngine::ensureDefinition(
+                "company_period.money.{$stage}.ledger_company_income_ex_vat", 'company_period', 'money_ex_vat',
+                "Company ledger company income ex VAT — {$stage} stage"
+            );
+            $defs["company_period.money.{$stage}.ledger_agent_income_ex_vat"] = FinanceEngine::ensureDefinition(
+                "company_period.money.{$stage}.ledger_agent_income_ex_vat", 'company_period', 'money_ex_vat',
+                "Company ledger agent income ex VAT — {$stage} stage"
+            );
+            $defs["company_period.money.{$stage}.ledger_company_retained_ex_vat"] = FinanceEngine::ensureDefinition(
+                "company_period.money.{$stage}.ledger_company_retained_ex_vat", 'company_period', 'money_ex_vat',
+                "Company ledger company retained ex VAT — {$stage} stage"
+            );
         }
         $defs['company_period.money.total_nondeclined.team_agent_income_ex_vat'] = FinanceEngine::ensureDefinition(
             'company_period.money.total_nondeclined.team_agent_income_ex_vat', 'company_period', 'money_ex_vat',
@@ -588,6 +920,30 @@ class RollupService
         $defs['company_period.money.registered_granted.team_agent_income_ex_vat'] = FinanceEngine::ensureDefinition(
             'company_period.money.registered_granted.team_agent_income_ex_vat', 'company_period', 'money_ex_vat',
             'Company team agent income ex VAT — registered + granted stages combined'
+        );
+        $defs['company_period.money.total_nondeclined.team_company_income_ex_vat'] = FinanceEngine::ensureDefinition(
+            'company_period.money.total_nondeclined.team_company_income_ex_vat', 'company_period', 'money_ex_vat',
+            'Company team company income ex VAT — total non-declined'
+        );
+        $defs['company_period.money.total_nondeclined.team_company_retained_ex_vat'] = FinanceEngine::ensureDefinition(
+            'company_period.money.total_nondeclined.team_company_retained_ex_vat', 'company_period', 'money_ex_vat',
+            'Company team company retained ex VAT — total non-declined'
+        );
+        $defs['company_period.deals.total_nondeclined.count'] = FinanceEngine::ensureDefinition(
+            'company_period.deals.total_nondeclined.count', 'company_period', 'count',
+            'Company deals — total non-declined count'
+        );
+        $defs['company_period.money.total_nondeclined.ledger_company_income_ex_vat'] = FinanceEngine::ensureDefinition(
+            'company_period.money.total_nondeclined.ledger_company_income_ex_vat', 'company_period', 'money_ex_vat',
+            'Company ledger company income ex VAT — total non-declined'
+        );
+        $defs['company_period.money.total_nondeclined.ledger_agent_income_ex_vat'] = FinanceEngine::ensureDefinition(
+            'company_period.money.total_nondeclined.ledger_agent_income_ex_vat', 'company_period', 'money_ex_vat',
+            'Company ledger agent income ex VAT — total non-declined'
+        );
+        $defs['company_period.money.total_nondeclined.ledger_company_retained_ex_vat'] = FinanceEngine::ensureDefinition(
+            'company_period.money.total_nondeclined.ledger_company_retained_ex_vat', 'company_period', 'money_ex_vat',
+            'Company ledger company retained ex VAT — total non-declined'
         );
         $defs['company_period.value.total_nondeclined.property_value_inc_vat'] = FinanceEngine::ensureDefinition(
             'company_period.value.total_nondeclined.property_value_inc_vat', 'company_period', 'money_inc_vat',

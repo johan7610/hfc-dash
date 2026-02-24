@@ -15,7 +15,7 @@
         </p>
     </div>
     <a href="{{ route('presentations.index') }}"
-       class="text-xs text-indigo-600 hover:underline mt-1">← Back to Presentations</a>
+       class="text-xs text-[#00b4d8] hover:underline mt-1">← Back to Presentations</a>
 </div>
 
 {{-- ══════════════════════════════════════════════════════════════════════════
@@ -77,7 +77,7 @@
         </div>
         <div class="mt-4">
             <button type="submit"
-                    class="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700">
+                    class="px-5 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded hover:bg-[#081f36]">
                 Re-run Analysis
             </button>
         </div>
@@ -87,12 +87,12 @@
 {{-- ══════════════════════════════════════════════════════════════════════════
      SELLER SUMMARY HERO — "Sale Probability at Your Price"
 ══════════════════════════════════════════════════════════════════════════ --}}
-<div class="bg-gradient-to-br from-indigo-700 to-indigo-900 rounded-xl shadow-lg p-6 mb-6 text-white">
-    <p class="text-indigo-200 text-xs font-semibold uppercase tracking-widest mb-1">Seller Summary</p>
+<div class="bg-gradient-to-br from-[#0b2a4a] to-[#061a30] rounded-xl shadow-lg p-6 mb-6 text-white">
+    <p class="text-sky-200 text-xs font-semibold uppercase tracking-widest mb-1">Seller Summary</p>
     <h2 class="text-xl font-bold mb-5">Sale Probability at Your Price</h2>
 
     @if($spResult->skipReason)
-        <div class="bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-sm text-indigo-100">
+        <div class="bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-sm text-sky-100">
             <strong class="text-white">Insufficient data:</strong>
             {{ $spResult->skipReason }}
         </div>
@@ -101,34 +101,34 @@
         <div class="grid grid-cols-3 gap-3 mb-5">
             {{-- 30 days --}}
             <div class="bg-white/10 border border-white/20 rounded-lg p-4 text-center">
-                <p class="text-indigo-200 text-xs mb-1 font-medium">Sold in 30 days</p>
+                <p class="text-sky-200 text-xs mb-1 font-medium">Sold in 30 days</p>
                 <p class="text-3xl font-bold">
                     @if($spResult->p30 !== null)
                         {{ number_format($spResult->p30 * 100, 0) }}<span class="text-xl">%</span>
                     @else
-                        <span class="text-base font-normal text-indigo-300 italic">—</span>
+                        <span class="text-base font-normal text-sky-300 italic">—</span>
                     @endif
                 </p>
             </div>
             {{-- 60 days --}}
             <div class="bg-white/15 border border-white/30 rounded-lg p-4 text-center ring-1 ring-white/30">
-                <p class="text-indigo-200 text-xs mb-1 font-medium">Sold in 60 days</p>
+                <p class="text-sky-200 text-xs mb-1 font-medium">Sold in 60 days</p>
                 <p class="text-3xl font-bold">
                     @if($spResult->p60 !== null)
                         {{ number_format($spResult->p60 * 100, 0) }}<span class="text-xl">%</span>
                     @else
-                        <span class="text-base font-normal text-indigo-300 italic">—</span>
+                        <span class="text-base font-normal text-sky-300 italic">—</span>
                     @endif
                 </p>
             </div>
             {{-- 90 days --}}
             <div class="bg-white/10 border border-white/20 rounded-lg p-4 text-center">
-                <p class="text-indigo-200 text-xs mb-1 font-medium">Sold in 90 days</p>
+                <p class="text-sky-200 text-xs mb-1 font-medium">Sold in 90 days</p>
                 <p class="text-3xl font-bold">
                     @if($spResult->p90 !== null)
                         {{ number_format($spResult->p90 * 100, 0) }}<span class="text-xl">%</span>
                     @else
-                        <span class="text-base font-normal text-indigo-300 italic">—</span>
+                        <span class="text-base font-normal text-sky-300 italic">—</span>
                     @endif
                 </p>
             </div>
@@ -136,11 +136,11 @@
 
         {{-- Expected days banner --}}
         <div class="bg-white/10 border border-white/20 rounded-lg px-4 py-3 flex items-center justify-between">
-            <span class="text-indigo-200 text-sm">Estimated time to sell</span>
+            <span class="text-sky-200 text-sm">Estimated time to sell</span>
             @if($spResult->expectedDays !== null)
                 <span class="text-white font-bold text-lg">{{ $spResult->expectedDays }} days</span>
             @else
-                <span class="text-indigo-300 text-sm italic">
+                <span class="text-sky-300 text-sm italic">
                     {{ $spResult->skipReason ?? 'Insufficient data' }}
                 </span>
             @endif
@@ -148,7 +148,7 @@
     @endif
 
     {{-- Version trace --}}
-    <p class="mt-4 text-indigo-300 text-xs text-right font-mono">
+    <p class="mt-4 text-sky-300 text-xs text-right font-mono">
         MA {{ $maRun->model_version }} · SP {{ $spRun->model_version }} · run #{{ $spRun->id }}
     </p>
 </div>
@@ -225,13 +225,13 @@
                 @endphp
                 <div class="flex items-start gap-4">
                     {{-- Rank circle --}}
-                    <div class="shrink-0 w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold">
+                    <div class="shrink-0 w-7 h-7 rounded-full bg-sky-100 text-[#0b2a4a] flex items-center justify-center text-xs font-bold">
                         {{ $loop->iteration }}
                     </div>
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center justify-between mb-1">
                             <span class="text-sm font-medium text-gray-800">{{ $label }}</span>
-                            <span class="text-xs font-semibold text-indigo-700 ml-2 shrink-0">{{ $contribPct }}%</span>
+                            <span class="text-xs font-semibold text-[#0b2a4a] ml-2 shrink-0">{{ $contribPct }}%</span>
                         </div>
                         <div class="flex items-center gap-2 mb-1.5">
                             <span class="text-xs text-gray-500">
@@ -253,10 +253,10 @@
                                     Raw: —
                                 @endif
                             </span>
-                            <span class="text-xs text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5 truncate">{{ $interp }}</span>
+                            <span class="text-xs text-[#00b4d8] bg-sky-50 rounded px-1.5 py-0.5 truncate">{{ $interp }}</span>
                         </div>
                         <div class="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                            <div class="h-full bg-indigo-500 rounded-full" style="width: {{ $barWidth }}%"></div>
+                            <div class="h-full bg-sky-500 rounded-full" style="width: {{ $barWidth }}%"></div>
                         </div>
                     </div>
                 </div>
@@ -338,7 +338,7 @@
 
     {{-- Full 21-row table inside <details> --}}
     <details>
-        <summary class="cursor-pointer text-xs text-indigo-600 hover:text-indigo-800 select-none font-medium">
+        <summary class="cursor-pointer text-xs text-[#00b4d8] hover:text-[#0b2a4a] select-none font-medium">
             Show full price sensitivity curve (21 steps)
         </summary>
         <div class="mt-3 overflow-x-auto">
@@ -357,7 +357,7 @@
                 <tbody>
                     @foreach($spResult->sensitivity as $row)
                         @php $isBase = $row['delta_rands'] === 0; @endphp
-                        <tr class="border-b last:border-0 {{ $isBase ? 'bg-indigo-50 font-semibold' : '' }}">
+                        <tr class="border-b last:border-0 {{ $isBase ? 'bg-sky-50 font-semibold' : '' }}">
                             <td class="py-1.5 px-3">
                                 @if($row['delta_rands'] > 0)
                                     +R{{ number_format($row['delta_rands'], 0, '.', ',') }}

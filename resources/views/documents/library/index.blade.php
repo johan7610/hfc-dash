@@ -31,11 +31,11 @@
 
 {{-- Attach toolbar --}}
 @if($presentation)
-<div class="mb-4 bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-    <p class="text-sm font-semibold text-indigo-800 mb-1">
+<div class="mb-4 bg-sky-50 border border-sky-200 rounded-xl p-4">
+    <p class="text-sm font-semibold text-[#0b2a4a] mb-1">
         Attaching to: {{ $presentation->title }} (#{{ $presentation->id }})
     </p>
-    <p class="text-xs text-indigo-600">Select documents below and click "Attach Selected" to link them to this presentation.</p>
+    <p class="text-xs text-[#00b4d8]">Select documents below and click "Attach Selected" to link them to this presentation.</p>
 </div>
 @endif
 
@@ -87,7 +87,7 @@
                     @enderror
                 </div>
                 <button type="submit"
-                        class="w-full px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded hover:bg-indigo-700">
+                        class="w-full px-3 py-1.5 bg-[#0b2a4a] text-white text-xs font-medium rounded hover:bg-[#081f36]">
                     Upload
                 </button>
             </form>
@@ -152,7 +152,7 @@
             <div class="mb-3 flex items-center justify-between">
                 <p class="text-xs text-gray-500">{{ $items->total() }} document(s) in library</p>
                 <button type="submit"
-                        class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                        class="px-4 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded-lg hover:bg-[#081f36] disabled:opacity-50"
                         id="attachBtn" disabled>
                     Attach Selected
                 </button>
@@ -205,7 +205,7 @@
                                     {{ $item->title ?? $item->original_name }}
                                 </td>
                                 <td class="px-3 py-2">
-                                    <span class="inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-600">
+                                    <span class="inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-sky-50 text-[#00b4d8]">
                                         {{ $docTypeLabels[$item->doc_type] ?? $item->doc_type }}
                                     </span>
                                 </td>
@@ -220,7 +220,7 @@
                                 </td>
                                 <td class="px-3 py-2 text-right">
                                     <a href="{{ route('documents.library.download', $item) }}"
-                                       class="text-indigo-600 hover:text-indigo-800 font-medium">
+                                       class="text-[#00b4d8] hover:text-[#0b2a4a] font-medium">
                                         Download
                                     </a>
                                 </td>

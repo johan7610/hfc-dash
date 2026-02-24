@@ -49,13 +49,13 @@
             <div class="nexus-panel-body">
                 <div class="space-y-2">
                     <a href="{{ route('nexus.role-manager') }}" class="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors group">
-                        <div class="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-indigo-600">
+                        <div class="w-9 h-9 rounded-lg bg-sky-50 flex items-center justify-center flex-shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-[#00b4d8]">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
                             </svg>
                         </div>
                         <div>
-                            <div class="text-sm font-semibold text-gray-900 group-hover:text-indigo-600">Role &amp; Permissions Manager</div>
+                            <div class="text-sm font-semibold text-gray-900 group-hover:text-[#00b4d8]">Role &amp; Permissions Manager</div>
                             <div class="text-xs text-gray-500">Manage role-based access and user roles</div>
                         </div>
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 text-gray-400 ml-auto">
@@ -106,14 +106,14 @@
                         </svg>
                     </a>
                     <a href="{{ route('admin.p24-suburbs.index') }}" class="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors group">
-                        <div class="w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center flex-shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-violet-600">
+                        <div class="w-9 h-9 rounded-lg bg-sky-50 flex items-center justify-center flex-shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-[#00b4d8]">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
                             </svg>
                         </div>
                         <div>
-                            <div class="text-sm font-semibold text-gray-900 group-hover:text-violet-600">P24 Suburbs</div>
+                            <div class="text-sm font-semibold text-gray-900 group-hover:text-[#00b4d8]">P24 Suburbs</div>
                             <div class="text-xs text-gray-500">Manage Property24 suburb mappings</div>
                         </div>
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 text-gray-400 ml-auto">

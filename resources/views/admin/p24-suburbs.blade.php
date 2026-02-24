@@ -42,7 +42,7 @@
                     <input type="checkbox" name="confirmed" value="1" id="new_confirmed" class="rounded">
                     <label for="new_confirmed" class="text-xs font-semibold text-gray-600">Confirmed</label>
                 </div>
-                <button type="submit" class="px-4 py-1.5 bg-indigo-600 text-white text-sm font-semibold rounded hover:bg-indigo-700">Add</button>
+                <button type="submit" class="px-4 py-1.5 bg-[#0b2a4a] text-white text-sm font-semibold rounded hover:bg-[#081f36]">Add</button>
             </form>
         </div>
     </div>
@@ -90,7 +90,7 @@
                             </td>
                             <td class="px-4 py-2 text-right">
                                 <div class="flex items-center justify-end gap-2">
-                                    <button type="submit" class="px-3 py-1 bg-indigo-600 text-white text-xs font-semibold rounded hover:bg-indigo-700">Save</button>
+                                    <button type="submit" class="px-3 py-1 bg-[#0b2a4a] text-white text-xs font-semibold rounded hover:bg-[#081f36]">Save</button>
                         </form>
                                     <form method="POST" action="{{ route('admin.p24-suburbs.destroy', $suburb) }}" class="inline" onsubmit="return confirm('Delete {{ $suburb->name }}?')">
                                         @csrf

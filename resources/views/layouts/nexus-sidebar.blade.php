@@ -31,6 +31,30 @@
     $user = auth()->user();
     $userInitials = $user ? collect(explode(' ', $user->name))->map(fn($w) => strtoupper(substr($w, 0, 1)))->take(2)->join('') : '??';
     $userRole = $user ? str_replace('_', ' ', $user->effectiveRole()) : '';
+
+    // Agency Tracker role helpers
+    $effectiveRole = $user ? strtolower(trim((string)($user->effectiveRole() ?? ($user->role ?? '')))) : '';
+    $navIsAdmin = ($effectiveRole === 'admin') || (bool)($user->is_admin ?? 0);
+    $navIsBM = ($effectiveRole === 'branch_manager');
+    $navIsAgent = ($effectiveRole === 'agent');
+    $effectiveBranchId = $user?->effectiveBranchId();
+    $atExpanded = ($nexusSection === 'agency-tracker');
+
+    // Impersonation state
+    $impersonatorId  = (int) session('impersonator_id', 0);
+    $isImpersonating = $impersonatorId > 0;
+    $canSwitchUsers  = !$isImpersonating && ($navIsAdmin || (bool)($user->is_admin ?? 0));
+    $impersonatorName = null;
+    if ($isImpersonating) {
+        $impersonatorName = \Illuminate\Support\Facades\DB::table('users')->where('id', $impersonatorId)->value('name');
+    }
+    $switchUsers = collect();
+    if ($canSwitchUsers) {
+        $switchUsers = \Illuminate\Support\Facades\DB::table('users')
+            ->where('is_active', 1)
+            ->orderBy('name')
+            ->get(['id','name','email','role']);
+    }
 @endphp
 
 <div class="nexus-sidebar">
@@ -127,14 +151,83 @@
         </a>
         @endif
 
-        {{-- Agency Tracker (direct link) --}}
-        <a href="{{ route('worksheet.index') }}" class="nexus-nav-item {{ $nexusSection === 'agency-tracker' ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 0 0 .75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 0 0-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0 1 12 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 0 1-.673-.38m0 0A2.18 2.18 0 0 1 3 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 0 1 3.413-.387m7.5 0V5.25A2.25 2.25 0 0 0 13.5 3h-3a2.25 2.25 0 0 0-2.25 2.25v.894m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-            </svg>
-            <span>Agency Tracker</span>
-            <svg class="nexus-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
-        </a>
+        {{-- Agency Tracker (expandable group) --}}
+        <div x-data="{ atOpen: {{ $atExpanded ? 'true' : 'false' }} }">
+            <button type="button" @click="atOpen = !atOpen" class="nexus-nav-item nexus-nav-group-toggle {{ $atExpanded ? 'active' : '' }}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 0 0 .75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 0 0-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0 1 12 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 0 1-.673-.38m0 0A2.18 2.18 0 0 1 3 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 0 1 3.413-.387m7.5 0V5.25A2.25 2.25 0 0 0 13.5 3h-3a2.25 2.25 0 0 0-2.25 2.25v.894m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                </svg>
+                <span>Agency Tracker</span>
+                <svg class="nexus-chevron transition-transform duration-200" :class="atOpen && 'rotate-90'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+            </button>
+
+            <div x-show="atOpen" x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="nexus-nav-children">
+
+                {{-- Common items (all roles) --}}
+                <a href="{{ route('worksheet.index') }}" class="nexus-nav-subitem {{ request()->routeIs('worksheet.*') ? 'active' : '' }}">Worksheet</a>
+                <a href="{{ route('agent.listings') }}" class="nexus-nav-subitem {{ request()->routeIs('agent.listings*') ? 'active' : '' }}">My Listing Stock</a>
+                @if($user && ($user->can_capture_rentals || in_array($effectiveRole, ['admin','branch_manager'])))
+                <a href="{{ route('rentals.index') }}" class="nexus-nav-subitem {{ request()->routeIs('rentals.*') ? 'active' : '' }}">Rentals</a>
+                @endif
+
+                {{-- Agent section --}}
+                @if($navIsAgent)
+                <div class="nexus-nav-sublabel">My Performance</div>
+                <a href="{{ route('agent.dashboard') }}" class="nexus-nav-subitem {{ request()->routeIs('agent.dashboard') ? 'active' : '' }}">Agent Dashboard</a>
+                <a href="{{ route('agent.daily.summary') }}" class="nexus-nav-subitem {{ request()->routeIs('agent.daily.summary*') ? 'active' : '' }}">Daily Activity Summary</a>
+                <a href="{{ route('agent.daily') }}" class="nexus-nav-subitem {{ request()->routeIs('agent.daily') ? 'active' : '' }}">My Daily Activity</a>
+                <a href="{{ route('agent.deals.index') }}" class="nexus-nav-subitem {{ request()->routeIs('agent.deals.*') ? 'active' : '' }}">My Deals</a>
+                @endif
+
+                {{-- Branch Manager section --}}
+                @if($navIsBM)
+                <div class="nexus-nav-sublabel">Branch</div>
+                <a href="{{ route('bm.performance') }}" class="nexus-nav-subitem {{ request()->routeIs('bm.performance*') ? 'active' : '' }}">Branch Performance</a>
+                <a href="{{ route('bm.daily.summary') }}" class="nexus-nav-subitem {{ request()->routeIs('bm.daily.summary*') ? 'active' : '' }}">Daily Activity Summary</a>
+                <a href="{{ route('bm.listings') }}" class="nexus-nav-subitem {{ request()->routeIs('bm.listings*') ? 'active' : '' }}">Branch Listing Stock</a>
+                <a href="{{ route('bm.my.dashboard') }}" class="nexus-nav-subitem {{ request()->routeIs('bm.my.dashboard') ? 'active' : '' }}">My Agent Dashboard</a>
+                <a href="{{ route('admin.deals') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.deals*') ? 'active' : '' }}">Deal Register</a>
+                <div class="nexus-nav-sublabel">Setup</div>
+                <a href="{{ route('bm.worksheet.market') }}" class="nexus-nav-subitem {{ request()->routeIs('bm.worksheet.market*') ? 'active' : '' }}">Worksheet Market</a>
+                <a href="{{ route('admin.daily.summary') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.daily.summary*') ? 'active' : '' }}">Daily Activity Summary</a>
+                <a href="{{ route('admin.targets') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.targets*') ? 'active' : '' }}">Daily Activity Targets</a>
+                <a href="{{ route('admin.targets.activity.definitions') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.targets.activity.definitions*') ? 'active' : '' }}">Activity Definitions</a>
+                <a href="{{ route('admin.targets.activity.setup') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.targets.activity.setup*') ? 'active' : '' }}">Activity Setup</a>
+                <a href="{{ route('bm.tv-messages') }}" class="nexus-nav-subitem {{ request()->routeIs('bm.tv-messages*') ? 'active' : '' }}">TV Messages</a>
+                @if($effectiveBranchId)
+                <a href="{{ route('agent.daily') }}" class="nexus-nav-subitem {{ request()->routeIs('agent.daily') ? 'active' : '' }}">Daily Activity Capture</a>
+                @endif
+                @endif
+
+                {{-- Admin section --}}
+                @if($navIsAdmin)
+                <div class="nexus-nav-sublabel">Admin</div>
+                <a href="{{ route('admin.performance') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.performance') ? 'active' : '' }}">Performance</a>
+                @if(\Illuminate\Support\Facades\Route::has('admin.listings.stock'))
+                <a href="{{ route('admin.listings.stock') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.listings.stock*') ? 'active' : '' }}">Company Listing Stock</a>
+                @endif
+                <a href="{{ route('admin.performance-settings.edit') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.performance-settings*') ? 'active' : '' }}">Company Settings</a>
+                <a href="{{ route('admin.designations.index') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.designations*') ? 'active' : '' }}">Designations</a>
+                <a href="{{ route('admin.deals') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.deals*') ? 'active' : '' }}">Deal Register</a>
+                <a href="{{ route('admin.listings.agents') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.listings.agents*') ? 'active' : '' }}">Listing Stock</a>
+                <a href="{{ route('admin.listings.import') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.listings.import*') ? 'active' : '' }}">Import Listings</a>
+                <a href="{{ route('admin.daily.summary') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.daily.summary*') ? 'active' : '' }}">Daily Activity Summary</a>
+                <a href="{{ route('admin.targets') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.targets') ? 'active' : '' }}">Targets</a>
+                <a href="{{ route('admin.targets.activity.definitions') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.targets.activity.definitions*') ? 'active' : '' }}">Activity Definitions</a>
+                <a href="{{ route('admin.targets.activity.setup') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.targets.activity.setup*') ? 'active' : '' }}">Activity Setup</a>
+                <a href="{{ route('admin.worksheet-market') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.worksheet-market*') ? 'active' : '' }}">Worksheet Market</a>
+                <a href="{{ route('admin.branch-assignments') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.branch-assignments') ? 'active' : '' }}">Branch Assignments</a>
+                <a href="{{ route('admin.users') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.users') ? 'active' : '' }}">Users</a>
+                <a href="{{ route('admin.tv-messages') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.tv-messages*') ? 'active' : '' }}">TV Messages</a>
+                @endif
+
+                {{-- Tools (all roles) --}}
+                <div class="nexus-nav-sublabel">Tools</div>
+                <a href="{{ route('tools.commission') }}" class="nexus-nav-subitem {{ request()->routeIs('tools.commission') && !request()->query('section') ? 'active' : '' }}">Commission Calculator</a>
+                <a href="{{ route('tools.cma') }}" class="nexus-nav-subitem {{ request()->routeIs('tools.cma') ? 'active' : '' }}">CMA Certificate Generator</a>
+                <a href="{{ route('tools.commission') }}?section=history" class="nexus-nav-subitem {{ request()->routeIs('tools.commission') && request()->query('section') === 'history' ? 'active' : '' }}">History & Logs</a>
+            </div>
+        </div>
 
         
         {{-- PDF Splitter (route-guarded) --}}
@@ -229,14 +322,62 @@
         @endif
     </nav>
 
-    {{-- User Profile --}}
+    {{-- User Profile + Impersonation --}}
     @auth
-    <div class="nexus-user-profile">
-        <div class="nexus-user-avatar">{{ $userInitials }}</div>
-        <div>
-            <div class="nexus-user-name">{{ $user->name }}</div>
-            <div class="nexus-user-role">{{ $userRole }}</div>
+    <div class="nexus-user-section" x-data="{ userMenu: false, switchPanel: false }">
+        {{-- Impersonation banner --}}
+        @if($isImpersonating)
+        <div class="nexus-impersonate-banner">
+            <div class="text-[11px] text-amber-200">Viewing as <strong>{{ $user->name ?? 'User' }}</strong></div>
+            <form method="POST" action="{{ route('impersonate.stop') }}" class="mt-1">
+                @csrf
+                <button type="submit" class="nexus-impersonate-btn">Switch back to {{ $impersonatorName ?? 'admin' }}</button>
+            </form>
         </div>
+        @endif
+
+        <div class="nexus-user-profile">
+            <div class="nexus-user-avatar">{{ $userInitials }}</div>
+            <div class="flex-1 min-w-0">
+                <div class="nexus-user-name">{{ $user->name }}</div>
+                <div class="nexus-user-role">{{ $userRole }}</div>
+            </div>
+            <button type="button" @click="userMenu = !userMenu" class="nexus-user-menu-btn" title="User menu">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:1rem;height:1rem"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 12.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 18.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" /></svg>
+            </button>
+        </div>
+
+        {{-- Dropdown menu --}}
+        <div x-show="userMenu" @click.outside="userMenu = false" x-transition class="nexus-user-dropdown">
+            <a href="{{ route('profile.edit') }}" class="nexus-user-dropdown-item">Profile</a>
+            @if($canSwitchUsers)
+            <button type="button" @click="switchPanel = !switchPanel; userMenu = false" class="nexus-user-dropdown-item w-full text-left">Switch User</button>
+            @endif
+            <form method="POST" action="{{ route('logout') }}">
+                @csrf
+                <button type="submit" class="nexus-user-dropdown-item w-full text-left">Log Out</button>
+            </form>
+        </div>
+
+        {{-- Switch user panel --}}
+        @if($canSwitchUsers)
+        <div x-show="switchPanel" @click.outside="switchPanel = false" x-transition class="nexus-switch-panel">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold px-2 py-1">Switch User</div>
+            <div class="nexus-switch-list">
+                @foreach($switchUsers as $su)
+                    @if((int)$su->id !== (int)($user->id ?? 0))
+                    <form method="POST" action="{{ route('impersonate.start', ['user' => $su->id]) }}">
+                        @csrf
+                        <button type="submit" class="nexus-switch-item">
+                            <div class="text-xs text-white/90">{{ $su->name }}</div>
+                            <div class="text-[10px] text-white/50">{{ $su->email }} · {{ $su->role }}</div>
+                        </button>
+                    </form>
+                    @endif
+                @endforeach
+            </div>
+        </div>
+        @endif
     </div>
     @endauth
 </div>

@@ -5,6 +5,7 @@ namespace App\Services\Admin;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use App\Services\Finance\CommissionCalculator;
+use App\Services\Finance\FinanceReadModel;
 
 class CompanyPerformanceService
 {
@@ -179,23 +180,34 @@ $branches = DB::table('branches')->select('id','name')->get()->keyBy('id');
 
 
         // Calendar context for pace/status calculations (period-level)
-        // Company income totals (ex VAT) from deals in this period
-        $dealsInPeriod = DB::table('deals')
-            ->whereBetween('deal_date', [$start->toDateString(), $end->toDateString()])
-              ->whereRaw("COALESCE(accepted_status,'') != 'D'") // DECLINED_FILTER_PATCH_20260212
-            ->select('id','branch_id','total_commission','listing_external','listing_our_share_percent','selling_external','selling_our_share_percent','listing_split_percent','selling_split_percent')
-            ->get();
+        // --- Finance Engine dual-read: primary source is finance_computed_values ---
+        $readModel = app(FinanceReadModel::class);
+        $companyEngineResult = $readModel->getCompanyPeriodMap($period);
+        $useEngine = !empty($companyEngineResult['data']);
 
-        $companyIncomeByBranch = []; // branch_id => income ex VAT
-        $companyIncomeTotal = 0.0;
+        if ($useEngine) {
+            // ENGINE PATH: Read company income from Finance Engine
+            $cData = $companyEngineResult['data'];
+            $companyIncomeTotal = (float)($cData['company_period.money.total_nondeclined.ledger_company_income_ex_vat'] ?? 0);
+            $companyIncomeByBranch = []; // populated per-branch below from engine
+        } else {
+            // FALLBACK: Inline company income calculation from deals
+            $dealsInPeriod = DB::table('deals')
+                ->whereBetween('deal_date', [$start->toDateString(), $end->toDateString()])
+                  ->whereRaw("COALESCE(accepted_status,'') != 'D'")
+                ->select('id','branch_id','total_commission','listing_external','listing_our_share_percent','selling_external','selling_our_share_percent','listing_split_percent','selling_split_percent')
+                ->get();
 
-        foreach ($dealsInPeriod as $d) {
-            $inc = CommissionCalculator::companyIncomeExVat($d);
-            $bid = (int)($d->branch_id ?? 0);
-            $companyIncomeByBranch[$bid] = ($companyIncomeByBranch[$bid] ?? 0) + $inc;
-            $companyIncomeTotal += $inc;
+            $companyIncomeByBranch = [];
+            $companyIncomeTotal = 0.0;
+
+            foreach ($dealsInPeriod as $d) {
+                $inc = CommissionCalculator::companyIncomeExVat($d);
+                $bid = (int)($d->branch_id ?? 0);
+                $companyIncomeByBranch[$bid] = ($companyIncomeByBranch[$bid] ?? 0) + $inc;
+                $companyIncomeTotal += $inc;
+            }
         }
-
 
         $start = Carbon::createFromFormat('Y-m', $period)->startOfMonth();
         $end   = (clone $start)->endOfMonth();
@@ -205,65 +217,78 @@ $branches = DB::table('branches')->select('id','name')->get()->keyBy('id');
         $daysElapsed = $today->betweenIncluded($start, $end) ? max(1, $start->diffInDays($today) + 1) : 1;
         $daysLeft    = $today->betweenIncluded($start, $end) ? max(0, $today->diffInDays($end)) : 0;
 
-        
-        /* AGENT_INCOME_ALLOCATIONS */
-        // Allocate company-side income (ex VAT) to agents using deal_user.agent_split_percent (agent share)
-        $allocByUser = [];
-        $allocUserIds = array_values(array_unique(array_map(fn($rr) => (int)($rr['user_id'] ?? 0), $rows)));
-        $allocUserIds = array_values(array_filter($allocUserIds, fn($id) => $id > 0));
-
-        if (!empty($allocUserIds)) {
-            $allocRows = DB::table('deal_user')
-                ->join('deals','deals.id','=','deal_user.deal_id')
-                ->whereIn('deal_user.user_id', $allocUserIds)
-                ->whereBetween('deals.deal_date', [$start->toDateString(), $end->toDateString()])
-                ->whereRaw("COALESCE(deals.accepted_status,'') != 'D'") // DECLINED_FILTER_PATCH_20260212
-                ->select(
-                    'deal_user.user_id',
-                    'deal_user.deal_id',
-                    'deal_user.side',
-                    'deal_user.agent_split_percent',
-                    'deals.total_commission',
-                    'deals.listing_external',
-                    'deals.listing_our_share_percent',
-                    'deals.selling_external',
-                    'deals.selling_our_share_percent'
-                ,
-                      'deals.listing_split_percent',
-                      'deals.selling_split_percent'
-                  )
-                ->get();
-
-            foreach ($allocRows as $ar) {
-                $uid = (int)$ar->user_id;
-                if (!isset($allocByUser[$uid])) {
-                    $allocByUser[$uid] = ['company_income'=>0.0,'agent_income'=>0.0,'company_retained'=>0.0];
+        /* AGENT_INCOME_ALLOCATIONS — Finance Engine primary, inline fallback */
+        if ($useEngine) {
+            // ENGINE PATH: Read per-agent financial data from finance_computed_values
+            foreach ($rows as &$r) {
+                $uid = (int)($r['user_id'] ?? 0);
+                if ($uid > 0) {
+                    $agentMap = $readModel->getAgentPeriodMap($uid, $period);
+                    $r['actuals']['company_income']   = (float)($agentMap['agent_period.money.total_nondeclined.company_income_ex_vat'] ?? 0);
+                    $r['actuals']['agent_income']     = (float)($agentMap['agent_period.money.total_nondeclined.agent_income_ex_vat'] ?? 0);
+                    $r['actuals']['company_retained'] = (float)($agentMap['agent_period.money.total_nondeclined.retained_ex_vat'] ?? 0);
                 }
-
-                // Side-based company income ex VAT for this agent row (respects listing/selling split + externals)
-                $sideIncomeExVat = (float) CommissionCalculator::companyIncomeExVatForSide($ar, $ar->side ?? null);
-                $split = (float)($ar->agent_split_percent ?? 0);
-                if ($split < 0) $split = 0;
-                if ($split > 100) $split = 100;
-
-                $agentIncome = round($sideIncomeExVat * ($split / 100.0), 2);
-                $companyRetained = round($sideIncomeExVat - $agentIncome, 2);
-
-                $allocByUser[$uid]['company_income'] += $sideIncomeExVat;
-                $allocByUser[$uid]['agent_income'] += $agentIncome;
-                $allocByUser[$uid]['company_retained'] += $companyRetained;
             }
+            unset($r);
+        } else {
+            // FALLBACK: Inline allocation from deal_user table
+            $allocByUser = [];
+            $allocUserIds = array_values(array_unique(array_map(fn($rr) => (int)($rr['user_id'] ?? 0), $rows)));
+            $allocUserIds = array_values(array_filter($allocUserIds, fn($id) => $id > 0));
+
+            if (!empty($allocUserIds)) {
+                $allocRows = DB::table('deal_user')
+                    ->join('deals','deals.id','=','deal_user.deal_id')
+                    ->whereIn('deal_user.user_id', $allocUserIds)
+                    ->whereBetween('deals.deal_date', [$start->toDateString(), $end->toDateString()])
+                    ->whereRaw("COALESCE(deals.accepted_status,'') != 'D'")
+                    ->select(
+                        'deal_user.user_id',
+                        'deal_user.deal_id',
+                        'deal_user.side',
+                        'deal_user.agent_split_percent',
+                        'deals.total_commission',
+                        'deals.listing_external',
+                        'deals.listing_our_share_percent',
+                        'deals.selling_external',
+                        'deals.selling_our_share_percent',
+                        'deals.listing_split_percent',
+                        'deals.selling_split_percent'
+                    )
+                    ->get();
+
+                foreach ($allocRows as $ar) {
+                    $uid = (int)$ar->user_id;
+                    if (!isset($allocByUser[$uid])) {
+                        $allocByUser[$uid] = ['company_income'=>0.0,'agent_income'=>0.0,'company_retained'=>0.0];
+                    }
+
+                    $sideIncomeExVat = (float) CommissionCalculator::companyIncomeExVatForSide($ar, $ar->side ?? null);
+                    $split = (float)($ar->agent_split_percent ?? 0);
+                    if ($split < 0) $split = 0;
+                    if ($split > 100) $split = 100;
+
+                    $agentIncome = round($sideIncomeExVat * ($split / 100.0), 2);
+                    $companyRetained = round($sideIncomeExVat - $agentIncome, 2);
+
+                    $allocByUser[$uid]['company_income'] += $sideIncomeExVat;
+                    $allocByUser[$uid]['agent_income'] += $agentIncome;
+                    $allocByUser[$uid]['company_retained'] += $companyRetained;
+                }
+            }
+
+            foreach ($rows as &$r) {
+                $uid = (int)($r['user_id'] ?? 0);
+                if (isset($allocByUser[$uid])) {
+                    $r['actuals']['company_income'] = round((float)$allocByUser[$uid]['company_income'], 2);
+                    $r['actuals']['agent_income'] = round((float)$allocByUser[$uid]['agent_income'], 2);
+                    $r['actuals']['company_retained'] = round((float)$allocByUser[$uid]['company_retained'], 2);
+                }
+            }
+            unset($r);
         }
 
 foreach ($rows as &$r) {
-
-            // Income allocations (agent split) based on deal_user.agent_split_percent
-            $uid = (int)($r['user_id'] ?? 0);
-            if (isset($allocByUser[$uid])) {
-                $r['actuals']['company_income'] = round((float)$allocByUser[$uid]['company_income'], 2);
-                $r['actuals']['agent_income'] = round((float)$allocByUser[$uid]['agent_income'], 2);
-                $r['actuals']['company_retained'] = round((float)$allocByUser[$uid]['company_retained'], 2);
-            }
 
 
             $r['progress'] = [
@@ -394,17 +419,25 @@ foreach ($rows as &$r) {
             ];
             /* ADMIN_BRANCH_TOTALS_SHAPE_END */
             $bid = (int)($b['branch_id'] ?? 0);
-            $b['actuals']['ledger_company_income'] = (float)($companyIncomeByBranch[$bid] ?? 0);
 
-                // --- LEDGER agent + retained (accounting truth, deal.branch_id based) ---
+            if ($useEngine) {
+                // ENGINE PATH: Read ledger values from Finance Engine
+                $branchMapResult = $readModel->getBranchPeriodMap($bid, $period);
+                $bData = $branchMapResult['data'] ?? [];
+                $b['actuals']['ledger_company_income']   = (float)($bData['branch_period.money.total_nondeclined.ledger_company_income_ex_vat'] ?? 0);
+                $b['actuals']['ledger_agent_income']     = (float)($bData['branch_period.money.total_nondeclined.ledger_agent_income_ex_vat'] ?? 0);
+                $b['actuals']['ledger_company_retained'] = (float)($bData['branch_period.money.total_nondeclined.ledger_company_retained_ex_vat'] ?? 0);
+            } else {
+                // FALLBACK: Inline ledger calculation
+                $b['actuals']['ledger_company_income'] = (float)($companyIncomeByBranch[$bid] ?? 0);
+
                 $ledgerAgent = 0.0;
-
                 $ledgerRows = \DB::table('deal_user')
                     ->join('deals','deals.id','=','deal_user.deal_id')
                     ->leftJoin('users','users.id','=','deal_user.user_id')
                     ->where('deals.branch_id', $bid)
                     ->whereBetween('deals.deal_date', [$start->toDateString(), $end->toDateString()])
-                ->whereRaw("COALESCE(deals.accepted_status,'') != 'D'") // DECLINED_FILTER_PATCH_20260212
+                    ->whereRaw("COALESCE(deals.accepted_status,'') != 'D'")
                     ->select(
                         'deal_user.side',
                         'deal_user.agent_split_percent',
@@ -419,8 +452,7 @@ foreach ($rows as &$r) {
                     )->get();
 
                 foreach ($ledgerRows as $lr) {
-                    $sideIncome = (float) \App\Services\Finance\CommissionCalculator::companyIncomeExVatForSide($lr, $lr->side ?? null);
-
+                    $sideIncome = (float) CommissionCalculator::companyIncomeExVatForSide($lr, $lr->side ?? null);
                     $split = $lr->agent_split_percent;
                     if ($split === null || $split === '') {
                         $split = $lr->user_default_split_percent;
@@ -428,7 +460,6 @@ foreach ($rows as &$r) {
                     $split = (float)($split ?? 0);
                     if ($split < 0) $split = 0;
                     if ($split > 100) $split = 100;
-
                     $ledgerAgent += round($sideIncome * ($split / 100.0), 2);
                 }
 
@@ -437,6 +468,7 @@ foreach ($rows as &$r) {
                     max(0, ($b['actuals']['ledger_company_income'] ?? 0) - $ledgerAgent),
                     2
                 );
+            }
 
               // Admin branch cards should reflect TEAM reality (agent allocations)
               $b['actuals']['company_income'] = (float)($b['actuals']['team_company_income'] ?? 0);
@@ -628,87 +660,83 @@ foreach ($rows as &$r) {
         /* BM_V2_POINTS_PATCH_END */
 
 
-// Company income (ex VAT) for branch (BM budget truth)
-        $dealsBranch = DB::table('deals')
-            ->where('branch_id', $branchId)
-            ->whereBetween('deal_date', [$start->toDateString(), $end->toDateString()])
-              ->whereRaw("COALESCE(accepted_status,'') != 'D'") // DECLINED_FILTER_PATCH_20260212
-            ->select('id','total_commission','listing_external','listing_our_share_percent','selling_external','selling_our_share_percent')
-            ->get();
+        // --- LEDGER income for this branch (Finance Engine primary, inline fallback) ---
+        $readModel = app(FinanceReadModel::class);
+        $branchMapResult = $readModel->getBranchPeriodMap($branchId, $period);
+        $useBranchEngine = !empty($branchMapResult['data']);
 
-        $companyIncomeBranchTotal = 0.0;
-        foreach ($dealsBranch as $d) {
-            $companyIncomeBranchTotal += CommissionCalculator::companyIncomeExVat($d);
-        }
+        if ($useBranchEngine) {
+            // ENGINE PATH: Read ledger values from Finance Engine
+            $bData = $branchMapResult['data'];
+            $companyIncomeBranchTotal   = (float)($bData['branch_period.money.total_nondeclined.ledger_company_income_ex_vat'] ?? 0);
+            $ledgerAgentIncomeTotal     = (float)($bData['branch_period.money.total_nondeclined.ledger_agent_income_ex_vat'] ?? 0);
+            $ledgerCompanyRetainedTotal = (float)($bData['branch_period.money.total_nondeclined.ledger_company_retained_ex_vat'] ?? 0);
+        } else {
+            // FALLBACK: Inline ledger calculation from deals
+            $dealsBranch = DB::table('deals')
+                ->where('branch_id', $branchId)
+                ->whereBetween('deal_date', [$start->toDateString(), $end->toDateString()])
+                ->whereRaw("COALESCE(accepted_status,'') != 'D'")
+                ->select('id','total_commission','listing_external','listing_our_share_percent','selling_external','selling_our_share_percent')
+                ->get();
 
-        // LEDGER agent income: sum agent shares for deals recorded against this branch (ex VAT, side-based).
-        // NOTE: This is accounting view (deals.branch_id), not agent-branch/team truth.
-        $ledgerAgentIncomeTotal = 0.0;
-
-        $ledgerRows = DB::table('deal_user')
-            ->join('deals','deals.id','=','deal_user.deal_id')
-            ->leftJoin('users','users.id','=','deal_user.user_id')
-            ->where('deals.branch_id', $branchId)
-            ->whereBetween('deals.deal_date', [$start->toDateString(), $end->toDateString()])
-                ->whereRaw("COALESCE(deals.accepted_status,'') != 'D'") // DECLINED_FILTER_PATCH_20260212
-            ->select(
-                'deal_user.user_id',
-                'deal_user.side',
-                'deal_user.agent_split_percent',
-                'users.agent_cut_percent as user_default_split_percent',
-                'deals.total_commission',
-                'deals.listing_external',
-                'deals.listing_our_share_percent',
-                'deals.selling_external',
-                'deals.selling_our_share_percent'
-            ,
-                      'deals.listing_split_percent',
-                      'deals.selling_split_percent'
-                  )
-            ->get();
-
-        foreach ($ledgerRows as $lr) {
-            $sideIncomeExVat = (float) CommissionCalculator::companyIncomeExVatForSide($lr, $lr->side ?? null);
-
-            $split = $lr->agent_split_percent;
-            if ($split === null || $split === '') {
-                $split = $lr->user_default_split_percent;
+            $companyIncomeBranchTotal = 0.0;
+            foreach ($dealsBranch as $d) {
+                $companyIncomeBranchTotal += CommissionCalculator::companyIncomeExVat($d);
             }
 
-          // Attach LEDGER money into branch totals (accounting truth)
-          $tot['actuals']['ledger_company_income'] = round((float)$companyIncomeBranchTotal, 2);
-          $tot['actuals']['ledger_agent_income'] = round((float)$ledgerAgentIncomeTotal, 2);
-          $tot['actuals']['ledger_company_retained'] = round(
-              max(0, (float)$companyIncomeBranchTotal - (float)$ledgerAgentIncomeTotal),
-              2
-          );
+            $ledgerAgentIncomeTotal = 0.0;
+            $ledgerRows = DB::table('deal_user')
+                ->join('deals','deals.id','=','deal_user.deal_id')
+                ->leftJoin('users','users.id','=','deal_user.user_id')
+                ->where('deals.branch_id', $branchId)
+                ->whereBetween('deals.deal_date', [$start->toDateString(), $end->toDateString()])
+                ->whereRaw("COALESCE(deals.accepted_status,'') != 'D'")
+                ->select(
+                    'deal_user.user_id',
+                    'deal_user.side',
+                    'deal_user.agent_split_percent',
+                    'users.agent_cut_percent as user_default_split_percent',
+                    'deals.total_commission',
+                    'deals.listing_external',
+                    'deals.listing_our_share_percent',
+                    'deals.selling_external',
+                    'deals.selling_our_share_percent',
+                    'deals.listing_split_percent',
+                    'deals.selling_split_percent'
+                )
+                ->get();
 
-            $split = (float)($split ?? 0);
-            if ($split < 0) $split = 0;
-            if ($split > 100) $split = 100;
+            foreach ($ledgerRows as $lr) {
+                $sideIncomeExVat = (float) CommissionCalculator::companyIncomeExVatForSide($lr, $lr->side ?? null);
+                $split = $lr->agent_split_percent;
+                if ($split === null || $split === '') {
+                    $split = $lr->user_default_split_percent;
+                }
+                $split = (float)($split ?? 0);
+                if ($split < 0) $split = 0;
+                if ($split > 100) $split = 100;
+                $ledgerAgentIncomeTotal += round($sideIncomeExVat * ($split / 100.0), 2);
+            }
 
-            $ledgerAgentIncomeTotal += round($sideIncomeExVat * ($split / 100.0), 2);
+            $ledgerAgentIncomeTotal = round($ledgerAgentIncomeTotal, 2);
+            $ledgerCompanyRetainedTotal = round(max(0, (float)$companyIncomeBranchTotal - (float)$ledgerAgentIncomeTotal), 2);
         }
 
-        $ledgerAgentIncomeTotal = round($ledgerAgentIncomeTotal, 2);
-        $ledgerCompanyRetainedTotal = round(max(0, (float)$companyIncomeBranchTotal - (float)$ledgerAgentIncomeTotal), 2);
+        // Attach LEDGER money into branch totals (accounting truth)
+        $tot['actuals']['ledger_company_income']   = round((float)$companyIncomeBranchTotal, 2);
+        $tot['actuals']['ledger_agent_income']     = round((float)$ledgerAgentIncomeTotal, 2);
+        $tot['actuals']['ledger_company_retained'] = round((float)$ledgerCompanyRetainedTotal, 2);
 
-        // Keep LEDGER (deal-branch) totals separate for accounting
-          $tot['actuals']['ledger_company_income'] = $companyIncomeBranchTotal;
+        // BM / Targets truth = TEAM totals (agent-branch based, regardless of deal.branch_id)
+        $tot['actuals']['company_income']   = $teamCompanyIncome;
+        $tot['actuals']['agent_income']     = $teamAgentIncome;
+        $tot['actuals']['company_retained'] = $teamCompanyRetained;
 
-
-          $tot['actuals']['ledger_agent_income'] = $ledgerAgentIncomeTotal;
-
-          $tot['actuals']['ledger_company_retained'] = $ledgerCompanyRetainedTotal;
-          // BM / Targets truth = TEAM totals (agent-branch based, regardless of deal.branch_id)
-          $tot['actuals']['company_income']   = $teamCompanyIncome;
-          $tot['actuals']['agent_income']     = $teamAgentIncome;
-          $tot['actuals']['company_retained'] = $teamCompanyRetained;
-
-          // Preserve explicit TEAM keys too (useful for UI clarity)
-          $tot['actuals']['team_company_income']   = $teamCompanyIncome;
-          $tot['actuals']['team_agent_income']     = $teamAgentIncome;
-          $tot['actuals']['team_company_retained'] = $teamCompanyRetained;
+        // Preserve explicit TEAM keys too (useful for UI clarity)
+        $tot['actuals']['team_company_income']   = $teamCompanyIncome;
+        $tot['actuals']['team_agent_income']     = $teamAgentIncome;
+        $tot['actuals']['team_company_retained'] = $teamCompanyRetained;
         $today = Carbon::today();
         $daysInMonth = $start->daysInMonth;
         $daysElapsed = $today->betweenIncluded($start, $end) ? max(1, $start->diffInDays($today) + 1) : 1;

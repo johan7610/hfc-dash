@@ -8,7 +8,7 @@
         <p class="text-sm text-gray-500 mt-1">Enter the property details — you'll upload evidence and run analysis on the next screen.</p>
     </div>
     <a href="{{ route('presentations.index') }}"
-       class="text-xs text-indigo-600 hover:underline">&larr; Back to Presentations</a>
+       class="text-xs text-[#00b4d8] hover:underline">&larr; Back to Presentations</a>
 </div>
 
 <div class="bg-white rounded-xl shadow p-6 max-w-3xl">
@@ -213,7 +213,7 @@
 
         <div class="mt-6 flex items-center gap-3">
             <button type="submit"
-                    class="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700">
+                    class="px-5 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded hover:bg-[#081f36]">
                 Create Presentation &rarr;
             </button>
             <a href="{{ route('presentations.index') }}"

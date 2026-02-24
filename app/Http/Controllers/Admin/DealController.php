@@ -10,6 +10,7 @@ use App\Models\Branch;
 use App\Models\DealSettlement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Services\DealMoneyLineRebuilder;
 use App\Services\SlidingScaleService;
 
 class DealController extends Controller
@@ -256,6 +257,13 @@ $deals = $query->orderBy('deal_no')->get();
         }
         if ($oldCommission !== $newCommission) {
             $this->logDealEvent($deal, 'commission_status_changed', $oldCommission, $newCommission);
+        }
+
+        // Rebuild deal_money_lines + refresh rollups (status change affects stage counts)
+        \App\Services\DealMoneyLineRebuilder::rebuildDealId((int)$deal->id);
+        $dealPeriod = (string)($deal->period ?? '');
+        if ($dealPeriod && preg_match('/^\d{4}-\d{2}$/', $dealPeriod)) {
+            (new \App\Services\Finance\RollupService())->refreshPeriod($dealPeriod);
         }
 
         return redirect()->route('admin.deals')->with('status', 'Deal updated.');
@@ -506,7 +514,11 @@ $financialLocked = ($deal->exists && (($deal->commission_status ?? "") === "Paid
         \Log::info('Rebuilding deal_money_lines after deal create/update', ['deal_id' => (int)$deal->id]);
         \App\Services\DealMoneyLineRebuilder::rebuildDealId((int)$deal->id);
 
-
+        // Refresh finance_computed_values for the affected period (single source of truth)
+        $dealPeriod = (string)($deal->period ?? '');
+        if ($dealPeriod && preg_match('/^\d{4}-\d{2}$/', $dealPeriod)) {
+            (new \App\Services\Finance\RollupService())->refreshPeriod($dealPeriod);
+        }
 
         return redirect()->route('admin.deals');
     }
@@ -521,122 +533,27 @@ $financialLocked = ($deal->exists && (($deal->commission_status ?? "") === "Paid
 
         $deal->load('agents');
 
-          // Settlement maths is based on GROSS commission (VAT informational only)
-          $vatRatePercent = (float) \App\Models\PerformanceSetting::get('vat_rate', 15);
-          $vatRate = $vatRatePercent / 100;
-          $totalCommissionIncVat = (float) $deal->total_commission;
-          $totalCommissionExVat  = ($totalCommissionIncVat > 0) ? ($totalCommissionIncVat / (1.0 + $vatRate)) : 0.0;
-
-          // Side splits are captured INCL VAT (bank reality).
-          // Internal payouts (agents/company) are EX VAT; External payable is INCL VAT.
-          $vatAmt = (float)$totalCommissionIncVat - (float)$totalCommissionExVat;
-
-          $listingSplitPct = max(0.0, min(100.0, (float)($deal->listing_split_percent ?? 50)));
-          $sellingSplitPct = max(0.0, min(100.0, (float)($deal->selling_split_percent ?? 50)));
-
-          // Side totals INCL VAT (deal register reality)
-          $listingSideInc = (float)$totalCommissionIncVat * ($listingSplitPct / 100.0);
-          $sellingSideInc = (float)$totalCommissionIncVat * ($sellingSplitPct / 100.0);
-
-          // Side totals EX VAT for internal payout pools
-          $listingSideEx = ($listingSideInc > 0) ? ($listingSideInc / (1.0 + $vatRate)) : 0.0;
-          $sellingSideEx = ($sellingSideInc > 0) ? ($sellingSideInc / (1.0 + $vatRate)) : 0.0;
-
-          $listingOurPct = max(0.0, min(100.0, (float)($deal->listing_our_share_percent ?? 100)));
-          $sellingOurPct = max(0.0, min(100.0, (float)($deal->selling_our_share_percent ?? 100)));
-
-          // Pools (EX VAT) include our_share_percent + external flags
-          if ($deal->listing_external) {
-              $listingPool = 0.0;
-              $listingExternalPayable = $listingSideInc; // lose full INCL VAT side
-          } else {
-              $listingPool = $listingSideEx * ($listingOurPct / 100.0);
-              $listingExternalPayable = max(0, $listingSideInc * (1.0 - ($listingOurPct / 100.0))); // remainder INCL VAT
-          }
-
-          if ($deal->selling_external) {
-              $sellingPool = 0.0;
-              $sellingExternalPayable = $sellingSideInc; // lose full INCL VAT side
-          } else {
-              $sellingPool = $sellingSideEx * ($sellingOurPct / 100.0);
-              $sellingExternalPayable = max(0, $sellingSideInc * (1.0 - ($sellingOurPct / 100.0))); // remainder INCL VAT
-          }
-
-          $externalPayableTotal = $listingExternalPayable + $sellingExternalPayable;
-        $settlements = DealSettlement::where('deal_id', $deal->id)->get()
-            ->groupBy(fn($s) => $s->side . ':' . $s->user_id);
-
-        $listingRows = $this->buildSettleRows($deal, 'listing', $listingPool, $settlements);
-        $sellingRows = $this->buildSettleRows($deal, 'selling', $sellingPool, $settlements);
-
-        // Per-agent summary across listing + selling
-        $agentSummary = [];
-
-        $totals = [
-            'allocated' => 0.0,
-            'gross' => 0.0,
-            'paye' => 0.0,
-            'deductions' => 0.0,
-            'net' => 0.0,
-            'company' => 0.0,
-            'external' => (float) $externalPayableTotal,
-        ];
-
-        foreach (array_merge($listingRows, $sellingRows) as $r) {
-            $uid = (int) $r['user_id'];
-
-            if (!isset($agentSummary[$uid])) {
-                $agentSummary[$uid] = [
-                    'user_id' => $uid,
-                    'name' => $r['name'],
-                    'allocated' => 0.0,
-                    'gross' => 0.0,
-                    'paye' => 0.0,
-                    'deductions' => 0.0,
-                    'net' => 0.0,
-                ];
-            }
-
-            $agentSummary[$uid]['allocated'] += (float) $r['allocated'];
-            $agentSummary[$uid]['gross'] += (float) $r['gross'];
-            $agentSummary[$uid]['paye'] += (float) $r['paye'];
-            $agentSummary[$uid]['deductions'] += (float) $r['deductions'];
-            $agentSummary[$uid]['net'] += (float) $r['net'];
-
-            $totals['allocated'] += (float) $r['allocated'];
-            $totals['gross'] += (float) $r['gross'];
-            $totals['paye'] += (float) $r['paye'];
-            $totals['deductions'] += (float) $r['deductions'];
-            $totals['net'] += (float) $r['net'];
-            $totals['company'] += (float) $r['company'];
-        }
-
-        // Sort summary by agent name
-        $agentSummary = array_values($agentSummary);
-        usort($agentSummary, fn($a, $b) => strcmp($a['name'], $b['name']));
-
-        // checksum: everything must reconcile back to total_commission
-        $checksumTotal = $totals['net'] + $totals['paye'] + $totals['deductions'] + $totals['company'] + $totals['external'] + $vatAmt;
-        $checksumOk = abs($checksumTotal - $totalCommissionExVat) <= 0.01;
+        $pools = DealMoneyLineRebuilder::computeDealPools($deal);
+        $summary = $this->buildSettlementSummary($deal, $pools);
 
         return view('admin.deals.settle', [
             'deal' => $deal,
-            'vatRate' => $vatRate,
-            'totalCommissionIncVat' => $totalCommissionIncVat,
-            'totalCommissionExVat' => $totalCommissionExVat,
-            'listingPool' => $listingPool,
-            'sellingPool' => $sellingPool,
-            'listingRows' => $listingRows,
-            'sellingRows' => $sellingRows,
+            'vatRate' => $pools['vatRate'],
+            'totalCommissionIncVat' => $pools['totalCommissionIncVat'],
+            'totalCommissionExVat' => $pools['totalCommissionExVat'],
+            'listingPool' => $pools['listingPool'],
+            'sellingPool' => $pools['sellingPool'],
+            'listingRows' => $summary['listingRows'],
+            'sellingRows' => $summary['sellingRows'],
 
-            'listingExternalPayable' => $listingExternalPayable,
-            'sellingExternalPayable' => $sellingExternalPayable,
-            'externalPayableTotal' => $externalPayableTotal,
+            'listingExternalPayable' => $pools['listingExternalPayable'],
+            'sellingExternalPayable' => $pools['sellingExternalPayable'],
+            'externalPayableTotal' => $pools['externalPayableTotal'],
 
-            'agentSummary' => $agentSummary,
-            'totals' => $totals,
-            'checksumTotal' => $checksumTotal,
-            'checksumOk' => $checksumOk,
+            'agentSummary' => $summary['agentSummary'],
+            'totals' => $summary['totals'],
+            'checksumTotal' => $summary['checksumTotal'],
+            'checksumOk' => $summary['checksumOk'],
         ]);
     }
 
@@ -679,48 +596,11 @@ $financialLocked = ($deal->exists && (($deal->commission_status ?? "") === "Paid
 
           $oldCommissionStatusForPaid = (string)($deal->commission_status ?? '');
 
-          // Settlement maths is based on GROSS commission (VAT informational only)
-          $vatRatePercent = (float) \App\Models\PerformanceSetting::get('vat_rate', 15);
-          $vatRate = $vatRatePercent / 100;
-          $totalCommissionIncVat = (float) $deal->total_commission;
-          $totalCommissionExVat  = ($totalCommissionIncVat > 0) ? ($totalCommissionIncVat / (1.0 + $vatRate)) : 0.0;
-
-          // Side splits are captured INCL VAT (bank reality).
-          // Internal payouts (agents/company) are EX VAT; External payable is INCL VAT.
-          $vatAmt = (float)$totalCommissionIncVat - (float)$totalCommissionExVat;
-
-          $listingSplitPct = max(0.0, min(100.0, (float)($deal->listing_split_percent ?? 50)));
-          $sellingSplitPct = max(0.0, min(100.0, (float)($deal->selling_split_percent ?? 50)));
-
-          // Side totals INCL VAT (deal register reality)
-          $listingSideInc = (float)$totalCommissionIncVat * ($listingSplitPct / 100.0);
-          $sellingSideInc = (float)$totalCommissionIncVat * ($sellingSplitPct / 100.0);
-
-          // Side totals EX VAT for internal payout pools
-          $listingSideEx = ($listingSideInc > 0) ? ($listingSideInc / (1.0 + $vatRate)) : 0.0;
-          $sellingSideEx = ($sellingSideInc > 0) ? ($sellingSideInc / (1.0 + $vatRate)) : 0.0;
-
-          $listingOurPct = max(0.0, min(100.0, (float)($deal->listing_our_share_percent ?? 100)));
-          $sellingOurPct = max(0.0, min(100.0, (float)($deal->selling_our_share_percent ?? 100)));
-
-          // Pools (EX VAT) include our_share_percent + external flags
-          if ($deal->listing_external) {
-              $listingPool = 0.0;
-              $listingExternalPayable = $listingSideInc; // lose full INCL VAT side
-          } else {
-              $listingPool = $listingSideEx * ($listingOurPct / 100.0);
-              $listingExternalPayable = max(0, $listingSideInc * (1.0 - ($listingOurPct / 100.0))); // remainder INCL VAT
-          }
-
-          if ($deal->selling_external) {
-              $sellingPool = 0.0;
-              $sellingExternalPayable = $sellingSideInc; // lose full INCL VAT side
-          } else {
-              $sellingPool = $sellingSideEx * ($sellingOurPct / 100.0);
-              $sellingExternalPayable = max(0, $sellingSideInc * (1.0 - ($sellingOurPct / 100.0))); // remainder INCL VAT
-          }
-
-          $externalPayableTotal = $listingExternalPayable + $sellingExternalPayable;
+          $pools = DealMoneyLineRebuilder::computeDealPools($deal);
+          $totalCommissionExVat = $pools['totalCommissionExVat'];
+          $listingPool = $pools['listingPool'];
+          $sellingPool = $pools['sellingPool'];
+          $externalPayableTotal = $pools['externalPayableTotal'];
 
         // Validate share totals for non-external sides (forces full pool usage)
         foreach (['listing', 'selling'] as $side) {
@@ -932,9 +812,14 @@ $financialLocked = ($deal->exists && (($deal->commission_status ?? "") === "Paid
           }
 
         // Rebuild deal_money_lines after settlement changes (single source of truth)
-        // Rebuild deal_money_lines immediately after settlement save (single source of truth)
         \Log::info('Rebuilding deal_money_lines after settlement save', ['deal_id' => (int)$deal->id]);
         \App\Services\DealMoneyLineRebuilder::rebuildDealId((int)$deal->id);
+
+        // Refresh finance_computed_values for the affected period
+        $dealPeriod = (string)($deal->period ?? '');
+        if ($dealPeriod && preg_match('/^\d{4}-\d{2}$/', $dealPeriod)) {
+            (new \App\Services\Finance\RollupService())->refreshPeriod($dealPeriod);
+        }
 
         return redirect()
             ->route('admin.deals.settle', $deal)
@@ -950,102 +835,25 @@ $financialLocked = ($deal->exists && (($deal->commission_status ?? "") === "Paid
 
         $deal->load('agents');
 
-        // Settlement maths is based on GROSS commission (VAT informational only)
-        $vatRatePercent = (float) \App\Models\PerformanceSetting::get('vat_rate', 15);
-        $vatRate = $vatRatePercent / 100;
-        $totalCommissionIncVat = (float) $deal->total_commission;
-        $totalCommissionExVat  = ($totalCommissionIncVat > 0) ? ($totalCommissionIncVat / (1.0 + $vatRate)) : 0.0;
+        $pools = DealMoneyLineRebuilder::computeDealPools($deal);
+        $summary = $this->buildSettlementSummary($deal, $pools);
 
-        // Side splits are captured INCL VAT (bank reality).
-        // Internal payouts (agents/company) are EX VAT; External payable is INCL VAT.
-        $vatAmt = (float)$totalCommissionIncVat - (float)$totalCommissionExVat;
+        $vatRate = $pools['vatRate'];
+        $vatAmt = $pools['vatAmt'];
+        $totalCommissionIncVat = $pools['totalCommissionIncVat'];
+        $totalCommissionExVat = $pools['totalCommissionExVat'];
+        $listingPool = $pools['listingPool'];
+        $sellingPool = $pools['sellingPool'];
+        $listingExternalPayable = $pools['listingExternalPayable'];
+        $sellingExternalPayable = $pools['sellingExternalPayable'];
+        $externalPayableTotal = $pools['externalPayableTotal'];
 
-        $listingSplitPct = max(0.0, min(100.0, (float)($deal->listing_split_percent ?? 50)));
-        $sellingSplitPct = max(0.0, min(100.0, (float)($deal->selling_split_percent ?? 50)));
-
-        // Side totals INCL VAT (deal register reality)
-        $listingSideInc = (float)$totalCommissionIncVat * ($listingSplitPct / 100.0);
-        $sellingSideInc = (float)$totalCommissionIncVat * ($sellingSplitPct / 100.0);
-
-        // Side totals EX VAT for internal payout pools
-        $listingSideEx = ($listingSideInc > 0) ? ($listingSideInc / (1.0 + $vatRate)) : 0.0;
-        $sellingSideEx = ($sellingSideInc > 0) ? ($sellingSideInc / (1.0 + $vatRate)) : 0.0;
-
-        $listingOurPct = max(0.0, min(100.0, (float)($deal->listing_our_share_percent ?? 100)));
-        $sellingOurPct = max(0.0, min(100.0, (float)($deal->selling_our_share_percent ?? 100)));
-
-        // Pools (EX VAT) include our_share_percent + external flags
-        if ($deal->listing_external) {
-            $listingPool = 0.0;
-            $listingExternalPayable = $listingSideInc; // lose full INCL VAT side
-        } else {
-            $listingPool = $listingSideEx * ($listingOurPct / 100.0);
-            $listingExternalPayable = max(0, $listingSideInc * (1.0 - ($listingOurPct / 100.0))); // remainder INCL VAT
-        }
-
-        if ($deal->selling_external) {
-            $sellingPool = 0.0;
-            $sellingExternalPayable = $sellingSideInc; // lose full INCL VAT side
-        } else {
-            $sellingPool = $sellingSideEx * ($sellingOurPct / 100.0);
-            $sellingExternalPayable = max(0, $sellingSideInc * (1.0 - ($sellingOurPct / 100.0))); // remainder INCL VAT
-        }
-
-        $externalPayableTotal = $listingExternalPayable + $sellingExternalPayable;
-
-        $settlements = DealSettlement::where('deal_id', $deal->id)->get()
-            ->groupBy(fn($s) => $s->side . ':' . $s->user_id);
-
-        $listingRows = $this->buildSettleRows($deal, 'listing', $listingPool, $settlements);
-        $sellingRows = $this->buildSettleRows($deal, 'selling', $sellingPool, $settlements);
-
-        // Per-agent summary across listing + selling
-        $agentSummary = [];
-        $totals = [
-            'allocated' => 0.0,
-            'gross' => 0.0,
-            'paye' => 0.0,
-            'deductions' => 0.0,
-            'net' => 0.0,
-            'company' => 0.0,
-            'external' => (float) $externalPayableTotal,
-        ];
-
-        foreach (array_merge($listingRows, $sellingRows) as $r) {
-            $uid = (int) $r['user_id'];
-
-            if (!isset($agentSummary[$uid])) {
-                $agentSummary[$uid] = [
-                    'user_id' => $uid,
-                    'name' => $r['name'],
-                    'allocated' => 0.0,
-                    'gross' => 0.0,
-                    'paye' => 0.0,
-                    'deductions' => 0.0,
-                    'net' => 0.0,
-                ];
-            }
-
-            $agentSummary[$uid]['allocated'] += (float) $r['allocated'];
-            $agentSummary[$uid]['gross'] += (float) $r['gross'];
-            $agentSummary[$uid]['paye'] += (float) $r['paye'];
-            $agentSummary[$uid]['deductions'] += (float) $r['deductions'];
-            $agentSummary[$uid]['net'] += (float) $r['net'];
-
-            $totals['allocated'] += (float) $r['allocated'];
-            $totals['gross'] += (float) $r['gross'];
-            $totals['paye'] += (float) $r['paye'];
-            $totals['deductions'] += (float) $r['deductions'];
-            $totals['net'] += (float) $r['net'];
-            $totals['company'] += (float) $r['company'];
-        }
-
-        // Sort summary by agent name
-        $agentSummary = array_values($agentSummary);
-        usort($agentSummary, fn($a, $b) => strcmp($a['name'], $b['name']));
-
-        $checksumTotal = $totals['net'] + $totals['paye'] + $totals['deductions'] + $totals['company'] + $totals['external'] + $vatAmt;
-        $checksumOk = abs($checksumTotal - $totalCommissionExVat) <= 0.01;
+        $listingRows = $summary['listingRows'];
+        $sellingRows = $summary['sellingRows'];
+        $agentSummary = $summary['agentSummary'];
+        $totals = $summary['totals'];
+        $checksumTotal = $summary['checksumTotal'];
+        $checksumOk = $summary['checksumOk'];
 
         $companyName = (string) \App\Models\PerformanceSetting::get('company_name', 'Home Finders Coastal');
 
@@ -1077,48 +885,13 @@ $financialLocked = ($deal->exists && (($deal->commission_status ?? "") === "Paid
 
         $deal->load('agents');
 
-        // Settlement maths is based on GROSS commission (VAT informational only)
-        $vatRatePercent = (float) \App\Models\PerformanceSetting::get('vat_rate', 15);
-        $vatRate = $vatRatePercent / 100;
-        $totalCommissionIncVat = (float) $deal->total_commission;
-        $totalCommissionExVat  = ($totalCommissionIncVat > 0) ? ($totalCommissionIncVat / (1.0 + $vatRate)) : 0.0;
-        $vatAmt = (float)$totalCommissionIncVat - (float)$totalCommissionExVat;
-
-        $listingSplitPct = max(0.0, min(100.0, (float)($deal->listing_split_percent ?? 50)));
-        $sellingSplitPct = max(0.0, min(100.0, (float)($deal->selling_split_percent ?? 50)));
-
-        $listingSideInc = (float)$totalCommissionIncVat * ($listingSplitPct / 100.0);
-        $sellingSideInc = (float)$totalCommissionIncVat * ($sellingSplitPct / 100.0);
-
-        $listingSideEx = ($listingSideInc > 0) ? ($listingSideInc / (1.0 + $vatRate)) : 0.0;
-        $sellingSideEx = ($sellingSideInc > 0) ? ($sellingSideInc / (1.0 + $vatRate)) : 0.0;
-
-        $listingOurPct = max(0.0, min(100.0, (float)($deal->listing_our_share_percent ?? 100)));
-        $sellingOurPct = max(0.0, min(100.0, (float)($deal->selling_our_share_percent ?? 100)));
-
-        if ($deal->listing_external) {
-            $listingPool = 0.0;
-            $listingExternalPayable = $listingSideInc;
-        } else {
-            $listingPool = $listingSideEx * ($listingOurPct / 100.0);
-            $listingExternalPayable = max(0, $listingSideInc * (1.0 - ($listingOurPct / 100.0)));
-        }
-
-        if ($deal->selling_external) {
-            $sellingPool = 0.0;
-            $sellingExternalPayable = $sellingSideInc;
-        } else {
-            $sellingPool = $sellingSideEx * ($sellingOurPct / 100.0);
-            $sellingExternalPayable = max(0, $sellingSideInc * (1.0 - ($sellingOurPct / 100.0)));
-        }
-
-        $externalPayableTotal = $listingExternalPayable + $sellingExternalPayable;
+        $pools = DealMoneyLineRebuilder::computeDealPools($deal);
 
         $settlements = DealSettlement::where('deal_id', $deal->id)->get()
             ->groupBy(fn($s) => $s->side . ':' . $s->user_id);
 
-        $listingRows = $this->buildSettleRows($deal, 'listing', $listingPool, $settlements);
-        $sellingRows = $this->buildSettleRows($deal, 'selling', $sellingPool, $settlements);
+        $listingRows = $this->buildSettleRows($deal, 'listing', $pools['listingPool'], $settlements);
+        $sellingRows = $this->buildSettleRows($deal, 'selling', $pools['sellingPool'], $settlements);
 
         $uid = (int)$user->id;
 
@@ -1150,17 +923,85 @@ $financialLocked = ($deal->exists && (($deal->commission_status ?? "") === "Paid
             'deal' => $deal,
             'companyName' => $companyName,
             'user' => $user,
-            'vatRate' => $vatRate,
-            'vatAmt' => $vatAmt,
-            'totalCommissionIncVat' => $totalCommissionIncVat,
-            'totalCommissionExVat' => $totalCommissionExVat,
+            'vatRate' => $pools['vatRate'],
+            'vatAmt' => $pools['vatAmt'],
+            'totalCommissionIncVat' => $pools['totalCommissionIncVat'],
+            'totalCommissionExVat' => $pools['totalCommissionExVat'],
             'listingMine' => $listingMine,
             'sellingMine' => $sellingMine,
             'mine' => $mine,
-            'externalPayableTotal' => $externalPayableTotal,
+            'externalPayableTotal' => $pools['externalPayableTotal'],
         ]);
     }
 
+
+    /**
+     * Build settlement summary (rows, agent totals, checksum) from deal pools.
+     * Shared by settle() and printSettlement() which produce identical summaries.
+     */
+    private function buildSettlementSummary(Deal $deal, array $pools): array
+    {
+        $settlements = DealSettlement::where('deal_id', $deal->id)->get()
+            ->groupBy(fn($s) => $s->side . ':' . $s->user_id);
+
+        $listingRows = $this->buildSettleRows($deal, 'listing', $pools['listingPool'], $settlements);
+        $sellingRows = $this->buildSettleRows($deal, 'selling', $pools['sellingPool'], $settlements);
+
+        $agentSummary = [];
+        $totals = [
+            'allocated' => 0.0,
+            'gross' => 0.0,
+            'paye' => 0.0,
+            'deductions' => 0.0,
+            'net' => 0.0,
+            'company' => 0.0,
+            'external' => (float) $pools['externalPayableTotal'],
+        ];
+
+        foreach (array_merge($listingRows, $sellingRows) as $r) {
+            $uid = (int) $r['user_id'];
+
+            if (!isset($agentSummary[$uid])) {
+                $agentSummary[$uid] = [
+                    'user_id' => $uid,
+                    'name' => $r['name'],
+                    'allocated' => 0.0,
+                    'gross' => 0.0,
+                    'paye' => 0.0,
+                    'deductions' => 0.0,
+                    'net' => 0.0,
+                ];
+            }
+
+            $agentSummary[$uid]['allocated'] += (float) $r['allocated'];
+            $agentSummary[$uid]['gross'] += (float) $r['gross'];
+            $agentSummary[$uid]['paye'] += (float) $r['paye'];
+            $agentSummary[$uid]['deductions'] += (float) $r['deductions'];
+            $agentSummary[$uid]['net'] += (float) $r['net'];
+
+            $totals['allocated'] += (float) $r['allocated'];
+            $totals['gross'] += (float) $r['gross'];
+            $totals['paye'] += (float) $r['paye'];
+            $totals['deductions'] += (float) $r['deductions'];
+            $totals['net'] += (float) $r['net'];
+            $totals['company'] += (float) $r['company'];
+        }
+
+        $agentSummary = array_values($agentSummary);
+        usort($agentSummary, fn($a, $b) => strcmp($a['name'], $b['name']));
+
+        $checksumTotal = $totals['net'] + $totals['paye'] + $totals['deductions'] + $totals['company'] + $totals['external'] + $pools['vatAmt'];
+        $checksumOk = abs($checksumTotal - $pools['totalCommissionExVat']) <= 0.01;
+
+        return [
+            'listingRows' => $listingRows,
+            'sellingRows' => $sellingRows,
+            'agentSummary' => $agentSummary,
+            'totals' => $totals,
+            'checksumTotal' => $checksumTotal,
+            'checksumOk' => $checksumOk,
+        ];
+    }
 
     private function buildSettleRows(Deal $deal, string $side, float $pool, $settlements): array
     {

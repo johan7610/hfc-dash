@@ -21,7 +21,7 @@
         @endif
     </div>
     <a href="{{ route('presentations.show', $presentation) }}"
-       class="text-xs text-indigo-600 hover:underline mt-1">← Overview</a>
+       class="text-xs text-[#00b4d8] hover:underline mt-1">← Overview</a>
 </div>
 
 {{-- D1: Prep data summary — links + uploads at a glance --}}
@@ -37,7 +37,7 @@
             <span class="font-medium text-gray-700">{{ $linkCount }}</span>
             {{ $linkCount === 1 ? 'link' : 'links' }} attached
             <a href="{{ route('presentations.show', $presentation) }}#links"
-               class="ml-1 text-indigo-500 hover:underline">manage</a>
+               class="ml-1 text-[#00b4d8] hover:underline">manage</a>
         </span>
     @endif
     @if($uploadCount > 0)
@@ -79,7 +79,7 @@
             </div>
             <div class="flex items-end">
                 <button type="submit"
-                        class="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700">
+                        class="px-5 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded hover:bg-[#081f36]">
                     @if(isset($latestSnapshot) && $latestSnapshot) Re-run Analysis @else Run Analysis @endif
                 </button>
             </div>
@@ -117,11 +117,11 @@
     @if(isset($latestVersion) && $latestVersion)
     <a href="{{ route('presentations.versions.pdf', [$presentation, $latestVersion]) }}"
        target="_blank"
-       class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700">
+       class="px-4 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded hover:bg-[#081f36]">
         Download PDF
     </a>
     <a href="{{ route('presentations.versions.complete-pack', [$presentation, $latestVersion]) }}"
-       class="px-4 py-2 bg-indigo-500 text-white text-sm font-medium rounded hover:bg-indigo-600">
+       class="px-4 py-2 bg-[#00b4d8] text-white text-sm font-medium rounded hover:bg-[#0b2a4a]">
         Complete Pack (ZIP)
     </a>
     @endif
@@ -129,7 +129,7 @@
     {{-- Pricing Simulator --}}
     @if(config('features.pricing_simulator_v1'))
     <a href="{{ route('presentations.pricing-simulator', $presentation) }}"
-       class="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded hover:bg-purple-700">
+       class="px-4 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded hover:bg-[#081f36]">
         Pricing Simulator
     </a>
     @endif
@@ -176,7 +176,7 @@
                 @else
                     <span class="text-gray-300 font-bold">○</span>
                     <span class="text-gray-400">{{ $item['label'] }}
-                        <span class="text-indigo-500"> — {{ $item['fix'] }}</span>
+                        <span class="text-[#00b4d8]"> — {{ $item['fix'] }}</span>
                     </span>
                 @endif
             </div>
@@ -273,24 +273,24 @@
             document.querySelectorAll('.cma-tile').forEach(function (t) {
                 var isSel = t.dataset.range === range;
                 t.className = t.className
-                    .replace(/bg-indigo-50|bg-gray-50|hover:bg-gray-100|ring-1|ring-indigo-200/g, '')
+                    .replace(/bg-sky-50|bg-gray-50|hover:bg-gray-100|ring-1|ring-sky-200/g, '')
                     .trim();
                 if (isSel) {
-                    t.classList.add('bg-indigo-50', 'ring-1', 'ring-indigo-200');
+                    t.classList.add('bg-sky-50', 'ring-1', 'ring-sky-200');
                 } else {
                     t.classList.add('bg-gray-50', 'hover:bg-gray-100');
                 }
                 var label = t.querySelector('span');
                 var valP  = t.querySelector('p');
                 if (label) {
-                    label.className = label.className.replace(/text-indigo-400|text-gray-400/g, '').trim();
-                    label.classList.add(isSel ? 'text-indigo-400' : 'text-gray-400');
+                    label.className = label.className.replace(/text-\[#38bfe0\]|text-gray-400/g, '').trim();
+                    label.classList.add(isSel ? 'text-[#38bfe0]' : 'text-gray-400');
                 }
                 if (valP) {
                     valP.className = valP.className
-                        .replace(/font-bold|font-semibold|text-indigo-700|text-gray-700|text-lg/g, '')
+                        .replace(/font-bold|font-semibold|text-\[#0b2a4a\]|text-gray-700|text-lg/g, '')
                         .trim();
-                    if (isSel) valP.classList.add('font-bold', 'text-indigo-700', 'text-lg');
+                    if (isSel) valP.classList.add('font-bold', 'text-[#0b2a4a]', 'text-lg');
                     else valP.classList.add('font-semibold', 'text-gray-700');
                 }
             });
@@ -315,22 +315,22 @@
             document.querySelectorAll('.vicinity-tile').forEach(function (t) {
                 var isSel = t.dataset.range === range;
                 t.className = t.className
-                    .replace(/bg-indigo-50|bg-gray-50|hover:bg-gray-100|ring-1|ring-indigo-200/g, '')
+                    .replace(/bg-sky-50|bg-gray-50|hover:bg-gray-100|ring-1|ring-sky-200/g, '')
                     .trim();
-                if (isSel) t.classList.add('bg-indigo-50', 'ring-1', 'ring-indigo-200');
+                if (isSel) t.classList.add('bg-sky-50', 'ring-1', 'ring-sky-200');
                 else t.classList.add('bg-gray-50', 'hover:bg-gray-100');
 
                 var label = t.querySelector('span');
                 var valP  = t.querySelector('p');
                 if (label) {
-                    label.className = label.className.replace(/text-indigo-400|text-gray-400/g, '').trim();
-                    label.classList.add(isSel ? 'text-indigo-400' : 'text-gray-400');
+                    label.className = label.className.replace(/text-\[#38bfe0\]|text-gray-400/g, '').trim();
+                    label.classList.add(isSel ? 'text-[#38bfe0]' : 'text-gray-400');
                 }
                 if (valP) {
                     valP.className = valP.className
-                        .replace(/font-bold|font-semibold|text-indigo-700|text-gray-700|text-lg/g, '')
+                        .replace(/font-bold|font-semibold|text-\[#0b2a4a\]|text-gray-700|text-lg/g, '')
                         .trim();
-                    if (isSel) valP.classList.add('font-bold', 'text-indigo-700', 'text-lg');
+                    if (isSel) valP.classList.add('font-bold', 'text-[#0b2a4a]', 'text-lg');
                     else valP.classList.add('font-semibold', 'text-gray-700');
                 }
             });

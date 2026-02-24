@@ -44,17 +44,31 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
                         </svg>
                     </button>
-                    <span class="ml-3 text-sm font-bold text-gray-900">nexus <span class="text-indigo-600">os</span></span>
+                    <span class="ml-3 text-sm font-bold text-gray-900">nexus <span class="text-[#00b4d8]">os</span></span>
                 </div>
 
                 @include('layouts.nexus-header')
 
                 {{-- Content --}}
-                <main class="flex-1 overflow-y-auto bg-gray-100 p-4 lg:p-6">
+                <main id="appScroll" class="flex-1 overflow-y-auto bg-gray-100 p-4 lg:p-6">
                     @hasSection('nexus-content')
                         @yield('nexus-content')
                     @else
-                        {{ $slot ?? '' }}
+                        {{-- Agency Tracker / legacy views: header slot + hfc-card wrapper --}}
+                        @isset($header)
+                            <div class="mb-4">
+                                {{ $header }}
+                            </div>
+                        @endisset
+                        @hasSection('content')
+                            <div class="hfc-card p-4 sm:p-6">
+                                @yield('content')
+                            </div>
+                        @else
+                            <div class="hfc-card p-4 sm:p-6">
+                                {{ $slot ?? '' }}
+                            </div>
+                        @endif
                     @endif
                 </main>
             </div>

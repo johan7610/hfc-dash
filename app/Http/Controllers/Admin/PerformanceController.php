@@ -129,10 +129,23 @@ class PerformanceController extends Controller
         ];
 
 
+        // Active TV codes for all branches (admin visibility)
+        $tvCodes = \App\Models\TvAccessCode::where('is_active', true)
+            ->where(function ($q) {
+                $q->whereNull('expires_at')
+                  ->orWhere('expires_at', '>', now());
+            })
+            ->with(['branch:id,name', 'creator:id,name'])
+            ->orderBy('branch_id')
+            ->get();
+
+        $branches = \App\Models\Branch::orderBy('name')->get(['id', 'name']);
+
         return view('admin.performance', [
             'rollup' => $rollup,
             'listingStats' => $listingStats,
-
+            'tvCodes' => $tvCodes,
+            'branches' => $branches,
 'statusSummary' => $statusSummary,
         ]);
     }

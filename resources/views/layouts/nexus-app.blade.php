@@ -42,7 +42,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
                         </svg>
                     </button>
-                    <span class="ml-3 text-sm font-bold text-gray-900">nexus <span class="text-indigo-600">os</span></span>
+                    <span class="ml-3 text-sm font-bold text-gray-900">nexus <span class="text-[#00b4d8]">os</span></span>
                 </div>
 
                 @include('layouts.nexus-header')

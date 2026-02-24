@@ -24,11 +24,37 @@
         $nexusSection = 'role-manager';
     } elseif (str_starts_with($currentPath, 'nexus/settings')) {
         $nexusSection = 'settings';
+    } elseif (str_starts_with($currentPath, 'admin/finance')) {
+        $nexusSection = 'finance-engine';
     }
 
     $user = auth()->user();
     $userInitials = $user ? collect(explode(' ', $user->name))->map(fn($w) => strtoupper(substr($w, 0, 1)))->take(2)->join('') : '??';
     $userRole = $user ? str_replace('_', ' ', $user->effectiveRole()) : '';
+
+    // Agency Tracker role helpers
+    $effectiveRole = $user ? strtolower(trim((string)($user->effectiveRole() ?? ($user->role ?? '')))) : '';
+    $navIsAdmin = ($effectiveRole === 'admin') || (bool)($user->is_admin ?? 0);
+    $navIsBM = ($effectiveRole === 'branch_manager');
+    $navIsAgent = ($effectiveRole === 'agent');
+    $effectiveBranchId = $user?->effectiveBranchId();
+    $atExpanded = ($nexusSection === 'agency-tracker');
+
+    // Impersonation state
+    $impersonatorId  = (int) session('impersonator_id', 0);
+    $isImpersonating = $impersonatorId > 0;
+    $canSwitchUsers  = !$isImpersonating && ($navIsAdmin || (bool)($user->is_admin ?? 0));
+    $impersonatorName = null;
+    if ($isImpersonating) {
+        $impersonatorName = \Illuminate\Support\Facades\DB::table('users')->where('id', $impersonatorId)->value('name');
+    }
+    $switchUsers = collect();
+    if ($canSwitchUsers) {
+        $switchUsers = \Illuminate\Support\Facades\DB::table('users')
+            ->where('is_active', 1)
+            ->orderBy('name')
+            ->get(['id','name','email','role']);
+    }
 ?>
 
 <div class="nexus-sidebar">
@@ -126,13 +152,82 @@
         <?php endif; ?>
 
         
-        <a href="<?php echo e(route('worksheet.index')); ?>" class="nexus-nav-item <?php echo e($nexusSection === 'agency-tracker' ? 'active' : ''); ?>">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 0 0 .75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 0 0-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0 1 12 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 0 1-.673-.38m0 0A2.18 2.18 0 0 1 3 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 0 1 3.413-.387m7.5 0V5.25A2.25 2.25 0 0 0 13.5 3h-3a2.25 2.25 0 0 0-2.25 2.25v.894m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-            </svg>
-            <span>Agency Tracker</span>
-            <svg class="nexus-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
-        </a>
+        <div x-data="{ atOpen: <?php echo e($atExpanded ? 'true' : 'false'); ?> }">
+            <button type="button" @click="atOpen = !atOpen" class="nexus-nav-item nexus-nav-group-toggle <?php echo e($atExpanded ? 'active' : ''); ?>">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 0 0 .75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 0 0-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0 1 12 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 0 1-.673-.38m0 0A2.18 2.18 0 0 1 3 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 0 1 3.413-.387m7.5 0V5.25A2.25 2.25 0 0 0 13.5 3h-3a2.25 2.25 0 0 0-2.25 2.25v.894m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                </svg>
+                <span>Agency Tracker</span>
+                <svg class="nexus-chevron transition-transform duration-200" :class="atOpen && 'rotate-90'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+            </button>
+
+            <div x-show="atOpen" x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="nexus-nav-children">
+
+                
+                <a href="<?php echo e(route('worksheet.index')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('worksheet.*') ? 'active' : ''); ?>">Worksheet</a>
+                <a href="<?php echo e(route('agent.listings')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('agent.listings*') ? 'active' : ''); ?>">My Listing Stock</a>
+                <?php if($user && ($user->can_capture_rentals || in_array($effectiveRole, ['admin','branch_manager']))): ?>
+                <a href="<?php echo e(route('rentals.index')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('rentals.*') ? 'active' : ''); ?>">Rentals</a>
+                <?php endif; ?>
+
+                
+                <?php if($navIsAgent): ?>
+                <div class="nexus-nav-sublabel">My Performance</div>
+                <a href="<?php echo e(route('agent.dashboard')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('agent.dashboard') ? 'active' : ''); ?>">Agent Dashboard</a>
+                <a href="<?php echo e(route('agent.daily.summary')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('agent.daily.summary*') ? 'active' : ''); ?>">Daily Activity Summary</a>
+                <a href="<?php echo e(route('agent.daily')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('agent.daily') ? 'active' : ''); ?>">My Daily Activity</a>
+                <a href="<?php echo e(route('agent.deals.index')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('agent.deals.*') ? 'active' : ''); ?>">My Deals</a>
+                <?php endif; ?>
+
+                
+                <?php if($navIsBM): ?>
+                <div class="nexus-nav-sublabel">Branch</div>
+                <a href="<?php echo e(route('bm.performance')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('bm.performance*') ? 'active' : ''); ?>">Branch Performance</a>
+                <a href="<?php echo e(route('bm.daily.summary')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('bm.daily.summary*') ? 'active' : ''); ?>">Daily Activity Summary</a>
+                <a href="<?php echo e(route('bm.listings')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('bm.listings*') ? 'active' : ''); ?>">Branch Listing Stock</a>
+                <a href="<?php echo e(route('bm.my.dashboard')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('bm.my.dashboard') ? 'active' : ''); ?>">My Agent Dashboard</a>
+                <a href="<?php echo e(route('admin.deals')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.deals*') ? 'active' : ''); ?>">Deal Register</a>
+                <div class="nexus-nav-sublabel">Setup</div>
+                <a href="<?php echo e(route('bm.worksheet.market')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('bm.worksheet.market*') ? 'active' : ''); ?>">Worksheet Market</a>
+                <a href="<?php echo e(route('admin.daily.summary')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.daily.summary*') ? 'active' : ''); ?>">Daily Activity Summary</a>
+                <a href="<?php echo e(route('admin.targets')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.targets*') ? 'active' : ''); ?>">Daily Activity Targets</a>
+                <a href="<?php echo e(route('admin.targets.activity.definitions')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.targets.activity.definitions*') ? 'active' : ''); ?>">Activity Definitions</a>
+                <a href="<?php echo e(route('admin.targets.activity.setup')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.targets.activity.setup*') ? 'active' : ''); ?>">Activity Setup</a>
+                <a href="<?php echo e(route('bm.tv-messages')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('bm.tv-messages*') ? 'active' : ''); ?>">TV Messages</a>
+                <?php if($effectiveBranchId): ?>
+                <a href="<?php echo e(route('agent.daily')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('agent.daily') ? 'active' : ''); ?>">Daily Activity Capture</a>
+                <?php endif; ?>
+                <?php endif; ?>
+
+                
+                <?php if($navIsAdmin): ?>
+                <div class="nexus-nav-sublabel">Admin</div>
+                <a href="<?php echo e(route('admin.performance')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.performance') ? 'active' : ''); ?>">Performance</a>
+                <?php if(\Illuminate\Support\Facades\Route::has('admin.listings.stock')): ?>
+                <a href="<?php echo e(route('admin.listings.stock')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.listings.stock*') ? 'active' : ''); ?>">Company Listing Stock</a>
+                <?php endif; ?>
+                <a href="<?php echo e(route('admin.performance-settings.edit')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.performance-settings*') ? 'active' : ''); ?>">Company Settings</a>
+                <a href="<?php echo e(route('admin.designations.index')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.designations*') ? 'active' : ''); ?>">Designations</a>
+                <a href="<?php echo e(route('admin.deals')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.deals*') ? 'active' : ''); ?>">Deal Register</a>
+                <a href="<?php echo e(route('admin.listings.agents')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.listings.agents*') ? 'active' : ''); ?>">Listing Stock</a>
+                <a href="<?php echo e(route('admin.listings.import')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.listings.import*') ? 'active' : ''); ?>">Import Listings</a>
+                <a href="<?php echo e(route('admin.daily.summary')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.daily.summary*') ? 'active' : ''); ?>">Daily Activity Summary</a>
+                <a href="<?php echo e(route('admin.targets')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.targets') ? 'active' : ''); ?>">Targets</a>
+                <a href="<?php echo e(route('admin.targets.activity.definitions')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.targets.activity.definitions*') ? 'active' : ''); ?>">Activity Definitions</a>
+                <a href="<?php echo e(route('admin.targets.activity.setup')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.targets.activity.setup*') ? 'active' : ''); ?>">Activity Setup</a>
+                <a href="<?php echo e(route('admin.worksheet-market')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.worksheet-market*') ? 'active' : ''); ?>">Worksheet Market</a>
+                <a href="<?php echo e(route('admin.branch-assignments')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.branch-assignments') ? 'active' : ''); ?>">Branch Assignments</a>
+                <a href="<?php echo e(route('admin.users')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.users') ? 'active' : ''); ?>">Users</a>
+                <a href="<?php echo e(route('admin.tv-messages')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('admin.tv-messages*') ? 'active' : ''); ?>">TV Messages</a>
+                <?php endif; ?>
+
+                
+                <div class="nexus-nav-sublabel">Tools</div>
+                <a href="<?php echo e(route('tools.commission')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('tools.commission') && !request()->query('section') ? 'active' : ''); ?>">Commission Calculator</a>
+                <a href="<?php echo e(route('tools.cma')); ?>" class="nexus-nav-subitem <?php echo e(request()->routeIs('tools.cma') ? 'active' : ''); ?>">CMA Certificate Generator</a>
+                <a href="<?php echo e(route('tools.commission')); ?>?section=history" class="nexus-nav-subitem <?php echo e(request()->routeIs('tools.commission') && request()->query('section') === 'history' ? 'active' : ''); ?>">History & Logs</a>
+            </div>
+        </div>
 
         
         
@@ -195,6 +290,26 @@
         <?php endif; ?>
 
         
+        <?php if($user && $user->role === 'admin'): ?>
+        <div class="nexus-nav-divider"></div>
+        <div class="px-4 py-1">
+            <span class="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-semibold">Finance Engine</span>
+        </div>
+        <a href="<?php echo e(route('admin.finance.definitions')); ?>" class="nexus-nav-item <?php echo e($nexusSection === 'finance-engine' && request()->is('admin/finance/definitions') ? 'active' : ''); ?>">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 15.75V18m-7.5-6.75h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V13.5Zm0 2.25h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V18Zm2.498-6.75h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V13.5Zm0 2.25h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V18Zm2.504-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5Zm0 2.25h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V18Zm2.498-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5ZM8.25 6h7.5v2.25h-7.5V6ZM12 2.25c-1.892 0-3.758.11-5.593.322C5.307 2.7 4.5 3.65 4.5 4.757V19.5a2.25 2.25 0 0 0 2.25 2.25h10.5a2.25 2.25 0 0 0 2.25-2.25V4.757c0-1.108-.806-2.057-1.907-2.185A48.507 48.507 0 0 0 12 2.25Z" />
+            </svg>
+            <span>Definitions</span>
+        </a>
+        <a href="<?php echo e(route('admin.finance.audit.index')); ?>" class="nexus-nav-item <?php echo e($nexusSection === 'finance-engine' && request()->is('admin/finance/audit*') ? 'active' : ''); ?>">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25Z" />
+            </svg>
+            <span>Audit History</span>
+        </a>
+        <?php endif; ?>
+
+        
         <?php if(!$user || $user->canAccessNexusSection('settings')): ?>
         <a href="<?php echo e(route('nexus.settings')); ?>" class="nexus-nav-item <?php echo e($nexusSection === 'settings' ? 'active' : ''); ?>">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -209,12 +324,60 @@
 
     
     <?php if(auth()->guard()->check()): ?>
-    <div class="nexus-user-profile">
-        <div class="nexus-user-avatar"><?php echo e($userInitials); ?></div>
-        <div>
-            <div class="nexus-user-name"><?php echo e($user->name); ?></div>
-            <div class="nexus-user-role"><?php echo e($userRole); ?></div>
+    <div class="nexus-user-section" x-data="{ userMenu: false, switchPanel: false }">
+        
+        <?php if($isImpersonating): ?>
+        <div class="nexus-impersonate-banner">
+            <div class="text-[11px] text-amber-200">Viewing as <strong><?php echo e($user->name ?? 'User'); ?></strong></div>
+            <form method="POST" action="<?php echo e(route('impersonate.stop')); ?>" class="mt-1">
+                <?php echo csrf_field(); ?>
+                <button type="submit" class="nexus-impersonate-btn">Switch back to <?php echo e($impersonatorName ?? 'admin'); ?></button>
+            </form>
         </div>
+        <?php endif; ?>
+
+        <div class="nexus-user-profile">
+            <div class="nexus-user-avatar"><?php echo e($userInitials); ?></div>
+            <div class="flex-1 min-w-0">
+                <div class="nexus-user-name"><?php echo e($user->name); ?></div>
+                <div class="nexus-user-role"><?php echo e($userRole); ?></div>
+            </div>
+            <button type="button" @click="userMenu = !userMenu" class="nexus-user-menu-btn" title="User menu">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:1rem;height:1rem"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 12.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 18.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" /></svg>
+            </button>
+        </div>
+
+        
+        <div x-show="userMenu" @click.outside="userMenu = false" x-transition class="nexus-user-dropdown">
+            <a href="<?php echo e(route('profile.edit')); ?>" class="nexus-user-dropdown-item">Profile</a>
+            <?php if($canSwitchUsers): ?>
+            <button type="button" @click="switchPanel = !switchPanel; userMenu = false" class="nexus-user-dropdown-item w-full text-left">Switch User</button>
+            <?php endif; ?>
+            <form method="POST" action="<?php echo e(route('logout')); ?>">
+                <?php echo csrf_field(); ?>
+                <button type="submit" class="nexus-user-dropdown-item w-full text-left">Log Out</button>
+            </form>
+        </div>
+
+        
+        <?php if($canSwitchUsers): ?>
+        <div x-show="switchPanel" @click.outside="switchPanel = false" x-transition class="nexus-switch-panel">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold px-2 py-1">Switch User</div>
+            <div class="nexus-switch-list">
+                <?php $__currentLoopData = $switchUsers; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $su): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                    <?php if((int)$su->id !== (int)($user->id ?? 0)): ?>
+                    <form method="POST" action="<?php echo e(route('impersonate.start', ['user' => $su->id])); ?>">
+                        <?php echo csrf_field(); ?>
+                        <button type="submit" class="nexus-switch-item">
+                            <div class="text-xs text-white/90"><?php echo e($su->name); ?></div>
+                            <div class="text-[10px] text-white/50"><?php echo e($su->email); ?> · <?php echo e($su->role); ?></div>
+                        </button>
+                    </form>
+                    <?php endif; ?>
+                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+            </div>
+        </div>
+        <?php endif; ?>
     </div>
     <?php endif; ?>
 </div>

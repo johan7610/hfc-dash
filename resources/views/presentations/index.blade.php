@@ -9,7 +9,7 @@
         <p class="text-sm text-gray-500 mt-1">Seller presentations with market analysis.</p>
     </div>
     <a href="{{ route('presentations.create') }}"
-       class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700">
+       class="px-4 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded hover:bg-[#081f36]">
         + New Presentation
     </a>
 </div>
@@ -26,7 +26,7 @@
         <div class="px-6 py-12 text-center">
             <p class="text-gray-400 text-sm mb-4">No presentations yet.</p>
             <a href="{{ route('presentations.create') }}"
-               class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700">
+               class="px-4 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded hover:bg-[#081f36]">
                 Create your first presentation
             </a>
         </div>
@@ -82,7 +82,7 @@
                         </td>
                         <td class="px-4 py-3">
                             <a href="{{ route('presentations.show', $pres) }}"
-                               class="text-indigo-600 hover:underline text-xs font-medium">
+                               class="text-[#00b4d8] hover:underline text-xs font-medium">
                                 Open →
                             </a>
                         </td>

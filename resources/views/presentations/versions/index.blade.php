@@ -5,7 +5,7 @@
 <div class="mb-6 flex items-center justify-between">
     <h1 class="text-xl font-bold text-gray-800">{{ $pageTitle }}</h1>
     <a href="{{ route('presentations.index') }}"
-       class="text-xs text-indigo-600 hover:underline">← All Presentations</a>
+       class="text-xs text-[#00b4d8] hover:underline">← All Presentations</a>
 </div>
 
 {{-- FILTERS --}}
@@ -46,7 +46,7 @@
     </div>
 
     <button type="submit"
-            class="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded hover:bg-indigo-700">
+            class="px-3 py-1.5 bg-[#0b2a4a] text-white text-xs font-medium rounded hover:bg-[#081f36]">
         Filter
     </button>
 
@@ -89,7 +89,7 @@
                     <td class="px-4 py-3 text-right text-xs">
                         @if($version->presentation)
                             <a href="{{ route('presentations.show', $version->presentation_id) }}"
-                               class="text-indigo-600 hover:underline mr-3">
+                               class="text-[#00b4d8] hover:underline mr-3">
                                 Presentation →
                             </a>
                         @endif

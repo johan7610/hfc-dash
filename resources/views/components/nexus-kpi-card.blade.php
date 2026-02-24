@@ -1,4 +1,4 @@
-@props(['title', 'value', 'trend' => 0, 'trendUp' => true, 'iconBg' => 'bg-indigo-100 text-indigo-600'])
+@props(['title', 'value', 'trend' => 0, 'trendUp' => true, 'iconBg' => 'bg-sky-100 text-[#00b4d8]'])
 
 <div class="nexus-kpi-card">
     <div class="flex items-start justify-between">

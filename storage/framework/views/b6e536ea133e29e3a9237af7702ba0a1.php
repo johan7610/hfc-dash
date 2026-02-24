@@ -7,7 +7,7 @@
 
 <?php
     $statusClasses = match($presentation->status) {
-        'presented' => 'bg-indigo-50 text-indigo-600',
+        'presented' => 'bg-sky-50 text-[#00b4d8]',
         'locked'    => 'pres-badge-success',
         default     => 'bg-slate-100 text-slate-500',
     };
@@ -69,26 +69,26 @@
 
 <div class="pres-card mb-8">
     <div class="flex flex-wrap items-center gap-3 px-5 py-3.5">
-        <?php if($readiness['can_compile']): ?>
+        <?php if($latestSnapshot): ?>
             <a href="<?php echo e(route('presentations.analysis', $presentation)); ?>"
                class="pres-btn pres-btn-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" /></svg>
+                View Analysis
+            </a>
+        <?php endif; ?>
+        <?php if($readiness['can_compile']): ?>
+            <a href="<?php echo e(route('presentations.analysis', [$presentation, 'refresh' => 1])); ?>"
+               class="pres-btn <?php echo e($latestSnapshot ? 'pres-btn-secondary' : 'pres-btn-primary'); ?>">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" /></svg>
                 <?php echo e($latestSnapshot ? 'Re-run Analysis' : 'Run Analysis'); ?>
 
             </a>
-        <?php else: ?>
+        <?php elseif(!$latestSnapshot): ?>
             <span class="pres-btn pres-btn-disabled"
                   title="Complete the required evidence items below before running analysis">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" /></svg>
-                <?php echo e($latestSnapshot ? 'Re-run Analysis' : 'Run Analysis'); ?>
-
+                Run Analysis
             </span>
-        <?php endif; ?>
-        <?php if($latestSnapshot): ?>
-            <a href="<?php echo e(route('presentations.snapshots.show', [$presentation, $latestSnapshot])); ?>"
-               class="pres-btn pres-btn-secondary">
-                Latest Snapshot →
-            </a>
         <?php endif; ?>
         <?php if(config('features.pricing_simulator_v1')): ?>
             <a href="<?php echo e(route('presentations.pricing-simulator', $presentation)); ?>"
@@ -153,7 +153,7 @@
                 <ul class="space-y-2">
                     <?php $__currentLoopData = $readiness['required_items']; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $item): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                         <li class="flex items-start gap-2.5 text-xs">
-                            <span class="mt-0.5 shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] <?php echo e($item['satisfied'] ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'); ?>">
+                            <span class="mt-0.5 shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] <?php echo e($item['satisfied'] ? 'bg-sky-100 text-[#00b4d8]' : 'bg-slate-100 text-slate-400'); ?>">
                                 <?php echo e($item['satisfied'] ? '✓' : '✗'); ?>
 
                             </span>
@@ -172,7 +172,7 @@
                 <ul class="space-y-2">
                     <?php $__currentLoopData = $readiness['optional_items']; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $item): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                         <li class="flex items-start gap-2.5 text-xs">
-                            <span class="mt-0.5 shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] <?php echo e($item['satisfied'] ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-300'); ?>">
+                            <span class="mt-0.5 shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] <?php echo e($item['satisfied'] ? 'bg-sky-100 text-[#00b4d8]' : 'bg-slate-100 text-slate-300'); ?>">
                                 <?php echo e($item['satisfied'] ? '✓' : '○'); ?>
 
                             </span>
@@ -212,7 +212,7 @@
         
         <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
             <p class="pres-stat-label mb-1">P30</p>
-            <p class="pres-stat-value <?php echo e(($powerPanel['p30'] ?? 0) >= 0.5 ? 'text-indigo-600' : 'text-slate-800'); ?>">
+            <p class="pres-stat-value <?php echo e(($powerPanel['p30'] ?? 0) >= 0.5 ? 'text-[#00b4d8]' : 'text-slate-800'); ?>">
                 <?php if($powerPanel['p30'] !== null): ?>
                     <?php echo e(number_format($powerPanel['p30'] * 100, 0)); ?>%
                 <?php else: ?>
@@ -223,7 +223,7 @@
         
         <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
             <p class="pres-stat-label mb-1">P60</p>
-            <p class="pres-stat-value <?php echo e(($powerPanel['p60'] ?? 0) >= 0.5 ? 'text-indigo-600' : 'text-slate-800'); ?>">
+            <p class="pres-stat-value <?php echo e(($powerPanel['p60'] ?? 0) >= 0.5 ? 'text-[#00b4d8]' : 'text-slate-800'); ?>">
                 <?php if($powerPanel['p60'] !== null): ?>
                     <?php echo e(number_format($powerPanel['p60'] * 100, 0)); ?>%
                 <?php else: ?>
@@ -234,7 +234,7 @@
         
         <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
             <p class="pres-stat-label mb-1">P90</p>
-            <p class="pres-stat-value <?php echo e(($powerPanel['p90'] ?? 0) >= 0.65 ? 'text-indigo-600' : 'text-slate-800'); ?>">
+            <p class="pres-stat-value <?php echo e(($powerPanel['p90'] ?? 0) >= 0.65 ? 'text-[#00b4d8]' : 'text-slate-800'); ?>">
                 <?php if($powerPanel['p90'] !== null): ?>
                     <?php echo e(number_format($powerPanel['p90'] * 100, 0)); ?>%
                 <?php else: ?>
@@ -262,8 +262,8 @@
                     $confScore = $powerPanel['confidence']['confidence_score'] ?? 0;
                     $confGrade = $powerPanel['confidence']['confidence_grade'] ?? '-';
                     $confColor = match($confGrade) {
-                        'A' => 'text-indigo-600',
-                        'B' => 'text-indigo-500',
+                        'A' => 'text-[#00b4d8]',
+                        'B' => 'text-[#00b4d8]',
                         'C' => 'text-slate-500',
                         default => 'text-slate-400',
                     };
@@ -281,7 +281,7 @@
                     $ppiScore = $powerPanel['ppi']['ppi_score'] ?? 0;
                     $ppiLabel = $powerPanel['ppi']['ppi_label'] ?? '-';
                     $ppiColor = match($ppiLabel) {
-                        'Strong' => 'text-indigo-600',
+                        'Strong' => 'text-[#00b4d8]',
                         'Balanced' => 'text-slate-600',
                         default => 'text-slate-400',
                     };
@@ -330,12 +330,12 @@
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 
                 <?php if(!empty($explain['key_drivers'])): ?>
-                    <div class="bg-indigo-50 rounded-lg p-3">
-                        <p class="text-[11px] font-semibold text-indigo-700 mb-2 uppercase tracking-widest">Key Drivers</p>
+                    <div class="bg-sky-50 rounded-lg p-3">
+                        <p class="text-[11px] font-semibold text-[#0b2a4a] mb-2 uppercase tracking-widest">Key Drivers</p>
                         <ul class="space-y-1.5">
                             <?php $__currentLoopData = $explain['key_drivers']; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $driver): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                                 <li class="text-xs text-slate-600 flex items-start gap-2">
-                                    <span class="text-indigo-500 mt-0.5 shrink-0 font-bold">+</span>
+                                    <span class="text-[#00b4d8] mt-0.5 shrink-0 font-bold">+</span>
                                     <?php echo e($driver); ?>
 
                                 </li>
@@ -418,7 +418,7 @@
             <p class="text-sm text-slate-400 italic">No analysis run yet.</p>
             <?php if($readiness['can_compile']): ?>
                 <a href="<?php echo e(route('presentations.analysis', $presentation)); ?>"
-                   class="mt-3 inline-block text-xs text-indigo-600 hover:underline font-medium">
+                   class="mt-3 inline-block text-xs text-[#00b4d8] hover:underline font-medium">
                     Run first analysis →
                 </a>
             <?php else: ?>
@@ -441,7 +441,7 @@
             </p>
             <?php if($latestSnapshot): ?>
                 <a href="<?php echo e(route('presentations.snapshots.show', [$presentation, $latestSnapshot])); ?>"
-                   class="mt-4 inline-block text-xs text-indigo-600 hover:underline font-medium">
+                   class="mt-4 inline-block text-xs text-[#00b4d8] hover:underline font-medium">
                     View latest →
                 </a>
             <?php endif; ?>
@@ -505,10 +505,30 @@
                 $p24TypeSlug = $p24PathMap[$presentation->property_type] ?? 'for-sale';
                 $p24TypeDisplay = $p24TypeLabel[$presentation->property_type] ?? ucfirst($presentation->property_type ?? '');
 
-                // Look up suburb in P24 config
+                // Look up suburb in DB first (p24_suburbs table), fall back to config
                 $p24SuburbKey  = strtolower(trim($p24Suburb));
-                $p24Suburbs    = config('p24_suburbs', []);
-                $p24SuburbInfo = $p24Suburbs[$p24SuburbKey] ?? null;
+                $p24SuburbInfo = null;
+                if (class_exists(\App\Models\P24Suburb::class) && \Schema::hasTable('p24_suburbs')) {
+                    $dbSuburb = \App\Models\P24Suburb::where('slug', str_replace(' ', '-', $p24SuburbKey))
+                        ->orWhereRaw('LOWER(name) = ?', [$p24SuburbKey])
+                        ->first();
+                    if ($dbSuburb) {
+                        $p24SuburbInfo = [
+                            'id'          => $dbSuburb->p24_id,
+                            'slug'        => $dbSuburb->slug,
+                            'surrounding' => $dbSuburb->surrounding_ids ?? [],
+                            'confirmed'   => $dbSuburb->confirmed,
+                        ];
+                    }
+                }
+                if (!$p24SuburbInfo) {
+                    $p24Suburbs    = config('p24_suburbs', []);
+                    $p24SuburbInfo = $p24Suburbs[$p24SuburbKey] ?? null;
+                }
+                // If suburb found but ID is unconfirmed, fall back to Term= search
+                if ($p24SuburbInfo && empty($p24SuburbInfo['confirmed'])) {
+                    $p24SuburbInfo = null; // force Term= fallback
+                }
 
                 // Build advanced-search URL: sp=s%3d{ids}%26pf%3d{min}%26pt%3d{max}%26bd%3d{beds}
                 $p24BaseUrl    = 'https://www.property24.com/' . $p24TypeSlug . '/advanced-search/results';
@@ -548,7 +568,7 @@
                     }
                 }
             ?>
-            <div class="mb-5 p-4 rounded-xl border-2 border-indigo-200 bg-indigo-50/50">
+            <div class="mb-5 p-4 rounded-xl border-2 border-sky-200 bg-sky-50/50">
                 <div class="flex items-center justify-between gap-4 flex-wrap">
                     <div>
                         <p class="text-xs font-semibold text-slate-600 mb-1">Quick Search — find competing listings</p>
@@ -574,7 +594,7 @@
                                 <a href="<?php echo e($p24WideUrl); ?>"
                                    target="_blank"
                                    rel="noopener noreferrer"
-                                   class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-indigo-700 text-xs font-bold border border-indigo-300 bg-white hover:bg-indigo-50 shadow-sm hover:shadow transition-all">
+                                   class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[#0b2a4a] text-xs font-bold border border-sky-300 bg-white hover:bg-sky-50 shadow-sm hover:shadow transition-all">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
                                     <?php echo e($p24Suburb); ?> + Surrounding
                                 </a>
@@ -619,7 +639,7 @@
                             <div class="min-w-0 flex items-center gap-1 flex-wrap">
                                 <?php
                                     $linkColor = in_array($link->type, ['active_listing', 'competitor_listing'])
-                                        ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-500';
+                                        ? 'bg-sky-50 text-[#00b4d8]' : 'bg-slate-100 text-slate-500';
                                 ?>
                                 <span class="pres-badge <?php echo e($linkColor); ?>">
                                     <?php echo e($linkTypeLabels[$link->type] ?? ucfirst($link->type)); ?>
@@ -631,11 +651,11 @@
                                     $lHasCapture = !empty($link->portal_capture_id);
                                     $lExtStatus = $link->extraction_status ?? 'pending';
                                     if ($lHasCapture) {
-                                        $lExtBadge = 'bg-indigo-50 text-indigo-600';
+                                        $lExtBadge = 'bg-sky-50 text-[#00b4d8]';
                                         $lExtLabel = 'Captured';
                                     } else {
                                         $lExtBadge = match($lExtStatus) {
-                                            'ok'     => 'bg-indigo-50 text-indigo-600',
+                                            'ok'     => 'bg-sky-50 text-[#00b4d8]',
                                             'failed' => 'bg-slate-100 text-slate-500',
                                             default  => 'bg-slate-50 text-slate-400',
                                         };
@@ -657,7 +677,7 @@
                                           class="inline">
                                         <?php echo csrf_field(); ?>
                                         <button type="submit"
-                                                class="inline-block px-1 py-0.5 text-xs text-indigo-500 hover:text-indigo-700"
+                                                class="inline-block px-1 py-0.5 text-xs text-[#00b4d8] hover:text-[#0b2a4a]"
                                                 title="Re-run extraction">&#x27F3;</button>
                                     </form>
                                 <?php endif; ?>
@@ -669,7 +689,7 @@
                                 <?php endif; ?>
 
                                 <a href="<?php echo e($link->url); ?>" target="_blank" rel="noopener noreferrer"
-                                   class="text-indigo-600 hover:underline break-all">
+                                   class="text-[#00b4d8] hover:underline break-all">
                                     <?php echo e(\Illuminate\Support\Str::limit($link->url, 50)); ?>
 
                                 </a>
@@ -689,7 +709,7 @@
                                         <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                                     </select>
                                     <button type="submit"
-                                            class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold">Save</button>
+                                            class="text-xs text-[#00b4d8] hover:text-[#0b2a4a] font-semibold">Save</button>
                                 </form>
                                 <form method="POST"
                                       action="<?php echo e(route('presentations.links.destroy', [$presentation, $link])); ?>">
@@ -727,12 +747,12 @@
                                 if (!empty($lVerified['price_median'])) $lParts[] = 'Median: R' . number_format($lVerified['price_median'], 0);
                             ?>
                             <?php if(!empty($lParts)): ?>
-                                <div class="mt-1.5 text-xs text-slate-600 bg-indigo-50 rounded px-2 py-1">
+                                <div class="mt-1.5 text-xs text-slate-600 bg-sky-50 rounded px-2 py-1">
                                     Search capture | <?php echo e(implode(' | ', $lParts)); ?>
 
                                 </div>
                             <?php else: ?>
-                                <div class="mt-1.5 text-xs text-slate-600 bg-indigo-50 rounded px-2 py-1">
+                                <div class="mt-1.5 text-xs text-slate-600 bg-sky-50 rounded px-2 py-1">
                                     Search capture
                                 </div>
                             <?php endif; ?>
@@ -779,7 +799,7 @@
                         <?php if($lHasCapture): ?>
                             <?php $lCapture = $link->portalCapture; ?>
                             <?php if($lCapture): ?>
-                                <div class="mt-1.5 bg-indigo-50 border border-indigo-200 rounded px-2 py-1.5 text-xs text-indigo-700 flex items-center justify-between gap-2">
+                                <div class="mt-1.5 bg-sky-50 border border-sky-200 rounded px-2 py-1.5 text-xs text-[#0b2a4a] flex items-center justify-between gap-2">
                                     <div class="flex-1">
                                         <span class="font-semibold">Captured via extension</span>
                                         — <?php echo e(number_format($lCapture->html_bytes)); ?> bytes
@@ -799,7 +819,7 @@
                         <?php if($lExtStatus === 'failed' && !$lHasCapture): ?>
                             <?php if(config('features.portal_extension_capture_v1') && $link->type === 'property24'): ?>
                                 
-                                <div class="mt-1.5 bg-indigo-50 border border-indigo-200 rounded px-2 py-1.5 text-xs text-indigo-700 flex items-center justify-between gap-2">
+                                <div class="mt-1.5 bg-sky-50 border border-sky-200 rounded px-2 py-1.5 text-xs text-[#0b2a4a] flex items-center justify-between gap-2">
                                     <div class="flex-1">
                                         <span class="font-semibold">Capture via Browser Extension</span> — open the portal and use the capture extension
                                     </div>
@@ -865,7 +885,7 @@
                         <?php if(config('features.presentation_link_details_v1') && isset($linkViews[$link->id])): ?>
                             <?php $lView = $linkViews[$link->id]; ?>
                             <details class="mt-1.5">
-                                <summary class="text-xs text-indigo-500 cursor-pointer hover:underline">
+                                <summary class="text-xs text-[#00b4d8] cursor-pointer hover:underline">
                                     <?php if(($lView['capture_page_type'] ?? null) === 'search'): ?>
                                         View search summary
                                     <?php else: ?>
@@ -877,37 +897,37 @@
 
                                     <?php if(($lView['capture_page_type'] ?? null) === 'search'): ?>
                                         
-                                        <div class="bg-indigo-50 border border-indigo-200 rounded p-3">
-                                            <p class="text-xs font-semibold text-indigo-700 mb-2 uppercase tracking-wide">Search Capture Summary</p>
+                                        <div class="bg-sky-50 border border-sky-200 rounded p-3">
+                                            <p class="text-xs font-semibold text-[#0b2a4a] mb-2 uppercase tracking-wide">Search Capture Summary</p>
                                             <?php if(!empty($lView['search_summary'])): ?>
                                                 <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
                                                     <?php if(!empty($lView['search_summary']['listings_found'])): ?>
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Listings found</dt>
-                                                        <dd class="text-indigo-800 font-medium"><?php echo e($lView['search_summary']['listings_found']); ?></dd>
+                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Listings found</dt>
+                                                        <dd class="text-[#0b2a4a] font-medium"><?php echo e($lView['search_summary']['listings_found']); ?></dd>
                                                     <?php endif; ?>
                                                     <?php if(!empty($lView['search_summary']['total_results'])): ?>
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Total results</dt>
-                                                        <dd class="text-indigo-800 font-medium"><?php echo e($lView['search_summary']['total_results']); ?></dd>
+                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Total results</dt>
+                                                        <dd class="text-[#0b2a4a] font-medium"><?php echo e($lView['search_summary']['total_results']); ?></dd>
                                                     <?php endif; ?>
                                                     <?php if(!empty($lView['search_summary']['price_change_count'])): ?>
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Price changes</dt>
+                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Price changes</dt>
                                                         <dd class="text-amber-700 font-semibold"><?php echo e($lView['search_summary']['price_change_count']); ?></dd>
                                                     <?php endif; ?>
                                                     <?php if(!empty($lView['search_summary']['capture_time'])): ?>
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Captured</dt>
-                                                        <dd class="text-indigo-800"><?php echo e($lView['search_summary']['capture_time']); ?></dd>
+                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Captured</dt>
+                                                        <dd class="text-[#0b2a4a]"><?php echo e($lView['search_summary']['capture_time']); ?></dd>
                                                     <?php endif; ?>
                                                     <?php if(!empty($lView['search_summary']['html_bytes'])): ?>
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Page size</dt>
-                                                        <dd class="text-indigo-800"><?php echo e(number_format($lView['search_summary']['html_bytes'])); ?> bytes</dd>
+                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Page size</dt>
+                                                        <dd class="text-[#0b2a4a]"><?php echo e(number_format($lView['search_summary']['html_bytes'])); ?> bytes</dd>
                                                     <?php endif; ?>
                                                     <?php if(!empty($lView['search_summary']['parse_status'])): ?>
-                                                        <dt class="text-indigo-400 whitespace-nowrap">Status</dt>
-                                                        <dd class="text-indigo-800"><?php echo e($lView['search_summary']['parse_status']); ?></dd>
+                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Status</dt>
+                                                        <dd class="text-[#0b2a4a]"><?php echo e($lView['search_summary']['parse_status']); ?></dd>
                                                     <?php endif; ?>
                                                 </dl>
                                             <?php endif; ?>
-                                            <p class="mt-2 text-xs text-indigo-500 italic">
+                                            <p class="mt-2 text-xs text-[#00b4d8] italic">
                                                 Search captures monitor competitor changes. To see listing details, open the listing page and capture it.
                                             </p>
                                         </div>
@@ -961,7 +981,7 @@
                                                             <tr class="border-b border-gray-100">
                                                                 <td class="py-1.5 pr-2 text-gray-500 whitespace-nowrap"><?php echo e($oField['label']); ?></td>
                                                                 <td class="py-1.5 pr-2 text-gray-700"><?php echo e($oField['current'] ?? '—'); ?></td>
-                                                                <td class="py-1.5 pr-2 <?php echo e($oField['imported'] ? 'text-indigo-600' : 'text-gray-300'); ?>">
+                                                                <td class="py-1.5 pr-2 <?php echo e($oField['imported'] ? 'text-[#00b4d8]' : 'text-gray-300'); ?>">
                                                                     <?php echo e($oField['imported'] ?? ($oField['imported_missing_label'] ?? 'No imported value yet')); ?>
 
                                                                 </td>
@@ -1054,7 +1074,7 @@
                         <?php else: ?>
                             
                             <details class="mt-1.5">
-                                <summary class="text-xs text-indigo-500 cursor-pointer hover:underline">
+                                <summary class="text-xs text-[#00b4d8] cursor-pointer hover:underline">
                                     <?php echo e($link->isOverridden() ? 'Edit override' : 'View details / Override'); ?>
 
                                 </summary>
@@ -1156,7 +1176,7 @@
                 </button>
             </div>
             <p id="add-link-error" class="text-xs text-red-600 hidden"></p>
-            <p id="add-link-success" class="text-xs text-indigo-600 hidden"></p>
+            <p id="add-link-success" class="text-xs text-[#00b4d8] hidden"></p>
 
             <?php $__errorArgs = ['url'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
@@ -1245,10 +1265,10 @@ unset($__errorArgs, $__bag); ?>
                     // Build new link row and insert into DOM
                     var link = data.link;
                     var typeColor = ['active_listing', 'competitor_listing'].indexOf(link.type) >= 0
-                        ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-500';
+                        ? 'bg-sky-50 text-[#00b4d8]' : 'bg-slate-100 text-slate-500';
                     var extBadge = link.portal_capture_id
-                        ? 'bg-indigo-50 text-indigo-600'
-                        : (link.extraction_status === 'ok' ? 'bg-indigo-50 text-indigo-600' : (link.extraction_status === 'failed' ? 'bg-slate-100 text-slate-500' : 'bg-slate-50 text-slate-400'));
+                        ? 'bg-sky-50 text-[#00b4d8]'
+                        : (link.extraction_status === 'ok' ? 'bg-sky-50 text-[#00b4d8]' : (link.extraction_status === 'failed' ? 'bg-slate-100 text-slate-500' : 'bg-slate-50 text-slate-400'));
                     var extLabel = link.portal_capture_id
                         ? 'Captured'
                         : (link.extraction_status === 'ok' ? 'Extracted' : (link.extraction_status === 'failed' ? 'Failed' : 'Pending'));
@@ -1262,7 +1282,7 @@ unset($__errorArgs, $__bag); ?>
                         + '<div class="min-w-0 flex items-center gap-1 flex-wrap">'
                         + '<span class="inline-block px-1.5 py-0.5 rounded text-xs font-medium ' + typeColor + '">' + esc(linkTypeLabels[link.type] || link.type) + '</span>'
                         + '<span class="inline-block px-1.5 py-0.5 rounded text-xs font-medium ' + extBadge + '" data-link-badge="' + link.id + '">' + extLabel + '</span>'
-                        + '<a href="' + esc(link.url) + '" target="_blank" rel="noopener noreferrer" class="text-indigo-600 hover:underline break-all">' + esc(shortUrl) + '</a>'
+                        + '<a href="' + esc(link.url) + '" target="_blank" rel="noopener noreferrer" class="text-[#00b4d8] hover:underline break-all">' + esc(shortUrl) + '</a>'
                         + (link.notes ? '<span class="text-gray-400"> — ' + esc(link.notes) + '</span>' : '')
                         + '</div></div>';
 
@@ -1336,7 +1356,7 @@ unset($__errorArgs, $__bag); ?>
         
         <div id="captures-summary" class="mb-4 hidden">
             <div class="flex items-center gap-4 text-xs">
-                <span id="captures-summary-listings" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-semibold"></span>
+                <span id="captures-summary-listings" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-50 text-[#0b2a4a] font-semibold"></span>
                 <span id="captures-summary-searches" class="text-slate-400 font-medium"></span>
             </div>
         </div>
@@ -1376,6 +1396,11 @@ unset($__errorArgs, $__bag); ?>
         </details>
         <?php endif; ?>
 
+        <?php
+            $p24SuburbMap = collect(config('p24_suburbs'))
+                ->pluck('slug', 'id')
+                ->map(fn ($slug) => ucwords(str_replace('-', ' ', $slug)));
+        ?>
         <script>
         (function () {
             var presentationId = <?php echo e($presentation->id); ?>;
@@ -1408,9 +1433,67 @@ unset($__errorArgs, $__bag); ?>
                 return iso.substring(0, 16).replace('T', ' ');
             }
 
+            function formatShortPrice(v) {
+                if (!v || v <= 0) return '';
+                if (v >= 1000000) {
+                    var m = (v / 1000000);
+                    return 'R' + (m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)) + 'M';
+                }
+                if (v >= 1000) return 'R' + Math.round(v / 1000) + 'K';
+                return 'R' + v;
+            }
+
+            // P24 suburb ID → name lookup (from config/p24_suburbs.php)
+            var p24SuburbMap = <?php echo json_encode($p24SuburbMap, 15, 512) ?>;
+
             function extractSearchDescription(c) {
+                var url = c.source_url || '';
+
+                // Parse P24 advanced search URL for a friendly description
+                if (url.indexOf('property24.com') !== -1 && url.indexOf('sp=') !== -1) {
+                    try {
+                        var urlObj = new URL(url);
+                        var sp = urlObj.searchParams.get('sp');
+                        if (sp) {
+                            var spParams = new URLSearchParams(sp);
+                            var parts = [];
+
+                            // Suburb name from ID
+                            var subId = spParams.get('s');
+                            if (subId && p24SuburbMap[subId]) {
+                                parts.push(p24SuburbMap[subId]);
+                            }
+
+                            // Property type from URL path
+                            if (url.indexOf('/houses-for-sale') !== -1) parts.push('Houses');
+                            else if (url.indexOf('/apartments-for-sale') !== -1) parts.push('Apartments');
+                            else if (url.indexOf('/townhouses-for-sale') !== -1) parts.push('Townhouses');
+                            else parts.push('Properties');
+
+                            // Price range
+                            var pf = spParams.get('pf');
+                            var pt = spParams.get('pt');
+                            if (pf || pt) {
+                                var rangeStr = '';
+                                rangeStr += pf ? formatShortPrice(parseInt(pf)) : 'Any';
+                                rangeStr += ' \u2013 ';
+                                rangeStr += pt ? formatShortPrice(parseInt(pt)) : 'Any';
+                                parts.push(rangeStr);
+                            }
+
+                            // Beds
+                            var bd = spParams.get('bd');
+                            if (bd) parts.push(bd + '+ beds');
+
+                            if (parts.length > 0) {
+                                return parts.join(' | ');
+                            }
+                        }
+                    } catch (e) { /* fall through to default */ }
+                }
+
+                // Fallback: use page title
                 var title = c.page_title || '';
-                // P24 titles: "4 Bedroom houses for sale in Shelly Beach - Property24.com"
                 var desc = title.replace(/\s*[-|–].*(Property24|PrivateProperty).*$/i, '').trim();
                 if (desc.length > 80) desc = desc.substring(0, 77) + '...';
                 return desc || c.source_site || 'Search';
@@ -1462,18 +1545,18 @@ unset($__errorArgs, $__bag); ?>
             function buildSearchCard(c) {
                 var desc = extractSearchDescription(c);
                 var count = extractListingCount(c);
-                var statusClass = c.parse_status === 'parsed' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400';
+                var statusClass = c.parse_status === 'parsed' ? 'bg-sky-50 text-[#00b4d8]' : 'bg-slate-100 text-slate-400';
                 var statusLabel = c.parse_status === 'parsed' ? 'Parsed' : (c.parse_status || 'Pending');
 
                 var html = '<div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">';
-                html += '<div class="shrink-0 w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">';
-                html += '<svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>';
+                html += '<div class="shrink-0 w-8 h-8 rounded-lg bg-sky-100 flex items-center justify-center">';
+                html += '<svg class="w-4 h-4 text-[#00b4d8]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>';
                 html += '</div>';
                 html += '<div class="flex-1 min-w-0">';
                 html += '<p class="text-xs font-semibold text-slate-700 truncate">' + esc(desc) + '</p>';
                 html += '<div class="flex items-center gap-2 mt-0.5">';
                 if (count !== null) {
-                    html += '<span class="text-[11px] text-indigo-600 font-medium">' + count + ' properties found</span>';
+                    html += '<span class="text-[11px] text-[#00b4d8] font-medium">' + count + ' properties found</span>';
                     html += '<span class="text-slate-300">·</span>';
                 }
                 html += '<span class="text-[11px] text-slate-400">' + shortDate(c.captured_at) + '</span>';
@@ -1481,7 +1564,7 @@ unset($__errorArgs, $__bag); ?>
                 html += '</div>';
                 html += '<div class="flex items-center gap-2 shrink-0">';
                 html += '<span class="px-1.5 py-0.5 rounded text-[10px] font-medium ' + statusClass + '">' + esc(statusLabel) + '</span>';
-                html += '<a href="' + esc(c.source_url) + '" target="_blank" class="text-indigo-500 hover:text-indigo-700" title="Open on portal">';
+                html += '<a href="' + esc(c.source_url) + '" target="_blank" class="text-[#00b4d8] hover:text-[#0b2a4a]" title="Open on portal">';
                 html += '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>';
                 html += '</a>';
                 html += '<button type="button" onclick="deleteCapture(' + c.id + ')" class="text-slate-300 hover:text-red-500 transition-colors" title="Delete capture">';
@@ -1494,7 +1577,7 @@ unset($__errorArgs, $__bag); ?>
 
             function buildPropertyCard(c) {
                 var f = extractPropertyFields(c);
-                var statusClass = c.parse_status === 'parsed' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400';
+                var statusClass = c.parse_status === 'parsed' ? 'bg-sky-50 text-[#00b4d8]' : 'bg-slate-100 text-slate-400';
                 var statusLabel = c.parse_status === 'parsed' ? 'Parsed' : (c.parse_status || 'Pending');
                 var priceStr = formatPrice(f.price);
                 var title = (f.name || '').replace(/\s*[-|–].*(Property24|PrivateProperty).*$/i, '').trim();
@@ -1550,7 +1633,7 @@ unset($__errorArgs, $__bag); ?>
                 html += '<span class="px-1.5 py-0.5 rounded text-[10px] font-medium ' + statusClass + '">' + esc(statusLabel) + '</span>';
                 html += '</div>';
                 html += '<div class="flex items-center gap-2">';
-                html += '<a href="' + esc(c.source_url) + '" target="_blank" class="text-indigo-500 hover:text-indigo-700" title="View on portal">';
+                html += '<a href="' + esc(c.source_url) + '" target="_blank" class="text-[#00b4d8] hover:text-[#0b2a4a]" title="View on portal">';
                 html += '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>';
                 html += '</a>';
                 html += '<button type="button" onclick="deleteCapture(' + c.id + ')" class="text-slate-300 hover:text-red-500 transition-colors" title="Delete capture">';
@@ -1595,12 +1678,12 @@ unset($__errorArgs, $__bag); ?>
                     var shortUrl = (c.source_url || '').length > 45 ? c.source_url.substring(0, 45) + '...' : c.source_url;
                     var capturedAt = shortDate(c.captured_at);
                     var statusBadge = c.parse_status === 'parsed'
-                        ? '<span class="px-1 py-0.5 rounded bg-indigo-50 text-indigo-600" data-capture-status>parsed</span>'
+                        ? '<span class="px-1 py-0.5 rounded bg-sky-50 text-[#00b4d8]" data-capture-status>parsed</span>'
                         : '<span class="px-1 py-0.5 rounded bg-slate-50 text-slate-400" data-capture-status>' + esc(c.parse_status || 'unknown') + '</span>';
                     t += '<tr class="border-b border-gray-50" data-capture-id="' + c.id + '">';
                     t += '<td class="py-1.5 pr-2 text-gray-600">' + esc(c.source_site || '') + '</td>';
-                    t += '<td class="py-1.5 pr-2"><span class="px-1 py-0.5 rounded bg-indigo-50 text-indigo-600">' + esc(c.page_type) + '</span></td>';
-                    t += '<td class="py-1.5 pr-2"><a href="' + esc(c.source_url) + '" target="_blank" class="text-indigo-600 hover:underline">' + esc(shortUrl) + '</a></td>';
+                    t += '<td class="py-1.5 pr-2"><span class="px-1 py-0.5 rounded bg-sky-50 text-[#00b4d8]">' + esc(c.page_type) + '</span></td>';
+                    t += '<td class="py-1.5 pr-2"><a href="' + esc(c.source_url) + '" target="_blank" class="text-[#00b4d8] hover:underline">' + esc(shortUrl) + '</a></td>';
                     t += '<td class="py-1.5 pr-2">' + statusBadge + '</td>';
                     t += '<td class="py-1.5 pr-2 text-gray-500">' + capturedAt + '</td>';
                     t += '<td class="py-1.5 text-gray-500">' + (c.html_bytes ? Number(c.html_bytes).toLocaleString() + 'b' : '-') + '</td>';
@@ -1633,15 +1716,40 @@ unset($__errorArgs, $__bag); ?>
                         else properties.push(c);
                     });
 
-                    // Summary line
+                    // Summary line — count UNIQUE listings across all search captures
                     var totalListingsFound = 0;
+                    var seenListingIds = {};
+                    var bestTotalCount = null;
                     searches.forEach(function (c) {
-                        var cnt = extractListingCount(c);
-                        if (cnt) totalListingsFound += parseInt(cnt, 10);
+                        var ef = c.extracted_fields_json;
+                        // Collect unique listing IDs from extracted items
+                        if (ef && ef.search && ef.search.items) {
+                            ef.search.items.forEach(function (item) {
+                                // Normalize: strip leading non-numeric chars (P prefix on sponsored copies)
+                                var lid = String(item.portal_listing_id || '').replace(/^[^0-9]+/, '');
+                                if (lid && !seenListingIds[lid]) {
+                                    seenListingIds[lid] = true;
+                                    totalListingsFound++;
+                                }
+                            });
+                        }
+                        // P24's reported total_count is the authoritative headline number
+                        if (ef && ef.search && ef.search.total_count && ef.search.total_count > 0) {
+                            if (bestTotalCount === null || ef.search.total_count > bestTotalCount) {
+                                bestTotalCount = ef.search.total_count;
+                            }
+                        }
                     });
+                    // Always prefer P24's total_count as the headline (it's the truth)
+                    if (bestTotalCount !== null) {
+                        totalListingsFound = bestTotalCount;
+                    }
 
                     if (attached.length > 0) {
-                        summaryListingsEl.textContent = totalListingsFound + ' active listings found from ' + searches.length + ' search capture' + (searches.length !== 1 ? 's' : '');
+                        var listingLabel = bestTotalCount !== null
+                            ? totalListingsFound + ' active listings (from P24 search)'
+                            : totalListingsFound + ' unique listings from ' + searches.length + ' search capture' + (searches.length !== 1 ? 's' : '');
+                        summaryListingsEl.textContent = listingLabel;
                         summarySearchesEl.textContent = properties.length + ' individual propert' + (properties.length !== 1 ? 'ies' : 'y') + ' captured';
                         summaryEl.classList.remove('hidden');
                     } else {
@@ -1823,10 +1931,10 @@ unset($__errorArgs, $__bag); ?>
 
         
         <?php if($totalUploads > 0): ?>
-            <div class="mb-4 px-3 py-2 rounded-lg <?php echo e(empty($missingTypes) ? 'bg-indigo-50' : 'bg-slate-50'); ?>">
+            <div class="mb-4 px-3 py-2 rounded-lg <?php echo e(empty($missingTypes) ? 'bg-sky-50' : 'bg-slate-50'); ?>">
                 <div class="flex items-center gap-2 text-xs">
                     <?php if(empty($missingTypes)): ?>
-                        <span class="text-indigo-600 font-semibold">Documents: <?php echo e(count($presentTypes)); ?>/3 uploaded ✓</span>
+                        <span class="text-[#00b4d8] font-semibold">Documents: <?php echo e(count($presentTypes)); ?>/3 uploaded ✓</span>
                     <?php else: ?>
                         <span class="text-slate-600 font-semibold">Documents: <?php echo e(count($presentTypes)); ?>/3</span>
                         <span class="text-slate-400">— missing:
@@ -1851,7 +1959,7 @@ unset($__errorArgs, $__bag); ?>
                             $uIsKnownType = in_array($upload->type, ['suburb_stats', 'vicinity_sales', 'cma', 'market_article', 'other']);
                             $uExtStatus = $upload->extraction_status ?? 'pending';
                             $uExtBadge = match($uExtStatus) {
-                                'ok'     => 'bg-indigo-50 text-indigo-600',
+                                'ok'     => 'bg-sky-50 text-[#00b4d8]',
                                 'failed' => 'bg-red-50 text-red-600',
                                 default  => 'bg-amber-50 text-amber-600',
                             };
@@ -1879,7 +1987,7 @@ unset($__errorArgs, $__bag); ?>
                                       class="inline">
                                     <?php echo csrf_field(); ?>
                                     <button type="submit"
-                                            class="inline-block px-1 py-0.5 text-xs text-indigo-500 hover:text-indigo-700"
+                                            class="inline-block px-1 py-0.5 text-xs text-[#00b4d8] hover:text-[#0b2a4a]"
                                             title="Re-run extraction">&#x27F3;</button>
                                 </form>
 
@@ -1916,12 +2024,12 @@ unset($__errorArgs, $__bag); ?>
                                         <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                                     </select>
                                     <button type="submit"
-                                            class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold">Save</button>
+                                            class="text-xs text-[#00b4d8] hover:text-[#0b2a4a] font-semibold">Save</button>
                                 </form>
                             <?php else: ?>
                                 
                                 <details class="shrink-0">
-                                    <summary class="text-[11px] text-slate-400 cursor-pointer hover:text-indigo-600">Change type</summary>
+                                    <summary class="text-[11px] text-slate-400 cursor-pointer hover:text-[#00b4d8]">Change type</summary>
                                     <form method="POST"
                                           action="<?php echo e(route('presentations.uploads.update-type', [$presentation, $upload])); ?>"
                                           class="flex items-center gap-1.5 mt-1">
@@ -1933,7 +2041,7 @@ unset($__errorArgs, $__bag); ?>
                                             <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                                         </select>
                                         <button type="submit"
-                                                class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold">Save</button>
+                                                class="text-xs text-[#00b4d8] hover:text-[#0b2a4a] font-semibold">Save</button>
                                     </form>
                                 </details>
                             <?php endif; ?>
@@ -1950,8 +2058,8 @@ unset($__errorArgs, $__bag); ?>
 
                         <?php if($hasDocExtract && $upload->type === 'cma'): ?>
                             
-                            <div class="mt-2 bg-indigo-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
-                                <div class="font-semibold text-indigo-700">CMA Valuation Summary</div>
+                            <div class="mt-2 bg-sky-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
+                                <div class="font-semibold text-[#0b2a4a]">CMA Valuation Summary</div>
                                 <?php if(isset($uFields['cma.lower_range']) || isset($uFields['cma.middle_range']) || isset($uFields['cma.upper_range'])): ?>
                                     <div>
                                         <span class="text-gray-500">Price Range:</span>
@@ -2001,8 +2109,8 @@ unset($__errorArgs, $__bag); ?>
 
                         <?php elseif($hasDocExtract && $upload->type === 'suburb_stats'): ?>
                             
-                            <div class="mt-2 bg-indigo-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
-                                <div class="font-semibold text-indigo-700">
+                            <div class="mt-2 bg-sky-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
+                                <div class="font-semibold text-[#0b2a4a]">
                                     Suburb Sales Summary
                                     <?php if(isset($uFields['suburb.latest_year'])): ?>
                                         <span class="font-normal text-gray-400">(<?php echo e($uFields['suburb.latest_year']); ?>)</span>
@@ -2031,8 +2139,8 @@ unset($__errorArgs, $__bag); ?>
 
                         <?php elseif($hasDocExtract && $upload->type === 'vicinity_sales'): ?>
                             
-                            <div class="mt-2 bg-indigo-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
-                                <div class="font-semibold text-indigo-700">Vicinity Sales Summary</div>
+                            <div class="mt-2 bg-sky-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
+                                <div class="font-semibold text-[#0b2a4a]">Vicinity Sales Summary</div>
                                 <?php if(isset($uFields['vicinity.lower_range']) || isset($uFields['vicinity.middle_range']) || isset($uFields['vicinity.upper_range'])): ?>
                                     <div>
                                         <span class="text-gray-500">Price Range:</span>
@@ -2133,7 +2241,7 @@ unset($__errorArgs, $__bag); ?>
 
                         
                             <details class="mt-1.5">
-                                <summary class="text-xs text-indigo-500 cursor-pointer hover:underline">
+                                <summary class="text-xs text-[#00b4d8] cursor-pointer hover:underline">
                                     <?php echo e($upload->isOverridden() ? 'Edit override' : 'Details'); ?>
 
                                 </summary>
@@ -2328,7 +2436,7 @@ unset($__errorArgs, $__bag); ?>
                                 <div class="flex items-center gap-2 min-w-0">
                                     <span class="text-slate-400 shrink-0">&#128206;</span>
                                     <span class="truncate font-medium"><?php echo e($libDoc->title ?? $libDoc->original_name); ?></span>
-                                    <span class="pres-badge bg-indigo-50 text-indigo-600">
+                                    <span class="pres-badge bg-sky-50 text-[#00b4d8]">
                                         <?php echo e($libDoc->doc_type); ?>
 
                                     </span>
@@ -2336,7 +2444,7 @@ unset($__errorArgs, $__bag); ?>
                                     <span class="text-slate-400"><?php echo e($libDoc->pivot->created_at ? \Carbon\Carbon::parse($libDoc->pivot->created_at)->format('d M Y') : ''); ?></span>
                                 </div>
                                 <a href="<?php echo e(route('documents.library.download', $libDoc)); ?>"
-                                   class="text-indigo-600 hover:text-indigo-800 font-semibold shrink-0 ml-2">
+                                   class="text-[#00b4d8] hover:text-[#0b2a4a] font-semibold shrink-0 ml-2">
                                     Download
                                 </a>
                             </li>
@@ -2471,7 +2579,7 @@ unset($__errorArgs, $__bag); ?>
 
 <?php if(config('features.presentation_live_updates_v1') && config('features.portal_extension_capture_v1')): ?>
 
-<div id="live-new-captures-banner" class="hidden fixed bottom-4 right-4 z-50 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg shadow-lg cursor-pointer hover:bg-indigo-700 transition-colors"
+<div id="live-new-captures-banner" class="hidden fixed bottom-4 right-4 z-50 px-4 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded-lg shadow-lg cursor-pointer hover:bg-[#081f36] transition-colors"
      onclick="window.__liveUpdates && window.__liveUpdates.scrollToCaptures()">
     <span id="live-banner-text">0 new captures</span>
 </div>
@@ -2543,11 +2651,11 @@ unset($__errorArgs, $__bag); ?>
         if (!badgeEl) return;
 
         if (linkData.portal_capture_id) {
-            badgeEl.className = 'inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-600';
+            badgeEl.className = 'inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-sky-50 text-[#00b4d8]';
             badgeEl.textContent = 'Captured';
         } else {
             var statusMap = {
-                'ok':      { cls: 'bg-indigo-50 text-indigo-600', label: 'Extracted' },
+                'ok':      { cls: 'bg-sky-50 text-[#00b4d8]', label: 'Extracted' },
                 'failed':  { cls: 'bg-slate-100 text-slate-500',  label: 'Failed' },
                 'pending': { cls: 'bg-slate-50 text-slate-400',   label: 'Pending' },
             };
@@ -2573,7 +2681,7 @@ unset($__errorArgs, $__bag); ?>
         var statusEl = row.querySelector('[data-capture-status]');
         if (statusEl) {
             if (c.parse_status === 'parsed') {
-                statusEl.className = 'px-1 py-0.5 rounded bg-indigo-50 text-indigo-600';
+                statusEl.className = 'px-1 py-0.5 rounded bg-sky-50 text-[#00b4d8]';
                 statusEl.textContent = 'parsed';
             } else {
                 statusEl.className = 'px-1 py-0.5 rounded bg-slate-50 text-slate-400';
@@ -2596,13 +2704,13 @@ unset($__errorArgs, $__bag); ?>
             : c.source_url;
         var capturedAt = c.captured_at ? c.captured_at.substring(0, 16).replace('T', ' ') : '';
         var statusBadge = c.parse_status === 'parsed'
-            ? '<span class="px-1 py-0.5 rounded bg-indigo-50 text-indigo-600" data-capture-status>parsed</span>'
+            ? '<span class="px-1 py-0.5 rounded bg-sky-50 text-[#00b4d8]" data-capture-status>parsed</span>'
             : '<span class="px-1 py-0.5 rounded bg-slate-50 text-slate-400" data-capture-status>' + esc(c.parse_status || 'unknown') + '</span>';
 
         var row = '<tr class="border-b border-gray-50 live-capture-new" data-capture-id="' + c.id + '">';
         row += '<td class="py-1.5 pr-2 text-gray-600">' + esc(c.source_site || '') + '</td>';
-        row += '<td class="py-1.5 pr-2"><span class="px-1 py-0.5 rounded bg-indigo-50 text-indigo-600">' + esc(c.page_type) + '</span></td>';
-        row += '<td class="py-1.5 pr-2"><a href="' + esc(c.source_url) + '" target="_blank" class="text-indigo-600 hover:underline">' + esc(shortUrl) + '</a></td>';
+        row += '<td class="py-1.5 pr-2"><span class="px-1 py-0.5 rounded bg-sky-50 text-[#00b4d8]">' + esc(c.page_type) + '</span></td>';
+        row += '<td class="py-1.5 pr-2"><a href="' + esc(c.source_url) + '" target="_blank" class="text-[#00b4d8] hover:underline">' + esc(shortUrl) + '</a></td>';
         row += '<td class="py-1.5 pr-2">' + statusBadge + '</td>';
         row += '<td class="py-1.5 pr-2 text-gray-500">' + capturedAt + '</td>';
         row += '<td class="py-1.5 text-gray-500">' + (c.html_bytes ? Number(c.html_bytes).toLocaleString() + 'b' : '-') + '</td>';

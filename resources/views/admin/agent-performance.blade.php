@@ -18,16 +18,16 @@
     $pointsStatus = (string)($progress['points_status'] ?? '—');
     $pointsPerDayNeeded = (float)($progress['points_per_day_needed'] ?? 0);
 
-    // Bars like BM
-    $valueBar  = $valuePct >= 95 ? 'bg-green-600' : ($valuePct >= 75 ? 'bg-amber-500' : 'bg-red-600');
-    $dealsBar  = $dealsPct >= 95 ? 'bg-green-600' : ($dealsPct >= 75 ? 'bg-amber-500' : 'bg-red-600');
+    // Bars — ds colours: >= 80 navy, >= 50 amber, else crimson
+    $valueBar  = $valuePct >= 80 ? 'ds-bar-navy' : ($valuePct >= 50 ? 'ds-bar-amber' : 'ds-bar-crimson');
+    $dealsBar  = $dealsPct >= 80 ? 'ds-bar-navy' : ($dealsPct >= 50 ? 'ds-bar-amber' : 'ds-bar-crimson');
 
-    $pointsBar = 'bg-gray-900';
+    $pointsBar = 'ds-bar-navy';
     if ($pointsTarget > 0) {
-        if ($pointsActual >= $pointsTarget) $pointsBar = 'bg-green-600';
-        elseif ($pointsStatus === 'Ahead' || $pointsStatus === 'On pace') $pointsBar = 'bg-green-600';
-        elseif ($pointsPct >= 75) $pointsBar = 'bg-amber-500';
-        else $pointsBar = 'bg-red-600';
+        if ($pointsActual >= $pointsTarget) $pointsBar = 'ds-bar-navy';
+        elseif ($pointsStatus === 'Ahead' || $pointsStatus === 'On pace') $pointsBar = 'ds-bar-navy';
+        elseif ($pointsPct >= 50) $pointsBar = 'ds-bar-amber';
+        else $pointsBar = 'ds-bar-crimson';
     }
 
     $m7 = $momentum_7d ?? [];
@@ -52,24 +52,23 @@
 
 <x-app-layout>
     <x-slot name="header">
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div>
-                <h2 class="font-semibold text-xl text-gray-200 leading-tight">
-                    Agent Dashboard — {{ $period }}
-                </h2>
-                <div class="text-sm text-gray-400">
-                    {{ $agent->name }} — {{ $agent->email }} @if($branchName) ({{ $branchName }}) @endif
+        <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                <div>
+                    <h2 class="text-xl font-bold text-white leading-tight">
+                        Agent Performance — {{ $agent->name }}
+                    </h2>
+                    <div class="text-sm text-white/60">
+                        {{ $agent->email }} @if($branchName) — {{ $branchName }} @endif — {{ $period }}
+                    </div>
                 </div>
-            </div>
-
-            <div class="flex flex-wrap md:flex-nowrap items-center gap-2">
-                <a href="{{ route('admin.performance', ['period' => $period]) }}" class="btn-primary px-4 py-2">Back</a>
-
-                <form method="GET" action="{{ route('admin.agent.performance', ['userId' => $agent->id]) }}" class="flex flex-wrap md:flex-nowrap items-center gap-2">
-                    <label class="text-sm font-semibold text-gray-200">Period</label>
-                    <input type="month" name="period" value="{{ $period }}" />
-                    <button type="submit" class="btn-primary px-4 py-2">Go</button>
-                </form>
+                <div class="flex items-center gap-2">
+                    <a href="{{ route('admin.performance', ['period' => $period]) }}" class="px-3 py-1.5 text-sm font-semibold rounded border border-white/30 text-white hover:bg-white/10">Back</a>
+                    <form method="GET" action="{{ route('admin.agent.performance', ['userId' => $agent->id]) }}" class="flex items-center gap-2">
+                        <input type="month" name="period" value="{{ $period }}" class="h-8 text-sm rounded border border-white/20 bg-white/10 text-white px-2" />
+                        <button type="submit" class="px-3 py-1.5 text-sm font-semibold rounded bg-white/20 text-white hover:bg-white/30">Go</button>
+                    </form>
+                </div>
             </div>
         </div>
     </x-slot>
@@ -77,30 +76,30 @@
     <div class="space-y-6">
 
         {{-- HERO: Money (agent) --}}
-        <div class="card">
-            <div class="text-2xl md:text-3xl font-extrabold text-gray-900 leading-tight">Agent focus — Money</div>
-            <div class="text-sm text-gray-600 mt-1">
-                Business truth (ex VAT) from Deal Register → side share/external flags → agent split.
-            </div>
+        <h3 class="ds-section-header">Agent focus — Money</h3>
+        <p class="ds-section-sub mb-4">
+            Business truth (ex VAT) from Deal Register &rarr; side share/external flags &rarr; agent split.
+        </p>
 
-            <div class="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <div class="card">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
                 <div class="rounded-2xl border border-black/10 bg-gray-50 p-4">
-                    <div class="text-xs font-bold text-gray-500 tracking-wide">RETAINED</div>
+                    <div class="ds-label">RETAINED</div>
                     <div class="text-sm text-gray-600 mt-1">Company retained (ex VAT)</div>
-                    <div class="text-3xl font-extrabold text-gray-900 leading-tight">R {{ number_format($moneyCompanyRetained, 0) }}</div>
+                    <div class="ds-value-xl leading-tight">R {{ number_format($moneyCompanyRetained, 0) }}</div>
 
                     <div class="mt-3 grid grid-cols-3 gap-2 text-xs text-gray-700">
                         <div class="rounded-xl bg-white border border-black/10 p-2">
-                            <div class="text-gray-500 font-semibold">Income</div>
-                            <div class="font-extrabold">R {{ number_format($moneyCompanyIncome, 0) }}</div>
+                            <div class="ds-label">Income</div>
+                            <div style="font-weight:700">R {{ number_format($moneyCompanyIncome, 0) }}</div>
                         </div>
                         <div class="rounded-xl bg-white border border-black/10 p-2">
-                            <div class="text-gray-500 font-semibold">Agent share</div>
-                            <div class="font-extrabold">R {{ number_format($moneyAgentIncome, 0) }}</div>
+                            <div class="ds-label">Agent share</div>
+                            <div style="font-weight:700">R {{ number_format($moneyAgentIncome, 0) }}</div>
                         </div>
                         <div class="rounded-xl bg-white border border-black/10 p-2">
-                            <div class="text-gray-500 font-semibold">Retained</div>
-                            <div class="font-extrabold">R {{ number_format($moneyCompanyRetained, 0) }}</div>
+                            <div class="ds-label">Retained</div>
+                            <div style="font-weight:700">R {{ number_format($moneyCompanyRetained, 0) }}</div>
                         </div>
                     </div>
 
@@ -113,54 +112,54 @@
 
                 {{-- Value --}}
                 <div class="rounded-2xl border border-black/10 bg-gray-50 p-4">
-                    <div class="text-xs font-bold text-gray-500 tracking-wide">VALUE</div>
+                    <div class="ds-label">VALUE</div>
                     <div class="text-sm text-gray-600 mt-1">Sales Value (Actual / Target)</div>
-                    <div class="text-3xl font-extrabold text-gray-900 leading-tight">
+                    <div class="ds-value-xl leading-tight">
                         R {{ number_format($valueActual, 0) }}
                         <span class="text-gray-400 font-bold">/ R {{ number_format($valueTarget, 0) }}</span>
                     </div>
-                    <div class="mt-2 h-3 rounded bg-gray-200 overflow-hidden">
-                        <div class="h-3 {{ $valueBar }}" style="width: {{ min(100, max(0, $valuePct)) }}%"></div>
+                    <div class="ds-progress-track mt-2">
+                        <div class="ds-progress-bar {{ $valueBar }}" style="width: {{ min(100, max(0, $valuePct)) }}%"></div>
                     </div>
-                    <div class="mt-2 text-sm text-gray-700 font-semibold">Progress {{ number_format($valuePct, 1) }}%</div>
+                    <div class="mt-2 text-sm ds-value font-semibold">Progress {{ number_format($valuePct, 1) }}%</div>
 
                     <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-700">
                         <div class="rounded-xl bg-white border border-black/10 p-2">
-                            <div class="text-gray-500 font-semibold">Deals</div>
-                            <div class="font-extrabold">{{ number_format($dealsActual, 0) }} / {{ number_format($dealsTarget, 0) }}</div>
+                            <div class="ds-label">Deals</div>
+                            <div style="font-weight:700">{{ number_format($dealsActual, 0) }} / {{ number_format($dealsTarget, 0) }}</div>
                         </div>
                         <div class="rounded-xl bg-white border border-black/10 p-2">
-                            <div class="text-gray-500 font-semibold">Listings target</div>
-                            <div class="font-extrabold">{{ number_format((int)($targets['listings'] ?? 0), 0) }}</div>
+                            <div class="ds-label">Listings target</div>
+                            <div style="font-weight:700">{{ number_format((int)($targets['listings'] ?? 0), 0) }}</div>
                         </div>
                     </div>
                 </div>
 
                 {{-- Pace --}}
                 <div class="rounded-2xl border border-black/10 bg-gray-50 p-4">
-                    <div class="text-xs font-bold text-gray-500 tracking-wide">PACE</div>
-                    <div class="text-sm text-gray-600 mt-1">Today: <span class="font-extrabold">{{ number_format($todayPoints, 0) }}</span> pts</div>
-                    <div class="text-sm text-gray-600 mt-1">Status: <span class="font-extrabold">{{ $pointsStatus }}</span></div>
-                    <div class="text-sm text-gray-600 mt-1">Need <span class="font-extrabold">{{ number_format($pointsPerDayNeeded, 1) }}</span>/day</div>
+                    <div class="ds-label">PACE</div>
+                    <div class="text-sm text-gray-600 mt-1">Today: <span class="ds-value" style="font-weight:700">{{ number_format($todayPoints, 0) }}</span> pts</div>
+                    <div class="text-sm text-gray-600 mt-1">Status: <span class="ds-value" style="font-weight:700">{{ $pointsStatus }}</span></div>
+                    <div class="text-sm text-gray-600 mt-1">Need <span class="ds-value" style="font-weight:700">{{ number_format($pointsPerDayNeeded, 1) }}</span>/day</div>
 
                     <div class="mt-3 text-sm text-gray-600 font-semibold">Points progress</div>
-                    <div class="mt-2 h-3 rounded bg-gray-200 overflow-hidden">
-                        <div class="h-3 {{ $pointsBar }}" style="width: {{ min(100, max(0, $pointsPct)) }}%"></div>
+                    <div class="ds-progress-track mt-2">
+                        <div class="ds-progress-bar {{ $pointsBar }}" style="width: {{ min(100, max(0, $pointsPct)) }}%"></div>
                     </div>
                     <div class="mt-2 text-xs text-gray-600">
                         {{ number_format($pointsActual, 0) }} / {{ number_format($pointsTarget, 0) }} ({{ number_format($pointsPct, 1) }}%)
-                        @if($pointsTarget > 0 && $pointsActual >= $pointsTarget) <span title="Target achieved">🏆</span> @endif
+                        @if($pointsTarget > 0 && $pointsActual >= $pointsTarget) <span title="Target achieved">&#127942;</span> @endif
                     </div>
                 </div>
             </div>
         </div>
 
         {{-- Momentum + today breakdown (matches BM style) --}}
-        <div class="card">
-            <div class="text-2xl md:text-3xl font-extrabold text-gray-900 leading-tight">Activity focus — Momentum</div>
-            <div class="text-sm text-gray-600 mt-1">Last 7 days points + today breakdown (agent scoped).</div>
+        <h3 class="ds-section-header">Activity focus — Momentum</h3>
+        <p class="ds-section-sub mb-4">Last 7 days points + today breakdown (agent scoped).</p>
 
-            <div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div class="card">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 <div class="rounded-2xl border border-black/10 bg-gray-50 p-4">
                     <div class="text-sm text-gray-600 font-semibold">Momentum (last 7 days)</div>
                     <div class="mt-3 grid grid-cols-7 gap-2">
@@ -172,9 +171,9 @@
                             <div class="rounded-xl border border-black/10 bg-white p-2 text-center">
                                 <div class="text-[10px] text-gray-500">{{ \Carbon\Carbon::parse($d['date'])->format('D') }}</div>
                                 <div class="mt-2 h-20 flex items-end justify-center">
-                                    <div class="w-4 rounded {{ $v > 0 ? 'bg-gray-900' : 'bg-gray-200' }}" style="height: {{ $h }}px;"></div>
+                                    <div class="w-4 rounded {{ $v > 0 ? 'ds-bar-navy' : 'bg-gray-200' }}" style="height: {{ $h }}px;"></div>
                                 </div>
-                                <div class="text-xs font-extrabold text-gray-900 mt-1">{{ number_format($v, 0) }}</div>
+                                <div class="text-xs ds-value mt-1" style="font-weight:700">{{ number_format($v, 0) }}</div>
                             </div>
                         @endforeach
                     </div>
@@ -187,7 +186,7 @@
                             <div class="text-sm text-gray-500">No activity captured today.</div>
                         @else
                             <div class="overflow-x-auto">
-                                <table class="min-w-full text-sm">
+                                <table class="ds-table min-w-full text-sm">
                                     <thead>
                                         <tr class="text-left text-gray-600">
                                             <th class="py-2 pr-4">Activity</th>
@@ -198,7 +197,7 @@
                                         @foreach($activities_today as $k => $v)
                                             <tr>
                                                 <td class="py-2 pr-4 text-gray-900 font-semibold">{{ $pretty($k) }}</td>
-                                                <td class="py-2 text-right text-gray-900 font-extrabold">{{ (int)$v }}</td>
+                                                <td class="py-2 text-right ds-value" style="font-weight:700">{{ (int)$v }}</td>
                                             </tr>
                                         @endforeach
                                     </tbody>
@@ -211,13 +210,13 @@
         </div>
 
         {{-- Deals table (light, BM-styled) --}}
-        <div class="card">
-            <div class="text-2xl md:text-3xl font-extrabold text-gray-900 leading-tight">Deals</div>
-            <div class="text-sm text-gray-600 mt-1">Includes per-deal company income (ex VAT), agent share, retained.</div>
+        <h3 class="ds-section-header">Deals</h3>
+        <p class="ds-section-sub mb-4">Includes per-deal company income (ex VAT), agent share, retained.</p>
 
-            <div class="mt-4 rounded-2xl border border-black/10 bg-gray-50 overflow-hidden">
+        <div class="card">
+            <div class="rounded-2xl border border-black/10 bg-gray-50 overflow-hidden">
                 <div class="overflow-x-auto">
-                    <table class="min-w-full text-sm">
+                    <table class="ds-table min-w-full text-sm">
                         <thead class="bg-white border-b border-black/10">
                             <tr class="text-left text-gray-600">
                                 <th class="px-4 py-3">Date</th>
@@ -237,16 +236,16 @@
                                 <tr class="hover:bg-black/5">
                                     <td class="px-4 py-3 text-gray-900">{{ $d->deal_date }}</td>
                                     <td class="px-4 py-3">
-                                        <div class="font-extrabold text-gray-900">{{ $d->file_no }}</div>
+                                        <div class="ds-value" style="font-weight:700">{{ $d->file_no }}</div>
                                         <div class="text-gray-500 text-xs font-semibold">{{ $d->deal_no }}</div>
                                     </td>
                                     <td class="px-4 py-3 text-gray-900">{{ $d->property_address }}</td>
                                     <td class="px-4 py-3 text-gray-900 font-semibold">{{ $d->side }}</td>
                                     <td class="px-4 py-3 text-right text-gray-900 font-semibold">R {{ number_format($d->property_value,0) }}</td>
                                     <td class="px-4 py-3 text-right text-gray-900 font-semibold">R {{ number_format($d->total_commission,0) }}</td>
-                                    <td class="px-4 py-3 text-right text-gray-900 font-extrabold">R {{ number_format($d->company_income_ex_vat ?? 0,0) }}</td>
-                                    <td class="px-4 py-3 text-right text-gray-900 font-extrabold">R {{ number_format($d->agent_income_ex_vat ?? 0,0) }}</td>
-                                    <td class="px-4 py-3 text-right text-gray-900 font-extrabold">R {{ number_format($d->company_retained_ex_vat ?? 0,0) }}</td>
+                                    <td class="px-4 py-3 text-right ds-value" style="font-weight:700">R {{ number_format($d->company_income_ex_vat ?? 0,0) }}</td>
+                                    <td class="px-4 py-3 text-right ds-value" style="font-weight:700">R {{ number_format($d->agent_income_ex_vat ?? 0,0) }}</td>
+                                    <td class="px-4 py-3 text-right ds-value" style="font-weight:700">R {{ number_format($d->company_retained_ex_vat ?? 0,0) }}</td>
                                     <td class="px-4 py-3 text-right text-gray-900">{{ (int)$d->agent_split_percent }}% / {{ (int)$d->agent_cut_percent }}%</td>
                                 </tr>
                             @endforeach
@@ -259,10 +258,10 @@
                         </tbody>
                         <tfoot class="bg-white border-t border-black/10">
                             <tr>
-                                <td class="px-4 py-3 font-extrabold text-gray-900" colspan="6">Totals</td>
-                                <td class="px-4 py-3 text-right font-extrabold text-gray-900">R {{ number_format($dealsCompanyIncome,0) }}</td>
-                                <td class="px-4 py-3 text-right font-extrabold text-gray-900">R {{ number_format($dealsAgentIncome,0) }}</td>
-                                <td class="px-4 py-3 text-right font-extrabold text-gray-900">R {{ number_format($dealsRetained,0) }}</td>
+                                <td class="px-4 py-3 ds-value" style="font-weight:700" colspan="6">Totals</td>
+                                <td class="px-4 py-3 text-right ds-value" style="font-weight:700">R {{ number_format($dealsCompanyIncome,0) }}</td>
+                                <td class="px-4 py-3 text-right ds-value" style="font-weight:700">R {{ number_format($dealsAgentIncome,0) }}</td>
+                                <td class="px-4 py-3 text-right ds-value" style="font-weight:700">R {{ number_format($dealsRetained,0) }}</td>
                                 <td class="px-4 py-3"></td>
                             </tr>
                         </tfoot>

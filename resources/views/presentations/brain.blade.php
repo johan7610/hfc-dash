@@ -53,7 +53,7 @@
                     <input type="text" id="inp-price"
                            value="{{ $defaults['price'] ?? '' }}"
                            placeholder="2,500,000"
-                           class="w-full bg-gray-800 border border-gray-700 rounded-lg pl-7 pr-3 py-2.5 text-lg font-semibold text-white placeholder-gray-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors"
+                           class="w-full bg-gray-800 border border-gray-700 rounded-lg pl-7 pr-3 py-2.5 text-lg font-semibold text-white placeholder-gray-600 focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none transition-colors"
                            inputmode="numeric">
                 </div>
             </div>
@@ -72,11 +72,11 @@
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Suburb</label>
                 <input type="text" id="inp-suburb" value="{{ $defaults['suburb'] }}"
-                       class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:border-indigo-500 outline-none transition-colors">
+                       class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:border-[#00b4d8] outline-none transition-colors">
             </div>
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Type</label>
-                <select id="inp-type" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:border-indigo-500 outline-none transition-colors">
+                <select id="inp-type" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:border-[#00b4d8] outline-none transition-colors">
                     @foreach(['house','unit','land','other'] as $t)
                         <option value="{{ $t }}" {{ $defaults['type'] === $t ? 'selected' : '' }}>{{ ucfirst($t) }}</option>
                     @endforeach
@@ -85,12 +85,12 @@
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Bedrooms</label>
                 <input type="number" id="inp-bedrooms" min="0" max="20" value="{{ $defaults['bedrooms'] ?? '' }}"
-                       class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:border-indigo-500 outline-none transition-colors">
+                       class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:border-[#00b4d8] outline-none transition-colors">
             </div>
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Size m&sup2;</label>
                 <input type="number" id="inp-size" min="0" value="{{ $defaults['size_m2'] ?? '' }}"
-                       class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:border-indigo-500 outline-none transition-colors">
+                       class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:border-[#00b4d8] outline-none transition-colors">
             </div>
         </div>
 
@@ -101,7 +101,7 @@
         <div class="flex flex-wrap items-center gap-3">
             {{-- Primary: Simulate --}}
             <button id="btn-simulate"
-                    class="px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-500 active:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                    class="px-5 py-2.5 bg-[#0b2a4a] text-white text-sm font-medium rounded-lg hover:bg-[#00b4d8] active:bg-[#081f36] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
                     {{ $canSimulate ? '' : 'disabled' }}>
                 <span id="btn-simulate-text">Run Simulation</span>
                 <svg id="btn-simulate-spin" class="hidden animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">

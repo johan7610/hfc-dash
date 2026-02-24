@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('layouts.nexus')
 
 @section('content')
 @php
@@ -176,7 +176,7 @@
                         </span>
 
                         @if(is_null($m->branch_id))
-                            <span class="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-200">
+                            <span class="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full bg-sky-50 text-[#0b2a4a] dark:bg-sky-500/10 dark:text-sky-200">
                                 Global
                             </span>
                         @else
@@ -272,7 +272,7 @@
                         </div>
 
                         <div class="md:col-span-1">
-                            <span class="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-200">
+                            <span class="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full bg-sky-50 text-[#0b2a4a] dark:bg-sky-500/10 dark:text-sky-200">
                                 Global
                             </span>
                         </div>

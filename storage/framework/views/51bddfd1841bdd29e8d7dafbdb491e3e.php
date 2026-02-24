@@ -15,10 +15,10 @@
     </div>
     <div class="flex gap-2">
         <a href="<?php echo e(route('presentations.analysis', $presentation)); ?>"
-           class="text-xs text-indigo-600 hover:underline mt-1">&larr; Analysis</a>
+           class="text-xs text-[#00b4d8] hover:underline mt-1">&larr; Analysis</a>
         <span class="text-xs text-gray-300 mt-1">|</span>
         <a href="<?php echo e(route('presentations.show', $presentation)); ?>"
-           class="text-xs text-indigo-600 hover:underline mt-1">&larr; Overview</a>
+           class="text-xs text-[#00b4d8] hover:underline mt-1">&larr; Overview</a>
     </div>
 </div>
 
@@ -30,13 +30,13 @@
             <label class="block text-xs text-gray-500 mb-1">Commission %</label>
             <input type="number" id="cfg-commission" value="<?php echo e($config['commission_pct'] ?? 5.0); ?>"
                    step="0.5" min="0" max="15"
-                   class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                   class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-[#00b4d8] focus:border-[#00b4d8]">
         </div>
         <div>
             <label class="block text-xs text-gray-500 mb-1">Transfer Cost %</label>
             <input type="number" id="cfg-transfer" value="<?php echo e($config['transfer_cost_pct'] ?? 4.0); ?>"
                    step="0.5" min="0" max="10"
-                   class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                   class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-[#00b4d8] focus:border-[#00b4d8]">
         </div>
         <div>
             <label class="block text-xs text-gray-500 mb-1">Monthly Holding Cost</label>
@@ -50,7 +50,10 @@
 </div>
 
 
-<?php $stock = $analysisData['stock_absorption'] ?? []; ?>
+<?php
+    $stock = $analysisData['stock_absorption'] ?? [];
+    $pricePos = $analysisData['price_position'] ?? [];
+?>
 <?php if(!empty($stock['total_active_stock']) && !empty($stock['monthly_sales'])): ?>
 <?php
     $stockColorClass = match($stock['absorption_color'] ?? '') {
@@ -62,7 +65,7 @@
     };
 ?>
 <div class="rounded-lg border p-4 mb-6 <?php echo e($stockColorClass); ?>">
-    <div class="flex items-center gap-3 text-sm">
+    <div class="flex items-center flex-wrap gap-3 text-sm">
         <span class="font-bold text-lg"><?php echo e($stock['total_active_stock']); ?></span>
         <span>competing listings</span>
         <span class="text-gray-400">|</span>
@@ -72,6 +75,15 @@
         <span class="text-gray-400">|</span>
         <span class="font-semibold"><?php echo e($stock['absorption_label']); ?></span>
     </div>
+    <?php if(!empty($pricePos['has_data'])): ?>
+    <div class="flex items-center gap-3 text-sm mt-2 pt-2 border-t border-current border-opacity-20">
+        <span>Price rank: <strong>#<?php echo e($pricePos['price_rank']); ?></strong> of <?php echo e($pricePos['total_listings']); ?></span>
+        <span class="text-gray-400">|</span>
+        <span><?php echo e($pricePos['listings_more_expensive']); ?> priced higher, <?php echo e($pricePos['listings_cheaper']); ?> lower</span>
+        <span class="text-gray-400">|</span>
+        <span class="font-semibold"><?php echo e($pricePos['position_label']); ?></span>
+    </div>
+    <?php endif; ?>
     <?php if($stock['search_total_count'] && $stock['listings_with_price'] < $stock['search_total_count']): ?>
     <p class="text-xs mt-1 opacity-75">
         <?php echo e($stock['listings_with_price']); ?> of <?php echo e($stock['search_total_count']); ?> listings have price data &mdash; "Competing" column counts listings with known prices at or below each scenario.
@@ -111,11 +123,11 @@
                 <?php $__currentLoopData = $scenarios; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $i => $s): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                 <tr class="scenario-row border-b border-gray-100 hover:bg-gray-50" data-index="<?php echo e($i); ?>">
                     <td class="py-2 px-2">
-                        <input type="text" class="sc-label border-0 bg-transparent text-sm font-medium text-gray-800 w-full focus:outline-none focus:bg-indigo-50 rounded px-1"
+                        <input type="text" class="sc-label border-0 bg-transparent text-sm font-medium text-gray-800 w-full focus:outline-none focus:bg-sky-50 rounded px-1"
                                value="<?php echo e($s['label']); ?>">
                     </td>
                     <td class="py-2 px-2 text-right">
-                        <input type="number" class="sc-price border border-gray-200 rounded px-2 py-1 text-sm text-right w-28 focus:ring-indigo-500 focus:border-indigo-500"
+                        <input type="number" class="sc-price border border-gray-200 rounded px-2 py-1 text-sm text-right w-28 focus:ring-[#00b4d8] focus:border-[#00b4d8]"
                                value="<?php echo e($s['price']); ?>" min="1" step="10000">
                     </td>
                     <td class="py-2 px-2 text-right sc-competing text-gray-700"><?php echo e($s['competing_count'] ?? '—'); ?></td>
@@ -169,15 +181,15 @@
 </div>
 
 
-<div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-6" id="narrative-box">
-    <h3 class="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-2">Key Insight</h3>
-    <p class="text-sm text-indigo-900 leading-relaxed" id="narrative-text"><?php echo e($narrative); ?></p>
+<div class="bg-sky-50 border border-sky-200 rounded-lg p-4 mb-6" id="narrative-box">
+    <h3 class="text-xs font-semibold text-[#0b2a4a] uppercase tracking-wide mb-2">Key Insight</h3>
+    <p class="text-sm text-[#0b2a4a] leading-relaxed" id="narrative-text"><?php echo e($narrative); ?></p>
 </div>
 
 
 <div class="flex flex-wrap items-center gap-3 mb-8">
     <button id="btn-compute"
-            class="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+            class="px-5 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded hover:bg-[#081f36] focus:ring-2 focus:ring-[#00b4d8] focus:ring-offset-2">
         Compute Scenarios
     </button>
 
@@ -189,12 +201,12 @@
     <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
         <input type="checkbox" id="chk-include-pdf" <?php echo e($includeInPdf ? 'checked' : ''); ?>
 
-               class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+               class="rounded border-gray-300 text-[#00b4d8] focus:ring-[#00b4d8]">
         Include in PDF
     </label>
 
     <a href="<?php echo e(route('presentations.pricing-simulator.present', $presentation)); ?>" target="_blank"
-       class="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded hover:bg-purple-700">
+       class="px-4 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded hover:bg-[#081f36]">
         Present to Seller &rarr;
     </a>
 
@@ -310,10 +322,10 @@ document.addEventListener('DOMContentLoaded', function() {
             tr.dataset.index = i;
             tr.innerHTML = `
                 <td class="py-2 px-2">
-                    <input type="text" class="sc-label border-0 bg-transparent text-sm font-medium text-gray-800 w-full focus:outline-none focus:bg-indigo-50 rounded px-1" value="${s.label}">
+                    <input type="text" class="sc-label border-0 bg-transparent text-sm font-medium text-gray-800 w-full focus:outline-none focus:bg-sky-50 rounded px-1" value="${s.label}">
                 </td>
                 <td class="py-2 px-2 text-right">
-                    <input type="number" class="sc-price border border-gray-200 rounded px-2 py-1 text-sm text-right w-28 focus:ring-indigo-500 focus:border-indigo-500" value="${s.price}" min="1" step="10000">
+                    <input type="number" class="sc-price border border-gray-200 rounded px-2 py-1 text-sm text-right w-28 focus:ring-[#00b4d8] focus:border-[#00b4d8]" value="${s.price}" min="1" step="10000">
                 </td>
                 <td class="py-2 px-2 text-right sc-competing text-gray-700">${s.competing_count ?? '—'}</td>
                 <td class="py-2 px-2 text-right sc-months text-gray-700">${s.est_months ?? '—'}</td>
@@ -424,10 +436,10 @@ document.addEventListener('DOMContentLoaded', function() {
         tr.dataset.index = idx;
         tr.innerHTML = `
             <td class="py-2 px-2">
-                <input type="text" class="sc-label border-0 bg-transparent text-sm font-medium text-gray-800 w-full focus:outline-none focus:bg-indigo-50 rounded px-1" value="Custom ${idx + 1}" placeholder="Label">
+                <input type="text" class="sc-label border-0 bg-transparent text-sm font-medium text-gray-800 w-full focus:outline-none focus:bg-sky-50 rounded px-1" value="Custom ${idx + 1}" placeholder="Label">
             </td>
             <td class="py-2 px-2 text-right">
-                <input type="number" class="sc-price border border-gray-200 rounded px-2 py-1 text-sm text-right w-28 focus:ring-indigo-500 focus:border-indigo-500" value="" min="1" step="10000" placeholder="Price">
+                <input type="number" class="sc-price border border-gray-200 rounded px-2 py-1 text-sm text-right w-28 focus:ring-[#00b4d8] focus:border-[#00b4d8]" value="" min="1" step="10000" placeholder="Price">
             </td>
             <td class="py-2 px-2 text-right sc-competing text-gray-700">—</td>
             <td class="py-2 px-2 text-right sc-months text-gray-700">—</td>
@@ -457,10 +469,10 @@ document.addEventListener('DOMContentLoaded', function() {
             tr.dataset.index = i;
             tr.innerHTML = `
                 <td class="py-2 px-2">
-                    <input type="text" class="sc-label border-0 bg-transparent text-sm font-medium text-gray-800 w-full focus:outline-none focus:bg-indigo-50 rounded px-1" value="${s.label}">
+                    <input type="text" class="sc-label border-0 bg-transparent text-sm font-medium text-gray-800 w-full focus:outline-none focus:bg-sky-50 rounded px-1" value="${s.label}">
                 </td>
                 <td class="py-2 px-2 text-right">
-                    <input type="number" class="sc-price border border-gray-200 rounded px-2 py-1 text-sm text-right w-28 focus:ring-indigo-500 focus:border-indigo-500" value="${s.price}" min="1" step="10000">
+                    <input type="number" class="sc-price border border-gray-200 rounded px-2 py-1 text-sm text-right w-28 focus:ring-[#00b4d8] focus:border-[#00b4d8]" value="${s.price}" min="1" step="10000">
                 </td>
                 <td class="py-2 px-2 text-right sc-competing text-gray-700">—</td>
                 <td class="py-2 px-2 text-right sc-months text-gray-700">—</td>

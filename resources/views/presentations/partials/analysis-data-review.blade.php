@@ -150,9 +150,9 @@
                 <span class="text-xs text-gray-400 block">Sales Count</span>
                 <p class="text-lg font-bold text-gray-800">{{ $suburb['sales_count'] ?? '—' }}</p>
             </div>
-            <div class="bg-indigo-50 rounded-lg p-3 text-center">
-                <span class="text-xs text-indigo-400 block">Median Price</span>
-                <p class="text-lg font-bold text-indigo-700">
+            <div class="bg-sky-50 rounded-lg p-3 text-center">
+                <span class="text-xs text-[#38bfe0] block">Median Price</span>
+                <p class="text-lg font-bold text-[#0b2a4a]">
                     @if($suburb['median_price'])
                         R {{ number_format($suburb['median_price']) }}
                     @else
@@ -293,17 +293,17 @@
             <p class="text-xs text-gray-400 mb-2 font-medium">Price Distribution (R 500K brackets) — {{ $priceBrk['total_priced'] }} listings with price data</p>
             <div class="space-y-1.5">
                 @foreach($priceBrk['brackets'] as $bracket)
-                <div class="flex items-center gap-3 {{ $bracket['contains_asking'] ? 'bg-indigo-50 rounded-lg px-2 py-1.5 -mx-2 border border-indigo-200' : '' }}">
+                <div class="flex items-center gap-3 {{ $bracket['contains_asking'] ? 'bg-sky-50 rounded-lg px-2 py-1.5 -mx-2 border border-sky-200' : '' }}">
                     <span class="text-xs text-gray-500 w-44 flex-shrink-0 text-right font-mono">{{ $bracket['label'] }}</span>
                     <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
                         @if($bracket['bar_pct'] > 0)
-                        <div class="h-full rounded-full {{ $bracket['contains_asking'] ? 'bg-indigo-500' : 'bg-gray-400' }}"
+                        <div class="h-full rounded-full {{ $bracket['contains_asking'] ? 'bg-sky-500' : 'bg-gray-400' }}"
                              style="width: {{ max($bracket['bar_pct'], 4) }}%"></div>
                         @endif
                     </div>
                     <span class="text-xs font-semibold text-gray-700 w-8 text-right">{{ $bracket['count'] }}</span>
                     @if($bracket['contains_asking'])
-                        <span class="text-xs text-indigo-600 font-medium flex-shrink-0">Your price</span>
+                        <span class="text-xs text-[#00b4d8] font-medium flex-shrink-0">Your price</span>
                     @endif
                 </div>
                 @endforeach
@@ -333,7 +333,7 @@
                 @php $firstOpen = false; @endphp
                 <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 select-none flex items-center justify-between">
                     <span>{{ $section['label'] }}</span>
-                    <span class="px-2 py-0.5 rounded-full text-xs bg-indigo-100 text-indigo-700 font-medium">{{ $section['data']['count'] }}</span>
+                    <span class="px-2 py-0.5 rounded-full text-xs bg-sky-100 text-[#0b2a4a] font-medium">{{ $section['data']['count'] }}</span>
                 </summary>
                 <div class="px-4 pb-4 overflow-x-auto">
                     <table class="w-full text-sm">
@@ -408,15 +408,15 @@
             {{-- CMA Range — clickable tiles --}}
             @if($cma['cma_middle'])
             <div>
-                <p class="text-xs text-gray-400 mb-2 font-medium">CMA Report Range <span class="text-indigo-400">(click to select)</span></p>
+                <p class="text-xs text-gray-400 mb-2 font-medium">CMA Report Range <span class="text-[#38bfe0]">(click to select)</span></p>
                 <div class="flex items-center gap-3">
                     @foreach(['lower' => $cma['cma_lower'], 'middle' => $cma['cma_middle'], 'upper' => $cma['cma_upper']] as $range => $val)
                     @php $isSel = ($cma['selected_range'] ?? 'middle') === $range; @endphp
                     <div class="cma-tile text-center flex-1 rounded-lg p-3 cursor-pointer transition-all
-                        {{ $isSel ? 'bg-indigo-50 ring-1 ring-indigo-200' : 'bg-gray-50 hover:bg-gray-100' }}"
+                        {{ $isSel ? 'bg-sky-50 ring-1 ring-sky-200' : 'bg-gray-50 hover:bg-gray-100' }}"
                         data-range="{{ $range }}" data-value="{{ $val }}">
-                        <span class="text-xs block {{ $isSel ? 'text-indigo-400' : 'text-gray-400' }}">{{ ucfirst($range) }}</span>
-                        <p class="{{ $isSel ? 'font-bold text-indigo-700 text-lg' : 'font-semibold text-gray-700' }}">R {{ number_format($val) }}</p>
+                        <span class="text-xs block {{ $isSel ? 'text-[#38bfe0]' : 'text-gray-400' }}">{{ ucfirst($range) }}</span>
+                        <p class="{{ $isSel ? 'font-bold text-[#0b2a4a] text-lg' : 'font-semibold text-gray-700' }}">R {{ number_format($val) }}</p>
                     </div>
                     @endforeach
                 </div>
@@ -426,16 +426,16 @@
             {{-- Vicinity Range — clickable tiles --}}
             @if($cma['vicinity_middle'])
             <div>
-                <p class="text-xs text-gray-400 mb-2 font-medium">Vicinity Sales Range <span class="text-indigo-400">(click to select)</span></p>
+                <p class="text-xs text-gray-400 mb-2 font-medium">Vicinity Sales Range <span class="text-[#38bfe0]">(click to select)</span></p>
                 <div class="flex items-center gap-3">
                     @php $vicSel = $presentation->vicinity_selected_range ?? 'middle'; @endphp
                     @foreach(['lower' => $cma['vicinity_lower'], 'middle' => $cma['vicinity_middle'], 'upper' => $cma['vicinity_upper']] as $range => $val)
                     @php $isSel = $vicSel === $range; @endphp
                     <div class="vicinity-tile text-center flex-1 rounded-lg p-3 cursor-pointer transition-all
-                        {{ $isSel ? 'bg-indigo-50 ring-1 ring-indigo-200' : 'bg-gray-50 hover:bg-gray-100' }}"
+                        {{ $isSel ? 'bg-sky-50 ring-1 ring-sky-200' : 'bg-gray-50 hover:bg-gray-100' }}"
                         data-range="{{ $range }}" data-value="{{ $val }}">
-                        <span class="text-xs block {{ $isSel ? 'text-indigo-400' : 'text-gray-400' }}">{{ ucfirst($range) }}</span>
-                        <p class="{{ $isSel ? 'font-bold text-indigo-700 text-lg' : 'font-semibold text-gray-700' }}">R {{ number_format($val) }}</p>
+                        <span class="text-xs block {{ $isSel ? 'text-[#38bfe0]' : 'text-gray-400' }}">{{ ucfirst($range) }}</span>
+                        <p class="{{ $isSel ? 'font-bold text-[#0b2a4a] text-lg' : 'font-semibold text-gray-700' }}">R {{ number_format($val) }}</p>
                     </div>
                     @endforeach
                 </div>
@@ -511,7 +511,7 @@
                         </td>
                         <td class="py-2 pr-3 text-gray-800 text-xs max-w-[200px] truncate {{ !empty($row['is_excluded']) ? 'line-through' : '' }}">
                             @if(!empty($row['url']))
-                                <a href="{{ $row['url'] }}" target="_blank" class="text-indigo-600 hover:underline" title="{{ $row['address'] ?? '' }}">{{ $row['address'] ?? '—' }}</a>
+                                <a href="{{ $row['url'] }}" target="_blank" class="text-[#00b4d8] hover:underline" title="{{ $row['address'] ?? '' }}">{{ $row['address'] ?? '—' }}</a>
                             @else
                                 {{ $row['address'] ?? '—' }}
                             @endif

@@ -1,11 +1,15 @@
 <x-app-layout>
     <x-slot name="header">
-        <div>
-            <h2 class="font-semibold text-xl text-gray-200 leading-tight">
-                Agent Dashboard — {{ $snapshot['month_label'] }}
-            </h2>
-            <div class="text-sm text-gray-400">
-                {{ $snapshot['range']['start'] }} → {{ $snapshot['range']['end'] }}
+        <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                <div>
+                    <h2 class="text-xl font-bold text-white leading-tight">
+                        Agent Dashboard — {{ $snapshot['month_label'] }}
+                    </h2>
+                    <div class="text-sm text-white/60">
+                        {{ $snapshot['range']['start'] }} → {{ $snapshot['range']['end'] }}
+                    </div>
+                </div>
             </div>
         </div>
     </x-slot>
@@ -57,12 +61,8 @@
 
         // Simple pace status vs "needed per day" (if target exists)
         $pointsStatus = '—';
-        $pointsBarClass = 'bg-gray-900';
+        $pointsBarClass = 'ds-bar-navy';
 
-        // Color rules (no JS)
-        // - Target achieved: green + trophy
-        // - Ahead/On pace: green
-        // - Behind: amber if close, red if far
         if ($pointsTarget > 0 && $daysLeft > 0) {
             $daysElapsed = max(1, $daysInMonth - $daysLeft);
             $expectedByNow = round(($pointsTarget / $daysInMonth) * $daysElapsed, 1);
@@ -71,15 +71,11 @@
             else $pointsStatus = 'Behind';
         }
 
-        // TARGET_BAR_CLASS_APPLIED
         if ($pointsTarget > 0) {
-            if ($pointsActual >= $pointsTarget) {
-                $pointsBarClass = 'bg-green-600';
-            } elseif ($pointsStatus === 'Ahead' || $pointsStatus === 'On pace') {
-                $pointsBarClass = 'bg-green-600';
-            } else {
-                $pointsBarClass = ($pointsPct >= 75) ? 'bg-amber-500' : 'bg-red-600';
-            }
+            if ($pointsActual >= $pointsTarget) $pointsBarClass = 'ds-bar-navy';
+            elseif ($pointsPct >= 80) $pointsBarClass = 'ds-bar-navy';
+            elseif ($pointsPct >= 50) $pointsBarClass = 'ds-bar-amber';
+            else $pointsBarClass = 'ds-bar-crimson';
         }
 
         // Calendar starts on Monday
@@ -95,10 +91,10 @@
             <div class="flex flex-col gap-4">
                 <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                     <div>
-                        <div class="text-2xl md:text-3xl font-extrabold text-gray-900 leading-tight">
+                        <div class="ds-section-header" style="font-size:1.5rem;">
                             Your focus — {{ $snapshot['month_label'] }}
                         </div>
-                        <div class="text-sm text-gray-600 mt-1">
+                        <div class="ds-section-sub">
                             {{ $snapshot['range']['start'] }} → {{ $snapshot['range']['end'] }}
                         </div>
                     </div>
@@ -146,9 +142,9 @@
                             </div>
                         </div>
 
-                        <div class="mt-3 text-sm text-gray-600 font-semibold">Points progress</div>
-                        <div class="mt-2 h-3 rounded bg-gray-200 overflow-hidden">
-                            <div class="h-3 {{ $pointsBarClass ?? 'bg-gray-900' }}" style="width: {{ $pointsPct }}%"></div>
+                        <div class="mt-3 ds-label">Points progress</div>
+                        <div class="mt-2 ds-progress-track">
+                            <div class="ds-progress-bar {{ $pointsBarClass ?? 'ds-bar-navy' }}" style="width: {{ $pointsPct }}%"></div>
                         </div>
                     </div>
 
@@ -178,18 +174,18 @@
                         </div>
 
                         @php
-                            $valueBarClass = 'bg-gray-900';
+                            $valueBarClass = 'ds-bar-navy';
                             if (($t['value_target'] ?? 0) > 0) {
-                                if (($a['sales_value'] ?? 0) >= ($t['value_target'] ?? 0)) $valueBarClass = 'bg-green-600';
-                                elseif ($valuePct >= 95) $valueBarClass = 'bg-green-600';
-                                elseif ($valuePct >= 75) $valueBarClass = 'bg-amber-500';
-                                else $valueBarClass = 'bg-red-600';
+                                if (($a['sales_value'] ?? 0) >= ($t['value_target'] ?? 0)) $valueBarClass = 'ds-bar-navy';
+                                elseif ($valuePct >= 80) $valueBarClass = 'ds-bar-navy';
+                                elseif ($valuePct >= 50) $valueBarClass = 'ds-bar-amber';
+                                else $valueBarClass = 'ds-bar-crimson';
                             }
                         @endphp
 
-                        <div class="mt-3 text-sm text-gray-600 font-semibold">Value progress</div>
-                        <div class="mt-2 h-3 rounded bg-gray-200 overflow-hidden">
-                            <div class="h-3 {{ $valueBarClass }}" style="width: {{ $valuePct }}%"></div>
+                        <div class="mt-3 ds-label">Value progress</div>
+                        <div class="mt-2 ds-progress-track">
+                            <div class="ds-progress-bar {{ $valueBarClass }}" style="width: {{ $valuePct }}%"></div>
                         </div>
                     </div>
                 </div>
@@ -197,7 +193,7 @@
         </div>
 
 <div class="card">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4">Your Actuals</h3>
+                <h3 class="ds-section-header mb-4">Your Actuals</h3>
                     <div class="text-xs text-gray-500 -mt-2 mb-4">What you’ve done so far — updated from Deals + Daily Activity + Points.</div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                     <div class="rounded-xl border border-black/10 bg-gray-50 p-4">
@@ -256,7 +252,7 @@
                 {{-- YOU vs BRANCH vs COMPANY (WOW scorecards, totals only) --}}
         <div class="card">
             <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-gray-900">You vs Branch vs Company</h3>
+                <h3 class="ds-section-header">You vs Branch vs Company</h3>
                 <div class="text-xs text-gray-500">Totals only (privacy safe)</div>
             </div>
 
@@ -277,10 +273,10 @@
                 };
 
                 $barClass = function($pct) {
-                    if ($pct === null) return 'bg-gray-300';
-                    if ($pct >= 95) return 'bg-green-600';
-                    if ($pct >= 75) return 'bg-amber-500';
-                    return 'bg-red-600';
+                    if ($pct === null) return 'ds-bar-navy';
+                    if ($pct >= 80) return 'ds-bar-navy';
+                    if ($pct >= 50) return 'ds-bar-amber';
+                    return 'ds-bar-crimson';
                 };
                 $youValuePct  = $pct($youValueA,  $youValueT);
                 $youPointsPct = $pct($youPointsA, $youPointsT);
@@ -314,9 +310,9 @@
                         </div>
                     </div>
 
-                    <div class="mt-3 text-xs text-gray-600 font-semibold">Points progress</div>
-                    <div class="mt-2 h-3 rounded bg-gray-200 overflow-hidden">
-                        <div class="h-3 {{ $barClass($youPointsPct) }}" style="width: {{ (int)($youPointsPct ?? 0) }}%"></div>
+                    <div class="mt-3 ds-label">Points progress</div>
+                    <div class="mt-2 ds-progress-track">
+                        <div class="ds-progress-bar {{ $barClass($youPointsPct) }}" style="width: {{ (int)($youPointsPct ?? 0) }}%"></div>
                     </div>
 
                     <div class="mt-4 grid grid-cols-2 gap-3">
@@ -330,8 +326,8 @@
                                 / R {{ number_format($youValueT,0) }}
                                 @if($youValueT > 0 && $youValueA >= $youValueT) <span title="Target achieved">🏆</span> @endif
                             </div>
-                            <div class="mt-2 h-2 rounded bg-gray-200 overflow-hidden">
-                                <div class="h-2 {{ $barClass($youValuePct) }}" style="width: {{ (int)($youValuePct ?? 0) }}%"></div>
+                            <div class="mt-2 ds-progress-track">
+                                <div class="ds-progress-bar {{ $barClass($youValuePct) }}" style="width: {{ (int)($youValuePct ?? 0) }}%"></div>
                             </div>
                         </div>
                     </div>
@@ -346,16 +342,14 @@
                     <div class="text-xs uppercase tracking-wide text-gray-500 font-semibold">Your Branch</div>
 
                     @if($cmpBranch)
-                        </div>
-
-                        <div class="mt-4 text-xs text-gray-600 font-semibold">Value progress</div>
+                        <div class="mt-4 ds-label">Value progress</div>
                         <div class="mt-1 text-lg font-extrabold text-gray-900">
                             R {{ number_format($bValueA,0) }}
                             <span class="text-gray-400 font-bold">/ R {{ number_format($bValueT,0) }}</span>
                             @if($bValueT > 0 && $bValueA >= $bValueT) <span title="Target achieved">🏆</span> @endif
                         </div>
-                        <div class="mt-2 h-3 rounded bg-gray-200 overflow-hidden">
-                            <div class="h-3 {{ $barClass($bValuePct) }}" style="width: {{ (int)($bValuePct ?? 0) }}%"></div>
+                        <div class="mt-2 ds-progress-track">
+                            <div class="ds-progress-bar {{ $barClass($bValuePct) }}" style="width: {{ (int)($bValuePct ?? 0) }}%"></div>
                         </div>
 
                         <div class="mt-4 text-xs text-gray-600">
@@ -363,8 +357,8 @@
                         </div>
                     @else
                         <div class="mt-2 text-sm text-gray-600">No branch assigned.</div>
-                        <div class="mt-3 h-3 rounded bg-gray-200 overflow-hidden">
-                            <div class="h-3 bg-gray-300" style="width: 10%"></div>
+                        <div class="mt-3 ds-progress-track">
+                            <div class="ds-progress-bar ds-bar-navy" style="width: 10%"></div>
                         </div>
                     @endif
                 </div>
@@ -374,16 +368,14 @@
                     <div class="text-xs uppercase tracking-wide text-gray-500 font-semibold">Company</div>
 
                     @if($cmpCompany)
-                        </div>
-
-                        <div class="mt-4 text-xs text-gray-600 font-semibold">Value progress</div>
+                        <div class="mt-4 ds-label">Value progress</div>
                         <div class="mt-1 text-lg font-extrabold text-gray-900">
                             R {{ number_format($cValueA,0) }}
                             <span class="text-gray-400 font-bold">/ R {{ number_format($cValueT,0) }}</span>
                             @if($cValueT > 0 && $cValueA >= $cValueT) <span title="Target achieved">🏆</span> @endif
                         </div>
-                        <div class="mt-2 h-3 rounded bg-gray-200 overflow-hidden">
-                            <div class="h-3 {{ $barClass($cValuePct) }}" style="width: {{ (int)($cValuePct ?? 0) }}%"></div>
+                        <div class="mt-2 ds-progress-track">
+                            <div class="ds-progress-bar {{ $barClass($cValuePct) }}" style="width: {{ (int)($cValuePct ?? 0) }}%"></div>
                         </div>
 
                         <div class="mt-4 text-xs text-gray-600">
@@ -391,8 +383,8 @@
                         </div>
                     @else
                         <div class="mt-2 text-sm text-gray-600">Not available.</div>
-                        <div class="mt-3 h-3 rounded bg-gray-200 overflow-hidden">
-                            <div class="h-3 bg-gray-300" style="width: 10%"></div>
+                        <div class="mt-3 ds-progress-track">
+                            <div class="ds-progress-bar ds-bar-navy" style="width: 10%"></div>
                         </div>
                     @endif
                 </div>
@@ -401,7 +393,7 @@
 
         <div class="card">
             <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-gray-900">Momentum — last 7 days</h3>
+                <h3 class="ds-section-header">Momentum — last 7 days</h3>
                 <div class="text-xs text-gray-500">Points per day + streak (no JS)</div>
             </div>
 
@@ -445,7 +437,7 @@
                     <div class="rounded-xl border border-black/10 bg-gray-50 p-2 text-center">
                         <div class="text-[10px] text-gray-600 font-semibold">{{ $dt->format('D') }}</div>
                         <div class="mt-2 h-16 flex items-end justify-center">
-                            <div class="w-6 rounded bg-gray-900" style="height: {{ $h }}px;"></div>
+                            <div class="w-6 rounded" style="height: {{ $h }}px; background: #0b2a4a;"></div>
                         </div>
                         <div class="mt-2 text-xs font-extrabold text-gray-900">{{ number_format($pts, 1) }}</div>
                     </div>

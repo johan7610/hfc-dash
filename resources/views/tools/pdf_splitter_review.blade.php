@@ -26,7 +26,7 @@
         'x' => 'other',
     ];
 
-    // Badge colour map (tailwind-style token â†’ inline style)
+    // Badge colour map (tailwind-style token → inline style)
     $badgeStyle = [
         'mandate'           => 'background:#dbeafe;color:#1e3a8a',
         'fica'              => 'background:#ede9fe;color:#4c1d95',
@@ -68,7 +68,7 @@
 #spr .alert { padding:10px 14px; border-radius:7px; font-size:.85rem; margin-bottom:14px; }
 #spr .alert-error { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
 
-/* â”€â”€ Toolbar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Toolbar ─────────────────────────────────── */
 #spr .toolbar {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     background: #f8fafc; border: 1px solid var(--border);
@@ -99,7 +99,7 @@
                    padding:10px 24px; font-size:.9rem; font-weight:600; cursor:pointer; }
 #spr .btn-gen:hover { background:#0a233a; }
 
-/* â”€â”€ Shortcut legend â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Shortcut legend ─────────────────────────── */
 #spr .legend {
     display:flex; flex-wrap:wrap; gap:5px;
     background:#f1f5f9; border:1px solid var(--border);
@@ -120,7 +120,7 @@
     border:1px solid #cbd5e1;
 }
 
-/* â”€â”€ Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Table ───────────────────────────────────── */
 #spr .tbl-wrap {
     background:#fff; border:1px solid var(--border); border-radius:10px;
     box-shadow:0 3px 14px rgba(0,0,0,.07); overflow:hidden; margin-bottom:16px;
@@ -192,10 +192,10 @@
 <div id="spr">
 <div class="wrap">
 
-    <h1 class="pg-title">PDF Pack Splitter â€” Review Labels</h1>
+    <h1 class="pg-title">PDF Pack Splitter — Review Labels</h1>
     <p class="pg-sub">
-        <strong>{{ $base }}</strong> &nbsp;Â·&nbsp; {{ $pCount }} pages
-        &nbsp;Â·&nbsp; Click rows to select Â· Shift-click for ranges Â· Use keyboard shortcuts to label Â· then Generate ZIP.
+        <strong>{{ $base }}</strong> &nbsp;·&nbsp; {{ $pCount }} pages
+        &nbsp;·&nbsp; Click rows to select · Shift-click for ranges · Use keyboard shortcuts to label · then Generate ZIP.
     </p>
 
     @if($errors->any())
@@ -218,7 +218,7 @@
             @endif
         @endforeach
         <span class="key-chip" style="margin-left:8px;color:#94a3b8;">
-            <kbd>â†‘â†“</kbd> navigate &nbsp; <kbd>Esc</kbd> deselect
+            <kbd>↑↓</kbd> navigate &nbsp; <kbd>Esc</kbd> deselect
         </span>
     </div>
 
@@ -227,7 +227,7 @@
         <span class="sel-count" id="sel-count">0 selected</span>
 
         <span class="tb-sep"></span>
-        <span class="tb-label">Set selected â†’</span>
+        <span class="tb-label">Set selected →</span>
         <select class="tb-select" id="tb-type-select">
             @foreach($docTypes as $key => $label)
                 <option value="{{ $key }}">{{ $label }}</option>
@@ -237,7 +237,7 @@
 
         <span class="tb-sep"></span>
         <button type="button" class="tb-btn btn-reset" id="tb-reset">Reset selected</button>
-        <button type="button" class="tb-btn btn-other" id="tb-all-other">Set ALL â†’ Other</button>
+        <button type="button" class="tb-btn btn-other" id="tb-all-other">Set ALL → Other</button>
     </div>
 
     <form method="POST" action="{{ route('tools.pdf_splitter.confirm') }}" id="spr-form">
@@ -316,7 +316,7 @@
 
         <div class="bottom-bar">
             <button type="submit" class="btn-gen">&#x2913;&nbsp; Generate ZIP</button>
-            <a href="{{ route('tools.pdf_splitter.index') }}" class="btn-back">â† Upload a different PDF</a>
+            <a href="{{ route('tools.pdf_splitter.index') }}" class="btn-back">← Upload a different PDF</a>
         </div>
     </form>
 
@@ -327,22 +327,22 @@
 (function () {
     'use strict';
 
-    /* â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    /* ── Config ─────────────────────────────── */
     const TOTAL   = {{ $pCount }};
     const KEY_MAP = @json($keyMap);   // { 'm': 'mandate', ... }
 
-    /* â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    /* ── State ──────────────────────────────── */
     let selected     = new Set();   // page numbers (int)
     let lastSelected = null;
 
-    /* â”€â”€ DOM helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    /* ── DOM helpers ────────────────────────── */
     const tbody    = document.getElementById('spr-tbody');
     const countEl  = document.getElementById('sel-count');
 
     function row(p)    { return tbody.querySelector(`tr[data-page="${p}"]`); }
     function sel(p)    { return tbody.querySelector(`select[name="labels[${p}]"]`); }
 
-    /* â”€â”€ Selection rendering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    /* ── Selection rendering ────────────────── */
     function renderSelection() {
         tbody.querySelectorAll('tr[data-page]').forEach(tr => {
             const p = +tr.dataset.page;
@@ -374,7 +374,7 @@
         if (r) r.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
 
-    /* â”€â”€ Row click â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    /* ── Row click ──────────────────────────── */
     tbody.addEventListener('click', function (e) {
         // Ignore clicks on the select dropdown itself
         if (e.target.tagName === 'SELECT') return;
@@ -396,7 +396,7 @@
         }
     });
 
-    /* â”€â”€ Apply label to selected rows â”€â”€â”€â”€â”€â”€â”€â”€ */
+    /* ── Apply label to selected rows ──────── */
     function applyLabel(label, advance) {
         if (selected.size === 0) return;
         selected.forEach(p => {
@@ -413,10 +413,10 @@
         }
     }
 
-    /* â”€â”€ Keyboard shortcuts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    /* ── Keyboard shortcuts ─────────────────── */
     document.addEventListener('keydown', function (e) {
         const tag = e.target.tagName;
-        // Allow typing in selects/inputs/buttons normally â€” only intercept when body / table is focused
+        // Allow typing in selects/inputs/buttons normally — only intercept when body / table is focused
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
         if (tag === 'BUTTON') return;
         // Allow select dropdown navigation without stealing keys
@@ -453,7 +453,7 @@
         }
     });
 
-    /* â”€â”€ Toolbar buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    /* ── Toolbar buttons ────────────────────── */
     document.getElementById('tb-apply').addEventListener('click', function () {
         const v = document.getElementById('tb-type-select').value;
         applyLabel(v, false);
@@ -473,7 +473,7 @@
         }
     });
 
-    /* â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    /* ── Init ───────────────────────────────── */
     // Pre-select page 1 so keyboard shortcuts work immediately
     selectOnly(1);
 })();

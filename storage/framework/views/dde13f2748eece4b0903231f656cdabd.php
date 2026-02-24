@@ -28,5 +28,5 @@ foreach ($attributes->all() as $__key => $__value) {
 
 unset($__defined_vars, $__key, $__value); ?>
 
-<input <?php if($disabled): echo 'disabled'; endif; ?> <?php echo e($attributes->merge(['class' => 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm'])); ?>>
+<input <?php if($disabled): echo 'disabled'; endif; ?> <?php echo e($attributes->merge(['class' => 'border-gray-300 focus:border-[#00b4d8] focus:ring-[#00b4d8] rounded-md shadow-sm'])); ?>>
 <?php /**PATH C:\Users\johan\OneDrive\Documents\GitHub\hfc-dash\resources\views/components/text-input.blade.php ENDPATH**/ ?>

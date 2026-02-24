@@ -44,18 +44,33 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
                         </svg>
                     </button>
-                    <span class="ml-3 text-sm font-bold text-gray-900">nexus <span class="text-indigo-600">os</span></span>
+                    <span class="ml-3 text-sm font-bold text-gray-900">nexus <span class="text-[#00b4d8]">os</span></span>
                 </div>
 
                 <?php echo $__env->make('layouts.nexus-header', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
 
                 
-                <main class="flex-1 overflow-y-auto bg-gray-100 p-4 lg:p-6">
+                <main id="appScroll" class="flex-1 overflow-y-auto bg-gray-100 p-4 lg:p-6">
                     <?php if (! empty(trim($__env->yieldContent('nexus-content')))): ?>
                         <?php echo $__env->yieldContent('nexus-content'); ?>
                     <?php else: ?>
-                        <?php echo e($slot ?? ''); ?>
+                        
+                        <?php if(isset($header)): ?>
+                            <div class="mb-4">
+                                <?php echo e($header); ?>
 
+                            </div>
+                        <?php endif; ?>
+                        <?php if (! empty(trim($__env->yieldContent('content')))): ?>
+                            <div class="hfc-card p-4 sm:p-6">
+                                <?php echo $__env->yieldContent('content'); ?>
+                            </div>
+                        <?php else: ?>
+                            <div class="hfc-card p-4 sm:p-6">
+                                <?php echo e($slot ?? ''); ?>
+
+                            </div>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </main>
             </div>

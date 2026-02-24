@@ -150,7 +150,7 @@
                         <?php echo e(__('Your email address is unverified.')); ?>
 
 
-                        <button form="send-verification" class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <button form="send-verification" class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#00b4d8]">
                             <?php echo e(__('Click here to re-send the verification email.')); ?>
 
                         </button>

@@ -25,7 +25,7 @@
         </p>
     </div>
     <a href="{{ route('presentations.index') }}"
-       class="text-xs text-indigo-600 hover:underline mt-1">← Back to Presentations</a>
+       class="text-xs text-[#00b4d8] hover:underline mt-1">← Back to Presentations</a>
 </div>
 
 @if(session('success'))
@@ -76,12 +76,12 @@
 {{-- ══════════════════════════════════════════════════════════════════════════
      SALE PROBABILITY SUMMARY
 ══════════════════════════════════════════════════════════════════════════ --}}
-<div class="bg-gradient-to-br from-indigo-700 to-indigo-900 rounded-xl shadow-lg p-6 mb-6 text-white">
-    <p class="text-indigo-200 text-xs font-semibold uppercase tracking-widest mb-1">Snapshot — Seller Summary</p>
+<div class="bg-gradient-to-br from-[#0b2a4a] to-[#061a30] rounded-xl shadow-lg p-6 mb-6 text-white">
+    <p class="text-sky-200 text-xs font-semibold uppercase tracking-widest mb-1">Snapshot — Seller Summary</p>
     <h2 class="text-xl font-bold mb-5">Sale Probability at Your Price</h2>
 
     @if(!empty($summary['skip_reason']))
-        <div class="bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-sm text-indigo-100">
+        <div class="bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-sm text-sky-100">
             <strong class="text-white">Insufficient data:</strong>
             {{ $summary['skip_reason'] }}
         </div>
@@ -93,12 +93,12 @@
                 ['label' => 'Sold in 90 days', 'key' => 'p90'],
             ] as $chip)
             <div class="bg-white/10 border border-white/20 rounded-lg p-4 text-center">
-                <p class="text-indigo-200 text-xs mb-1 font-medium">{{ $chip['label'] }}</p>
+                <p class="text-sky-200 text-xs mb-1 font-medium">{{ $chip['label'] }}</p>
                 <p class="text-3xl font-bold">
                     @if(isset($summary[$chip['key']]) && $summary[$chip['key']] !== null)
                         {{ number_format($summary[$chip['key']] * 100, 0) }}<span class="text-xl">%</span>
                     @else
-                        <span class="text-base font-normal text-indigo-300 italic">—</span>
+                        <span class="text-base font-normal text-sky-300 italic">—</span>
                     @endif
                 </p>
             </div>
@@ -106,17 +106,17 @@
         </div>
 
         <div class="bg-white/10 border border-white/20 rounded-lg px-4 py-3 flex items-center justify-between">
-            <span class="text-indigo-200 text-sm">Estimated time to sell</span>
+            <span class="text-sky-200 text-sm">Estimated time to sell</span>
             @if(isset($summary['expected_days']) && $summary['expected_days'] !== null)
                 <span class="text-white font-bold text-lg">{{ $summary['expected_days'] }} days</span>
             @else
-                <span class="text-indigo-300 text-sm italic">Insufficient data</span>
+                <span class="text-sky-300 text-sm italic">Insufficient data</span>
             @endif
         </div>
     @endif
 
     @if($maRun && $spRun)
-    <p class="mt-4 text-indigo-300 text-xs text-right font-mono">
+    <p class="mt-4 text-sky-300 text-xs text-right font-mono">
         MA {{ $maRun->model_version }} · SP {{ $spRun->model_version }} · run #{{ $spRun->id }}
     </p>
     @endif
