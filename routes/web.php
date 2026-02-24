@@ -455,6 +455,14 @@ Route::post('/internal/ai-chat-proxy', [\App\Http\Controllers\Internal\AiChatPro
 
 Route::get('/ai-buddy', fn() => redirect()->route('ellie.index'))->middleware('auth')->name('ai.buddy');
 
+// ===== DOCUMENT FILING REGISTER =====
+Route::middleware(['auth'])->group(function () {
+    Route::get('/filing-register', [\App\Http\Controllers\DocumentFilingController::class, 'index'])->name('filing-register.index');
+    Route::post('/filing-register', [\App\Http\Controllers\DocumentFilingController::class, 'store'])->name('filing-register.store');
+    Route::put('/filing-register/{id}', [\App\Http\Controllers\DocumentFilingController::class, 'update'])->name('filing-register.update');
+    Route::delete('/filing-register/{id}', [\App\Http\Controllers\DocumentFilingController::class, 'destroy'])->name('filing-register.destroy');
+});
+
 // ===== NEXUS OS ROUTES =====
 use App\Http\Controllers\Nexus\DashboardController as NexusDashboardController;
 use App\Http\Controllers\Nexus\PlaceholderController as NexusPlaceholderController;

@@ -215,6 +215,7 @@
                 <a href="{{ route('bm.listings') }}" class="nexus-nav-subitem {{ request()->routeIs('bm.listings*') ? 'active' : '' }}">Branch Listing Stock</a>
                 <a href="{{ route('bm.my.dashboard') }}" class="nexus-nav-subitem {{ request()->routeIs('bm.my.dashboard') ? 'active' : '' }}">My Agent Dashboard</a>
                 <a href="{{ route('admin.deals') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.deals*') ? 'active' : '' }}">Deal Register</a>
+                <a href="{{ route('filing-register.index') }}" class="nexus-nav-subitem {{ request()->routeIs('filing-register.*') ? 'active' : '' }}">Filing Register</a>
                 <div class="nexus-nav-sublabel">Setup</div>
                 <a href="{{ route('bm.worksheet.market') }}" class="nexus-nav-subitem {{ request()->routeIs('bm.worksheet.market*') ? 'active' : '' }}">Worksheet Market</a>
                 <a href="{{ route('admin.targets') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.targets*') ? 'active' : '' }}">Daily Activity Targets</a>
@@ -236,6 +237,7 @@
                 <a href="{{ route('admin.performance-settings.edit') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.performance-settings*') ? 'active' : '' }}">Company Settings</a>
                 <a href="{{ route('admin.designations.index') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.designations*') ? 'active' : '' }}">Designations</a>
                 <a href="{{ route('admin.deals') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.deals*') ? 'active' : '' }}">Deal Register</a>
+                <a href="{{ route('filing-register.index') }}" class="nexus-nav-subitem {{ request()->routeIs('filing-register.*') ? 'active' : '' }}">Filing Register</a>
                 <a href="{{ route('admin.listings.agents') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.listings.agents*') ? 'active' : '' }}">Listing Stock</a>
                 <a href="{{ route('admin.listings.import') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.listings.import*') ? 'active' : '' }}">Import Listings</a>
                 <a href="{{ route('admin.daily.summary') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.daily.summary*') ? 'active' : '' }}">Daily Activity Summary</a>
