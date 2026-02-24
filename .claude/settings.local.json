@@ -9,7 +9,15 @@
       "Bash(composer update:*)",
       "Bash(php artisan:*)",
       "Bash(npm run build:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(php --version)",
+      "Bash(node --version)",
+      "Bash(npm --version)",
+      "Bash(composer --version)",
+      "Bash(timeout 5 npm run dev)",
+      "Bash(tasklist)",
+      "Bash(\"/c/xampp/mysql/bin/mysqladmin.exe\" -u root ping)",
+      "Bash(tasklist /FI \"IMAGENAME eq mysqld.exe\")"
     ]
   }
 }

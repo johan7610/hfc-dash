@@ -23,7 +23,8 @@ class DatabaseSeeder extends Seeder
                 'name' => 'Test User',
                 'password' => Hash::make('Test@1024'),
                 'email_verified_at' => now(),
-                'role' => 'admin',   // important for permissions
+                'role' => 'admin',
+                'is_admin' => true,
             ]
         );
 

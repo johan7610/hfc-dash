@@ -14,7 +14,11 @@ class MultiDemoSeeder extends Seeder
         $period = '2026-01';
 
         $cols = function(string $table) {
-            return collect(DB::select("PRAGMA table_info('$table')"))->pluck('name')->all();
+            $db = DB::getDatabaseName();
+            return collect(DB::select(
+                "SELECT COLUMN_NAME as name FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?",
+                [$db, $table]
+            ))->pluck('name')->all();
         };
         $filter = function(array $data, array $columns) {
             return array_intersect_key($data, array_flip($columns));
@@ -132,14 +136,13 @@ class MultiDemoSeeder extends Seeder
                 'selling_external'=>0,
                 'selling_our_share_percent'=>100,
                 'file_no'=>$fileNo,
-                'deal_no'=>$dealNo,
                 'branch_id'=>$branchId,
                 'property_address'=>$addr,
                 'seller_name'=>'Demo Seller',
                 'buyer_name'=>'Demo Buyer',
                 'attorney_name'=>'Demo Attorneys',
-                'accepted_status'=>'accepted',
-                'commission_status'=>'pending',
+                'accepted_status'=>'G',
+                'commission_status'=>'Not Paid',
                 'remarks'=>$remarks,
                 'created_at'=>now(),
                 'updated_at'=>now(),

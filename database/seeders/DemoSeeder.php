@@ -38,7 +38,11 @@ class DemoSeeder extends Seeder
         }
 
         // Assign branch_id if users table has it
-        $userCols = collect(DB::select("PRAGMA table_info('users')"))->pluck('name')->all();
+        $db = DB::getDatabaseName();
+        $userCols = collect(DB::select(
+            "SELECT COLUMN_NAME as name FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?",
+            [$db, 'users']
+        ))->pluck('name')->all();
         if (in_array('branch_id', $userCols, true)) {
             DB::table('users')->where('id', $agent->id)->update([
                 'branch_id' => $branchId,
@@ -48,7 +52,11 @@ class DemoSeeder extends Seeder
 
         // Helper: only insert columns that exist
         $cols = function(string $table) {
-            return collect(DB::select("PRAGMA table_info('$table')"))->pluck('name')->all();
+            $db = DB::getDatabaseName();
+            return collect(DB::select(
+                "SELECT COLUMN_NAME as name FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?",
+                [$db, $table]
+            ))->pluck('name')->all();
         };
         $filter = function(array $data, array $columns) {
             return array_intersect_key($data, array_flip($columns));
@@ -98,14 +106,13 @@ class DemoSeeder extends Seeder
             'selling_our_share_percent' => 100,
 
             'file_no' => 'FILE-001',
-            'deal_no' => 'D-001',
             'branch_id' => $branchId,
             'property_address' => '123 Coastal Rd',
             'seller_name' => 'Seller One',
             'buyer_name' => 'Buyer One',
             'attorney_name' => 'Demo Attorneys',
-            'accepted_status' => 'accepted',
-            'commission_status' => 'pending',
+            'accepted_status' => 'G',
+            'commission_status' => 'Not Paid',
             'remarks' => 'Demo deal 1',
 
             'created_at' => now(),
@@ -119,7 +126,7 @@ class DemoSeeder extends Seeder
         $dealBase2['property_value'] = 2200000;
         $dealBase2['total_commission'] = 110000;
         $dealBase2['file_no'] = 'FILE-002';
-        $dealBase2['deal_no'] = 'D-002';
+        // deal_no omitted (unsignedInteger, nullable)
         $dealBase2['property_address'] = '77 Ocean View';
         $dealBase2['seller_name'] = 'Seller Two';
         $dealBase2['buyer_name'] = 'Buyer Two';

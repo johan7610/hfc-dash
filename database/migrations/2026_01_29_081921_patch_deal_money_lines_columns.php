@@ -6,11 +6,12 @@ use Illuminate\Support\Facades\DB;
 return new class extends Migration {
     private function colExists(string $table, string $col): bool
     {
-        $cols = DB::select("PRAGMA table_info($table)");
-        foreach ($cols as $c) {
-            if (($c->name ?? null) === $col) return true;
-        }
-        return false;
+        $db = DB::getDatabaseName();
+        $result = DB::select(
+            "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?",
+            [$db, $table, $col]
+        );
+        return count($result) > 0;
     }
 
     public function up(): void
@@ -42,7 +43,7 @@ return new class extends Migration {
 
         foreach ($adds as [$col, $sqlType]) {
             if (!$this->colExists($table, $col)) {
-                DB::statement("ALTER TABLE $table ADD COLUMN $col $sqlType");
+                DB::statement("ALTER TABLE `$table` ADD `$col` $sqlType");
             }
         }
     }

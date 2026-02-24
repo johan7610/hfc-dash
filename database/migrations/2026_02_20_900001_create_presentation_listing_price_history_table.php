@@ -25,7 +25,7 @@ return new class extends Migration
                   ->references('id')->on('presentation_active_listings')
                   ->onDelete('cascade');
 
-            $table->index(['active_listing_id', 'captured_at']);
+            $table->index(['active_listing_id', 'captured_at'], 'plph_active_listing_captured_at_idx');
         });
     }
 
