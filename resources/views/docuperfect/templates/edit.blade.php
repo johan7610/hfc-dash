@@ -1,6 +1,8 @@
 @extends('layouts.nexus')
 
 @section('nexus-content')
+<link rel="stylesheet" href="{{ asset('css/docuperfect-editor.css') }}">
+
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
 
     <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 flex items-center justify-between">
@@ -57,27 +59,35 @@
     </div>
 
     {{-- Editor canvas area --}}
-    <div class="ds-status-card p-6">
-        <div id="docuperfect-editor" class="min-h-[400px] flex items-center justify-center">
-            <div class="text-center text-slate-400">
-                <div class="text-lg font-semibold mb-2">Editor loading...</div>
-                <div class="text-sm">The interactive field editor will be built in Phase 2.</div>
-                @if($template->page_count === 0)
-                <div class="mt-4 text-sm text-amber-600">No page images yet. Upload a PDF to render pages.</div>
-                @endif
-            </div>
-        </div>
+    <div class="ds-status-card p-4">
+        <div id="docuperfect-editor"></div>
     </div>
 
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+@php
+    $pageImageUrls = [];
+    for ($n = 0; $n < $template->page_count; $n++) {
+        $pageImageUrls[] = route('docuperfect.page.image', ['id' => $template->id, 'page' => $n]);
+    }
+@endphp
 <script>
-    window.dpTemplate = @json($template);
-    window.dpPageImageBaseUrl = @json(route('docuperfect.page.image', ['id' => $template->id, 'page' => '__PAGE__']));
-    window.dpSaveFieldsUrl = @json(route('docuperfect.templates.saveFields', $template->id));
-    window.dpUploadPagesUrl = @json(route('docuperfect.templates.uploadPages', $template->id));
-    window.dpCsrfToken = @json(csrf_token());
+    window.DocuperfectConfig = {
+        mode: 'template',
+        templateId: @json($template->id),
+        pageImages: @json($pageImageUrls),
+        fields: @json($template->fields_json ?? []),
+        isGlobal: @json($template->is_global),
+        allowedBranches: @json($template->branches->pluck('id')),
+        saveUrl: @json(route('docuperfect.templates.saveFields', $template->id)),
+        uploadPagesUrl: @json(route('docuperfect.templates.uploadPages', $template->id)),
+        clauseApiUrl: @json(route('docuperfect.clauses.json')),
+        csrfToken: @json(csrf_token()),
+        templateName: @json($template->name),
+        templateType: @json($template->template_type)
+    };
 </script>
+<script src="{{ asset('js/docuperfect-editor.js') }}"></script>
 @endsection

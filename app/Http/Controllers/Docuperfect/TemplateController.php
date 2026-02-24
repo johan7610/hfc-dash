@@ -76,13 +76,32 @@ class TemplateController extends Controller
 
         $template = Template::findOrFail($id);
 
-        $request->validate([
-            'fields_json' => 'required|array',
-        ]);
+        $data = [];
 
-        $template->update([
-            'fields_json' => $request->input('fields_json'),
-        ]);
+        if ($request->has('fields')) {
+            $data['fields_json'] = $request->input('fields');
+        }
+        if ($request->has('name')) {
+            $data['name'] = $request->input('name');
+        }
+        if ($request->has('template_type')) {
+            $data['template_type'] = $request->input('template_type');
+        }
+        if ($request->has('is_global')) {
+            $data['is_global'] = $request->boolean('is_global');
+        }
+
+        if (!empty($data)) {
+            $template->update($data);
+        }
+
+        if ($request->has('allowed_branches')) {
+            if ($request->boolean('is_global')) {
+                $template->branches()->detach();
+            } else {
+                $template->branches()->sync($request->input('allowed_branches', []));
+            }
+        }
 
         return response()->json(['ok' => true]);
     }

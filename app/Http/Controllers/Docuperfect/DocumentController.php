@@ -71,13 +71,18 @@ class DocumentController extends Controller
             abort(403);
         }
 
-        $request->validate([
-            'fields_json' => 'required|array',
-        ]);
+        $data = [];
 
-        $document->update([
-            'fields_json' => $request->input('fields_json'),
-        ]);
+        if ($request->has('fields')) {
+            $data['fields_json'] = $request->input('fields');
+        }
+        if ($request->has('name')) {
+            $data['name'] = $request->input('name');
+        }
+
+        if (!empty($data)) {
+            $document->update($data);
+        }
 
         return response()->json(['ok' => true]);
     }
