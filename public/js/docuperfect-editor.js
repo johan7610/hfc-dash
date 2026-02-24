@@ -498,10 +498,11 @@
         wrap.className = 'dp-strike-opts';
         wrap.addEventListener('mousedown', stopProp);
 
+        var strikeLabels = { horizontal: 'Strikethrough', diagonal: 'Diagonal Strike' };
         ['horizontal', 'diagonal'].forEach(function (t) {
             var btn = document.createElement('button');
             btn.className = 'dp-strike-opt' + ((field.strikethroughType || 'horizontal') === t ? ' active' : '');
-            btn.textContent = t.charAt(0).toUpperCase() + t.slice(1);
+            btn.textContent = strikeLabels[t];
             btn.addEventListener('click', function () {
                 field.strikethroughType = t;
                 isDirty = true;

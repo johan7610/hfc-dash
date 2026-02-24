@@ -22,6 +22,12 @@
     flex-direction: column;
     gap: 6px;
     flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    max-height: 100vh;
+    overflow-y: auto;
+    z-index: 50;
 }
 
 .dp-sidebar-label {

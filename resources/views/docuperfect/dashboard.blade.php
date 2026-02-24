@@ -80,20 +80,35 @@
                 <div class="text-sm text-slate-500">No templates available yet.</div>
             </div>
         @else
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 @foreach($templates as $tpl)
-                <div class="ds-status-card p-4">
-                    <div class="flex items-start justify-between mb-2">
-                        <div>
-                            <div class="font-semibold text-slate-900 text-sm">{{ $tpl->name }}</div>
-                            <div class="text-xs text-slate-500 mt-0.5">{{ $tpl->page_count }} page{{ $tpl->page_count !== 1 ? 's' : '' }}</div>
-                        </div>
-                        <span class="ds-badge ds-badge-info text-[10px]">{{ $tpl->template_type }}</span>
+                <div class="ds-status-card p-4 flex flex-col">
+                    <div class="flex items-start justify-between mb-1">
+                        <div class="font-semibold text-slate-900 text-sm leading-tight">{{ $tpl->name }}</div>
+                        @if($tpl->template_type)
+                        <span class="ds-badge ds-badge-info text-[10px] ml-2 flex-shrink-0">{{ $tpl->template_type }}</span>
+                        @endif
                     </div>
-                    <div class="flex items-center gap-2 mt-3">
-                        <a href="{{ route('docuperfect.documents.create', $tpl->id) }}" class="nexus-btn-primary text-xs px-3 py-1.5">New Document</a>
+                    <div class="text-xs text-slate-500 mb-3">
+                        @if($tpl->is_global)
+                            Global
+                        @else
+                            {{ $tpl->branches->pluck('name')->join(', ') ?: 'No branches' }}
+                        @endif
+                    </div>
+                    @if($tpl->page_count > 0)
+                    <div class="flex-1 flex items-center justify-center mb-3">
+                        <img src="{{ route('docuperfect.page.image', ['id' => $tpl->id, 'page' => 0]) }}"
+                             alt="{{ $tpl->name }}"
+                             style="max-height: 200px; width: auto;"
+                             loading="lazy"
+                             class="rounded shadow-sm mx-auto block" />
+                    </div>
+                    @endif
+                    <div class="flex items-center gap-2 mt-auto pt-3 border-t border-slate-100">
+                        <a href="{{ route('docuperfect.documents.create', $tpl->id) }}" class="nexus-btn-primary text-xs px-3 py-1.5">Create Document</a>
                         @if($user->isAdmin() || $user->isBranchManager())
-                        <a href="{{ route('docuperfect.templates.edit', $tpl->id) }}" class="ds-link text-xs">Edit Template</a>
+                        <a href="{{ route('docuperfect.templates.edit', $tpl->id) }}" class="nexus-btn-outline text-xs px-3 py-1.5">Edit</a>
                         @endif
                     </div>
                 </div>
