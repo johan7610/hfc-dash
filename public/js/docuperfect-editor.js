@@ -23,6 +23,9 @@
     var isDirty = false;
     var dragState = null;       // { type, fieldId, startX, startY, container, ... }
     var clauseCache = null;
+    var placementStrikeType = null;
+    var quickFillEl = null;
+    var quickFillDebounce = null;
 
     // DOM refs (set in init)
     var editorEl, sidebarEl, canvasEl;
@@ -31,13 +34,14 @@
     // CONSTANTS
     // ======================================================================
     var TYPES = [
-        { type: 'placeholder',   label: 'Text',    icon: 'Aa' },
-        { type: 'strikethrough', label: 'Strike',  icon: '\u2014' },
-        { type: 'selection',     label: 'Select',  icon: '\u2261' },
-        { type: 'initial',       label: 'Initial', icon: 'In' },
-        { type: 'date',          label: 'Date',    icon: 'Dt' },
-        { type: 'condition',     label: 'Clause',  icon: '\u00A7' },
-        { type: 'signature',     label: 'Sign',    icon: 'Sg' }
+        { type: 'placeholder',   label: 'Text',      icon: 'Aa' },
+        { type: 'strikethrough', label: 'Strike',     icon: '\u2014', strikethroughType: 'horizontal' },
+        { type: 'strikethrough', label: 'Diagonal',   icon: '\u2572', strikethroughType: 'diagonal' },
+        { type: 'selection',     label: 'Select',     icon: '\u2261' },
+        { type: 'initial',       label: 'Initial',    icon: 'In' },
+        { type: 'date',          label: 'Date',       icon: 'Dt' },
+        { type: 'condition',     label: 'Clause',     icon: '\u00A7' },
+        { type: 'signature',     label: 'Sign',       icon: 'Sg' }
     ];
 
     // ======================================================================
@@ -103,6 +107,14 @@
         buildSidebar();
         editorEl.appendChild(sidebarEl);
 
+        // Quick fill sidebar (document mode only)
+        if (C.mode === 'document') {
+            quickFillEl = document.createElement('div');
+            quickFillEl.className = 'dp-quick-fill-sidebar';
+            buildQuickFill();
+            editorEl.appendChild(quickFillEl);
+        }
+
         // Canvas area
         canvasEl = document.createElement('div');
         canvasEl.className = 'dp-canvas-area';
@@ -119,12 +131,13 @@
             var btn = document.createElement('button');
             btn.className = 'dp-sidebar-btn';
             btn.dataset.type = t.type;
+            if (t.strikethroughType) btn.dataset.strikeType = t.strikethroughType;
             btn.innerHTML = '<span class="dp-btn-icon">' + t.icon + '</span>' + t.label;
             btn.addEventListener('click', function () {
-                if (placementMode === t.type) {
+                if (placementMode === t.type && (!t.strikethroughType || placementStrikeType === t.strikethroughType)) {
                     cancelPlacement();
                 } else {
-                    startPlacement(t.type);
+                    startPlacement(t.type, t.strikethroughType);
                 }
             });
             sidebarEl.appendChild(btn);
@@ -284,7 +297,10 @@
         inp.value = field.value || '';
         inp.placeholder = 'Enter text\u2026';
         applyStyle(inp, field);
-        inp.addEventListener('input', function () { field.value = this.value; isDirty = true; });
+        inp.addEventListener('input', function () {
+            field.value = this.value; isDirty = true;
+            if (field.named_field_id) syncNamedField(field.named_field_id, this.value, this);
+        });
         inp.addEventListener('mousedown', stopProp);
         el.appendChild(inp);
     }
@@ -532,16 +548,20 @@
     // ======================================================================
     // PLACEMENT
     // ======================================================================
-    function startPlacement(type) {
+    function startPlacement(type, strikethroughType) {
         placementMode = type;
+        placementStrikeType = strikethroughType || null;
         editorEl.classList.add('dp-placement-active');
         sidebarEl.querySelectorAll('.dp-sidebar-btn').forEach(function (b) {
-            b.classList.toggle('active', b.dataset.type === type);
+            var match = b.dataset.type === type;
+            if (strikethroughType) match = match && b.dataset.strikeType === strikethroughType;
+            b.classList.toggle('active', match);
         });
     }
 
     function cancelPlacement() {
         placementMode = null;
+        placementStrikeType = null;
         editorEl.classList.remove('dp-placement-active');
         if (sidebarEl) sidebarEl.querySelectorAll('.dp-sidebar-btn').forEach(function (b) { b.classList.remove('active'); });
     }
@@ -564,7 +584,7 @@
         };
 
         // Type-specific defaults
-        if (placementMode === 'strikethrough')  { nf.active = false; nf.strikethroughType = 'horizontal'; }
+        if (placementMode === 'strikethrough')  { nf.active = false; nf.strikethroughType = placementStrikeType || 'horizontal'; }
         if (placementMode === 'selection')      { nf.options = ['Option 1', 'Option 2']; nf.selectedValue = null; }
         if (placementMode === 'condition')      { nf.text = ''; }
         if (C.mode === 'document')              { nf.isUserAdded = true; }
@@ -769,10 +789,12 @@
             var nameEl  = document.getElementById('dpTemplateName');
             var typeEl  = document.getElementById('dpTemplateType');
             var globEl  = document.getElementById('dpGlobal');
+            var docTypeEl = document.getElementById('dpDocumentType');
 
             if (nameEl) body.name = nameEl.value;
             if (typeEl) body.template_type = typeEl.value;
             if (globEl) body.is_global = globEl.checked;
+            if (docTypeEl) body.document_type_id = docTypeEl.value || null;
 
             var brCbs = document.querySelectorAll('.dp-branch-cb:checked');
             body.allowed_branches = Array.from(brCbs).map(function (cb) { return parseInt(cb.value); });
@@ -1023,6 +1045,131 @@
         var d = document.createElement('div');
         d.appendChild(document.createTextNode(str));
         return d.innerHTML;
+    }
+
+    // ======================================================================
+    // QUICK FILL (document mode)
+    // ======================================================================
+    function buildQuickFill() {
+        // Header with toggle
+        var header = document.createElement('div');
+        header.className = 'dp-quick-fill-header';
+
+        var title = document.createElement('span');
+        title.textContent = 'QUICK FILL';
+        header.appendChild(title);
+
+        var toggle = document.createElement('button');
+        toggle.className = 'dp-quick-fill-toggle';
+        toggle.textContent = '\u25C0';
+        toggle.addEventListener('click', function () {
+            quickFillEl.classList.toggle('collapsed');
+            toggle.textContent = quickFillEl.classList.contains('collapsed') ? '\u25B6' : '\u25C0';
+        });
+        header.appendChild(toggle);
+        quickFillEl.appendChild(header);
+
+        // Fields container
+        var fieldsContainer = document.createElement('div');
+        fieldsContainer.className = 'dp-quick-fill-fields';
+
+        // Build named field map
+        var namedFieldMap = {};
+        (C.namedFields || []).forEach(function (nf) {
+            namedFieldMap[nf.id] = nf;
+        });
+
+        // Find unique named_field_ids in current fields
+        var usedNamedFieldIds = [];
+        fields.forEach(function (f) {
+            if (f.named_field_id && usedNamedFieldIds.indexOf(f.named_field_id) === -1) {
+                usedNamedFieldIds.push(f.named_field_id);
+            }
+        });
+
+        if (usedNamedFieldIds.length === 0) {
+            var empty = document.createElement('div');
+            empty.className = 'dp-quick-fill-empty';
+            empty.textContent = 'No named fields in this document.';
+            fieldsContainer.appendChild(empty);
+        } else {
+            usedNamedFieldIds.forEach(function (nfId) {
+                var namedField = namedFieldMap[nfId];
+                var item = document.createElement('div');
+                item.className = 'dp-quick-fill-item';
+
+                var label = document.createElement('label');
+                label.textContent = namedField ? namedField.label : 'Field #' + nfId;
+                item.appendChild(label);
+
+                var input = document.createElement('input');
+                input.type = 'text';
+                input.dataset.namedFieldId = nfId;
+
+                // Get current value from first matching field
+                var firstMatch = fields.find(function (f) { return f.named_field_id == nfId; });
+                input.value = firstMatch ? (firstMatch.value || '') : '';
+
+                input.addEventListener('input', function () {
+                    syncNamedField(nfId, this.value, this);
+                });
+
+                item.appendChild(input);
+                fieldsContainer.appendChild(item);
+            });
+        }
+
+        quickFillEl.appendChild(fieldsContainer);
+    }
+
+    function syncNamedField(namedFieldId, value, sourceInput) {
+        // Update all fields with this named_field_id
+        fields.forEach(function (f) {
+            if (f.named_field_id == namedFieldId) {
+                f.value = value;
+            }
+        });
+        isDirty = true;
+
+        // Update canvas inputs directly (skip the source input)
+        document.querySelectorAll('.dp-field').forEach(function (fieldEl) {
+            var fId = fieldEl.dataset.fieldId;
+            var f = findField(fId);
+            if (f && f.named_field_id == namedFieldId) {
+                var inp = fieldEl.querySelector('.dp-field-input');
+                if (inp && inp !== sourceInput) {
+                    inp.value = value;
+                }
+            }
+        });
+
+        // Update quick fill sidebar input (skip the source input)
+        if (quickFillEl) {
+            var qfInput = quickFillEl.querySelector('input[data-named-field-id="' + namedFieldId + '"]');
+            if (qfInput && qfInput !== sourceInput) {
+                qfInput.value = value;
+            }
+        }
+
+        // Debounced save to pack instance
+        if (C.packInstanceSaveUrl && C.packInstanceId) {
+            clearTimeout(quickFillDebounce);
+            quickFillDebounce = setTimeout(function () {
+                savePackInstanceValue(namedFieldId, value);
+            }, 500);
+        }
+    }
+
+    function savePackInstanceValue(namedFieldId, value) {
+        fetch(C.packInstanceSaveUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': C.csrfToken, 'Accept': 'application/json' },
+            body: JSON.stringify({
+                pack_instance_id: C.packInstanceId,
+                named_field_id: namedFieldId,
+                value: value
+            })
+        }).catch(function () { /* silent fail for debounced saves */ });
     }
 
     // ======================================================================
