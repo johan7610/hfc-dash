@@ -24,7 +24,7 @@
 
     {{-- Template metadata editor --}}
     <div class="ds-status-card p-4 space-y-3">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
                 <label class="ds-label block mb-1">Template Name</label>
                 <input type="text" id="dpTemplateName" value="{{ $template->name }}" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
@@ -35,6 +35,15 @@
                     <option value="sales" {{ $template->template_type === 'sales' ? 'selected' : '' }}>Sales</option>
                     <option value="rentals" {{ $template->template_type === 'rentals' ? 'selected' : '' }}>Rentals</option>
                     <option value="compliance" {{ $template->template_type === 'compliance' ? 'selected' : '' }}>Compliance</option>
+                </select>
+            </div>
+            <div>
+                <label class="ds-label block mb-1">Document Type</label>
+                <select id="dpDocumentType" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
+                    <option value="">— None —</option>
+                    @foreach($documentTypes as $dt)
+                    <option value="{{ $dt->id }}" {{ $template->document_type_id == $dt->id ? 'selected' : '' }}>{{ $dt->name }}</option>
+                    @endforeach
                 </select>
             </div>
             <div>
@@ -86,7 +95,9 @@
         clauseApiUrl: @json(route('docuperfect.clauses.json')),
         csrfToken: @json(csrf_token()),
         templateName: @json($template->name),
-        templateType: @json($template->template_type)
+        templateType: @json($template->template_type),
+        documentTypeId: @json($template->document_type_id),
+        namedFields: @json($namedFields)
     };
 </script>
 <script src="{{ asset('js/docuperfect-editor.js') }}"></script>

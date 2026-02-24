@@ -13,6 +13,7 @@ class Template extends Model
     protected $fillable = [
         'name',
         'template_type',
+        'document_type_id',
         'page_count',
         'fields_json',
         'is_global',
@@ -29,6 +30,11 @@ class Template extends Model
     public function owner()
     {
         return $this->belongsTo(User::class, 'owner_id');
+    }
+
+    public function documentType()
+    {
+        return $this->belongsTo(DocumentType::class, 'document_type_id');
     }
 
     public function branches()

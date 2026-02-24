@@ -16,6 +16,7 @@ class Document extends Model
         'fields_json',
         'owner_id',
         'branch_id',
+        'pack_instance_id',
         'archived_at',
     ];
 
@@ -37,6 +38,19 @@ class Document extends Model
     public function template()
     {
         return $this->belongsTo(Template::class, 'template_id');
+    }
+
+    public function packInstanceValues()
+    {
+        if (!$this->pack_instance_id) {
+            return collect();
+        }
+        return PackInstanceValue::where('pack_instance_id', $this->pack_instance_id)->get();
+    }
+
+    public function scopeInPackInstance($query, $instanceId)
+    {
+        return $query->where('pack_instance_id', $instanceId);
     }
 
     public function scopeActive($query)

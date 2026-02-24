@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Docuperfect;
 
 use App\Http\Controllers\Controller;
+use App\Models\Docuperfect\DocumentType;
+use App\Models\Docuperfect\NamedField;
 use App\Models\Docuperfect\Template;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -18,12 +20,14 @@ class TemplateController extends Controller
 
         $showArchived = $request->boolean('archived');
 
-        $query = Template::visibleTo($user)->with(['owner', 'branches']);
+        $query = Template::visibleTo($user)->with(['owner', 'branches', 'documentType']);
         $templates = $showArchived
             ? $query->archived()->orderByDesc('archived_at')->get()
             : $query->active()->orderBy('name')->get();
 
-        return view('docuperfect.templates.index', compact('templates', 'showArchived', 'user'));
+        $documentTypes = DocumentType::orderBy('sort_order')->get();
+
+        return view('docuperfect.templates.index', compact('templates', 'showArchived', 'documentTypes', 'user'));
     }
 
     public function upload(Request $request)
@@ -61,10 +65,12 @@ class TemplateController extends Controller
             abort(403);
         }
 
-        $template = Template::with('branches')->findOrFail($id);
+        $template = Template::with(['branches', 'documentType'])->findOrFail($id);
         $branches = \App\Models\Branch::orderBy('name')->get();
+        $documentTypes = DocumentType::orderBy('sort_order')->get();
+        $namedFields = NamedField::orderBy('sort_order')->get();
 
-        return view('docuperfect.templates.edit', compact('template', 'branches', 'user'));
+        return view('docuperfect.templates.edit', compact('template', 'branches', 'documentTypes', 'namedFields', 'user'));
     }
 
     public function saveFields(Request $request, $id)
@@ -86,6 +92,9 @@ class TemplateController extends Controller
         }
         if ($request->has('template_type')) {
             $data['template_type'] = $request->input('template_type');
+        }
+        if ($request->has('document_type_id')) {
+            $data['document_type_id'] = $request->input('document_type_id') ?: null;
         }
         if ($request->has('is_global')) {
             $data['is_global'] = $request->boolean('is_global');

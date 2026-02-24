@@ -3,9 +3,19 @@
 @section('content')
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
-        <h2 class="text-xl font-bold text-white leading-tight">My Documents</h2>
-        <div class="text-sm text-white/60">All your filled documents. Create new ones from the <a href="{{ route('docuperfect.dashboard') }}" class="text-white/80 underline">Dashboard</a>.</div>
+    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 flex items-center justify-between">
+        <div>
+            @if(!empty($packInstance))
+            <h2 class="text-xl font-bold text-white leading-tight">Document Pack</h2>
+            <div class="text-sm text-white/60">Documents created from this pack. Fill named fields once — they populate across all documents.</div>
+            @else
+            <h2 class="text-xl font-bold text-white leading-tight">My Documents</h2>
+            <div class="text-sm text-white/60">All your filled documents. Create new ones from the <a href="{{ route('docuperfect.dashboard') }}" class="text-white/80 underline">Dashboard</a>.</div>
+            @endif
+        </div>
+        @if(!empty($packInstance))
+        <a href="{{ route('docuperfect.documents.index') }}" class="text-sm text-white/70 hover:text-white">Show All</a>
+        @endif
     </div>
 
     @if(session('status'))

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Docuperfect;
 
 use App\Http\Controllers\Controller;
 use App\Models\Docuperfect\Document;
+use App\Models\Docuperfect\NamedField;
 use App\Models\Docuperfect\Template;
 use Illuminate\Http\Request;
 
@@ -12,14 +13,19 @@ class DocumentController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
+        $packInstance = $request->query('pack_instance');
 
-        $documents = Document::active()
+        $query = Document::active()
             ->visibleTo($user)
-            ->with(['template', 'owner', 'branch'])
-            ->orderByDesc('updated_at')
-            ->get();
+            ->with(['template', 'owner', 'branch']);
 
-        return view('docuperfect.documents.index', compact('documents', 'user'));
+        if ($packInstance) {
+            $query->where('pack_instance_id', $packInstance);
+        }
+
+        $documents = $query->orderByDesc('updated_at')->get();
+
+        return view('docuperfect.documents.index', compact('documents', 'packInstance', 'user'));
     }
 
     public function create(Request $request, $templateId)
@@ -57,8 +63,9 @@ class DocumentController extends Controller
         }
 
         $template = $document->template;
+        $namedFields = NamedField::orderBy('sort_order')->get();
 
-        return view('docuperfect.documents.edit', compact('document', 'template', 'user'));
+        return view('docuperfect.documents.edit', compact('document', 'template', 'namedFields', 'user'));
     }
 
     public function saveFields(Request $request, $id)

@@ -49,7 +49,11 @@
         clauseApiUrl: @json(route('docuperfect.clauses.json')),
         csrfToken: @json(csrf_token()),
         templateName: @json($template->name),
-        documentName: @json($document->name)
+        documentName: @json($document->name),
+        namedFields: @json($namedFields),
+        packInstanceId: @json($document->pack_instance_id),
+        packInstanceValuesUrl: @json($document->pack_instance_id ? route('docuperfect.api.packInstanceValues', ['instanceId' => $document->pack_instance_id]) : null),
+        packInstanceSaveUrl: @json(route('docuperfect.api.packInstanceValuesSave'))
     };
 </script>
 <script src="{{ asset('js/docuperfect-editor.js') }}"></script>
