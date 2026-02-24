@@ -2,72 +2,70 @@
 
 @section('nexus-content')
 
-{{-- Navy header bar --}}
-<div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-6">
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-        <div>
-            <h2 class="text-xl font-bold text-white leading-tight">Market Analysis Results</h2>
-            <div class="text-sm text-white/60">
-                Presentation #{{ $presentation->id }}
-                &nbsp;·&nbsp; MA run #{{ $maRun->id }}
-                &nbsp;·&nbsp; SP run #{{ $spRun->id }}
-            </div>
-        </div>
-        <a href="{{ route('presentations.index') }}"
-           class="nexus-btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.3); background:transparent;">
-            &larr; Back to Presentations
-        </a>
+{{-- ══════════════════════════════════════════════════════════════════════════
+     PAGE HEADER
+══════════════════════════════════════════════════════════════════════════ --}}
+<div class="mb-6 flex items-start justify-between">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-800">Market Analysis Results</h1>
+        <p class="text-sm text-gray-500 mt-1">
+            Presentation #{{ $presentation->id }}
+            &nbsp;·&nbsp; MA run #{{ $maRun->id }}
+            &nbsp;·&nbsp; SP run #{{ $spRun->id }}
+        </p>
     </div>
+    <a href="{{ route('presentations.index') }}"
+       class="text-xs text-[#00b4d8] hover:underline mt-1">← Back to Presentations</a>
 </div>
 
 {{-- ══════════════════════════════════════════════════════════════════════════
      INPUTS FORM (re-run)
 ══════════════════════════════════════════════════════════════════════════ --}}
-<div class="ds-status-card mb-6" style="border-left-color: var(--ds-cyan);">
-    <h2 class="ds-section-header mb-3">Inputs</h2>
+<div class="bg-white rounded-xl shadow p-6 mb-6">
+    <h2 class="text-base font-semibold text-gray-700 mb-3">Inputs</h2>
     <form method="POST" action="{{ route('presentations.compute', $presentation) }}">
         @csrf
         <div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
             <div>
-                <label class="ds-label block mb-1">Suburb <span class="text-red-500">*</span></label>
+                <label class="block text-xs text-gray-600 mb-1">Suburb <span class="text-red-500">*</span></label>
                 <input type="text" name="suburb" value="{{ $inputs['suburb'] }}" required
-                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                       class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
                 @error('suburb')<p class="mt-1 text-xs text-red-600">{{ $message }}</p>@enderror
             </div>
             <div>
-                <label class="ds-label block mb-1">Property Type <span class="text-red-500">*</span></label>
-                <select name="type" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                <label class="block text-xs text-gray-600 mb-1">Property Type <span class="text-red-500">*</span></label>
+                <select name="type" required class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
                     @foreach(['house','unit','land','other'] as $t)
                         <option value="{{ $t }}" {{ ($inputs['type'] ?? '') === $t ? 'selected' : '' }}>{{ ucfirst($t) }}</option>
                     @endforeach
                 </select>
             </div>
             <div>
-                <label class="ds-label block mb-1">Period <span class="text-red-500">*</span></label>
-                <select name="period_months" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                <label class="block text-xs text-gray-600 mb-1">Period <span class="text-red-500">*</span></label>
+                <select name="period_months" required class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
                     @foreach([6,12,24] as $m)
                         <option value="{{ $m }}" {{ ($inputs['period_months'] ?? 12) == $m ? 'selected' : '' }}>{{ $m }} months</option>
                     @endforeach
                 </select>
             </div>
             <div>
-                <label class="ds-label block mb-1">Price (R)</label>
+                <label class="block text-xs text-gray-600 mb-1">Price (R)</label>
                 <input type="number" name="price" value="{{ $inputs['price'] ?? '' }}" step="1" min="0"
-                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                       class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
             </div>
             <div>
-                <label class="ds-label block mb-1">Floor Area (m²)</label>
+                <label class="block text-xs text-gray-600 mb-1">Floor Area (m²)</label>
                 <input type="number" name="size_m2" value="{{ $inputs['size_m2'] ?? '' }}" min="0"
-                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                       class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
             </div>
             <div>
-                <label class="ds-label block mb-1">Bedrooms</label>
+                <label class="block text-xs text-gray-600 mb-1">Bedrooms</label>
                 <input type="number" name="bedrooms" value="{{ $inputs['bedrooms'] ?? '' }}" min="0" max="20"
-                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                       class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
             </div>
             <div>
-                <label class="ds-label block mb-1">Branch</label>
-                <select name="branch_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                <label class="block text-xs text-gray-600 mb-1">Branch</label>
+                <select name="branch_id" class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
                     <option value="">— Any —</option>
                     @foreach($branches as $branch)
                         <option value="{{ $branch->id }}" {{ ($inputs['branch_id'] ?? null) == $branch->id ? 'selected' : '' }}>
@@ -78,7 +76,8 @@
             </div>
         </div>
         <div class="mt-4">
-            <button type="submit" class="nexus-btn-primary">
+            <button type="submit"
+                    class="px-5 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded hover:bg-[#081f36]">
                 Re-run Analysis
             </button>
         </div>
@@ -175,9 +174,9 @@
     $topSignals = array_slice($activeSignals, 0, 3, true);
 @endphp
 
-<div class="ds-status-card mb-6" style="border-left-color: var(--ds-cyan);">
-    <h2 class="ds-section-header mb-1">What's Driving This</h2>
-    <p class="ds-section-sub mb-4">Top 3 signals by influence on the probability score.</p>
+<div class="bg-white rounded-xl shadow p-6 mb-6">
+    <h2 class="text-base font-semibold text-gray-800 mb-1">What's Driving This</h2>
+    <p class="text-xs text-gray-400 mb-4">Top 3 signals by influence on the probability score.</p>
 
     @if(empty($topSignals))
         <div class="py-6 text-center">
@@ -288,9 +287,9 @@
     ];
 @endphp
 
-<div class="ds-status-card mb-6" style="border-left-color: var(--ds-cyan);">
-    <h2 class="ds-section-header mb-1">Price Sensitivity</h2>
-    <p class="ds-section-sub mb-4">Effect of a price reduction on 60-day probability and expected sale time.</p>
+<div class="bg-white rounded-xl shadow p-6 mb-6">
+    <h2 class="text-base font-semibold text-gray-800 mb-1">Price Sensitivity</h2>
+    <p class="text-xs text-gray-400 mb-4">Effect of a price reduction on 60-day probability and expected sale time.</p>
 
     {{-- Quick drop cards --}}
     <div class="grid grid-cols-3 gap-3 mb-4">
@@ -343,9 +342,9 @@
             Show full price sensitivity curve (21 steps)
         </summary>
         <div class="mt-3 overflow-x-auto">
-            <table class="w-full text-xs text-left ds-table">
+            <table class="w-full text-xs text-left text-gray-700">
                 <thead>
-                    <tr>
+                    <tr class="border-b bg-gray-50 text-gray-500">
                         <th class="py-2 px-3">Price Delta</th>
                         <th class="py-2 px-3">Dev %</th>
                         <th class="py-2 px-3">Score</th>
@@ -425,8 +424,8 @@
      MARKET EVIDENCE (secondary)
 ══════════════════════════════════════════════════════════════════════════ --}}
 @php $domCurve = $maResult->domCurve; @endphp
-<div class="ds-status-card mb-6" style="border-left-color: var(--ds-cyan);">
-    <h2 class="ds-section-header mb-1">Market Evidence</h2>
+<div class="bg-white rounded-xl shadow p-6 mb-6">
+    <h2 class="text-base font-semibold text-gray-700 mb-1">Market Evidence</h2>
     <p class="text-xs text-gray-400 mb-4">
         {{ $inputs['suburb'] }} · {{ ucfirst($inputs['type']) }} · {{ $inputs['period_months'] }} month window
     </p>
@@ -497,8 +496,8 @@
 {{-- ══════════════════════════════════════════════════════════════════════════
      SAVE SNAPSHOT
 ══════════════════════════════════════════════════════════════════════════ --}}
-<div class="ds-status-card mb-6" style="border-left-color: var(--ds-cyan);">
-    <h2 class="ds-section-header mb-1">Save Snapshot</h2>
+<div class="bg-white rounded-xl shadow p-6 mb-6">
+    <h2 class="text-base font-semibold text-gray-700 mb-1">Save Snapshot</h2>
     <p class="text-xs text-gray-400 mb-4">
         Lock these results as an immutable snapshot attached to Presentation #{{ $presentation->id }}.
         MA run #{{ $maRun->id }} · SP run #{{ $spRun->id }}.
@@ -509,7 +508,8 @@
         <input type="hidden" name="prob_run_id"         value="{{ $spRun->id }}">
         <input type="hidden" name="inputs_json"         value="{{ $snapshotInputsJson }}">
         <input type="hidden" name="output_summary_json" value="{{ $snapshotOutputSummaryJson }}">
-        <button type="submit" class="nexus-btn-primary">
+        <button type="submit"
+                class="px-5 py-2 bg-emerald-600 text-white text-sm font-medium rounded hover:bg-emerald-700">
             Save Snapshot
         </button>
     </form>

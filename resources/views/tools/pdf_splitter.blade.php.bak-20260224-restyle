@@ -5,7 +5,14 @@
 #pdf-splitter-root, #pdf-splitter-root * { box-sizing: border-box; }
 
 #pdf-splitter-root {
-    color: #0f172a;
+    --ink:    #0f172a;
+    --muted:  #64748b;
+    --border: rgba(15,23,42,0.12);
+    --card:   #ffffff;
+    --navy:   #0b2a45;
+
+    padding: 28px 22px;
+    color: var(--ink);
 }
 
 #pdf-splitter-root .wrap {
@@ -13,25 +20,74 @@
     margin: 0 auto;
 }
 
+#pdf-splitter-root .page-title {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: var(--navy);
+    margin: 0 0 6px;
+}
+
+#pdf-splitter-root .page-sub {
+    font-size: 0.875rem;
+    color: var(--muted);
+    margin: 0 0 24px;
+}
+
+#pdf-splitter-root .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 28px 32px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.08);
+}
+
+#pdf-splitter-root .alert {
+    padding: 12px 16px;
+    border-radius: 7px;
+    font-size: 0.875rem;
+    margin-bottom: 20px;
+}
+
+#pdf-splitter-root .alert-success {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #166534;
+}
+
+#pdf-splitter-root .alert-error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+}
+
 #pdf-splitter-root .field { margin-bottom: 20px; }
+
+#pdf-splitter-root label {
+    display: block;
+    font-size: 0.825rem;
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
 
 #pdf-splitter-root input[type="text"],
 #pdf-splitter-root input[type="file"] {
     width: 100%;
-    padding: 0.625rem 0.75rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 0.5rem;
-    font-size: 0.875rem;
-    color: #0f172a;
+    padding: 10px 13px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.9rem;
+    color: var(--ink);
     background: #f8fafc;
     outline: none;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: border-color 0.15s;
 }
 
 #pdf-splitter-root input[type="text"]:focus {
-    border-color: #0b2a4a;
+    border-color: var(--navy);
     background: #fff;
-    box-shadow: 0 0 0 3px rgba(0, 180, 216, 0.1);
 }
 
 #pdf-splitter-root .field-error {
@@ -39,31 +95,41 @@
     color: #b91c1c;
     margin-top: 4px;
 }
+
+#pdf-splitter-root .btn-submit {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 28px;
+    background: var(--navy);
+    color: #fff;
+    border: none;
+    border-radius: 7px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+#pdf-splitter-root .btn-submit:hover {
+    background: #0a233a;
+}
 </style>
 
 <div id="pdf-splitter-root">
     <div class="wrap">
 
-        {{-- Navy header bar --}}
-        <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-6">
-            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                <div>
-                    <h2 class="text-xl font-bold text-white leading-tight">PDF Pack Splitter</h2>
-                    <div class="text-sm text-white/60">Upload a pack PDF and set a base name</div>
-                </div>
-            </div>
-        </div>
+        <h1 class="page-title">PDF Pack Splitter</h1>
+        <p class="page-sub">Upload a pack PDF and set a base name. OCR runs automatically — you'll review and correct labels before the ZIP is generated.</p>
 
         {{-- Status message --}}
         @if(session('status'))
-            <div class="mb-4 px-4 py-3 bg-green-50 border border-green-200 text-green-800 rounded-lg text-sm font-medium">
-                {{ session('status') }}
-            </div>
+            <div class="alert alert-success">{{ session('status') }}</div>
         @endif
 
         {{-- Validation errors --}}
         @if($errors->any())
-            <div class="mb-4 px-4 py-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-sm">
+            <div class="alert alert-error">
                 <ul style="margin:0;padding-left:18px;">
                     @foreach($errors->all() as $error)
                         <li>{{ $error }}</li>
@@ -72,17 +138,14 @@
             </div>
         @endif
 
-        <div class="ds-status-card" style="border-left-color: var(--ds-cyan);">
-            <h3 class="ds-section-header" style="margin-bottom:1rem;">Upload PDF</h3>
-            <p class="text-sm text-gray-500 mb-4">OCR runs automatically &mdash; you'll review and correct labels before the ZIP is generated.</p>
-
+        <div class="card">
             <form method="POST"
                   action="{{ route('tools.pdf_splitter.run') }}"
                   enctype="multipart/form-data">
                 @csrf
 
                 <div class="field">
-                    <label class="ds-label block mb-1">Base Name</label>
+                    <label for="base_name">Base Name</label>
                     <input type="text"
                            id="base_name"
                            name="base_name"
@@ -95,7 +158,7 @@
                 </div>
 
                 <div class="field">
-                    <label class="ds-label block mb-1">PDF File <span style="font-weight:400;color:#64748b;">(max 50 MB)</span></label>
+                    <label for="pdf">PDF File <span style="font-weight:400;color:var(--muted)">(max 50 MB)</span></label>
                     <input type="file"
                            id="pdf"
                            name="pdf"
@@ -105,7 +168,7 @@
                     @enderror
                 </div>
 
-                <button type="submit" class="nexus-btn-primary" style="padding: 0.625rem 1.5rem;">
+                <button type="submit" class="btn-submit">
                     Upload PDF
                 </button>
             </form>
@@ -119,3 +182,4 @@
 @if (session('splitter_download_url'))
     <iframe src="{{ session('splitter_download_url') }}" style="display:none; width:0; height:0; border:0;"></iframe>
 @endif
+

@@ -18,50 +18,46 @@
 
 <div class="pres-page -m-6 p-6">
 
-{{-- Navy header bar --}}
-<div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-8">
-    <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-        <div>
-            <div class="flex items-center gap-3 mb-1.5">
-                <h2 class="text-xl font-bold text-white leading-tight">{{ $presentation->title }}</h2>
-                <span class="pres-badge {{ $statusClasses }}" style="border:1px solid rgba(255,255,255,0.2);">
-                    {{ ucfirst($presentation->status) }}
-                </span>
-            </div>
-            <p class="text-sm text-white/70 font-medium">{{ $presentation->property_address ?? 'No address set' }}</p>
-
-            {{-- Property details row --}}
-            @php
-                $propTypeLabels = [
-                    'house' => 'House', 'townhouse' => 'Townhouse', 'apartment' => 'Apartment/Flat',
-                    'duplex' => 'Duplex', 'vacant_land' => 'Vacant Land', 'farm' => 'Farm',
-                    'unit' => 'Unit/Apartment', 'land' => 'Vacant Land', 'other' => 'Other',
-                ];
-                $propDetails = array_filter([
-                    $presentation->suburb,
-                    $presentation->property_type ? ($propTypeLabels[$presentation->property_type] ?? ucfirst($presentation->property_type)) : null,
-                    $presentation->bedrooms ? $presentation->bedrooms . ' bed' : null,
-                    $presentation->bathrooms ? $presentation->bathrooms . ' bath' : null,
-                    $presentation->garages_parking ? $presentation->garages_parking . ' garage' : null,
-                    $presentation->erf_size_m2 ? number_format($presentation->erf_size_m2) . ' m² erf' : null,
-                    $presentation->floor_area_m2 ? $presentation->floor_area_m2 . ' m² floor' : null,
-                    $presentation->asking_price_inc ? 'R ' . number_format($presentation->asking_price_inc, 0, '.', ' ') : null,
-                ]);
-            @endphp
-            @if(!empty($propDetails))
-                <p class="text-xs text-white/40 mt-1">{{ implode(' · ', $propDetails) }}</p>
-            @endif
-
-            @if($presentation->seller_name)
-                <p class="text-xs text-white/40 mt-0.5">Seller: {{ $presentation->seller_name }}</p>
-            @endif
-            <p class="text-xs text-white/40 mt-0.5">Created {{ $presentation->created_at->format('Y-m-d') }}</p>
+{{-- PAGE HEADER --}}
+<div class="mb-8 flex items-start justify-between">
+    <div>
+        <div class="flex items-center gap-3 mb-1.5">
+            <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">{{ $presentation->title }}</h1>
+            <span class="pres-badge {{ $statusClasses }}">
+                {{ ucfirst($presentation->status) }}
+            </span>
         </div>
-        <a href="{{ route('presentations.index') }}"
-           class="nexus-btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.3); background:transparent;">
-            &larr; All Presentations
-        </a>
+        <p class="text-sm text-slate-600 font-medium">{{ $presentation->property_address ?? 'No address set' }}</p>
+
+        {{-- Property details row --}}
+        @php
+            $propTypeLabels = [
+                'house' => 'House', 'townhouse' => 'Townhouse', 'apartment' => 'Apartment/Flat',
+                'duplex' => 'Duplex', 'vacant_land' => 'Vacant Land', 'farm' => 'Farm',
+                'unit' => 'Unit/Apartment', 'land' => 'Vacant Land', 'other' => 'Other',
+            ];
+            $propDetails = array_filter([
+                $presentation->suburb,
+                $presentation->property_type ? ($propTypeLabels[$presentation->property_type] ?? ucfirst($presentation->property_type)) : null,
+                $presentation->bedrooms ? $presentation->bedrooms . ' bed' : null,
+                $presentation->bathrooms ? $presentation->bathrooms . ' bath' : null,
+                $presentation->garages_parking ? $presentation->garages_parking . ' garage' : null,
+                $presentation->erf_size_m2 ? number_format($presentation->erf_size_m2) . ' m² erf' : null,
+                $presentation->floor_area_m2 ? $presentation->floor_area_m2 . ' m² floor' : null,
+                $presentation->asking_price_inc ? 'R ' . number_format($presentation->asking_price_inc, 0, '.', ' ') : null,
+            ]);
+        @endphp
+        @if(!empty($propDetails))
+            <p class="text-xs text-slate-400 mt-1">{{ implode(' · ', $propDetails) }}</p>
+        @endif
+
+        @if($presentation->seller_name)
+            <p class="text-xs text-slate-400 mt-0.5">Seller: {{ $presentation->seller_name }}</p>
+        @endif
+        <p class="text-xs text-slate-400 mt-0.5">Created {{ $presentation->created_at->format('Y-m-d') }}</p>
     </div>
+    <a href="{{ route('presentations.index') }}"
+       class="pres-btn pres-btn-secondary text-xs">← All Presentations</a>
 </div>
 
 @if(session('success'))
