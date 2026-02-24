@@ -189,7 +189,6 @@
                 <a href="{{ route('admin.deals') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.deals*') ? 'active' : '' }}">Deal Register</a>
                 <div class="nexus-nav-sublabel">Setup</div>
                 <a href="{{ route('bm.worksheet.market') }}" class="nexus-nav-subitem {{ request()->routeIs('bm.worksheet.market*') ? 'active' : '' }}">Worksheet Market</a>
-                <a href="{{ route('admin.daily.summary') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.daily.summary*') ? 'active' : '' }}">Daily Activity Summary</a>
                 <a href="{{ route('admin.targets') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.targets*') ? 'active' : '' }}">Daily Activity Targets</a>
                 <a href="{{ route('admin.targets.activity.definitions') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.targets.activity.definitions*') ? 'active' : '' }}">Activity Definitions</a>
                 <a href="{{ route('admin.targets.activity.setup') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.targets.activity.setup*') ? 'active' : '' }}">Activity Setup</a>

@@ -149,6 +149,20 @@ class TvController extends Controller
             ];
         })->filter(fn($x) => trim((string)$x['message']) !== '')->values()->all();
 
+        // Agent leaderboard — ranked by points (same data source as BM performance page)
+        $agentLeaderboard = collect($rollup['rows'] ?? [])
+            ->map(fn($r) => [
+                'name'         => (string) ($r['name'] ?? 'Unknown'),
+                'deals'        => (int) ($r['actuals']['deals'] ?? 0),
+                'sales_value'  => (float) ($r['actuals']['sales_value'] ?? 0),
+                'points'       => (float) ($r['actuals']['points'] ?? 0),
+                'points_target'=> (float) ($r['targets']['points'] ?? 0),
+            ])
+            ->sortByDesc('points')
+            ->values()
+            ->take(10)
+            ->all();
+
         return view('tv.branch', [
             'tvMessages' => $tvMessages,
             'tvMessagesRawCount' => is_countable($tvMessagesRaw) ? count($tvMessagesRaw) : 0,
@@ -158,6 +172,7 @@ class TvController extends Controller
             'branchName' => $branchName,
             'tvCode' => $code,
             'autoRefresh' => true,
+            'agentLeaderboard' => $agentLeaderboard,
         ]);
     }
 }
