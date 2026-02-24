@@ -759,6 +759,15 @@
 .ds-badge-onpace  { background: var(--ds-green); color: #fff; }
 .ds-badge-default { background: #e5e7eb; color: #374151; }
 
+/* Deal register badges */
+.ds-badge-success    { background: var(--ds-green); color: #fff; }
+.ds-badge-danger     { background: var(--ds-crimson); color: #fff; }
+.ds-badge-warning    { background: var(--ds-amber); color: #fff; }
+.ds-badge-info       { background: var(--ds-navy); color: #fff; }
+.ds-badge-paid       { background: var(--ds-green); color: #fff; }
+.ds-badge-notpaid    { background: var(--ds-amber); color: #fff; }
+.ds-badge-loss       { background: var(--ds-crimson); color: #fff; }
+
 /* Money card accents (colored left border, white bg) */
 .ds-money-pending   { border-left-color: var(--ds-amber); }
 .ds-money-granted   { border-left-color: var(--ds-green); }

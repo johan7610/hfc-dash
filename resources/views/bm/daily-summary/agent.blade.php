@@ -3,45 +3,45 @@
 @section('content')
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-    <div class="flex items-start justify-between gap-4">
+    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
         <div>
-            <div class="text-sm text-slate-500 space-x-2">
-                <a class="hover:underline" href="{{ route('bm.daily.summary', array_filter(['range'=>$range,'month'=>$month])) }}">Branch Summary</a>
-                <span>›</span>
-                <a class="hover:underline" href="{{ route('bm.daily.summary.activity', array_filter(['definition'=>$def->id,'range'=>$range,'month'=>$month])) }}">{{ $def->name }}</a>
-                <span>›</span>
-                <span class="text-slate-700">{{ $agentName }}</span>
+            <div class="text-sm text-white/60 space-x-2">
+                <a class="hover:underline text-white/60" href="{{ route('bm.daily.summary', array_filter(['range'=>$range,'month'=>$month])) }}">Branch Summary</a>
+                <span>&rsaquo;</span>
+                <a class="hover:underline text-white/60" href="{{ route('bm.daily.summary.activity', array_filter(['definition'=>$def->id,'range'=>$range,'month'=>$month])) }}">{{ $def->name }}</a>
+                <span>&rsaquo;</span>
+                <span class="text-white">{{ $agentName }}</span>
             </div>
-            <h1 class="text-2xl font-semibold text-slate-900 mt-1">{{ $agentName }} — {{ $def->name }}</h1>
-            <div class="text-sm text-slate-600">
-                {{ $branchName ?? ('Branch #' . (int)$branchId) }} · {{ $start->toFormattedDateString() }} → {{ $end->toFormattedDateString() }}
+            <h2 class="text-xl font-bold text-white leading-tight mt-1">{{ $agentName }} &mdash; {{ $def->name }}</h2>
+            <div class="text-sm text-white/60">
+                {{ $branchName ?? ('Branch #' . (int)$branchId) }} &middot; {{ $start->toFormattedDateString() }} &rarr; {{ $end->toFormattedDateString() }}
             </div>
         </div>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="rounded-2xl border bg-white p-5 shadow-sm">
-            <div class="text-xs uppercase tracking-wide text-slate-500">Total Count</div>
-            <div class="mt-1 text-3xl font-extrabold text-slate-900">{{ (int)$totalCount }}</div>
+        <div class="ds-status-card">
+            <div class="ds-label">Total Count</div>
+            <div class="ds-value-xl">{{ (int)$totalCount }}</div>
         </div>
-        <div class="rounded-2xl border bg-white p-5 shadow-sm">
-            <div class="text-xs uppercase tracking-wide text-slate-500">Weight</div>
-            <div class="mt-1 text-3xl font-extrabold text-slate-900">{{ number_format((float)$def->weight, 2) }}</div>
+        <div class="ds-status-card">
+            <div class="ds-label">Weight</div>
+            <div class="ds-value-xl">{{ number_format((float)$def->weight, 2) }}</div>
         </div>
-        <div class="rounded-2xl border bg-white p-5 shadow-sm">
-            <div class="text-xs uppercase tracking-wide text-slate-500">Total Points</div>
-            <div class="mt-1 text-3xl font-extrabold text-slate-900">{{ number_format((float)$totalPoints, 0) }}</div>
+        <div class="ds-status-card">
+            <div class="ds-label">Total Points</div>
+            <div class="ds-value-xl">{{ number_format((float)$totalPoints, 0) }}</div>
         </div>
     </div>
 
-    <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
-        <div class="px-5 py-4 border-b bg-slate-50/60">
-            <div class="font-semibold text-slate-900">Dates performed</div>
-            <div class="text-xs text-slate-500">Newest first.</div>
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800">
+            <h3 class="ds-section-header">Dates performed</h3>
+            <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">Newest first.</div>
         </div>
 
         <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
+            <table class="min-w-full text-sm ds-table">
                 <thead class="bg-white">
                     <tr class="border-b text-slate-600">
                         <th class="text-left p-3">Date</th>

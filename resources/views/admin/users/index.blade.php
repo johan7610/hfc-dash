@@ -1,47 +1,48 @@
-<x-app-layout>
+@extends('layouts.nexus')
+
+@section('content')
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-        <div class="flex items-start justify-between gap-4">
-            <div>
-                <h1 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">User Management</h1>
-                <p class="text-sm text-slate-600 dark:text-slate-300">Manage roles, branch assignment, designation (prints), and default commission/PAYE settings.</p>
+        @php
+            $uCol = $users instanceof \Illuminate\Pagination\AbstractPaginator ? $users->getCollection() : $users;
+            $totalUsers = is_countable($uCol) ? count($uCol) : 0;
+            $activeUsers = method_exists($uCol, 'where') ? $uCol->where('is_active', true)->count() : 0;
+        @endphp
 
-                @if (session('status'))
-                    <div class="mt-4 rounded-2xl bg-emerald-50 text-emerald-800 border border-emerald-200 px-4 py-3">
-                        {{ session('status') }}
-                    </div>
-                @endif
-
-                @if ($errors->any())
-                    <div class="mt-4 rounded-2xl bg-red-50 text-red-800 border border-red-200 px-4 py-3">
-                        <ul class="list-disc pl-5 text-sm space-y-1">
-                            @foreach ($errors->all() as $e)
-                                <li>{{ $e }}</li>
-                            @endforeach
-                        </ul>
-                    </div>
-                @endif
-            </div>
-
-            @php
-                $uCol = $users instanceof \Illuminate\Pagination\AbstractPaginator ? $users->getCollection() : $users;
-                $totalUsers = is_countable($uCol) ? count($uCol) : 0;
-                $activeUsers = method_exists($uCol, 'where') ? $uCol->where('is_active', true)->count() : 0;
-            @endphp
-
-            <div class="text-right">
-                <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Users</div>
-                <div class="mt-1 text-2xl font-semibold text-slate-900 dark:text-slate-100">{{ number_format((int)$totalUsers) }}</div>
-                <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    Active: {{ number_format((int)$activeUsers) }}
+        <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                <div>
+                    <h2 class="text-xl font-bold text-white leading-tight">User Management</h2>
+                    <div class="text-sm text-white/60">Manage roles, branch assignment, designation (prints), and default commission/PAYE settings.</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-xs uppercase tracking-wide text-white/60">Users</div>
+                    <div class="text-2xl font-bold text-white">{{ number_format((int)$totalUsers) }}</div>
+                    <div class="text-xs text-white/60">Active: {{ number_format((int)$activeUsers) }}</div>
                 </div>
             </div>
         </div>
 
+        @if (session('status'))
+            <div class="rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 px-4 py-3 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-100">
+                {{ session('status') }}
+            </div>
+        @endif
+
+        @if ($errors->any())
+            <div class="rounded-2xl border border-rose-200 bg-rose-50 text-rose-900 px-4 py-3 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-100">
+                <ul class="list-disc pl-5 text-sm space-y-1">
+                    @foreach ($errors->all() as $e)
+                        <li>{{ $e }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
         <div class="space-y-3">
             @foreach(($users instanceof \Illuminate\Pagination\AbstractPaginator ? $users : $users) as $user)
                 <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden">
-                    <div class="px-4 py-3 bg-slate-900 dark:bg-slate-800 text-white flex items-start justify-between gap-4">
+                    <div class="px-4 py-3 bg-[#0b2a4a] text-white flex items-start justify-between gap-4">
                         <div class="min-w-0">
                             <div class="flex flex-wrap items-center gap-2">
                                 <div class="font-semibold text-white truncate">{{ $user->name }}</div>
@@ -60,15 +61,15 @@
                                 @endif
                             </div>
 
-                            <div class="mt-1 text-sm text-slate-200 truncate">{{ $user->email }}</div>
+                            <div class="mt-1 text-sm text-white/60 truncate">{{ $user->email }}</div>
 
-                            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-white/15 bg-white/10">
+                            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-white/15 bg-white/10 text-white/80">
                                     <span class="font-semibold text-white">Branch:</span>
                                     <span>{{ optional(($branches ?? collect())->firstWhere('id', $user->branch_id))->name ?? '(none)' }}</span>
                                 </span>
 
-                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-white/15 bg-white/10">
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-white/15 bg-white/10 text-white/80">
                                     <span class="font-semibold text-white">Designation:</span>
                                     <span>{{ $user->designation ?: '(blank)' }}</span>
                                 </span>
@@ -78,7 +79,7 @@
                         <div class="shrink-0 flex items-center gap-2">
                             <form method="POST" action="{{ route('admin.users.toggle', $user) }}">
                                 @csrf
-                                <button class="px-3 py-1.5 rounded-lg text-sm bg-white text-slate-900 hover:bg-slate-100">
+                                <button class="nexus-btn-outline text-sm">
                                     Toggle Active
                                 </button>
                             </form>
@@ -119,7 +120,7 @@
                                 <label class="block text-xs text-slate-600 dark:text-slate-300 mb-1">Designation (prints on certificates)</label>
                                 <select name="designation" class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-2 py-2 text-sm">
                                     @php $des = old('designation', $user->designation ?? ''); @endphp
-                                    
+
                                     <option value="" {{ $des==='' ? 'selected' : '' }}>(blank)</option>
                                     @foreach(($designations ?? []) as $d)
                                         <option value="{{ $d->name }}" {{ $des===$d->name ? 'selected' : '' }}>{{ $d->name }}</option>
@@ -177,7 +178,7 @@
 
                             <div class="md:col-span-12 flex items-center justify-between gap-3 pt-2">
                                 <div class="text-xs text-slate-500 dark:text-slate-400">One save updates role/branch/designation + defaults.</div>
-                                <button type="submit" class="px-3 py-2 rounded-lg text-sm bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100">
+                                <button type="submit" class="nexus-btn-primary text-sm">
                                     Save User
                                 </button>
                             </div>
@@ -194,4 +195,4 @@
         @endif
 
     </div>
-</x-app-layout>
+@endsection

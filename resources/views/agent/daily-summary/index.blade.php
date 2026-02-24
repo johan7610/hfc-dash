@@ -3,55 +3,57 @@
 @section('content')
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-    <div class="flex items-start justify-between gap-4">
-        <div>
-            <h1 class="text-2xl font-semibold text-slate-900">Daily Activity Summary</h1>
-            <div class="text-sm text-slate-600">
-                {{ $start->toFormattedDateString() }} → {{ $end->toFormattedDateString() }}
+    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <h2 class="text-xl font-bold text-white leading-tight">Daily Activity Summary</h2>
+                <div class="text-sm text-white/60">
+                    {{ $start->toFormattedDateString() }} &rarr; {{ $end->toFormattedDateString() }}
+                </div>
             </div>
+
+            <form method="GET" action="{{ route('agent.daily.summary') }}" class="flex flex-wrap items-center gap-2">
+                <select name="range" class="rounded-lg border-0 bg-white/10 text-white text-sm px-3 py-1.5 [&>option]:text-slate-900">
+                    <option value="7d"  {{ $range==='7d' ? 'selected' : '' }}>Last 7 days</option>
+                    <option value="month" {{ $range==='month' ? 'selected' : '' }}>This month</option>
+                    <option value="3m"  {{ $range==='3m' ? 'selected' : '' }}>Last 3 months</option>
+                    <option value="6m"  {{ $range==='6m' ? 'selected' : '' }}>Last 6 months</option>
+                    <option value="12m" {{ $range==='12m' ? 'selected' : '' }}>Last 12 months</option>
+                </select>
+
+                @if($range === 'month')
+                    <input type="text" name="month" value="{{ $month ?? '' }}" placeholder="YYYY-MM"
+                           class="w-28 rounded-lg border-0 bg-white/10 text-white text-sm px-3 py-1.5 placeholder:text-white/40" />
+                @endif
+
+                <button class="nexus-btn-primary text-sm">Apply</button>
+            </form>
         </div>
-
-        <form method="GET" action="{{ route('agent.daily.summary') }}" class="flex flex-wrap items-center gap-2">
-            <select name="range" class="rounded-xl border-slate-200 text-sm">
-                <option value="7d"  {{ $range==='7d' ? 'selected' : '' }}>Last 7 days</option>
-                <option value="month" {{ $range==='month' ? 'selected' : '' }}>This month</option>
-                <option value="3m"  {{ $range==='3m' ? 'selected' : '' }}>Last 3 months</option>
-                <option value="6m"  {{ $range==='6m' ? 'selected' : '' }}>Last 6 months</option>
-                <option value="12m" {{ $range==='12m' ? 'selected' : '' }}>Last 12 months</option>
-            </select>
-
-            @if($range === 'month')
-                <input type="text" name="month" value="{{ $month ?? '' }}" placeholder="YYYY-MM"
-                       class="w-28 rounded-xl border-slate-200 text-sm" />
-            @endif
-
-            <button class="rounded-xl bg-slate-900 text-white px-4 py-2 text-sm font-semibold">Apply</button>
-        </form>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="rounded-2xl border bg-white p-5 shadow-sm">
-            <div class="text-xs uppercase tracking-wide text-slate-500">Total Count</div>
-            <div class="mt-1 text-3xl font-extrabold text-slate-900">{{ (int)$grandCount }}</div>
+        <div class="ds-status-card">
+            <div class="ds-label">Total Count</div>
+            <div class="ds-value-xl">{{ (int)$grandCount }}</div>
         </div>
-        <div class="rounded-2xl border bg-white p-5 shadow-sm">
-            <div class="text-xs uppercase tracking-wide text-slate-500">Total Points</div>
-            <div class="mt-1 text-3xl font-extrabold text-slate-900">{{ number_format((float)$grandPoints, 0) }}</div>
+        <div class="ds-status-card">
+            <div class="ds-label">Total Points</div>
+            <div class="ds-value-xl">{{ number_format((float)$grandPoints, 0) }}</div>
         </div>
-        <div class="rounded-2xl border bg-white p-5 shadow-sm">
-            <div class="text-xs uppercase tracking-wide text-slate-500">Activities Tracked</div>
-            <div class="mt-1 text-3xl font-extrabold text-slate-900">{{ count($items) }}</div>
+        <div class="ds-status-card">
+            <div class="ds-label">Activities Tracked</div>
+            <div class="ds-value-xl">{{ count($items) }}</div>
         </div>
     </div>
 
-    <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
-        <div class="px-5 py-4 border-b bg-slate-50/60">
-            <div class="font-semibold text-slate-900">By Activity</div>
-            <div class="text-xs text-slate-500">Click the Count to drill down to your dates list (next step).</div>
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800">
+            <h3 class="ds-section-header">By Activity</h3>
+            <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">Click the Count to drill down to your dates list (next step).</div>
         </div>
 
         <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
+            <table class="min-w-full text-sm ds-table">
                 <thead class="bg-white">
                     <tr class="border-b text-slate-600">
                         <th class="text-left p-3">Activity</th>

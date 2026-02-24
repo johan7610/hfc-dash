@@ -1,30 +1,31 @@
 <x-app-layout>
     {{-- SETTLE_BLADE_FINGERPRINT: 2026-01-26_1602 --}}
     <x-slot name="header">
-        <div class="flex items-center justify-between">
-            <div>
-                <div class="text-xl font-semibold text-gray-900">Settle Deal #{{ $deal->deal_no }}</div>
-                <div class="text-sm text-gray-500">Settle payments and verify reconciliation (incl VAT).</div>
-            </div>
-            <div class="flex items-center gap-3">
-                <a href="{{ route('admin.deals') }}"
-                   class="inline-flex items-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-gray-200 hover:bg-gray-50">
-                    ← Back
-                </a>
-                <button form="settleForm"
-                        class="inline-flex items-center justify-center rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-gray-800">
-                  <a href="{{ route('admin.deals.settle.print', $deal) }}" target="_blank"
-                     class="inline-flex items-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-gray-200 hover:bg-gray-50">
-                      Print Settlement
-                  </a>
-                    Save Settlement
-                </button>
+        <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                <div>
+                    <h2 class="text-xl font-bold text-white leading-tight">Settlement &mdash; Deal #{{ $deal->deal_no }}</h2>
+                    <div class="text-sm text-white/60">{{ $deal->property_address ?: 'No address' }}</div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <a href="{{ route('admin.deals') }}"
+                       class="inline-flex items-center rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/20 hover:bg-white/15">
+                        &larr; Back
+                    </a>
+                    <a href="{{ route('admin.deals.settle.print', $deal) }}" target="_blank"
+                       class="inline-flex items-center rounded-xl bg-white/20 px-4 py-2 text-sm font-semibold text-white hover:bg-white/30">
+                        Print Settlement
+                    </a>
+                    <button form="settleForm"
+                            class="nexus-btn-primary px-5 py-2.5 text-sm">
+                        Save Settlement
+                    </button>
+                </div>
             </div>
         </div>
     </x-slot>
 
     <div class="space-y-6">
-
 
         @if (session('status'))
             <div class="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{{ session('status') }}</div>
@@ -34,366 +35,364 @@
             <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ $errors->first() }}</div>
         @endif
 
-          {{-- Key totals --}}
-        <div class="rounded-2xl bg-gray-900 text-white shadow-lg p-6">
-              @php $vatAmt = (float)$totalCommissionIncVat - (float)$totalCommissionExVat; $money = fn($v) => number_format((float)($v ?? 0), 2, '.', ','); @endphp
-              <div class="settle-key-totals">
-                  <div class="rounded-2xl bg-white ring-1 ring-gray-200 p-5 text-center shadow-sm">
-                      <div class="text-[11px] uppercase tracking-wide text-gray-500">Commission (Incl VAT)</div>
-                      <div class="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900">R {{ $money($totalCommissionIncVat) }}</div>
-                  </div>
-                  <div class="rounded-2xl bg-white ring-1 ring-gray-200 p-5 text-center shadow-sm">
-                      <div class="text-[11px] uppercase tracking-wide text-gray-500">VAT ({{ (int)round(((float)$vatRate)*100) }}%)</div>
-                      <div class="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900">R {{ $money($vatAmt) }}</div>
-                  </div>
-                  <div class="rounded-2xl bg-white ring-1 ring-gray-200 p-5 text-center shadow-sm">
-                      <div class="text-[11px] uppercase tracking-wide text-gray-500">Commission (Ex VAT)</div>
-                      <div class="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900">R {{ $money($totalCommissionExVat) }}</div>
-                  </div>
-              </div>
-          </div>
+        {{-- Deal Summary --}}
+        <div>
+            <h2 class="ds-section-header">Deal Summary</h2>
+            <div class="ds-section-sub mb-4">Commission totals (incl VAT).</div>
+
+            @php $vatAmt = (float)$totalCommissionIncVat - (float)$totalCommissionExVat; $money = fn($v) => number_format((float)($v ?? 0), 2, '.', ','); @endphp
+
+            <div class="ds-status-card">
+                <div class="settle-key-totals">
+                    <div class="text-center">
+                        <div class="ds-label mb-1">Commission (Incl VAT)</div>
+                        <div class="ds-value-xl" style="color:#0b2a4a">R {{ $money($totalCommissionIncVat) }}</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="ds-label mb-1">VAT ({{ (int)round(((float)$vatRate)*100) }}%)</div>
+                        <div class="ds-value-xl" style="color:#0b2a4a">R {{ $money($vatAmt) }}</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="ds-label mb-1">Commission (Ex VAT)</div>
+                        <div class="ds-value-xl" style="color:#0b2a4a">R {{ $money($totalCommissionExVat) }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
 <form id="settleForm" method="POST" action="{{ route('admin.deals.settle.save', $deal) }}" class="space-y-6">
-            
 @csrf
+
+        {{-- Commission Split --}}
+        <div>
+            <h2 class="ds-section-header">Commission Split</h2>
+            <div class="ds-section-sub mb-4">Adjust Share %, Cut, PAYE, Deductions — values update live.</div>
+        </div>
+
     {{-- SETTLE_MARKPAID_RELOCATED_2026_02_12 --}}
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+{{-- LISTING SIDE --}}
 <div class="settle-col space-y-6 min-w-0">
-{{-- LISTING_POOL_CARD_2026 --}}
-              <div class="rounded-2xl bg-gray-900 text-white shadow-lg p-6">
-                    <div class="text-xs text-gray-400">Listing Pool (Our share)</div>
-                    <div class="text-3xl font-extrabold tracking-tight">R <span class="js-pool" data-side="listing">{{ $money($listingPool) }}</span></div>
-                    <div class="text-xs text-gray-500 mt-1">External payable: R {{ $money($listingExternalPayable ?? 0) }}</div>
-                </div>
 
-{{-- LISTING --}}
-                <div class="rounded-2xl border bg-white shadow-sm ">
-                    <div class="px-5 py-4 border-b bg-gray-50/60 flex items-center justify-between">
-                        <div class="font-semibold">Listing Side</div>
-                        @if($deal->listing_external)
-                            <span class="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-800 font-semibold">External</span>
-                        @endif
-                    </div>
+    {{-- Listing Pool --}}
+    <div class="ds-status-card" style="border-left-color: var(--ds-navy);">
+        <div class="ds-label">Listing Pool (Our share)</div>
+        <div class="ds-value-xl mt-1" style="color:#0b2a4a">R <span class="js-pool" data-side="listing">{{ $money($listingPool) }}</span></div>
+        <div class="text-xs text-gray-500 mt-1">External payable: R {{ $money($listingExternalPayable ?? 0) }}</div>
+    </div>
 
-                    <div class="p-5 space-y-4">
-                        @if($deal->listing_external)
-                            <div class="text-sm text-gray-600">
-                                Listing side is marked external — pool is R 0.
-                            </div>
-                        @else
-                            <div class="text-xs text-gray-400">
-                                Tip: Adjust Share %, Cut, PAYE, Deductions — values update live.
-                            </div>
-<div class="space-y-3">
-                                @foreach($listingRows as $r)
-                                    <div class="settle-row rounded-2xl bg-white ring-1 ring-gray-200 p-4 md:p-3 shadow-sm"
-                                         data-side="listing"
-                                         data-user="{{ $r['user_id'] }}">
+    {{-- Listing Side Card --}}
+    <div class="ds-status-card">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="ds-section-header" style="margin-bottom:0">Listing Side</h3>
+            @if($deal->listing_external)
+                <span class="ds-badge ds-badge-warning">External</span>
+            @endif
+        </div>
 
-                                        <div class="grid grid-cols-1 md:grid-cols-16 gap-3 ">
-                                            <div class="md:col-span-4">
-                                                <div class="font-semibold text-gray-900">{{ $r['name'] }}</div>
-                                                <div class="text-xs text-gray-400">
-                                                    Alloc: R <span class="js-allocated" data-raw="{{ (float)$r['allocated'] }}">{{ $money($r['allocated']) }}</span>
-                                                    • Gross: R <span class="js-gross" data-raw="{{ (float)$r['gross'] }}">{{ $money($r['gross']) }}</span>
-                                                </div>
-                                            </div>
-
-                                            <div class="md:col-span-2">
-<label class="text-[12px] font-semibold text-gray-700 block mb-2 uppercase tracking-wide">Share %</label>
-                                                  <label class="md:hidden text-xs text-gray-500">Share %</label>
-                                                <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-                                                       type="number" inputmode="decimal" min="0" placeholder="0.00" step="0.01"
-                                                       name="listing_share[{{ $r['user_id'] }}]"
-                                                       value="{{ old('listing_share.'.$r['user_id'], $r['share_percent']) }}">
-                                            </div>
-
-                                            <div class="md:col-span-2">
-<label class="text-[12px] font-semibold text-gray-700 block mb-2 uppercase tracking-wide">Cut %</label>
-                                                  <label class="md:hidden text-xs text-gray-500">Cut %</label>
-                                                <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-                                                       type="number" inputmode="decimal" min="0" placeholder="0.00" step="0.01"
-                                                       name="listing_agent_cut[{{ $r['user_id'] }}]"
-                                                       value="{{ old('listing_agent_cut.'.$r['user_id'], $r['agent_cut_percent']) }}">
-                                            </div>
-
-                                            <div class="md:col-span-5">
-<label class="text-[12px] font-semibold text-gray-700 block mb-2 uppercase tracking-wide">PAYE</label>
-                                                  <label class="md:hidden text-xs text-gray-500">PAYE</label>
-                                                <div class="flex items-center gap-2 flex-nowrap">
-                                                    @php $pm = old('listing_paye_method.'.$r['user_id'], $r['paye_method']); @endphp
-                                                    <select class="w-32 shrink-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-                                                            name="listing_paye_method[{{ $r['user_id'] }}]">
-                                                        <option value="percentage" {{ $pm === 'percentage' ? 'selected' : '' }}>%</option>
-                                                        <option value="fixed" {{ $pm === 'fixed' ? 'selected' : '' }}>Fixed</option>
-                                                    </select>
-
-                                                    <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-                                                           type="number" inputmode="decimal" min="0" placeholder="0.00" step="0.01"
-                                                           name="listing_paye_value[{{ $r['user_id'] }}]"
-                                                           value="{{ old('listing_paye_value.'.$r['user_id'], $r['paye_value']) }}">
-                                                </div>
-                                                <div class="text-xs text-gray-500 mt-1">
-                                                    Calc: R <span class="js-paye" data-raw="{{ (float)$r['paye'] }}">{{ $money($r['paye']) }}</span>
-                                                </div>
-                                            </div>
-
-                                            <div class="md:col-span-2">
-<label class="text-[12px] font-semibold text-gray-700 block mb-2 uppercase tracking-wide">Deduct</label>
-                                                  <label class="md:hidden text-xs text-gray-500">Deduct</label>
-                                                <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-                                                       type="number" inputmode="decimal" min="0" placeholder="0.00" step="0.01"
-                                                       name="listing_deductions[{{ $r['user_id'] }}]"
-                                                       value="{{ old('listing_deductions.'.$r['user_id'], $r['deductions']) }}">
-                                            </div>
-
-                                            <div class="md:col-span-3 md:text-right">
-<div class="text-[12px] font-semibold text-gray-700 block mb-2 uppercase tracking-wide text-right">Net</div>
-                                                  <div class="md:hidden text-xs text-gray-500">Net</div>
-                                                <div class="text-lg font-extrabold text-emerald-700">
-                                                    R <span class="js-net" data-raw="{{ (float)$r['net'] }}">{{ $money($r['net']) }}</span>
-                                                </div>
-                                                <div class="text-xs text-gray-400">
-                                                    Company: R <span class="js-company" data-raw="{{ (float)$r['company'] }}">{{ $money($r['company']) }}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="mt-2 grid grid-cols-1 md:grid-cols-16 gap-3">
-                                            <div class="md:col-span-12">
-                                                <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-                                                       type="text"
-                                                       placeholder="Deduction reason (optional)"
-                                                       name="listing_deductions_description[{{ $r['user_id'] }}]"
-                                                       value="{{ old('listing_deductions_description.'.$r['user_id'], $r['deductions_description']) }}">
-                                            </div>
-                                        </div>
-                                    </div>
-                                @endforeach
-                            </div>
-
-                            <div class="text-xs text-gray-600">Rule: listing shares must total 100.</div>
-                        @endif
-                    </div>
-                </div>
-                </div>
-<div class="settle-col space-y-6 min-w-0">
-{{-- SELLING_POOL_CARD_2026 --}}
-              <div class="rounded-2xl bg-gray-900 text-white shadow-lg p-6">
-                    <div class="text-xs text-gray-400">Selling Pool (Our share)</div>
-                    <div class="text-3xl font-extrabold tracking-tight">R <span class="js-pool" data-side="selling">{{ $money($sellingPool) }}</span></div>
-                    <div class="text-xs text-gray-500 mt-1">External payable: R {{ $money($sellingExternalPayable ?? 0) }}</div>
-                </div>
-
-{{-- SELLING --}}
-                <div class="rounded-2xl border bg-white shadow-sm ">
-                    <div class="px-5 py-4 border-b bg-gray-50/60 flex items-center justify-between">
-                        <div class="font-semibold">Selling Side</div>
-                        @if($deal->selling_external)
-                            <span class="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-800 font-semibold">External</span>
-                        @endif
-                    </div>
-
-                    <div class="p-5 space-y-4">
-                        @if($deal->selling_external)
-                            <div class="text-sm text-gray-600">
-                                Selling side is marked external — pool is R 0.
-                            </div>
-                        @else
-                            <div class="text-xs text-gray-400">
-                                Tip: Adjust Share %, Cut, PAYE, Deductions — values update live.
-                            </div>
-<div class="space-y-3">
-                                @foreach($sellingRows as $r)
-                                    <div class="settle-row rounded-2xl bg-white ring-1 ring-gray-200 p-4 md:p-3 shadow-sm"
-                                         data-side="selling"
-                                         data-user="{{ $r['user_id'] }}">
-
-                                        <div class="grid grid-cols-1 md:grid-cols-16 gap-3 ">
-                                            <div class="md:col-span-4">
-                                                <div class="font-semibold text-gray-900">{{ $r['name'] }}</div>
-                                                <div class="text-xs text-gray-400">
-                                                    Alloc: R <span class="js-allocated" data-raw="{{ (float)$r['allocated'] }}">{{ $money($r['allocated']) }}</span>
-                                                    • Gross: R <span class="js-gross" data-raw="{{ (float)$r['gross'] }}">{{ $money($r['gross']) }}</span>
-                                                </div>
-                                            </div>
-
-                                            <div class="md:col-span-2">
-<label class="text-[12px] font-semibold text-gray-700 block mb-2 uppercase tracking-wide">Share %</label>
-                                                  <label class="md:hidden text-xs text-gray-500">Share %</label>
-                                                <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-                                                       type="number" inputmode="decimal" min="0" placeholder="0.00" step="0.01"
-                                                       name="selling_share[{{ $r['user_id'] }}]"
-                                                       value="{{ old('selling_share.'.$r['user_id'], $r['share_percent']) }}">
-                                            </div>
-
-                                            <div class="md:col-span-2">
-<label class="text-[12px] font-semibold text-gray-700 block mb-2 uppercase tracking-wide">Cut %</label>
-                                                  <label class="md:hidden text-xs text-gray-500">Cut %</label>
-                                                <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-                                                       type="number" inputmode="decimal" min="0" placeholder="0.00" step="0.01"
-                                                       name="selling_agent_cut[{{ $r['user_id'] }}]"
-                                                       value="{{ old('selling_agent_cut.'.$r['user_id'], $r['agent_cut_percent']) }}">
-                                            </div>
-
-                                            <div class="md:col-span-5">
-<label class="text-[12px] font-semibold text-gray-700 block mb-2 uppercase tracking-wide">PAYE</label>
-                                                  <label class="md:hidden text-xs text-gray-500">PAYE</label>
-                                                <div class="flex items-center gap-2 flex-nowrap">
-                                                    @php $pm = old('selling_paye_method.'.$r['user_id'], $r['paye_method']); @endphp
-                                                    <select class="w-32 shrink-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-                                                            name="selling_paye_method[{{ $r['user_id'] }}]">
-                                                        <option value="percentage" {{ $pm === 'percentage' ? 'selected' : '' }}>%</option>
-                                                        <option value="fixed" {{ $pm === 'fixed' ? 'selected' : '' }}>Fixed</option>
-                                                    </select>
-
-                                                    <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-                                                           type="number" inputmode="decimal" min="0" placeholder="0.00" step="0.01"
-                                                           name="selling_paye_value[{{ $r['user_id'] }}]"
-                                                           value="{{ old('selling_paye_value.'.$r['user_id'], $r['paye_value']) }}">
-                                                </div>
-                                                <div class="text-xs text-gray-500 mt-1">
-                                                    Calc: R <span class="js-paye" data-raw="{{ (float)$r['paye'] }}">{{ $money($r['paye']) }}</span>
-                                                </div>
-                                            </div>
-
-                                            <div class="md:col-span-2">
-<label class="text-[12px] font-semibold text-gray-700 block mb-2 uppercase tracking-wide">Deduct</label>
-                                                  <label class="md:hidden text-xs text-gray-500">Deduct</label>
-                                                <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-                                                       type="number" inputmode="decimal" min="0" placeholder="0.00" step="0.01"
-                                                       name="selling_deductions[{{ $r['user_id'] }}]"
-                                                       value="{{ old('selling_deductions.'.$r['user_id'], $r['deductions']) }}">
-                                            </div>
-
-                                            <div class="md:col-span-3 md:text-right">
-<div class="text-[12px] font-semibold text-gray-700 block mb-2 uppercase tracking-wide text-right">Net</div>
-                                                  <div class="md:hidden text-xs text-gray-500">Net</div>
-                                                <div class="text-lg font-extrabold text-emerald-700">
-                                                    R <span class="js-net" data-raw="{{ (float)$r['net'] }}">{{ $money($r['net']) }}</span>
-                                                </div>
-                                                <div class="text-xs text-gray-400">
-                                                    Company: R <span class="js-company" data-raw="{{ (float)$r['company'] }}">{{ $money($r['company']) }}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="mt-2 grid grid-cols-1 md:grid-cols-16 gap-3">
-                                            <div class="md:col-span-12">
-                                                <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-                                                       type="text"
-                                                       placeholder="Deduction reason (optional)"
-                                                       name="selling_deductions_description[{{ $r['user_id'] }}]"
-                                                       value="{{ old('selling_deductions_description.'.$r['user_id'], $r['deductions_description']) }}">
-                                            </div>
-                                        </div>
-                                    </div>
-                                @endforeach
-                            </div>
-
-                            <div class="text-xs text-gray-600">Rule: selling shares must total 100.</div>
-
-
-    
-                        @endif
-                    </div>
-                </div>
-
+        @if($deal->listing_external)
+            <div class="text-sm text-gray-600">
+                Listing side is marked external — pool is R 0.
             </div>
+        @else
+            <div class="space-y-3">
+                @foreach($listingRows as $r)
+                    <div class="settle-row rounded-xl bg-white ring-1 ring-gray-200 p-4 md:p-3 shadow-sm"
+                         data-side="listing"
+                         data-user="{{ $r['user_id'] }}">
+
+                        <div class="grid grid-cols-1 md:grid-cols-16 gap-3">
+                            <div class="md:col-span-4">
+                                <div class="font-semibold" style="color:#0b2a4a">{{ $r['name'] }}</div>
+                                <div class="text-xs text-gray-400">
+                                    Alloc: R <span class="js-allocated" data-raw="{{ (float)$r['allocated'] }}">{{ $money($r['allocated']) }}</span>
+                                    &bull; Gross: R <span class="js-gross" data-raw="{{ (float)$r['gross'] }}">{{ $money($r['gross']) }}</span>
+                                </div>
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <label class="ds-label block mb-1">Share %</label>
+                                <label class="md:hidden text-xs text-gray-500">Share %</label>
+                                <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                       type="number" inputmode="decimal" min="0" placeholder="0.00" step="0.01"
+                                       name="listing_share[{{ $r['user_id'] }}]"
+                                       value="{{ old('listing_share.'.$r['user_id'], $r['share_percent']) }}">
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <label class="ds-label block mb-1">Cut %</label>
+                                <label class="md:hidden text-xs text-gray-500">Cut %</label>
+                                <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                       type="number" inputmode="decimal" min="0" placeholder="0.00" step="0.01"
+                                       name="listing_agent_cut[{{ $r['user_id'] }}]"
+                                       value="{{ old('listing_agent_cut.'.$r['user_id'], $r['agent_cut_percent']) }}">
+                            </div>
+
+                            <div class="md:col-span-5">
+                                <label class="ds-label block mb-1">PAYE</label>
+                                <label class="md:hidden text-xs text-gray-500">PAYE</label>
+                                <div class="flex items-center gap-2 flex-nowrap">
+                                    @php $pm = old('listing_paye_method.'.$r['user_id'], $r['paye_method']); @endphp
+                                    <select class="w-32 shrink-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                            name="listing_paye_method[{{ $r['user_id'] }}]">
+                                        <option value="percentage" {{ $pm === 'percentage' ? 'selected' : '' }}>%</option>
+                                        <option value="fixed" {{ $pm === 'fixed' ? 'selected' : '' }}>Fixed</option>
+                                    </select>
+
+                                    <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                           type="number" inputmode="decimal" min="0" placeholder="0.00" step="0.01"
+                                           name="listing_paye_value[{{ $r['user_id'] }}]"
+                                           value="{{ old('listing_paye_value.'.$r['user_id'], $r['paye_value']) }}">
+                                </div>
+                                <div class="text-xs text-gray-500 mt-1">
+                                    Calc: R <span class="js-paye" data-raw="{{ (float)$r['paye'] }}">{{ $money($r['paye']) }}</span>
+                                </div>
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <label class="ds-label block mb-1">Deduct</label>
+                                <label class="md:hidden text-xs text-gray-500">Deduct</label>
+                                <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                       type="number" inputmode="decimal" min="0" placeholder="0.00" step="0.01"
+                                       name="listing_deductions[{{ $r['user_id'] }}]"
+                                       value="{{ old('listing_deductions.'.$r['user_id'], $r['deductions']) }}">
+                            </div>
+
+                            <div class="md:col-span-3 md:text-right">
+                                <div class="ds-label block mb-1 text-right">Net</div>
+                                <div class="md:hidden text-xs text-gray-500">Net</div>
+                                <div class="text-lg font-extrabold" style="color:var(--ds-green)">
+                                    R <span class="js-net" data-raw="{{ (float)$r['net'] }}">{{ $money($r['net']) }}</span>
+                                </div>
+                                <div class="text-xs text-gray-400">
+                                    Company: R <span class="js-company" data-raw="{{ (float)$r['company'] }}">{{ $money($r['company']) }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-2 grid grid-cols-1 md:grid-cols-16 gap-3">
+                            <div class="md:col-span-12">
+                                <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                       type="text"
+                                       placeholder="Deduction reason (optional)"
+                                       name="listing_deductions_description[{{ $r['user_id'] }}]"
+                                       value="{{ old('listing_deductions_description.'.$r['user_id'], $r['deductions_description']) }}">
+                            </div>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+
+            <div class="text-xs text-gray-600 mt-3">Rule: listing shares must total 100.</div>
+        @endif
+    </div>
+</div>
+
+{{-- SELLING SIDE --}}
+<div class="settle-col space-y-6 min-w-0">
+
+    {{-- Selling Pool --}}
+    <div class="ds-status-card" style="border-left-color: var(--ds-green);">
+        <div class="ds-label">Selling Pool (Our share)</div>
+        <div class="ds-value-xl mt-1" style="color:#0b2a4a">R <span class="js-pool" data-side="selling">{{ $money($sellingPool) }}</span></div>
+        <div class="text-xs text-gray-500 mt-1">External payable: R {{ $money($sellingExternalPayable ?? 0) }}</div>
+    </div>
+
+    {{-- Selling Side Card --}}
+    <div class="ds-status-card">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="ds-section-header" style="margin-bottom:0">Selling Side</h3>
+            @if($deal->selling_external)
+                <span class="ds-badge ds-badge-warning">External</span>
+            @endif
+        </div>
+
+        @if($deal->selling_external)
+            <div class="text-sm text-gray-600">
+                Selling side is marked external — pool is R 0.
+            </div>
+        @else
+            <div class="space-y-3">
+                @foreach($sellingRows as $r)
+                    <div class="settle-row rounded-xl bg-white ring-1 ring-gray-200 p-4 md:p-3 shadow-sm"
+                         data-side="selling"
+                         data-user="{{ $r['user_id'] }}">
+
+                        <div class="grid grid-cols-1 md:grid-cols-16 gap-3">
+                            <div class="md:col-span-4">
+                                <div class="font-semibold" style="color:#0b2a4a">{{ $r['name'] }}</div>
+                                <div class="text-xs text-gray-400">
+                                    Alloc: R <span class="js-allocated" data-raw="{{ (float)$r['allocated'] }}">{{ $money($r['allocated']) }}</span>
+                                    &bull; Gross: R <span class="js-gross" data-raw="{{ (float)$r['gross'] }}">{{ $money($r['gross']) }}</span>
+                                </div>
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <label class="ds-label block mb-1">Share %</label>
+                                <label class="md:hidden text-xs text-gray-500">Share %</label>
+                                <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                       type="number" inputmode="decimal" min="0" placeholder="0.00" step="0.01"
+                                       name="selling_share[{{ $r['user_id'] }}]"
+                                       value="{{ old('selling_share.'.$r['user_id'], $r['share_percent']) }}">
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <label class="ds-label block mb-1">Cut %</label>
+                                <label class="md:hidden text-xs text-gray-500">Cut %</label>
+                                <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                       type="number" inputmode="decimal" min="0" placeholder="0.00" step="0.01"
+                                       name="selling_agent_cut[{{ $r['user_id'] }}]"
+                                       value="{{ old('selling_agent_cut.'.$r['user_id'], $r['agent_cut_percent']) }}">
+                            </div>
+
+                            <div class="md:col-span-5">
+                                <label class="ds-label block mb-1">PAYE</label>
+                                <label class="md:hidden text-xs text-gray-500">PAYE</label>
+                                <div class="flex items-center gap-2 flex-nowrap">
+                                    @php $pm = old('selling_paye_method.'.$r['user_id'], $r['paye_method']); @endphp
+                                    <select class="w-32 shrink-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                            name="selling_paye_method[{{ $r['user_id'] }}]">
+                                        <option value="percentage" {{ $pm === 'percentage' ? 'selected' : '' }}>%</option>
+                                        <option value="fixed" {{ $pm === 'fixed' ? 'selected' : '' }}>Fixed</option>
+                                    </select>
+
+                                    <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                           type="number" inputmode="decimal" min="0" placeholder="0.00" step="0.01"
+                                           name="selling_paye_value[{{ $r['user_id'] }}]"
+                                           value="{{ old('selling_paye_value.'.$r['user_id'], $r['paye_value']) }}">
+                                </div>
+                                <div class="text-xs text-gray-500 mt-1">
+                                    Calc: R <span class="js-paye" data-raw="{{ (float)$r['paye'] }}">{{ $money($r['paye']) }}</span>
+                                </div>
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <label class="ds-label block mb-1">Deduct</label>
+                                <label class="md:hidden text-xs text-gray-500">Deduct</label>
+                                <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                       type="number" inputmode="decimal" min="0" placeholder="0.00" step="0.01"
+                                       name="selling_deductions[{{ $r['user_id'] }}]"
+                                       value="{{ old('selling_deductions.'.$r['user_id'], $r['deductions']) }}">
+                            </div>
+
+                            <div class="md:col-span-3 md:text-right">
+                                <div class="ds-label block mb-1 text-right">Net</div>
+                                <div class="md:hidden text-xs text-gray-500">Net</div>
+                                <div class="text-lg font-extrabold" style="color:var(--ds-green)">
+                                    R <span class="js-net" data-raw="{{ (float)$r['net'] }}">{{ $money($r['net']) }}</span>
+                                </div>
+                                <div class="text-xs text-gray-400">
+                                    Company: R <span class="js-company" data-raw="{{ (float)$r['company'] }}">{{ $money($r['company']) }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-2 grid grid-cols-1 md:grid-cols-16 gap-3">
+                            <div class="md:col-span-12">
+                                <input class="w-full flex-1 min-w-0 rounded-xl bg-white ring-1 ring-gray-300 px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                       type="text"
+                                       placeholder="Deduction reason (optional)"
+                                       name="selling_deductions_description[{{ $r['user_id'] }}]"
+                                       value="{{ old('selling_deductions_description.'.$r['user_id'], $r['deductions_description']) }}">
+                            </div>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+
+            <div class="text-xs text-gray-600 mt-3">Rule: selling shares must total 100.</div>
+        @endif
+    </div>
+</div>
+
     </div>
 
     {{-- SETTLE_BLOCKS_PLACED_UNDER_SPLITS_2026_02_12 --}}
-<div class="rounded-2xl border bg-white shadow-sm p-5 space-y-4">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <label class="inline-flex items-center gap-2 flex-nowrap text-sm">
-                        <input type="checkbox" name="mark_paid" value="1" {{ old('mark_paid') ? 'checked' : '' }}>
-                        Mark deal commission status as “Paid”
-                    </label>
+    <div>
+        <h2 class="ds-section-header">Payment & Reconciliation</h2>
+        <div class="ds-section-sub mb-4">Mark paid and verify checksum.</div>
 
-                    <div class="text-xs text-gray-400">
-                        Note: Invalid totals block saving. Paid deals lock.
-                    </div>
-                </div>
+        <div class="ds-status-card space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <label class="inline-flex items-center gap-2 flex-nowrap text-sm">
+                    <input type="checkbox" name="mark_paid" value="1" {{ old('mark_paid') ? 'checked' : '' }}>
+                    Mark deal commission status as "Paid"
+                </label>
 
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
-                    <div><b>Total Commission:</b> R {{ $money($deal->total_commission) }}</div>
-                    <div><b>External Payable:</b> R <span id="js-external-total">{{ $money($externalPayableTotal ?? 0) }}</span></div>
-                    <div><b>Company Portion:</b> R <span id="js-company-total">{{ $money($totals['company']) }}</span></div>
-                    <div>
-                        <b>Checksum:</b>
-                        <span class="{{ $checksumOk ? 'text-green-700' : 'text-red-700' }} font-bold">
-                            R <span id="js-checksum">{{ $money($checksumTotal) }}</span>
-                            (<span id="js-checksum-status">{{ $checksumOk ? 'OK' : 'NOT OK' }}</span>)
-                        </span>
-                    </div>
-                </div>
-
-{{-- AGENT_SUMMARY_RELOCATED_UNDER_SELLING_SPLITS_2026_02_12 --}}
-<div class="rounded-2xl bg-gray-900 text-white shadow-lg p-6">
-                <div class="flex items-center justify-between mb-3">
-                    <h2 class="text-lg font-semibold">Agent Summary</h2>
-                    <div class="text-xs text-gray-400">Updates live as you edit values above.</div>
-                </div>
-
-                <div class="overflow-x-auto">
-                    <table class="min-w-full text-sm">
-                        <thead>
-                            <tr class="border-b text-gray-600">
-                                <th class="text-left p-2">Agent</th>
-                                <th class="text-left p-2">Allocated</th>
-                                <th class="text-left p-2">Gross</th>
-                                <th class="text-left p-2">PAYE</th>
-                                <th class="text-left p-2">Deductions</th>
-                                <th class="text-left p-2">Net</th>
-                                  <th class="text-left p-2">Print</th>
-                            </tr>
-                        </thead>
-                        <tbody id="js-agent-summary-body">
-                            @foreach(($agentSummary ?? []) as $s)
-                                <tr class="border-b agent-summary-row" data-user="{{ (int)$s['user_id'] }}">
-                                    <td class="p-2 font-medium">{{ $s['name'] }}</td>
-                                    <td class="p-2">R <span class="js-sum-allocated" data-raw="{{ (float)$s['allocated'] }}">{{ $money($s['allocated']) }}</span></td>
-                                    <td class="p-2">R <span class="js-sum-gross" data-raw="{{ (float)$s['gross'] }}">{{ $money($s['gross']) }}</span></td>
-                                    <td class="p-2">R <span class="js-sum-paye" data-raw="{{ (float)$s['paye'] }}">{{ $money($s['paye']) }}</span></td>
-                                    <td class="p-2">R <span class="js-sum-deductions" data-raw="{{ (float)$s['deductions'] }}">{{ $money($s['deductions']) }}</span></td>
-                                    <td class="p-2 font-semibold">R <span class="js-sum-net" data-raw="{{ (float)$s['net'] }}">{{ $money($s['net']) }}</span></td>
-                                      <td class="p-2">
-                                          @if((int)$s['user_id'] > 0)
-                                              <a class="inline-flex items-center rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold text-white ring-1 ring-white/15 hover:bg-white/15"
-                                                 href="{{ route('admin.deals.settle.print.agent', ['deal' => $deal->id, 'user' => (int)$s['user_id']]) }}" target="_blank">
-                                                  Print Payslip
-                                              </a>
-                                          @endif
-
-                                      </td>
-                                </tr>
-                            @endforeach
-
-                            <tr class="border-t-2">
-                                <td class="p-2 font-bold">Totals</td>
-                                <td class="p-2 font-bold">R <span id="js-sum-total-allocated">{{ $money($totals['allocated']) }}</span></td>
-                                <td class="p-2 font-bold">R <span id="js-sum-total-gross">{{ $money($totals['gross']) }}</span></td>
-                                <td class="p-2 font-bold">R <span id="js-sum-total-paye">{{ $money($totals['paye']) }}</span></td>
-                                <td class="p-2 font-bold">R <span id="js-sum-total-deductions">{{ $money($totals['deductions']) }}</span></td>
-                                <td class="p-2 font-bold">R <span id="js-sum-total-net">{{ $money($totals['net']) }}</span></td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div class="text-xs text-gray-400">
+                    Note: Invalid totals block saving. Paid deals lock.
                 </div>
             </div>
 
-
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+                <div><span class="ds-label">Total Commission:</span> <span class="ds-value">R {{ $money($deal->total_commission) }}</span></div>
+                <div><span class="ds-label">External Payable:</span> <span class="ds-value">R <span id="js-external-total">{{ $money($externalPayableTotal ?? 0) }}</span></span></div>
+                <div><span class="ds-label">Company Portion:</span> <span class="ds-value">R <span id="js-company-total">{{ $money($totals['company']) }}</span></span></div>
+                <div>
+                    <span class="ds-label">Checksum:</span>
+                    <span class="{{ $checksumOk ? 'text-green-700' : 'text-red-700' }} font-bold">
+                        R <span id="js-checksum">{{ $money($checksumTotal) }}</span>
+                        (<span id="js-checksum-status">{{ $checksumOk ? 'OK' : 'NOT OK' }}</span>)
+                    </span>
+                </div>
             </div>
+        </div>
+    </div>
 
+    {{-- Agent Summary --}}
+    <div>
+        <h2 class="ds-section-header">Agent Summary</h2>
+        <div class="ds-section-sub mb-4">Updates live as you edit values above.</div>
 
+        <div class="ds-status-card overflow-hidden" style="padding:0">
+            <div class="overflow-x-auto">
+                <table class="ds-table min-w-full text-sm">
+                    <thead>
+                        <tr>
+                            <th class="text-left px-4 py-3">Agent</th>
+                            <th class="text-right px-4 py-3">Allocated</th>
+                            <th class="text-right px-4 py-3">Gross</th>
+                            <th class="text-right px-4 py-3">PAYE</th>
+                            <th class="text-right px-4 py-3">Deductions</th>
+                            <th class="text-right px-4 py-3">Net</th>
+                            <th class="text-right px-4 py-3">Print</th>
+                        </tr>
+                    </thead>
+                    <tbody id="js-agent-summary-body">
+                        @foreach(($agentSummary ?? []) as $s)
+                            <tr class="agent-summary-row" data-user="{{ (int)$s['user_id'] }}">
+                                <td class="px-4 py-3 font-medium" style="color:#0b2a4a">{{ $s['name'] }}</td>
+                                <td class="px-4 py-3 text-right">R <span class="js-sum-allocated" data-raw="{{ (float)$s['allocated'] }}">{{ $money($s['allocated']) }}</span></td>
+                                <td class="px-4 py-3 text-right">R <span class="js-sum-gross" data-raw="{{ (float)$s['gross'] }}">{{ $money($s['gross']) }}</span></td>
+                                <td class="px-4 py-3 text-right">R <span class="js-sum-paye" data-raw="{{ (float)$s['paye'] }}">{{ $money($s['paye']) }}</span></td>
+                                <td class="px-4 py-3 text-right">R <span class="js-sum-deductions" data-raw="{{ (float)$s['deductions'] }}">{{ $money($s['deductions']) }}</span></td>
+                                <td class="px-4 py-3 text-right font-bold ds-value">R <span class="js-sum-net" data-raw="{{ (float)$s['net'] }}">{{ $money($s['net']) }}</span></td>
+                                <td class="px-4 py-3 text-right">
+                                    @if((int)$s['user_id'] > 0)
+                                        <a class="nexus-btn-outline text-xs px-3 py-1.5"
+                                           href="{{ route('admin.deals.settle.print.agent', ['deal' => $deal->id, 'user' => (int)$s['user_id']]) }}" target="_blank">
+                                            Payslip
+                                        </a>
+                                    @endif
+                                </td>
+                            </tr>
+                        @endforeach
 
-            
-
-{{-- Mark paid + live balancing summary --}}
-            
-
-
-            
-            
+                        <tr style="border-top: 2px solid var(--ds-border);">
+                            <td class="px-4 py-3 font-extrabold" style="color:#0b2a4a">Totals</td>
+                            <td class="px-4 py-3 text-right font-bold">R <span id="js-sum-total-allocated">{{ $money($totals['allocated']) }}</span></td>
+                            <td class="px-4 py-3 text-right font-bold">R <span id="js-sum-total-gross">{{ $money($totals['gross']) }}</span></td>
+                            <td class="px-4 py-3 text-right font-bold">R <span id="js-sum-total-paye">{{ $money($totals['paye']) }}</span></td>
+                            <td class="px-4 py-3 text-right font-bold">R <span id="js-sum-total-deductions">{{ $money($totals['deductions']) }}</span></td>
+                            <td class="px-4 py-3 text-right font-extrabold ds-value">R <span id="js-sum-total-net">{{ $money($totals['net']) }}</span></td>
+                            <td class="px-4 py-3"></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 
         </form>
 
@@ -544,16 +543,5 @@
   recalc();
 })();
 </script>
-        {{-- (Keep your existing live JS block below this line in your file; it was already added earlier.) --}}
-        @if (false)
-            
-
-        @endif
     </div>
-
-    {{-- IMPORTANT:
-         Your live recalculation script already exists further down in your current settle.blade.php.
-         We did not re-inject it here to avoid breaking it. It will remain after this template once we merge it in the next step. --}}
 </x-app-layout>
-
-
