@@ -18,14 +18,21 @@ class PageImageController extends Controller
             abort(404);
         }
 
+        // Try png first, then jpg (some templates have jpeg images)
         $path = "docuperfect/templates/{$id}/page-{$page}.png";
+        $contentType = 'image/png';
+
+        if (!Storage::exists($path)) {
+            $path = "docuperfect/templates/{$id}/page-{$page}.jpg";
+            $contentType = 'image/jpeg';
+        }
 
         if (!Storage::exists($path)) {
             abort(404);
         }
 
         return response(Storage::get($path), 200, [
-            'Content-Type' => 'image/png',
+            'Content-Type' => $contentType,
             'Cache-Control' => 'private, max-age=3600',
         ]);
     }
