@@ -5,7 +5,7 @@
 
     <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 flex items-center justify-between">
         <div>
-            <h2 class="text-xl font-bold text-white leading-tight">Templates</h2>
+            <h2 class="text-xl font-bold text-white leading-tight">Template Management</h2>
             <div class="text-sm text-white/60">Manage document templates for your agents.</div>
         </div>
         <div class="flex items-center gap-3">

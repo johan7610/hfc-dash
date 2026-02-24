@@ -105,7 +105,7 @@ class DocumentController extends Controller
 
         $document->update(['archived_at' => now()]);
 
-        return redirect()->route('docuperfect.documents.index')
+        return redirect()->route('docuperfect.dashboard')
             ->with('status', "Document \"{$document->name}\" archived.");
     }
 
@@ -121,7 +121,7 @@ class DocumentController extends Controller
         $name = $document->name;
         $document->delete();
 
-        return redirect()->route('docuperfect.documents.index')
+        return redirect()->route('docuperfect.dashboard')
             ->with('status', "Document \"{$name}\" deleted.");
     }
 }

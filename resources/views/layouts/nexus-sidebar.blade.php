@@ -155,12 +155,12 @@
             </button>
 
             <div x-show="dpOpen" @unless($dpExpanded) x-cloak @endunless x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="nexus-nav-children">
+                <a href="{{ route('docuperfect.create') }}" class="nexus-nav-subitem {{ request()->routeIs('docuperfect.create') ? 'active' : '' }}">Create Document</a>
                 <a href="{{ route('docuperfect.dashboard') }}" class="nexus-nav-subitem {{ request()->routeIs('docuperfect.dashboard') ? 'active' : '' }}">My Documents</a>
-                @if($navIsAdmin || $navIsBM)
-                <a href="{{ route('docuperfect.templates.index') }}" class="nexus-nav-subitem {{ request()->routeIs('docuperfect.templates.*') ? 'active' : '' }}">Templates</a>
-                @endif
-                <a href="{{ route('docuperfect.packs.index') }}" class="nexus-nav-subitem {{ request()->routeIs('docuperfect.packs.*') ? 'active' : '' }}">Document Packs</a>
                 <a href="{{ route('docuperfect.clauses.index') }}" class="nexus-nav-subitem {{ request()->routeIs('docuperfect.clauses.*') ? 'active' : '' }}">Clause Library</a>
+                @if($navIsAdmin || $navIsBM)
+                <a href="{{ route('docuperfect.templates.index') }}" class="nexus-nav-subitem {{ request()->routeIs('docuperfect.templates.*') ? 'active' : '' }}">Template Management</a>
+                @endif
                 @if($navIsAdmin)
                 <a href="{{ route('docuperfect.settings.types') }}" class="nexus-nav-subitem {{ request()->routeIs('docuperfect.settings.*') ? 'active' : '' }}">Settings</a>
                 @endif

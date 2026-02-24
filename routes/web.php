@@ -612,6 +612,7 @@ Route::middleware(['auth'])->prefix('presentations')->name('presentations.')->gr
 // ===== DOCUPERFECT =====
 Route::prefix('docuperfect')->middleware('auth')->group(function () {
     Route::get('/', [\App\Http\Controllers\Docuperfect\DashboardController::class, 'index'])->name('docuperfect.dashboard');
+    Route::get('/create', [\App\Http\Controllers\Docuperfect\DashboardController::class, 'create'])->name('docuperfect.create');
 
     // Templates (admin/BM)
     Route::get('/templates', [\App\Http\Controllers\Docuperfect\TemplateController::class, 'index'])->name('docuperfect.templates.index');
@@ -624,8 +625,13 @@ Route::prefix('docuperfect')->middleware('auth')->group(function () {
     Route::post('/templates/{id}/copy', [\App\Http\Controllers\Docuperfect\TemplateController::class, 'copy'])->name('docuperfect.templates.copy');
     Route::delete('/templates/{id}', [\App\Http\Controllers\Docuperfect\TemplateController::class, 'destroy'])->name('docuperfect.templates.destroy');
 
-    // Documents
-    Route::get('/documents', [\App\Http\Controllers\Docuperfect\DocumentController::class, 'index'])->name('docuperfect.documents.index');
+    // Documents — bare /docuperfect/documents redirects to dashboard (pack_instance keeps existing view)
+    Route::get('/documents', function (\Illuminate\Http\Request $request) {
+        if (!$request->query('pack_instance')) {
+            return redirect()->route('docuperfect.dashboard');
+        }
+        return app(\App\Http\Controllers\Docuperfect\DocumentController::class)->index($request);
+    })->name('docuperfect.documents.index');
     Route::get('/documents/create/{templateId}', [\App\Http\Controllers\Docuperfect\DocumentController::class, 'create'])->name('docuperfect.documents.create');
     Route::get('/documents/{id}/edit', [\App\Http\Controllers\Docuperfect\DocumentController::class, 'edit'])->name('docuperfect.documents.edit');
     Route::post('/documents/{id}/fields', [\App\Http\Controllers\Docuperfect\DocumentController::class, 'saveFields'])->name('docuperfect.documents.saveFields');
