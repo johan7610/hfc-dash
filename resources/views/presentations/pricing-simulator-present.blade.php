@@ -89,7 +89,7 @@
 </p>
 
 <div class="config-summary">
-    Commission: {{ $config['commission_pct'] ?? 5.0 }}%
+    Commission: {{ $config['commission_pct'] ?? 7.5 }}% (excl. VAT)
     &middot; Transfer Cost: {{ $config['transfer_cost_pct'] ?? 4.0 }}%
     &middot; Monthly Holding Cost: R {{ number_format($config['monthly_holding_cost'] ?? 0, 0, '.', ' ') }}
 </div>

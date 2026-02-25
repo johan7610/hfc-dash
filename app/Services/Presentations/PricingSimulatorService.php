@@ -56,7 +56,7 @@ class PricingSimulatorService
      */
     public function compute(array $scenarios, array $config, array $analysisData): array
     {
-        $commissionPct    = (float) ($config['commission_pct'] ?? 5.0);
+        $commissionPct    = (float) ($config['commission_pct'] ?? 7.5);
         $transferCostPct  = (float) ($config['transfer_cost_pct'] ?? 4.0);
         $monthlyHolding   = (float) ($config['monthly_holding_cost'] ?? 0);
 

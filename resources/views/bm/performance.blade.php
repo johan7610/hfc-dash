@@ -41,7 +41,7 @@
     $sumListings = (int)($r["totals"]["targets"]["listings"] ?? 0);
     $sumValue = (float)($r["totals"]["targets"]["value"] ?? 0);
 
-    $b = $budget ?? ['branch_budget'=>0,'projected_income'=>0,'short_amount'=>0,'short_pct'=>0,'commission_rate'=>0.05,'company_share'=>0.5];
+    $b = $budget ?? ['branch_budget'=>0,'projected_income'=>0,'short_amount'=>0,'short_pct'=>0,'commission_rate'=>0.075,'company_share'=>0.5];
     $branchBudget = (float)($b['branch_budget'] ?? 0);
     $projectedIncome = (float)($b['projected_income'] ?? 0);
     $shortAmount = (float)($b['short_amount'] ?? 0);
@@ -421,7 +421,7 @@
                     <div class="ds-label">Projected Income (from agent targets)</div>
                     <div class="ds-value-xl" style="color:#0b2a4a">R {{ number_format($projectedIncome, 0) }}</div>
                     <div class="ds-label mt-1">
-                        rate {{ number_format(($b['commission_rate'] ?? 0.05) * 100, 2) }}% × share {{ number_format(($b['company_share'] ?? 0.5) * 100, 0) }}%
+                        rate {{ number_format(($b['commission_rate'] ?? 0.075) * 100, 2) }}% × share {{ number_format(($b['company_share'] ?? 0.5) * 100, 0) }}%
                     </div>
                 </div>
 

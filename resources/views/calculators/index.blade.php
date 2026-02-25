@@ -27,14 +27,18 @@
                 </div>
 
                 <div>
-                    <label class="ds-label block mb-1">Commission Rate</label>
+                    <label class="ds-label block mb-1">Commission Rate <span class="text-xs text-gray-400 font-normal">(excl. VAT)</span></label>
                     <div class="flex items-center gap-2 flex-wrap">
-                        <template x-for="r in [5, 6, 7.5]" :key="r">
-                            <button type="button" @click="comm.rate = r; comm.customRate = ''"
-                                    :class="comm.rate == r && comm.customRate === '' ? 'bg-[#0b2a4a] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                                    class="px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors"
-                                    x-text="r + '%'"></button>
-                        </template>
+                        <button type="button" @click="comm.rate = 7.5; comm.customRate = ''"
+                                :class="comm.rate == 7.5 && comm.customRate === '' ? 'bg-[#0b2a4a] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                                class="px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors">
+                            7.5% — Residential
+                        </button>
+                        <button type="button" @click="comm.rate = 10; comm.customRate = ''"
+                                :class="comm.rate == 10 && comm.customRate === '' ? 'bg-[#0b2a4a] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                                class="px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors">
+                            10% — Commercial / Vacant Land
+                        </button>
                         <input type="text" x-model="comm.customRate" @input="comm.rate = parseFloat(comm.customRate) || 0" placeholder="Custom %"
                                class="w-24 border border-slate-300 rounded-lg p-1.5 text-sm focus:border-cyan-500 focus:outline-none" />
                     </div>
@@ -199,7 +203,7 @@ function calculatorsApp() {
     return {
         comm: {
             salePrice: '',
-            rate: 5,
+            rate: 7.5,
             customRate: '',
             result: null,
         },

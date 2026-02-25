@@ -1226,14 +1226,14 @@ class PresentationController extends Controller
         if ($savedConfig && !empty($savedConfig['scenarios'])) {
             $scenarios = $savedConfig['scenarios'];
             $config = $savedConfig['config'] ?? [
-                'commission_pct'      => 5.0,
+                'commission_pct'      => 7.5,
                 'transfer_cost_pct'   => 4.0,
                 'monthly_holding_cost' => $analysisData['holding_cost']['monthly_total'] ?? 0,
             ];
             $narrative = $savedConfig['narrative'] ?? '';
         } else {
             $config = [
-                'commission_pct'      => 5.0,
+                'commission_pct'      => 7.5,
                 'transfer_cost_pct'   => 4.0,
                 'monthly_holding_cost' => $analysisData['holding_cost']['monthly_total'] ?? 0,
             ];

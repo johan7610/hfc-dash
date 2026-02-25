@@ -270,7 +270,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function collectConfig() {
         return {
-            commission_pct: parseFloat(document.getElementById('cfg-commission').value) || 5.0,
+            commission_pct: parseFloat(document.getElementById('cfg-commission').value) || 7.5,
             transfer_cost_pct: parseFloat(document.getElementById('cfg-transfer').value) || 4.0,
             monthly_holding_cost: parseInt(document.getElementById('cfg-holding').value) || 0,
         };

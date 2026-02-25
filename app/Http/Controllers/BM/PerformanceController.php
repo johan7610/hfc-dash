@@ -32,7 +32,7 @@ class PerformanceController extends Controller
         );
 
         // Income projection from agent targets (value sum -> income)
-        $commissionRate = (float) config('performance.commission_rate', 0.05);
+        $commissionRate = (float) config('performance.commission_rate', 0.075);
         $companyShare   = (float) config('performance.company_share', 0.50);
 
         $agentValueTargetSum = (float)($rollup['totals']['targets']['value'] ?? 0);
@@ -198,7 +198,7 @@ class PerformanceController extends Controller
 
         $rollup = $service->getBranchRollup($branchId, $period);
 
-        $commissionRate = (float) config('performance.commission_rate', 0.05);
+        $commissionRate = (float) config('performance.commission_rate', 0.075);
         $companyShare   = (float) config('performance.company_share', 0.50);
 
         $agentValueTargetSum = (float)($rollup['totals']['targets']['value'] ?? 0);
@@ -448,7 +448,7 @@ class PerformanceController extends Controller
 
         $perAgentBudget = $branchBudget / $activeCount;
 
-        $commissionRate = (float) config('performance.commission_rate', 0.05);
+        $commissionRate = (float) config('performance.commission_rate', 0.075);
         $companyShare   = (float) config('performance.company_share', 0.50);
         $incomePerValue = $commissionRate * $companyShare;
 

@@ -1448,7 +1448,7 @@ a:hover { text-decoration: underline; }
 
 <div class="avoid-break" style="margin-bottom:14px;">
 <p style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">
-    Commission: <?= number_format($simCfg['commission_pct'] ?? 5, 1) ?>%
+    Commission: <?= number_format($simCfg['commission_pct'] ?? 7.5, 1) ?>% (excl. VAT)
     &middot; Transfer Cost: <?= number_format($simCfg['transfer_cost_pct'] ?? 4, 1) ?>%
     &middot; Monthly Holding Cost: <?= $zar((int)($simCfg['monthly_holding_cost'] ?? 0)) ?>
 </p>
