@@ -387,6 +387,18 @@ class EllieController extends Controller
             ->values()
             ->toArray();
 
+        // ELLIE_KNOWLEDGE_BASE_2026
+        // Search knowledge base for relevant document chunks
+        $knowledgeContext = '';
+        $knowledgeSources = [];
+        $searchService = new \App\Services\AI\KnowledgeSearchService();
+
+        if ($searchService->shouldSearch($data['message'])) {
+            $results = $searchService->search($data['message'], 3);
+            $knowledgeContext = $results['context'];
+            $knowledgeSources = $results['sources'];
+        }
+
         $resp = Http::timeout(120)
             ->acceptJson()
             ->asJson()
@@ -400,7 +412,7 @@ class EllieController extends Controller
                 ],
                 'context' => $ctx,
                 'history' => $history,
-                'knowledge_context' => '',
+                'knowledge_context' => $knowledgeContext,
             ]);
 
         if (!$resp->successful()) {
