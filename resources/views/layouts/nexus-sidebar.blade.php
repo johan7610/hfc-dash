@@ -22,6 +22,8 @@
         $nexusSection = 'franchise-admin';
     } elseif (str_starts_with($currentPath, 'nexus/role-manager')) {
         $nexusSection = 'role-manager';
+    } elseif (str_starts_with($currentPath, 'nexus/properties')) {
+        $nexusSection = 'properties';
     } elseif (str_starts_with($currentPath, 'nexus/settings/agencies')) {
         $nexusSection = 'agencies';
     } elseif (str_starts_with($currentPath, 'nexus/settings')) {
@@ -331,6 +333,16 @@
             <svg class="nexus-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m9 18 6-6-6-6"/>
             </svg>
+        </a>
+        @endif
+
+        {{-- Properties --}}
+        @if(config('features.properties') && \Illuminate\Support\Facades\Route::has('nexus.properties.index') && (!$user || $user->canAccessNexusSection('properties')))
+        <a href="{{ route('nexus.properties.index') }}" class="nexus-nav-item {{ $nexusSection === 'properties' ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+            </svg>
+            <span>Properties</span>
         </a>
         @endif
 
