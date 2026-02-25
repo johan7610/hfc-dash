@@ -3,47 +3,45 @@
 @section('content')
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-            <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Agent</div>
-            <h1 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">{{ $user->name }}</h1>
-            <div class="text-sm text-slate-600 dark:text-slate-300">{{ $user->email }}</div>
-        </div>
+    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <div class="text-xs uppercase tracking-wide text-white/60">Agent</div>
+                <h2 class="text-xl font-bold text-white leading-tight">{{ $user->name }}</h2>
+                <div class="text-sm text-white/60">{{ $user->email }}</div>
+            </div>
 
-        <div class="flex flex-wrap gap-2 items-end">
-            <a href="{{ route('admin.listings.agents', ['status' => $status ?? 'active', 'source' => $source ?? 'propcon']) }}"
-               class="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-900/30">
-                Back
-            </a>
+            <div class="flex flex-wrap gap-2 items-end">
+                <a href="{{ route('admin.listings.agents', ['status' => $status ?? 'active', 'source' => $source ?? 'propcon']) }}"
+                   class="nexus-btn-outline text-sm">&larr; Back</a>
 
-            <form method="get" class="flex flex-wrap gap-2 items-end">
-                <div>
-                    <label class="block text-xs text-slate-600 dark:text-slate-300 mb-1">Status</label>
-                    <select name="status" class="rounded-lg border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                        @foreach(['active'=>'Active (contains active/for sale)','all'=>'All'] as $k=>$label)
-                            <option value="{{ $k }}" @selected(($status ?? 'active') === $k)>{{ $label }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs text-slate-600 dark:text-slate-300 mb-1">Source</label>
-                    <input name="source" value="{{ $source ?? 'propcon' }}" class="w-40 rounded-lg border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
-                </div>
-                <button class="px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100">
-                    Apply
-                </button>
-            </form>
+                <form method="get" class="flex flex-wrap gap-2 items-end">
+                    <div>
+                        <label class="block text-xs text-white/60 mb-1">Status</label>
+                        <select name="status" class="rounded-lg border-0 bg-white/10 text-white text-sm px-3 py-1.5 [&>option]:text-slate-900">
+                            @foreach(['active'=>'Active (contains active/for sale)','all'=>'All'] as $k=>$label)
+                                <option value="{{ $k }}" @selected(($status ?? 'active') === $k)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-white/60 mb-1">Source</label>
+                        <input name="source" value="{{ $source ?? 'propcon' }}" class="w-40 rounded-lg border-0 bg-white/10 text-white text-sm px-3 py-1.5 placeholder:text-white/40" />
+                    </div>
+                    <button class="nexus-btn-primary text-sm">Apply</button>
+                </form>
+            </div>
         </div>
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-4">
-            <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Active listings</div>
-            <div class="mt-1 text-2xl font-semibold text-slate-900 dark:text-slate-100">{{ number_format((int)($summary->listing_count ?? 0)) }}</div>
+        <div class="ds-status-card">
+            <div class="ds-label">Active listings</div>
+            <div class="ds-value-xl">{{ number_format((int)($summary->listing_count ?? 0)) }}</div>
         </div>
-        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-4">
-            <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Total asking value</div>
-            <div class="mt-1 text-2xl font-semibold text-slate-900 dark:text-slate-100">R {{ number_format(((int)($summary->total_value_cents ?? 0))/100, 0) }}</div>
+        <div class="ds-status-card">
+            <div class="ds-label">Total asking value</div>
+            <div class="ds-value-lg">R {{ number_format(((int)($summary->total_value_cents ?? 0))/100, 0) }}</div>
         </div>
     </div>
 
@@ -54,7 +52,7 @@
         </div>
 
         <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
+            <table class="min-w-full text-sm ds-table">
                 <thead class="bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-300">
                     <tr>
                         <th class="text-left px-4 py-3">Property</th>

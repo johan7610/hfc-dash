@@ -1,14 +1,16 @@
 <x-app-layout>
     <x-slot name="header">
-        <div class="flex items-center justify-between">
-            <div>
-                <div class="text-xl font-semibold text-gray-900">{{ $mode === 'create' ? 'Add Deal' : 'Edit Deal' }}</div>
-                <div class="text-sm text-gray-500">Capture the deal accurately so settlement + rollups reconcile end-to-end.</div>
+        <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                <div>
+                    <h2 class="text-xl font-bold text-white leading-tight">{{ $mode === 'create' ? 'Add Deal' : 'Edit Deal' }}</h2>
+                    <div class="text-sm text-white/60">Capture the deal accurately so settlement + rollups reconcile end-to-end.</div>
+                </div>
+                <a href="{{ route('admin.deals') }}"
+                   class="inline-flex items-center rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/20 hover:bg-white/15">
+                    &larr; Back to Deal Register
+                </a>
             </div>
-            <a href="{{ route('admin.deals') }}"
-               class="inline-flex items-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-gray-200 hover:bg-gray-50">
-                ← Back to Deal Register
-            </a>
         </div>
     </x-slot>
 
@@ -75,20 +77,20 @@
 <form method="POST" action="{{ $mode === 'create' ? url('/admin/deals') : route('admin.deals.update', $deal) }}" class="space-y-6">
         @csrf
 
-        <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
-            <div class="border-b bg-gray-50/60 px-5 py-4">
-                <div class="text-sm font-semibold text-gray-900">Deal details</div>
-                <div class="text-xs text-gray-500">Core deal + commission capture (commission is VAT-inclusive).</div>
-            </div>
-            <div class="px-5 py-5">
+        {{-- Deal Details --}}
+        <div>
+            <h2 class="ds-section-header">Deal Details</h2>
+            <div class="ds-section-sub mb-4">Core deal + commission capture (commission is VAT-inclusive).</div>
+
+            <div class="ds-status-card">
                 <div class="deal-grid">
             <div>
-                <label>Deal No (system)</label>
+                <label class="ds-label block mb-1">Deal No (system)</label>
                 <input type="text" value="{{ $deal->deal_no ?? 'Auto' }}" disabled>
             </div>
 
             <div>
-                  <label>Branch</label>
+                  <label class="ds-label block mb-1">Branch</label>
 
                   @php
                       $u = auth()->user();
@@ -118,42 +120,42 @@
               </div>
 
             <div>
-                <label>Period</label>
+                <label class="ds-label block mb-1">Period</label>
                 <input type="month" name="period" value="{{ old('period', $deal->period) }}" required>
             </div>
 
             <div>
-                <label>Deal Date</label>
+                <label class="ds-label block mb-1">Deal Date</label>
                 <input type="date" name="deal_date" value="{{ old('deal_date', optional($deal->deal_date)->format('Y-m-d')) }}" required>
             </div>
 
             <div class="field-full">
-                <label>Property Address</label>
+                <label class="ds-label block mb-1">Property Address</label>
                 <input type="text" name="property_address" class="w-full" value="{{ old('property_address', $deal->property_address) }}">
             </div>
 
             <div>
-                <label>Seller</label>
+                <label class="ds-label block mb-1">Seller</label>
                 <input type="text" name="seller_name" value="{{ old('seller_name', $deal->seller_name) }}">
             </div>
 
             <div>
-                <label>Buyer</label>
+                <label class="ds-label block mb-1">Buyer</label>
                 <input type="text" name="buyer_name" value="{{ old('buyer_name', $deal->buyer_name) }}">
             </div>
 
             <div class="field-full">
-                <label>Attorney</label>
+                <label class="ds-label block mb-1">Attorney</label>
                 <input type="text" name="attorney_name" class="w-full" value="{{ old('attorney_name', $deal->attorney_name) }}">
             </div>
 
             <div>
-                <label>Selling Price</label>
+                <label class="ds-label block mb-1">Selling Price</label>
                 <input type="number" step="0.01" class="input-base money-input" name="property_value" value="{{ old('property_value', $deal->property_value) }}" required>
             </div>
 
             <div>
-                <label>Total Commission (Incl VAT)</label>
+                <label class="ds-label block mb-1">Total Commission (Incl VAT)</label>
                 <input type="number" step="0.01" class="input-base money-input" name="total_commission" value="{{ old('total_commission', $deal->total_commission) }}" required>
                 <div class="mt-1 text-xs text-gray-500">Internal pools/allocations are calculated <span class="font-semibold">Ex VAT</span> (VAT is tracked separately).</div>
             </div>
@@ -161,15 +163,15 @@
             </div>
         </div>
 
-        <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
-            <div class="border-b bg-gray-50/60 px-5 py-4">
-                <div class="text-sm font-semibold text-gray-900">Status & registration</div>
-                <div class="text-xs text-gray-500">Admin tracking fields (optional where applicable).</div>
-            </div>
-            <div class="px-5 py-5">
+        {{-- Status & Registration --}}
+        <div>
+            <h2 class="ds-section-header">Status & Registration</h2>
+            <div class="ds-section-sub mb-4">Admin tracking fields (optional where applicable).</div>
+
+            <div class="ds-status-card">
                 <div class="deal-grid pt-2">
             <div>
-                <label>Accepted Status</label>
+                <label class="ds-label block mb-1">Accepted Status</label>
                 @php $as = old('accepted_status', $deal->accepted_status); @endphp
                 <select name="accepted_status">
                     <option value="">-- Select --</option>
@@ -181,7 +183,7 @@
             </div>
 
             <div>
-                <label>Commission Status</label>
+                <label class="ds-label block mb-1">Commission Status</label>
                 @php $cs = old('commission_status', $deal->commission_status); @endphp
                 <select name="commission_status">
                     <option value="">-- Select --</option>
@@ -192,28 +194,28 @@
             </div>
 
             <div>
-                <label>Registration Date</label>
+                <label class="ds-label block mb-1">Registration Date</label>
                 <input type="date" name="registration_date" value="{{ old('registration_date', optional($deal->registration_date)->format('Y-m-d')) }}">
             </div>
 
             <div>
-                <label>Remarks</label>
+                <label class="ds-label block mb-1">Remarks</label>
                 <input type="text" name="remarks" value="{{ old('remarks', $deal->remarks) }}">
             </div>
                 </div>
             </div>
         </div>
 
-        <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
-            <div class="border-b bg-gray-50/60 px-5 py-4">
-                <div class="text-sm font-semibold text-gray-900">Sides, splits & agents</div>
-                <div class="text-xs text-gray-500">Set external / our share and lock listing + selling split to total 100%.</div>
-            </div>
-            <div class="px-5 py-5">
+        {{-- Sides, splits & agents --}}
+        <div>
+            <h2 class="ds-section-header">Sides, Splits & Agents</h2>
+            <div class="ds-section-sub mb-4">Set external / our share and lock listing + selling split to total 100%.</div>
+
+            <div class="ds-status-card">
                 <div class="deal-grid pt-4">
             <!-- LISTING -->
             <div>
-                <h3 class="font-bold">Listing Side</h3>
+                <h3 class="font-bold" style="color:#0b2a4a">Listing Side</h3>
 
                 <div class="flex items-center gap-3">
                     <label class="inline-flex items-center gap-2">
@@ -224,7 +226,7 @@
                     <input type="number" step="0.01" name="listing_our_share_percent" value="{{ old('listing_our_share_percent', $deal->listing_our_share_percent) }}" class="w-36" placeholder="Our Share %">
                     <div class="w-64">
                         <div class="flex items-center justify-between">
-                            <div class="text-xs font-semibold text-gray-700">Listing split %</div>
+                            <div class="ds-label">Listing split %</div>
                             <div class="text-xs text-gray-500"><span id="listing_split_label">—</span> / <span id="selling_split_label">—</span></div>
                         </div>
                         <div class="mt-2 flex items-center gap-3">
@@ -240,7 +242,7 @@
 
                 <div class="mt-3 space-y-3">
                     <div>
-                        <label class="text-sm font-semibold">Listing Agents</label>
+                        <label class="ds-label block mb-1">Listing Agents</label>
                         <select id="listing_select" class="multi-select" multiple size="6">
                             @foreach($agents as $agent)
                                 <option value="{{ $agent->id }}" {{ in_array((string)$agent->id, $listingSelectedIds, true) ? 'selected' : '' }}>
@@ -257,7 +259,7 @@
 
             <!-- SELLING -->
             <div>
-                <h3 class="font-bold">Selling Side</h3>
+                <h3 class="font-bold" style="color:#0b2a4a">Selling Side</h3>
 
                 <div class="flex items-center gap-3">
                     <label class="inline-flex items-center gap-2">
@@ -267,7 +269,7 @@
 
                     <input type="number" step="0.01" name="selling_our_share_percent" value="{{ old('selling_our_share_percent', $deal->selling_our_share_percent) }}" class="w-36" placeholder="Our Share %">
                     <div class="w-64">
-                        <div class="text-xs font-semibold text-gray-700">Selling split %</div>
+                        <div class="ds-label">Selling split %</div>
                         <div class="mt-2 flex items-center gap-3">
                             <input id="selling_split_percent" type="number" step="0.01" name="selling_split_percent"
                                    value="{{ old('selling_split_percent', $deal->selling_split_percent ?? 50) }}"
@@ -281,7 +283,7 @@
 
                 <div class="mt-3 space-y-3">
                     <div>
-                        <label class="text-sm font-semibold">Selling Agents</label>
+                        <label class="ds-label block mb-1">Selling Agents</label>
                         <select id="selling_select" class="multi-select" multiple size="6">
                             @foreach($agents as $agent)
                                 <option value="{{ $agent->id }}" {{ in_array((string)$agent->id, $sellingSelectedIds, true) ? 'selected' : '' }}>
@@ -297,14 +299,13 @@
             </div>
         </div>
 
-                </div>
             </div>
         </div>
 
 
         <div class="flex items-center justify-end">
             <button type="submit"
-                    class="inline-flex items-center justify-center rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-gray-800">
+                    class="nexus-btn-primary px-5 py-2.5 text-sm">
                 {{ $mode === 'create' ? 'Save Deal' : 'Update Deal' }}
             </button>
         </div>
@@ -330,7 +331,7 @@
 
                     row.innerHTML = `
                         <input type="hidden" name="${sideName}_agents[]" value="${id}">
-                        <div class="w-48 font-semibold">${label}</div>
+                        <div class="w-48 font-semibold" style="color:#0b2a4a">${label}</div>
                         <input type="number" step="0.01" name="${sideName}_override[${id}]" placeholder="% override" class="w-32" value="${initial ?? ''}">
                         <button type="button" class="text-xs text-red-600">Remove</button>
                     `;
@@ -359,7 +360,7 @@
 
             listingSelect.addEventListener('change', () => syncSelected(listingSelect, listingSelected, 'listing', listingPercents));
             sellingSelect.addEventListener('change', () => syncSelected(sellingSelect, sellingSelected, 'selling', sellingPercents));
-        
+
 
             // Side split sliders: keep listing + selling = 100.00 (UI convenience only; server validates truth)
             const lNum = document.getElementById('listing_split_percent');

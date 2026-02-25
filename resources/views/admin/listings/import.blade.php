@@ -3,9 +3,9 @@
 @section('content')
 <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-    <div>
-        <h1 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Import Listings (Propcon XLSX)</h1>
-        <p class="text-sm text-slate-600 dark:text-slate-300">Upload the Propcon export as-is. We store the file locally and apply updates into listing stock.</p>
+    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+        <h2 class="text-xl font-bold text-white leading-tight">Import Listings (Propcon XLSX)</h2>
+        <div class="text-sm text-white/60">Upload the Propcon export as-is. We store the file locally and apply updates into listing stock.</div>
     </div>
 
     @if(session('status'))
@@ -25,10 +25,10 @@
         </div>
     @endif
 
-    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-5">
+    <div class="ds-status-card p-5">
         <div class="flex items-start justify-between gap-4">
             <div>
-                <div class="text-sm font-medium text-slate-900 dark:text-slate-100">Upload XLSX</div>
+                <h3 class="ds-section-header">Upload XLSX</h3>
                 <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">We will upsert into listing stock using the Code/Reference fields. Manual pricing fields will be preserved in a later phase.</div>
             </div>
         </div>
@@ -41,7 +41,7 @@
                        class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-slate-900 file:text-white hover:file:bg-slate-800 dark:file:bg-white dark:file:text-slate-900 dark:hover:file:bg-slate-100
                               rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 px-3 py-2" />
             </div>
-            <button class="px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100">
+            <button class="nexus-btn-primary">
                 Import
             </button>
         </form>
@@ -49,12 +49,12 @@
 
     <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden">
         <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800">
-            <div class="text-sm font-medium text-slate-900 dark:text-slate-100">Recent import runs</div>
+            <h3 class="ds-section-header">Recent import runs</h3>
             <div class="text-xs text-slate-500 dark:text-slate-400">Audit trail from listing_import_runs</div>
         </div>
 
         <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
+            <table class="min-w-full text-sm ds-table">
                 <thead class="bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-300">
                     <tr>
                         <th class="text-left px-4 py-3">ID</th>

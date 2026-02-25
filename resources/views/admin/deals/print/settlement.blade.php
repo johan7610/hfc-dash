@@ -8,23 +8,28 @@
     @page { size: A4; margin: 14mm; }
     body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color:#0f172a; }
     .top { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; }
-    .h1 { margin:0; font-size:18px; font-weight:900; letter-spacing:-0.02em; }
+    .h1 { margin:0; font-size:18px; font-weight:900; letter-spacing:-0.02em; color:#0b2a4a; }
     .sub { margin-top:4px; font-size:12px; color:#475569; }
     .meta { text-align:right; font-size:12px; color:#334155; }
     .pill { display:inline-block; padding:6px 10px; border-radius:999px; border:1px solid #e2e8f0; background:#fff; font-size:12px; }
-    .card { border:1px solid #e2e8f0; border-radius:16px; padding:14px; margin-top:14px; }
+    .card { border:1px solid #e2e8f0; border-radius:16px; padding:14px; margin-top:14px; border-left:4px solid #00b4d8; }
     .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
-    .k { font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; }
-    .v { font-size:18px; font-weight:900; margin-top:4px; }
+    .k { font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; font-weight:600; }
+    .v { font-size:18px; font-weight:900; margin-top:4px; color:#0b2a4a; }
     .cols { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
     table { width:100%; border-collapse:collapse; font-size:12px; }
-    th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; padding:8px; border-bottom:1px solid #e2e8f0; }
+    th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; padding:8px; border-bottom:1px solid #e2e8f0; font-weight:600; }
     td { padding:8px; border-bottom:1px solid #f1f5f9; vertical-align:top; }
+    tr:nth-child(even) td { background:#f8fafc; }
     .right { text-align:right; }
     .muted { color:#64748b; font-size:11px; }
-    .net { font-weight:900; }
-    .ok { color:#047857; font-weight:900; }
-    .bad { color:#b91c1c; font-weight:900; }
+    .net { font-weight:900; color:#0b2a4a; }
+    .ok { color:#059669; font-weight:900; }
+    .bad { color:#c41e3a; font-weight:900; }
+    .agent-name { font-weight:800; color:#0b2a4a; }
+    .header-bar { background:#0b2a4a; color:#fff; padding:12px 16px; border-radius:12px; margin-bottom:14px; }
+    .header-bar .h1 { color:#fff; }
+    .header-bar .sub { color:rgba(255,255,255,0.6); }
   </style>
 </head>
 <body>
@@ -33,16 +38,18 @@
     $property = $deal->property_address ?? $deal->address ?? $deal->property ?? $deal->title ?? ('Deal #' . $deal->deal_no);
   @endphp
 
-  <div class="top">
-    <div>
-      <div class="h1">{{ $companyName }} — Settlement Breakdown</div>
-      <div class="sub">{{ $property }}</div>
-      <div class="sub">Deal #{{ $deal->deal_no }}</div>
-    </div>
-    <div class="meta">
-      <div class="pill">Printed: {{ now()->format('Y-m-d H:i') }}</div><br><br>
-      <div class="muted">Checksum:</div>
-      <div class="{{ $checksumOk ? 'ok' : 'bad' }}">R {{ $money($checksumTotal) }} ({{ $checksumOk ? 'OK' : 'NOT OK' }})</div>
+  <div class="header-bar">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+      <div>
+        <div class="h1">{{ $companyName }} &mdash; Settlement Breakdown</div>
+        <div class="sub">{{ $property }}</div>
+        <div class="sub">Deal #{{ $deal->deal_no }}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:12px; color:rgba(255,255,255,0.7)">Printed: {{ now()->format('Y-m-d H:i') }}</div>
+        <div style="margin-top:4px; font-size:11px; color:rgba(255,255,255,0.5)">Checksum:</div>
+        <div style="font-weight:900; color:{{ $checksumOk ? '#86efac' : '#fca5a5' }}">R {{ $money($checksumTotal) }} ({{ $checksumOk ? 'OK' : 'NOT OK' }})</div>
+      </div>
     </div>
   </div>
 
@@ -84,7 +91,7 @@
           @foreach($listingRows as $r)
             <tr>
               <td>
-                <div style="font-weight:800">{{ $r['name'] }}</div>
+                <div class="agent-name">{{ $r['name'] }}</div>
                 @if(!empty($r['deductions_description']))
                   <div class="muted">Deduction: {{ $r['deductions_description'] }}</div>
                 @endif
@@ -121,7 +128,7 @@
           @foreach($sellingRows as $r)
             <tr>
               <td>
-                <div style="font-weight:800">{{ $r['name'] }}</div>
+                <div class="agent-name">{{ $r['name'] }}</div>
                 @if(!empty($r['deductions_description']))
                   <div class="muted">Deduction: {{ $r['deductions_description'] }}</div>
                 @endif
@@ -156,7 +163,7 @@
         @foreach($agentSummary as $s)
           @if((int)$s['user_id'] > 0)
             <tr>
-              <td style="font-weight:800">{{ $s['name'] }}</td>
+              <td class="agent-name">{{ $s['name'] }}</td>
               <td class="right">R {{ $money($s['allocated']) }}</td>
               <td class="right">R {{ $money($s['gross']) }}</td>
               <td class="right">R {{ $money($s['paye']) }}</td>
@@ -168,7 +175,7 @@
       </tbody>
     </table>
     <div class="muted" style="margin-top:10px">
-      Company portion: R {{ $money($totals['company']) }} • External payable (Incl VAT): R {{ $money($externalPayableTotal ?? 0) }}
+      Company portion: R {{ $money($totals['company']) }} &bull; External payable (Incl VAT): R {{ $money($externalPayableTotal ?? 0) }}
     </div>
   </div>
 

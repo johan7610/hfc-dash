@@ -10,22 +10,26 @@
 {{-- ══════════════════════════════════════════════════════════════════════════
      PAGE HEADER
 ══════════════════════════════════════════════════════════════════════════ --}}
-<div class="mb-6 flex items-start justify-between">
-    <div>
-        <h1 class="text-2xl font-bold text-gray-800">Snapshot #{{ $snapshot->id }}</h1>
-        <p class="text-sm text-gray-500 mt-1">
-            Presentation #{{ $presentation->id }}
-            &nbsp;·&nbsp; Saved {{ $snapshot->created_at->format('Y-m-d H:i') }}
-            @if($snapshot->market_analytics_run_id)
-                &nbsp;·&nbsp; MA run #{{ $snapshot->market_analytics_run_id }}
-            @endif
-            @if($snapshot->sale_probability_run_id)
-                &nbsp;·&nbsp; SP run #{{ $snapshot->sale_probability_run_id }}
-            @endif
-        </p>
+<div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div>
+            <h2 class="text-xl font-bold text-white leading-tight">Snapshot #{{ $snapshot->id }}</h2>
+            <div class="text-sm text-white/60">
+                Presentation #{{ $presentation->id }}
+                &nbsp;·&nbsp; Saved {{ $snapshot->created_at->format('Y-m-d H:i') }}
+                @if($snapshot->market_analytics_run_id)
+                    &nbsp;·&nbsp; MA run #{{ $snapshot->market_analytics_run_id }}
+                @endif
+                @if($snapshot->sale_probability_run_id)
+                    &nbsp;·&nbsp; SP run #{{ $snapshot->sale_probability_run_id }}
+                @endif
+            </div>
+        </div>
+        <a href="{{ route('presentations.index') }}"
+           class="nexus-btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.3); background:transparent;">
+            &larr; Back to Presentations
+        </a>
     </div>
-    <a href="{{ route('presentations.index') }}"
-       class="text-xs text-[#00b4d8] hover:underline mt-1">← Back to Presentations</a>
 </div>
 
 @if(session('success'))
@@ -38,8 +42,8 @@
      INPUTS USED
 ══════════════════════════════════════════════════════════════════════════ --}}
 @if(!empty($inputs))
-<div class="bg-white rounded-xl shadow p-6 mb-6">
-    <h2 class="text-base font-semibold text-gray-700 mb-3">Inputs (locked)</h2>
+<div class="ds-status-card mb-6" style="border-left-color: var(--ds-cyan);">
+    <h2 class="ds-section-header">Inputs (locked)</h2>
     <dl class="grid grid-cols-2 gap-x-8 gap-y-2 text-sm md:grid-cols-3 lg:grid-cols-4">
         @foreach([
             'suburb'        => 'Suburb',
@@ -125,8 +129,8 @@
 {{-- ══════════════════════════════════════════════════════════════════════════
      KEY MARKET METRICS
 ══════════════════════════════════════════════════════════════════════════ --}}
-<div class="bg-white rounded-xl shadow p-6 mb-6">
-    <h2 class="text-base font-semibold text-gray-700 mb-1">Market Evidence (locked)</h2>
+<div class="ds-status-card mb-6" style="border-left-color: var(--ds-cyan);">
+    <h2 class="ds-section-header" style="margin-bottom:0.25rem;">Market Evidence (locked)</h2>
     <p class="text-xs text-gray-400 mb-4">Values frozen at snapshot time.</p>
     <dl class="grid grid-cols-2 gap-x-8 gap-y-3 text-sm md:grid-cols-3">
         <div>
@@ -204,8 +208,8 @@
     $hasAnySensitivity = collect($sensitivityDrops)->contains(fn($d) => !empty($summary[$d['key']]));
 @endphp
 @if($hasAnySensitivity)
-<div class="bg-white rounded-xl shadow p-6 mb-6">
-    <h2 class="text-base font-semibold text-gray-800 mb-1">Price Sensitivity (locked)</h2>
+<div class="ds-status-card mb-6" style="border-left-color: var(--ds-cyan);">
+    <h2 class="ds-section-header" style="margin-bottom:0.25rem;">Price Sensitivity (locked)</h2>
     <p class="text-xs text-gray-400 mb-4">Quick scenario cards frozen at snapshot time.</p>
     <div class="grid grid-cols-3 gap-3">
         @foreach($sensitivityDrops as $drop)

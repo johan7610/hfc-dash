@@ -5,23 +5,27 @@
 {{-- ══════════════════════════════════════════════════════════════════════════
      PAGE HEADER
 ══════════════════════════════════════════════════════════════════════════ --}}
-<div class="mb-6 flex items-start justify-between">
-    <div>
-        <h1 class="text-2xl font-bold text-gray-800">Market Analysis</h1>
-        <p class="text-sm text-gray-500 mt-1">
-            {{ $presentation->title }}
-            @if($presentation->property_address)
-                &nbsp;·&nbsp; {{ $presentation->property_address }}
+<div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div>
+            <h2 class="text-xl font-bold text-white leading-tight">Market Analysis</h2>
+            <div class="text-sm text-white/60">
+                {{ $presentation->title }}
+                @if($presentation->property_address)
+                    &nbsp;·&nbsp; {{ $presentation->property_address }}
+                @endif
+            </div>
+            @if(isset($latestSnapshot) && $latestSnapshot && $latestSnapshot->generated_at)
+                <div class="text-xs text-emerald-300 mt-1 font-medium">
+                    Last analysed: {{ $latestSnapshot->generated_at->format('d M Y, H:i') }}
+                </div>
             @endif
-        </p>
-        @if(isset($latestSnapshot) && $latestSnapshot && $latestSnapshot->generated_at)
-            <p class="text-xs text-emerald-600 mt-1 font-medium">
-                Last analysed: {{ $latestSnapshot->generated_at->format('d M Y, H:i') }}
-            </p>
-        @endif
+        </div>
+        <a href="{{ route('presentations.show', $presentation) }}"
+           class="nexus-btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.3); background:transparent;">
+            &larr; Overview
+        </a>
     </div>
-    <a href="{{ route('presentations.show', $presentation) }}"
-       class="text-xs text-[#00b4d8] hover:underline mt-1">← Overview</a>
 </div>
 
 {{-- D1: Prep data summary — links + uploads at a glance --}}
@@ -55,9 +59,9 @@
 {{-- ══════════════════════════════════════════════════════════════════════════
      RUN ANALYSIS PANEL
 ══════════════════════════════════════════════════════════════════════════ --}}
-<div class="bg-white rounded-xl shadow p-6 mb-6">
+<div class="ds-status-card mb-6" style="border-left-color: var(--ds-cyan);">
     <div class="flex items-center justify-between mb-3">
-        <h2 class="text-base font-semibold text-gray-700">Run Analysis</h2>
+        <h2 class="ds-section-header">Run Analysis</h2>
         @if(isset($latestSnapshot) && $latestSnapshot && $latestSnapshot->generated_at)
             <span class="text-xs text-emerald-600 font-medium">
                 Snapshot saved {{ $latestSnapshot->generated_at->diffForHumans() }}
@@ -68,18 +72,17 @@
         @csrf
         <div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
             <div>
-                <label class="block text-xs text-gray-600 mb-1">Asking Price (R)</label>
+                <label class="ds-label block mb-1">Asking Price (R)</label>
                 <input type="number" name="asking_price_inc"
                        value="{{ $presentation->asking_price_inc ?? '' }}"
                        step="1" min="0"
-                       class="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none"
                        placeholder="e.g. 2500000">
                 <p class="mt-0.5 text-xs text-gray-400">Saves to presentation and freezes analysis snapshot.</p>
                 @error('asking_price_inc')<p class="mt-1 text-xs text-red-600">{{ $message }}</p>@enderror
             </div>
             <div class="flex items-end">
-                <button type="submit"
-                        class="px-5 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded hover:bg-[#081f36]">
+                <button type="submit" class="nexus-btn-primary">
                     @if(isset($latestSnapshot) && $latestSnapshot) Re-run Analysis @else Run Analysis @endif
                 </button>
             </div>
@@ -103,7 +106,7 @@
     @if(isset($readiness) && $readiness['can_compile'])
     <form method="POST" action="{{ route('presentations.compile', $presentation) }}" class="inline">
         @csrf
-        <button type="submit" class="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded hover:bg-emerald-700">
+        <button type="submit" class="nexus-btn-primary" style="background:#059669;">
             Compile Pack
         </button>
     </form>
@@ -117,11 +120,11 @@
     @if(isset($latestVersion) && $latestVersion)
     <a href="{{ route('presentations.versions.pdf', [$presentation, $latestVersion]) }}"
        target="_blank"
-       class="px-4 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded hover:bg-[#081f36]">
+       class="nexus-btn-primary">
         Download PDF
     </a>
     <a href="{{ route('presentations.versions.complete-pack', [$presentation, $latestVersion]) }}"
-       class="px-4 py-2 bg-[#00b4d8] text-white text-sm font-medium rounded hover:bg-[#0b2a4a]">
+       class="nexus-btn-primary" style="background:#00b4d8;">
         Complete Pack (ZIP)
     </a>
     @endif
@@ -129,7 +132,7 @@
     {{-- Pricing Simulator --}}
     @if(config('features.pricing_simulator_v1'))
     <a href="{{ route('presentations.pricing-simulator', $presentation) }}"
-       class="px-4 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded hover:bg-[#081f36]">
+       class="nexus-btn-primary">
         Pricing Simulator
     </a>
     @endif
@@ -155,8 +158,8 @@
                    || \App\Models\PortalCapture::where('presentation_id', $presentation->id)->where('parse_status', 'parsed')->exists();
 @endphp
 
-<div class="bg-white rounded-xl shadow p-5 mb-6" id="readiness">
-    <h2 class="text-sm font-semibold text-gray-700 mb-3">Analysis readiness</h2>
+<div class="ds-status-card mb-6" style="border-left-color: var(--ds-cyan);" id="readiness">
+    <h2 class="ds-section-header">Analysis readiness</h2>
     <div class="grid grid-cols-2 gap-x-8 gap-y-2 text-xs sm:grid-cols-3">
         @php
         $items = [

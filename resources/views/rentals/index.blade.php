@@ -4,45 +4,46 @@
 
 <div class="max-w-7xl mx-auto px-4 py-6">
 
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-bold">Rentals Register</h1>
-
-<!-- RENTAL SUMMARY -->
-<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:16px;">
-    <div style="font-weight:600;margin-bottom:8px;">Register Totals (All Assigned Rentals)</div>
-    <div style="font-size:12px;color:#6b7280;margin:-4px 0 10px 0;">Not period-based. For worksheet-matching figures, use <strong>Rentals (This Period)</strong> above.</div>
-
-    <div style="display:flex;gap:24px;margin-bottom:8px;">
-        <div>Total Rentals: <strong>{{ $summary->total_count ?? 0 }}</strong></div>
-        <div>Total Commission (Excl VAT): <strong>R {{ number_format($summary->total_comm ?? 0, 2) }}</strong></div>
-    </div>
-
-    <div style="display:flex;flex-wrap:wrap;gap:16px;">
-        @foreach($summary_per_agent as $a)
-            <div style="border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;background:white;">
-                <div style="font-weight:500;">{{ data_get($a, 'name') }}</div>
-                <div style="font-size:12px;color:#555;">
-                    {{ data_get($a, 'rental_count', 0) }} rentals —
-                    R {{ number_format((float) data_get($a, 'total_comm', 0), 2) }}
-                </div>
+    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+            <div>
+                <h2 class="text-xl font-bold text-white leading-tight">Rentals Register</h2>
+                <div class="text-sm text-white/60">All assigned rentals &mdash; not period-based</div>
             </div>
-        @endforeach
+            <div class="flex items-center gap-6">
+                <div class="text-right">
+                    <div class="text-xs uppercase tracking-wide text-white/60">Total rentals</div>
+                    <div class="text-2xl font-bold text-white">{{ $summary->total_count ?? 0 }}</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-xs uppercase tracking-wide text-white/60">Commission (Excl VAT)</div>
+                    <div class="text-2xl font-bold text-white">R {{ number_format($summary->total_comm ?? 0, 2) }}</div>
+                </div>
+                <a href="{{ route('rentals.create') }}" class="nexus-btn-primary">+ New Rental</a>
+            </div>
+        </div>
     </div>
-</div>
 
-
-
-        <a href="{{ route('rentals.create') }}"
-           class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-            + New Rental
-        </a>
+    <div class="ds-status-card" style="border-left-color: var(--ds-cyan);">
+        <h3 class="ds-section-header">Per Agent</h3>
+        <div class="flex flex-wrap gap-3 mt-3">
+            @foreach($summary_per_agent as $a)
+                <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2">
+                    <div class="font-semibold text-slate-900 dark:text-slate-100">{{ data_get($a, 'name') }}</div>
+                    <div class="text-xs text-slate-500 dark:text-slate-400">
+                        {{ data_get($a, 'rental_count', 0) }} rentals &mdash;
+                        R {{ number_format((float) data_get($a, 'total_comm', 0), 2) }}
+                    </div>
+                </div>
+            @endforeach
+        </div>
     </div>
 
-    <div class="bg-white shadow rounded-lg overflow-x-auto">
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden">
 
-        <table class="min-w-full">
+        <table class="min-w-full text-sm ds-table">
 
-            <thead class="bg-gray-100">
+            <thead class="bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-300">
                 <tr>
                     <th class="text-left px-4 py-2">Address</th>
                     <th class="text-left px-4 py-2">Lease Start</th>
@@ -60,7 +61,7 @@
 
                 @forelse($rentals as $rental)
 
-                <tr class="border-t">
+                <tr>
 
                     <td class="px-4 py-2">
                         {{ $rental->lease_address }}
@@ -101,7 +102,7 @@
                     <td class="px-4 py-2 text-right">
 
                         <a href="{{ route('rentals.edit', $rental->id) }}"
-                           class="text-blue-600 hover:underline">
+                           class="ds-link">
                             Edit
                         </a>
 
@@ -112,7 +113,7 @@
                 @empty
 
                 <tr>
-                    <td colspan="9" class="px-4 py-6 text-center text-gray-500">
+                    <td colspan="9" class="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
                         No rentals found
                     </td>
                 </tr>

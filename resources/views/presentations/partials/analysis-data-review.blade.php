@@ -21,7 +21,7 @@
 
 <div class="mb-6">
     <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-bold text-gray-800">Extracted Data Review</h2>
+        <h2 class="ds-section-header" style="font-size:1.125rem;">Extracted Data Review</h2>
         <span class="text-xs text-gray-400">
             {{ $counts['fields'] }} fields &middot;
             {{ $counts['sold_comps'] }} comps &middot;
@@ -30,8 +30,8 @@
     </div>
 
     {{-- ── 1. SUBJECT PROPERTY SUMMARY ──────────────────────────────────── --}}
-    <div class="bg-white rounded-xl shadow p-6 mb-4">
-        <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">1. Subject Property</h3>
+    <div class="ds-status-card mb-4" style="border-left-color: var(--ds-cyan);">
+        <h3 class="ds-section-header">1. Subject Property</h3>
         <div class="grid grid-cols-2 gap-x-8 gap-y-2 text-sm md:grid-cols-3 lg:grid-cols-4">
             <div>
                 <span class="text-xs text-gray-400">Address</span>
@@ -139,8 +139,8 @@
 
     {{-- ── 2. SUBURB MARKET OVERVIEW ────────────────────────────────────── --}}
     @if($suburb['latest_year'])
-    <div class="bg-white rounded-xl shadow p-6 mb-4">
-        <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">2. Suburb Market Overview</h3>
+    <div class="ds-status-card mb-4" style="border-left-color: var(--ds-cyan);">
+        <h3 class="ds-section-header">2. Suburb Market Overview</h3>
         <div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
             <div class="bg-gray-50 rounded-lg p-3 text-center">
                 <span class="text-xs text-gray-400 block">Year</span>
@@ -246,8 +246,8 @@
         $priceBrk = $analysisData['price_brackets'] ?? [];
     @endphp
     @if(!empty($pricePos['has_data']) || !empty($priceBrk['has_data']))
-    <div class="bg-white rounded-xl shadow p-6 mb-4">
-        <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Market Position & Price Distribution</h3>
+    <div class="ds-status-card mb-4" style="border-left-color: var(--ds-cyan);">
+        <h3 class="ds-section-header">Market Position & Price Distribution</h3>
 
         {{-- Price Position Ranking --}}
         @if(!empty($pricePos['has_data']))
@@ -315,8 +315,8 @@
 
     {{-- ── 3. COMPARABLE SALES ──────────────────────────────────────────── --}}
     @if($comps['vicinity']['count'] > 0 || $comps['cma_comps']['count'] > 0 || $comps['street_sales']['count'] > 0)
-    <div class="bg-white rounded-xl shadow p-6 mb-4">
-        <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">3. Comparable Sales</h3>
+    <div class="ds-status-card mb-4" style="border-left-color: var(--ds-cyan);">
+        <h3 class="ds-section-header">3. Comparable Sales</h3>
 
         @php
             $compSections = [
@@ -402,8 +402,8 @@
 
     {{-- ── 4. CMA VALUATION ─────────────────────────────────────────────── --}}
     @if($cma['cma_middle'] || $cma['vicinity_middle'])
-    <div class="bg-white rounded-xl shadow p-6 mb-4">
-        <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">4. CMA Valuation</h3>
+    <div class="ds-status-card mb-4" style="border-left-color: var(--ds-cyan);">
+        <h3 class="ds-section-header">4. CMA Valuation</h3>
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
             {{-- CMA Range — clickable tiles --}}
             @if($cma['cma_middle'])
@@ -480,8 +480,8 @@
 
     {{-- ── 5. ACTIVE MARKET COMPETITION ─────────────────────────────────── --}}
     @if(($active['total_count'] ?? $active['count']) > 0)
-    <div class="bg-white rounded-xl shadow p-6 mb-4">
-        <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">5. Active Market Competition</h3>
+    <div class="ds-status-card mb-4" style="border-left-color: var(--ds-cyan);">
+        <h3 class="ds-section-header">5. Active Market Competition</h3>
         <div class="overflow-x-auto">
             <table class="w-full text-sm" id="active-listings-table">
                 <thead>
@@ -565,8 +565,8 @@
 
     {{-- ── 6. HOLDING COST IMPACT ───────────────────────────────────────── --}}
     @if($holding['monthly_total'] > 0)
-    <div class="bg-white rounded-xl shadow p-6 mb-4">
-        <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">6. Holding Cost Impact</h3>
+    <div class="ds-status-card mb-4" style="border-left-color: var(--ds-cyan);">
+        <h3 class="ds-section-header">6. Holding Cost Impact</h3>
         <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
             {{-- Monthly breakdown --}}
             <div>
@@ -613,8 +613,8 @@
     @endif
 
     {{-- ── 7. KEY INSIGHTS ──────────────────────────────────────────────── --}}
-    <div class="bg-white rounded-xl shadow p-6 mb-4" id="key-insights-container">
-        <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">7. Key Insights</h3>
+    <div class="ds-status-card mb-4" style="border-left-color: var(--ds-cyan);" id="key-insights-container">
+        <h3 class="ds-section-header">7. Key Insights</h3>
 
         @if(!$insights['asking_price_set'])
             <div class="bg-amber-50 border border-amber-200 rounded-lg p-4">

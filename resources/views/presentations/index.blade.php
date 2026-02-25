@@ -2,101 +2,106 @@
 
 @section('nexus-content')
 
-{{-- PAGE HEADER --}}
-<div class="mb-6 flex items-center justify-between">
-    <div>
-        <h1 class="text-2xl font-bold text-gray-800">Presentations</h1>
-        <p class="text-sm text-gray-500 mt-1">Seller presentations with market analysis.</p>
-    </div>
-    <a href="{{ route('presentations.create') }}"
-       class="px-4 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded hover:bg-[#081f36]">
-        + New Presentation
-    </a>
-</div>
-
-@if(session('success'))
-    <div class="mb-4 px-4 py-3 bg-green-50 border border-green-200 text-green-800 rounded text-sm">
-        {{ session('success') }}
-    </div>
-@endif
-
-{{-- PRESENTATIONS TABLE --}}
-<div class="bg-white rounded-xl shadow overflow-hidden">
-    @if($presentations->isEmpty())
-        <div class="px-6 py-12 text-center">
-            <p class="text-gray-400 text-sm mb-4">No presentations yet.</p>
+{{-- Navy header bar --}}
+<div class="max-w-6xl mx-auto">
+    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-6">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+            <div>
+                <h2 class="text-xl font-bold text-white leading-tight">Presentations</h2>
+                <div class="text-sm text-white/60">Seller presentations with market analysis</div>
+            </div>
             <a href="{{ route('presentations.create') }}"
-               class="px-4 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded hover:bg-[#081f36]">
-                Create your first presentation
+               class="nexus-btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.3); background:transparent;">
+                + New Presentation
             </a>
         </div>
-    @else
-        <table class="w-full text-sm text-left text-gray-700">
-            <thead class="bg-gray-50 border-b">
-                <tr>
-                    <th class="px-4 py-3 font-medium text-gray-500">Title</th>
-                    <th class="px-4 py-3 font-medium text-gray-500">Address</th>
-                    <th class="px-4 py-3 font-medium text-gray-500">Property</th>
-                    <th class="px-4 py-3 font-medium text-gray-500">Seller</th>
-                    <th class="px-4 py-3 font-medium text-gray-500">Status</th>
-                    <th class="px-4 py-3 font-medium text-gray-500">Last Updated</th>
-                    <th class="px-4 py-3 font-medium text-gray-500"></th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-                @foreach($presentations as $pres)
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-4 py-3 font-medium text-gray-800">
-                            {{ $pres->title }}
-                        </td>
-                        <td class="px-4 py-3 text-gray-600 text-xs">
-                            {{ $pres->property_address ?? '—' }}
-                        </td>
-                        <td class="px-4 py-3 text-xs">
-                            @if($pres->suburb || $pres->property_type)
-                                <span class="text-gray-700">{{ $pres->suburb ?? '—' }}</span>
-                                @if($pres->property_type)
-                                    <span class="text-gray-400"> · {{ ucfirst($pres->property_type) }}</span>
-                                @endif
-                            @else
-                                <span class="text-gray-300">—</span>
-                            @endif
-                        </td>
-                        <td class="px-4 py-3 text-gray-600 text-xs">
-                            {{ $pres->seller_name ?? '—' }}
-                        </td>
-                        <td class="px-4 py-3">
-                            @php
-                                $statusClasses = match($pres->status) {
-                                    'presented' => 'bg-blue-100 text-blue-700',
-                                    'locked'    => 'bg-green-100 text-green-700',
-                                    default     => 'bg-gray-100 text-gray-600',
-                                };
-                            @endphp
-                            <span class="px-2 py-0.5 rounded text-xs font-medium {{ $statusClasses }}">
-                                {{ ucfirst($pres->status) }}
-                            </span>
-                        </td>
-                        <td class="px-4 py-3 text-gray-400 text-xs">
-                            {{ $pres->updated_at->format('Y-m-d H:i') }}
-                        </td>
-                        <td class="px-4 py-3">
-                            <a href="{{ route('presentations.show', $pres) }}"
-                               class="text-[#00b4d8] hover:underline text-xs font-medium">
-                                Open →
-                            </a>
-                        </td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
+    </div>
 
-        @if($presentations->hasPages())
-            <div class="px-4 py-3 border-t">
-                {{ $presentations->links() }}
-            </div>
-        @endif
+    @if(session('success'))
+        <div class="mb-4 px-4 py-3 bg-green-50 border border-green-200 text-green-800 rounded-lg text-sm font-medium">
+            {{ session('success') }}
+        </div>
     @endif
+
+    {{-- Presentations table --}}
+    <div class="ds-status-card" style="border-left-color: var(--ds-cyan); padding: 0; overflow: hidden;">
+        @if($presentations->isEmpty())
+            <div class="px-6 py-12 text-center">
+                <p class="text-gray-400 text-sm mb-4">No presentations yet.</p>
+                <a href="{{ route('presentations.create') }}" class="nexus-btn-primary">
+                    Create your first presentation
+                </a>
+            </div>
+        @else
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm ds-table">
+                    <thead>
+                        <tr>
+                            <th class="text-left px-4 py-3">Title</th>
+                            <th class="text-left px-4 py-3">Address</th>
+                            <th class="text-left px-4 py-3">Property</th>
+                            <th class="text-left px-4 py-3">Seller</th>
+                            <th class="text-left px-4 py-3">Status</th>
+                            <th class="text-left px-4 py-3">Last Updated</th>
+                            <th class="text-left px-4 py-3"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($presentations as $pres)
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-3 font-semibold" style="color:#0b2a4a;">
+                                    {{ $pres->title }}
+                                </td>
+                                <td class="px-4 py-3 text-gray-600 text-xs">
+                                    {{ $pres->property_address ?? '—' }}
+                                </td>
+                                <td class="px-4 py-3 text-xs">
+                                    @if($pres->suburb || $pres->property_type)
+                                        <span class="text-gray-700">{{ $pres->suburb ?? '—' }}</span>
+                                        @if($pres->property_type)
+                                            <span class="text-gray-400"> · {{ ucfirst($pres->property_type) }}</span>
+                                        @endif
+                                    @else
+                                        <span class="text-gray-300">—</span>
+                                    @endif
+                                </td>
+                                <td class="px-4 py-3 text-gray-600 text-xs">
+                                    {{ $pres->seller_name ?? '—' }}
+                                </td>
+                                <td class="px-4 py-3">
+                                    @php
+                                        $badgeClass = match($pres->status) {
+                                            'presented' => 'ds-badge-info',
+                                            'locked'    => 'ds-badge-success',
+                                            default     => 'ds-badge-default',
+                                        };
+                                    @endphp
+                                    <span class="ds-badge {{ $badgeClass }}">
+                                        {{ ucfirst($pres->status) }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 text-gray-400 text-xs">
+                                    {{ $pres->updated_at->format('Y-m-d H:i') }}
+                                </td>
+                                <td class="px-4 py-3">
+                                    <a href="{{ route('presentations.show', $pres) }}"
+                                       class="ds-agent-link text-xs font-medium">
+                                        Open &rarr;
+                                    </a>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+
+            @if($presentations->hasPages())
+                <div class="px-4 py-3 border-t" style="border-color: #e2e8f0;">
+                    {{ $presentations->links() }}
+                </div>
+            @endif
+        @endif
+    </div>
 </div>
 
 @endsection

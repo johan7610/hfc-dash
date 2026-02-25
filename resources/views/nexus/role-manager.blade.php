@@ -1,33 +1,29 @@
 @extends('layouts.nexus')
 
-@section('nexus-content')
-<div x-data="{ activeTab: 'permissions' }">
-    <div class="flex items-center justify-between mb-6">
-        <div>
-            <h1 class="text-2xl font-bold text-gray-900">Role &amp; Permissions Manager</h1>
-            <p class="text-sm text-gray-500 mt-1">Manage role-based permissions for each section of the system.</p>
-        </div>
+@section('content')
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6" x-data="{ activeTab: 'permissions' }">
+
+    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+        <h2 class="text-xl font-bold text-white leading-tight">Role &amp; Permissions Manager</h2>
+        <div class="text-sm text-white/60">Manage role-based permissions for each section of the system.</div>
     </div>
 
     @if(session('success'))
-        <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
-            {{ session('success') }}
-        </div>
+        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 px-4 py-3">{{ session('success') }}</div>
     @endif
 
-    {{-- Tabs --}}
-    <div class="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
+    <div class="flex gap-1 bg-slate-100 dark:bg-slate-900 rounded-lg p-1 w-fit">
         <button @click="activeTab = 'permissions'"
                 :class="activeTab === 'permissions'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'"
+                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
                 class="px-4 py-2 rounded-md text-sm font-medium transition-all">
             Permissions Matrix
         </button>
         <button @click="activeTab = 'users'"
                 :class="activeTab === 'users'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'"
+                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
                 class="px-4 py-2 rounded-md text-sm font-medium transition-all">
             User Roles
         </button>
@@ -37,86 +33,77 @@
     <div x-show="activeTab === 'permissions'" x-cloak>
         <form method="POST" action="{{ route('nexus.role-manager.save') }}">
             @csrf
-            <div class="nexus-panel">
-                <div class="nexus-panel-header">
-                    <h3 class="nexus-panel-title">Section Permissions</h3>
-                    <button type="submit" class="nexus-btn-primary" style="padding: 8px 20px;">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                        </svg>
-                        Save Changes
-                    </button>
+            <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden">
+                <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <h3 class="ds-section-header">Section Permissions</h3>
+                    <button type="submit" class="nexus-btn-primary text-sm">Save Changes</button>
                 </div>
-                <div class="nexus-panel-body p-0">
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm">
-                            <thead>
-                                <tr class="border-b border-gray-200 bg-gray-50">
-                                    <th class="text-left py-3 px-4 font-semibold text-gray-700 sticky left-0 bg-gray-50 z-10 min-w-[260px]">
-                                        Permission
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm ds-table">
+                        <thead>
+                            <tr class="border-b text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/40">
+                                <th class="text-left py-3 px-4 sticky left-0 bg-slate-50 dark:bg-slate-900/40 z-10 min-w-[260px]">
+                                    Permission
+                                </th>
+                                @foreach($roles as $role)
+                                    <th class="text-center py-3 px-3 min-w-[120px]">
+                                        @php
+                                            $roleBadge = match($role) {
+                                                'admin' => 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300',
+                                                'branch_manager' => 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
+                                                default => 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+                                            };
+                                        @endphp
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium {{ $roleBadge }}">
+                                            {{ str_replace('_', ' ', $role) }}
+                                        </span>
                                     </th>
-                                    @foreach($roles as $role)
-                                        <th class="text-center py-3 px-3 font-semibold text-gray-700 min-w-[120px]">
-                                            <div class="flex flex-col items-center gap-1">
-                                                @php
-                                                    $roleBadge = match($role) {
-                                                        'admin' => 'nexus-badge-blue',
-                                                        'branch_manager' => 'nexus-badge-green',
-                                                        default => 'nexus-badge-yellow',
-                                                    };
-                                                @endphp
-                                                <span class="nexus-badge {{ $roleBadge }}">
-                                                    {{ str_replace('_', ' ', $role) }}
-                                                </span>
-                                            </div>
-                                        </th>
-                                    @endforeach
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @php $lastSection = ''; @endphp
-                                @foreach($permissions as $perm)
-                                    @if($perm->section !== $lastSection)
-                                        @php $lastSection = $perm->section; @endphp
-                                        <tr class="bg-gray-50/80">
-                                            <td colspan="{{ count($roles) + 1 }}" class="py-2 px-4">
-                                                <span class="text-xs font-bold text-[#00b4d8] uppercase tracking-wider">
-                                                    {{ str_replace('-', ' ', $perm->section) }}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    @endif
-                                    <tr class="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
-                                        <td class="py-2.5 px-4 font-medium text-gray-800 sticky left-0 bg-white z-10">
-                                            {{ $perm->label }}
-                                        </td>
-                                        @foreach($roles as $role)
-                                            <td class="py-2.5 px-3 text-center">
-                                                <label class="inline-flex items-center justify-center cursor-pointer">
-                                                    <input type="hidden"
-                                                           name="permissions[{{ $perm->key }}][{{ $role }}]"
-                                                           value="0">
-                                                    <input type="checkbox"
-                                                           name="permissions[{{ $perm->key }}][{{ $role }}]"
-                                                           value="1"
-                                                           {{ isset($granted[$perm->key][$role]) ? 'checked' : '' }}
-                                                           class="w-4 h-4 rounded border-gray-300 text-[#00b4d8] focus:ring-[#00b4d8] cursor-pointer">
-                                                </label>
-                                            </td>
-                                        @endforeach
-                                    </tr>
                                 @endforeach
-
-                                @if($permissions->isEmpty())
-                                    <tr>
-                                        <td colspan="{{ count($roles) + 1 }}" class="py-12 text-center text-gray-400">
-                                            No permissions defined yet. Run the seeder to populate default permissions.
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @php $lastSection = ''; @endphp
+                            @foreach($permissions as $perm)
+                                @if($perm->section !== $lastSection)
+                                    @php $lastSection = $perm->section; @endphp
+                                    <tr class="bg-slate-50/80 dark:bg-slate-900/20">
+                                        <td colspan="{{ count($roles) + 1 }}" class="py-2 px-4">
+                                            <span class="text-xs font-bold text-[#00b4d8] uppercase tracking-wider">
+                                                {{ str_replace('-', ' ', $perm->section) }}
+                                            </span>
                                         </td>
                                     </tr>
                                 @endif
-                            </tbody>
-                        </table>
-                    </div>
+                                <tr class="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-900/30">
+                                    <td class="py-2.5 px-4 font-medium text-slate-900 dark:text-slate-100 sticky left-0 bg-white dark:bg-slate-950 z-10">
+                                        {{ $perm->label }}
+                                    </td>
+                                    @foreach($roles as $role)
+                                        <td class="py-2.5 px-3 text-center">
+                                            <label class="inline-flex items-center justify-center cursor-pointer">
+                                                <input type="hidden"
+                                                       name="permissions[{{ $perm->key }}][{{ $role }}]"
+                                                       value="0">
+                                                <input type="checkbox"
+                                                       name="permissions[{{ $perm->key }}][{{ $role }}]"
+                                                       value="1"
+                                                       {{ isset($granted[$perm->key][$role]) ? 'checked' : '' }}
+                                                       class="w-4 h-4 rounded border-slate-300 dark:border-slate-700 text-[#00b4d8] focus:ring-[#00b4d8] cursor-pointer">
+                                            </label>
+                                        </td>
+                                    @endforeach
+                                </tr>
+                            @endforeach
+
+                            @if($permissions->isEmpty())
+                                <tr>
+                                    <td colspan="{{ count($roles) + 1 }}" class="py-12 text-center text-slate-500 dark:text-slate-400">
+                                        No permissions defined yet. Run the seeder to populate default permissions.
+                                    </td>
+                                </tr>
+                            @endif
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </form>
@@ -124,57 +111,55 @@
 
     {{-- TAB 2: User Roles --}}
     <div x-show="activeTab === 'users'" x-cloak>
-        <div class="nexus-panel">
-            <div class="nexus-panel-header">
-                <h3 class="nexus-panel-title">User Roles</h3>
+        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden">
+            <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+                <h3 class="ds-section-header">User Roles</h3>
             </div>
-            <div class="nexus-panel-body p-0">
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="border-b border-gray-200 bg-gray-50">
-                                <th class="text-left py-3 px-4 font-semibold text-gray-700">Name</th>
-                                <th class="text-left py-3 px-4 font-semibold text-gray-700">Email</th>
-                                <th class="text-left py-3 px-4 font-semibold text-gray-700">Current Role</th>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm ds-table">
+                    <thead>
+                        <tr class="border-b text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/40">
+                            <th class="text-left py-3 px-4">Name</th>
+                            <th class="text-left py-3 px-4">Email</th>
+                            <th class="text-left py-3 px-4">Current Role</th>
+                            @if(auth()->user()->isEffectiveAdmin())
+                                <th class="text-left py-3 px-4">Change Role</th>
+                            @endif
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
+                        @foreach($users as $u)
+                            <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-900/30">
+                                <td class="py-2.5 px-4 font-medium text-slate-900 dark:text-slate-100">{{ $u->name }}</td>
+                                <td class="py-2.5 px-4 text-slate-600 dark:text-slate-300">{{ $u->email }}</td>
+                                <td class="py-2.5 px-4">
+                                    @php
+                                        $roleBadge = match($u->role) {
+                                            'admin' => 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300',
+                                            'branch_manager' => 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
+                                            default => 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+                                        };
+                                    @endphp
+                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium {{ $roleBadge }}">{{ str_replace('_', ' ', $u->role) }}</span>
+                                </td>
                                 @if(auth()->user()->isEffectiveAdmin())
-                                    <th class="text-left py-3 px-4 font-semibold text-gray-700">Change Role</th>
+                                    <td class="py-2.5 px-4">
+                                        <form method="POST" action="{{ route('nexus.role-manager.user-role') }}" class="flex items-center gap-2">
+                                            @csrf
+                                            <input type="hidden" name="user_id" value="{{ $u->id }}">
+                                            <select name="role" class="text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1.5 px-2" style="max-width:160px">
+                                                <option value="agent" {{ $u->role === 'agent' ? 'selected' : '' }}>Agent</option>
+                                                <option value="branch_manager" {{ $u->role === 'branch_manager' ? 'selected' : '' }}>Branch Manager</option>
+                                                <option value="admin" {{ $u->role === 'admin' ? 'selected' : '' }}>Admin</option>
+                                            </select>
+                                            <button type="submit" class="nexus-btn-primary text-xs" style="padding:6px 14px;min-height:auto;min-width:auto">Save</button>
+                                        </form>
+                                    </td>
                                 @endif
                             </tr>
-                        </thead>
-                        <tbody>
-                            @foreach($users as $u)
-                                <tr class="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
-                                    <td class="py-2.5 px-4 font-medium text-gray-900">{{ $u->name }}</td>
-                                    <td class="py-2.5 px-4 text-gray-600">{{ $u->email }}</td>
-                                    <td class="py-2.5 px-4">
-                                        @php
-                                            $roleBadge = match($u->role) {
-                                                'admin' => 'nexus-badge-blue',
-                                                'branch_manager' => 'nexus-badge-green',
-                                                default => 'nexus-badge-yellow',
-                                            };
-                                        @endphp
-                                        <span class="nexus-badge {{ $roleBadge }}">{{ str_replace('_', ' ', $u->role) }}</span>
-                                    </td>
-                                    @if(auth()->user()->isEffectiveAdmin())
-                                        <td class="py-2.5 px-4">
-                                            <form method="POST" action="{{ route('nexus.role-manager.user-role') }}" class="flex items-center gap-2">
-                                                @csrf
-                                                <input type="hidden" name="user_id" value="{{ $u->id }}">
-                                                <select name="role" class="text-xs border-gray-300 rounded-md py-1.5 px-2 bg-white" style="max-width:160px">
-                                                    <option value="agent" {{ $u->role === 'agent' ? 'selected' : '' }}>Agent</option>
-                                                    <option value="branch_manager" {{ $u->role === 'branch_manager' ? 'selected' : '' }}>Branch Manager</option>
-                                                    <option value="admin" {{ $u->role === 'admin' ? 'selected' : '' }}>Admin</option>
-                                                </select>
-                                                <button type="submit" class="nexus-btn-primary" style="padding:6px 14px;font-size:12px;min-height:auto;min-width:auto">Save</button>
-                                            </form>
-                                        </td>
-                                    @endif
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                </div>
+                        @endforeach
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

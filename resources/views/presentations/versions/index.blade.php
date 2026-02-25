@@ -2,17 +2,24 @@
 
 @section('nexus-content')
 
-<div class="mb-6 flex items-center justify-between">
-    <h1 class="text-xl font-bold text-gray-800">{{ $pageTitle }}</h1>
-    <a href="{{ route('presentations.index') }}"
-       class="text-xs text-[#00b4d8] hover:underline">← All Presentations</a>
+<div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div>
+            <h2 class="text-xl font-bold text-white leading-tight">{{ $pageTitle }}</h2>
+            <div class="text-sm text-white/60">Compiled presentation packs</div>
+        </div>
+        <a href="{{ route('presentations.index') }}"
+           class="nexus-btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.3); background:transparent;">
+            &larr; All Presentations
+        </a>
+    </div>
 </div>
 
 {{-- FILTERS --}}
 <form method="GET" class="mb-4 flex flex-wrap gap-2 items-end">
     @if($isAdmin)
         <div>
-            <label class="block text-xs text-gray-500 mb-1">Branch</label>
+            <label class="ds-label block mb-1">Branch</label>
             <select name="branch_id" class="border border-gray-300 rounded px-2 py-1.5 text-xs">
                 <option value="">All branches</option>
                 @foreach($branches as $branch)
@@ -24,7 +31,7 @@
             </select>
         </div>
         <div>
-            <label class="block text-xs text-gray-500 mb-1">User ID</label>
+            <label class="ds-label block mb-1">User ID</label>
             <input type="number" name="user_id" value="{{ $filters['user_id'] ?? '' }}"
                    placeholder="Any"
                    class="border border-gray-300 rounded px-2 py-1.5 text-xs w-24">
@@ -32,21 +39,20 @@
     @endif
 
     <div>
-        <label class="block text-xs text-gray-500 mb-1">Presentation ID</label>
+        <label class="ds-label block mb-1">Presentation ID</label>
         <input type="number" name="presentation_id" value="{{ $filters['presentation_id'] ?? '' }}"
                placeholder="Any"
                class="border border-gray-300 rounded px-2 py-1.5 text-xs w-28">
     </div>
 
     <div>
-        <label class="block text-xs text-gray-500 mb-1">Period (YYYY-MM)</label>
+        <label class="ds-label block mb-1">Period (YYYY-MM)</label>
         <input type="text" name="period" value="{{ $filters['period'] ?? '' }}"
                placeholder="e.g. 2026-02"
                class="border border-gray-300 rounded px-2 py-1.5 text-xs w-28">
     </div>
 
-    <button type="submit"
-            class="px-3 py-1.5 bg-[#0b2a4a] text-white text-xs font-medium rounded hover:bg-[#081f36]">
+    <button type="submit" class="nexus-btn-primary" style="padding:0.375rem 0.75rem; font-size:0.75rem;">
         Filter
     </button>
 
@@ -59,8 +65,8 @@
 </form>
 
 {{-- TABLE --}}
-<div class="bg-white rounded-xl shadow overflow-hidden">
-    <table class="w-full text-sm">
+<div class="ds-status-card overflow-hidden" style="border-left-color: var(--ds-cyan); padding:0;">
+    <table class="ds-table w-full text-sm">
         <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Compiled</th>

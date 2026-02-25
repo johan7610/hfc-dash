@@ -4,63 +4,54 @@
 @section('content')
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-    {{-- Breadcrumb --}}
-    <div class="text-sm text-slate-500 dark:text-slate-400">
-        <a href="{{ route('admin.finance.audit.index') }}" class="hover:underline text-blue-600 dark:text-blue-400">Audit Center</a>
-        <span class="mx-1">/</span>
-        <span>Run #{{ $run->id }}</span>
-    </div>
-
-    {{-- Header card --}}
-    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm">
-        <div class="flex flex-wrap gap-6 items-start justify-between">
+    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
-                <h1 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Audit Run #{{ $run->id }}</h1>
-                <div class="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Period: <span class="font-semibold text-slate-700 dark:text-slate-200">{{ AuditLabelHelper::periodLabel($run->period) }}</span>
-                    &nbsp;&middot;&nbsp;
-                    Engine: <span class="font-mono text-slate-700 dark:text-slate-200">{{ $run->engine_version }}</span>
-                    &nbsp;&middot;&nbsp;
+                <a href="{{ route('admin.finance.audit.index') }}" class="text-sm text-white/60 hover:underline">&larr; Audit Center</a>
+                <h2 class="text-xl font-bold text-white leading-tight mt-1">Audit Run #{{ $run->id }}</h2>
+                <div class="text-sm text-white/60">
+                    Period: <span class="text-white/80 font-medium">{{ AuditLabelHelper::periodLabel($run->period) }}</span>
+                    &middot;
+                    Engine: <span class="font-mono text-white/80">{{ $run->engine_version }}</span>
+                    &middot;
                     @if($run->status === 'complete')
-                        <span class="inline-flex items-center rounded-full bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">complete</span>
+                        <span class="inline-flex items-center rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-semibold text-emerald-300">complete</span>
                     @elseif($run->status === 'failed')
-                        <span class="inline-flex items-center rounded-full bg-red-50 dark:bg-red-900/30 px-2 py-0.5 text-xs font-semibold text-red-700 dark:text-red-400">failed</span>
+                        <span class="inline-flex items-center rounded-full bg-red-500/20 px-2 py-0.5 text-xs font-semibold text-red-300">failed</span>
                     @else
-                        <span class="inline-flex items-center rounded-full bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">{{ $run->status }}</span>
+                        <span class="inline-flex items-center rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-300">{{ $run->status }}</span>
                     @endif
                 </div>
-                <div class="mt-1 text-xs text-slate-400">
+                <div class="text-xs text-white/40 mt-1">
                     Started: {{ $run->started_at?->format('d M Y H:i:s') ?? '—' }}
-                    &nbsp;&middot;&nbsp;
+                    &middot;
                     Finished: {{ $run->finished_at?->format('d M Y H:i:s') ?? '—' }}
                 </div>
             </div>
 
             <div class="flex gap-4">
                 <div class="text-center">
-                    <div class="text-2xl font-extrabold text-slate-900 dark:text-slate-100">{{ number_format($counts['total']) }}</div>
-                    <div class="text-xs text-slate-500 uppercase tracking-wide">Total</div>
+                    <div class="text-2xl font-extrabold text-white">{{ number_format($counts['total']) }}</div>
+                    <div class="text-xs text-white/50 uppercase tracking-wide">Total</div>
                 </div>
                 <div class="text-center">
-                    <div class="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">{{ number_format($counts['matches']) }}</div>
-                    <div class="text-xs text-slate-500 uppercase tracking-wide">Match</div>
+                    <div class="text-2xl font-extrabold text-emerald-400">{{ number_format($counts['matches']) }}</div>
+                    <div class="text-xs text-white/50 uppercase tracking-wide">Match</div>
                 </div>
                 <div class="text-center">
-                    <div class="text-2xl font-extrabold text-red-600 dark:text-red-400">{{ number_format($counts['errors']) }}</div>
-                    <div class="text-xs text-slate-500 uppercase tracking-wide">Fail</div>
+                    <div class="text-2xl font-extrabold text-red-400">{{ number_format($counts['errors']) }}</div>
+                    <div class="text-xs text-white/50 uppercase tracking-wide">Fail</div>
                 </div>
                 <div class="text-center">
-                    <div class="text-2xl font-extrabold text-amber-600 dark:text-amber-400">{{ number_format($counts['warnings']) }}</div>
-                    <div class="text-xs text-slate-500 uppercase tracking-wide">Warn</div>
+                    <div class="text-2xl font-extrabold text-amber-400">{{ number_format($counts['warnings']) }}</div>
+                    <div class="text-xs text-white/50 uppercase tracking-wide">Warn</div>
                 </div>
             </div>
         </div>
     </div>
 
     @if(session('status'))
-        <div class="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-200">
-            {{ session('status') }}
-        </div>
+        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 px-4 py-3">{{ session('status') }}</div>
     @endif
 
     {{-- Grouped Items --}}
@@ -70,7 +61,6 @@
                 [$entityType, $entityId] = explode(':', $groupKey, 2);
                 $summary = $groupSummaries[$groupKey];
 
-                // Build entity display name
                 $entityName = "#{$entityId}";
                 $entitySubtext = '';
                 $editUrl = null;
@@ -100,8 +90,7 @@
                 }
             @endphp
 
-            <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm overflow-hidden">
-                {{-- Collapsible header --}}
+            <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden">
                 <button type="button"
                         x-on:click="openGroups['{{ $groupKey }}'] = !openGroups['{{ $groupKey }}']"
                         class="w-full px-5 py-4 flex items-center justify-between text-left
@@ -112,7 +101,7 @@
                             <span class="font-semibold text-slate-900 dark:text-slate-100">{{ $entityName }}</span>
                             <span class="text-xs text-slate-500 dark:text-slate-400 uppercase">{{ str_replace('_', ' ', $entityType) }}</span>
                             @if($editUrl)
-                                <a href="{{ $editUrl }}" class="text-xs text-blue-600 dark:text-blue-400 hover:underline" onclick="event.stopPropagation()">View Deal</a>
+                                <a href="{{ $editUrl }}" class="text-xs text-[#0b2a4a] dark:text-[#00b4d8] hover:underline" onclick="event.stopPropagation()">View Deal</a>
                             @endif
                         </div>
                         @if($entitySubtext)
@@ -137,11 +126,10 @@
                     </div>
                 </button>
 
-                {{-- Collapsible body --}}
                 <div x-show="openGroups['{{ $groupKey }}']" x-cloak>
-                    <table class="min-w-full text-sm">
+                    <table class="min-w-full text-sm ds-table">
                         <thead>
-                            <tr class="border-b border-t border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-950">
+                            <tr class="border-b border-t border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/40">
                                 <th class="text-left px-4 py-2 w-20">Status</th>
                                 <th class="text-left px-4 py-2">Definition</th>
                                 <th class="text-right px-4 py-2">Expected</th>
@@ -150,9 +138,9 @@
                                 <th class="text-left px-4 py-2">Message</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                        <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
                             @foreach($groupItems as $item)
-                                <tr class="{{ $item->severity === 'error' ? 'bg-red-50/40 dark:bg-red-900/10' : '' }} hover:bg-slate-50 dark:hover:bg-slate-900/40">
+                                <tr class="{{ $item->severity === 'error' ? 'bg-red-50/40 dark:bg-red-900/10' : '' }} hover:bg-slate-50/80 dark:hover:bg-slate-900/30">
                                     <td class="px-4 py-2.5">
                                         @if($item->severity === 'error')
                                             <span class="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-xs font-semibold text-red-700 dark:text-red-400">fail</span>
@@ -207,7 +195,7 @@
     </div>
 
     @if($groupedItems->isEmpty())
-        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-8 text-center text-slate-400 dark:text-slate-600">
+        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-8 text-center text-slate-500 dark:text-slate-400">
             No audit items found for this run.
         </div>
     @endif

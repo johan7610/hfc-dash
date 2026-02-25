@@ -5,45 +5,50 @@
 {{-- ══════════════════════════════════════════════════════════════════════════
      PAGE HEADER
 ══════════════════════════════════════════════════════════════════════════ --}}
-<div class="mb-6 flex items-start justify-between">
-    <div>
-        <h1 class="text-2xl font-bold text-gray-800">Pricing Simulator</h1>
-        <p class="text-sm text-gray-500 mt-1">
-            {{ $presentation->title }}
-            @if($presentation->property_address)
-                &nbsp;&middot;&nbsp; {{ $presentation->property_address }}
-            @endif
-        </p>
-    </div>
-    <div class="flex gap-2">
-        <a href="{{ route('presentations.analysis', $presentation) }}"
-           class="text-xs text-[#00b4d8] hover:underline mt-1">&larr; Analysis</a>
-        <span class="text-xs text-gray-300 mt-1">|</span>
-        <a href="{{ route('presentations.show', $presentation) }}"
-           class="text-xs text-[#00b4d8] hover:underline mt-1">&larr; Overview</a>
+<div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div>
+            <h2 class="text-xl font-bold text-white leading-tight">Pricing Simulator</h2>
+            <div class="text-sm text-white/60">
+                {{ $presentation->title }}
+                @if($presentation->property_address)
+                    &nbsp;&middot;&nbsp; {{ $presentation->property_address }}
+                @endif
+            </div>
+        </div>
+        <div class="flex gap-2">
+            <a href="{{ route('presentations.analysis', $presentation) }}"
+               class="nexus-btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.3); background:transparent;">
+                &larr; Analysis
+            </a>
+            <a href="{{ route('presentations.show', $presentation) }}"
+               class="nexus-btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.3); background:transparent;">
+                &larr; Overview
+            </a>
+        </div>
     </div>
 </div>
 
 {{-- ══════════════════════════════════════════════════════════════════════════
      CONFIGURATION PANEL
 ══════════════════════════════════════════════════════════════════════════ --}}
-<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-    <h2 class="text-sm font-semibold text-gray-700 mb-3">Configuration</h2>
+<div class="ds-status-card mb-6" style="border-left-color: var(--ds-cyan);">
+    <h2 class="ds-section-header">Configuration</h2>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
-            <label class="block text-xs text-gray-500 mb-1">Commission %</label>
+            <label class="ds-label block mb-1">Commission %</label>
             <input type="number" id="cfg-commission" value="{{ $config['commission_pct'] ?? 5.0 }}"
                    step="0.5" min="0" max="15"
-                   class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-[#00b4d8] focus:border-[#00b4d8]">
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
         </div>
         <div>
-            <label class="block text-xs text-gray-500 mb-1">Transfer Cost %</label>
+            <label class="ds-label block mb-1">Transfer Cost %</label>
             <input type="number" id="cfg-transfer" value="{{ $config['transfer_cost_pct'] ?? 4.0 }}"
                    step="0.5" min="0" max="10"
-                   class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-[#00b4d8] focus:border-[#00b4d8]">
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
         </div>
         <div>
-            <label class="block text-xs text-gray-500 mb-1">Monthly Holding Cost</label>
+            <label class="ds-label block mb-1">Monthly Holding Cost</label>
             <div class="flex items-center border border-gray-200 rounded px-3 py-2 bg-gray-50 text-sm text-gray-700">
                 R {{ number_format($config['monthly_holding_cost'] ?? 0, 0, '.', ' ') }}
             </div>
@@ -100,9 +105,9 @@
 {{-- ══════════════════════════════════════════════════════════════════════════
      SCENARIOS TABLE
 ══════════════════════════════════════════════════════════════════════════ --}}
-<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+<div class="ds-status-card mb-6" style="border-left-color: var(--ds-cyan);">
     <div class="flex items-center justify-between mb-3">
-        <h2 class="text-sm font-semibold text-gray-700">Pricing Scenarios</h2>
+        <h2 class="ds-section-header">Pricing Scenarios</h2>
         <div class="flex gap-2">
             <button id="btn-add-scenario" class="text-xs px-3 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200">+ Add Scenario</button>
             <button id="btn-reset" class="text-xs px-3 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200">Reset to Defaults</button>
@@ -110,7 +115,7 @@
     </div>
 
     <div class="overflow-x-auto">
-        <table class="w-full text-sm" id="scenarios-table">
+        <table class="ds-table w-full text-sm" id="scenarios-table">
             <thead>
                 <tr class="text-xs text-gray-500 uppercase tracking-wide border-b border-gray-200">
                     <th class="text-left py-2 px-2">Scenario</th>
@@ -179,8 +184,8 @@
 {{-- ══════════════════════════════════════════════════════════════════════════
      BAR CHART — Net Proceeds Comparison
 ══════════════════════════════════════════════════════════════════════════ --}}
-<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-    <h2 class="text-sm font-semibold text-gray-700 mb-3">Net Proceeds Comparison</h2>
+<div class="ds-status-card mb-6" style="border-left-color: var(--ds-cyan);">
+    <h2 class="ds-section-header">Net Proceeds Comparison</h2>
     <div id="bar-chart" class="space-y-2">
         {{-- Rendered by JS --}}
     </div>
@@ -198,13 +203,11 @@
      ACTION BUTTONS
 ══════════════════════════════════════════════════════════════════════════ --}}
 <div class="flex flex-wrap items-center gap-3 mb-8">
-    <button id="btn-compute"
-            class="px-5 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded hover:bg-[#081f36] focus:ring-2 focus:ring-[#00b4d8] focus:ring-offset-2">
+    <button id="btn-compute" class="nexus-btn-primary">
         Compute Scenarios
     </button>
 
-    <button id="btn-save"
-            class="px-5 py-2 bg-emerald-600 text-white text-sm font-medium rounded hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
+    <button id="btn-save" class="nexus-btn-primary" style="background:#059669;">
         Save Configuration
     </button>
 
@@ -215,7 +218,7 @@
     </label>
 
     <a href="{{ route('presentations.pricing-simulator.present', $presentation) }}" target="_blank"
-       class="px-4 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded hover:bg-[#081f36]">
+       class="nexus-btn-primary">
         Present to Seller &rarr;
     </a>
 

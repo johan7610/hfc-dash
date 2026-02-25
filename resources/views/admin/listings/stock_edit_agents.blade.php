@@ -1,30 +1,29 @@
 @extends('layouts.nexus')
 
 @section('content')
-<div class="max-w-4xl mx-auto p-4">
-    <div class="flex items-start justify-between gap-4 mb-4">
-        <div>
-            <h1 class="text-xl font-semibold">Edit Listing Agents</h1>
-            <div class="text-sm text-gray-600 mt-1">
-                <div><strong>Listing ID:</strong> {{ $listing->id }}</div>
-                <div><strong>Source:</strong> {{ $listing->source }} |
-                    <strong>External Ref:</strong> {{ $listing->external_ref }} |
-                    <strong>External ID:</strong> {{ $listing->external_id }}</div>
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+            <div>
+                <h2 class="text-xl font-bold text-white leading-tight">Edit Listing Agents</h2>
+                <div class="text-sm text-white/60 mt-1">
+                    Listing #{{ $listing->id }} &middot; {{ $listing->source }} &middot; {{ $listing->external_ref }} / {{ $listing->external_id }}
+                </div>
             </div>
+            <a href="{{ route('admin.listings.agents.show', $listing->user_id) }}" class="nexus-btn-outline text-sm">&larr; Back</a>
         </div>
-        <a href="{{ route('admin.listings.agents.show', $listing->user_id) }}" class="text-sm underline">Back to Agent Listings</a>
     </div>
 
     @if (session('status'))
-        <div class="mb-4 p-3 rounded bg-green-50 border border-green-200 text-green-800">
+        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 px-4 py-3 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-100">
             {{ session('status') }}
         </div>
     @endif
 
     @if ($errors->any())
-        <div class="mb-4 p-3 rounded bg-red-50 border border-red-200 text-red-800">
+        <div class="rounded-2xl border border-rose-200 bg-rose-50 text-rose-900 px-4 py-3 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-100">
             <div class="font-semibold mb-1">Please fix the errors:</div>
-            <ul class="list-disc pl-5">
+            <ul class="list-disc pl-5 text-sm space-y-1">
                 @foreach ($errors->all() as $e)
                     <li>{{ $e }}</li>
                 @endforeach
@@ -32,8 +31,8 @@
         </div>
     @endif
 
-    <div class="p-4 rounded border bg-white mb-4">
-        <div class="text-sm text-gray-700 whitespace-pre-line">
+    <div class="ds-status-card p-4">
+        <div class="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-line">
             <strong>Property:</strong><br>
             {{ $listing->property }}
         </div>
@@ -51,7 +50,7 @@
         </div>
     </div>
 
-    <form method="POST" action="{{ route('admin.listings.stock.agents.update', $listing) }}" class="p-4 rounded border bg-white">
+    <form method="POST" action="{{ route('admin.listings.stock.agents.update', $listing) }}" class="ds-status-card p-4">
         @csrf
 
         <div class="mb-4">
@@ -82,7 +81,7 @@
             <div class="text-xs text-gray-500 mt-1">Hold Ctrl (Windows) / Cmd (Mac) to select multiple.</div>
         </div>
 
-        <button type="submit" class="px-4 py-2 rounded bg-black text-white">
+        <button type="submit" class="nexus-btn-primary">
             Save Agents
         </button>
     </form>

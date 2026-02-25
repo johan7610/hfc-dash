@@ -4,77 +4,72 @@
 @section('content')
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-    {{-- Breadcrumb --}}
-    <div class="text-sm text-slate-500 dark:text-slate-400">
-        <a href="{{ route('admin.finance.audit.index') }}" class="hover:underline text-blue-600 dark:text-blue-400">Audit Center</a>
-        <span class="mx-1">/</span>
-        <a href="{{ route('admin.finance.audit.run', $run) }}" class="hover:underline text-blue-600 dark:text-blue-400">Run #{{ $run->id }}</a>
-        <span class="mx-1">/</span>
-        <span>Deal {{ $deal->deal_no ?? '#'.$deal->id }}</span>
-    </div>
-
-    {{-- Header --}}
-    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm">
-        <div class="flex flex-wrap gap-6 items-start justify-between">
+    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
-                <h1 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+                <div class="text-sm text-white/60 space-x-2">
+                    <a href="{{ route('admin.finance.audit.index') }}" class="hover:underline">Audit Center</a>
+                    <span>&rsaquo;</span>
+                    <a href="{{ route('admin.finance.audit.run', $run) }}" class="hover:underline">Run #{{ $run->id }}</a>
+                    <span>&rsaquo;</span>
+                    <span class="text-white/80">Deal {{ $deal->deal_no ?? '#'.$deal->id }}</span>
+                </div>
+                <h2 class="text-xl font-bold text-white leading-tight mt-1">
                     Deal {{ $deal->deal_no ?? '#'.$deal->id }}
-                </h1>
+                </h2>
                 @if($deal->property_address)
-                    <div class="mt-1 text-sm text-slate-600 dark:text-slate-400">{{ $deal->property_address }}</div>
+                    <div class="text-sm text-white/60">{{ $deal->property_address }}</div>
                 @endif
                 @if($deal->agents->isNotEmpty())
-                    <div class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    <div class="text-sm text-white/50">
                         Agents: {{ $deal->agents->pluck('name')->join(', ') }}
                     </div>
                 @endif
-                <div class="mt-2 flex flex-wrap gap-4 text-xs text-slate-500 dark:text-slate-400">
-                    <span>Period: <span class="font-semibold text-slate-700 dark:text-slate-200">{{ AuditLabelHelper::periodLabel($deal->period ?? $run->period) }}</span></span>
-                    <span>Status: <span class="font-semibold text-slate-700 dark:text-slate-200">{{ $deal->commission_status ?? '—' }}</span></span>
-                    <span>Deal date: <span class="font-semibold text-slate-700 dark:text-slate-200">{{ $deal->deal_date?->format('d M Y') ?? '—' }}</span></span>
-                </div>
-                <div class="mt-2">
-                    <a href="{{ route('admin.deals.edit', $deal) }}"
-                       class="text-sm text-blue-600 dark:text-blue-400 hover:underline">
-                        View in Deal Register &rarr;
-                    </a>
+                <div class="mt-1 flex flex-wrap gap-4 text-xs text-white/40">
+                    <span>Period: <span class="text-white/70">{{ AuditLabelHelper::periodLabel($deal->period ?? $run->period) }}</span></span>
+                    <span>Status: <span class="text-white/70">{{ $deal->commission_status ?? '—' }}</span></span>
+                    <span>Deal date: <span class="text-white/70">{{ $deal->deal_date?->format('d M Y') ?? '—' }}</span></span>
                 </div>
             </div>
 
-            <div class="text-right">
-                <div class="text-xs text-slate-400">Audit Run</div>
-                <div class="font-semibold text-slate-700 dark:text-slate-300">#{{ $run->id }}</div>
-                <div class="text-xs text-slate-500">{{ AuditLabelHelper::periodLabel($run->period) }}</div>
-                <div class="mt-1">
-                    @if($run->status === 'complete')
-                        <span class="inline-flex items-center rounded-full bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">complete</span>
-                    @elseif($run->status === 'failed')
-                        <span class="inline-flex items-center rounded-full bg-red-50 dark:bg-red-900/30 px-2 py-0.5 text-xs font-semibold text-red-700 dark:text-red-400">failed</span>
-                    @else
-                        <span class="inline-flex items-center rounded-full bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">{{ $run->status }}</span>
-                    @endif
+            <div class="flex flex-col items-end gap-2">
+                <div class="text-right">
+                    <div class="text-xs text-white/40">Audit Run</div>
+                    <div class="font-semibold text-white">#{{ $run->id }}</div>
+                    <div class="text-xs text-white/50">{{ AuditLabelHelper::periodLabel($run->period) }}</div>
+                    <div class="mt-1">
+                        @if($run->status === 'complete')
+                            <span class="inline-flex items-center rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-semibold text-emerald-300">complete</span>
+                        @elseif($run->status === 'failed')
+                            <span class="inline-flex items-center rounded-full bg-red-500/20 px-2 py-0.5 text-xs font-semibold text-red-300">failed</span>
+                        @else
+                            <span class="inline-flex items-center rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-300">{{ $run->status }}</span>
+                        @endif
+                    </div>
                 </div>
+                <a href="{{ route('admin.deals.edit', $deal) }}" class="nexus-btn-outline text-sm">
+                    View in Deal Register &rarr;
+                </a>
             </div>
         </div>
     </div>
 
     @if($items->isEmpty())
-        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-8 text-center text-slate-400 dark:text-slate-600">
+        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-8 text-center text-slate-500 dark:text-slate-400">
             No audit items found for this deal in run #{{ $run->id }}.
         </div>
     @else
 
-    {{-- Audit Metrics table --}}
-    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm overflow-hidden">
-        <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40">
-            <div class="font-semibold text-slate-900 dark:text-slate-100">Audit Metrics</div>
-            <div class="text-xs text-slate-400">Definition-by-definition breakdown for this deal.</div>
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <h3 class="ds-section-header">Audit Metrics</h3>
+            <div class="text-xs text-slate-500 dark:text-slate-400">Definition-by-definition breakdown for this deal.</div>
         </div>
 
         <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
+            <table class="min-w-full text-sm ds-table">
                 <thead>
-                    <tr class="border-b border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-950">
+                    <tr class="border-b text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/40">
                         <th class="text-left px-4 py-3 w-20">Status</th>
                         <th class="text-left px-4 py-3">Definition</th>
                         <th class="text-right px-4 py-3">Expected</th>
@@ -83,9 +78,9 @@
                         <th class="text-left px-4 py-3">Message</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
                     @foreach($items as $item)
-                        <tr class="{{ $item->severity === 'error' ? 'bg-red-50/40 dark:bg-red-900/10' : '' }} hover:bg-slate-50 dark:hover:bg-slate-900/40">
+                        <tr class="{{ $item->severity === 'error' ? 'bg-red-50/40 dark:bg-red-900/10' : '' }} hover:bg-slate-50/80 dark:hover:bg-slate-900/30">
                             <td class="px-4 py-3">
                                 @if($item->severity === 'error')
                                     <span class="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-xs font-semibold text-red-700 dark:text-red-400">fail</span>
@@ -132,7 +127,6 @@
                             </td>
                         </tr>
 
-                        {{-- Agent allocations: render if expected_json or actual_json contains by_agent --}}
                         @php
                             $expJson = $item->expected_json ?? [];
                             $actJson = $item->actual_json ?? [];
@@ -191,7 +185,6 @@
                                                         </td>
                                                     </tr>
                                                 @endforeach
-                                                {{-- Totals row --}}
                                                 <tr class="bg-slate-50 dark:bg-slate-900 font-semibold border-t-2 border-slate-200 dark:border-slate-700">
                                                     <td class="px-3 py-1.5 text-slate-700 dark:text-slate-300">Total</td>
                                                     <td class="px-3 py-1.5 text-right font-mono text-slate-700 dark:text-slate-300">{{ AuditLabelHelper::zar($expTotal) }}</td>
@@ -216,10 +209,9 @@
 
     @endif
 
-    {{-- Back link --}}
     <div>
         <a href="{{ route('admin.finance.audit.run', $run) }}"
-           class="text-sm text-blue-600 dark:text-blue-400 hover:underline">
+           class="text-sm text-[#0b2a4a] dark:text-[#00b4d8] hover:underline">
             &larr; Back to Run #{{ $run->id }}
         </a>
     </div>

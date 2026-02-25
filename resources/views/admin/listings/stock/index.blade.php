@@ -3,47 +3,38 @@
 @section('content')
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-    <div class="flex items-start justify-between gap-4">
-        <div>
-            <h1 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Branch Listing Stock</h1>
-            <p class="text-sm text-slate-600 dark:text-slate-300">Read-only view from imported Propcon stock for your branch. Filters affect totals.</p>
+    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+            <div>
+                <h2 class="text-xl font-bold text-white leading-tight">Company Listing Stock</h2>
+                <div class="text-sm text-white/60">Read-only view from imported Propcon stock. Filters affect totals.</div>
+            </div>
+            <div class="text-right">
+                <div class="text-xs uppercase tracking-wide text-white/60">Active listings</div>
+                <div class="text-2xl font-bold text-white">{{ number_format((int)($summary->listing_count ?? 0)) }}</div>
+                <div class="text-xs text-white/60">Value: R {{ number_format(((int)($summary->total_price_cents ?? 0))/100, 0) }}</div>
+            </div>
+        </div>
+    </div>
 
-            @if(!empty($context))
-    <div class="mt-4 rounded-2xl bg-slate-900 dark:bg-slate-800 text-white px-6 py-4">
+    @if(!empty($context))
+    <div class="ds-status-card" style="border-left-color: var(--ds-cyan);">
         <div class="flex items-center justify-between gap-6">
             <div class="min-w-0">
-                <div class="text-xs uppercase tracking-wider text-slate-200">
-                    {{ strtoupper((string)($context['filter'] ?? 'view')) }}
-                </div>
-                <div class="text-2xl font-semibold leading-tight truncate">
-                    {{ $context['title'] ?? 'Listings' }}
-                </div>
-                <div class="text-sm text-slate-200 mt-1">
-                    {{ $context['note'] ?? '' }}
-                </div>
+                <div class="ds-label">{{ strtoupper((string)($context['filter'] ?? 'view')) }}</div>
+                <div class="ds-value text-xl">{{ $context['title'] ?? 'Listings' }}</div>
+                <div class="text-sm text-gray-500 mt-1">{{ $context['note'] ?? '' }}</div>
             </div>
             <div class="text-right shrink-0">
-                <div class="text-xs uppercase tracking-wider text-slate-200">Count</div>
-                <div class="text-3xl font-bold leading-tight">
-                    {{ (int)($context['count'] ?? 0) }}
-                </div>
+                <div class="ds-label">Count</div>
+                <div class="ds-value-lg">{{ (int)($context['count'] ?? 0) }}</div>
             </div>
         </div>
     </div>
-@endif
-
-        </div>
-        <div class="text-right">
-            <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Active listings</div>
-            <div class="mt-1 text-2xl font-semibold text-slate-900 dark:text-slate-100">{{ number_format((int)($summary->listing_count ?? 0)) }}</div>
-            <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Total value: R {{ number_format(((int)($summary->total_price_cents ?? 0))/100, 0) }}
-            </div>
-        </div>
-    </div>
+    @endif
 
     
-    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-3 space-y-3">
+    <div class="ds-status-card p-3 space-y-3">
         <form method="get" class="flex flex-wrap items-end gap-2">
             <div class="min-w-[220px]">
                 <label class="block text-xs text-slate-600 dark:text-slate-300 mb-1">Status</label>
@@ -72,7 +63,7 @@
             </div>
 
             <div class="flex gap-2">
-                <button class="px-3 py-1 rounded-lg text-sm bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100">
+                <button class="nexus-btn-primary text-sm">
                     Apply
                 </button>
                 <a href="{{ route('agent.listings') }}" class="px-3 py-1 rounded-lg text-sm border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-900">
@@ -123,7 +114,7 @@
         </div>
 
         <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
+            <table class="min-w-full text-sm ds-table">
                 <thead class="bg-slate-50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-300">
 <tr>
                         <th class="text-left px-3 py-2">Status</th>

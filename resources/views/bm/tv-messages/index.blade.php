@@ -13,14 +13,16 @@
 
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-    <div class="flex items-start justify-between gap-4">
-        <div>
-            <h1 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">TV Messages (Branch)</h1>
-            <p class="text-sm text-slate-600 dark:text-slate-300">
-                Add messages for your branch TV. Admin can add global messages visible on all TVs.
-            </p>
+    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+            <div>
+                <h2 class="text-xl font-bold text-white leading-tight">TV Messages (Branch)</h2>
+                <div class="text-sm text-white/60">
+                    Add messages for your branch TV. Admin can add global messages visible on all TVs.
+                </div>
+            </div>
             @if($bmBranchId)
-                <div class="mt-2 inline-flex items-center gap-2 text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-white/80">
+                <div class="inline-flex items-center gap-2 text-xs px-3 py-1 rounded-full bg-white/10 text-white/80">
                     <span class="opacity-70">Branch:</span>
                     <span class="font-semibold">{{ $bmBranchName ?: ('#'.$bmBranchId) }}</span>
                 </div>
@@ -41,10 +43,8 @@
     @endif
 
     {{-- Add --}}
-    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-4">
-        <div class="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">
-            Add TV message
-        </div>
+    <div class="ds-status-card p-4">
+        <h3 class="ds-section-header mb-3">Add TV message</h3>
 
         <form method="POST" action="{{ route('bm.tv-messages.store') }}"
               class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
@@ -100,7 +100,7 @@
             </div>
 
             <div class="md:col-span-1">
-                <button class="w-full px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-sm font-semibold">
+                <button class="w-full nexus-btn-primary text-sm">
                     Add
                 </button>
             </div>

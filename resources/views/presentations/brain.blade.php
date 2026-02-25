@@ -13,7 +13,30 @@
 {{-- ═══════════════════════════════════════════════════════════════════════════
      BRAIN SIMULATION — PREMIUM DARK UI
 ═══════════════════════════════════════════════════════════════════════════ --}}
-<div id="brain-app" class="min-h-screen -mx-4 -mt-4 px-4 pt-4 pb-12 bg-gray-950 text-gray-100">
+
+{{-- Navy header bar --}}
+<div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div>
+            <h2 class="text-xl font-bold text-white leading-tight">Brain Simulation</h2>
+            <div class="text-sm text-white/60">
+                {{ $presentation->title }}
+                @if($presentation->property_address)
+                    &middot; {{ $presentation->property_address }}
+                @endif
+                @if($presentation->suburb)
+                    &middot; {{ $presentation->suburb }}
+                @endif
+            </div>
+        </div>
+        <a href="{{ route('presentations.show', $presentation) }}"
+           class="nexus-btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.3); background:transparent;">
+            &larr; Overview
+        </a>
+    </div>
+</div>
+
+<div id="brain-app" class="min-h-screen -mx-4 -mt-4 px-4 pt-4 pb-12 bg-gray-950 text-gray-100" style="border-radius:1rem;">
 
 {{-- ── TOAST CONTAINER ──────────────────────────────────────────────────── --}}
 <div id="brain-toast" class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none" style="max-width:380px;"></div>
@@ -22,23 +45,6 @@
      A) COMMAND BAR
 ══════════════════════════════════════════════════════════════════════════ --}}
 <div class="mb-8">
-    {{-- Header row --}}
-    <div class="flex items-start justify-between mb-5">
-        <div>
-            <h1 class="text-xl font-semibold text-white tracking-tight">Brain Simulation</h1>
-            <p class="text-xs text-gray-500 mt-0.5">
-                {{ $presentation->title }}
-                @if($presentation->property_address)
-                    <span class="text-gray-600">&middot;</span> {{ $presentation->property_address }}
-                @endif
-                @if($presentation->suburb)
-                    <span class="text-gray-600">&middot;</span> {{ $presentation->suburb }}
-                @endif
-            </p>
-        </div>
-        <a href="{{ route('presentations.show', $presentation) }}"
-           class="text-xs text-gray-500 hover:text-gray-300 transition-colors">&larr; Overview</a>
-    </div>
 
     {{-- Command card --}}
     <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5">

@@ -2,7 +2,9 @@
     $currentPath = request()->path();
     $nexusSection = 'agency-tracker'; // default for all existing routes
 
-    if (str_starts_with($currentPath, 'documents/library')) {
+    if (str_starts_with($currentPath, 'docuperfect')) {
+        $nexusSection = 'docuperfect';
+    } elseif (str_starts_with($currentPath, 'documents/library')) {
         $nexusSection = 'document-library';
     } elseif ($currentPath === 'nexus' || $currentPath === 'nexus/') {
         $nexusSection = 'dashboard';
@@ -64,7 +66,7 @@
     </div>
 
     {{-- Navigation --}}
-    <nav class="flex-1 py-2">
+    <nav class="flex-1 py-2 overflow-y-auto min-h-0">
         {{-- Dashboard --}}
         <a href="{{ route('nexus.dashboard') }}" class="nexus-nav-item {{ $nexusSection === 'dashboard' ? 'active' : '' }}">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -140,6 +142,32 @@
         </a>
         @endif
 
+        {{-- Docuperfect (expandable group) --}}
+        @if(\Illuminate\Support\Facades\Route::has('docuperfect.dashboard'))
+        @php $dpExpanded = ($nexusSection === 'docuperfect'); @endphp
+        <div x-data="{ dpOpen: {{ $dpExpanded ? 'true' : 'false' }} }">
+            <button type="button" @click="dpOpen = !dpOpen" class="nexus-nav-item nexus-nav-group-toggle {{ $dpExpanded ? 'active' : '' }}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.5a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m0 0a2.625 2.625 0 1 1 5.25 0" />
+                </svg>
+                <span>Documents</span>
+                <svg class="nexus-chevron transition-transform duration-200" :class="dpOpen && 'rotate-90'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+            </button>
+
+            <div x-show="dpOpen" @unless($dpExpanded) x-cloak @endunless x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="nexus-nav-children">
+                <a href="{{ route('docuperfect.create') }}" class="nexus-nav-subitem {{ request()->routeIs('docuperfect.create') ? 'active' : '' }}">Create Document</a>
+                <a href="{{ route('docuperfect.dashboard') }}" class="nexus-nav-subitem {{ request()->routeIs('docuperfect.dashboard') ? 'active' : '' }}">My Documents</a>
+                <a href="{{ route('docuperfect.clauses.index') }}" class="nexus-nav-subitem {{ request()->routeIs('docuperfect.clauses.*') ? 'active' : '' }}">Clause Library</a>
+                @if($navIsAdmin || $navIsBM)
+                <a href="{{ route('docuperfect.templates.index') }}" class="nexus-nav-subitem {{ request()->routeIs('docuperfect.templates.*') ? 'active' : '' }}">Template Management</a>
+                @endif
+                @if($navIsAdmin)
+                <a href="{{ route('docuperfect.settings.types') }}" class="nexus-nav-subitem {{ request()->routeIs('docuperfect.settings.*') ? 'active' : '' }}">Settings</a>
+                @endif
+            </div>
+        </div>
+        @endif
+
         {{-- Franchise Admin --}}
         @if(!$user || $user->canAccessNexusSection('franchise-admin'))
         <a href="{{ route('nexus.franchise-admin') }}" class="nexus-nav-item {{ $nexusSection === 'franchise-admin' ? 'active' : '' }}">
@@ -161,7 +189,7 @@
                 <svg class="nexus-chevron transition-transform duration-200" :class="atOpen && 'rotate-90'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
             </button>
 
-            <div x-show="atOpen" x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="nexus-nav-children">
+            <div x-show="atOpen" @unless($atExpanded) x-cloak @endunless x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="nexus-nav-children">
 
                 {{-- Common items (all roles) --}}
                 <a href="{{ route('worksheet.index') }}" class="nexus-nav-subitem {{ request()->routeIs('worksheet.*') ? 'active' : '' }}">Worksheet</a>
@@ -187,9 +215,9 @@
                 <a href="{{ route('bm.listings') }}" class="nexus-nav-subitem {{ request()->routeIs('bm.listings*') ? 'active' : '' }}">Branch Listing Stock</a>
                 <a href="{{ route('bm.my.dashboard') }}" class="nexus-nav-subitem {{ request()->routeIs('bm.my.dashboard') ? 'active' : '' }}">My Agent Dashboard</a>
                 <a href="{{ route('admin.deals') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.deals*') ? 'active' : '' }}">Deal Register</a>
+                <a href="{{ route('filing-register.index') }}" class="nexus-nav-subitem {{ request()->routeIs('filing-register.*') ? 'active' : '' }}">Filing Register</a>
                 <div class="nexus-nav-sublabel">Setup</div>
                 <a href="{{ route('bm.worksheet.market') }}" class="nexus-nav-subitem {{ request()->routeIs('bm.worksheet.market*') ? 'active' : '' }}">Worksheet Market</a>
-                <a href="{{ route('admin.daily.summary') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.daily.summary*') ? 'active' : '' }}">Daily Activity Summary</a>
                 <a href="{{ route('admin.targets') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.targets*') ? 'active' : '' }}">Daily Activity Targets</a>
                 <a href="{{ route('admin.targets.activity.definitions') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.targets.activity.definitions*') ? 'active' : '' }}">Activity Definitions</a>
                 <a href="{{ route('admin.targets.activity.setup') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.targets.activity.setup*') ? 'active' : '' }}">Activity Setup</a>
@@ -209,6 +237,7 @@
                 <a href="{{ route('admin.performance-settings.edit') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.performance-settings*') ? 'active' : '' }}">Company Settings</a>
                 <a href="{{ route('admin.designations.index') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.designations*') ? 'active' : '' }}">Designations</a>
                 <a href="{{ route('admin.deals') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.deals*') ? 'active' : '' }}">Deal Register</a>
+                <a href="{{ route('filing-register.index') }}" class="nexus-nav-subitem {{ request()->routeIs('filing-register.*') ? 'active' : '' }}">Filing Register</a>
                 <a href="{{ route('admin.listings.agents') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.listings.agents*') ? 'active' : '' }}">Listing Stock</a>
                 <a href="{{ route('admin.listings.import') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.listings.import*') ? 'active' : '' }}">Import Listings</a>
                 <a href="{{ route('admin.daily.summary') }}" class="nexus-nav-subitem {{ request()->routeIs('admin.daily.summary*') ? 'active' : '' }}">Daily Activity Summary</a>
@@ -286,6 +315,16 @@
             </svg>
             <span>Role Manager</span>
             <svg class="nexus-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+        </a>
+        @endif
+
+        {{-- Knowledge Base (admin only) --}}
+        @if($navIsAdmin)
+        <a href="{{ route('admin.knowledge.index') }}" class="nexus-nav-item {{ request()->is('admin/knowledge*') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+            </svg>
+            <span>Knowledge Base</span>
         </a>
         @endif
 
