@@ -63,6 +63,13 @@ Route::middleware('auth')->group(function () {
     Route::post('/ellie/unarchive', [\App\Http\Controllers\EllieController::class, 'unarchive'])
         ->name('ellie.unarchive');
 
+    // Calculators
+    Route::get('/calculators', [\App\Http\Controllers\CalculatorController::class, 'index'])->name('calculators.index');
+    Route::post('/calculators/commission', [\App\Http\Controllers\CalculatorController::class, 'calculateCommission'])->name('calculators.commission');
+    Route::post('/calculators/bond', [\App\Http\Controllers\CalculatorController::class, 'calculateBond'])->name('calculators.bond');
+    Route::post('/calculators/transfer-duty', [\App\Http\Controllers\CalculatorController::class, 'calculateTransferDuty'])->name('calculators.transferDuty');
+    Route::post('/calculators/transfer-costs', [\App\Http\Controllers\CalculatorController::class, 'calculateTransferCosts'])->name('calculators.transferCosts');
+
     Route::get('/worksheet', [WorksheetController::class, 'index'])->name('worksheet.index');
     Route::post('/worksheet', [WorksheetController::class, 'store'])->name('worksheet.store');
 
