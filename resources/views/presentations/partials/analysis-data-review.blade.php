@@ -240,6 +240,195 @@
     </div>
     @endif
 
+    {{-- ── NEW LISTING INFLOW & ABSORPTION ──────────────────────────────── --}}
+    @php $inflow = $analysisData['inflow_absorption'] ?? []; @endphp
+    @if(!empty($inflow))
+    <div class="ds-status-card mb-4" style="border-left-color: var(--ds-cyan);" id="inflow-absorption">
+        <h3 class="ds-section-header">New Listing Inflow &amp; Absorption</h3>
+
+        @if(empty($inflow['has_data']))
+            {{-- No data state --}}
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <p class="text-sm text-gray-500">
+                    No P24 alert data available yet.
+                    @if(!empty($inflow['reason']))
+                        {{ $inflow['reason'] }}
+                    @endif
+                    @if(($inflow['total_p24_listings'] ?? 0) === 0)
+                        Import P24 alert emails to see new listing inflow data.
+                    @endif
+                </p>
+            </div>
+        @else
+            {{-- Row 1: Period cards --}}
+            <div class="grid grid-cols-3 gap-3 mb-4">
+                <div class="bg-gray-50 rounded-lg p-3 text-center">
+                    <span class="text-xs text-gray-400 block">Last 7 Days</span>
+                    <p class="text-xl font-bold text-gray-800">{{ $inflow['count_7d'] }}</p>
+                    <span class="text-xs text-gray-400">new listings</span>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-3 text-center">
+                    <span class="text-xs text-gray-400 block">Last 30 Days</span>
+                    <p class="text-xl font-bold text-gray-800">{{ $inflow['count_30d'] }}</p>
+                    <span class="text-xs text-gray-400">new listings</span>
+                </div>
+                <div class="bg-sky-50 rounded-lg p-3 text-center ring-1 ring-sky-200">
+                    <span class="text-xs text-[#38bfe0] block">Last 90 Days</span>
+                    <p class="text-xl font-bold text-[#0b2a4a]">{{ $inflow['count_90d'] }}</p>
+                    <span class="text-xs text-[#38bfe0]">new listings</span>
+                </div>
+            </div>
+
+            {{-- Row 2: Inflow rate callout --}}
+            @if($inflow['new_listing_rate'] > 0)
+            <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-700">Average inflow rate</p>
+                        <p class="text-xs text-gray-400 mt-0.5">
+                            Based on {{ $inflow['count_90d'] }} similar listings over the past 90 days
+                        </p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-2xl font-bold text-[#0b2a4a]">{{ $inflow['new_listing_rate'] }}</p>
+                        <p class="text-xs text-gray-400">per month</p>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">
+                    That's {{ number_format($inflow['new_listing_rate'] * 12, 0) }} new competing listings per year entering the market
+                </p>
+                @if(!empty($inflow['target_suburbs']))
+                <p class="text-xs text-gray-400 mt-1">
+                    Matching: {{ implode(', ', $inflow['target_suburbs']) }}
+                    @if(!empty($inflow['target_types']))
+                        &middot; {{ implode('/', $inflow['target_types']) }}
+                    @endif
+                    @if(!empty($inflow['price_range']))
+                        &middot; R {{ number_format($inflow['price_range']['low']) }} &ndash; R {{ number_format($inflow['price_range']['high']) }}
+                    @endif
+                </p>
+                @endif
+            </div>
+            @endif
+
+            {{-- Row 3: Absorption impact --}}
+            @if($inflow['net_absorption'] !== null)
+            @php
+                $trendColor = match($inflow['stock_trend'] ?? '') {
+                    'growing'   => ['bg' => 'bg-red-50', 'border' => 'border-red-200', 'text' => 'text-red-700', 'badge' => 'bg-red-100 text-red-800'],
+                    'depleting' => ['bg' => 'bg-emerald-50', 'border' => 'border-emerald-200', 'text' => 'text-emerald-700', 'badge' => 'bg-emerald-100 text-emerald-800'],
+                    default     => ['bg' => 'bg-amber-50', 'border' => 'border-amber-200', 'text' => 'text-amber-700', 'badge' => 'bg-amber-100 text-amber-800'],
+                };
+                $trendLabel = match($inflow['stock_trend'] ?? '') {
+                    'growing'   => 'Stock Growing',
+                    'depleting' => 'Stock Depleting',
+                    default     => 'Stock Stable',
+                };
+            @endphp
+            <div class="grid grid-cols-1 gap-4 mb-4 md:grid-cols-2">
+                {{-- Left: Standard vs Adjusted --}}
+                <div class="{{ $trendColor['bg'] }} {{ $trendColor['border'] }} border rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <p class="text-xs font-semibold {{ $trendColor['text'] }} uppercase tracking-wide">Adjusted Absorption</p>
+                        <span class="text-xs px-2.5 py-1 rounded-full font-semibold {{ $trendColor['badge'] }}">{{ $trendLabel }}</span>
+                    </div>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Standard supply</span>
+                            <span class="font-medium text-gray-800">
+                                {{ $inflow['active_listings'] }} &divide; {{ $inflow['monthly_sales'] }}/mo
+                                @if(!empty($stock['months_of_supply']))
+                                    = {{ number_format($stock['months_of_supply'], 1) }} months
+                                @endif
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Net absorption</span>
+                            <span class="font-medium {{ $trendColor['text'] }}">
+                                {{ $inflow['monthly_sales'] }} sold &minus; {{ $inflow['new_listing_rate'] }} new
+                                = {{ $inflow['net_absorption'] > 0 ? '+' : '' }}{{ $inflow['net_absorption'] }}/mo
+                            </span>
+                        </div>
+                        @if($inflow['adjusted_months_supply'] !== null)
+                        <div class="flex justify-between pt-1 border-t {{ $trendColor['border'] }}">
+                            <span class="text-gray-600 font-medium">Adjusted supply</span>
+                            <span class="font-bold {{ $trendColor['text'] }}">{{ $inflow['adjusted_months_supply'] }} months</span>
+                        </div>
+                        @endif
+                        @if($inflow['pool_after_3_months'] !== null)
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Pool after 3 months</span>
+                            <span class="font-medium {{ $trendColor['text'] }}">~{{ $inflow['pool_after_3_months'] }} properties</span>
+                        </div>
+                        @endif
+                    </div>
+                </div>
+
+                {{-- Right: Selling probability --}}
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Selling Probability</p>
+                    <div class="space-y-3">
+                        @if($inflow['monthly_probability'] !== null)
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-gray-600">Monthly chance</span>
+                                <span class="font-bold text-gray-800">{{ $inflow['monthly_probability'] }}%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="bg-[#00b4d8] h-2 rounded-full" style="width: {{ min($inflow['monthly_probability'], 100) }}%"></div>
+                            </div>
+                        </div>
+                        @endif
+                        @if($inflow['prob_3_months'] !== null)
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-gray-600">3-month chance</span>
+                                <span class="font-bold text-gray-800">{{ $inflow['prob_3_months'] }}%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="bg-[#0b2a4a] h-2 rounded-full" style="width: {{ min($inflow['prob_3_months'], 100) }}%"></div>
+                            </div>
+                        </div>
+                        @endif
+                        @if($inflow['adjusted_prob_3_months'] !== null && $inflow['adjusted_prob_3_months'] != $inflow['prob_3_months'])
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-gray-600">Adjusted 3-month <span class="text-xs text-gray-400">(with inflow)</span></span>
+                                <span class="font-bold {{ $inflow['adjusted_prob_3_months'] < ($inflow['prob_3_months'] ?? 0) ? 'text-red-600' : 'text-emerald-600' }}">{{ $inflow['adjusted_prob_3_months'] }}%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="{{ $inflow['adjusted_prob_3_months'] < ($inflow['prob_3_months'] ?? 0) ? 'bg-red-400' : 'bg-emerald-400' }} h-2 rounded-full"
+                                     style="width: {{ min($inflow['adjusted_prob_3_months'], 100) }}%"></div>
+                            </div>
+                        </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+            @endif
+
+            {{-- Row 4: Key insight narrative --}}
+            @if(!empty($inflow['narrative']))
+            @php
+                $narrativeBg = match($inflow['stock_trend'] ?? '') {
+                    'growing'   => 'bg-red-50 border-red-200 text-red-800',
+                    'depleting' => 'bg-emerald-50 border-emerald-200 text-emerald-800',
+                    default     => 'bg-amber-50 border-amber-200 text-amber-800',
+                };
+            @endphp
+            <div class="{{ $narrativeBg }} border rounded-lg p-4">
+                <p class="text-sm font-medium leading-relaxed">{{ $inflow['narrative'] }}</p>
+            </div>
+            @endif
+
+            {{-- Data source note --}}
+            <p class="text-xs text-gray-400 mt-3">
+                Source: P24 alert email imports ({{ number_format($inflow['total_p24_listings']) }} total listings in database)
+            </p>
+        @endif
+    </div>
+    @endif
+
     {{-- ── PRICE POSITION & BRACKETS ─────────────────────────────────────── --}}
     @php
         $pricePos = $analysisData['price_position'] ?? [];
