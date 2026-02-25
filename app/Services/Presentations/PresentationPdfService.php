@@ -70,6 +70,7 @@ class PresentationPdfService
         $cma         = $data['cma_valuation']       ?? [];
         $competition = $data['active_competition']  ?? [];
         $stock       = $data['stock_absorption']    ?? [];
+        $inflow      = $data['inflow_absorption']   ?? [];
         $holding     = $data['holding_cost']        ?? [];
         $insights    = $data['key_insights']        ?? [];
 
@@ -1233,11 +1234,175 @@ a:hover { text-decoration: underline; }
 <?php endif ?>
 
 <?php // ══════════════════════════════════════════════════════════════════════
-      // PAGE 7 — HOLDING COST ANALYSIS
+      // PAGE 7 — NEW LISTING INFLOW & ABSORPTION
       // ══════════════════════════════════════════════════════════════════════ ?>
+<?php if (!empty($inflow['has_data'])): ?>
 <div class="page-break"></div>
 <div class="section-header">
     <span class="section-number">6</span>
+    <h2>New Listing Inflow &amp; Absorption</h2>
+</div>
+
+<p style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">
+    New competing listings entering the market directly impact your selling probability.
+    This analysis uses P24 alert data to measure the rate of new stock inflow.
+</p>
+
+<?php // Period cards: 7d / 30d / 90d ?>
+<div class="metric-grid">
+    <div class="metric-card">
+        <div class="label">Last 7 Days</div>
+        <div class="value"><?= (int) $inflow['count_7d'] ?></div>
+        <div class="sub">new listings</div>
+    </div>
+    <div class="metric-card">
+        <div class="label">Last 30 Days</div>
+        <div class="value"><?= (int) $inflow['count_30d'] ?></div>
+        <div class="sub">new listings</div>
+    </div>
+    <div class="metric-card highlight">
+        <div class="label">Last 90 Days</div>
+        <div class="value"><?= (int) $inflow['count_90d'] ?></div>
+        <div class="sub">new listings</div>
+    </div>
+</div>
+
+<?php // Inflow rate callout ?>
+<?php if ($inflow['new_listing_rate'] > 0): ?>
+<div class="callout callout-info" style="margin-top:14px;">
+    <strong>Inflow Rate:</strong> <?= $inflow['new_listing_rate'] ?> new similar listings per month
+    (<?= number_format($inflow['new_listing_rate'] * 12, 0) ?>/year).
+    Based on <?= (int) $inflow['count_90d'] ?> matching listings over the past 90 days.
+    <?php if (!empty($inflow['target_suburbs'])): ?>
+    <br><span style="font-size:10px;color:var(--text-light);">
+        Matching: <?= $esc(implode(', ', $inflow['target_suburbs'])) ?>
+        <?php if (!empty($inflow['target_types'])): ?> &middot; <?= $esc(implode('/', $inflow['target_types'])) ?><?php endif ?>
+        <?php if (!empty($inflow['price_range'])): ?> &middot; R <?= number_format($inflow['price_range']['low']) ?> – R <?= number_format($inflow['price_range']['high']) ?><?php endif ?>
+    </span>
+    <?php endif ?>
+</div>
+<?php endif ?>
+
+<?php // Adjusted absorption & selling probability ?>
+<?php if ($inflow['net_absorption'] !== null): ?>
+<?php
+    $inflowTrendColor = match($inflow['stock_trend'] ?? '') {
+        'growing'   => 'danger',
+        'depleting' => 'success',
+        default     => 'warning',
+    };
+    $inflowTrendLabel = match($inflow['stock_trend'] ?? '') {
+        'growing'   => 'Stock Growing',
+        'depleting' => 'Stock Depleting',
+        default     => 'Stock Stable',
+    };
+    $inflowCalloutClass = match($inflow['stock_trend'] ?? '') {
+        'growing'   => 'callout-danger',
+        'depleting' => 'callout-success',
+        default     => 'callout-warning',
+    };
+?>
+<div class="avoid-break" style="margin-top:18px;">
+<div class="two-col">
+    <?php // Left: Standard vs Adjusted absorption ?>
+    <div>
+        <h3 style="margin-bottom:10px;">Adjusted Absorption</h3>
+        <table>
+            <thead><tr><th>Metric</th><th class="num">Value</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td>Standard supply</td>
+                    <td class="num">
+                        <?= (int) $inflow['active_listings'] ?> listings &divide; <?= $inflow['monthly_sales'] ?>/mo
+                        <?php if ($monthsOfSupply !== null): ?>= <?= number_format($monthsOfSupply, 1) ?> months<?php endif ?>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Net absorption</td>
+                    <td class="num" style="color:var(--<?= $inflowTrendColor ?>);">
+                        <?= $inflow['monthly_sales'] ?> sold &minus; <?= $inflow['new_listing_rate'] ?> new
+                        = <?= $inflow['net_absorption'] > 0 ? '+' : '' ?><?= $inflow['net_absorption'] ?>/mo
+                    </td>
+                </tr>
+                <tr>
+                    <td>Stock trend</td>
+                    <td class="num"><span class="cmp-badge cmp-<?= $inflowTrendColor ?>"><?= $inflowTrendLabel ?></span></td>
+                </tr>
+                <?php if ($inflow['adjusted_months_supply'] !== null): ?>
+                <tr style="font-weight:700;">
+                    <td>Adjusted supply</td>
+                    <td class="num" style="color:var(--<?= $inflowTrendColor ?>);"><?= $inflow['adjusted_months_supply'] ?> months</td>
+                </tr>
+                <?php endif ?>
+                <?php if ($inflow['pool_after_3_months'] !== null): ?>
+                <tr>
+                    <td>Pool after 3 months</td>
+                    <td class="num">~<?= $inflow['pool_after_3_months'] ?> properties</td>
+                </tr>
+                <?php endif ?>
+            </tbody>
+        </table>
+    </div>
+
+    <?php // Right: Selling probability ?>
+    <div>
+        <h3 style="margin-bottom:10px;">Selling Probability</h3>
+        <?php if ($inflow['monthly_probability'] !== null): ?>
+        <div style="margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px;">
+                <span style="color:var(--text-muted);">Monthly chance</span>
+                <span style="font-weight:700;"><?= $inflow['monthly_probability'] ?>%</span>
+            </div>
+            <div style="background:#e2e8f0;border-radius:999px;height:10px;overflow:hidden;">
+                <div style="width:<?= min($inflow['monthly_probability'], 100) ?>%;height:100%;background:var(--brand-light);border-radius:999px;"></div>
+            </div>
+        </div>
+        <?php endif ?>
+        <?php if ($inflow['prob_3_months'] !== null): ?>
+        <div style="margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px;">
+                <span style="color:var(--text-muted);">3-month chance</span>
+                <span style="font-weight:700;"><?= $inflow['prob_3_months'] ?>%</span>
+            </div>
+            <div style="background:#e2e8f0;border-radius:999px;height:10px;overflow:hidden;">
+                <div style="width:<?= min($inflow['prob_3_months'], 100) ?>%;height:100%;background:var(--brand);border-radius:999px;"></div>
+            </div>
+        </div>
+        <?php endif ?>
+        <?php if ($inflow['adjusted_prob_3_months'] !== null && $inflow['adjusted_prob_3_months'] != $inflow['prob_3_months']): ?>
+        <div style="margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px;">
+                <span style="color:var(--text-muted);">Adjusted 3-month <span style="font-size:8px;color:var(--text-light);">(with inflow)</span></span>
+                <span style="font-weight:700;color:var(--<?= $inflow['adjusted_prob_3_months'] < ($inflow['prob_3_months'] ?? 0) ? 'danger' : 'success' ?>);"><?= $inflow['adjusted_prob_3_months'] ?>%</span>
+            </div>
+            <div style="background:#e2e8f0;border-radius:999px;height:10px;overflow:hidden;">
+                <div style="width:<?= min($inflow['adjusted_prob_3_months'], 100) ?>%;height:100%;background:<?= $inflow['adjusted_prob_3_months'] < ($inflow['prob_3_months'] ?? 0) ? 'var(--danger)' : 'var(--success)' ?>;border-radius:999px;"></div>
+            </div>
+        </div>
+        <?php endif ?>
+    </div>
+</div>
+</div>
+<?php endif ?>
+
+<?php // Narrative insight ?>
+<?php if (!empty($inflow['narrative'])): ?>
+<div class="callout <?= $inflowCalloutClass ?? 'callout-info' ?>" style="margin-top:14px;">
+    <strong>Key Insight:</strong> <?= $esc($inflow['narrative']) ?>
+</div>
+<?php endif ?>
+
+<p style="font-size:8.5px;color:var(--text-light);margin-top:10px;">
+    Source: P24 alert email imports (<?= number_format($inflow['total_p24_listings'] ?? 0) ?> total listings in database)
+</p>
+<?php endif // end inflow section ?>
+
+<?php // ══════════════════════════════════════════════════════════════════════
+      // PAGE 8 — HOLDING COST ANALYSIS
+      // ══════════════════════════════════════════════════════════════════════ ?>
+<div class="page-break"></div>
+<div class="section-header">
+    <span class="section-number"><?= !empty($inflow['has_data']) ? '7' : '6' ?></span>
     <h2>Holding Cost Analysis</h2>
 </div>
 
@@ -1318,11 +1483,11 @@ a:hover { text-decoration: underline; }
 <?php endif ?>
 
 <?php // ══════════════════════════════════════════════════════════════════════
-      // PAGE 8 — PRICING STRATEGY & RECOMMENDATION
+      // PAGE 9 — PRICING STRATEGY & RECOMMENDATION
       // ══════════════════════════════════════════════════════════════════════ ?>
 <div class="page-break"></div>
 <div class="section-header">
-    <span class="section-number">7</span>
+    <span class="section-number"><?= !empty($inflow['has_data']) ? '8' : '7' ?></span>
     <h2>Pricing Strategy &amp; Recommendation</h2>
 </div>
 
@@ -1431,7 +1596,7 @@ a:hover { text-decoration: underline; }
 <?php endif ?>
 
 <?php // ══════════════════════════════════════════════════════════════════════
-      // PAGE 9 — PRICING SCENARIOS (conditional — only if simulator saved with include_in_pdf)
+      // PAGE 10 — PRICING SCENARIOS (conditional — only if simulator saved with include_in_pdf)
       // ══════════════════════════════════════════════════════════════════════ ?>
 <?php
     $simConfig = $presentation->simulator_config_json;
@@ -1442,7 +1607,7 @@ a:hover { text-decoration: underline; }
 ?>
 <div class="page-break"></div>
 <div class="section-header">
-    <span class="section-number">8</span>
+    <span class="section-number"><?= !empty($inflow['has_data']) ? '9' : '8' ?></span>
     <h2>Pricing Scenarios</h2>
 </div>
 
