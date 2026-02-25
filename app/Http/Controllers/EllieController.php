@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use App\Models\AiConversation;
 use App\Models\AiMessage;
+use App\Services\PropertyCostService;
 
 class EllieController extends Controller
 {
@@ -267,6 +268,30 @@ class EllieController extends Controller
               ]);
           }
 
+          // ELLIE_TRANSFER_COSTS_SHORTCUT_2026
+          $asksTransferCost = $this->detectsTransferCostQuery($msgLower2);
+          if ($asksTransferCost) {
+              $extractedPrice = $this->extractPriceFromMessage($data['message']);
+              if ($extractedPrice > 0) {
+                  $reply = $this->buildTransferCostReply($extractedPrice);
+
+                  AiMessage::create([
+                      'conversation_id' => $conversation->id,
+                      'user_id' => $user->id,
+                      'role' => 'assistant',
+                      'content' => $reply,
+                  ]);
+                  $conversation->update(['last_message_at' => now()]);
+
+                  \Log::info('ELLIE_SEND_RES', ['user_id' => (int)(auth()->id() ?? 0), 'ok' => true, 'mode' => 'quick_transfer_costs']);
+
+                  return response()->json([
+                      'ok' => true,
+                      'conversation_id' => $conversation->id,
+                      'reply' => $reply,
+                  ]);
+              }
+          }
 
         // ELLIE_CONTEXT_V2_PIPELINE_LISTINGS_2026
 
@@ -627,6 +652,79 @@ class EllieController extends Controller
             return redirect()->route('ellie.index', [
                 'conversation_id' => $conversation->id,
             ]);
+        }
+
+        // ELLIE_TRANSFER_COST_HELPERS_2026
+        private function detectsTransferCostQuery(string $msgLower): bool
+        {
+            return (str_contains($msgLower, 'transfer cost') ||
+                    str_contains($msgLower, 'transfer costs') ||
+                    str_contains($msgLower, 'transfer duty') ||
+                    str_contains($msgLower, 'transfer fees') ||
+                    (str_contains($msgLower, 'how much') && str_contains($msgLower, 'transfer')) ||
+                    (str_contains($msgLower, 'cost to transfer') || str_contains($msgLower, 'cost of transfer')) ||
+                    (str_contains($msgLower, 'conveyancing') && str_contains($msgLower, 'fee')) ||
+                    (str_contains($msgLower, 'bond registration') && str_contains($msgLower, 'cost')) ||
+                    (str_contains($msgLower, 'bond cost') || str_contains($msgLower, 'bond costs')));
+        }
+
+        private function extractPriceFromMessage(string $message): float
+        {
+            // Match patterns like: R2,500,000 / R 2 500 000 / 2500000 / 2.5m / R2.5M / 2,500,000
+            $msg = str_replace(["\n", "\r"], ' ', $message);
+
+            // Try "R X.Xm" or "X.Xm" pattern first (e.g., "R2.5m", "1.5m")
+            if (preg_match('/R?\s*([\d.]+)\s*[mM]/u', $msg, $m)) {
+                return (float) $m[1] * 1000000;
+            }
+
+            // Try "R 1 500 000" or "R1,500,000" or "R1500000"
+            if (preg_match('/R\s*([\d\s,]+)/u', $msg, $m)) {
+                $clean = preg_replace('/[\s,]/', '', $m[1]);
+                $val = (float) $clean;
+                if ($val >= 50000) return $val;
+            }
+
+            // Try bare number >= 100000
+            if (preg_match('/([\d,\s]{6,})/u', $msg, $m)) {
+                $clean = preg_replace('/[\s,]/', '', $m[1]);
+                $val = (float) $clean;
+                if ($val >= 100000) return $val;
+            }
+
+            return 0;
+        }
+
+        private function buildTransferCostReply(float $price): string
+        {
+            $zar = fn(float $v) => 'R ' . number_format($v, 2, '.', ',');
+
+            $transfer = PropertyCostService::calcTransferCosts($price);
+            $bond = PropertyCostService::calcBondCosts($price);
+
+            $lines = [];
+            $lines[] = "**Transfer Costs** for {$zar($price)}:";
+            $lines[] = "";
+            $lines[] = "**TRANSFER (property into buyer's name):**";
+            $lines[] = "- Conveyancing fee: {$zar($transfer['conveyancing_fee'])}";
+            $lines[] = "- Posts & petties: {$zar($transfer['posts_petties'])}";
+            $lines[] = "- VAT (15%): {$zar($transfer['vat'])}";
+            $lines[] = "- Deeds office: {$zar($transfer['deeds_office'])}";
+            $lines[] = "- Transfer duty: {$zar($transfer['transfer_duty'])}";
+            $lines[] = "- **TOTAL Transfer: {$zar($transfer['total'])}**";
+            $lines[] = "";
+            $lines[] = "**BOND REGISTRATION** (if 100% bond at same amount):";
+            $lines[] = "- Conveyancing fee: {$zar($bond['conveyancing_fee'])}";
+            $lines[] = "- Posts & petties: {$zar($bond['posts_petties'])}";
+            $lines[] = "- VAT (15%): {$zar($bond['vat'])}";
+            $lines[] = "- Deeds office: {$zar($bond['deeds_office'])}";
+            $lines[] = "- **TOTAL Bond: {$zar($bond['total'])}**";
+            $lines[] = "";
+            $lines[] = "**GRAND TOTAL: {$zar($transfer['total'] + $bond['total'])}**";
+            $lines[] = "";
+            $lines[] = "_Fees based on Law Society Guideline Tariff 2025 (Van Dyk & Swart). Actual fees may vary by attorney. Additional costs apply (bank fees ~R6,038, FICA R1,265/person, clearance cert R950)._";
+
+            return implode("\n", $lines);
         }
 
 }

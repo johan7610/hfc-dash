@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\PerformanceSetting;
+use App\Services\PropertyCostService;
 use Illuminate\Http\Request;
 
 class CalculatorController extends Controller
@@ -81,10 +82,10 @@ class CalculatorController extends Controller
         ]);
 
         $price = (float) $data['purchase_price'];
-        $duty = $this->calcTransferDuty($price);
+        $duty = PropertyCostService::calcTransferDuty($price);
         $effectiveRate = $price > 0 ? ($duty / $price) * 100 : 0;
 
-        $bracket = $this->getTransferDutyBracket($price);
+        $bracket = PropertyCostService::getTransferDutyBracket($price);
 
         return response()->json([
             'ok' => true,
@@ -106,25 +107,19 @@ class CalculatorController extends Controller
         $needsBond = (bool) $data['needs_bond'];
         $bondAmount = $needsBond ? (float) ($data['bond_amount'] ?? $price) : 0;
 
-        $transferDuty = $this->calcTransferDuty($price);
-        $conveyancingFees = $this->estimateConveyancingFees($price);
-        $deedsOfficePetties = $this->estimateDeedsOfficePetties($price);
-        $subtotalTransfer = $transferDuty + $conveyancingFees + $deedsOfficePetties;
+        $transfer = PropertyCostService::calcTransferCosts($price);
 
-        $bondRegistration = 0;
+        $bond = null;
         if ($needsBond && $bondAmount > 0) {
-            $bondRegistration = $this->estimateBondRegistration($bondAmount);
+            $bond = PropertyCostService::calcBondCosts($bondAmount);
         }
 
-        $grandTotal = $subtotalTransfer + $bondRegistration;
+        $grandTotal = $transfer['total'] + ($bond['total'] ?? 0);
 
         return response()->json([
             'ok' => true,
-            'transfer_duty' => round($transferDuty, 2),
-            'conveyancing_fees' => round($conveyancingFees, 2),
-            'deeds_office_petties' => round($deedsOfficePetties, 2),
-            'subtotal_transfer' => round($subtotalTransfer, 2),
-            'bond_registration' => round($bondRegistration, 2),
+            'transfer' => $transfer,
+            'bond' => $bond,
             'grand_total' => round($grandTotal, 2),
         ]);
     }
@@ -265,94 +260,4 @@ class CalculatorController extends Controller
         return $principal * ($r * $factor) / ($factor - 1);
     }
 
-    /**
-     * SA Transfer Duty brackets (effective 1 March 2023).
-     */
-    private function calcTransferDuty(float $price): float
-    {
-        if ($price <= 1100000) {
-            return 0;
-        }
-        if ($price <= 1512500) {
-            return ($price - 1100000) * 0.03;
-        }
-        if ($price <= 2117500) {
-            return 12375 + ($price - 1512500) * 0.06;
-        }
-        if ($price <= 2722500) {
-            return 48675 + ($price - 2117500) * 0.08;
-        }
-        if ($price <= 12100000) {
-            return 97075 + ($price - 2722500) * 0.11;
-        }
-
-        return 1128600 + ($price - 12100000) * 0.13;
-    }
-
-    private function getTransferDutyBracket(float $price): string
-    {
-        if ($price <= 1100000) {
-            return 'R0 - R1,100,000: 0%';
-        }
-        if ($price <= 1512500) {
-            return 'R1,100,001 - R1,512,500: 3% above R1,100,000';
-        }
-        if ($price <= 2117500) {
-            return 'R1,512,501 - R2,117,500: R12,375 + 6% above R1,512,500';
-        }
-        if ($price <= 2722500) {
-            return 'R2,117,501 - R2,722,500: R48,675 + 8% above R2,117,500';
-        }
-        if ($price <= 12100000) {
-            return 'R2,722,501 - R12,100,000: R97,075 + 11% above R2,722,500';
-        }
-
-        return 'R12,100,001+: R1,128,600 + 13% above R12,100,000';
-    }
-
-    /**
-     * Estimated conveyancing (transfer attorney) fees based on property value.
-     * Guideline scale — approximate.
-     */
-    private function estimateConveyancingFees(float $price): float
-    {
-        if ($price <= 0) return 0;
-        if ($price <= 500000) return 8500;
-        if ($price <= 750000) return 11000;
-        if ($price <= 1000000) return 14000;
-        if ($price <= 1500000) return 17500;
-        if ($price <= 2000000) return 22000;
-        if ($price <= 3000000) return 28000;
-        if ($price <= 5000000) return 38000;
-        if ($price <= 10000000) return 55000;
-        return 75000;
-    }
-
-    /**
-     * Estimated deeds office, postage, and petties.
-     */
-    private function estimateDeedsOfficePetties(float $price): float
-    {
-        if ($price <= 0) return 0;
-        if ($price <= 1000000) return 4500;
-        if ($price <= 2000000) return 5500;
-        if ($price <= 5000000) return 7000;
-        return 9000;
-    }
-
-    /**
-     * Estimated bond registration costs (attorney + deeds).
-     */
-    private function estimateBondRegistration(float $bondAmount): float
-    {
-        if ($bondAmount <= 0) return 0;
-        if ($bondAmount <= 500000) return 12000;
-        if ($bondAmount <= 750000) return 15000;
-        if ($bondAmount <= 1000000) return 18000;
-        if ($bondAmount <= 1500000) return 22000;
-        if ($bondAmount <= 2000000) return 27000;
-        if ($bondAmount <= 3000000) return 33000;
-        if ($bondAmount <= 5000000) return 42000;
-        return 55000;
-    }
 }

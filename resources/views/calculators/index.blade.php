@@ -140,13 +140,13 @@
                 </div>
                 <div class="flex justify-between"><span class="ds-label">Effective rate</span><span class="ds-value" x-text="duty.result?.effective_rate?.toFixed(2) + '%'"></span></div>
                 <div class="mt-2 text-xs text-gray-600 bg-gray-50 rounded-lg p-2" x-text="duty.result?.bracket"></div>
-                <div class="text-xs text-gray-500 mt-2">Transfer duty paid by the BUYER. Properties under R1.1M = R0 duty.</div>
+                <div class="text-xs text-gray-500 mt-2">Transfer duty paid by the BUYER. Properties under R1,210,000 = R0 duty. (2025 brackets, effective 1 March 2025)</div>
             </div>
         </div>
 
-        {{-- CARD 4: Transfer Cost Estimator --}}
+        {{-- CARD 4: Transfer & Bond Cost Calculator --}}
         <div class="ds-status-card flex flex-col" style="min-height: 420px;">
-            <h3 class="ds-section-header" style="margin-bottom:0.75rem;">Total Transfer Costs</h3>
+            <h3 class="ds-section-header" style="margin-bottom:0.75rem;">Transfer & Bond Costs</h3>
 
             <div class="space-y-3 flex-1">
                 <div>
@@ -181,17 +181,51 @@
             </div>
 
             {{-- Results --}}
-            <div x-show="costs.result" x-transition class="mt-4 pt-4 border-t border-slate-200 space-y-2">
-                <div class="flex justify-between"><span class="ds-label">Transfer duty</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.transfer_duty)"></span></div>
-                <div class="flex justify-between"><span class="ds-label">Conveyancing fees (est.)</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.conveyancing_fees)"></span></div>
-                <div class="flex justify-between"><span class="ds-label">Deeds office & petties</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.deeds_office_petties)"></span></div>
-                <div class="flex justify-between border-t border-slate-100 pt-2"><span class="ds-label">Subtotal (transfer)</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.subtotal_transfer)"></span></div>
-                <div x-show="costs.needsBond" class="flex justify-between"><span class="ds-label">Bond registration</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.bond_registration)"></span></div>
-                <div class="flex justify-between border-t border-slate-200 pt-2 mt-2">
+            <div x-show="costs.result" x-transition class="mt-4 pt-4 border-t border-slate-200 space-y-1">
+                {{-- Transfer section --}}
+                <div class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Transfer Costs</div>
+                <div class="flex justify-between"><span class="ds-label">Conveyancing fee</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.transfer?.conveyancing_fee)"></span></div>
+                <div class="flex justify-between"><span class="ds-label">Posts & petties</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.transfer?.posts_petties)"></span></div>
+                <div class="flex justify-between"><span class="ds-label">VAT (15%)</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.transfer?.vat)"></span></div>
+                <div class="flex justify-between"><span class="ds-label">Deeds office</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.transfer?.deeds_office)"></span></div>
+                <div class="flex justify-between"><span class="ds-label">Transfer duty</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.transfer?.transfer_duty)"></span></div>
+                <div class="flex justify-between border-t border-slate-100 pt-1 mt-1"><span class="ds-label font-semibold">Total Transfer</span><span class="ds-value font-semibold" x-text="'R ' + fmt(costs.result?.transfer?.total)"></span></div>
+
+                {{-- Bond section --}}
+                <template x-if="costs.needsBond && costs.result?.bond">
+                    <div class="mt-3 space-y-1">
+                        <div class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Bond Registration</div>
+                        <div class="flex justify-between"><span class="ds-label">Conveyancing fee</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.bond?.conveyancing_fee)"></span></div>
+                        <div class="flex justify-between"><span class="ds-label">Posts & petties</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.bond?.posts_petties)"></span></div>
+                        <div class="flex justify-between"><span class="ds-label">VAT (15%)</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.bond?.vat)"></span></div>
+                        <div class="flex justify-between"><span class="ds-label">Deeds office</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.bond?.deeds_office)"></span></div>
+                        <div class="flex justify-between border-t border-slate-100 pt-1 mt-1"><span class="ds-label font-semibold">Total Bond</span><span class="ds-value font-semibold" x-text="'R ' + fmt(costs.result?.bond?.total)"></span></div>
+                    </div>
+                </template>
+
+                {{-- Grand total --}}
+                <div class="flex justify-between border-t border-slate-200 pt-2 mt-3">
                     <span class="ds-label font-bold">GRAND TOTAL</span>
                     <span class="ds-value-lg" x-text="'R ' + fmt(costs.result?.grand_total)"></span>
                 </div>
-                <div class="text-xs text-gray-500 mt-2">Estimates only — request formal quotation from conveyancer.</div>
+
+                {{-- Additional costs toggle --}}
+                <div class="mt-3" x-data="{ showAdditional: false }">
+                    <button type="button" @click="showAdditional = !showAdditional"
+                            class="text-xs font-semibold text-cyan-700 hover:text-cyan-900 transition-colors">
+                        <span x-text="showAdditional ? '▼ Hide' : '▶ Show'"></span> additional costs
+                    </button>
+                    <div x-show="showAdditional" x-transition class="mt-2 bg-gray-50 rounded-lg p-3 space-y-1 text-xs text-gray-600">
+                        <div class="flex justify-between"><span>Bank admin & initiation fees</span><span>~R 6,037.50</span></div>
+                        <div class="flex justify-between"><span>FICA fees (per person)</span><span>R 1,100 + VAT</span></div>
+                        <div class="flex justify-between"><span>Clearance certificate</span><span>R 950.00</span></div>
+                        <div class="flex justify-between"><span>Misc (deed searches, electronic fees)</span><span>~R 1,800.00</span></div>
+                        <div class="flex justify-between"><span>Lodgment fee (per deed/document)</span><span>R 50.00</span></div>
+                        <div class="flex justify-between"><span>Sectional title insurance cert (if applicable)</span><span>~R 950.00</span></div>
+                    </div>
+                </div>
+
+                <div class="text-xs text-gray-500 mt-2">Fees based on Van Dyk & Swart Inc. — Guideline Tariff 2025. Actual fees may vary by attorney. Additional costs apply (bank fees, FICA, certificates — see above).</div>
             </div>
         </div>
 
