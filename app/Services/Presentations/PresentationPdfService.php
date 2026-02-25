@@ -71,6 +71,7 @@ class PresentationPdfService
         $competition = $data['active_competition']  ?? [];
         $stock       = $data['stock_absorption']    ?? [];
         $inflow      = $data['inflow_absorption']   ?? [];
+        $propcon     = $data['propcon_insights']    ?? [];
         $holding     = $data['holding_cost']        ?? [];
         $insights    = $data['key_insights']        ?? [];
 
@@ -1398,11 +1399,141 @@ a:hover { text-decoration: underline; }
 <?php endif // end inflow section ?>
 
 <?php // ══════════════════════════════════════════════════════════════════════
+      // PAGE 7.5 — PROPCON LISTING PERFORMANCE INSIGHTS
+      // ══════════════════════════════════════════════════════════════════════ ?>
+<?php if (!empty($propcon['has_data'])): ?>
+<div class="page-break"></div>
+<div class="section-header">
+    <span class="section-number"><?= !empty($inflow['has_data']) ? '7' : '6' ?></span>
+    <h2>Listing Performance &mdash; Similar Properties</h2>
+</div>
+
+<p style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">
+    How similar properties currently on the market are performing &mdash; portal views, buyer matches, and time on market.
+    <?php if (!empty($propcon['criteria'])): ?>
+    <br><strong>Matching:</strong> <?= $esc($propcon['criteria']) ?>
+    &middot; <?= (int) $propcon['similar_count'] ?> similar <?= $propcon['similar_count'] === 1 ? 'listing' : 'listings' ?>
+    <?php endif ?>
+</p>
+
+<!-- Benchmark stat cards -->
+<div class="metric-grid" style="grid-template-columns: repeat(4, 1fr);">
+    <div class="metric-card">
+        <div class="label">Avg Views</div>
+        <div class="value"><?= $propcon['avg_views'] !== null ? number_format($propcon['avg_views']) : '—' ?></div>
+        <?php if ($propcon['min_views'] !== null && $propcon['max_views'] !== null): ?>
+        <div class="sub"><?= number_format($propcon['min_views']) ?> – <?= number_format($propcon['max_views']) ?></div>
+        <?php endif ?>
+    </div>
+    <div class="metric-card">
+        <div class="label">Avg Buyer Matches</div>
+        <div class="value"><?= $propcon['avg_matches'] !== null ? number_format($propcon['avg_matches']) : '—' ?></div>
+        <?php if ($propcon['min_matches'] !== null && $propcon['max_matches'] !== null): ?>
+        <div class="sub"><?= $propcon['min_matches'] ?> – <?= $propcon['max_matches'] ?></div>
+        <?php endif ?>
+    </div>
+    <div class="metric-card">
+        <div class="label">Avg Days on Market</div>
+        <div class="value"><?= $propcon['avg_days_on_market'] !== null ? $propcon['avg_days_on_market'] : '—' ?></div>
+        <?php if ($propcon['min_days'] !== null && $propcon['max_days'] !== null): ?>
+        <div class="sub"><?= $propcon['min_days'] ?> – <?= $propcon['max_days'] ?> days</div>
+        <?php endif ?>
+    </div>
+    <div class="metric-card highlight">
+        <div class="label">Avg Views/Day</div>
+        <div class="value"><?= $propcon['avg_views_per_day'] !== null ? $propcon['avg_views_per_day'] : '—' ?></div>
+    </div>
+</div>
+
+<!-- Similar listings table -->
+<?php if (!empty($propcon['listings'])): ?>
+<div class="avoid-break" style="margin-top:16px;">
+    <h3 style="margin-bottom:8px;">Similar Active Listings</h3>
+    <table>
+        <thead>
+            <tr>
+                <th style="text-align:left;">Address</th>
+                <th style="text-align:left;">Type</th>
+                <th class="num">Price</th>
+                <th class="num">Beds</th>
+                <th class="num">Views</th>
+                <th class="num">Matches</th>
+                <th class="num">Days</th>
+                <th class="num">Views/Day</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ($propcon['listings'] as $pcRow): ?>
+            <tr<?= !empty($pcRow['is_subject']) ? ' style="background:var(--bg-alt);font-weight:600;"' : '' ?>>
+                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                    <?= $esc($pcRow['address'] ?? '—') ?>
+                    <?php if (!empty($pcRow['is_subject'])): ?>
+                    <span style="font-size:8px;background:var(--brand-light);color:var(--brand);padding:1px 5px;border-radius:3px;margin-left:4px;">YOUR LISTING</span>
+                    <?php endif ?>
+                </td>
+                <td><?= $esc($pcRow['type'] ?? '—') ?></td>
+                <td class="num"><?= $pcRow['price'] ? $zar($pcRow['price']) : '—' ?></td>
+                <td class="num"><?= $pcRow['beds'] ?? '—' ?></td>
+                <td class="num"><?= $pcRow['views'] !== null ? number_format($pcRow['views']) : '—' ?></td>
+                <td class="num"><?= $pcRow['matches'] ?? '—' ?></td>
+                <td class="num"><?= $pcRow['days_on_market'] ?? '—' ?></td>
+                <td class="num"><?= $pcRow['views_per_day'] ?? '—' ?></td>
+            </tr>
+            <?php endforeach ?>
+        </tbody>
+    </table>
+</div>
+<?php endif ?>
+
+<!-- Subject property highlight -->
+<?php if (!empty($propcon['subject_found']) && !empty($propcon['subject_stats'])): ?>
+<?php $ss = $propcon['subject_stats']; ?>
+<div class="callout callout-info" style="margin-top:14px;">
+    <strong>Your Listing Performance:</strong>
+    <?= $ss['views'] !== null ? number_format($ss['views']) . ' views' : '' ?>
+    <?= $ss['matches'] !== null ? ' · ' . $ss['matches'] . ' matches' : '' ?>
+    <?= $ss['days_on_market'] !== null ? ' · ' . $ss['days_on_market'] . ' days on market' : '' ?>
+    <?= $ss['views_per_day'] !== null ? ' · ' . $ss['views_per_day'] . ' views/day' : '' ?>
+    <?php if ($ss['rank_views']): ?>
+    <br>Ranked <?= $esc($ss['rank_views']) ?> by views<?= $ss['rank_matches'] ? ', ' . $esc($ss['rank_matches']) . ' by matches' : '' ?> among similar listings.
+    <?php endif ?>
+</div>
+<?php endif ?>
+
+<!-- Market signal narrative -->
+<?php if (!empty($propcon['market_signal_text'])): ?>
+<?php
+    $pcSignalClass = match($propcon['market_signal'] ?? '') {
+        'price_issue'      => 'callout-danger',
+        'visibility_issue' => 'callout-warning',
+        'healthy'          => 'callout-success',
+        'new_listing'      => 'callout-info',
+        default            => 'callout-info',
+    };
+?>
+<div class="callout <?= $pcSignalClass ?>" style="margin-top:14px;">
+    <strong>Market Signal:</strong> <?= $esc($propcon['market_signal_text']) ?>
+</div>
+<?php endif ?>
+
+<p style="font-size:8.5px;color:var(--text-light);margin-top:10px;">
+    Source: PropCon agency data &middot; <?= number_format($propcon['total_propcon_listings'] ?? 0) ?> listings in database &middot; Updated weekly
+</p>
+<?php endif // end propcon section ?>
+
+<?php
+    // Compute dynamic section number offset for remaining sections
+    $sectionAfterInflow = 6;
+    if (!empty($inflow['has_data'])) $sectionAfterInflow++;
+    if (!empty($propcon['has_data'])) $sectionAfterInflow++;
+?>
+
+<?php // ══════════════════════════════════════════════════════════════════════
       // PAGE 8 — HOLDING COST ANALYSIS
       // ══════════════════════════════════════════════════════════════════════ ?>
 <div class="page-break"></div>
 <div class="section-header">
-    <span class="section-number"><?= !empty($inflow['has_data']) ? '7' : '6' ?></span>
+    <span class="section-number"><?= $sectionAfterInflow ?></span>
     <h2>Holding Cost Analysis</h2>
 </div>
 
@@ -1487,7 +1618,7 @@ a:hover { text-decoration: underline; }
       // ══════════════════════════════════════════════════════════════════════ ?>
 <div class="page-break"></div>
 <div class="section-header">
-    <span class="section-number"><?= !empty($inflow['has_data']) ? '8' : '7' ?></span>
+    <span class="section-number"><?= $sectionAfterInflow + 1 ?></span>
     <h2>Pricing Strategy &amp; Recommendation</h2>
 </div>
 
@@ -1607,7 +1738,7 @@ a:hover { text-decoration: underline; }
 ?>
 <div class="page-break"></div>
 <div class="section-header">
-    <span class="section-number"><?= !empty($inflow['has_data']) ? '9' : '8' ?></span>
+    <span class="section-number"><?= $sectionAfterInflow + 2 ?></span>
     <h2>Pricing Scenarios</h2>
 </div>
 

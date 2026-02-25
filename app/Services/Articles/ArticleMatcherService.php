@@ -4,6 +4,7 @@ namespace App\Services\Articles;
 
 use App\Models\ArticlePool;
 use App\Models\Presentation;
+use App\Support\SuburbMapper;
 use Illuminate\Support\Collection;
 use Carbon\Carbon;
 
@@ -11,6 +12,11 @@ class ArticleMatcherService
 {
     /**
      * Suggest the most relevant articles from the pool for a presentation.
+     *
+     * Uses a 3-tier matching hierarchy:
+     *   1. Town/City level (+8) — suburb mapped to parent town, matches all siblings
+     *   2. Region level (+5) — South Coast, KZN, Hibiscus Coast, etc.
+     *   3. National/financial (+3) — interest rates, bond, property market (always relevant)
      *
      * Excludes articles already attached to this presentation (matched by URL).
      * Excludes articles older than 6 months.
@@ -35,14 +41,26 @@ class ArticleMatcherService
         $suburb       = mb_strtolower(trim($presentation->suburb ?? ''));
         $propertyType = mb_strtolower(trim($presentation->property_type ?? ''));
 
+        // Expand suburb to town-level siblings for matching
+        $townSuburbs = [];
+        $townName    = null;
+        if ($suburb !== '') {
+            $townName = SuburbMapper::townFor($suburb);
+            if ($townName !== null) {
+                $townSuburbs = array_map('mb_strtolower', SuburbMapper::suburbsInTown($townName));
+                // Also add the town name itself as a matchable term
+                $townSuburbs[] = mb_strtolower($townName);
+            }
+        }
+
         // Score each article
-        $scored = $articles->map(function (ArticlePool $article) use ($suburb, $propertyType, $attachedUrls) {
+        $scored = $articles->map(function (ArticlePool $article) use ($suburb, $propertyType, $attachedUrls, $townSuburbs, $townName) {
             // Skip already-attached
             if (in_array($article->url, $attachedUrls, true)) {
                 return null;
             }
 
-            $score = $this->scoreArticle($article, $suburb, $propertyType);
+            $score = $this->scoreArticle($article, $suburb, $propertyType, $townSuburbs, $townName);
 
             if ($score <= 0) {
                 return null;
@@ -62,25 +80,74 @@ class ArticleMatcherService
 
     /**
      * Score a single article against presentation context.
+     *
+     * 3-tier hierarchy:
+     *   Tier 1: Town/City match (+8) — article tags a suburb in the same town
+     *   Tier 2: Region match (+5) — article tags a KZN/South Coast region
+     *   Tier 3: National/financial (+3) — interest rates, property market, etc.
+     *
+     * Additional bonuses:
+     *   Exact suburb match: +10 (on top of town match)
+     *   Property type match: +3
+     *   Recency: +1 to +3
      */
-    private function scoreArticle(ArticlePool $article, string $suburb, string $propertyType): int
-    {
+    private function scoreArticle(
+        ArticlePool $article,
+        string $suburb,
+        string $propertyType,
+        array $townSuburbs,
+        ?string $townName,
+    ): int {
         $tags  = $article->tags_json ?? [];
         $score = 0;
 
-        // Exact suburb match (+10)
-        if ($suburb !== '' && !empty($tags['suburbs'])) {
+        // Tier 1: Town/City level match (+8)
+        // Check if article mentions any suburb in the same town area
+        $hasTownMatch = false;
+        $hasExactSuburbMatch = false;
+
+        if (!empty($tags['suburbs'])) {
             foreach ($tags['suburbs'] as $tagSuburb) {
-                if (mb_strtolower($tagSuburb) === $suburb) {
-                    $score += 10;
+                $tagLower = mb_strtolower($tagSuburb);
+
+                // Exact suburb match
+                if ($suburb !== '' && $tagLower === $suburb) {
+                    $hasExactSuburbMatch = true;
+                    $hasTownMatch = true;
+                    break;
+                }
+
+                // Town-level match (article mentions a sibling suburb)
+                if (!empty($townSuburbs) && in_array($tagLower, $townSuburbs, true)) {
+                    $hasTownMatch = true;
+                }
+            }
+        }
+
+        // Also check if article mentions the town name in title/snippet via towns tag
+        if (!$hasTownMatch && !empty($tags['towns'])) {
+            foreach ($tags['towns'] as $tagTown) {
+                if ($townName !== null && mb_strtolower($tagTown) === mb_strtolower($townName)) {
+                    $hasTownMatch = true;
                     break;
                 }
             }
         }
 
-        // Region match (+5)
+        if ($hasExactSuburbMatch) {
+            $score += 10; // Exact suburb match (strongest signal)
+        } elseif ($hasTownMatch) {
+            $score += 8;  // Town-level match
+        }
+
+        // Tier 2: Region match (+5)
         if (!empty($tags['regions'])) {
             $score += 5;
+        }
+
+        // Tier 3: National/financial topic (+3) — always relevant
+        if (!empty($tags['topics'])) {
+            $score += 3;
         }
 
         // Property type match (+3)
@@ -91,11 +158,6 @@ class ArticleMatcherService
                     break;
                 }
             }
-        }
-
-        // Financial/market topic (+2)
-        if (!empty($tags['topics'])) {
-            $score += 2;
         }
 
         // Recency bonus
@@ -110,8 +172,6 @@ class ArticleMatcherService
             }
         }
 
-        // Minimum relevance: at least a recency or topic score to surface
-        // Articles with zero tags still get recency bonus, which is fine
         return $score;
     }
 }

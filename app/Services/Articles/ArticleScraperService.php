@@ -3,6 +3,7 @@
 namespace App\Services\Articles;
 
 use App\Models\ArticlePool;
+use App\Support\SuburbMapper;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -231,7 +232,11 @@ class ArticleScraperService
     /**
      * Auto-tag an article by scanning title + snippet for known keywords.
      *
-     * @return array{suburbs?: string[], regions?: string[], property_types?: string[], topics?: string[]}
+     * Tags with suburbs, towns (parent areas), regions, property types, and topics.
+     * An article mentioning "Margate" will be tagged with the Margate town,
+     * making it match ALL suburbs in the Greater Margate area.
+     *
+     * @return array{suburbs?: string[], towns?: string[], regions?: string[], property_types?: string[], topics?: string[]}
      */
     private function autoTag(string $title, string $snippet): array
     {
@@ -241,6 +246,14 @@ class ArticleScraperService
         foreach (self::SUBURBS as $suburb) {
             if (mb_stripos($searchText, mb_strtolower($suburb)) !== false) {
                 $tags['suburbs'][] = $suburb;
+            }
+        }
+
+        // Town-level tagging: check for town names from the mapping config.
+        // An article mentioning "Margate" should match all Margate-area suburbs.
+        foreach (SuburbMapper::allTowns() as $town) {
+            if (mb_stripos($searchText, mb_strtolower($town)) !== false) {
+                $tags['towns'][] = $town;
             }
         }
 
