@@ -641,6 +641,12 @@ Route::middleware(['auth'])->prefix('presentations')->name('presentations.')->gr
     // Live snapshot polling (B1 — zero-refresh updates)
     Route::get('/{presentation}/live-snapshot', [\App\Http\Controllers\Presentation\PortalCaptureController::class, 'liveSnapshot'])
         ->name('live-snapshot');
+
+    // Article suggestions and management
+    Route::post('/{presentation}/articles', [\App\Http\Controllers\Presentation\PresentationArticleController::class, 'add'])
+        ->name('articles.add');
+    Route::delete('/{presentation}/articles/{article}', [\App\Http\Controllers\Presentation\PresentationArticleController::class, 'remove'])
+        ->name('articles.remove');
 });
 
 // ===== DOCUPERFECT =====

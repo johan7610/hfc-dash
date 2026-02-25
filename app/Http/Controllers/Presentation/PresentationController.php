@@ -236,10 +236,19 @@ class PresentationController extends Controller
         $maxCaptureUpdatedAt = $presentation->portalCaptures()->max('updated_at') ?? '';
         $maxLinkUpdatedAt    = $links->max('updated_at')?->toIso8601String() ?? '';
 
+        // ── Article suggestions (feature-flagged) ────────────────────────
+        $addedArticles     = collect();
+        $suggestedArticles = collect();
+        if (config('features.article_suggestions_v1')) {
+            $addedArticles     = $presentation->articles()->latest()->get();
+            $suggestedArticles = (new \App\Services\Articles\ArticleMatcherService())->suggest($presentation);
+        }
+
         return view('presentations.show', compact(
             'presentation', 'latestSnapshot', 'snapshotCount', 'links', 'readiness', 'powerPanel',
             'linkViews', 'isAdmin', 'latestVersion',
-            'maxCaptureId', 'maxCaptureUpdatedAt', 'maxLinkUpdatedAt'
+            'maxCaptureId', 'maxCaptureUpdatedAt', 'maxLinkUpdatedAt',
+            'addedArticles', 'suggestedArticles'
         ));
     }
 
