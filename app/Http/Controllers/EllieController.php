@@ -375,6 +375,18 @@ class EllieController extends Controller
             'next_actions' => $nextActions,
         ];
 
+        // ELLIE_HISTORY_V1_2026
+        // Fetch last 10 messages for conversation history context
+        $history = \App\Models\AiMessage::where('conversation_id', $conversation->id)
+            ->whereIn('role', ['user', 'assistant'])
+            ->orderBy('created_at', 'desc')
+            ->take(10)
+            ->get()
+            ->reverse()
+            ->map(fn($m) => ['role' => $m->role, 'content' => $m->content])
+            ->values()
+            ->toArray();
+
         $resp = Http::timeout(120)
             ->acceptJson()
             ->asJson()
@@ -387,6 +399,8 @@ class EllieController extends Controller
                     'branch_id' => $user->branch_id ?? null,
                 ],
                 'context' => $ctx,
+                'history' => $history,
+                'knowledge_context' => '',
             ]);
 
         if (!$resp->successful()) {
