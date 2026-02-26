@@ -317,7 +317,7 @@ class SalesDocumentController extends Controller
                 ? storage_path("app/private/{$send->original_file_path}")
                 : null,
             uploadUrl: route('sales-documents.upload', ['token' => $recipient->token]),
-            message: $send->message,
+            personalMessage: $send->message,
             expiresAt: $recipient->token_expires_at,
         );
 

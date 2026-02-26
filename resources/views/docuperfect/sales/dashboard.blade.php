@@ -15,17 +15,7 @@
         </a>
     </div>
 
-    {{-- Flash messages --}}
-    @if(session('status'))
-        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 px-4 py-3 text-sm">
-            {{ session('status') }}
-        </div>
-    @endif
-    @if(session('error'))
-        <div class="rounded-2xl border border-red-200 bg-red-50 text-red-900 px-4 py-3 text-sm">
-            {{ session('error') }}
-        </div>
-    @endif
+    {{-- Flash messages handled by global toast system --}}
 
     {{-- Status summary cards --}}
     <div class="grid grid-cols-3 gap-4">

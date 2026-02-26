@@ -839,3 +839,140 @@
 .dp-placement-active .dp-page-container .dp-zone {
     pointer-events: none;
 }
+
+/* === Create Named Field Modal === */
+.dp-nf-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dp-nf-modal {
+    background: white;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 420px;
+    padding: 24px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+}
+
+.dp-nf-modal h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0b2a4a;
+    margin: 0 0 16px 0;
+}
+
+.dp-nf-form-group {
+    margin-bottom: 12px;
+}
+
+.dp-nf-form-group label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 4px;
+}
+
+.dp-nf-form-group input,
+.dp-nf-form-group select {
+    width: 100%;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 14px;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.dp-nf-form-group input:focus,
+.dp-nf-form-group select:focus {
+    border-color: #00b4d8;
+}
+
+.dp-nf-name-preview {
+    font-size: 11px;
+    color: #94a3b8;
+    margin: -8px 0 12px 0;
+    min-height: 16px;
+    font-family: monospace;
+}
+
+.dp-nf-dup-warn {
+    background: #fef3c7;
+    border: 1px solid #fbbf24;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: #92400e;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.dp-nf-dup-btn {
+    background: #f59e0b;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.dp-nf-dup-btn:hover {
+    background: #d97706;
+}
+
+.dp-nf-btn-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+}
+
+.dp-nf-btn {
+    border: none;
+    border-radius: 8px;
+    padding: 8px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.dp-nf-btn-cancel {
+    background: #e2e8f0;
+    color: #475569;
+}
+
+.dp-nf-btn-cancel:hover {
+    background: #cbd5e1;
+}
+
+.dp-nf-btn-save {
+    background: #00b4d8;
+    color: white;
+}
+
+.dp-nf-btn-save:hover {
+    background: #0097b2;
+}
+
+.dp-nf-btn-save:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}

@@ -32,6 +32,7 @@ class SignatureTemplate extends Model
     const STATUS_SIGNING = 'signing';
     const STATUS_AWAITING_TENANT = 'awaiting_tenant';
     const STATUS_AWAITING_LANDLORD = 'awaiting_landlord';
+    const STATUS_PENDING_AGENT_APPROVAL = 'pending_agent_approval';
     const STATUS_COMPLETED = 'completed';
     const STATUS_EXPIRED = 'expired';
     const STATUS_DECLINED = 'declined';
@@ -119,7 +120,13 @@ class SignatureTemplate extends Model
             self::STATUS_SIGNING,
             self::STATUS_AWAITING_TENANT,
             self::STATUS_AWAITING_LANDLORD,
+            self::STATUS_PENDING_AGENT_APPROVAL,
         ]);
+    }
+
+    public function isPendingAgentApproval(): bool
+    {
+        return $this->status === self::STATUS_PENDING_AGENT_APPROVAL;
     }
 
     public function currentPartyRole(): ?string

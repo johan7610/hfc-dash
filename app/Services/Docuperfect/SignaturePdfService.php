@@ -181,6 +181,10 @@ class SignaturePdfService
         $document = $template->document;
         $docTemplate = $document->template;
 
+        // Extract field values from the document for overlay
+        $documentFields = $document->fields_json ?? [];
+        $fieldsByPage = $this->groupFieldsByPage($documentFields);
+
         $pages = [];
         for ($pageNum = 0; $pageNum < $docTemplate->page_count; $pageNum++) {
             $pageImageBase64 = $this->getPageImageBase64($docTemplate->id, $pageNum);
@@ -214,6 +218,7 @@ class SignaturePdfService
             $pages[] = [
                 'image_base64' => $pageImageBase64,
                 'markers' => $markerData,
+                'fields' => $fieldsByPage[$pageNum] ?? [],
             ];
         }
 
@@ -221,7 +226,7 @@ class SignaturePdfService
         $progress = $template->partyProgress();
         $auditLogs = $template->auditLogs()->orderBy('created_at')->get();
 
-        // Render combined HTML with document pages + audit certificate
+        // Render combined HTML with document pages + field values + signatures + audit certificate
         $html = view('docuperfect.signatures.pdf.signed-document', [
             'pages' => $pages,
             'documentName' => $document->name,
@@ -243,6 +248,67 @@ class SignaturePdfService
         $pdf->save($tempPath);
 
         return $tempPath;
+    }
+
+    /**
+     * Group document field values by page index for PDF overlay.
+     * Returns array keyed by 0-indexed page number.
+     */
+    private function groupFieldsByPage(array $fields): array
+    {
+        $grouped = [];
+
+        foreach ($fields as $field) {
+            $pageIndex = $field['pageIndex'] ?? 0;
+            $type = $field['type'] ?? 'placeholder';
+
+            // Skip signature/initial fields — those are handled by signature markers
+            if (in_array($type, ['signature', 'initial'])) {
+                continue;
+            }
+
+            // Get the display value
+            $displayValue = $this->getFieldDisplayValue($field);
+            if ($displayValue === null || $displayValue === '') {
+                continue;
+            }
+
+            $position = $field['position'] ?? [];
+            $size = $field['size'] ?? [];
+            $style = $field['style'] ?? [];
+
+            $grouped[$pageIndex][] = [
+                'x' => $position['x'] ?? 0,
+                'y' => $position['y'] ?? 0,
+                'w' => $size['width'] ?? 10,
+                'h' => $size['height'] ?? 3,
+                'type' => $type,
+                'value' => $displayValue,
+                'fontSize' => $style['fontSize'] ?? 10,
+                'bold' => $style['bold'] ?? false,
+                'underline' => $style['underline'] ?? false,
+                'solidBackground' => $style['solidBackground'] ?? false,
+            ];
+        }
+
+        return $grouped;
+    }
+
+    /**
+     * Extract the display value from a field based on its type.
+     */
+    private function getFieldDisplayValue(array $field): ?string
+    {
+        $type = $field['type'] ?? 'placeholder';
+
+        return match ($type) {
+            'placeholder' => trim((string) ($field['value'] ?? '')),
+            'date' => trim((string) ($field['value'] ?? '')),
+            'selection' => trim((string) ($field['selectedValue'] ?? '')),
+            'condition' => trim((string) ($field['text'] ?? '')),
+            'strikethrough' => null, // handled visually
+            default => trim((string) ($field['value'] ?? '')),
+        };
     }
 
     /**

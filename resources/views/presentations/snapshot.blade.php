@@ -32,11 +32,7 @@
     </div>
 </div>
 
-@if(session('success'))
-    <div class="mb-4 px-4 py-3 bg-green-50 border border-green-200 text-green-800 rounded text-sm">
-        {{ session('success') }}
-    </div>
-@endif
+{{-- Flash messages handled by global toast system --}}
 
 {{-- ══════════════════════════════════════════════════════════════════════════
      INPUTS USED

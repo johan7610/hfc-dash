@@ -3,6 +3,26 @@
 @section('nexus-content')
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
 
+    <x-sticky-action-bar>
+        <x-slot name="left">
+            <a href="{{ route('docuperfect.rental') }}" class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                Back to Rental
+            </a>
+        </x-slot>
+        <x-slot name="center">
+            <h2 class="text-sm font-semibold text-gray-700 truncate">{{ $document->name }} &mdash; @if($step === 1) Step 1: Parties @else Step 2: Markers @endif</h2>
+        </x-slot>
+        <x-slot name="right">
+            @if($step === 2)
+                <a href="{{ route('docuperfect.signatures.setup', [$document, 'step' => 1]) }}"
+                   class="px-3 py-1.5 text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">
+                    Edit Parties
+                </a>
+            @endif
+        </x-slot>
+    </x-sticky-action-bar>
+
     {{-- Header --}}
     <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 flex items-center justify-between">
         <div>
@@ -25,16 +45,7 @@
         </div>
     </div>
 
-    @if(session('status'))
-        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 px-4 py-3 text-sm">
-            {{ session('status') }}
-        </div>
-    @endif
-    @if(session('error'))
-        <div class="rounded-2xl border border-red-200 bg-red-50 text-red-900 px-4 py-3 text-sm">
-            {{ session('error') }}
-        </div>
-    @endif
+    {{-- Flash messages handled by global toast system --}}
     @if($errors->any())
         <div class="rounded-2xl border border-red-200 bg-red-50 text-red-900 px-4 py-3 text-sm">
             @foreach($errors->all() as $error)
@@ -49,9 +60,13 @@
     @if($step === 1)
     <div class="ds-status-card p-6" x-data="{
         addTenantWitness: {{ !empty(collect($parties)->firstWhere('role', 'tenant_witness')) ? 'true' : 'false' }},
-        addLandlordWitness: {{ !empty(collect($parties)->firstWhere('role', 'landlord_witness')) ? 'true' : 'false' }}
+        addLandlordWitness: {{ !empty(collect($parties)->firstWhere('role', 'landlord_witness')) ? 'true' : 'false' }},
+        tenantNotRequired: {{ old('tenant_not_required') ? 'true' : (collect($parties)->isNotEmpty() && !collect($parties)->firstWhere('role', 'tenant') ? 'true' : 'false') }},
+        landlordNotRequired: {{ old('landlord_not_required') ? 'true' : (collect($parties)->isNotEmpty() && !collect($parties)->firstWhere('role', 'landlord') ? 'true' : 'false') }},
+        submittingParties: false
     }">
-        <form action="{{ route('docuperfect.signatures.saveParties', $document) }}" method="POST">
+        <form action="{{ route('docuperfect.signatures.saveParties', $document) }}" method="POST"
+              @submit="if (submittingParties) { $event.preventDefault(); return; } submittingParties = true;">
             @csrf
 
             <h3 class="text-lg font-semibold text-slate-800 mb-4">Signing Parties</h3>
@@ -76,112 +91,143 @@
             </div>
 
             {{-- Tenant --}}
-            <div class="mb-6 p-4 rounded-xl border border-green-200 bg-green-50/50">
-                <div class="text-sm font-semibold text-green-700 mb-3 uppercase tracking-wider">Tenant (Signs Second)</div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="mb-6 p-4 rounded-xl border border-green-200" :class="tenantNotRequired ? 'bg-gray-50 opacity-60' : 'bg-green-50/50'">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="text-sm font-semibold text-green-700 uppercase tracking-wider">Tenant (Signs Second)</div>
+                    <label class="flex items-center gap-2 text-sm cursor-pointer">
+                        <input type="checkbox" name="tenant_not_required" value="1"
+                               x-model="tenantNotRequired"
+                               @change="if(tenantNotRequired) { addTenantWitness = false; }"
+                               class="rounded border-gray-300 text-gray-500 focus:ring-gray-400">
+                        <span class="text-gray-500 text-xs">Not required for this document</span>
+                    </label>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" :class="{ 'pointer-events-none': tenantNotRequired }">
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Name <span class="text-red-500">*</span></label>
-                        <input type="text" name="tenant_name" required
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Name <span x-show="!tenantNotRequired" class="text-red-500">*</span></label>
+                        <input type="text" name="tenant_name" :required="!tenantNotRequired" :disabled="tenantNotRequired"
                                value="{{ old('tenant_name', collect($parties)->firstWhere('role', 'tenant')['name'] ?? '') }}"
                                class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-green-500 focus:border-green-500"
+                               :class="{ 'bg-gray-100': tenantNotRequired }"
                                placeholder="Full name">
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Email <span class="text-red-500">*</span></label>
-                        <input type="email" name="tenant_email" required
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Email <span x-show="!tenantNotRequired" class="text-red-500">*</span></label>
+                        <input type="email" name="tenant_email" :required="!tenantNotRequired" :disabled="tenantNotRequired"
                                value="{{ old('tenant_email', collect($parties)->firstWhere('role', 'tenant')['email'] ?? '') }}"
                                class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-green-500 focus:border-green-500"
+                               :class="{ 'bg-gray-100': tenantNotRequired }"
                                placeholder="tenant@email.com">
                     </div>
                     <div>
                         <label class="block text-xs font-medium text-slate-600 mb-1">ID Number <span class="text-slate-400">(optional)</span></label>
-                        <input type="text" name="tenant_id_number"
+                        <input type="text" name="tenant_id_number" :disabled="tenantNotRequired"
                                value="{{ old('tenant_id_number', collect($parties)->firstWhere('role', 'tenant')['id_number'] ?? '') }}"
                                class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-green-500 focus:border-green-500"
+                               :class="{ 'bg-gray-100': tenantNotRequired }"
                                placeholder="SA ID number" maxlength="20">
                     </div>
                 </div>
 
-                <label class="flex items-center gap-2 mt-3 cursor-pointer text-sm text-slate-600">
-                    <input type="checkbox" name="add_tenant_witness" value="1"
-                           x-model="addTenantWitness"
-                           class="rounded border-slate-300 text-green-600 focus:ring-green-500">
-                    Add witness for Tenant
-                </label>
+                <div x-show="!tenantNotRequired" x-cloak>
+                    <label class="flex items-center gap-2 mt-3 cursor-pointer text-sm text-slate-600">
+                        <input type="checkbox" name="add_tenant_witness" value="1"
+                               x-model="addTenantWitness"
+                               class="rounded border-slate-300 text-green-600 focus:ring-green-500">
+                        Add witness for Tenant
+                    </label>
 
-                <div x-show="addTenantWitness" x-cloak x-transition class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 pl-6 border-l-2 border-green-200">
-                    <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Witness Name</label>
-                        <input type="text" name="tenant_witness_name"
-                               value="{{ old('tenant_witness_name', collect($parties)->firstWhere('role', 'tenant_witness')['name'] ?? '') }}"
-                               class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="Witness full name"
-                               :required="addTenantWitness">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Witness Email</label>
-                        <input type="email" name="tenant_witness_email"
-                               value="{{ old('tenant_witness_email', collect($parties)->firstWhere('role', 'tenant_witness')['email'] ?? '') }}"
-                               class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="witness@email.com"
-                               :required="addTenantWitness">
+                    <div x-show="addTenantWitness" x-cloak x-transition class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 pl-6 border-l-2 border-green-200">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Witness Name</label>
+                            <input type="text" name="tenant_witness_name"
+                                   value="{{ old('tenant_witness_name', collect($parties)->firstWhere('role', 'tenant_witness')['name'] ?? '') }}"
+                                   class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="Witness full name"
+                                   :required="addTenantWitness && !tenantNotRequired">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Witness Email</label>
+                            <input type="email" name="tenant_witness_email"
+                                   value="{{ old('tenant_witness_email', collect($parties)->firstWhere('role', 'tenant_witness')['email'] ?? '') }}"
+                                   class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="witness@email.com"
+                                   :required="addTenantWitness && !tenantNotRequired">
+                        </div>
                     </div>
                 </div>
             </div>
 
             {{-- Landlord --}}
-            <div class="mb-6 p-4 rounded-xl border border-orange-200 bg-orange-50/50">
-                <div class="text-sm font-semibold text-orange-700 mb-3 uppercase tracking-wider">Landlord / Owner (Signs Third)</div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="mb-6 p-4 rounded-xl border border-orange-200" :class="landlordNotRequired ? 'bg-gray-50 opacity-60' : 'bg-orange-50/50'">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="text-sm font-semibold text-orange-700 uppercase tracking-wider">Landlord / Owner (Signs Third)</div>
+                    <label class="flex items-center gap-2 text-sm cursor-pointer">
+                        <input type="checkbox" name="landlord_not_required" value="1"
+                               x-model="landlordNotRequired"
+                               @change="if(landlordNotRequired) { addLandlordWitness = false; }"
+                               class="rounded border-gray-300 text-gray-500 focus:ring-gray-400">
+                        <span class="text-gray-500 text-xs">Not required for this document</span>
+                    </label>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" :class="{ 'pointer-events-none': landlordNotRequired }">
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Name <span class="text-red-500">*</span></label>
-                        <input type="text" name="landlord_name" required
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Name <span x-show="!landlordNotRequired" class="text-red-500">*</span></label>
+                        <input type="text" name="landlord_name" :required="!landlordNotRequired" :disabled="landlordNotRequired"
                                value="{{ old('landlord_name', collect($parties)->firstWhere('role', 'landlord')['name'] ?? '') }}"
                                class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
+                               :class="{ 'bg-gray-100': landlordNotRequired }"
                                placeholder="Full name">
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Email <span class="text-red-500">*</span></label>
-                        <input type="email" name="landlord_email" required
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Email <span x-show="!landlordNotRequired" class="text-red-500">*</span></label>
+                        <input type="email" name="landlord_email" :required="!landlordNotRequired" :disabled="landlordNotRequired"
                                value="{{ old('landlord_email', collect($parties)->firstWhere('role', 'landlord')['email'] ?? '') }}"
                                class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
+                               :class="{ 'bg-gray-100': landlordNotRequired }"
                                placeholder="landlord@email.com">
                     </div>
                     <div>
                         <label class="block text-xs font-medium text-slate-600 mb-1">ID Number <span class="text-slate-400">(optional)</span></label>
-                        <input type="text" name="landlord_id_number"
+                        <input type="text" name="landlord_id_number" :disabled="landlordNotRequired"
                                value="{{ old('landlord_id_number', collect($parties)->firstWhere('role', 'landlord')['id_number'] ?? '') }}"
                                class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
+                               :class="{ 'bg-gray-100': landlordNotRequired }"
                                placeholder="SA ID number" maxlength="20">
                     </div>
                 </div>
 
-                <label class="flex items-center gap-2 mt-3 cursor-pointer text-sm text-slate-600">
-                    <input type="checkbox" name="add_landlord_witness" value="1"
-                           x-model="addLandlordWitness"
-                           class="rounded border-slate-300 text-orange-600 focus:ring-orange-500">
-                    Add witness for Landlord
-                </label>
+                <div x-show="!landlordNotRequired" x-cloak>
+                    <label class="flex items-center gap-2 mt-3 cursor-pointer text-sm text-slate-600">
+                        <input type="checkbox" name="add_landlord_witness" value="1"
+                               x-model="addLandlordWitness"
+                               class="rounded border-slate-300 text-orange-600 focus:ring-orange-500">
+                        Add witness for Landlord
+                    </label>
 
-                <div x-show="addLandlordWitness" x-cloak x-transition class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 pl-6 border-l-2 border-orange-200">
-                    <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Witness Name</label>
-                        <input type="text" name="landlord_witness_name"
-                               value="{{ old('landlord_witness_name', collect($parties)->firstWhere('role', 'landlord_witness')['name'] ?? '') }}"
-                               class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="Witness full name"
-                               :required="addLandlordWitness">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Witness Email</label>
-                        <input type="email" name="landlord_witness_email"
-                               value="{{ old('landlord_witness_email', collect($parties)->firstWhere('role', 'landlord_witness')['email'] ?? '') }}"
-                               class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="witness@email.com"
-                               :required="addLandlordWitness">
+                    <div x-show="addLandlordWitness" x-cloak x-transition class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 pl-6 border-l-2 border-orange-200">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Witness Name</label>
+                            <input type="text" name="landlord_witness_name"
+                                   value="{{ old('landlord_witness_name', collect($parties)->firstWhere('role', 'landlord_witness')['name'] ?? '') }}"
+                                   class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="Witness full name"
+                                   :required="addLandlordWitness && !landlordNotRequired">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Witness Email</label>
+                            <input type="email" name="landlord_witness_email"
+                                   value="{{ old('landlord_witness_email', collect($parties)->firstWhere('role', 'landlord_witness')['email'] ?? '') }}"
+                                   class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="witness@email.com"
+                                   :required="addLandlordWitness && !landlordNotRequired">
+                        </div>
                     </div>
                 </div>
             </div>
 
             <div class="flex justify-end">
-                <button type="submit" class="nexus-btn-primary text-sm px-6 py-2.5">
-                    Save Parties & Continue to Marker Placement
+                <button type="submit" class="nexus-btn-primary text-sm px-6 py-2.5"
+                        :disabled="submittingParties"
+                        :class="submittingParties ? 'opacity-50 cursor-not-allowed' : ''">
+                    <span x-show="!submittingParties">Save Parties & Continue to Marker Placement</span>
+                    <span x-show="submittingParties" x-cloak>Saving...</span>
                 </button>
             </div>
         </form>
@@ -324,91 +370,97 @@
             </div>
 
             {{-- RIGHT: Toolbar --}}
-            <div class="w-72 flex-shrink-0 ds-status-card p-4 flex flex-col overflow-auto" style="max-height:calc(100vh - 200px);">
-                <h4 class="text-sm font-semibold text-slate-800 mb-3">Place Markers</h4>
-                <p class="text-xs text-slate-500 mb-4">Select a marker type and party, then click on the document to place it.</p>
+            <div class="w-72 flex-shrink-0 ds-status-card flex flex-col" style="max-height:calc(100vh - 200px);">
+                {{-- Scrollable content area --}}
+                <div class="flex-1 overflow-y-auto p-4 min-h-0">
+                    <h4 class="text-sm font-semibold text-slate-800 mb-3">Place Markers</h4>
+                    <p class="text-xs text-slate-500 mb-4">Select a marker type and party, then click on the document to place it.</p>
 
-                {{-- Marker type --}}
-                <div class="mb-4">
-                    <label class="block text-xs font-medium text-slate-600 mb-2">Marker Type</label>
-                    <div class="grid grid-cols-2 gap-2">
-                        <button @click="selectedType = 'signature'" :class="selectedType === 'signature' ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'bg-slate-50 hover:bg-slate-100'"
-                                class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-center transition-colors">
-                            Signature
-                        </button>
-                        <button @click="selectedType = 'initial'" :class="selectedType === 'initial' ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'bg-slate-50 hover:bg-slate-100'"
-                                class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-center transition-colors">
-                            Initial
-                        </button>
-                        <button @click="selectedType = 'date'" :class="selectedType === 'date' ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'bg-slate-50 hover:bg-slate-100'"
-                                class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-center transition-colors">
-                            Date
-                        </button>
-                        <button @click="selectedType = 'text'" :class="selectedType === 'text' ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'bg-slate-50 hover:bg-slate-100'"
-                                class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-center transition-colors">
-                            Text Field
-                        </button>
-                    </div>
-                </div>
-
-                {{-- Assign to party --}}
-                <div class="mb-4">
-                    <label class="block text-xs font-medium text-slate-600 mb-2">Assign To</label>
-                    <div class="space-y-1.5">
-                        @foreach($parties as $party)
-                        <label class="flex items-center gap-2 cursor-pointer text-sm rounded-lg px-3 py-1.5 transition-colors"
-                               :class="selectedParty === '{{ $party['role'] }}' ? 'bg-slate-100 font-medium' : 'hover:bg-slate-50'">
-                            <input type="radio" name="assign_party" value="{{ $party['role'] }}"
-                                   x-model="selectedParty"
-                                   class="text-cyan-600 focus:ring-cyan-500">
-                            <span class="w-2.5 h-2.5 rounded-full flex-shrink-0
-                                @if($party['role'] === 'agent') bg-blue-500
-                                @elseif($party['role'] === 'tenant') bg-green-500
-                                @elseif($party['role'] === 'landlord') bg-orange-500
-                                @else bg-purple-500
-                                @endif"></span>
-                            {{ ucfirst(str_replace('_', ' ', $party['role'])) }}
-                        </label>
-                        @endforeach
-                    </div>
-                </div>
-
-                {{-- Place mode toggle --}}
-                <button @click="placementActive = !placementActive"
-                        class="w-full rounded-lg px-4 py-2.5 text-sm font-medium mb-4 transition-colors"
-                        :class="placementActive ? 'bg-cyan-600 text-white hover:bg-cyan-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'">
-                    <span x-show="!placementActive">Click to Enable Placement</span>
-                    <span x-show="placementActive" x-cloak>Placement Active &mdash; Click on Document</span>
-                </button>
-
-                <hr class="border-slate-200 my-3">
-
-                {{-- Placed markers list --}}
-                <h4 class="text-sm font-semibold text-slate-800 mb-2">
-                    Placed Markers <span class="text-slate-400 font-normal" x-text="'(' + markers.length + ')'"></span>
-                </h4>
-                <div class="flex-1 overflow-auto space-y-1 min-h-0" style="max-height:300px;">
-                    <template x-if="markers.length === 0">
-                        <div class="text-xs text-slate-400 italic py-4 text-center">No markers placed yet.</div>
-                    </template>
-                    <template x-for="(marker, idx) in markers" :key="marker._id">
-                        <div class="flex items-center justify-between text-xs px-2 py-1.5 rounded-lg hover:bg-slate-50 group"
-                             :class="marker.page_number === currentPage ? 'bg-slate-50' : ''">
-                            <div class="flex items-center gap-2 min-w-0">
-                                <span class="w-2 h-2 rounded-full flex-shrink-0" :class="partyDotClass(marker.assigned_party)"></span>
-                                <span x-show="marker.from_template" class="inline-flex items-center px-1 py-0 rounded text-[9px] font-semibold bg-indigo-100 text-indigo-600 flex-shrink-0" title="From template zone">[T]</span>
-                                <span class="truncate" x-text="markerLabel(marker)"></span>
-                                <span class="text-slate-400 flex-shrink-0" x-text="'Pg ' + marker.page_number"></span>
-                            </div>
-                            <button @click="removeMarker(marker._id)" class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 flex-shrink-0 ml-1">&times;</button>
+                    {{-- Marker type --}}
+                    <div class="mb-4">
+                        <label class="block text-xs font-medium text-slate-600 mb-2">Marker Type</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button @click="selectedType = 'signature'" :class="selectedType === 'signature' ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'bg-slate-50 hover:bg-slate-100'"
+                                    class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-center transition-colors">
+                                Signature
+                            </button>
+                            <button @click="selectedType = 'initial'" :class="selectedType === 'initial' ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'bg-slate-50 hover:bg-slate-100'"
+                                    class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-center transition-colors">
+                                Initial
+                            </button>
+                            <button @click="selectedType = 'date'" :class="selectedType === 'date' ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'bg-slate-50 hover:bg-slate-100'"
+                                    class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-center transition-colors">
+                                Date
+                            </button>
+                            <button @click="selectedType = 'text'" :class="selectedType === 'text' ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'bg-slate-50 hover:bg-slate-100'"
+                                    class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-center transition-colors">
+                                Text Field
+                            </button>
                         </div>
-                    </template>
+                    </div>
+
+                    {{-- Assign to party --}}
+                    <div class="mb-4">
+                        <label class="block text-xs font-medium text-slate-600 mb-2">Assign To</label>
+                        <div class="space-y-1.5">
+                            @foreach($parties as $party)
+                            <label class="flex items-center gap-2 cursor-pointer text-sm rounded-lg px-3 py-1.5 transition-colors"
+                                   :class="selectedParty === '{{ $party['role'] }}' ? 'bg-slate-100 font-medium' : 'hover:bg-slate-50'">
+                                <input type="radio" name="assign_party" value="{{ $party['role'] }}"
+                                       x-model="selectedParty"
+                                       class="text-cyan-600 focus:ring-cyan-500">
+                                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0
+                                    @if($party['role'] === 'agent') bg-blue-500
+                                    @elseif($party['role'] === 'tenant') bg-green-500
+                                    @elseif($party['role'] === 'landlord') bg-orange-500
+                                    @else bg-purple-500
+                                    @endif"></span>
+                                {{ ucfirst(str_replace('_', ' ', $party['role'])) }}
+                            </label>
+                            @endforeach
+                        </div>
+                    </div>
+
+                    {{-- Place mode toggle --}}
+                    <button @click="placementActive = !placementActive"
+                            class="w-full rounded-lg px-4 py-2.5 text-sm font-medium mb-4 transition-colors"
+                            :class="placementActive ? 'bg-cyan-600 text-white hover:bg-cyan-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'">
+                        <span x-show="!placementActive">Click to Enable Placement</span>
+                        <span x-show="placementActive" x-cloak>Placement Active &mdash; Click on Document</span>
+                    </button>
+
+                    <hr class="border-slate-200 my-3">
+
+                    {{-- Placed markers list --}}
+                    <h4 class="text-sm font-semibold text-slate-800 mb-2">
+                        Placed Markers <span class="text-slate-400 font-normal" x-text="'(' + markers.length + ')'"></span>
+                    </h4>
+                    <div class="space-y-1">
+                        <template x-if="markers.length === 0">
+                            <div class="text-xs text-slate-400 italic py-4 text-center">No markers placed yet.</div>
+                        </template>
+                        <template x-for="(marker, idx) in markers" :key="marker._id">
+                            <div class="flex items-center justify-between text-xs px-2 py-1.5 rounded-lg hover:bg-slate-50 group"
+                                 :class="marker.page_number === currentPage ? 'bg-slate-50' : ''">
+                                <div class="flex items-center gap-2 min-w-0">
+                                    <span class="w-2 h-2 rounded-full flex-shrink-0" :class="partyDotClass(marker.assigned_party)"></span>
+                                    <span x-show="marker.from_template" class="inline-flex items-center px-1 py-0 rounded text-[9px] font-semibold bg-indigo-100 text-indigo-600 flex-shrink-0" title="From template zone">[T]</span>
+                                    <span class="truncate" x-text="markerLabel(marker)"></span>
+                                    <span class="text-slate-400 flex-shrink-0" x-text="'Pg ' + marker.page_number"></span>
+                                </div>
+                                <button @click="removeMarker(marker._id)" class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 flex-shrink-0 ml-1">&times;</button>
+                            </div>
+                        </template>
+                    </div>
+
+                    {{-- Status messages --}}
+                    <div x-show="saveMessage" x-cloak x-transition class="mt-3 rounded-lg px-3 py-2 text-xs"
+                         :class="saveError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'"
+                         x-text="saveMessage"></div>
                 </div>
 
-                <hr class="border-slate-200 my-3">
-
-                {{-- Save / proceed buttons --}}
-                <div class="space-y-2">
+                {{-- Sticky button footer — always visible --}}
+                <div class="flex-shrink-0 border-t border-slate-200 p-4 bg-white rounded-b-2xl space-y-2">
                     <button @click="saveMarkers()"
                             :disabled="saving || markers.length === 0"
                             class="w-full rounded-lg px-4 py-2.5 text-sm font-medium transition-colors"
@@ -423,11 +475,6 @@
                         Preview & Continue
                     </button>
                 </div>
-
-                {{-- Status messages --}}
-                <div x-show="saveMessage" x-cloak x-transition class="mt-3 rounded-lg px-3 py-2 text-xs"
-                     :class="saveError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'"
-                     x-text="saveMessage"></div>
             </div>
         </div>
 

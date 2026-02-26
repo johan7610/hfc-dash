@@ -43,7 +43,9 @@ class SignatureController extends Controller
             'counts' => $data['counts'],
             'upcomingRenewals' => $data['upcomingRenewals'],
             'expiredLeases' => $data['expiredLeases'],
+            'activeLeases' => $data['activeLeases'],
             'activeLeaseCount' => $data['activeLeaseCount'],
+            'lastUpdate' => $data['lastUpdate'] ?? '',
             'user' => $user,
         ]);
     }
@@ -127,37 +129,60 @@ class SignatureController extends Controller
         $user = $request->user();
         $this->authorizeDocument($user, $document);
 
-        $request->validate([
+        $tenantNotRequired = $request->boolean('tenant_not_required');
+        $landlordNotRequired = $request->boolean('landlord_not_required');
+
+        // Build validation rules — only validate active parties
+        $rules = [
             'agent_name' => 'required|string|max:255',
             'agent_email' => 'required|email|max:255',
-            'tenant_name' => 'required|string|max:255',
-            'tenant_email' => 'required|email|max:255',
-            'tenant_id_number' => 'nullable|string|max:20',
-            'landlord_name' => 'required|string|max:255',
-            'landlord_email' => 'required|email|max:255',
-            'landlord_id_number' => 'nullable|string|max:20',
-            'add_tenant_witness' => 'nullable|boolean',
-            'tenant_witness_name' => 'required_if:add_tenant_witness,1|nullable|string|max:255',
-            'tenant_witness_email' => 'required_if:add_tenant_witness,1|nullable|email|max:255',
-            'add_landlord_witness' => 'nullable|boolean',
-            'landlord_witness_name' => 'required_if:add_landlord_witness,1|nullable|string|max:255',
-            'landlord_witness_email' => 'required_if:add_landlord_witness,1|nullable|email|max:255',
-        ]);
-
-        // Build parties array
-        $parties = [
-            ['role' => 'agent', 'name' => $request->agent_name, 'email' => $request->agent_email, 'id_number' => null],
-            ['role' => 'tenant', 'name' => $request->tenant_name, 'email' => $request->tenant_email, 'id_number' => $request->tenant_id_number],
-            ['role' => 'landlord', 'name' => $request->landlord_name, 'email' => $request->landlord_email, 'id_number' => $request->landlord_id_number],
+            'tenant_not_required' => 'nullable|boolean',
+            'landlord_not_required' => 'nullable|boolean',
         ];
 
-        $signingOrder = ['agent', 'tenant', 'landlord'];
-
-        if ($request->boolean('add_tenant_witness')) {
-            $parties[] = ['role' => 'tenant_witness', 'name' => $request->tenant_witness_name, 'email' => $request->tenant_witness_email, 'id_number' => null];
+        if (!$tenantNotRequired) {
+            $rules['tenant_name'] = 'required|string|max:255';
+            $rules['tenant_email'] = 'required|email|max:255';
+            $rules['tenant_id_number'] = 'nullable|string|max:20';
+            $rules['add_tenant_witness'] = 'nullable|boolean';
+            $rules['tenant_witness_name'] = 'required_if:add_tenant_witness,1|nullable|string|max:255';
+            $rules['tenant_witness_email'] = 'required_if:add_tenant_witness,1|nullable|email|max:255';
         }
-        if ($request->boolean('add_landlord_witness')) {
-            $parties[] = ['role' => 'landlord_witness', 'name' => $request->landlord_witness_name, 'email' => $request->landlord_witness_email, 'id_number' => null];
+
+        if (!$landlordNotRequired) {
+            $rules['landlord_name'] = 'required|string|max:255';
+            $rules['landlord_email'] = 'required|email|max:255';
+            $rules['landlord_id_number'] = 'nullable|string|max:20';
+            $rules['add_landlord_witness'] = 'nullable|boolean';
+            $rules['landlord_witness_name'] = 'required_if:add_landlord_witness,1|nullable|string|max:255';
+            $rules['landlord_witness_email'] = 'required_if:add_landlord_witness,1|nullable|email|max:255';
+        }
+
+        $request->validate($rules);
+
+        // Build parties array — only include active parties
+        $parties = [
+            ['role' => 'agent', 'name' => $request->agent_name, 'email' => $request->agent_email, 'id_number' => null],
+        ];
+
+        $signingOrder = ['agent'];
+
+        if (!$tenantNotRequired) {
+            $parties[] = ['role' => 'tenant', 'name' => $request->tenant_name, 'email' => $request->tenant_email, 'id_number' => $request->tenant_id_number];
+            $signingOrder[] = 'tenant';
+
+            if ($request->boolean('add_tenant_witness')) {
+                $parties[] = ['role' => 'tenant_witness', 'name' => $request->tenant_witness_name, 'email' => $request->tenant_witness_email, 'id_number' => null];
+            }
+        }
+
+        if (!$landlordNotRequired) {
+            $parties[] = ['role' => 'landlord', 'name' => $request->landlord_name, 'email' => $request->landlord_email, 'id_number' => $request->landlord_id_number];
+            $signingOrder[] = 'landlord';
+
+            if ($request->boolean('add_landlord_witness')) {
+                $parties[] = ['role' => 'landlord_witness', 'name' => $request->landlord_witness_name, 'email' => $request->landlord_witness_email, 'id_number' => null];
+            }
         }
 
         // Get or create template
@@ -179,7 +204,9 @@ class SignatureController extends Controller
             'document_hash' => $hash,
         ]);
 
-        // Create signing requests for core parties (agent, tenant, landlord)
+        // Create signing requests for active core parties only
+        $activeRoles = collect($parties)->pluck('role')->intersect(['agent', 'tenant', 'landlord'])->all();
+
         foreach ($parties as $party) {
             // Only create requests for core signing roles
             if (!in_array($party['role'], ['agent', 'tenant', 'landlord'])) {
@@ -209,6 +236,18 @@ class SignatureController extends Controller
             }
         }
 
+        // Remove signing requests for parties that are no longer active
+        $template->requests()
+            ->whereIn('party_role', ['tenant', 'landlord'])
+            ->whereNotIn('party_role', $activeRoles)
+            ->delete();
+
+        // Remove markers assigned to parties that are no longer active
+        $template->markers()
+            ->whereIn('assigned_party', ['tenant', 'landlord'])
+            ->whereNotIn('assigned_party', $activeRoles)
+            ->delete();
+
         if ($request->expectsJson()) {
             return response()->json(['ok' => true]);
         }
@@ -226,6 +265,12 @@ class SignatureController extends Controller
 
         $template = SignatureTemplate::where('document_id', $document->id)->firstOrFail();
 
+        // Build allowed parties from the template's active parties
+        $allowedParties = collect($template->parties_json ?? [])
+            ->pluck('role')
+            ->intersect(['agent', 'tenant', 'landlord'])
+            ->implode(',');
+
         $request->validate([
             'markers' => 'required|array',
             'markers.*.page_number' => 'required|integer|min:1',
@@ -234,7 +279,7 @@ class SignatureController extends Controller
             'markers.*.width' => 'required|numeric|min:0|max:100',
             'markers.*.height' => 'required|numeric|min:0|max:100',
             'markers.*.type' => 'required|string|in:signature,initial,date,text',
-            'markers.*.assigned_party' => 'required|string|in:agent,tenant,landlord',
+            'markers.*.assigned_party' => 'required|string|in:' . $allowedParties,
             'markers.*.label' => 'nullable|string|max:255',
         ]);
 
@@ -705,6 +750,128 @@ class SignatureController extends Controller
 
         return redirect()->route('docuperfect.rental')
             ->with('status', $message);
+    }
+
+    // ──────────────────────────────────────────────
+    // Agent approval gate
+    // ──────────────────────────────────────────────
+
+    /**
+     * Show the agent review page for a completed party's signatures.
+     */
+    public function review(Request $request, Document $document)
+    {
+        $user = $request->user();
+        $this->authorizeDocument($user, $document);
+
+        $template = SignatureTemplate::where('document_id', $document->id)->firstOrFail();
+
+        if ($template->status !== SignatureTemplate::STATUS_PENDING_AGENT_APPROVAL) {
+            return redirect()->route('docuperfect.rental')
+                ->with('error', 'This document is not pending approval.');
+        }
+
+        $template->loadMissing(['requests', 'markers.signatures', 'signatures']);
+
+        // Find the most recently completed non-agent request
+        $completedRequest = $template->requests
+            ->where('status', SignatureRequest::STATUS_COMPLETED)
+            ->where('party_role', '!=', 'agent')
+            ->sortByDesc('completed_at')
+            ->first();
+
+        // Determine the next party
+        $order = $template->signing_order_json ?? ['agent', 'tenant', 'landlord'];
+        $completedParties = $template->requests
+            ->where('status', SignatureRequest::STATUS_COMPLETED)
+            ->pluck('party_role')
+            ->toArray();
+
+        $nextParty = null;
+        foreach ($order as $party) {
+            if ($party !== 'agent' && !in_array($party, $completedParties)) {
+                $nextParty = $party;
+                break;
+            }
+        }
+
+        // Get progress for the completed party
+        $progress = $template->partyProgress();
+
+        // Build page image URLs
+        $docTemplate = $document->template;
+        $pageImages = [];
+        if ($docTemplate) {
+            for ($n = 0; $n < $docTemplate->page_count; $n++) {
+                $pageImages[] = route('docuperfect.page.image', ['id' => $docTemplate->id, 'page' => $n]);
+            }
+        }
+
+        // Get all markers with signatures for display
+        $allMarkers = $template->markers()
+            ->with('signatures')
+            ->orderBy('page_number')
+            ->orderBy('sort_order')
+            ->get();
+
+        return view('docuperfect.signatures.review', [
+            'document' => $document,
+            'template' => $template,
+            'completedRequest' => $completedRequest,
+            'nextParty' => $nextParty,
+            'progress' => $progress,
+            'pageImages' => $pageImages,
+            'pageCount' => $docTemplate ? $docTemplate->page_count : 0,
+            'allMarkers' => $allMarkers,
+            'user' => $user,
+        ]);
+    }
+
+    /**
+     * Approve and advance to the next party (or complete the document).
+     */
+    public function approveAndAdvance(Request $request, Document $document)
+    {
+        $user = $request->user();
+        $this->authorizeDocument($user, $document);
+
+        $template = SignatureTemplate::where('document_id', $document->id)->firstOrFail();
+
+        if ($template->status !== SignatureTemplate::STATUS_PENDING_AGENT_APPROVAL) {
+            return redirect()->route('docuperfect.rental')
+                ->with('error', 'This document is not pending approval.');
+        }
+
+        $result = $this->signatureService->approveAndAdvance($template);
+
+        if ($result['action'] === 'sent') {
+            $nextName = $result['next_name'] ?? ucfirst($result['next_party']);
+            return redirect()->route('docuperfect.rental')
+                ->with('status', "Approved. Document sent to {$nextName} ({$result['next_party']}) for signing.");
+        }
+
+        return redirect()->route('docuperfect.rental')
+            ->with('status', 'All signatures approved. Document completed!');
+    }
+
+    /**
+     * Status check endpoint for dashboard polling.
+     */
+    public function statusCheck(Request $request)
+    {
+        $user = $request->user();
+
+        $pendingApproval = SignatureTemplate::where('status', SignatureTemplate::STATUS_PENDING_AGENT_APPROVAL)
+            ->visibleTo($user)
+            ->count();
+
+        $lastUpdate = SignatureTemplate::visibleTo($user)
+            ->max('updated_at');
+
+        return response()->json([
+            'pending_approval_count' => $pendingApproval,
+            'last_update' => $lastUpdate,
+        ]);
     }
 
     // ──────────────────────────────────────────────

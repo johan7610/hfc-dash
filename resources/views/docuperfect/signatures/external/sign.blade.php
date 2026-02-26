@@ -11,6 +11,14 @@
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
     <style>
         [x-cloak] { display: none !important; }
+        @keyframes pulseHighlight {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            50% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+        }
+        .pulse-highlight {
+            animation: pulseHighlight 1s ease-in-out 3;
+            border-color: #ef4444 !important;
+        }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen">
@@ -41,6 +49,20 @@
                 ({{ $request->daysUntilExpiry() }} days remaining)
             </div>
         @endif
+    </div>
+
+    {{-- Notification toast --}}
+    <div x-show="showNotificationBar" x-cloak x-transition
+         class="fixed top-4 right-4 z-[70] max-w-sm rounded-xl px-5 py-3 shadow-lg text-sm font-medium"
+         :class="{
+             'bg-red-50 text-red-800 border border-red-200': notificationType === 'error',
+             'bg-amber-50 text-amber-800 border border-amber-200': notificationType === 'warning',
+             'bg-blue-50 text-blue-800 border border-blue-200': notificationType === 'info'
+         }">
+        <div class="flex items-start gap-2">
+            <span x-text="notificationText" class="flex-1"></span>
+            <button @click="showNotificationBar = false" class="text-current opacity-50 hover:opacity-100">&times;</button>
+        </div>
     </div>
 
     {{-- Flash messages --}}
@@ -226,6 +248,7 @@
                         {{-- Render markers for current page --}}
                         <template x-for="marker in markersForCurrentPage()" :key="marker.id">
                             <div class="absolute flex items-center justify-center select-none transition-all duration-200"
+                                 :id="'marker-' + marker.id"
                                  :style="`left:${marker.x_position}%;top:${marker.y_position}%;width:${marker.width}%;height:${marker.height}%;z-index:10;`"
                                  :class="markerDisplayClasses(marker)"
                                  @click="handleMarkerClick(marker)">
@@ -305,6 +328,22 @@
                         <span x-show="completing" x-cloak>Completing...</span>
                     </button>
                 </div>
+            </div>
+
+            {{-- Floating progress bar for unsigned markers --}}
+            <div x-show="signedCount < totalRequired && totalRequired > 0" x-cloak x-transition
+                 class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-full px-6 py-3 flex items-center gap-3 z-40 border border-slate-200">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-slate-700" x-text="`${signedCount} of ${totalRequired} signed`"></span>
+                    <div class="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
+                        <div class="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                             :style="`width: ${totalRequired > 0 ? (signedCount / totalRequired) * 100 : 0}%`"></div>
+                    </div>
+                </div>
+                <button @click="goToNextUnsigned()"
+                        class="text-sm text-blue-600 font-medium hover:text-blue-800">
+                    Next &rarr;
+                </button>
             </div>
 
             {{-- Signature capture modal --}}
@@ -888,8 +927,22 @@ function externalSign() {
         },
         set remainingSignatureCount(v) {},
 
-        // ── Complete signing ──
+        // ── Complete signing (with guided navigation if unsigned remain) ──
         async completeSigning() {
+            // Check locally first — guide to unsigned markers
+            const unsignedMarkers = this.markers.filter(m => m.is_mine && !m.signed);
+            if (unsignedMarkers.length > 0) {
+                const first = unsignedMarkers[0];
+                const typeLabel = first.type === 'initial' ? 'initial' : 'sign';
+                this.showNotification(
+                    `Please ${typeLabel} here — ${unsignedMarkers.length} remaining`,
+                    'warning'
+                );
+                this.navigateToMarker(first);
+                return;
+            }
+
+            if (this.completing) return;
             this.completing = true;
             try {
                 const resp = await fetch('/sign/' + this.token + '/complete', {
@@ -903,13 +956,51 @@ function externalSign() {
                 const data = await resp.json();
                 if (data.ok && data.redirect) {
                     window.location.href = data.redirect;
-                } else if (data.error) {
-                    alert(data.error);
+                } else {
+                    this.showNotification(data.error || 'Could not complete signing. Please try again.', 'error');
                 }
             } catch (err) {
-                alert('Network error. Please try again.');
+                this.showNotification('Network error. Please check your connection and try again.', 'error');
+                console.error('Complete signing failed:', err);
             }
             this.completing = false;
+        },
+
+        // ── Navigate to next unsigned marker ──
+        goToNextUnsigned() {
+            const unsigned = this.markers.filter(m => m.is_mine && !m.signed);
+            if (unsigned.length === 0) return;
+            this.navigateToMarker(unsigned[0]);
+        },
+
+        navigateToMarker(marker) {
+            if (this.currentPage !== marker.page_number) {
+                this.currentPage = marker.page_number;
+            }
+            this.$nextTick(() => {
+                const el = document.getElementById('marker-' + marker.id);
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.classList.add('pulse-highlight');
+                    setTimeout(() => el.classList.remove('pulse-highlight'), 3000);
+                }
+            });
+        },
+
+        // ── Notification toast ──
+        _notificationTimeout: null,
+        notificationText: '',
+        notificationType: '',
+        showNotificationBar: false,
+
+        showNotification(text, type = 'info') {
+            this.notificationText = text;
+            this.notificationType = type;
+            this.showNotificationBar = true;
+            if (this._notificationTimeout) clearTimeout(this._notificationTimeout);
+            this._notificationTimeout = setTimeout(() => {
+                this.showNotificationBar = false;
+            }, 5000);
         },
 
         // ── Decline ──

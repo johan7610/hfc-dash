@@ -40,6 +40,11 @@ class Document extends Model
         return $this->belongsTo(Template::class, 'template_id');
     }
 
+    public function signatureTemplate()
+    {
+        return $this->hasOne(SignatureTemplate::class, 'document_id');
+    }
+
     public function packInstanceValues()
     {
         if (!$this->pack_instance_id) {

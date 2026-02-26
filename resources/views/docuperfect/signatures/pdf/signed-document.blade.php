@@ -71,6 +71,15 @@
             text-align: center;
         }
 
+        .field-overlay {
+            position: absolute;
+            overflow: hidden;
+            color: #1a1a1a;
+            font-family: Helvetica, Arial, sans-serif;
+            line-height: 1.2;
+            word-wrap: break-word;
+        }
+
         /* Audit Certificate Styles */
         .audit-page {
             page-break-before: always;
@@ -191,6 +200,16 @@
                 </div>
             @endif
 
+            {{-- Field value overlays --}}
+            @if(!empty($page['fields']))
+                @foreach($page['fields'] as $field)
+                    <div class="field-overlay" style="left: {{ $field['x'] }}%; top: {{ $field['y'] }}%; width: {{ $field['w'] }}%; height: {{ $field['h'] }}%; font-size: {{ $field['fontSize'] ?? 10 }}px;{{ !empty($field['bold']) ? ' font-weight: bold;' : '' }}{{ !empty($field['underline']) ? ' text-decoration: underline;' : '' }}{{ !empty($field['solidBackground']) ? ' background-color: #ffffff;' : '' }}">
+                        {{ $field['value'] }}
+                    </div>
+                @endforeach
+            @endif
+
+            {{-- Signature marker overlays --}}
             @foreach($page['markers'] as $marker)
                 <div class="signature-overlay" style="left: {{ $marker['x'] }}%; top: {{ $marker['y'] }}%; width: {{ $marker['w'] }}%; height: {{ $marker['h'] }}%;">
                     @if($marker['has_signature'] && $marker['signature_type'] === 'drawn' && $marker['signature_data'])

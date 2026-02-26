@@ -19,9 +19,9 @@
             <strong>{{ $documentName }}</strong>
         </div>
 
-        @if($message)
+        @if(!empty($personalMessage))
             <div style="background-color: #fffbeb; border-left: 4px solid #d69e2e; padding: 15px; margin: 20px 0;">
-                <p style="margin: 0; font-style: italic;">{{ $message }}</p>
+                <p style="margin: 0; font-style: italic;">{{ $personalMessage }}</p>
             </div>
         @endif
 

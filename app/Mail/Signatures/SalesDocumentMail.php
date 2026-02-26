@@ -14,7 +14,7 @@ class SalesDocumentMail extends BaseSignatureMail
         public string $documentName,
         public ?string $filePath,
         public string $uploadUrl,
-        public ?string $message,
+        public ?string $personalMessage,
         public Carbon $expiresAt,
     ) {}
 

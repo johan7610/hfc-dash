@@ -39,12 +39,16 @@ class NamedFieldController extends Controller
             $options = array_map('trim', explode(',', $request->input('default_options')));
         }
 
-        NamedField::create([
+        $field = NamedField::create([
             'name' => $request->input('name'),
             'field_type' => $request->input('field_type'),
             'default_options' => $options,
             'sort_order' => $request->input('sort_order') ?? ((int) NamedField::max('sort_order') + 10),
         ]);
+
+        if ($request->wantsJson()) {
+            return response()->json(['field' => $field]);
+        }
 
         return redirect()->route('docuperfect.settings.namedFields')
             ->with('status', "Named field \"{$request->input('name')}\" created.");

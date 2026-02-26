@@ -12,7 +12,7 @@ class SigningRequestMail extends BaseSignatureMail
         public string $signerName,
         public string $documentName,
         public string $signingUrl,
-        public ?string $message,
+        public ?string $personalMessage,
         public Carbon $expiresAt,
     ) {}
 

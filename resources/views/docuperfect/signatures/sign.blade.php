@@ -1,11 +1,50 @@
 @extends('layouts.nexus')
 
+@php
+    $userInitials = collect(explode(' ', $user->name))->map(function($n) { return strtoupper(substr($n, 0, 1)); })->join('');
+    $userFullName = $user->name;
+@endphp
+
 @section('nexus-content')
 {{-- Signature Pad library --}}
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+<style>
+@keyframes pulseHighlight {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+    50% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+}
+.pulse-highlight {
+    animation: pulseHighlight 1s ease-in-out 3;
+    border-color: #ef4444 !important;
+}
+</style>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4"
      x-data="signDocument()" x-init="init()">
+
+    <x-sticky-action-bar>
+        <x-slot name="left">
+            <a href="{{ route('docuperfect.rental') }}" class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                Back
+            </a>
+        </x-slot>
+        <x-slot name="center">
+            <h2 class="text-sm font-semibold text-gray-700 truncate">Sign: {{ $document->name }}</h2>
+        </x-slot>
+        <x-slot name="right">
+            <span class="text-xs text-gray-500" x-text="`${signedCount}/${totalAgent} signed`"></span>
+            <button @click="handleComplete()"
+                    :disabled="completingForm || signedCount < totalAgent || totalAgent === 0"
+                    class="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors"
+                    :class="signedCount >= totalAgent && totalAgent > 0 && !completingForm
+                        ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                        : 'bg-slate-100 text-slate-400 cursor-not-allowed'">
+                <span x-show="!completingForm">Complete & Send</span>
+                <span x-show="completingForm" x-cloak>Completing...</span>
+            </button>
+        </x-slot>
+    </x-sticky-action-bar>
 
     {{-- Header --}}
     <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 flex items-center justify-between">
@@ -25,17 +64,7 @@
         </div>
     </div>
 
-    {{-- Flash messages --}}
-    @if(session('status'))
-        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 px-4 py-3 text-sm">
-            {{ session('status') }}
-        </div>
-    @endif
-    @if(session('error'))
-        <div class="rounded-2xl border border-red-200 bg-red-50 text-red-900 px-4 py-3 text-sm">
-            {{ session('error') }}
-        </div>
-    @endif
+    {{-- Flash messages handled by global toast system --}}
 
     {{-- Progress bar --}}
     <div class="ds-status-card p-4">
@@ -130,6 +159,7 @@
                 {{-- Render markers for current page --}}
                 <template x-for="marker in markersForCurrentPage()" :key="marker.id">
                     <div class="absolute flex items-center justify-center select-none transition-all duration-200"
+                         :id="'marker-' + marker.id"
                          :style="`left:${marker.x_position}%;top:${marker.y_position}%;width:${marker.width}%;height:${marker.height}%;z-index:10;`"
                          :class="markerDisplayClasses(marker)"
                          @click="handleMarkerClick(marker)">
@@ -182,17 +212,31 @@
                 <span class="text-emerald-600 font-medium">All markers signed! Ready to send to the tenant.</span>
             </template>
         </div>
-        <form action="{{ route('docuperfect.signatures.signComplete', $document) }}" method="POST">
-            @csrf
-            <button type="submit"
-                    :disabled="signedCount < totalAgent"
-                    class="rounded-lg px-6 py-2.5 text-sm font-medium transition-colors"
-                    :class="signedCount >= totalAgent && totalAgent > 0
-                        ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                        : 'bg-slate-100 text-slate-400 cursor-not-allowed'">
-                Complete Signing & Send to Tenant &rarr;
-            </button>
-        </form>
+        <button @click="handleComplete()"
+                :disabled="completingForm"
+                class="rounded-lg px-6 py-2.5 text-sm font-medium transition-colors"
+                :class="signedCount >= totalAgent && totalAgent > 0 && !completingForm
+                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'">
+            <span x-show="!completingForm">Complete Signing & Send to Tenant &rarr;</span>
+            <span x-show="completingForm" x-cloak>Completing...</span>
+        </button>
+    </div>
+
+    {{-- Floating progress bar for unsigned markers --}}
+    <div x-show="signedCount < totalAgent && totalAgent > 0" x-cloak x-transition
+         class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-full px-6 py-3 flex items-center gap-3 z-40 border border-slate-200">
+        <div class="flex items-center gap-2">
+            <span class="text-sm font-medium text-slate-700" x-text="`${signedCount} of ${totalAgent} signed`"></span>
+            <div class="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div class="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                     :style="`width: ${totalAgent > 0 ? (signedCount / totalAgent) * 100 : 0}%`"></div>
+            </div>
+        </div>
+        <button @click="goToNextUnsigned()"
+                class="text-sm text-blue-600 font-medium hover:text-blue-800">
+            Next &rarr;
+        </button>
     </div>
 
     {{-- Include signature capture modal --}}
@@ -241,6 +285,9 @@ function signDocument() {
         typedName: @json($user->name),
         applying: false,
         signaturePad: null,
+
+        // Complete form state
+        completingForm: false,
 
         // Apply-to-all state
         showApplyAll: false,
@@ -315,8 +362,8 @@ function signDocument() {
             this.activeMarker = marker;
             this.captureMode = 'draw';
             this.typedName = marker.type === 'initial'
-                ? @json(collect(explode(' ', $user->name))->map(fn($n) => strtoupper(substr($n, 0, 1)))->join(''))
-                : @json($user->name);
+                ? @json($userInitials)
+                : @json($userFullName);
             this.showSignModal = true;
 
             this.$nextTick(() => this.initCanvas());
@@ -513,6 +560,56 @@ function signDocument() {
 
         set remainingSignatureCount(v) {
             // setter needed for x-text binding from modal partial
+        },
+
+        // ── Complete signing (with guided navigation if unsigned markers remain) ──
+        handleComplete() {
+            // Check if all agent markers are signed
+            const unsignedMarkers = this.markers.filter(m => m.assigned_party === 'agent' && !m.signed);
+
+            if (unsignedMarkers.length > 0) {
+                const first = unsignedMarkers[0];
+                const typeLabel = first.type === 'initial' ? 'initial' : 'sign';
+                alert(`Please ${typeLabel} here — ${unsignedMarkers.length} remaining`);
+                this.navigateToMarker(first);
+                return;
+            }
+
+            if (this.completingForm) return;
+            this.completingForm = true;
+
+            // Submit via form POST for redirect
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = @json(route('docuperfect.signatures.signComplete', $document));
+            const csrf = document.createElement('input');
+            csrf.type = 'hidden';
+            csrf.name = '_token';
+            csrf.value = @json(csrf_token());
+            form.appendChild(csrf);
+            document.body.appendChild(form);
+            form.submit();
+        },
+
+        // ── Navigate to next unsigned agent marker ──
+        goToNextUnsigned() {
+            const unsigned = this.markers.filter(m => m.assigned_party === 'agent' && !m.signed);
+            if (unsigned.length === 0) return;
+            this.navigateToMarker(unsigned[0]);
+        },
+
+        navigateToMarker(marker) {
+            if (this.currentPage !== marker.page_number) {
+                this.currentPage = marker.page_number;
+            }
+            this.$nextTick(() => {
+                const el = document.getElementById('marker-' + marker.id);
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.classList.add('pulse-highlight');
+                    setTimeout(() => el.classList.remove('pulse-highlight'), 3000);
+                }
+            });
         },
     };
 }

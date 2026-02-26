@@ -52,17 +52,7 @@
         </div>
     </div>
 
-    {{-- Flash messages --}}
-    @if(session('success'))
-        <div class="mb-5 px-4 py-3 rounded-xl text-sm font-medium" style="background:#f0fdf4;border:1px solid #bbf7d0;color:#166534">
-            {{ session('success') }}
-        </div>
-    @endif
-    @if(session('info'))
-        <div class="mb-5 px-4 py-3 rounded-xl text-sm font-medium bg-blue-50 border border-blue-200 text-blue-700">
-            {{ session('info') }}
-        </div>
-    @endif
+    {{-- Flash messages handled by global toast system --}}
 
     {{-- ACTION BUTTONS --}}
     <div class="ds-status-card mb-6">

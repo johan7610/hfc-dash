@@ -487,7 +487,8 @@ class SignatureService
     }
 
     /**
-     * Handle party completion — transition template status and send to next party.
+     * Handle party completion — if a non-agent party finished, require agent approval
+     * before advancing. Agent signing auto-advances to the next external party.
      */
     public function handlePartyCompletion(SignatureTemplate $template, string $completedParty): void
     {
@@ -505,12 +506,55 @@ class SignatureService
                 ]);
             }
 
-            // Determine next party
-            $order = $template->signing_order_json ?? ['agent', 'tenant', 'landlord'];
-            $currentIndex = array_search($completedParty, $order);
-            $nextParty = $order[$currentIndex + 1] ?? null;
+            // If an external party (non-agent) just completed, require agent approval
+            if ($completedParty !== 'agent') {
+                $template->update(['status' => SignatureTemplate::STATUS_PENDING_AGENT_APPROVAL]);
 
-            if ($nextParty && !$this->isPartyComplete($template, $nextParty)) {
+                SignatureAuditLog::log(
+                    $template,
+                    'pending_agent_approval',
+                    SignatureAuditLog::ACTOR_SYSTEM,
+                    'System',
+                    metadata: [
+                        'completed_party' => $completedParty,
+                        'signer_name' => $request?->signer_name,
+                    ],
+                );
+
+                // Notify the agent
+                $this->sendAgentApprovalNotification($template, $completedParty, $request);
+                return;
+            }
+
+            // Agent just finished — auto-advance to the first external party
+            $this->advanceToNextParty($template, $completedParty);
+        });
+    }
+
+    /**
+     * Agent approves and advances to the next party (or completes the document).
+     */
+    public function approveAndAdvance(SignatureTemplate $template): array
+    {
+        return DB::transaction(function () use ($template) {
+            $order = $template->signing_order_json ?? ['agent', 'tenant', 'landlord'];
+
+            // Find completed party roles
+            $completedParties = $template->requests()
+                ->where('status', SignatureRequest::STATUS_COMPLETED)
+                ->pluck('party_role')
+                ->toArray();
+
+            // Find next unsigned external party
+            $nextParty = null;
+            foreach ($order as $party) {
+                if ($party !== 'agent' && !in_array($party, $completedParties)) {
+                    $nextParty = $party;
+                    break;
+                }
+            }
+
+            if ($nextParty) {
                 // Transition to next party
                 $statusMap = [
                     'tenant' => SignatureTemplate::STATUS_AWAITING_TENANT,
@@ -527,10 +571,63 @@ class SignatureService
                 if ($nextRequest && $nextRequest->status === SignatureRequest::STATUS_WAITING) {
                     $this->sendSigningRequest($nextRequest);
                 }
-            } elseif ($this->isFullyComplete($template)) {
-                $this->completeDocument($template);
+
+                SignatureAuditLog::log(
+                    $template,
+                    'agent_approved_advance',
+                    SignatureAuditLog::ACTOR_USER,
+                    $template->creator?->name ?? 'Agent',
+                    $template->creator?->email,
+                    $template->created_by,
+                    metadata: ['next_party' => $nextParty],
+                );
+
+                return ['action' => 'sent', 'next_party' => $nextParty, 'next_name' => $nextRequest?->signer_name];
             }
+
+            // All external parties done — complete the document
+            $this->completeDocument($template);
+
+            SignatureAuditLog::log(
+                $template,
+                'agent_approved_complete',
+                SignatureAuditLog::ACTOR_USER,
+                $template->creator?->name ?? 'Agent',
+                $template->creator?->email,
+                $template->created_by,
+            );
+
+            return ['action' => 'completed'];
         });
+    }
+
+    /**
+     * Advance to next party in signing order (used after agent signs).
+     */
+    private function advanceToNextParty(SignatureTemplate $template, string $completedParty): void
+    {
+        $order = $template->signing_order_json ?? ['agent', 'tenant', 'landlord'];
+        $currentIndex = array_search($completedParty, $order);
+        $nextParty = $order[$currentIndex + 1] ?? null;
+
+        if ($nextParty && !$this->isPartyComplete($template, $nextParty)) {
+            $statusMap = [
+                'tenant' => SignatureTemplate::STATUS_AWAITING_TENANT,
+                'landlord' => SignatureTemplate::STATUS_AWAITING_LANDLORD,
+            ];
+            $newStatus = $statusMap[$nextParty] ?? SignatureTemplate::STATUS_SIGNING;
+            $template->update(['status' => $newStatus]);
+
+            $nextRequest = $template->requests()
+                ->where('party_role', $nextParty)
+                ->first();
+
+            if ($nextRequest && $nextRequest->status === SignatureRequest::STATUS_WAITING) {
+                $this->sendSigningRequest($nextRequest);
+            }
+        } elseif ($this->isFullyComplete($template)) {
+            $this->completeDocument($template);
+        }
     }
 
     /**
@@ -828,6 +925,7 @@ class SignatureService
 
         // Group documents by status
         $groups = [
+            'pending_approval' => collect(),
             'draft' => collect(),
             'ready_to_sign' => collect(),
             'awaiting_signatures' => collect(),
@@ -860,6 +958,7 @@ class SignatureService
 
             match ($sigTemplate->status) {
                 SignatureTemplate::STATUS_COMPLETED => $groups['completed']->push($doc),
+                SignatureTemplate::STATUS_PENDING_AGENT_APPROVAL => $groups['pending_approval']->push($doc),
                 SignatureTemplate::STATUS_SIGNING,
                 SignatureTemplate::STATUS_AWAITING_TENANT,
                 SignatureTemplate::STATUS_AWAITING_LANDLORD => $groups['awaiting_signatures']->push($doc),
@@ -882,15 +981,21 @@ class SignatureService
             ->limit(10)
             ->get();
 
-        $activeLeaseCount = LeaseRecord::visibleTo($user)
+        $activeLeases = LeaseRecord::visibleTo($user)
             ->where('status', LeaseRecord::STATUS_ACTIVE)
-            ->count();
+            ->with(['document', 'signatureTemplate'])
+            ->orderBy('lease_end_date')
+            ->get();
+
+        // Compute last update timestamp for polling
+        $lastUpdate = $signatureTemplates->max('updated_at');
 
         return [
             'groups' => $groups,
             'signatureTemplates' => $signatureTemplates,
             'fieldStatus' => $fieldStatus,
             'counts' => [
+                'pending_approval' => $groups['pending_approval']->count(),
                 'draft' => $groups['draft']->count(),
                 'ready_to_sign' => $groups['ready_to_sign']->count(),
                 'awaiting_signatures' => $groups['awaiting_signatures']->count(),
@@ -898,7 +1003,9 @@ class SignatureService
             ],
             'upcomingRenewals' => $upcomingRenewals,
             'expiredLeases' => $expiredLeases,
-            'activeLeaseCount' => $activeLeaseCount,
+            'activeLeases' => $activeLeases,
+            'activeLeaseCount' => $activeLeases->count(),
+            'lastUpdate' => $lastUpdate?->toIso8601String(),
         ];
     }
 
@@ -1032,7 +1139,7 @@ class SignatureService
                     signerName: $request->signer_name,
                     documentName: $documentName,
                     signingUrl: $signingUrl,
-                    message: $request->message,
+                    personalMessage: $request->message,
                     expiresAt: $request->token_expires_at,
                 ))->fromAgent($agent)
             );
@@ -1167,6 +1274,40 @@ class SignatureService
         } catch (\Throwable $e) {
             Log::error('Failed to send wet ink uploaded notification', [
                 'request_id' => $request->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Send notification to agent that a party has completed signing and needs approval.
+     */
+    private function sendAgentApprovalNotification(SignatureTemplate $template, string $completedParty, ?SignatureRequest $request): void
+    {
+        try {
+            $template->loadMissing(['document', 'creator']);
+            $agent = $template->creator;
+
+            if (!$agent) {
+                return;
+            }
+
+            $documentName = $template->document->name ?? 'Document';
+            $reviewUrl = url("/docuperfect/documents/{$template->document_id}/signatures/review");
+
+            Mail::to($agent->email)->send(
+                new \App\Mail\Signatures\PartySignedNotificationMail(
+                    agentName: $agent->name,
+                    partyRole: $completedParty,
+                    partyName: $request?->signer_name ?? ucfirst($completedParty),
+                    documentName: $documentName,
+                    reviewUrl: $reviewUrl,
+                )
+            );
+        } catch (\Throwable $e) {
+            Log::error('Failed to send agent approval notification', [
+                'template_id' => $template->id,
+                'completed_party' => $completedParty,
                 'error' => $e->getMessage(),
             ]);
         }

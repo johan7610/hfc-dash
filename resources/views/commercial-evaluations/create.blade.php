@@ -3,6 +3,18 @@
 @section('nexus-content')
 <div class="max-w-3xl mx-auto" x-data="{ propertyType: '{{ old('property_type', '') }}' }">
 
+    <x-sticky-action-bar>
+        <x-slot name="left">
+            <a href="{{ route('commercial-evaluations.index') }}" class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                Back
+            </a>
+        </x-slot>
+        <x-slot name="center">
+            <h2 class="text-sm font-semibold text-gray-700 truncate">New Commercial Market Evaluation</h2>
+        </x-slot>
+    </x-sticky-action-bar>
+
     {{-- Navy header --}}
     <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-6">
         <h2 class="text-xl font-bold text-white">New Commercial Market Evaluation</h2>

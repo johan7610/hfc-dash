@@ -8,9 +8,7 @@
         <div class="text-sm text-white/60">Manage role-based permissions for each section of the system.</div>
     </div>
 
-    @if(session('success'))
-        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 px-4 py-3">{{ session('success') }}</div>
-    @endif
+    {{-- Flash messages handled by global toast system --}}
 
     <div class="flex gap-1 bg-slate-100 dark:bg-slate-900 rounded-lg p-1 w-fit">
         <button @click="activeTab = 'permissions'"

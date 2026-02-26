@@ -18,6 +18,26 @@
 
 <div class="pres-page -m-6 p-6">
 
+<x-sticky-action-bar>
+    <x-slot name="left">
+        <a href="{{ route('presentations.index') }}" class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            All Presentations
+        </a>
+    </x-slot>
+    <x-slot name="center">
+        <h2 class="text-sm font-semibold text-gray-700 truncate">{{ $presentation->title }}</h2>
+    </x-slot>
+    <x-slot name="right">
+        <a href="{{ route('presentations.edit', $presentation) }}" class="px-3 py-1.5 text-sm font-medium bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">Edit</a>
+        @if($readiness['can_compile'])
+        <a href="{{ route('presentations.analysis', [$presentation, 'refresh' => 1]) }}" class="px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            {{ $latestSnapshot ? 'Re-run Analysis' : 'Run Analysis' }}
+        </a>
+        @endif
+    </x-slot>
+</x-sticky-action-bar>
+
 {{-- Navy header bar --}}
 <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-8">
     <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
@@ -64,11 +84,7 @@
     </div>
 </div>
 
-@if(session('success'))
-    <div class="mb-5 px-4 py-3 rounded-xl text-sm font-medium" style="background:var(--pres-success-bg);border:1px solid #bbf7d0;color:#166534">
-        {{ session('success') }}
-    </div>
-@endif
+{{-- Flash messages handled by global toast system --}}
 
 {{-- ACTION BUTTONS --}}
 <div class="ds-status-card mb-8">
@@ -131,11 +147,7 @@
     </div>
 </div>
 
-@if(session('error'))
-    <div class="mb-5 px-4 py-3 bg-red-50 border border-red-200 text-red-800 rounded-xl text-sm font-medium">
-        {{ session('error') }}
-    </div>
-@endif
+{{-- Error flash handled by global toast system --}}
 
 {{-- ── READINESS CHECKLIST (P16) ──────────────────────────────────────────── --}}
 <div class="ds-status-card mb-8">
@@ -1141,9 +1153,10 @@
                 </select>
                 <input type="url" name="url" id="link-url" placeholder="https://..." required
                        class="pres-input flex-1 min-w-0">
-                <a href="#" id="open-link-btn" target="_blank" rel="noopener noreferrer"
+                <button type="button" id="open-link-btn"
                    class="nexus-btn-outline text-xs py-1.5 px-2 shrink-0"
-                   title="Open link in new tab">↗</a>
+                   title="Open link in new tab"
+                   onclick="var u=document.getElementById('link-url').value; if(u) window.open(u,'_blank','noopener,noreferrer');">↗</button>
             </div>
             <div class="flex gap-2">
                 <input type="text" name="notes" placeholder="Notes (optional)"

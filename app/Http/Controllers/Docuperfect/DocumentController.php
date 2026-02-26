@@ -16,10 +16,16 @@ class DocumentController extends Controller
     {
         $user = $request->user();
         $packInstance = $request->query('pack_instance');
+        $filter = $request->query('filter', 'active');
 
-        $query = Document::active()
-            ->visibleTo($user)
-            ->with(['template', 'owner', 'branch']);
+        $query = Document::visibleTo($user)
+            ->with(['template', 'owner', 'branch', 'signatureTemplate']);
+
+        if ($filter === 'archived') {
+            $query->whereNotNull('archived_at');
+        } else {
+            $query->whereNull('archived_at');
+        }
 
         if ($packInstance) {
             $query->where('pack_instance_id', $packInstance);
@@ -34,7 +40,7 @@ class DocumentController extends Controller
                 ->get();
         }
 
-        return view('docuperfect.documents.index', compact('documents', 'packInstance', 'attachments', 'user'));
+        return view('docuperfect.documents.index', compact('documents', 'packInstance', 'attachments', 'user', 'filter'));
     }
 
     public function create(Request $request, $templateId)
@@ -261,10 +267,53 @@ class DocumentController extends Controller
             abort(403);
         }
 
+        // Block archiving for documents in active signing workflows or active leases
+        $sigTemplate = $document->signatureTemplate;
+        if ($sigTemplate) {
+            $blockedStatuses = [
+                'awaiting_tenant',
+                'awaiting_landlord',
+                'signing',
+                'pending_agent_approval',
+                'completed',
+                'sent',
+            ];
+
+            if (in_array($sigTemplate->status, $blockedStatuses)) {
+                $statusLabels = [
+                    'awaiting_tenant' => 'awaiting tenant signature',
+                    'awaiting_landlord' => 'awaiting landlord signature',
+                    'signing' => 'currently being signed',
+                    'pending_agent_approval' => 'pending your approval',
+                    'completed' => 'a completed active lease',
+                    'sent' => 'sent for signing',
+                ];
+                $label = $statusLabels[$sigTemplate->status] ?? 'in an active workflow';
+
+                return redirect()->back()
+                    ->with('error', "Cannot archive \"{$document->name}\" — it is {$label}. Only draft and cancelled documents can be archived.");
+            }
+        }
+
         $document->update(['archived_at' => now()]);
 
         return redirect()->route('docuperfect.dashboard')
             ->with('status', "Document \"{$document->name}\" archived.");
+    }
+
+    public function restore(Request $request, $id)
+    {
+        $user = $request->user();
+        $document = Document::findOrFail($id);
+
+        if (!$user->isAdmin() && (int)$document->owner_id !== (int)$user->id) {
+            abort(403);
+        }
+
+        $document->update(['archived_at' => null]);
+
+        return redirect()->back()
+            ->with('status', "Document \"{$document->name}\" restored.");
     }
 
     public function destroy(Request $request, $id)

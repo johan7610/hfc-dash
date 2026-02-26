@@ -594,7 +594,7 @@
         }
 
         // Named Field dropdown (template mode, text-capable only)
-        if (C.mode === 'template' && isTextCapable(field.type) && C.namedFields && C.namedFields.length > 0) {
+        if (C.mode === 'template' && isTextCapable(field.type)) {
             var nfSel = document.createElement('select');
             nfSel.className = 'dp-named-field-select';
 
@@ -603,7 +603,7 @@
             defOpt.textContent = 'Link field\u2026';
             nfSel.appendChild(defOpt);
 
-            C.namedFields.forEach(function (nf) {
+            (C.namedFields || []).forEach(function (nf) {
                 var o = document.createElement('option');
                 o.value = nf.id;
                 o.textContent = nf.name;
@@ -611,7 +611,18 @@
                 nfSel.appendChild(o);
             });
 
+            // "+ Create New" option at bottom
+            var createOpt = document.createElement('option');
+            createOpt.value = '__create_new__';
+            createOpt.textContent = '+ Create New\u2026';
+            nfSel.appendChild(createOpt);
+
             nfSel.addEventListener('change', function () {
+                if (this.value === '__create_new__') {
+                    this.value = field.named_field_id || '';
+                    openCreateNamedFieldModal(field);
+                    return;
+                }
                 if (this.value) {
                     var selOpt = this.options[this.selectedIndex];
                     field.named_field_id = parseInt(this.value);
@@ -1453,9 +1464,196 @@
     }
 
     // ======================================================================
+    // CREATE NAMED FIELD MODAL (template mode — on-the-fly)
+    // ======================================================================
+    function openCreateNamedFieldModal(targetField) {
+        // Remove any existing modal
+        var existing = document.querySelector('.dp-nf-modal-overlay');
+        if (existing) existing.remove();
+
+        var overlay = document.createElement('div');
+        overlay.className = 'dp-nf-modal-overlay';
+
+        var modal = document.createElement('div');
+        modal.className = 'dp-nf-modal';
+
+        var title = document.createElement('h3');
+        title.textContent = 'Create Named Field';
+        modal.appendChild(title);
+
+        // Display Label
+        var lblGroup = createFormGroup('Display Name', 'text', 'dp-nf-label');
+        modal.appendChild(lblGroup.wrap);
+
+        // Auto-generated field name (read-only display)
+        var namePreview = document.createElement('div');
+        namePreview.className = 'dp-nf-name-preview';
+        namePreview.textContent = '';
+        modal.appendChild(namePreview);
+
+        // Duplicate warning
+        var dupWarn = document.createElement('div');
+        dupWarn.className = 'dp-nf-dup-warn';
+        dupWarn.style.display = 'none';
+        modal.appendChild(dupWarn);
+
+        // Field Type
+        var typeGroup = document.createElement('div');
+        typeGroup.className = 'dp-nf-form-group';
+        var typeLbl = document.createElement('label');
+        typeLbl.textContent = 'Type';
+        typeGroup.appendChild(typeLbl);
+        var typeSel = document.createElement('select');
+        typeSel.id = 'dp-nf-type';
+        [['text', 'Text'], ['date', 'Date'], ['selection', 'Selection']].forEach(function (t) {
+            var o = document.createElement('option');
+            o.value = t[0];
+            o.textContent = t[1];
+            typeSel.appendChild(o);
+        });
+        typeGroup.appendChild(typeSel);
+        modal.appendChild(typeGroup);
+
+        // Options input (shown only for selection type)
+        var optGroup = createFormGroup('Options (comma-separated)', 'text', 'dp-nf-options');
+        optGroup.wrap.style.display = 'none';
+        modal.appendChild(optGroup.wrap);
+
+        typeSel.addEventListener('change', function () {
+            optGroup.wrap.style.display = this.value === 'selection' ? '' : 'none';
+        });
+
+        // Auto-generate name from label
+        lblGroup.input.addEventListener('input', function () {
+            var label = this.value;
+            var generated = label.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, '_').substring(0, 50);
+            namePreview.textContent = generated ? 'Field name: ' + generated : '';
+
+            // Check for duplicate
+            var dup = (C.namedFields || []).find(function (nf) {
+                return nf.name.toLowerCase().replace(/\s+/g, '_') === generated || nf.name.toLowerCase() === label.toLowerCase();
+            });
+            if (dup) {
+                dupWarn.style.display = '';
+                dupWarn.innerHTML = '';
+                var warnText = document.createElement('span');
+                warnText.textContent = '"' + dup.name + '" already exists \u2014 ';
+                dupWarn.appendChild(warnText);
+                var selectBtn = document.createElement('button');
+                selectBtn.type = 'button';
+                selectBtn.textContent = 'Select Existing';
+                selectBtn.className = 'dp-nf-dup-btn';
+                selectBtn.addEventListener('click', function () {
+                    targetField.named_field_id = dup.id;
+                    targetField.named_field_name = dup.name;
+                    isDirty = true;
+                    renderFieldsForPage(targetField.pageIndex);
+                    overlay.remove();
+                });
+                dupWarn.appendChild(selectBtn);
+            } else {
+                dupWarn.style.display = 'none';
+            }
+        });
+
+        // Buttons
+        var btnRow = document.createElement('div');
+        btnRow.className = 'dp-nf-btn-row';
+
+        var cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.className = 'dp-nf-btn dp-nf-btn-cancel';
+        cancelBtn.addEventListener('click', function () { overlay.remove(); });
+        btnRow.appendChild(cancelBtn);
+
+        var saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.textContent = 'Create & Select';
+        saveBtn.className = 'dp-nf-btn dp-nf-btn-save';
+        saveBtn.addEventListener('click', function () {
+            var label = lblGroup.input.value.trim();
+            if (!label) {
+                showToast('Name is required', 'error');
+                lblGroup.input.focus();
+                return;
+            }
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Creating\u2026';
+
+            var payload = {
+                name: label,
+                field_type: typeSel.value,
+                default_options: typeSel.value === 'selection' ? optGroup.input.value : null,
+            };
+
+            fetch('/docuperfect/settings/named-fields', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': C.csrfToken,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            }).then(function (r) {
+                if (!r.ok) return r.json().then(function (e) { throw new Error(e.message || JSON.stringify(e.errors || 'Unknown error')); });
+                return r.json();
+            }).then(function (data) {
+                // Add to in-memory list
+                C.namedFields = C.namedFields || [];
+                C.namedFields.push(data.field);
+
+                // Auto-select in target field
+                targetField.named_field_id = data.field.id;
+                targetField.named_field_name = data.field.name;
+                isDirty = true;
+                renderFieldsForPage(targetField.pageIndex);
+
+                overlay.remove();
+                showToast('Named field "' + data.field.name + '" created & linked');
+            }).catch(function (err) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Create & Select';
+                showToast('Error: ' + err.message, 'error');
+            });
+        });
+        btnRow.appendChild(saveBtn);
+
+        modal.appendChild(btnRow);
+        overlay.appendChild(modal);
+
+        // Close on overlay click
+        overlay.addEventListener('mousedown', function (e) {
+            if (e.target === overlay) overlay.remove();
+        });
+
+        document.body.appendChild(overlay);
+        lblGroup.input.focus();
+    }
+
+    function createFormGroup(labelText, inputType, inputId) {
+        var wrap = document.createElement('div');
+        wrap.className = 'dp-nf-form-group';
+        var lbl = document.createElement('label');
+        lbl.textContent = labelText;
+        wrap.appendChild(lbl);
+        var input = document.createElement('input');
+        input.type = inputType;
+        input.id = inputId;
+        wrap.appendChild(input);
+        return { wrap: wrap, input: input };
+    }
+
+    // ======================================================================
     // TOAST
     // ======================================================================
     function showToast(message, type) {
+        // Use global toast system if available
+        if (window.showToast) {
+            window.showToast(message, type || 'success');
+            return;
+        }
+        // Fallback to DOM-based toast
         document.querySelectorAll('.dp-toast').forEach(function (t) { t.remove(); });
         var toast = document.createElement('div');
         toast.className = 'dp-toast ' + (type || 'success');

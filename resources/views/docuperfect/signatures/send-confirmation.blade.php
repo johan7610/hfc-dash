@@ -11,17 +11,7 @@
         <div class="text-sm text-white/60">{{ $document->name }}</div>
     </div>
 
-    {{-- Flash messages --}}
-    @if(session('success'))
-        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 px-4 py-3 text-sm">
-            {{ session('success') }}
-        </div>
-    @endif
-    @if(session('error'))
-        <div class="rounded-2xl border border-red-200 bg-red-50 text-red-900 px-4 py-3 text-sm">
-            {{ session('error') }}
-        </div>
-    @endif
+    {{-- Flash messages handled by global toast system --}}
 
     {{-- Success banner --}}
     <div class="ds-status-card p-5">
