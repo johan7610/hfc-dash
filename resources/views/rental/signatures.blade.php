@@ -2,7 +2,41 @@
 
 @section('content')
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6"
-     x-data="{ showRejectModal: false, rejectDocId: null, rejectDocName: '', showRejected: false }">
+     x-data="{
+        showRejectModal: false,
+        rejectDocId: null,
+        rejectDocName: '',
+        showRejected: false,
+        savedIndicators: {},
+        async saveMetadata(docId, field, value) {
+            const body = {};
+            body[field] = value || null;
+            try {
+                const resp = await fetch(`/rental/signatures/${docId}/assign-metadata`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (resp.ok) {
+                    this.savedIndicators[docId + '-' + field] = true;
+                    setTimeout(() => { this.savedIndicators[docId + '-' + field] = false; }, 2000);
+                }
+            } catch (e) { console.error('Save failed', e); }
+        },
+        async saveExpiry(docId, date) {
+            try {
+                const resp = await fetch(`/rental/signatures/${docId}/set-expiry`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' },
+                    body: JSON.stringify({ lease_expiry_date: date })
+                });
+                if (resp.ok) {
+                    this.savedIndicators[docId + '-expiry'] = true;
+                    setTimeout(() => { this.savedIndicators[docId + '-expiry'] = false; }, 2000);
+                }
+            } catch (e) { console.error('Save failed', e); }
+        }
+     }">
 
     <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 flex items-center justify-between">
         <div>
@@ -239,6 +273,31 @@
                                     signed {{ $completedReq->completed_at?->diffForHumans() }}
                                 </div>
                             @endif
+                            {{-- Inline metadata dropdowns --}}
+                            <div class="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-amber-200">
+                                <div class="flex items-center gap-1.5">
+                                    <label class="text-[10px] text-slate-500 font-medium whitespace-nowrap">Type:</label>
+                                    <select class="text-xs border-slate-300 rounded-lg py-1 px-2 bg-white"
+                                            @change="saveMetadata({{ $doc->id }}, 'document_type_id', $event.target.value)">
+                                        <option value="">-- None --</option>
+                                        @foreach($documentTypes as $dt)
+                                            <option value="{{ $dt->id }}" {{ ($doc->document_type ?? '') === $dt->slug ? 'selected' : '' }}>{{ $dt->name }}</option>
+                                        @endforeach
+                                    </select>
+                                    <span class="text-emerald-600 text-[10px] font-medium transition-opacity" :class="savedIndicators[{{ $doc->id }} + '-document_type_id'] ? 'opacity-100' : 'opacity-0'">Saved</span>
+                                </div>
+                                <div class="flex items-center gap-1.5">
+                                    <label class="text-[10px] text-slate-500 font-medium whitespace-nowrap">Property:</label>
+                                    <select class="text-xs border-slate-300 rounded-lg py-1 px-2 bg-white"
+                                            @change="saveMetadata({{ $doc->id }}, 'property_id', $event.target.value)">
+                                        <option value="">-- None --</option>
+                                        @foreach($properties as $prop)
+                                            <option value="{{ $prop->id }}" {{ ($doc->property_id ?? '') == $prop->id ? 'selected' : '' }}>{{ $prop->full_address }}</option>
+                                        @endforeach
+                                    </select>
+                                    <span class="text-emerald-600 text-[10px] font-medium transition-opacity" :class="savedIndicators[{{ $doc->id }} + '-property_id'] ? 'opacity-100' : 'opacity-0'">Saved</span>
+                                </div>
+                            </div>
                         </div>
                         <div class="flex flex-col gap-1.5 ml-4">
                             <a href="{{ route('docuperfect.signatures.review', $doc) }}"
@@ -268,6 +327,7 @@
                     <tr>
                         <th class="text-left px-4 py-3">Document</th>
                         <th class="text-left px-4 py-3">Type</th>
+                        <th class="text-left px-4 py-3">Property</th>
                         <th class="text-left px-4 py-3">Signing Progress</th>
                         @if($user->isAdmin() || $user->isBranchManager())
                         <th class="text-left px-4 py-3">Agent</th>
@@ -283,7 +343,30 @@
                     @endphp
                     <tr>
                         <td class="px-4 py-3 font-medium">{{ $doc->name }}</td>
-                        <td class="px-4 py-3 text-slate-500">{{ $doc->document_type ? ucwords(str_replace('_', ' ', $doc->document_type)) : ($doc->template->documentType->name ?? '-') }}</td>
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-1">
+                                <select class="text-xs border-slate-300 rounded py-0.5 px-1 bg-white w-28"
+                                        @change="saveMetadata({{ $doc->id }}, 'document_type_id', $event.target.value)">
+                                    <option value="">--</option>
+                                    @foreach($documentTypes as $dt)
+                                        <option value="{{ $dt->id }}" {{ ($doc->document_type ?? '') === $dt->slug ? 'selected' : '' }}>{{ $dt->name }}</option>
+                                    @endforeach
+                                </select>
+                                <span class="text-emerald-600 text-[10px]" :class="savedIndicators[{{ $doc->id }} + '-document_type_id'] ? 'opacity-100' : 'opacity-0'">&#10003;</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-1">
+                                <select class="text-xs border-slate-300 rounded py-0.5 px-1 bg-white w-36"
+                                        @change="saveMetadata({{ $doc->id }}, 'property_id', $event.target.value)">
+                                    <option value="">--</option>
+                                    @foreach($properties as $prop)
+                                        <option value="{{ $prop->id }}" {{ ($doc->property_id ?? '') == $prop->id ? 'selected' : '' }}>{{ $prop->full_address }}</option>
+                                    @endforeach
+                                </select>
+                                <span class="text-emerald-600 text-[10px]" :class="savedIndicators[{{ $doc->id }} + '-property_id'] ? 'opacity-100' : 'opacity-0'">&#10003;</span>
+                            </div>
+                        </td>
                         <td class="px-4 py-3">
                             @if($sigTemplate)
                             <div class="flex flex-col gap-1.5">
@@ -534,6 +617,98 @@
     </div>
     @endif
 
+    {{-- Properties — documents grouped by property --}}
+    @if($documentsByProperty->isNotEmpty())
+    <div id="section-properties" class="space-y-2 scroll-mt-4">
+        <h3 class="text-sm font-semibold text-indigo-700 uppercase tracking-wider flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+            </svg>
+            Properties
+        </h3>
+        <div class="space-y-3">
+            @foreach($documentsByProperty->sortKeys() as $propertyId => $docs)
+                @php
+                    $propName = $propertyId ? ($docs->first()->property_address ?? ($properties->firstWhere('id', $propertyId)->full_address ?? 'Unknown Property')) : null;
+                @endphp
+                <div x-data="{ open: {{ $propertyId ? 'true' : 'false' }} }">
+                    <button @click="open = !open" class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-white border border-slate-200 hover:border-indigo-300 transition text-left">
+                        <div class="flex items-center gap-2">
+                            <svg class="w-4 h-4 text-indigo-500 transition-transform" :class="open ? 'rotate-90' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                            <span class="font-semibold text-sm text-slate-800">
+                                {{ $propName ?? 'Unassigned' }}
+                            </span>
+                            <span class="text-xs text-slate-400">({{ $docs->count() }} {{ Str::plural('document', $docs->count()) }})</span>
+                        </div>
+                    </button>
+                    <div x-show="open" x-collapse class="mt-1">
+                        <div class="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                            <table class="w-full text-sm ds-table">
+                                <thead>
+                                    <tr>
+                                        <th class="text-left px-4 py-2 text-xs">Type</th>
+                                        <th class="text-left px-4 py-2 text-xs">Document</th>
+                                        <th class="text-left px-4 py-2 text-xs">Status</th>
+                                        <th class="text-right px-4 py-2 text-xs">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                @foreach($docs as $doc)
+                                    @php
+                                        $st = $signatureTemplates->get($doc->id);
+                                        $statusLabel = 'Draft';
+                                        $statusColor = 'bg-slate-100 text-slate-600';
+                                        if ($st) {
+                                            $statusLabel = match($st->status) {
+                                                'completed' => 'Signed',
+                                                'pending_agent_approval' => 'Needs Approval',
+                                                'rejected' => 'Rejected',
+                                                'signing', 'awaiting_tenant', 'awaiting_landlord' => 'Awaiting',
+                                                default => ucfirst(str_replace('_', ' ', $st->status)),
+                                            };
+                                            $statusColor = match($st->status) {
+                                                'completed' => 'bg-emerald-100 text-emerald-700',
+                                                'pending_agent_approval' => 'bg-amber-100 text-amber-700',
+                                                'rejected' => 'bg-red-100 text-red-700',
+                                                'signing', 'awaiting_tenant', 'awaiting_landlord' => 'bg-blue-100 text-blue-700',
+                                                default => 'bg-slate-100 text-slate-600',
+                                            };
+                                        }
+                                    @endphp
+                                    <tr>
+                                        <td class="px-4 py-2">
+                                            @if($doc->document_type)
+                                                <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-600">{{ ucwords(str_replace('_', ' ', $doc->document_type)) }}</span>
+                                            @else
+                                                <span class="text-slate-300 text-xs">—</span>
+                                            @endif
+                                        </td>
+                                        <td class="px-4 py-2 font-medium text-slate-800">{{ $doc->name }}</td>
+                                        <td class="px-4 py-2">
+                                            <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold {{ $statusColor }}">{{ $statusLabel }}</span>
+                                        </td>
+                                        <td class="px-4 py-2 text-right">
+                                            @if($st && $st->status === 'completed')
+                                                <a href="{{ route('docuperfect.signatures.audit', $doc) }}" class="text-blue-600 hover:underline text-xs">Audit</a>
+                                                <a href="{{ route('docuperfect.signatures.download', $doc) }}" class="text-emerald-600 hover:underline text-xs ml-2">Download</a>
+                                            @else
+                                                <a href="{{ route('docuperfect.signatures.setup', $doc) }}" class="text-blue-600 hover:underline text-xs">View</a>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    </div>
+    @endif
+
     {{-- Active Leases --}}
     <div id="section-active-leases" class="space-y-2 scroll-mt-4">
         <h3 class="text-sm font-semibold text-green-700 uppercase tracking-wider flex items-center gap-2">
@@ -542,14 +717,37 @@
             </svg>
             Active Leases
         </h3>
+
+        {{-- LeaseRecord-based active leases --}}
         @if($activeLeases->isNotEmpty())
         <div class="space-y-3">
             @foreach($activeLeases as $lease)
-                @php $rental = number_format((float) $lease->rental_amount, 0, '.', ' '); @endphp
-                <div class="rounded-2xl border border-green-200 bg-green-50/50 p-4">
+                @php
+                    $rental = number_format((float) $lease->rental_amount, 0, '.', ' ');
+                    $daysLeft = $lease->daysUntilExpiry();
+                    $expiryColor = match(true) {
+                        $daysLeft <= 30 => 'text-red-600',
+                        $daysLeft <= 90 => 'text-amber-600',
+                        default => 'text-green-600',
+                    };
+                    $expiryBg = match(true) {
+                        $daysLeft <= 30 => 'bg-red-50 border-red-200',
+                        $daysLeft <= 90 => 'bg-amber-50 border-amber-200',
+                        default => 'bg-green-50/50 border-green-200',
+                    };
+                    $expiryDot = match(true) {
+                        $daysLeft <= 30 => 'bg-red-500',
+                        $daysLeft <= 90 => 'bg-amber-500',
+                        default => 'bg-green-500',
+                    };
+                @endphp
+                <div class="rounded-2xl border {{ $expiryBg }} p-4">
                     <div class="flex items-start justify-between">
                         <div class="flex-1">
-                            <div class="font-semibold text-slate-800">{{ $lease->property_address ?: ($lease->document->name ?? 'Unnamed') }}</div>
+                            <div class="flex items-center gap-2">
+                                <span class="inline-block w-2.5 h-2.5 rounded-full {{ $expiryDot }}"></span>
+                                <span class="font-semibold text-slate-800">{{ $lease->property_address ?: ($lease->document->name ?? 'Unnamed') }}</span>
+                            </div>
                             <div class="text-xs text-slate-600 mt-1">
                                 Tenant: {{ $lease->tenant_name ?? '—' }}
                                 <span class="mx-1.5">|</span>
@@ -565,7 +763,7 @@
                                     <span class="mx-1.5">|</span>
                                 @endif
                                 @if($lease->lease_end_date)
-                                    Expires: {{ $lease->lease_end_date->format('d M Y') }}
+                                    <span class="{{ $expiryColor }} font-medium">Expires: {{ $lease->lease_end_date->format('d M Y') }} ({{ $daysLeft }}d)</span>
                                 @endif
                             </div>
                             @if($lease->signatureTemplate && $lease->signatureTemplate->completed_at)
@@ -596,7 +794,58 @@
                 </div>
             @endforeach
         </div>
-        @else
+        @endif
+
+        {{-- Completed lease-type documents with expiry picker --}}
+        @if($completedLeaseDocs->isNotEmpty())
+        <div class="rounded-2xl border border-slate-200 bg-white overflow-hidden mt-3">
+            <div class="px-4 py-2 bg-slate-50 border-b border-slate-200">
+                <span class="text-xs text-slate-500 font-medium">Lease Documents — Set Expiry Dates</span>
+            </div>
+            <table class="w-full text-sm ds-table">
+                <thead>
+                    <tr>
+                        <th class="text-left px-4 py-2 text-xs">Property</th>
+                        <th class="text-left px-4 py-2 text-xs">Document</th>
+                        <th class="text-left px-4 py-2 text-xs">Signed</th>
+                        <th class="text-left px-4 py-2 text-xs">Lease Expiry</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach($completedLeaseDocs as $doc)
+                    @php
+                        $st = $signatureTemplates->get($doc->id);
+                        $signedDate = $st?->completed_at;
+                        $expiry = $doc->lease_expiry_date;
+                        $expiryDaysLeft = $expiry ? (int) now()->diffInDays($expiry, false) : null;
+                        $expiryIndicator = match(true) {
+                            $expiryDaysLeft === null => 'bg-slate-300',
+                            $expiryDaysLeft <= 30 => 'bg-red-500',
+                            $expiryDaysLeft <= 90 => 'bg-amber-500',
+                            default => 'bg-green-500',
+                        };
+                    @endphp
+                    <tr>
+                        <td class="px-4 py-2 font-medium text-slate-800">{{ $doc->property_address ?: '—' }}</td>
+                        <td class="px-4 py-2 text-slate-600">{{ $doc->name }}</td>
+                        <td class="px-4 py-2 text-slate-500 text-xs">{{ $signedDate?->format('d M Y') ?? '—' }}</td>
+                        <td class="px-4 py-2">
+                            <div class="flex items-center gap-2">
+                                <span class="inline-block w-2 h-2 rounded-full {{ $expiryIndicator }}"></span>
+                                <input type="date" value="{{ $expiry?->format('Y-m-d') ?? '' }}"
+                                       class="text-xs border-slate-300 rounded py-0.5 px-1.5 bg-white"
+                                       @change="saveExpiry({{ $doc->id }}, $event.target.value)">
+                                <span class="text-emerald-600 text-[10px] transition-opacity" :class="savedIndicators[{{ $doc->id }} + '-expiry'] ? 'opacity-100' : 'opacity-0'">Saved</span>
+                            </div>
+                        </td>
+                    </tr>
+                @endforeach
+                </tbody>
+            </table>
+        </div>
+        @endif
+
+        @if($activeLeases->isEmpty() && $completedLeaseDocs->isEmpty())
         <div class="ds-status-card p-4 text-center">
             <div class="text-sm text-slate-400 italic">No active leases yet.</div>
         </div>

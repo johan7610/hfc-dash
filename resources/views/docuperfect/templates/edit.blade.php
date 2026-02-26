@@ -79,8 +79,8 @@
     </div>
 
     {{-- Editor canvas area --}}
-    <div class="ds-status-card p-4">
-        <div id="docuperfect-editor"></div>
+    <div class="ds-status-card p-4" style="height:calc(100vh - 380px); min-height:300px;">
+        <div id="docuperfect-editor" style="height:100%;"></div>
     </div>
 
 </div>

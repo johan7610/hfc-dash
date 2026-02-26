@@ -1276,8 +1276,10 @@
             if (!r.ok) throw new Error('HTTP ' + r.status);
             isDirty = false;
             showToast('Saved successfully', 'success');
+            document.dispatchEvent(new CustomEvent('docuperfect:saved'));
         }).catch(function (err) {
             showToast('Save failed: ' + err.message, 'error');
+            document.dispatchEvent(new CustomEvent('docuperfect:save-failed'));
         }).finally(function () {
             if (btn) { btn.textContent = 'Save'; btn.disabled = false; }
         });

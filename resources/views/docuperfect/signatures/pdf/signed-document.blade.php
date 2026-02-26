@@ -217,14 +217,8 @@
                 <div class="signature-overlay" style="left: {{ $marker['x'] }}%; top: {{ $marker['y'] }}%; width: {{ $marker['w'] }}%; height: {{ $marker['h'] }}%;">
                     @if($marker['has_signature'] && $marker['signature_type'] === 'drawn' && $marker['signature_data'])
                         <img class="signature-image" src="{{ $marker['signature_data'] }}" alt="Signature">
-                        <div class="signature-label">
-                            Signed: {{ $marker['signer_name'] }} &mdash; {{ $marker['signed_at']?->format('d M Y H:i') }}
-                        </div>
                     @elseif($marker['has_signature'] && $marker['signature_type'] === 'typed')
                         <div class="typed-signature">{{ $marker['signer_name'] }}</div>
-                        <div class="signature-label">
-                            Signed: {{ $marker['signer_name'] }} &mdash; {{ $marker['signed_at']?->format('d M Y H:i') }}
-                        </div>
                     @elseif($marker['is_wet_ink'] && $marker['wet_ink_approved'])
                         <div class="wet-ink-stamp">
                             <div class="wet-ink-stamp-text">WET INK</div>

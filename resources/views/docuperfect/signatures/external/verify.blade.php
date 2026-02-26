@@ -17,7 +17,7 @@
                 </svg>
             </div>
             <h1 class="text-xl font-bold text-slate-800">Verify Your Identity</h1>
-            <p class="text-sm text-slate-500 mt-1">Please confirm your details to access the document.</p>
+            <p class="text-sm text-slate-500 mt-1">Hi {{ $request->signer_name }}, please enter your ID number to access the document.</p>
         </div>
 
         {{-- Error --}}
@@ -39,40 +39,18 @@
                 @csrf
 
                 <div>
-                    <label for="name" class="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
-                    <input type="text" id="name" name="name" value="{{ old('name') }}" required
-                           class="w-full rounded-lg border-slate-300 text-sm px-3 py-2.5 focus:ring-blue-500 focus:border-blue-500"
-                           placeholder="As provided by the sender">
-                    @error('name')
-                        <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
-                    @enderror
-                </div>
-
-                <div>
-                    <label for="email" class="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
-                    <input type="email" id="email" name="email" value="{{ old('email') }}" required
-                           class="w-full rounded-lg border-slate-300 text-sm px-3 py-2.5 focus:ring-blue-500 focus:border-blue-500"
-                           placeholder="your@email.com">
-                    @error('email')
-                        <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
-                    @enderror
-                </div>
-
-                @if($requiresIdNumber)
-                <div>
                     <label for="id_number" class="block text-sm font-medium text-slate-700 mb-1">ID / Passport Number</label>
                     <input type="text" id="id_number" name="id_number" value="{{ old('id_number') }}" required
                            class="w-full rounded-lg border-slate-300 text-sm px-3 py-2.5 focus:ring-blue-500 focus:border-blue-500"
-                           placeholder="Your ID or passport number">
+                           placeholder="Your ID or passport number"
+                           autocomplete="off">
                     @error('id_number')
                         <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
                     @enderror
                 </div>
-                @endif
 
                 <p class="text-xs text-slate-400 leading-relaxed">
-                    Your details must match what was provided when this document was prepared.
-                    This verification protects the security of the document.
+                    This verification protects the security of your document in compliance with POPIA regulations.
                 </p>
 
                 <button type="submit"

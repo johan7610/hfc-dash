@@ -7,11 +7,9 @@
 .dp-editor-layout {
     display: flex;
     gap: 0;
-    height: calc(100vh - 200px);
     min-height: 500px;
     background: #f1f5f9;
     border-radius: 12px;
-    overflow: hidden;
 }
 
 /* === Sidebar === */
@@ -25,6 +23,11 @@
     flex-shrink: 0;
     overflow-y: auto;
     z-index: 50;
+    position: sticky;
+    top: 80px;
+    align-self: flex-start;
+    max-height: calc(100vh - 100px);
+    border-radius: 12px 0 0 12px;
 }
 
 .dp-sidebar-label {
@@ -74,7 +77,6 @@
 /* === Canvas Area === */
 .dp-canvas-area {
     flex: 1;
-    overflow-y: auto;
     padding: 20px;
     display: flex;
     flex-direction: column;
@@ -607,6 +609,10 @@
     overflow-y: auto;
     transition: width 0.2s ease;
     z-index: 50;
+    position: sticky;
+    top: 80px;
+    align-self: flex-start;
+    max-height: calc(100vh - 100px);
 }
 
 .dp-quick-fill-sidebar.collapsed {

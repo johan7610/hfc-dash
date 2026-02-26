@@ -254,7 +254,7 @@
             @endforeach
         </div>
 
-        <div class="flex gap-4" style="min-height:600px;">
+        <div class="flex gap-4" style="height:calc(100vh - 240px); min-height:400px;">
             {{-- LEFT: Document pages --}}
             <div class="flex-1 ds-status-card p-4 overflow-hidden flex flex-col">
                 {{-- Page navigation --}}
@@ -275,11 +275,11 @@
                 </div>
 
                 {{-- Page display --}}
-                <div class="flex-1 overflow-auto flex justify-center" style="background:#e2e8f0;">
+                <div class="flex-1 overflow-auto flex justify-center items-start" style="background:#e2e8f0;">
                     <div class="relative inline-block" style="max-width:800px; width:100%;"
                          x-ref="pageContainer"
-                         @click="handlePageClick($event)"
-                         :style="placementActive ? 'cursor:crosshair;' : ''">
+                         @dragover.prevent="$event.dataTransfer.dropEffect = 'copy'"
+                         @drop.prevent="handleDrop($event)">
 
                         <img :src="pageImages[currentPage - 1]"
                              class="w-full block select-none pointer-events-none"
@@ -370,30 +370,38 @@
             </div>
 
             {{-- RIGHT: Toolbar --}}
-            <div class="w-72 flex-shrink-0 ds-status-card flex flex-col" style="max-height:calc(100vh - 200px);">
+            <div class="w-72 flex-shrink-0 ds-status-card flex flex-col">
                 {{-- Scrollable content area --}}
                 <div class="flex-1 overflow-y-auto p-4 min-h-0">
                     <h4 class="text-sm font-semibold text-slate-800 mb-3">Place Markers</h4>
                     <p class="text-xs text-slate-500 mb-4">Select a marker type and party, then click on the document to place it.</p>
 
-                    {{-- Marker type --}}
+                    {{-- Marker type (drag onto document to place) --}}
                     <div class="mb-4">
-                        <label class="block text-xs font-medium text-slate-600 mb-2">Marker Type</label>
+                        <label class="block text-xs font-medium text-slate-600 mb-2">Marker Type <span class="text-slate-400 font-normal">(drag onto document)</span></label>
                         <div class="grid grid-cols-2 gap-2">
-                            <button @click="selectedType = 'signature'" :class="selectedType === 'signature' ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'bg-slate-50 hover:bg-slate-100'"
-                                    class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-center transition-colors">
+                            <button @click="selectedType = 'signature'" draggable="true"
+                                    @dragstart="$event.dataTransfer.setData('marker-type', 'signature'); $event.dataTransfer.effectAllowed = 'copy'; selectedType = 'signature';"
+                                    :class="selectedType === 'signature' ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'bg-slate-50 hover:bg-slate-100'"
+                                    class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-center transition-colors cursor-grab active:cursor-grabbing">
                                 Signature
                             </button>
-                            <button @click="selectedType = 'initial'" :class="selectedType === 'initial' ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'bg-slate-50 hover:bg-slate-100'"
-                                    class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-center transition-colors">
+                            <button @click="selectedType = 'initial'" draggable="true"
+                                    @dragstart="$event.dataTransfer.setData('marker-type', 'initial'); $event.dataTransfer.effectAllowed = 'copy'; selectedType = 'initial';"
+                                    :class="selectedType === 'initial' ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'bg-slate-50 hover:bg-slate-100'"
+                                    class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-center transition-colors cursor-grab active:cursor-grabbing">
                                 Initial
                             </button>
-                            <button @click="selectedType = 'date'" :class="selectedType === 'date' ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'bg-slate-50 hover:bg-slate-100'"
-                                    class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-center transition-colors">
+                            <button @click="selectedType = 'date'" draggable="true"
+                                    @dragstart="$event.dataTransfer.setData('marker-type', 'date'); $event.dataTransfer.effectAllowed = 'copy'; selectedType = 'date';"
+                                    :class="selectedType === 'date' ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'bg-slate-50 hover:bg-slate-100'"
+                                    class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-center transition-colors cursor-grab active:cursor-grabbing">
                                 Date
                             </button>
-                            <button @click="selectedType = 'text'" :class="selectedType === 'text' ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'bg-slate-50 hover:bg-slate-100'"
-                                    class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-center transition-colors">
+                            <button @click="selectedType = 'text'" draggable="true"
+                                    @dragstart="$event.dataTransfer.setData('marker-type', 'text'); $event.dataTransfer.effectAllowed = 'copy'; selectedType = 'text';"
+                                    :class="selectedType === 'text' ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'bg-slate-50 hover:bg-slate-100'"
+                                    class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-center transition-colors cursor-grab active:cursor-grabbing">
                                 Text Field
                             </button>
                         </div>
@@ -421,13 +429,10 @@
                         </div>
                     </div>
 
-                    {{-- Place mode toggle --}}
-                    <button @click="placementActive = !placementActive"
-                            class="w-full rounded-lg px-4 py-2.5 text-sm font-medium mb-4 transition-colors"
-                            :class="placementActive ? 'bg-cyan-600 text-white hover:bg-cyan-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'">
-                        <span x-show="!placementActive">Click to Enable Placement</span>
-                        <span x-show="placementActive" x-cloak>Placement Active &mdash; Click on Document</span>
-                    </button>
+                    {{-- Drag hint --}}
+                    <div class="w-full rounded-lg px-4 py-2.5 text-xs text-center mb-4 bg-slate-100 text-slate-500 border border-dashed border-slate-300">
+                        Drag a marker type above onto the document page to place it
+                    </div>
 
                     <hr class="border-slate-200 my-3">
 
@@ -555,7 +560,6 @@
             totalPages: {{ $pageCount }},
             selectedType: 'signature',
             selectedParty: '{{ $parties[0]['role'] ?? 'agent' }}',
-            placementActive: false,
             saving: false,
             saved: {{ $markers->count() > 0 ? 'true' : 'false' }},
             saveMessage: '',
@@ -595,15 +599,16 @@
                 return css;
             },
 
-            handlePageClick(e) {
-                if (!this.placementActive) return;
+            handleDrop(e) {
+                const type = e.dataTransfer.getData('marker-type');
+                if (!type) return;
 
                 const container = this.$refs.pageContainer;
                 const rect = container.getBoundingClientRect();
                 const x = ((e.clientX - rect.left) / rect.width) * 100;
                 const y = ((e.clientY - rect.top) / rect.height) * 100;
 
-                const isSmall = this.selectedType === 'initial' || this.selectedType === 'date';
+                const isSmall = type === 'initial' || type === 'date';
                 const w = isSmall ? 10 : 22;
                 const h = isSmall ? 4 : 5.5;
 
@@ -619,7 +624,7 @@
                     y_position: Math.round(cy * 100) / 100,
                     width: w,
                     height: h,
-                    type: this.selectedType,
+                    type: type,
                     assigned_party: this.selectedParty,
                     label: null,
                     required: true,

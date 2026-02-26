@@ -72,11 +72,10 @@ class SigningController extends Controller
             );
         }
 
-        // Identity verification gate
-        if (!session("signing_verified_{$token}")) {
+        // Identity verification gate — only if signer has an ID number on file
+        if (!session("signing_verified_{$token}") && !empty($signingRequest->signer_id_number)) {
             return view('docuperfect.signatures.external.verify', [
                 'request' => $signingRequest,
-                'requiresIdNumber' => !empty($signingRequest->signer_id_number),
             ]);
         }
 
@@ -141,7 +140,7 @@ class SigningController extends Controller
     }
 
     /**
-     * Verify signer identity (name + email + optional ID number).
+     * Verify signer identity (ID/passport number only).
      */
     public function verify(Request $request, $token)
     {
@@ -153,49 +152,30 @@ class SigningController extends Controller
             return redirect()->route('signatures.external', $token);
         }
 
-        $rules = [
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|max:255',
-        ];
+        $request->validate([
+            'id_number' => 'required|string|min:3|max:20',
+        ]);
 
-        if (!empty($signingRequest->signer_id_number)) {
-            $rules['id_number'] = 'required|string|max:20';
-        }
+        // Normalized, case-insensitive comparison
+        $submittedId = strtolower(trim($request->id_number));
+        $expectedId = strtolower(trim($signingRequest->signer_id_number));
 
-        $request->validate($rules);
-
-        // Check name (case-insensitive, trim whitespace)
-        $nameMatch = strtolower(trim($request->name)) === strtolower(trim($signingRequest->signer_name));
-
-        // Check email
-        $emailMatch = strtolower(trim($request->email)) === strtolower(trim($signingRequest->signer_email));
-
-        // Check ID number if one was provided during setup
-        $idMatch = true;
-        if ($signingRequest->signer_id_number) {
-            $idMatch = trim($request->id_number) === trim($signingRequest->signer_id_number);
-        }
-
-        if (!$nameMatch || !$emailMatch || !$idMatch) {
+        if ($submittedId !== $expectedId) {
             SignatureAuditLog::log(
                 $signingRequest->template,
                 'identity_verification_failed',
                 SignatureAuditLog::ACTOR_SIGNER,
-                $request->name,
-                $request->email,
+                $signingRequest->signer_name,
+                $signingRequest->signer_email,
                 requestId: $signingRequest->id,
                 ip: $request->ip(),
                 ua: $request->userAgent(),
-                metadata: [
-                    'name_match' => $nameMatch,
-                    'email_match' => $emailMatch,
-                    'id_match' => $idMatch,
-                ],
+                metadata: ['id_match' => false],
             );
 
             return redirect()->back()
                 ->withInput()
-                ->with('error', 'Your details do not match our records. Please check and try again.');
+                ->with('error', 'The ID number does not match our records. Please try again.');
         }
 
         // Store verification in session

@@ -158,21 +158,19 @@ class DocumentFlattener
         $w = (floatval($marker->width) / 100) * $imgWidth;
         $h = (floatval($marker->height) / 100) * $imgHeight;
 
-        // Handle different signature types
-        if ($signature->signature_type === 'drawn' && $signature->signature_data) {
+        // Composite the client-rendered image onto the page.
+        // The client renders drawn signatures, typed signatures, text inputs, and dates
+        // as canvas images — always use that image when available so text markers
+        // render as normal text (not signature-style).
+        if ($signature->signature_data) {
             $this->compositeSignatureImage($image, $signature->signature_data, $x, $y, $w, $h);
         } elseif ($signature->signature_type === 'typed') {
-            // Render typed name in script font
+            // Fallback: render typed name when no image data available
             $this->renderTypedSignature($image, $signature->signer_name, $x, $y, $w, $h);
         }
 
-        // Add small signature label below the marker
-        $labelY = (int) $y + (int) $h + 2;
-        $dateStr = $signature->signed_at ? $signature->signed_at->format('d M Y H:i') : now()->format('d M Y H:i');
-        $label = 'Signed: ' . $signature->signer_name . ' — ' . $dateStr;
-        $labelColor = imagecolorallocate($image, 100, 100, 100);
-        // Use built-in GD font 1 (tiny) for the label
-        imagestring($image, 1, (int) $x, $labelY, $label, $labelColor);
+        // Audit metadata (signer name, timestamp) is stored in the database
+        // and appears on the audit certificate — not rendered on the document page.
 
         // Save the updated page
         $newPath = $this->saveFlattenedPage($template->id, $pageNum, $image);

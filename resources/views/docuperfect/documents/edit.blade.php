@@ -134,14 +134,14 @@
             </div>
             @endif
 
-            {{-- Set Up Signatures (generic — for any document) --}}
-            <a href="{{ route('docuperfect.signatures.setup', $document->id) }}"
-               class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+            {{-- Set Up Signatures (saves document first, then navigates) --}}
+            <button type="button" id="setup-signatures-btn"
+                    class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                 </svg>
                 Set Up Signatures
-            </a>
+            </button>
         </div>
     </div>
 
@@ -174,4 +174,62 @@
     };
 </script>
 <script src="{{ asset('js/docuperfect-editor.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const setupBtn = document.getElementById('setup-signatures-btn');
+    if (setupBtn) {
+        setupBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const origHtml = setupBtn.innerHTML;
+            setupBtn.disabled = true;
+            setupBtn.innerHTML = '<span>Saving&hellip;</span>';
+
+            const sigSetupUrl = @json(route('docuperfect.signatures.setup', $document->id));
+
+            // Trigger the editor save via the Save button
+            const saveBtn = document.getElementById('dpSaveBtn');
+            if (saveBtn) {
+                let resolved = false;
+                const onSaved = function() {
+                    if (resolved) return;
+                    resolved = true;
+                    cleanup();
+                    window.onbeforeunload = null;
+                    window.location.href = sigSetupUrl;
+                };
+                const onFailed = function() {
+                    if (resolved) return;
+                    resolved = true;
+                    cleanup();
+                    setupBtn.disabled = false;
+                    setupBtn.innerHTML = origHtml;
+                    alert('Failed to save document. Please try again.');
+                };
+                const cleanup = function() {
+                    document.removeEventListener('docuperfect:saved', onSaved);
+                    document.removeEventListener('docuperfect:save-failed', onFailed);
+                };
+
+                document.addEventListener('docuperfect:saved', onSaved);
+                document.addEventListener('docuperfect:save-failed', onFailed);
+                saveBtn.click();
+
+                // Fallback timeout
+                setTimeout(function() {
+                    if (!resolved) {
+                        resolved = true;
+                        cleanup();
+                        window.onbeforeunload = null;
+                        window.location.href = sigSetupUrl;
+                    }
+                }, 5000);
+            } else {
+                // No editor save button — just navigate
+                window.onbeforeunload = null;
+                window.location.href = sigSetupUrl;
+            }
+        });
+    }
+});
+</script>
 @endsection

@@ -21,11 +21,13 @@ class Document extends Model
         'document_type',
         'property_address',
         'property_id',
+        'lease_expiry_date',
     ];
 
     protected $casts = [
         'fields_json' => 'array',
         'archived_at' => 'datetime',
+        'lease_expiry_date' => 'date',
     ];
 
     public function owner()
