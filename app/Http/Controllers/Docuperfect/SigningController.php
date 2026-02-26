@@ -9,6 +9,7 @@ use App\Models\Docuperfect\SignatureRequest;
 use App\Services\Docuperfect\DocumentFlattener;
 use App\Services\Docuperfect\SignatureService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class SigningController extends Controller
 {
@@ -542,7 +543,7 @@ class SigningController extends Controller
             abort(404, 'Flattened page not found.');
         }
 
-        $path = storage_path('app/' . $flattenedPages[$pageNum]);
+        $path = Storage::disk('local')->path($flattenedPages[$pageNum]);
         if (!file_exists($path)) {
             abort(404, 'Flattened page file not found.');
         }

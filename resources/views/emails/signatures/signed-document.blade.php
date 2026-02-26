@@ -31,19 +31,21 @@
 
         @if($pdfPath)
             <div style="background-color: #f0fff4; border-left: 4px solid #276749; padding: 15px; margin: 20px 0;">
-                <p style="margin: 0;">Your signed copy is attached to this email. It includes a Certificate of Authenticity with the full audit trail.</p>
+                <p style="margin: 0;"><strong>Your signed copy is attached to this email.</strong> Please save it for your records.</p>
             </div>
         @else
-            <div style="background-color: #f0fff4; border-left: 4px solid #276749; padding: 15px; margin: 20px 0;">
-                <p style="margin: 0;">The document is now fully executed. You can view or download a copy below.</p>
+            <div style="background-color: #fffbeb; border-left: 4px solid #d69e2e; padding: 15px; margin: 20px 0;">
+                <p style="margin: 0;">The document is now fully executed. Please contact the agent if you need a copy of the signed document.</p>
             </div>
         @endif
 
-        <div style="text-align: center; margin: 30px 0;">
-            <a href="{{ $envelopeUrl }}" style="display: inline-block; background-color: #276749; color: #ffffff; padding: 14px 40px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
-                VIEW DOCUMENT
-            </a>
-        </div>
+        @if($envelopeUrl)
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{{ $envelopeUrl }}" style="display: inline-block; background-color: #276749; color: #ffffff; padding: 14px 40px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+                    VIEW IN NEXUS
+                </a>
+            </div>
+        @endif
 
         <p style="color: #666; font-size: 12px;">
             This document was signed in accordance with the Electronic Communications and Transactions Act 25 of 2002.

@@ -211,7 +211,12 @@
                 <div class="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
                     <div class="flex items-start justify-between">
                         <div class="flex-1">
-                            <div class="font-semibold text-slate-800">{{ $doc->name }}</div>
+                            <div class="font-semibold text-slate-800">
+                                {{ $doc->name }}
+                                @if($doc->document_type)
+                                    <span class="inline-block ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-600">{{ ucwords(str_replace('_', ' ', $doc->document_type)) }}</span>
+                                @endif
+                            </div>
                             <div class="flex flex-wrap items-center gap-2 mt-2">
                                 @foreach(['agent', 'tenant', 'landlord'] as $role)
                                     @php $req = $requests->get($role); @endphp
@@ -262,6 +267,7 @@
                 <thead>
                     <tr>
                         <th class="text-left px-4 py-3">Document</th>
+                        <th class="text-left px-4 py-3">Type</th>
                         <th class="text-left px-4 py-3">Signing Progress</th>
                         @if($user->isAdmin() || $user->isBranchManager())
                         <th class="text-left px-4 py-3">Agent</th>
@@ -277,6 +283,7 @@
                     @endphp
                     <tr>
                         <td class="px-4 py-3 font-medium">{{ $doc->name }}</td>
+                        <td class="px-4 py-3 text-slate-500">{{ $doc->document_type ? ucwords(str_replace('_', ' ', $doc->document_type)) : ($doc->template->documentType->name ?? '-') }}</td>
                         <td class="px-4 py-3">
                             @if($sigTemplate)
                             <div class="flex flex-col gap-1.5">

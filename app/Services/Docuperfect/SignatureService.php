@@ -682,8 +682,12 @@ class SignatureService
                 documentHash: $template->document_hash,
             );
         } else {
-            Log::warning('SignatureService: Signed PDF generation failed, sending emails without attachment', [
+            Log::error('SignatureService: Signed PDF generation failed, emails will NOT include PDF attachment', [
                 'template_id' => $template->id,
+                'document_id' => $template->document_id,
+                'document_name' => $template->document->name ?? 'unknown',
+                'has_flattened_pages' => !empty($template->flattened_pages_json),
+                'page_count' => $template->document->template?->page_count ?? 0,
             ]);
         }
 
@@ -1356,16 +1360,20 @@ class SignatureService
 
             $pdfFilename = "Signed - {$documentName}.pdf";
 
-            // Notify each external signer — attach client copy (no audit trail)
+            // Notify each signer — attach client copy (no audit trail)
+            // External signers (non-agent) do NOT get a link to Nexus — only the PDF attachment
             foreach ($template->requests as $request) {
                 if ($request->status !== SignatureRequest::STATUS_COMPLETED) {
                     continue;
                 }
 
+                // Only agent gets the Nexus link; external parties cannot access it
+                $signerUrl = $request->party_role === 'agent' ? $viewUrl : null;
+
                 $mail = (new SignedDocumentMail(
                     recipientName: $request->signer_name,
                     documentName: $documentName,
-                    envelopeUrl: $viewUrl,
+                    envelopeUrl: $signerUrl,
                     progress: $progress,
                     pdfPath: $clientPdfPath,
                     pdfFilename: $clientPdfPath ? $pdfFilename : null,

@@ -163,7 +163,7 @@
                 <div class="flex items-center justify-between mb-2">
                     <span class="text-sm font-medium text-slate-700">Signing Progress</span>
                     <span class="text-sm text-slate-500">
-                        <span x-text="signedCount"></span> / <span x-text="totalRequired"></span> markers signed
+                        <span x-text="signedCount"></span> / <span x-text="totalRequired"></span> markers completed
                     </span>
                 </div>
                 <div class="w-full bg-slate-200 rounded-full h-2.5">
@@ -260,8 +260,8 @@
                                 {{-- My unsigned marker (clickable) --}}
                                 <template x-if="marker.is_mine && !marker.signed">
                                     <div class="flex flex-col items-center justify-center w-full h-full px-1">
-                                        <span class="text-xs font-bold leading-tight truncate">Sign Here</span>
-                                        <span class="text-[10px] leading-tight opacity-70 truncate" x-text="markerTypeLabel(marker)"></span>
+                                        <span class="text-xs font-bold leading-tight truncate" x-text="markerActionLabel(marker)"></span>
+                                        <span class="text-[10px] leading-tight opacity-70 truncate" x-text="marker.label || markerTypeLabel(marker)"></span>
                                     </div>
                                 </template>
 
@@ -276,7 +276,7 @@
                                         <template x-if="marker.type === 'date'">
                                             <span class="text-xs font-medium" x-text="marker.date_value || formatDate(new Date())"></span>
                                         </template>
-                                        <span class="absolute -bottom-0.5 right-0.5 text-[9px] text-emerald-700 font-semibold">Signed</span>
+                                        <span class="absolute -bottom-0.5 right-0.5 text-[9px] text-emerald-700 font-semibold" x-text="marker.type === 'text' ? 'Done' : 'Signed'"></span>
                                     </div>
                                 </template>
 
@@ -338,7 +338,7 @@
             <div x-show="signedCount < totalRequired && totalRequired > 0" x-cloak x-transition
                  class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-full px-6 py-3 flex items-center gap-3 z-40 border border-slate-200">
                 <div class="flex items-center gap-2">
-                    <span class="text-sm font-medium text-slate-700" x-text="`${signedCount} of ${totalRequired} signed`"></span>
+                    <span class="text-sm font-medium text-slate-700" x-text="`${signedCount} of ${totalRequired} completed`"></span>
                     <div class="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
                         <div class="h-full bg-emerald-500 rounded-full transition-all duration-500"
                              :style="`width: ${totalRequired > 0 ? (signedCount / totalRequired) * 100 : 0}%`"></div>
@@ -457,6 +457,44 @@
                             <span x-show="!applyingAll">Yes, Apply to All</span>
                             <span x-show="applyingAll" x-cloak>Applying...</span>
                         </button>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Text input modal --}}
+            <div x-show="showTextModal" x-cloak x-transition.opacity
+                 class="fixed inset-0 z-50 flex items-center justify-center"
+                 style="background:rgba(0,0,0,0.6);"
+                 @keydown.escape.window="showTextModal = false">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" @click.stop>
+                    <div class="px-6 py-4 border-b border-slate-200" style="background:#0b2a4a;">
+                        <h3 class="text-white font-semibold text-lg">
+                            Enter Text: <span x-text="activeMarker ? (activeMarker.label || markerLabel(activeMarker)) : ''"></span>
+                            <span class="text-white/50 text-sm" x-text="activeMarker ? '— Page ' + activeMarker.page_number : ''"></span>
+                        </h3>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Type your response</label>
+                            <input type="text" x-model="textInputValue"
+                                   @keydown.enter.prevent="applyTextValue()"
+                                   class="w-full rounded-lg border-slate-300 text-sm px-3 py-2.5 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="Type here...">
+                        </div>
+                        <div class="flex items-center justify-end gap-3 pt-2">
+                            <button @click="showTextModal = false"
+                                    class="px-4 py-2.5 text-sm text-slate-600 hover:text-slate-800 font-medium">
+                                Cancel
+                            </button>
+                            <button @click="applyTextValue()"
+                                    class="rounded-lg px-6 py-2.5 text-sm font-semibold text-white transition-colors"
+                                    style="background:#0b2a4a;"
+                                    :disabled="applying || !textInputValue.trim()"
+                                    :class="(applying || !textInputValue.trim()) ? 'opacity-50 cursor-not-allowed' : ''">
+                                <span x-show="!applying">Apply</span>
+                                <span x-show="applying" x-cloak>Applying...</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -657,6 +695,8 @@ function externalSign() {
         signingMethod: @json($request->signing_method),
         wetInkPendingReview: {{ $wetInkPendingReview ? 'true' : 'false' }},
         showSignModal: false,
+        showTextModal: false,
+        textInputValue: '',
         activeMarker: null,
         captureMode: 'draw',
         typedName: @json($request->signer_name),
@@ -741,6 +781,13 @@ function externalSign() {
             return m.type.charAt(0).toUpperCase() + m.type.slice(1);
         },
 
+        markerActionLabel(m) {
+            if (m.type === 'text') return 'Enter Text';
+            if (m.type === 'date') return 'Auto Date';
+            if (m.type === 'initial') return 'Initial Here';
+            return 'Sign Here';
+        },
+
         markerDisplayClasses(m) {
             const base = 'rounded border-2 ';
             if (m.is_mine) {
@@ -757,6 +804,14 @@ function externalSign() {
 
             if (marker.type === 'date') {
                 this.signDateMarker(marker);
+                return;
+            }
+
+            // For text markers, show text input modal
+            if (marker.type === 'text') {
+                this.activeMarker = marker;
+                this.textInputValue = '';
+                this.showTextModal = true;
                 return;
             }
 
@@ -825,6 +880,32 @@ function externalSign() {
             const dataUrl = canvas.toDataURL('image/png');
             await this.submitSignature(marker, dataUrl, 'typed');
             marker.date_value = dateStr;
+        },
+
+        // ── Text marker input ──
+        async applyTextValue() {
+            if (!this.activeMarker || !this.textInputValue.trim()) return;
+            this.applying = true;
+
+            const text = this.textInputValue.trim();
+            const canvas = document.createElement('canvas');
+            canvas.width = 400;
+            canvas.height = 40;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.font = '16px sans-serif';
+            ctx.fillStyle = '#000000';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 5, 20);
+
+            const dataUrl = canvas.toDataURL('image/png');
+            const success = await this.submitSignature(this.activeMarker, dataUrl, 'typed');
+
+            if (success) {
+                this.showTextModal = false;
+            }
+
+            this.applying = false;
         },
 
         formatDate(d) {
@@ -946,7 +1027,7 @@ function externalSign() {
             const unsignedMarkers = this.markers.filter(m => m.is_mine && !m.signed);
             if (unsignedMarkers.length > 0) {
                 const first = unsignedMarkers[0];
-                const typeLabel = first.type === 'initial' ? 'initial' : 'sign';
+                const typeLabel = first.type === 'text' ? 'enter text' : (first.type === 'initial' ? 'initial' : 'sign');
                 this.showNotification(
                     `Please ${typeLabel} here — ${unsignedMarkers.length} remaining`,
                     'warning'

@@ -918,7 +918,7 @@ class SignatureController extends Controller
             abort(404, 'Flattened page not found.');
         }
 
-        $path = storage_path('app/' . $flattenedPages[$pageNum]);
+        $path = Storage::disk('local')->path($flattenedPages[$pageNum]);
         if (!file_exists($path)) {
             abort(404, 'Flattened page file not found.');
         }
@@ -962,7 +962,7 @@ class SignatureController extends Controller
         ]);
 
         $document = Document::findOrFail($id);
-        $this->authorizeDocument($request, $document);
+        $this->authorizeDocument($request->user(), $document);
 
         $template = $document->signatureTemplate;
 

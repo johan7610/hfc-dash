@@ -11,7 +11,7 @@ class SignedDocumentMail extends BaseSignatureMail
     public function __construct(
         public string $recipientName,
         public string $documentName,
-        public string $envelopeUrl,
+        public ?string $envelopeUrl = null,
         public array $progress = [],
         public ?string $pdfPath = null,
         public ?string $pdfFilename = null,
