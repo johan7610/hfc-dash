@@ -107,7 +107,10 @@
                                 <th class="text-left px-4 py-3">Property</th>
                                 <th class="text-left px-4 py-3">Branch / Period</th>
                                 <th class="text-right px-4 py-3">Selling Price</th>
-                                <th class="text-right px-4 py-3">Our Total (Ex VAT)</th>
+                                <th class="text-right px-4 py-3">Deal Commission</th>
+                                @if(($branchIdContext ?? 0) > 0)
+                                    <th class="text-right px-4 py-3">Branch Commission</th>
+                                @endif
                                 <th class="text-center px-4 py-3">Status</th>
                                 <th class="text-center px-4 py-3">Commission</th>
                                 <th class="text-center px-4 py-3">Quick Update</th>
@@ -159,6 +162,12 @@
                                         <div class="font-bold ds-value">R {{ number_format((float)$deal->totalOurCommission(), 0) }}</div>
                                     </td>
 
+                                    @if(($branchIdContext ?? 0) > 0)
+                                        <td class="px-4 py-3 text-right">
+                                            <div class="font-bold ds-value">R {{ number_format((float)$deal->branchCommission($branchIdContext), 0) }}</div>
+                                        </td>
+                                    @endif
+
                                     <td class="px-4 py-3 text-center">
                                         <span class="ds-badge {{ $statusBadge }}">{{ $acceptedLabel }}</span>
                                     </td>
@@ -201,7 +210,7 @@
 
                             @if($deals->isEmpty())
                                 <tr>
-                                    <td colspan="9" class="px-5 py-10 text-center text-sm text-gray-500">No deals found.</td>
+                                    <td colspan="{{ ($branchIdContext ?? 0) > 0 ? 10 : 9 }}" class="px-5 py-10 text-center text-sm text-gray-500">No deals found.</td>
                                 </tr>
                             @endif
                         </tbody>

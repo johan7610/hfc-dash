@@ -1024,6 +1024,7 @@ catch (\Throwable $e) {
 
         $agents = \App\Models\User::where('branch_id', $user->branch_id)
             ->where('is_active', 1)
+            ->where('counts_for_branch_split', 1)
                       ->whereIn('role', ['agent','branch_manager','admin'])
             ->count();
 
@@ -1095,6 +1096,7 @@ catch (\Throwable $e) {
 
         $agents = \App\Models\User::where('branch_id', $user->branch_id)
             ->where('is_active', 1)
+            ->where('counts_for_branch_split', 1)
                       ->whereIn('role', ['agent','branch_manager','admin'])
             ->count();
 
@@ -1184,6 +1186,7 @@ catch (\Throwable $e) {
         $agents = \App\Models\User::where('branch_id', $user->branch_id)
             ->whereIn('role', ['agent','branch_manager','admin'])
             ->where('is_active', 1)
+            ->where('counts_for_branch_split', 1)
             ->count();
 
         if ($agents < 1) $agents = 1;

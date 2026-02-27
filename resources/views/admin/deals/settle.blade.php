@@ -513,7 +513,9 @@
     const external = getNum(externalEl);
 
     const vatAmt = Number({{ (float)$vatAmt ?? 0 }});
-    const checksum = totals.net + totals.paye + totals.deductions + totals.company + external + vatAmt;
+    const vatRate = Number({{ (float)($vatRate ?? 0) }});
+    const externalExVat = (vatRate > 0 && external > 0) ? external / (1.0 + vatRate) : external;
+    const checksum = totals.net + totals.paye + totals.deductions + totals.company + externalExVat + vatAmt;
     const checksumEl = document.getElementById("js-checksum");
     if (checksumEl) checksumEl.textContent = fmt(checksum);
 

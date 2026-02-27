@@ -7,6 +7,7 @@
         rejectDocId: null,
         rejectDocName: '',
         showRejected: false,
+        showSuperseded: false,
         showUploadOnBehalf: false,
         uploadOnBehalfAction: '',
         uploadOnBehalfPartyName: '',
@@ -250,6 +251,9 @@
                         <div class="flex-1">
                             <div class="font-semibold text-slate-800">
                                 {{ $doc->name }}
+                                @if($sigTemplate && $sigTemplate->supersedes_id)
+                                    <span class="inline-block ml-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-100 text-cyan-700">v{{ $sigTemplate->versionNumber() }} &mdash; corrected</span>
+                                @endif
                                 @if($doc->document_type)
                                     <span class="inline-block ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-600">{{ ucwords(str_replace('_', ' ', $doc->document_type)) }}</span>
                                 @endif
@@ -307,6 +311,13 @@
                                class="inline-flex items-center px-4 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 whitespace-nowrap">
                                 Review &amp; Approve
                             </a>
+                            <form method="POST" action="{{ route('docuperfect.signatures.supersede', $doc) }}" class="inline">
+                                @csrf
+                                <button type="submit" class="text-xs text-cyan-600 hover:text-cyan-800 text-center whitespace-nowrap"
+                                        onclick="return confirm('This will supersede the current version and create a new one. All pending signing links will be invalidated. Continue?')">
+                                    Edit &amp; Re-send
+                                </button>
+                            </form>
                             <button type="button"
                                     @click="rejectDocId = {{ $doc->id }}; rejectDocName = {{ Js::from($doc->name) }}; showRejectModal = true"
                                     class="text-xs text-red-500 hover:text-red-700 text-center">
@@ -345,7 +356,12 @@
                         $requests = $sigTemplate ? $sigTemplate->requests->keyBy('party_role') : collect();
                     @endphp
                     <tr>
-                        <td class="px-4 py-3 font-medium">{{ $doc->name }}</td>
+                        <td class="px-4 py-3 font-medium">
+                            {{ $doc->name }}
+                            @if($sigTemplate && $sigTemplate->supersedes_id)
+                                <span class="inline-block ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-100 text-cyan-700">v{{ $sigTemplate->versionNumber() }} &mdash; corrected</span>
+                            @endif
+                        </td>
                         <td class="px-4 py-3">
                             <div class="flex items-center gap-1">
                                 <select class="text-xs border-slate-300 rounded py-0.5 px-1 bg-white w-28"
@@ -478,6 +494,13 @@
                                         </button>
                                     @endif
                                 @endif
+                                <form method="POST" action="{{ route('docuperfect.signatures.supersede', $doc) }}" class="inline">
+                                    @csrf
+                                    <button type="submit" class="text-cyan-600 hover:underline text-xs"
+                                            onclick="return confirm('This will supersede the current version and create a new one. All pending signing links will be invalidated. Continue?')">
+                                        Edit &amp; Re-send
+                                    </button>
+                                </form>
                                 <button type="button"
                                         @click="rejectDocId = {{ $doc->id }}; rejectDocName = {{ Js::from($doc->name) }}; showRejectModal = true"
                                         class="text-red-500 hover:underline text-xs">
@@ -906,6 +929,35 @@
     </div>
     @endif
 
+    {{-- Superseded --}}
+    @if(isset($groups['superseded']) && $groups['superseded']->isNotEmpty())
+    <div id="section-superseded" class="space-y-2 scroll-mt-4 mt-4">
+        <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer"
+            @click="showSuperseded = !showSuperseded">
+            Superseded ({{ $groups['superseded']->count() }})
+            <span class="text-xs" x-text="showSuperseded ? '&#9660;' : '&#9654;'"></span>
+        </h3>
+        <div x-show="showSuperseded" x-collapse class="space-y-3">
+            @foreach($groups['superseded'] as $doc)
+                @php $sigTemplate = $signatureTemplates->get($doc->id); @endphp
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 opacity-60">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <h4 class="font-medium text-gray-500 line-through">{{ $doc->name }}</h4>
+                            <p class="text-xs text-slate-400 mt-1">
+                                Superseded {{ $sigTemplate?->updated_at?->format('d M Y H:i') ?? '' }}
+                                @if($sigTemplate && $sigTemplate->superseded_by_id)
+                                    &mdash; replaced by a corrected version
+                                @endif
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    </div>
+    @endif
+
     {{-- Empty state --}}
     @if($counts['draft'] === 0 && $counts['ready_to_sign'] === 0 && $counts['awaiting_signatures'] === 0 && $counts['completed'] === 0 && $counts['pending_approval'] === 0 && $activeLeases->isEmpty())
     <div class="ds-status-card p-6 text-center">
@@ -920,7 +972,7 @@
             <h3 class="text-lg font-bold text-red-700 mb-4">Reject Document</h3>
             <p class="text-sm text-gray-600 mb-4" x-text="'Rejecting: ' + rejectDocName"></p>
 
-            <form method="POST" :action="'/docuperfect/documents/' + rejectDocId + '/reject'">
+            <form method="POST" :action="'/docuperfect/documents/' + rejectDocId + '/reject'" id="reject-form">
                 @csrf
 
                 <div class="mb-4">

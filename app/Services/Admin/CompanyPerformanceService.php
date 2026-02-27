@@ -87,44 +87,19 @@ return [
             ->get()
             ->keyBy('user_id');
 
-        // Deals (distinct per agent+deal to avoid double-counting when agent is on both sides)
-          $dealIdsPerUser = DB::table('deal_user')
-              ->whereIn('user_id', $agentIds)
-              ->selectRaw('user_id, deal_id, MAX(agent_split_percent) as agent_split_percent')
-              ->groupBy('user_id','deal_id');
+        // Deals — split-aware: each deal_user row contributes property_value × side split %.
+          $splitExpr = \App\Services\Agent\AgentPerformanceService::splitAwareSalesValueExpr();
 
-          // NOTE: sales_value must NOT double-count property_value when multiple agents share a deal.
-          // We allocate property_value equally across distinct agents on the deal for the period.
-          $dealActuals = DB::query()
-              ->fromSub($dealIdsPerUser, 'du')
-              ->join('deals','deals.id','=','du.deal_id')
-              ->joinSub(
-                  DB::table('deal_user')
-                      ->selectRaw('deal_id, COUNT(DISTINCT user_id) as agent_cnt')
-                      ->groupBy('deal_id'),
-                  'dc',
-                  'dc.deal_id',
-                  '=',
-                  'deals.id'
-              )
-              ->joinSub(
-                    DB::table('deal_user')
-                        ->selectRaw('deal_id, COALESCE(SUM(agent_split_percent),0) as split_sum_pct')
-                        ->groupBy('deal_id'),
-                    'ds',
-                    'ds.deal_id',
-                    '=',
-                    'deals.id'
-                )
-                ->whereBetween('deals.deal_date', [$start->toDateString(), $end->toDateString()])
-                ->whereRaw("COALESCE(deals.accepted_status,'') != 'D'") // DECLINED_FILTER_PATCH_20260212
-              ->groupBy('du.user_id')
-              ->selectRaw(
-                  'du.user_id as user_id,
-                   COUNT(*) as deals_count,
-                   COALESCE(SUM(deals.property_value * 1.0 / NULLIF(dc.agent_cnt,0)),0) as sales_value,
-                   COALESCE(SUM(deals.total_commission),0) as gross_commission'
-              )
+          $dealActuals = DB::table('deal_user')
+              ->join('deals', 'deals.id', '=', 'deal_user.deal_id')
+              ->whereIn('deal_user.user_id', $agentIds)
+              ->whereBetween('deals.deal_date', [$start->toDateString(), $end->toDateString()])
+              ->whereRaw("COALESCE(deals.accepted_status,'') != 'D'")
+              ->groupBy('deal_user.user_id')
+              ->selectRaw('deal_user.user_id as user_id')
+              ->selectRaw('COUNT(DISTINCT deal_user.deal_id) as deals_count')
+              ->selectRaw("COALESCE(SUM({$splitExpr}), 0) as sales_value")
+              ->selectRaw('COALESCE(SUM(deals.total_commission), 0) as gross_commission')
               ->get()
               ->keyBy('user_id');
             $pointsExpr = "(
@@ -573,31 +548,17 @@ foreach ($rows as &$r) {
         $start = Carbon::createFromFormat('Y-m', $period)->startOfMonth();
         $end   = (clone $start)->endOfMonth();
         // --- BM TEAM DEAL TOTALS (single source for BM "Branch Value Actual") ---
-        // TEAM scope = any user (agent/admin/BM) with users.branch_id = $branchId,
-        // sales_value must respect deal_user.agent_split_percent (branch gets only its allocated portion per deal).
-        $teamUserDealSplits = DB::table('deal_user')
+        // Split-aware: sum each branch member's deal_user contributions × side split %.
+        $splitExpr = \App\Services\Agent\AgentPerformanceService::splitAwareSalesValueExpr();
+
+        $teamDeals = DB::table('deal_user')
             ->join('users', 'users.id', '=', 'deal_user.user_id')
             ->join('deals', 'deals.id', '=', 'deal_user.deal_id')
             ->where('users.branch_id', $branchId)
             ->whereBetween('deals.deal_date', [$start->toDateString(), $end->toDateString()])
-                ->whereRaw("COALESCE(deals.accepted_status,'') != 'D'") // DECLINED_FILTER_PATCH_20260212
-            ->selectRaw('deal_user.deal_id as deal_id, deal_user.user_id as user_id, MAX(deal_user.agent_split_percent) as split_pct')
-            ->groupBy('deal_user.deal_id', 'deal_user.user_id');
-
-        $teamPerDeal = DB::query()
-            ->fromSub($teamUserDealSplits, 'ud')
-            ->join('deals', 'deals.id', '=', 'ud.deal_id')
-            ->groupBy('ud.deal_id')
-            ->selectRaw('ud.deal_id as deal_id')
-            ->selectRaw('MAX(deals.property_value) as property_value')
-            ->selectRaw('MAX(deals.total_commission) as total_commission')
-            ->selectRaw('COALESCE(SUM(ud.split_pct),0) as split_sum_pct');
-
-        $teamDeals = DB::query()
-            ->fromSub($teamPerDeal, 'd')
-            ->selectRaw('COUNT(*) as deals_count')
-            ->selectRaw('COALESCE(SUM(d.property_value),0) as sales_value')
-            ->selectRaw('COALESCE(SUM(d.total_commission),0) as total_commission')
+            ->whereRaw("COALESCE(deals.accepted_status,'') != 'D'")
+            ->selectRaw('COUNT(DISTINCT deal_user.deal_id) as deals_count')
+            ->selectRaw("COALESCE(SUM({$splitExpr}), 0) as sales_value")
             ->first();
 
         $tot['actuals']['deals'] = (int)($teamDeals->deals_count ?? 0);

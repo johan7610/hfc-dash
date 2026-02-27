@@ -61,8 +61,20 @@
     <div class="ds-status-card p-6" x-data="{
         addTenantWitness: {{ !empty(collect($parties)->firstWhere('role', 'tenant_witness')) ? 'true' : 'false' }},
         addLandlordWitness: {{ !empty(collect($parties)->firstWhere('role', 'landlord_witness')) ? 'true' : 'false' }},
+        addBuyerWitness: {{ !empty(collect($parties)->firstWhere('role', 'buyer_witness')) ? 'true' : 'false' }},
+        addSellerWitness: {{ !empty(collect($parties)->firstWhere('role', 'seller_witness')) ? 'true' : 'false' }},
+        addTenantCosigner: {{ !empty(collect($parties)->firstWhere('role', 'tenant_cosigner')) ? 'true' : 'false' }},
+        addLandlordCosigner: {{ !empty(collect($parties)->firstWhere('role', 'landlord_cosigner')) ? 'true' : 'false' }},
+        addBuyerCosigner: {{ !empty(collect($parties)->firstWhere('role', 'buyer_cosigner')) ? 'true' : 'false' }},
+        addSellerCosigner: {{ !empty(collect($parties)->firstWhere('role', 'seller_cosigner')) ? 'true' : 'false' }},
+        tenantWitnessTime: '{{ old('tenant_witness_timing', collect($parties)->firstWhere('role', 'tenant_witness')['witness_timing'] ?? 'same_time') }}',
+        landlordWitnessTime: '{{ old('landlord_witness_timing', collect($parties)->firstWhere('role', 'landlord_witness')['witness_timing'] ?? 'same_time') }}',
+        buyerWitnessTime: '{{ old('buyer_witness_timing', collect($parties)->firstWhere('role', 'buyer_witness')['witness_timing'] ?? 'same_time') }}',
+        sellerWitnessTime: '{{ old('seller_witness_timing', collect($parties)->firstWhere('role', 'seller_witness')['witness_timing'] ?? 'same_time') }}',
         tenantNotRequired: {{ old('tenant_not_required') ? 'true' : (collect($parties)->isNotEmpty() && !collect($parties)->firstWhere('role', 'tenant') ? 'true' : 'false') }},
         landlordNotRequired: {{ old('landlord_not_required') ? 'true' : (collect($parties)->isNotEmpty() && !collect($parties)->firstWhere('role', 'landlord') ? 'true' : 'false') }},
+        buyerNotRequired: {{ old('buyer_not_required') ? 'true' : (collect($parties)->isNotEmpty() && !collect($parties)->firstWhere('role', 'buyer') ? 'true' : 'false') }},
+        sellerNotRequired: {{ old('seller_not_required') ? 'true' : (collect($parties)->isNotEmpty() && !collect($parties)->firstWhere('role', 'seller') ? 'true' : 'false') }},
         hasCosigner: {{ ($isCandidate ?? false) ? 'true' : 'false' }},
         cosignMode: '{{ old('cosign_mode', $cosignMode ?? 'together') }}',
         selectedCosigner: '{{ old('cosigner_user_id', collect($parties)->firstWhere('role', 'cosigner') ? collect($fullStatusAgents ?? [])->firstWhere('email', collect($parties)->firstWhere('role', 'cosigner')['email'] ?? '')?->id ?? '' : ($branchManager?->id ?? '')) }}',
@@ -147,7 +159,7 @@
                     <label class="flex items-center gap-2 text-sm cursor-pointer">
                         <input type="checkbox" name="tenant_not_required" value="1"
                                x-model="tenantNotRequired"
-                               @change="if(tenantNotRequired) { addTenantWitness = false; }"
+                               @change="if(tenantNotRequired) { addTenantWitness = false; addTenantCosigner = false; }"
                                class="rounded border-gray-300 text-gray-500 focus:ring-gray-400">
                         <span class="text-gray-500 text-xs">Not required for this document</span>
                     </label>
@@ -187,20 +199,79 @@
                         Add witness for Tenant
                     </label>
 
-                    <div x-show="addTenantWitness" x-cloak x-transition class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 pl-6 border-l-2 border-green-200">
-                        <div>
-                            <label class="block text-xs font-medium text-slate-600 mb-1">Witness Name</label>
-                            <input type="text" name="tenant_witness_name"
-                                   value="{{ old('tenant_witness_name', collect($parties)->firstWhere('role', 'tenant_witness')['name'] ?? '') }}"
-                                   class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="Witness full name"
-                                   :required="addTenantWitness && !tenantNotRequired">
+                    <div x-show="addTenantWitness" x-cloak x-transition class="mt-3 pl-6 border-l-2 border-green-200 space-y-3">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Witness Name</label>
+                                <input type="text" name="tenant_witness_name"
+                                       value="{{ old('tenant_witness_name', collect($parties)->firstWhere('role', 'tenant_witness')['name'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="Witness full name"
+                                       :required="addTenantWitness && !tenantNotRequired">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Witness Email</label>
+                                <input type="email" name="tenant_witness_email"
+                                       value="{{ old('tenant_witness_email', collect($parties)->firstWhere('role', 'tenant_witness')['email'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="witness@email.com"
+                                       :required="addTenantWitness && !tenantNotRequired">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Witness ID Number <span class="text-slate-400">(optional)</span></label>
+                                <input type="text" name="tenant_witness_id_number"
+                                       value="{{ old('tenant_witness_id_number', collect($parties)->firstWhere('role', 'tenant_witness')['id_number'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="SA ID number" maxlength="20">
+                            </div>
                         </div>
                         <div>
-                            <label class="block text-xs font-medium text-slate-600 mb-1">Witness Email</label>
-                            <input type="email" name="tenant_witness_email"
-                                   value="{{ old('tenant_witness_email', collect($parties)->firstWhere('role', 'tenant_witness')['email'] ?? '') }}"
-                                   class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="witness@email.com"
-                                   :required="addTenantWitness && !tenantNotRequired">
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Signing Timing</label>
+                            <div class="flex gap-4">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="tenant_witness_timing" value="same_time" x-model="tenantWitnessTime"
+                                           class="text-green-600 focus:ring-green-500">
+                                    <span class="text-sm text-slate-700">Signs at same time</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="tenant_witness_timing" value="after" x-model="tenantWitnessTime"
+                                           class="text-green-600 focus:ring-green-500">
+                                    <span class="text-sm text-slate-700">Signs after</span>
+                                </label>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-1" x-show="tenantWitnessTime === 'same_time'">Witness receives signing link when tenant does.</p>
+                            <p class="text-xs text-slate-500 mt-1" x-show="tenantWitnessTime === 'after'" x-cloak>Witness receives signing link after tenant completes.</p>
+                        </div>
+                    </div>
+
+                    {{-- Tenant Co-signer --}}
+                    <label class="flex items-center gap-2 mt-3 cursor-pointer text-sm text-slate-600">
+                        <input type="checkbox" name="add_tenant_cosigner" value="1"
+                               x-model="addTenantCosigner"
+                               class="rounded border-slate-300 text-green-600 focus:ring-green-500">
+                        Add co-signer for Tenant
+                    </label>
+
+                    <div x-show="addTenantCosigner" x-cloak x-transition class="mt-3 pl-6 border-l-2 border-teal-200 space-y-3">
+                        <p class="text-xs text-slate-500">Co-signer signs at the same time as the tenant.</p>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Co-signer Name</label>
+                                <input type="text" name="tenant_cosigner_name"
+                                       value="{{ old('tenant_cosigner_name', collect($parties)->firstWhere('role', 'tenant_cosigner')['name'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="Co-signer full name"
+                                       :required="addTenantCosigner && !tenantNotRequired">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Co-signer Email</label>
+                                <input type="email" name="tenant_cosigner_email"
+                                       value="{{ old('tenant_cosigner_email', collect($parties)->firstWhere('role', 'tenant_cosigner')['email'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="cosigner@email.com"
+                                       :required="addTenantCosigner && !tenantNotRequired">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Co-signer ID Number <span class="text-slate-400">(optional)</span></label>
+                                <input type="text" name="tenant_cosigner_id_number"
+                                       value="{{ old('tenant_cosigner_id_number', collect($parties)->firstWhere('role', 'tenant_cosigner')['id_number'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="SA ID number" maxlength="20">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -213,7 +284,7 @@
                     <label class="flex items-center gap-2 text-sm cursor-pointer">
                         <input type="checkbox" name="landlord_not_required" value="1"
                                x-model="landlordNotRequired"
-                               @change="if(landlordNotRequired) { addLandlordWitness = false; }"
+                               @change="if(landlordNotRequired) { addLandlordWitness = false; addLandlordCosigner = false; }"
                                class="rounded border-gray-300 text-gray-500 focus:ring-gray-400">
                         <span class="text-gray-500 text-xs">Not required for this document</span>
                     </label>
@@ -253,20 +324,329 @@
                         Add witness for Landlord
                     </label>
 
-                    <div x-show="addLandlordWitness" x-cloak x-transition class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 pl-6 border-l-2 border-orange-200">
-                        <div>
-                            <label class="block text-xs font-medium text-slate-600 mb-1">Witness Name</label>
-                            <input type="text" name="landlord_witness_name"
-                                   value="{{ old('landlord_witness_name', collect($parties)->firstWhere('role', 'landlord_witness')['name'] ?? '') }}"
-                                   class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="Witness full name"
-                                   :required="addLandlordWitness && !landlordNotRequired">
+                    <div x-show="addLandlordWitness" x-cloak x-transition class="mt-3 pl-6 border-l-2 border-orange-200 space-y-3">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Witness Name</label>
+                                <input type="text" name="landlord_witness_name"
+                                       value="{{ old('landlord_witness_name', collect($parties)->firstWhere('role', 'landlord_witness')['name'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="Witness full name"
+                                       :required="addLandlordWitness && !landlordNotRequired">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Witness Email</label>
+                                <input type="email" name="landlord_witness_email"
+                                       value="{{ old('landlord_witness_email', collect($parties)->firstWhere('role', 'landlord_witness')['email'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="witness@email.com"
+                                       :required="addLandlordWitness && !landlordNotRequired">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Witness ID Number <span class="text-slate-400">(optional)</span></label>
+                                <input type="text" name="landlord_witness_id_number"
+                                       value="{{ old('landlord_witness_id_number', collect($parties)->firstWhere('role', 'landlord_witness')['id_number'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="SA ID number" maxlength="20">
+                            </div>
                         </div>
                         <div>
-                            <label class="block text-xs font-medium text-slate-600 mb-1">Witness Email</label>
-                            <input type="email" name="landlord_witness_email"
-                                   value="{{ old('landlord_witness_email', collect($parties)->firstWhere('role', 'landlord_witness')['email'] ?? '') }}"
-                                   class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="witness@email.com"
-                                   :required="addLandlordWitness && !landlordNotRequired">
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Signing Timing</label>
+                            <div class="flex gap-4">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="landlord_witness_timing" value="same_time" x-model="landlordWitnessTime"
+                                           class="text-orange-600 focus:ring-orange-500">
+                                    <span class="text-sm text-slate-700">Signs at same time</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="landlord_witness_timing" value="after" x-model="landlordWitnessTime"
+                                           class="text-orange-600 focus:ring-orange-500">
+                                    <span class="text-sm text-slate-700">Signs after</span>
+                                </label>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-1" x-show="landlordWitnessTime === 'same_time'">Witness receives signing link when landlord does.</p>
+                            <p class="text-xs text-slate-500 mt-1" x-show="landlordWitnessTime === 'after'" x-cloak>Witness receives signing link after landlord completes.</p>
+                        </div>
+                    </div>
+
+                    {{-- Landlord Co-signer --}}
+                    <label class="flex items-center gap-2 mt-3 cursor-pointer text-sm text-slate-600">
+                        <input type="checkbox" name="add_landlord_cosigner" value="1"
+                               x-model="addLandlordCosigner"
+                               class="rounded border-slate-300 text-orange-600 focus:ring-orange-500">
+                        Add co-signer for Landlord
+                    </label>
+
+                    <div x-show="addLandlordCosigner" x-cloak x-transition class="mt-3 pl-6 border-l-2 border-amber-200 space-y-3">
+                        <p class="text-xs text-slate-500">Co-signer signs at the same time as the landlord.</p>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Co-signer Name</label>
+                                <input type="text" name="landlord_cosigner_name"
+                                       value="{{ old('landlord_cosigner_name', collect($parties)->firstWhere('role', 'landlord_cosigner')['name'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="Co-signer full name"
+                                       :required="addLandlordCosigner && !landlordNotRequired">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Co-signer Email</label>
+                                <input type="email" name="landlord_cosigner_email"
+                                       value="{{ old('landlord_cosigner_email', collect($parties)->firstWhere('role', 'landlord_cosigner')['email'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="cosigner@email.com"
+                                       :required="addLandlordCosigner && !landlordNotRequired">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Co-signer ID Number <span class="text-slate-400">(optional)</span></label>
+                                <input type="text" name="landlord_cosigner_id_number"
+                                       value="{{ old('landlord_cosigner_id_number', collect($parties)->firstWhere('role', 'landlord_cosigner')['id_number'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="SA ID number" maxlength="20">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Buyer --}}
+            <div class="mb-6 p-4 rounded-xl border border-rose-200" :class="buyerNotRequired ? 'bg-gray-50 opacity-60' : 'bg-rose-50/50'">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="text-sm font-semibold text-rose-700 uppercase tracking-wider">Buyer</div>
+                    <label class="flex items-center gap-2 text-sm cursor-pointer">
+                        <input type="checkbox" name="buyer_not_required" value="1"
+                               x-model="buyerNotRequired"
+                               @change="if(buyerNotRequired) { addBuyerWitness = false; addBuyerCosigner = false; }"
+                               class="rounded border-gray-300 text-gray-500 focus:ring-gray-400">
+                        <span class="text-gray-500 text-xs">Not required for this document</span>
+                    </label>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" :class="{ 'pointer-events-none': buyerNotRequired }">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Name <span x-show="!buyerNotRequired" class="text-red-500">*</span></label>
+                        <input type="text" name="buyer_name" :required="!buyerNotRequired" :disabled="buyerNotRequired"
+                               value="{{ old('buyer_name', collect($parties)->firstWhere('role', 'buyer')['name'] ?? '') }}"
+                               class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-rose-500 focus:border-rose-500"
+                               :class="{ 'bg-gray-100': buyerNotRequired }"
+                               placeholder="Full name">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Email <span x-show="!buyerNotRequired" class="text-red-500">*</span></label>
+                        <input type="email" name="buyer_email" :required="!buyerNotRequired" :disabled="buyerNotRequired"
+                               value="{{ old('buyer_email', collect($parties)->firstWhere('role', 'buyer')['email'] ?? '') }}"
+                               class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-rose-500 focus:border-rose-500"
+                               :class="{ 'bg-gray-100': buyerNotRequired }"
+                               placeholder="buyer@email.com">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">ID Number <span class="text-slate-400">(optional)</span></label>
+                        <input type="text" name="buyer_id_number" :disabled="buyerNotRequired"
+                               value="{{ old('buyer_id_number', collect($parties)->firstWhere('role', 'buyer')['id_number'] ?? '') }}"
+                               class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-rose-500 focus:border-rose-500"
+                               :class="{ 'bg-gray-100': buyerNotRequired }"
+                               placeholder="SA ID number" maxlength="20">
+                    </div>
+                </div>
+
+                <div x-show="!buyerNotRequired" x-cloak>
+                    <label class="flex items-center gap-2 mt-3 cursor-pointer text-sm text-slate-600">
+                        <input type="checkbox" name="add_buyer_witness" value="1"
+                               x-model="addBuyerWitness"
+                               class="rounded border-slate-300 text-rose-600 focus:ring-rose-500">
+                        Add witness for Buyer
+                    </label>
+
+                    <div x-show="addBuyerWitness" x-cloak x-transition class="mt-3 pl-6 border-l-2 border-rose-200 space-y-3">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Witness Name</label>
+                                <input type="text" name="buyer_witness_name"
+                                       value="{{ old('buyer_witness_name', collect($parties)->firstWhere('role', 'buyer_witness')['name'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="Witness full name"
+                                       :required="addBuyerWitness && !buyerNotRequired">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Witness Email</label>
+                                <input type="email" name="buyer_witness_email"
+                                       value="{{ old('buyer_witness_email', collect($parties)->firstWhere('role', 'buyer_witness')['email'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="witness@email.com"
+                                       :required="addBuyerWitness && !buyerNotRequired">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Witness ID Number <span class="text-slate-400">(optional)</span></label>
+                                <input type="text" name="buyer_witness_id_number"
+                                       value="{{ old('buyer_witness_id_number', collect($parties)->firstWhere('role', 'buyer_witness')['id_number'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="SA ID number" maxlength="20">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Signing Timing</label>
+                            <div class="flex gap-4">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="buyer_witness_timing" value="same_time" x-model="buyerWitnessTime"
+                                           class="text-rose-600 focus:ring-rose-500">
+                                    <span class="text-sm text-slate-700">Signs at same time</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="buyer_witness_timing" value="after" x-model="buyerWitnessTime"
+                                           class="text-rose-600 focus:ring-rose-500">
+                                    <span class="text-sm text-slate-700">Signs after</span>
+                                </label>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-1" x-show="buyerWitnessTime === 'same_time'">Witness receives signing link when buyer does.</p>
+                            <p class="text-xs text-slate-500 mt-1" x-show="buyerWitnessTime === 'after'" x-cloak>Witness receives signing link after buyer completes.</p>
+                        </div>
+                    </div>
+
+                    {{-- Buyer Co-signer --}}
+                    <label class="flex items-center gap-2 mt-3 cursor-pointer text-sm text-slate-600">
+                        <input type="checkbox" name="add_buyer_cosigner" value="1"
+                               x-model="addBuyerCosigner"
+                               class="rounded border-slate-300 text-rose-600 focus:ring-rose-500">
+                        Add co-signer for Buyer
+                    </label>
+
+                    <div x-show="addBuyerCosigner" x-cloak x-transition class="mt-3 pl-6 border-l-2 border-pink-200 space-y-3">
+                        <p class="text-xs text-slate-500">Co-signer signs at the same time as the buyer.</p>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Co-signer Name</label>
+                                <input type="text" name="buyer_cosigner_name"
+                                       value="{{ old('buyer_cosigner_name', collect($parties)->firstWhere('role', 'buyer_cosigner')['name'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="Co-signer full name"
+                                       :required="addBuyerCosigner && !buyerNotRequired">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Co-signer Email</label>
+                                <input type="email" name="buyer_cosigner_email"
+                                       value="{{ old('buyer_cosigner_email', collect($parties)->firstWhere('role', 'buyer_cosigner')['email'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="cosigner@email.com"
+                                       :required="addBuyerCosigner && !buyerNotRequired">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Co-signer ID Number <span class="text-slate-400">(optional)</span></label>
+                                <input type="text" name="buyer_cosigner_id_number"
+                                       value="{{ old('buyer_cosigner_id_number', collect($parties)->firstWhere('role', 'buyer_cosigner')['id_number'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="SA ID number" maxlength="20">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Seller --}}
+            <div class="mb-6 p-4 rounded-xl border border-fuchsia-200" :class="sellerNotRequired ? 'bg-gray-50 opacity-60' : 'bg-fuchsia-50/50'">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="text-sm font-semibold text-fuchsia-700 uppercase tracking-wider">Seller</div>
+                    <label class="flex items-center gap-2 text-sm cursor-pointer">
+                        <input type="checkbox" name="seller_not_required" value="1"
+                               x-model="sellerNotRequired"
+                               @change="if(sellerNotRequired) { addSellerWitness = false; addSellerCosigner = false; }"
+                               class="rounded border-gray-300 text-gray-500 focus:ring-gray-400">
+                        <span class="text-gray-500 text-xs">Not required for this document</span>
+                    </label>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" :class="{ 'pointer-events-none': sellerNotRequired }">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Name <span x-show="!sellerNotRequired" class="text-red-500">*</span></label>
+                        <input type="text" name="seller_name" :required="!sellerNotRequired" :disabled="sellerNotRequired"
+                               value="{{ old('seller_name', collect($parties)->firstWhere('role', 'seller')['name'] ?? '') }}"
+                               class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-fuchsia-500 focus:border-fuchsia-500"
+                               :class="{ 'bg-gray-100': sellerNotRequired }"
+                               placeholder="Full name">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Email <span x-show="!sellerNotRequired" class="text-red-500">*</span></label>
+                        <input type="email" name="seller_email" :required="!sellerNotRequired" :disabled="sellerNotRequired"
+                               value="{{ old('seller_email', collect($parties)->firstWhere('role', 'seller')['email'] ?? '') }}"
+                               class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-fuchsia-500 focus:border-fuchsia-500"
+                               :class="{ 'bg-gray-100': sellerNotRequired }"
+                               placeholder="seller@email.com">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">ID Number <span class="text-slate-400">(optional)</span></label>
+                        <input type="text" name="seller_id_number" :disabled="sellerNotRequired"
+                               value="{{ old('seller_id_number', collect($parties)->firstWhere('role', 'seller')['id_number'] ?? '') }}"
+                               class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-fuchsia-500 focus:border-fuchsia-500"
+                               :class="{ 'bg-gray-100': sellerNotRequired }"
+                               placeholder="SA ID number" maxlength="20">
+                    </div>
+                </div>
+
+                <div x-show="!sellerNotRequired" x-cloak>
+                    <label class="flex items-center gap-2 mt-3 cursor-pointer text-sm text-slate-600">
+                        <input type="checkbox" name="add_seller_witness" value="1"
+                               x-model="addSellerWitness"
+                               class="rounded border-slate-300 text-fuchsia-600 focus:ring-fuchsia-500">
+                        Add witness for Seller
+                    </label>
+
+                    <div x-show="addSellerWitness" x-cloak x-transition class="mt-3 pl-6 border-l-2 border-fuchsia-200 space-y-3">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Witness Name</label>
+                                <input type="text" name="seller_witness_name"
+                                       value="{{ old('seller_witness_name', collect($parties)->firstWhere('role', 'seller_witness')['name'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="Witness full name"
+                                       :required="addSellerWitness && !sellerNotRequired">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Witness Email</label>
+                                <input type="email" name="seller_witness_email"
+                                       value="{{ old('seller_witness_email', collect($parties)->firstWhere('role', 'seller_witness')['email'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="witness@email.com"
+                                       :required="addSellerWitness && !sellerNotRequired">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Witness ID Number <span class="text-slate-400">(optional)</span></label>
+                                <input type="text" name="seller_witness_id_number"
+                                       value="{{ old('seller_witness_id_number', collect($parties)->firstWhere('role', 'seller_witness')['id_number'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="SA ID number" maxlength="20">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Signing Timing</label>
+                            <div class="flex gap-4">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="seller_witness_timing" value="same_time" x-model="sellerWitnessTime"
+                                           class="text-fuchsia-600 focus:ring-fuchsia-500">
+                                    <span class="text-sm text-slate-700">Signs at same time</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="seller_witness_timing" value="after" x-model="sellerWitnessTime"
+                                           class="text-fuchsia-600 focus:ring-fuchsia-500">
+                                    <span class="text-sm text-slate-700">Signs after</span>
+                                </label>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-1" x-show="sellerWitnessTime === 'same_time'">Witness receives signing link when seller does.</p>
+                            <p class="text-xs text-slate-500 mt-1" x-show="sellerWitnessTime === 'after'" x-cloak>Witness receives signing link after seller completes.</p>
+                        </div>
+                    </div>
+
+                    {{-- Seller Co-signer --}}
+                    <label class="flex items-center gap-2 mt-3 cursor-pointer text-sm text-slate-600">
+                        <input type="checkbox" name="add_seller_cosigner" value="1"
+                               x-model="addSellerCosigner"
+                               class="rounded border-slate-300 text-fuchsia-600 focus:ring-fuchsia-500">
+                        Add co-signer for Seller
+                    </label>
+
+                    <div x-show="addSellerCosigner" x-cloak x-transition class="mt-3 pl-6 border-l-2 border-violet-200 space-y-3">
+                        <p class="text-xs text-slate-500">Co-signer signs at the same time as the seller.</p>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Co-signer Name</label>
+                                <input type="text" name="seller_cosigner_name"
+                                       value="{{ old('seller_cosigner_name', collect($parties)->firstWhere('role', 'seller_cosigner')['name'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="Co-signer full name"
+                                       :required="addSellerCosigner && !sellerNotRequired">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Co-signer Email</label>
+                                <input type="email" name="seller_cosigner_email"
+                                       value="{{ old('seller_cosigner_email', collect($parties)->firstWhere('role', 'seller_cosigner')['email'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="cosigner@email.com"
+                                       :required="addSellerCosigner && !sellerNotRequired">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Co-signer ID Number <span class="text-slate-400">(optional)</span></label>
+                                <input type="text" name="seller_cosigner_id_number"
+                                       value="{{ old('seller_cosigner_id_number', collect($parties)->firstWhere('role', 'seller_cosigner')['id_number'] ?? '') }}"
+                                       class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="SA ID number" maxlength="20">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -327,8 +707,18 @@
                     @if($party['role'] === 'agent') bg-blue-100 text-blue-700
                     @elseif($party['role'] === 'cosigner') bg-indigo-100 text-indigo-700
                     @elseif($party['role'] === 'tenant') bg-green-100 text-green-700
+                    @elseif($party['role'] === 'tenant_witness') bg-emerald-100 text-emerald-700
+                    @elseif($party['role'] === 'tenant_cosigner') bg-teal-100 text-teal-700
                     @elseif($party['role'] === 'landlord') bg-orange-100 text-orange-700
-                    @else bg-purple-100 text-purple-700
+                    @elseif($party['role'] === 'landlord_witness') bg-amber-100 text-amber-700
+                    @elseif($party['role'] === 'landlord_cosigner') bg-yellow-100 text-yellow-700
+                    @elseif($party['role'] === 'buyer') bg-rose-100 text-rose-700
+                    @elseif($party['role'] === 'buyer_witness') bg-pink-100 text-pink-700
+                    @elseif($party['role'] === 'buyer_cosigner') bg-red-100 text-red-700
+                    @elseif($party['role'] === 'seller') bg-fuchsia-100 text-fuchsia-700
+                    @elseif($party['role'] === 'seller_witness') bg-violet-100 text-violet-700
+                    @elseif($party['role'] === 'seller_cosigner') bg-purple-100 text-purple-700
+                    @else bg-slate-100 text-slate-700
                     @endif">
                     {{ ucfirst(str_replace('_', ' ', $party['role'])) }}: {{ $party['name'] }}
                 </span>
@@ -502,8 +892,18 @@
                                     @if($party['role'] === 'agent') bg-blue-500
                                     @elseif($party['role'] === 'cosigner') bg-indigo-500
                                     @elseif($party['role'] === 'tenant') bg-green-500
+                                    @elseif($party['role'] === 'tenant_witness') bg-emerald-500
+                                    @elseif($party['role'] === 'tenant_cosigner') bg-teal-500
                                     @elseif($party['role'] === 'landlord') bg-orange-500
-                                    @else bg-purple-500
+                                    @elseif($party['role'] === 'landlord_witness') bg-amber-500
+                                    @elseif($party['role'] === 'landlord_cosigner') bg-yellow-600
+                                    @elseif($party['role'] === 'buyer') bg-rose-500
+                                    @elseif($party['role'] === 'buyer_witness') bg-pink-500
+                                    @elseif($party['role'] === 'buyer_cosigner') bg-red-400
+                                    @elseif($party['role'] === 'seller') bg-fuchsia-500
+                                    @elseif($party['role'] === 'seller_witness') bg-violet-500
+                                    @elseif($party['role'] === 'seller_cosigner') bg-purple-400
+                                    @else bg-slate-500
                                     @endif"></span>
                                 {{ ucfirst(str_replace('_', ' ', $party['role'])) }}
                             </label>
@@ -721,9 +1121,10 @@
             },
 
             markerLabel(m) {
-                const partyLabel = m.assigned_party.replace('_', ' ');
+                const partyLabel = m.assigned_party.replaceAll('_', ' ');
                 const typeLabel = m.type.charAt(0).toUpperCase() + m.type.slice(1);
-                return partyLabel.charAt(0).toUpperCase() + partyLabel.slice(1) + ' ' + typeLabel;
+                const words = partyLabel.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1));
+                return words.join(' ') + ' ' + typeLabel;
             },
 
             markerClasses(m) {
@@ -732,8 +1133,18 @@
                     case 'agent': return base + 'border-blue-500 bg-blue-50 text-blue-700';
                     case 'cosigner': return base + 'border-indigo-500 bg-indigo-50 text-indigo-700';
                     case 'tenant': return base + 'border-green-500 bg-green-50 text-green-700';
+                    case 'tenant_witness': return base + 'border-emerald-500 bg-emerald-50 text-emerald-700';
+                    case 'tenant_cosigner': return base + 'border-teal-500 bg-teal-50 text-teal-700';
                     case 'landlord': return base + 'border-orange-500 bg-orange-50 text-orange-700';
-                    default: return base + 'border-purple-500 bg-purple-50 text-purple-700';
+                    case 'landlord_witness': return base + 'border-amber-500 bg-amber-50 text-amber-700';
+                    case 'landlord_cosigner': return base + 'border-yellow-500 bg-yellow-50 text-yellow-700';
+                    case 'buyer': return base + 'border-rose-500 bg-rose-50 text-rose-700';
+                    case 'buyer_witness': return base + 'border-pink-500 bg-pink-50 text-pink-700';
+                    case 'buyer_cosigner': return base + 'border-red-400 bg-red-50 text-red-700';
+                    case 'seller': return base + 'border-fuchsia-500 bg-fuchsia-50 text-fuchsia-700';
+                    case 'seller_witness': return base + 'border-violet-500 bg-violet-50 text-violet-700';
+                    case 'seller_cosigner': return base + 'border-purple-400 bg-purple-50 text-purple-700';
+                    default: return base + 'border-slate-500 bg-slate-50 text-slate-700';
                 }
             },
 
@@ -742,8 +1153,18 @@
                     case 'agent': return 'bg-blue-500';
                     case 'cosigner': return 'bg-indigo-500';
                     case 'tenant': return 'bg-green-500';
+                    case 'tenant_witness': return 'bg-emerald-500';
+                    case 'tenant_cosigner': return 'bg-teal-500';
                     case 'landlord': return 'bg-orange-500';
-                    default: return 'bg-purple-500';
+                    case 'landlord_witness': return 'bg-amber-500';
+                    case 'landlord_cosigner': return 'bg-yellow-600';
+                    case 'buyer': return 'bg-rose-500';
+                    case 'buyer_witness': return 'bg-pink-500';
+                    case 'buyer_cosigner': return 'bg-red-400';
+                    case 'seller': return 'bg-fuchsia-500';
+                    case 'seller_witness': return 'bg-violet-500';
+                    case 'seller_cosigner': return 'bg-purple-400';
+                    default: return 'bg-slate-500';
                 }
             },
 

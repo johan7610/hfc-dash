@@ -111,7 +111,12 @@ class TargetsManageController extends Controller
                 ->selectRaw('
                     deal_user.user_id as user_id,
                     COUNT(DISTINCT deal_user.deal_id) as deals_actual,
-                    COALESCE(SUM(DISTINCT deals.property_value),0) as value_actual
+                    COALESCE(SUM(
+                        CASE deal_user.side
+                            WHEN \'listing\' THEN deals.property_value * deals.listing_split_percent / 100.0
+                            WHEN \'selling\' THEN deals.property_value * deals.selling_split_percent / 100.0
+                            ELSE 0 END
+                    ),0) as value_actual
                 ')
                 ->groupBy('deal_user.user_id')
                 ->get();

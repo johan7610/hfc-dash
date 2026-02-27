@@ -16,7 +16,10 @@ class Worksheet extends Model
         'want_net_target',
 
         'avg_sale_price',
+        'avg_sale_price_admin',
         'commission_percent',
+        'commission_percent_admin',
+        'commission_percent_locked',
         'paye_percent',
 
         'agent_split_percent',

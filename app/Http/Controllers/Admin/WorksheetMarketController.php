@@ -46,7 +46,7 @@ $agents = DB::table('users')
               ->selectRaw('branch_id, COUNT(*) as deals_count')
               ->selectRaw('AVG(property_value) as avg_sale_price_inc_vat')
               ->selectRaw('AVG(property_value / ?) as avg_sale_price_ex_vat', [$vatDivisor])
-              ->selectRaw('AVG((total_commission / NULLIF(property_value / ?,0))*100.0) as effective_commission_percent_ex_vat', [$vatDivisor])
+              ->selectRaw('AVG((total_commission / ? / NULLIF(property_value,0))*100.0) as effective_commission_percent_ex_vat', [$vatDivisor])
               ->groupBy('branch_id')
               ->get()
               ->keyBy(fn($r) => (string) $r->branch_id)
@@ -233,7 +233,7 @@ $periodStart = \Carbon\Carbon::createFromFormat('Y-m', $period)->startOfMonth();
             $sumPriceEx = $sumPriceInc ? ($sumPriceInc / $vatDivisor) : 0.0;
             $sumCommEx  = $sumCommInc  ? ($sumCommInc  / $vatDivisor) : 0.0;
 
-            $effPctEx = ($sumPriceEx > 0) ? (($sumCommEx / $sumPriceEx) * 100.0) : 0.0;
+            $effPctEx = ($sumPriceInc > 0) ? (($sumCommEx / $sumPriceInc) * 100.0) : 0.0;
 
             $branchMarket[(int)$bid] = [
                 'deals_count' => $count,

@@ -80,7 +80,7 @@ class SignatureController extends Controller
             [
                 'status' => SignatureTemplate::STATUS_DRAFT,
                 'created_by' => $user->id,
-                'signing_order_json' => ['agent', 'tenant', 'landlord'],
+                'signing_order_json' => ['agent', 'tenant', 'landlord', 'buyer', 'seller'],
             ]
         );
 
@@ -166,6 +166,8 @@ class SignatureController extends Controller
 
         $tenantNotRequired = $request->boolean('tenant_not_required');
         $landlordNotRequired = $request->boolean('landlord_not_required');
+        $buyerNotRequired = $request->boolean('buyer_not_required');
+        $sellerNotRequired = $request->boolean('seller_not_required');
 
         $hasCosigner = $request->boolean('has_cosigner');
 
@@ -175,6 +177,8 @@ class SignatureController extends Controller
             'agent_email' => 'required|email|max:255',
             'tenant_not_required' => 'nullable|boolean',
             'landlord_not_required' => 'nullable|boolean',
+            'buyer_not_required' => 'nullable|boolean',
+            'seller_not_required' => 'nullable|boolean',
             'has_cosigner' => 'nullable|boolean',
         ];
 
@@ -183,23 +187,31 @@ class SignatureController extends Controller
             $rules['cosign_mode'] = 'required|in:together,sequential';
         }
 
-        if (!$tenantNotRequired) {
-            $rules['tenant_name'] = 'required|string|max:255';
-            $rules['tenant_email'] = 'required|email|max:255';
-            $rules['tenant_id_number'] = 'nullable|string|max:20';
-            $rules['add_tenant_witness'] = 'nullable|boolean';
-            $rules['tenant_witness_name'] = 'required_if:add_tenant_witness,1|nullable|string|max:255';
-            $rules['tenant_witness_email'] = 'required_if:add_tenant_witness,1|nullable|email|max:255';
-        }
+        // Helper to add validation rules for an external party and its witness/cosigner
+        $addPartyRules = function (string $party, bool $notRequired) use (&$rules) {
+            if ($notRequired) {
+                return;
+            }
+            $rules["{$party}_name"] = 'required|string|max:255';
+            $rules["{$party}_email"] = 'required|email|max:255';
+            $rules["{$party}_id_number"] = 'nullable|string|max:20';
+            // Witness
+            $rules["add_{$party}_witness"] = 'nullable|boolean';
+            $rules["{$party}_witness_name"] = "required_if:add_{$party}_witness,1|nullable|string|max:255";
+            $rules["{$party}_witness_email"] = "required_if:add_{$party}_witness,1|nullable|email|max:255";
+            $rules["{$party}_witness_id_number"] = 'nullable|string|max:20';
+            $rules["{$party}_witness_timing"] = "required_if:add_{$party}_witness,1|nullable|in:same_time,after";
+            // Co-signer
+            $rules["add_{$party}_cosigner"] = 'nullable|boolean';
+            $rules["{$party}_cosigner_name"] = "required_if:add_{$party}_cosigner,1|nullable|string|max:255";
+            $rules["{$party}_cosigner_email"] = "required_if:add_{$party}_cosigner,1|nullable|email|max:255";
+            $rules["{$party}_cosigner_id_number"] = 'nullable|string|max:20';
+        };
 
-        if (!$landlordNotRequired) {
-            $rules['landlord_name'] = 'required|string|max:255';
-            $rules['landlord_email'] = 'required|email|max:255';
-            $rules['landlord_id_number'] = 'nullable|string|max:20';
-            $rules['add_landlord_witness'] = 'nullable|boolean';
-            $rules['landlord_witness_name'] = 'required_if:add_landlord_witness,1|nullable|string|max:255';
-            $rules['landlord_witness_email'] = 'required_if:add_landlord_witness,1|nullable|email|max:255';
-        }
+        $addPartyRules('tenant', $tenantNotRequired);
+        $addPartyRules('landlord', $landlordNotRequired);
+        $addPartyRules('buyer', $buyerNotRequired);
+        $addPartyRules('seller', $sellerNotRequired);
 
         $request->validate($rules);
 
@@ -219,23 +231,45 @@ class SignatureController extends Controller
             $cosignMode = $request->input('cosign_mode');
         }
 
-        if (!$tenantNotRequired) {
-            $parties[] = ['role' => 'tenant', 'name' => $request->tenant_name, 'email' => $request->tenant_email, 'id_number' => $request->tenant_id_number];
-            $signingOrder[] = 'tenant';
-
-            if ($request->boolean('add_tenant_witness')) {
-                $parties[] = ['role' => 'tenant_witness', 'name' => $request->tenant_witness_name, 'email' => $request->tenant_witness_email, 'id_number' => null];
+        // Helper to add an external party + its witness/cosigner to the parties array
+        $addParty = function (string $role, bool $notRequired) use ($request, &$parties, &$signingOrder) {
+            if ($notRequired) {
+                return;
             }
-        }
+            $parties[] = [
+                'role' => $role,
+                'name' => $request->input("{$role}_name"),
+                'email' => $request->input("{$role}_email"),
+                'id_number' => $request->input("{$role}_id_number"),
+            ];
+            $signingOrder[] = $role;
 
-        if (!$landlordNotRequired) {
-            $parties[] = ['role' => 'landlord', 'name' => $request->landlord_name, 'email' => $request->landlord_email, 'id_number' => $request->landlord_id_number];
-            $signingOrder[] = 'landlord';
-
-            if ($request->boolean('add_landlord_witness')) {
-                $parties[] = ['role' => 'landlord_witness', 'name' => $request->landlord_witness_name, 'email' => $request->landlord_witness_email, 'id_number' => null];
+            if ($request->boolean("add_{$role}_witness")) {
+                $parties[] = [
+                    'role' => "{$role}_witness",
+                    'name' => $request->input("{$role}_witness_name"),
+                    'email' => $request->input("{$role}_witness_email"),
+                    'id_number' => $request->input("{$role}_witness_id_number"),
+                    'witness_timing' => $request->input("{$role}_witness_timing", 'same_time'),
+                    'linked_to' => $role,
+                ];
             }
-        }
+
+            if ($request->boolean("add_{$role}_cosigner")) {
+                $parties[] = [
+                    'role' => "{$role}_cosigner",
+                    'name' => $request->input("{$role}_cosigner_name"),
+                    'email' => $request->input("{$role}_cosigner_email"),
+                    'id_number' => $request->input("{$role}_cosigner_id_number"),
+                    'linked_to' => $role,
+                ];
+            }
+        };
+
+        $addParty('tenant', $tenantNotRequired);
+        $addParty('landlord', $landlordNotRequired);
+        $addParty('buyer', $buyerNotRequired);
+        $addParty('seller', $sellerNotRequired);
 
         // Get or create template
         $template = SignatureTemplate::firstOrCreate(
@@ -257,22 +291,16 @@ class SignatureController extends Controller
             'document_hash' => $hash,
         ]);
 
-        // Create signing requests for active core parties only (agent, cosigner, tenant, landlord)
-        $coreRoles = ['agent', 'cosigner', 'tenant', 'landlord'];
-        $activeRoles = collect($parties)->pluck('role')->intersect($coreRoles)->all();
+        // Create signing requests for ALL parties (each gets a token for external signing)
+        $allActiveRoles = collect($parties)->pluck('role')->all();
 
         foreach ($parties as $party) {
-            // Only create requests for core signing roles
-            if (!in_array($party['role'], $coreRoles)) {
-                continue;
-            }
-
+            // Agent signing is internal — still create a request record
             $existing = $template->requests()
                 ->where('party_role', $party['role'])
                 ->first();
 
             if ($existing) {
-                // Update existing request if details changed
                 $existing->update([
                     'signer_name' => $party['name'],
                     'signer_email' => $party['email'],
@@ -290,16 +318,16 @@ class SignatureController extends Controller
             }
         }
 
-        // Remove signing requests for parties that are no longer active
+        // Remove signing requests for parties that are no longer active (exclude agent — always present)
         $template->requests()
-            ->whereIn('party_role', ['cosigner', 'tenant', 'landlord'])
-            ->whereNotIn('party_role', $activeRoles)
+            ->where('party_role', '!=', 'agent')
+            ->whereNotIn('party_role', $allActiveRoles)
             ->delete();
 
         // Remove markers assigned to parties that are no longer active
         $template->markers()
-            ->whereIn('assigned_party', ['cosigner', 'tenant', 'landlord'])
-            ->whereNotIn('assigned_party', $activeRoles)
+            ->where('assigned_party', '!=', 'agent')
+            ->whereNotIn('assigned_party', $allActiveRoles)
             ->delete();
 
         if ($request->expectsJson()) {
@@ -328,10 +356,9 @@ class SignatureController extends Controller
 
         $template = SignatureTemplate::where('document_id', $document->id)->firstOrFail();
 
-        // Build allowed parties from the template's active parties
+        // Build allowed parties from ALL active parties in the template
         $allowedParties = collect($template->parties_json ?? [])
             ->pluck('role')
-            ->intersect(['agent', 'cosigner', 'tenant', 'landlord'])
             ->implode(',');
 
         $request->validate([
@@ -574,11 +601,29 @@ class SignatureController extends Controller
 
         // --- Determine next step based on cosign mode ---
 
-        // No cosigner: standard flow (advance to tenant)
+        // Helper: find first external party status for this template
+        $firstExternalStatus = function () use ($template) {
+            $order = $template->signing_order_json ?? ['agent', 'tenant', 'landlord', 'buyer', 'seller'];
+            $internalRoles = ['agent', 'cosigner'];
+            $statusMap = [
+                'tenant' => SignatureTemplate::STATUS_AWAITING_TENANT,
+                'landlord' => SignatureTemplate::STATUS_AWAITING_LANDLORD,
+                'buyer' => SignatureTemplate::STATUS_AWAITING_BUYER,
+                'seller' => SignatureTemplate::STATUS_AWAITING_SELLER,
+            ];
+            foreach ($order as $party) {
+                if (!in_array($party, $internalRoles) && isset($statusMap[$party])) {
+                    return $statusMap[$party];
+                }
+            }
+            return SignatureTemplate::STATUS_AWAITING_TENANT;
+        };
+
+        // No cosigner: standard flow (advance to first external party)
         if (!$cosignMode) {
-            $template->update(['status' => SignatureTemplate::STATUS_AWAITING_TENANT]);
+            $template->update(['status' => $firstExternalStatus()]);
             return redirect()->route('docuperfect.signatures.sendConfirmation', $document)
-                ->with('success', 'You have signed all your markers. Now send to the tenant.');
+                ->with('success', 'You have signed all your markers. Now send to the next party.');
         }
 
         // TOGETHER mode: both agent and cosigner sign in parallel
@@ -597,8 +642,8 @@ class SignatureController extends Controller
                 ->exists();
 
             if ($agentDone && $cosignerDone && $agentRequestCompleted && $cosignerRequestCompleted) {
-                // Both done — advance to external parties
-                $template->update(['status' => SignatureTemplate::STATUS_AWAITING_TENANT]);
+                // Both done — advance to first external party
+                $template->update(['status' => $firstExternalStatus()]);
                 return redirect()->route('docuperfect.signatures.sendConfirmation', $document)
                     ->with('success', 'Both agent and co-signer have signed. Now send to the next party.');
             }
@@ -628,16 +673,16 @@ class SignatureController extends Controller
                     ->with('success', 'You have signed all your markers. Document sent to co-signer for review.');
             }
 
-            // Cosigner done — advance to external parties
-            $template->update(['status' => SignatureTemplate::STATUS_AWAITING_TENANT]);
+            // Cosigner done — advance to first external party
+            $template->update(['status' => $firstExternalStatus()]);
             return redirect()->route('docuperfect.signatures.sendConfirmation', $document)
                 ->with('success', 'Co-signing complete. Now send to the next party.');
         }
 
         // Fallback: standard flow
-        $template->update(['status' => SignatureTemplate::STATUS_AWAITING_TENANT]);
+        $template->update(['status' => $firstExternalStatus()]);
         return redirect()->route('docuperfect.signatures.sendConfirmation', $document)
-            ->with('success', 'You have signed all your markers. Now send to the tenant.');
+            ->with('success', 'You have signed all your markers. Now send to the next party.');
     }
 
     /**
@@ -658,7 +703,7 @@ class SignatureController extends Controller
             ->pluck('party_role')
             ->toArray();
 
-        $order = $template->signing_order_json ?? ['agent', 'tenant', 'landlord'];
+        $order = $template->signing_order_json ?? ['agent', 'tenant', 'landlord', 'buyer', 'seller'];
         $nextPartyRole = null;
         foreach ($order as $party) {
             if (!in_array($party, $internalRoles) && !in_array($party, $completedParties)) {
@@ -697,10 +742,12 @@ class SignatureController extends Controller
         if (in_array($template->status, [
             SignatureTemplate::STATUS_AWAITING_TENANT,
             SignatureTemplate::STATUS_AWAITING_LANDLORD,
+            SignatureTemplate::STATUS_AWAITING_BUYER,
+            SignatureTemplate::STATUS_AWAITING_SELLER,
         ])) {
             // Find the next external party in signing order
             $internalRoles = ['agent', 'cosigner'];
-            $order = $template->signing_order_json ?? ['agent', 'tenant', 'landlord'];
+            $order = $template->signing_order_json ?? ['agent', 'tenant', 'landlord', 'buyer', 'seller'];
             $completedParties = $template->requests()
                 ->where('status', SignatureRequest::STATUS_COMPLETED)
                 ->pluck('party_role')
@@ -1205,6 +1252,38 @@ class SignatureController extends Controller
         if ((int) $document->owner_id !== (int) $user->id) {
             abort(403);
         }
+    }
+
+    // ──────────────────────────────────────────────
+    // Document Supersede (Edit & Re-send)
+    // ──────────────────────────────────────────────
+
+    /**
+     * Supersede a document: mark old template as superseded, expire requests,
+     * create new template with party config and markers copied, redirect to editor.
+     */
+    public function supersede(Request $request, $id)
+    {
+        $document = Document::findOrFail($id);
+        $this->authorizeDocument($request->user(), $document);
+
+        $template = SignatureTemplate::where('document_id', $document->id)
+            ->whereNotIn('status', [SignatureTemplate::STATUS_SUPERSEDED, SignatureTemplate::STATUS_COMPLETED])
+            ->latest()
+            ->first();
+
+        if (!$template) {
+            return back()->with('error', 'No active signature template found for this document.');
+        }
+
+        if (!$template->canBeSuperseded()) {
+            return back()->with('error', 'Only in-progress documents can be superseded.');
+        }
+
+        $newTemplate = $this->signatureService->supersedeTemplate($template, $request->user());
+
+        return redirect()->route('docuperfect.documents.edit', $document->id)
+            ->with('status', 'Document superseded. Fix the error and set up signatures again — marker positions have been pre-loaded.');
     }
 
     // ──────────────────────────────────────────────

@@ -24,6 +24,8 @@ class SignatureTemplate extends Model
         'signed_pdf_path',
         'signed_pdf_client_path',
         'flattened_pages_json',
+        'supersedes_id',
+        'superseded_by_id',
     ];
 
     protected $casts = [
@@ -41,11 +43,14 @@ class SignatureTemplate extends Model
     const STATUS_AWAITING_TENANT = 'awaiting_tenant';
     const STATUS_AWAITING_LANDLORD = 'awaiting_landlord';
     const STATUS_AWAITING_COSIGNER = 'awaiting_cosigner';
+    const STATUS_AWAITING_BUYER = 'awaiting_buyer';
+    const STATUS_AWAITING_SELLER = 'awaiting_seller';
     const STATUS_PENDING_AGENT_APPROVAL = 'pending_agent_approval';
     const STATUS_COMPLETED = 'completed';
     const STATUS_EXPIRED = 'expired';
     const STATUS_DECLINED = 'declined';
     const STATUS_REJECTED = 'rejected';
+    const STATUS_SUPERSEDED = 'superseded';
 
     // --- Relationships ---
 
@@ -79,6 +84,16 @@ class SignatureTemplate extends Model
         return $this->hasMany(SignatureAuditLog::class);
     }
 
+    public function supersedes()
+    {
+        return $this->belongsTo(self::class, 'supersedes_id');
+    }
+
+    public function supersededBy()
+    {
+        return $this->belongsTo(self::class, 'superseded_by_id');
+    }
+
     public function leaseRecord()
     {
         return $this->hasOne(LeaseRecord::class);
@@ -93,7 +108,7 @@ class SignatureTemplate extends Model
 
     public function scopeActive($query)
     {
-        return $query->whereNotIn('status', [self::STATUS_EXPIRED, self::STATUS_DECLINED, self::STATUS_REJECTED]);
+        return $query->whereNotIn('status', [self::STATUS_EXPIRED, self::STATUS_DECLINED, self::STATUS_REJECTED, self::STATUS_SUPERSEDED]);
     }
 
     public function scopeVisibleTo($query, User $user)
@@ -131,6 +146,8 @@ class SignatureTemplate extends Model
             self::STATUS_AWAITING_COSIGNER,
             self::STATUS_AWAITING_TENANT,
             self::STATUS_AWAITING_LANDLORD,
+            self::STATUS_AWAITING_BUYER,
+            self::STATUS_AWAITING_SELLER,
             self::STATUS_PENDING_AGENT_APPROVAL,
         ]);
     }
@@ -145,6 +162,34 @@ class SignatureTemplate extends Model
         return $this->status === self::STATUS_REJECTED;
     }
 
+    public function isSuperseded(): bool
+    {
+        return $this->status === self::STATUS_SUPERSEDED;
+    }
+
+    /**
+     * Check if this template can be superseded (in-progress, not completed/superseded).
+     */
+    public function canBeSuperseded(): bool
+    {
+        return $this->isSigning() || $this->isPendingAgentApproval();
+    }
+
+    /**
+     * Get version number by counting the supersede chain.
+     */
+    public function versionNumber(): int
+    {
+        $version = 1;
+        $current = $this;
+        while ($current->supersedes_id) {
+            $version++;
+            $current = self::find($current->supersedes_id);
+            if (!$current) break;
+        }
+        return $version;
+    }
+
     public function rejectedBy()
     {
         return $this->belongsTo(User::class, 'rejected_by');
@@ -157,6 +202,8 @@ class SignatureTemplate extends Model
             'awaiting_cosigner' => 'cosigner',
             'awaiting_tenant' => 'tenant',
             'awaiting_landlord' => 'landlord',
+            'awaiting_buyer' => 'buyer',
+            'awaiting_seller' => 'seller',
         ];
 
         return $statusMap[$this->status] ?? null;

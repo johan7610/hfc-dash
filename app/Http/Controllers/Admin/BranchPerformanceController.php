@@ -42,6 +42,14 @@ class BranchPerformanceController extends Controller
 
         $statusSummary = Deal::statusSummaryForBranch($branchId, $period);
 
+        // Deal Register averages (same as BM PerformanceController)
+        $stageFilter = [
+            'pending'    => $request->boolean('st_pending', true),
+            'granted'    => $request->boolean('st_granted', true),
+            'registered' => $request->boolean('st_registered', true),
+        ];
+        $marketAverages = Deal::marketAveragesForBranch($branchId, $period, $stageFilter);
+
         // TV link (same shape BM uses)
         $tvUrl = url("/tv/branch/{$branchId}?token=" . env("TV_TOKEN") . "&period={$period}");
 
@@ -51,6 +59,7 @@ class BranchPerformanceController extends Controller
             'statusSummary' => $statusSummary,
             'rollup' => $rollup,
             'branchGoal' => $branchGoal,
+            'marketAverages' => $marketAverages,
             'budget' => [
                 'branch_budget' => $branchBudget,
                 'projected_income' => $projectedIncome,

@@ -199,7 +199,12 @@ public function index(Request $request)
 
                     COUNT(DISTINCT du.deal_id) as deals_actual,
 
-                    COALESCE(SUM( (deals.property_value * 1.0) / NULLIF(ac.agent_count, 0) ), 0) as value_actual
+                    COALESCE(SUM(
+                        CASE du_side.side
+                            WHEN "listing" THEN deals.property_value * deals.listing_split_percent / 100.0
+                            WHEN "selling" THEN deals.property_value * deals.selling_split_percent / 100.0
+                            ELSE 0 END
+                    ), 0) as value_actual
 
                 ')
 

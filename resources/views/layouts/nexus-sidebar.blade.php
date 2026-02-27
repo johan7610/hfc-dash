@@ -2,7 +2,11 @@
     $currentPath = request()->path();
     $nexusSection = 'agency-tracker'; // default for all existing routes
 
-    if (str_starts_with($currentPath, 'docuperfect')) {
+    if (str_starts_with($currentPath, 'rental')) {
+        $nexusSection = 'rental-division';
+    } elseif (str_starts_with($currentPath, 'docuperfect/sales')) {
+        $nexusSection = 'sales-documents';
+    } elseif (str_starts_with($currentPath, 'docuperfect')) {
         $nexusSection = 'docuperfect';
     } elseif (str_starts_with($currentPath, 'documents/library')) {
         $nexusSection = 'document-library';
@@ -157,6 +161,37 @@
             </div>
         </div>
         @endif
+
+        {{-- Sales Documents (top-level link into Docuperfect sales) --}}
+        @if(\Illuminate\Support\Facades\Route::has('docuperfect.sales'))
+        <a href="{{ route('docuperfect.sales') }}" class="nexus-nav-item {{ $nexusSection === 'sales-documents' ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v7.5M12 12.75h3m-3 0h-3m-2.25 0H5.625c-.621 0-1.125-.504-1.125-1.125V4.125c0-.621.504-1.125 1.125-1.125h5.25a2.25 2.25 0 0 1 2.25 2.25v1.5m-6 9V21m0-6.75h9" />
+            </svg>
+            <span>Sales Documents</span>
+            <svg class="nexus-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+        </a>
+        @endif
+
+        {{-- Rental Division (expandable group) --}}
+        @php $rentalExpanded = ($nexusSection === 'rental-division'); @endphp
+        <div x-data="{ rentalOpen: {{ $rentalExpanded ? 'true' : 'false' }} }">
+            <button type="button" @click="rentalOpen = !rentalOpen" class="nexus-nav-item nexus-nav-group-toggle {{ $rentalExpanded ? 'active' : '' }}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21m0 0h4.5V3.545M12.75 21h7.5V10.75M2.25 21h1.5m18 0h-18M2.25 9l4.5-1.636M18.75 3l-1.5.545m0 6.205 3 1m1.5.5-1.5-.5M6.75 7.364V3h-3v18m3-13.636 10.5-3.819" />
+                </svg>
+                <span>Rentals</span>
+                <svg class="nexus-chevron transition-transform duration-200" :class="rentalOpen && 'rotate-90'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+            </button>
+
+            <div x-show="rentalOpen" @unless($rentalExpanded) x-cloak @endunless x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="nexus-nav-children">
+                <a href="{{ route('rental.dashboard') }}" class="nexus-nav-subitem {{ request()->routeIs('rental.dashboard') ? 'active' : '' }}">Dashboard</a>
+                <a href="{{ route('rental.signatures') }}" class="nexus-nav-subitem {{ request()->routeIs('rental.signatures') ? 'active' : '' }}">Electronic Signatures</a>
+                <a href="{{ route('rental.active-leases') }}" class="nexus-nav-subitem {{ request()->routeIs('rental.active-leases') ? 'active' : '' }}">Active Leases</a>
+                <a href="{{ route('rental.expired-leases') }}" class="nexus-nav-subitem {{ request()->routeIs('rental.expired-leases') ? 'active' : '' }}">Expired Leases</a>
+                <a href="{{ route('rental.settings') }}" class="nexus-nav-subitem {{ request()->routeIs('rental.settings') ? 'active' : '' }}">Settings</a>
+            </div>
+        </div>
 
         {{-- Franchise Admin --}}
         @if(!$user || $user->canAccessNexusSection('franchise-admin'))

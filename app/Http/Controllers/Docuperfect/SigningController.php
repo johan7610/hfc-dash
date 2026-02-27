@@ -30,8 +30,17 @@ class SigningController extends Controller
             ->with(['template.document', 'template.markers.signatures', 'template.creator'])
             ->firstOrFail();
 
-        // Expired
+        // Expired — check if superseded
         if ($signingRequest->isExpired()) {
+            $template = $signingRequest->template;
+            if ($template && $template->isSuperseded()) {
+                return view('docuperfect.signatures.external.superseded', [
+                    'request' => $signingRequest,
+                    'template' => $template,
+                    'documentName' => $template->document->name ?? 'Document',
+                ]);
+            }
+
             return view('docuperfect.signatures.external.expired', [
                 'request' => $signingRequest,
             ]);
@@ -581,6 +590,140 @@ class SigningController extends Controller
         );
 
         return response()->json(['ok' => true, 'declined' => true]);
+    }
+
+    // ──────────────────────────────────────────────
+    // Signed document download (post-completion, token-based)
+    // ──────────────────────────────────────────────
+
+    /**
+     * Show the download page for a completed signed document.
+     * If the party has an ID number on file, require ID verification first.
+     */
+    public function downloadPage(Request $request, $token)
+    {
+        $signingRequest = SignatureRequest::where('token', $token)
+            ->with(['template.document'])
+            ->firstOrFail();
+
+        $template = $signingRequest->template;
+
+        // Document must be completed
+        if (!$template || $template->status !== 'completed') {
+            return view('docuperfect.signatures.external.download', [
+                'error' => 'This document is not yet fully signed.',
+                'request' => $signingRequest,
+                'token' => $token,
+            ]);
+        }
+
+        // If already verified in this session, serve download directly
+        if (session("download_verified_{$token}")) {
+            return view('docuperfect.signatures.external.download', [
+                'request' => $signingRequest,
+                'template' => $template,
+                'document' => $template->document,
+                'verified' => true,
+                'token' => $token,
+            ]);
+        }
+
+        // If no ID stored, skip verification
+        if (empty($signingRequest->signer_id_number)) {
+            session(["download_verified_{$token}" => true]);
+
+            return view('docuperfect.signatures.external.download', [
+                'request' => $signingRequest,
+                'template' => $template,
+                'document' => $template->document,
+                'verified' => true,
+                'token' => $token,
+            ]);
+        }
+
+        // Show ID verification form
+        return view('docuperfect.signatures.external.download', [
+            'request' => $signingRequest,
+            'template' => $template,
+            'document' => $template->document,
+            'verified' => false,
+            'needsVerification' => true,
+            'token' => $token,
+        ]);
+    }
+
+    /**
+     * Verify identity for download access.
+     */
+    public function downloadVerify(Request $request, $token)
+    {
+        $signingRequest = SignatureRequest::where('token', $token)
+            ->with('template')
+            ->firstOrFail();
+
+        $request->validate([
+            'id_number' => 'required|string|min:3|max:20',
+        ]);
+
+        $submittedId = strtolower(trim($request->id_number));
+        $expectedId = strtolower(trim($signingRequest->signer_id_number));
+
+        if ($submittedId !== $expectedId) {
+            return redirect()->route('signatures.download.page', $token)
+                ->with('error', 'The ID number does not match our records. Please try again.');
+        }
+
+        session(["download_verified_{$token}" => true]);
+
+        return redirect()->route('signatures.download.page', $token);
+    }
+
+    /**
+     * Serve the signed PDF file for download (token-based, session-verified).
+     */
+    public function downloadSignedFile(Request $request, $token)
+    {
+        $signingRequest = SignatureRequest::where('token', $token)
+            ->with(['template.document'])
+            ->firstOrFail();
+
+        $template = $signingRequest->template;
+
+        if (!$template || $template->status !== 'completed') {
+            abort(404, 'Document not available.');
+        }
+
+        // Require verification if ID is on file
+        if (!empty($signingRequest->signer_id_number) && !session("download_verified_{$token}")) {
+            return redirect()->route('signatures.download.page', $token);
+        }
+
+        // Serve the client copy (no audit trail)
+        $pdfPath = $template->signed_pdf_client_path ?? $template->signed_pdf_path;
+
+        if (!$pdfPath || !Storage::disk('local')->exists($pdfPath)) {
+            return redirect()->route('signatures.download.page', $token)
+                ->with('error', 'The signed PDF is not available yet. Please try again later.');
+        }
+
+        $document = $template->document;
+        $filename = "Signed - " . preg_replace('/[^a-zA-Z0-9_\-\. ]/', '_', $document->name ?? 'Document') . ".pdf";
+
+        SignatureAuditLog::log(
+            $template,
+            'signed_pdf_downloaded',
+            SignatureAuditLog::ACTOR_SIGNER,
+            $signingRequest->signer_name,
+            $signingRequest->signer_email,
+            requestId: $signingRequest->id,
+            ip: $request->ip(),
+            ua: $request->userAgent(),
+        );
+
+        return response()->download(
+            Storage::disk('local')->path($pdfPath),
+            $filename
+        );
     }
 
     /**
