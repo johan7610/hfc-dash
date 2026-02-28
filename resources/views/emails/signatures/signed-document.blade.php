@@ -22,21 +22,27 @@
                     <div style="padding: 4px 0; font-size: 13px;">
                         &#10004;&#65039; {{ $party['name'] }} ({{ ucfirst(str_replace('_', ' ', $role)) }})
                         @if($party['completed_at'])
-                            &mdash; {{ $party['completed_at']->format('d M Y') }}
+                            — {{ $party['completed_at']->format('d M Y') }}
                         @endif
                     </div>
                 @endforeach
             </div>
         @endif
 
-        <div style="background-color: #f0fff4; border-left: 4px solid #276749; padding: 15px; margin: 20px 0;">
-            <p style="margin: 0;">Your signed copy is ready for download. Click the button below to access it.</p>
-        </div>
+        @if($pdfPath)
+            <div style="background-color: #f0fff4; border-left: 4px solid #276749; padding: 15px; margin: 20px 0;">
+                <p style="margin: 0;"><strong>Your signed copy is attached to this email.</strong> Please save it for your records.</p>
+            </div>
+        @else
+            <div style="background-color: #fffbeb; border-left: 4px solid #d69e2e; padding: 15px; margin: 20px 0;">
+                <p style="margin: 0;">The document is now fully executed. Please contact the agent if you need a copy of the signed document.</p>
+            </div>
+        @endif
 
-        @if($downloadUrl)
+        @if($envelopeUrl)
             <div style="text-align: center; margin: 30px 0;">
-                <a href="{{ $downloadUrl }}" style="display: inline-block; background-color: #276749; color: #ffffff; padding: 14px 40px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
-                    DOWNLOAD SIGNED DOCUMENT
+                <a href="{{ $envelopeUrl }}" style="display: inline-block; background-color: #276749; color: #ffffff; padding: 14px 40px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+                    VIEW IN NEXUS
                 </a>
             </div>
         @endif

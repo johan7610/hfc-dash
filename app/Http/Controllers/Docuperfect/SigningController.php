@@ -30,17 +30,8 @@ class SigningController extends Controller
             ->with(['template.document', 'template.markers.signatures', 'template.creator'])
             ->firstOrFail();
 
-        // Expired — check if superseded
+        // Expired
         if ($signingRequest->isExpired()) {
-            $template = $signingRequest->template;
-            if ($template && $template->isSuperseded()) {
-                return view('docuperfect.signatures.external.superseded', [
-                    'request' => $signingRequest,
-                    'template' => $template,
-                    'documentName' => $template->document->name ?? 'Document',
-                ]);
-            }
-
             return view('docuperfect.signatures.external.expired', [
                 'request' => $signingRequest,
             ]);
@@ -89,35 +80,8 @@ class SigningController extends Controller
             ]);
         }
 
-        // If verification was skipped (no ID number on file), mark session as verified
-        // so that downstream endpoints (flattenedPageImage, capture, upload) allow access.
-        if (!session("signing_verified_{$token}")) {
-            session(["signing_verified_{$token}" => true]);
-        }
-
         $template = $signingRequest->template;
         $document = $template->document;
-        $docTemplate = $document->template;
-        $isSalesTemplate = $docTemplate && $docTemplate->template_type === 'sales';
-
-        // HARD BLOCK: Sales documents go straight to wet-ink flow — no electronic option
-        if ($isSalesTemplate && $signingRequest->signing_method !== 'wet_ink') {
-            $signingRequest->update([
-                'signing_method' => 'wet_ink',
-                'wet_ink_status' => $signingRequest->wet_ink_status ?: SignatureRequest::WET_INK_PENDING_UPLOAD,
-            ]);
-            $signingRequest->refresh();
-        }
-
-        // Signing method choice gate — rental parties choose before proceeding
-        if (!$isSalesTemplate && empty($signingRequest->signing_method)) {
-            return view('docuperfect.signatures.external.choose-method', [
-                'request' => $signingRequest,
-                'template' => $template,
-                'document' => $document,
-                'token' => $token,
-            ]);
-        }
 
         // Get this party's markers
         $myMarkers = $template->markers()
@@ -138,6 +102,7 @@ class SigningController extends Controller
             ->get();
 
         // Build page image URLs — use flattened images when available
+        $docTemplate = $document->template;
         $flattenedPages = $template->flattened_pages_json ?? [];
         $hasFlattened = !empty($flattenedPages);
         $pageImages = [];
@@ -236,33 +201,15 @@ class SigningController extends Controller
      */
     public function chooseMethod(Request $request, $token)
     {
-        $signingRequest = SignatureRequest::where('token', $token)
-            ->with('template.document.template')
-            ->firstOrFail();
+        $signingRequest = SignatureRequest::where('token', $token)->firstOrFail();
 
         if ($signingRequest->isExpired()) {
-            if ($request->expectsJson()) {
-                return response()->json(['ok' => false, 'error' => 'Signing link has expired.'], 410);
-            }
-            return redirect()->route('signatures.external', $token);
+            return response()->json(['ok' => false, 'error' => 'Signing link has expired.'], 410);
         }
 
         $request->validate([
             'method' => 'required|in:electronic,wet_ink',
         ]);
-
-        // HARD BLOCK: Sales documents cannot use electronic signing method
-        $docTemplate = $signingRequest->template->document->template ?? null;
-        if ($request->method === 'electronic' && $docTemplate && $docTemplate->template_type === 'sales') {
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'ok' => false,
-                    'error' => 'Electronic signatures are not permitted on sales documents.',
-                ], 403);
-            }
-            return redirect()->route('signatures.external', $token)
-                ->with('error', 'Electronic signatures are not permitted on sales documents.');
-        }
 
         $signingRequest->update([
             'signing_method' => $request->method,
@@ -274,11 +221,7 @@ class SigningController extends Controller
             ]);
         }
 
-        if ($request->expectsJson()) {
-            return response()->json(['ok' => true, 'method' => $request->method]);
-        }
-
-        return redirect()->route('signatures.external', $token);
+        return response()->json(['ok' => true, 'method' => $request->method]);
     }
 
     /**
@@ -287,20 +230,11 @@ class SigningController extends Controller
     public function capture(Request $request, $token, SignatureMarker $marker)
     {
         $signingRequest = SignatureRequest::where('token', $token)
-            ->with('template.document.template')
+            ->with('template')
             ->firstOrFail();
 
         if ($signingRequest->isExpired()) {
             return response()->json(['ok' => false, 'error' => 'Signing link has expired.'], 410);
-        }
-
-        // HARD BLOCK: Sales documents cannot accept electronic signatures
-        $docTemplate = $signingRequest->template->document->template ?? null;
-        if ($docTemplate && $docTemplate->template_type === 'sales') {
-            return response()->json([
-                'ok' => false,
-                'error' => 'Electronic signatures are not permitted on sales documents.',
-            ], 403);
         }
 
         // Verify session
@@ -448,7 +382,7 @@ class SigningController extends Controller
 
         $request->validate([
             'files' => 'required|array|min:1',
-            'files.*' => 'file|mimes:pdf,jpg,jpeg,png,heic|max:10240',
+            'files.*' => 'file|mimes:pdf,jpg,jpeg,png|max:20480',
         ]);
 
         $paths = [];
@@ -478,7 +412,6 @@ class SigningController extends Controller
         $signingRequest->update([
             'signing_method' => 'wet_ink',
             'wet_ink_upload_path' => json_encode($allPaths),
-            'wet_ink_upload_method' => 'upload',
             'wet_ink_status' => SignatureRequest::WET_INK_UPLOADED_PENDING_REVIEW,
         ]);
 
@@ -491,7 +424,7 @@ class SigningController extends Controller
             requestId: $signingRequest->id,
             ip: $request->ip(),
             ua: $request->userAgent(),
-            metadata: ['file_count' => count($paths), 'total_files' => count($allPaths), 'upload_method' => 'upload'],
+            metadata: ['file_count' => count($paths), 'total_files' => count($allPaths)],
         );
 
         // Notify the agent
@@ -504,12 +437,14 @@ class SigningController extends Controller
 
     /**
      * Download document for wet ink signing.
-     * Generates a clean PDF from page images (no signatures overlaid).
+     * Generates a PDF on-the-fly from flattened page images (which include
+     * document fields + previous signers' entries baked in), with colored
+     * annotation markers overlaid showing where this party needs to sign/initial/fill.
      */
     public function downloadForSigning($token)
     {
         $signingRequest = SignatureRequest::where('token', $token)
-            ->with(['template.document.template'])
+            ->with(['template.document.template', 'template.markers'])
             ->firstOrFail();
 
         if ($signingRequest->isExpired()) {
@@ -517,39 +452,77 @@ class SigningController extends Controller
                 ->with('error', 'Signing link has expired.');
         }
 
-        $document = $signingRequest->template->document;
-        $docTemplate = $document->template;
+        $signatureTemplate = $signingRequest->template;
+        $document = $signatureTemplate->document;
+        $docTemplate = $document->template ?? null;
 
         if (!$docTemplate || $docTemplate->page_count < 1) {
             return redirect()->route('signatures.external', $token)
-                ->with('error', 'Document not available for download.');
+                ->with('error', 'Document file not available for download.');
         }
 
-        // Build page images for the PDF
-        $pages = [];
-        for ($i = 0; $i < $docTemplate->page_count; $i++) {
-            $pngPath = "docuperfect/templates/{$docTemplate->id}/page-{$i}.png";
-            $jpgPath = "docuperfect/templates/{$docTemplate->id}/page-{$i}.jpg";
+        $flattener = app(DocumentFlattener::class);
 
-            if (Storage::disk('local')->exists($pngPath)) {
-                $content = Storage::disk('local')->get($pngPath);
-                $pages[] = 'data:image/png;base64,' . base64_encode($content);
-            } elseif (Storage::disk('local')->exists($jpgPath)) {
-                $content = Storage::disk('local')->get($jpgPath);
-                $pages[] = 'data:image/jpeg;base64,' . base64_encode($content);
+        // Load this party's unsigned markers for annotation overlays
+        $partyMarkers = $signatureTemplate->markers()
+            ->where('assigned_party', $signingRequest->party_role)
+            ->whereDoesntHave('signatures')
+            ->orderBy('page_number')
+            ->get();
+
+        // Create annotated temp copies with marker overlays (or fall back to plain images)
+        $annotatedPages = [];
+        $usingAnnotated = false;
+
+        if ($partyMarkers->isNotEmpty()) {
+            $annotatedPages = $flattener->createAnnotatedPages($signatureTemplate, $partyMarkers);
+            $usingAnnotated = !empty($annotatedPages);
+        }
+
+        // Fall back to plain page images if no markers or annotation failed
+        if (!$usingAnnotated) {
+            $annotatedPages = [];
+        }
+        $plainPages = $flattener->getPageImages($signatureTemplate);
+
+        // Build HTML with each page image as a full-page image
+        $html = '<html><head><style>'
+            . 'body { margin: 0; padding: 0; }'
+            . '.page { page-break-after: always; text-align: center; margin: 0; padding: 0; }'
+            . '.page:last-child { page-break-after: auto; }'
+            . '.page img { width: 100%; height: auto; display: block; }'
+            . '</style></head><body>';
+
+        $pageCount = $docTemplate->page_count;
+        for ($pageNum = 0; $pageNum < $pageCount; $pageNum++) {
+            // Use annotated temp image if available, otherwise plain storage image
+            if ($usingAnnotated && isset($annotatedPages[$pageNum])) {
+                $content = @file_get_contents($annotatedPages[$pageNum]);
+                $mime = 'image/png';
+            } else {
+                $storagePath = $plainPages[$pageNum] ?? null;
+                if (!$storagePath || !Storage::disk('local')->exists($storagePath)) {
+                    continue;
+                }
+                $content = Storage::disk('local')->get($storagePath);
+                $ext = strtolower(pathinfo($storagePath, PATHINFO_EXTENSION));
+                $mime = match ($ext) {
+                    'jpg', 'jpeg' => 'image/jpeg',
+                    'gif' => 'image/gif',
+                    'webp' => 'image/webp',
+                    default => 'image/png',
+                };
             }
+
+            if (!$content) continue;
+
+            $base64 = base64_encode($content);
+            $html .= '<div class="page">'
+                . '<img src="data:' . $mime . ';base64,' . $base64 . '">'
+                . '</div>';
         }
 
-        if (empty($pages)) {
-            return redirect()->route('signatures.external', $token)
-                ->with('error', 'Document pages not found.');
-        }
-
-        // Generate a clean PDF from the page images
-        $html = view('docuperfect.signatures.pdf.wet-ink-download', [
-            'pages' => $pages,
-            'documentName' => $document->name,
-        ])->render();
+        $html .= '</body></html>';
 
         $pdf = Pdf::loadHTML($html);
         $pdf->setPaper('a4', 'portrait');
@@ -562,9 +535,16 @@ class SigningController extends Controller
             'wet_ink_status' => $signingRequest->wet_ink_status ?: SignatureRequest::WET_INK_PENDING_UPLOAD,
         ]);
 
-        $filename = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', $document->name) . '_for_signing.pdf';
+        $filename = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', $document->name) . ' - For Signing.pdf';
 
-        return $pdf->download($filename);
+        $response = $pdf->download($filename);
+
+        // Clean up temp annotated images
+        if ($usingAnnotated) {
+            DocumentFlattener::cleanupTempImages($annotatedPages);
+        }
+
+        return $response;
     }
 
     /**
@@ -590,140 +570,6 @@ class SigningController extends Controller
         );
 
         return response()->json(['ok' => true, 'declined' => true]);
-    }
-
-    // ──────────────────────────────────────────────
-    // Signed document download (post-completion, token-based)
-    // ──────────────────────────────────────────────
-
-    /**
-     * Show the download page for a completed signed document.
-     * If the party has an ID number on file, require ID verification first.
-     */
-    public function downloadPage(Request $request, $token)
-    {
-        $signingRequest = SignatureRequest::where('token', $token)
-            ->with(['template.document'])
-            ->firstOrFail();
-
-        $template = $signingRequest->template;
-
-        // Document must be completed
-        if (!$template || $template->status !== 'completed') {
-            return view('docuperfect.signatures.external.download', [
-                'error' => 'This document is not yet fully signed.',
-                'request' => $signingRequest,
-                'token' => $token,
-            ]);
-        }
-
-        // If already verified in this session, serve download directly
-        if (session("download_verified_{$token}")) {
-            return view('docuperfect.signatures.external.download', [
-                'request' => $signingRequest,
-                'template' => $template,
-                'document' => $template->document,
-                'verified' => true,
-                'token' => $token,
-            ]);
-        }
-
-        // If no ID stored, skip verification
-        if (empty($signingRequest->signer_id_number)) {
-            session(["download_verified_{$token}" => true]);
-
-            return view('docuperfect.signatures.external.download', [
-                'request' => $signingRequest,
-                'template' => $template,
-                'document' => $template->document,
-                'verified' => true,
-                'token' => $token,
-            ]);
-        }
-
-        // Show ID verification form
-        return view('docuperfect.signatures.external.download', [
-            'request' => $signingRequest,
-            'template' => $template,
-            'document' => $template->document,
-            'verified' => false,
-            'needsVerification' => true,
-            'token' => $token,
-        ]);
-    }
-
-    /**
-     * Verify identity for download access.
-     */
-    public function downloadVerify(Request $request, $token)
-    {
-        $signingRequest = SignatureRequest::where('token', $token)
-            ->with('template')
-            ->firstOrFail();
-
-        $request->validate([
-            'id_number' => 'required|string|min:3|max:20',
-        ]);
-
-        $submittedId = strtolower(trim($request->id_number));
-        $expectedId = strtolower(trim($signingRequest->signer_id_number));
-
-        if ($submittedId !== $expectedId) {
-            return redirect()->route('signatures.download.page', $token)
-                ->with('error', 'The ID number does not match our records. Please try again.');
-        }
-
-        session(["download_verified_{$token}" => true]);
-
-        return redirect()->route('signatures.download.page', $token);
-    }
-
-    /**
-     * Serve the signed PDF file for download (token-based, session-verified).
-     */
-    public function downloadSignedFile(Request $request, $token)
-    {
-        $signingRequest = SignatureRequest::where('token', $token)
-            ->with(['template.document'])
-            ->firstOrFail();
-
-        $template = $signingRequest->template;
-
-        if (!$template || $template->status !== 'completed') {
-            abort(404, 'Document not available.');
-        }
-
-        // Require verification if ID is on file
-        if (!empty($signingRequest->signer_id_number) && !session("download_verified_{$token}")) {
-            return redirect()->route('signatures.download.page', $token);
-        }
-
-        // Serve the client copy (no audit trail)
-        $pdfPath = $template->signed_pdf_client_path ?? $template->signed_pdf_path;
-
-        if (!$pdfPath || !Storage::disk('local')->exists($pdfPath)) {
-            return redirect()->route('signatures.download.page', $token)
-                ->with('error', 'The signed PDF is not available yet. Please try again later.');
-        }
-
-        $document = $template->document;
-        $filename = "Signed - " . preg_replace('/[^a-zA-Z0-9_\-\. ]/', '_', $document->name ?? 'Document') . ".pdf";
-
-        SignatureAuditLog::log(
-            $template,
-            'signed_pdf_downloaded',
-            SignatureAuditLog::ACTOR_SIGNER,
-            $signingRequest->signer_name,
-            $signingRequest->signer_email,
-            requestId: $signingRequest->id,
-            ip: $request->ip(),
-            ua: $request->userAgent(),
-        );
-
-        return response()->download(
-            Storage::disk('local')->path($pdfPath),
-            $filename
-        );
     }
 
     /**

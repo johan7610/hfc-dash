@@ -20,11 +20,7 @@
         </div>
     @endif
 
-    @if(session('error'))
-        <div class="rounded-2xl border border-red-200 bg-red-50 text-red-900 px-4 py-3 text-sm">
-            {{ session('error') }}
-        </div>
-    @endif
+    {{-- Flash messages handled by global toast system --}}
 
     @if($errors->any())
         <div class="rounded-2xl border border-red-200 bg-red-50 text-red-900 px-4 py-3 text-sm">

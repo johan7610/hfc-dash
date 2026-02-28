@@ -18,9 +18,6 @@ class SignatureReminderMail extends BaseSignatureMail
         public Carbon $expiresAt,
         public int $reminderNumber,
         public ?string $forceTone = null,
-        public ?string $customSubject = null,
-        public ?string $customBody = null,
-        public int $daysSinceSent = 0,
     ) {
         $this->tone = $forceTone ?? match (true) {
             $this->reminderNumber >= 3 => 'final',
@@ -31,15 +28,11 @@ class SignatureReminderMail extends BaseSignatureMail
 
     public function envelope(): Envelope
     {
-        if ($this->customSubject) {
-            $subject = $this->replacePlaceholders($this->customSubject);
-        } else {
-            $subject = match ($this->tone) {
-                'final' => "Final reminder: Your signature is needed — {$this->documentName}",
-                'manual' => "Reminder from {$this->getAgentFooter()['name']}: Please sign {$this->documentName}",
-                default => "Reminder: Your signature is needed — {$this->documentName}",
-            };
-        }
+        $subject = match ($this->tone) {
+            'final' => "Final reminder: Your signature is needed — {$this->documentName}",
+            'manual' => "Reminder from {$this->getAgentFooter()['name']}: Please sign {$this->documentName}",
+            default => "Reminder: Your signature is needed — {$this->documentName}",
+        };
 
         return new Envelope(
             from: $this->getFromAddress(),
@@ -54,25 +47,7 @@ class SignatureReminderMail extends BaseSignatureMail
             view: 'emails.signatures.reminder',
             with: [
                 'agentFooter' => $this->getAgentFooter(),
-                'customBody' => $this->customBody
-                    ? $this->replacePlaceholders($this->customBody)
-                    : null,
             ],
-        );
-    }
-
-    private function replacePlaceholders(string $text): string
-    {
-        return str_replace(
-            ['{signer_name}', '{document_name}', '{agent_name}', '{signing_link}', '{days_waiting}'],
-            [
-                $this->signerName,
-                $this->documentName,
-                $this->getAgentFooter()['name'],
-                $this->signingUrl,
-                (string) $this->daysSinceSent,
-            ],
-            $text,
         );
     }
 }

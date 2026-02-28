@@ -7,10 +7,6 @@
         rejectDocId: null,
         rejectDocName: '',
         showRejected: false,
-        showSuperseded: false,
-        showUploadOnBehalf: false,
-        uploadOnBehalfAction: '',
-        uploadOnBehalfPartyName: '',
         savedIndicators: {},
         async saveMetadata(docId, field, value) {
             const body = {};
@@ -245,15 +241,14 @@
                     $sigTemplate = $signatureTemplates->get($doc->id);
                     $requests = $sigTemplate ? $sigTemplate->requests->keyBy('party_role') : collect();
                     $completedReq = $sigTemplate ? $sigTemplate->requests->where('status', 'completed')->where('party_role', '!=', 'agent')->sortByDesc('completed_at')->first() : null;
+                    $wetInkReq = $sigTemplate ? $sigTemplate->requests->first(fn($r) => $r->wet_ink_status === 'uploaded_pending_review') : null;
+                    $isWetInkApproval = (bool) $wetInkReq;
                 @endphp
                 <div class="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
                     <div class="flex items-start justify-between">
                         <div class="flex-1">
                             <div class="font-semibold text-slate-800">
                                 {{ $doc->name }}
-                                @if($sigTemplate && $sigTemplate->supersedes_id)
-                                    <span class="inline-block ml-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-100 text-cyan-700">v{{ $sigTemplate->versionNumber() }} &mdash; corrected</span>
-                                @endif
                                 @if($doc->document_type)
                                     <span class="inline-block ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 text-slate-600">{{ ucwords(str_replace('_', ' ', $doc->document_type)) }}</span>
                                 @endif
@@ -265,10 +260,21 @@
                                         @if($req->status === 'completed')
                                             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
                                                 &#10003; {{ ucfirst($role) }} signed
+                                                @if($req->signing_method === 'wet_ink')
+                                                    <span class="text-slate-400">(wet ink)</span>
+                                                @endif
+                                            </span>
+                                        @elseif($req->wet_ink_status === 'uploaded_pending_review')
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-200 text-amber-800">
+                                                &#9888; {{ ucfirst($role) }} wet ink — pending review
                                             </span>
                                         @elseif($req->status === 'waiting')
                                             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500">
                                                 &#128274; {{ ucfirst($role) }} waiting
+                                            </span>
+                                        @elseif(in_array($req->status, ['pending', 'viewed', 'partially_signed']))
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700">
+                                                &#9993; {{ ucfirst($role) }} — {{ $req->status === 'viewed' ? 'viewed' : ($req->status === 'partially_signed' ? 'signing' : 'sent') }}
                                             </span>
                                         @endif
                                     @endif
@@ -307,17 +313,17 @@
                             </div>
                         </div>
                         <div class="flex flex-col gap-1.5 ml-4">
-                            <a href="{{ route('docuperfect.signatures.review', $doc) }}"
-                               class="inline-flex items-center px-4 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 whitespace-nowrap">
-                                Review &amp; Approve
-                            </a>
-                            <form method="POST" action="{{ route('docuperfect.signatures.supersede', $doc) }}" class="inline">
-                                @csrf
-                                <button type="submit" class="text-xs text-cyan-600 hover:text-cyan-800 text-center whitespace-nowrap"
-                                        onclick="return confirm('This will supersede the current version and create a new one. All pending signing links will be invalidated. Continue?')">
-                                    Edit &amp; Re-send
-                                </button>
-                            </form>
+                            @if($isWetInkApproval)
+                                <a href="{{ route('docuperfect.signatures.wetInkReview', ['document' => $doc->id, 'signingRequest' => $wetInkReq->id]) }}"
+                                   class="inline-flex items-center px-4 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 whitespace-nowrap">
+                                    Review Wet Ink
+                                </a>
+                            @else
+                                <a href="{{ route('docuperfect.signatures.review', $doc) }}"
+                                   class="inline-flex items-center px-4 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 whitespace-nowrap">
+                                    Review &amp; Approve
+                                </a>
+                            @endif
                             <button type="button"
                                     @click="rejectDocId = {{ $doc->id }}; rejectDocName = {{ Js::from($doc->name) }}; showRejectModal = true"
                                     class="text-xs text-red-500 hover:text-red-700 text-center">
@@ -356,12 +362,7 @@
                         $requests = $sigTemplate ? $sigTemplate->requests->keyBy('party_role') : collect();
                     @endphp
                     <tr>
-                        <td class="px-4 py-3 font-medium">
-                            {{ $doc->name }}
-                            @if($sigTemplate && $sigTemplate->supersedes_id)
-                                <span class="inline-block ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-100 text-cyan-700">v{{ $sigTemplate->versionNumber() }} &mdash; corrected</span>
-                            @endif
-                        </td>
+                        <td class="px-4 py-3 font-medium">{{ $doc->name }}</td>
                         <td class="px-4 py-3">
                             <div class="flex items-center gap-1">
                                 <select class="text-xs border-slate-300 rounded py-0.5 px-1 bg-white w-28"
@@ -461,15 +462,8 @@
                                 <a href="{{ route('docuperfect.signatures.setup', $doc) }}" class="text-blue-600 hover:underline text-xs">View</a>
                                 @if($sigTemplate)
                                     @php
-                                        $wetInkReq = $sigTemplate->requests->first(fn($r) => $r->wet_ink_status === 'uploaded_pending_review');
                                         $activeReq = $sigTemplate->requests->first(fn($r) => in_array($r->status, ['pending', 'viewed', 'partially_signed']));
                                     @endphp
-                                    @if($wetInkReq)
-                                        <a href="{{ route('docuperfect.signatures.wetInkReview', ['document' => $doc->id, 'signingRequest' => $wetInkReq->id]) }}"
-                                           class="text-amber-600 hover:underline text-xs font-medium">
-                                            Review Wet Ink
-                                        </a>
-                                    @endif
                                     @if($activeReq)
                                         <form method="POST" action="{{ route('docuperfect.signatures.sendReminder', ['document' => $doc->id, 'signatureRequest' => $activeReq->id]) }}" class="inline">
                                             @csrf
@@ -478,29 +472,7 @@
                                             </button>
                                         </form>
                                     @endif
-                                    @php
-                                        $wetInkPendingReq = $sigTemplate->requests->first(fn($r) =>
-                                            $r->signing_method === 'wet_ink'
-                                            && in_array($r->wet_ink_status, ['pending_upload', 'rejected', null])
-                                            && !in_array($r->status, ['completed', 'expired', 'declined'])
-                                            && $r->party_role !== 'agent'
-                                        );
-                                    @endphp
-                                    @if($wetInkPendingReq)
-                                        <button type="button"
-                                                @click="uploadOnBehalfAction = '{{ route('docuperfect.signatures.uploadOnBehalf', ['document' => $doc->id, 'signingRequest' => $wetInkPendingReq->id]) }}'; uploadOnBehalfPartyName = {{ Js::from($wetInkPendingReq->signer_name) }}; showUploadOnBehalf = true"
-                                                class="text-cyan-600 hover:underline text-xs font-medium">
-                                            Upload on Behalf
-                                        </button>
-                                    @endif
                                 @endif
-                                <form method="POST" action="{{ route('docuperfect.signatures.supersede', $doc) }}" class="inline">
-                                    @csrf
-                                    <button type="submit" class="text-cyan-600 hover:underline text-xs"
-                                            onclick="return confirm('This will supersede the current version and create a new one. All pending signing links will be invalidated. Continue?')">
-                                        Edit &amp; Re-send
-                                    </button>
-                                </form>
                                 <button type="button"
                                         @click="rejectDocId = {{ $doc->id }}; rejectDocName = {{ Js::from($doc->name) }}; showRejectModal = true"
                                         class="text-red-500 hover:underline text-xs">
@@ -929,35 +901,6 @@
     </div>
     @endif
 
-    {{-- Superseded --}}
-    @if(isset($groups['superseded']) && $groups['superseded']->isNotEmpty())
-    <div id="section-superseded" class="space-y-2 scroll-mt-4 mt-4">
-        <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer"
-            @click="showSuperseded = !showSuperseded">
-            Superseded ({{ $groups['superseded']->count() }})
-            <span class="text-xs" x-text="showSuperseded ? '&#9660;' : '&#9654;'"></span>
-        </h3>
-        <div x-show="showSuperseded" x-collapse class="space-y-3">
-            @foreach($groups['superseded'] as $doc)
-                @php $sigTemplate = $signatureTemplates->get($doc->id); @endphp
-                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 opacity-60">
-                    <div class="flex items-start justify-between">
-                        <div>
-                            <h4 class="font-medium text-gray-500 line-through">{{ $doc->name }}</h4>
-                            <p class="text-xs text-slate-400 mt-1">
-                                Superseded {{ $sigTemplate?->updated_at?->format('d M Y H:i') ?? '' }}
-                                @if($sigTemplate && $sigTemplate->superseded_by_id)
-                                    &mdash; replaced by a corrected version
-                                @endif
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            @endforeach
-        </div>
-    </div>
-    @endif
-
     {{-- Empty state --}}
     @if($counts['draft'] === 0 && $counts['ready_to_sign'] === 0 && $counts['awaiting_signatures'] === 0 && $counts['completed'] === 0 && $counts['pending_approval'] === 0 && $activeLeases->isEmpty())
     <div class="ds-status-card p-6 text-center">
@@ -972,7 +915,7 @@
             <h3 class="text-lg font-bold text-red-700 mb-4">Reject Document</h3>
             <p class="text-sm text-gray-600 mb-4" x-text="'Rejecting: ' + rejectDocName"></p>
 
-            <form method="POST" :action="'/docuperfect/documents/' + rejectDocId + '/reject'" id="reject-form">
+            <form method="POST" :action="'/docuperfect/documents/' + rejectDocId + '/reject'">
                 @csrf
 
                 <div class="mb-4">
@@ -1004,54 +947,6 @@
                     <button type="submit"
                             class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700">
                         Reject Document
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    {{-- Upload on Behalf Modal --}}
-    <div x-show="showUploadOnBehalf" x-cloak
-         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-        <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md" @click.away="showUploadOnBehalf = false">
-            <h3 class="text-lg font-bold text-slate-800 mb-1">Upload on Behalf</h3>
-            <p class="text-sm text-slate-500 mb-4">Upload a signed document received from <strong x-text="uploadOnBehalfPartyName"></strong>.</p>
-
-            <form method="POST" :action="uploadOnBehalfAction" enctype="multipart/form-data">
-                @csrf
-
-                <div class="mb-4">
-                    <label class="block text-sm font-medium text-slate-700 mb-1">How was the document received? *</label>
-                    <div class="space-y-2">
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="radio" name="upload_method" value="email" class="text-cyan-600" required>
-                            <span class="text-sm">Email</span>
-                        </label>
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="radio" name="upload_method" value="whatsapp" class="text-cyan-600">
-                            <span class="text-sm">WhatsApp</span>
-                        </label>
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="radio" name="upload_method" value="in_person" class="text-cyan-600">
-                            <span class="text-sm">In person / office drop-off</span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="mb-4">
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Signed document(s) *</label>
-                    <input type="file" name="files[]" multiple required
-                           accept=".pdf,.jpg,.jpeg,.png,.heic"
-                           class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-cyan-50 file:text-cyan-700 hover:file:bg-cyan-100">
-                    <p class="text-xs text-slate-400 mt-1">PDF, JPG, PNG, HEIC — max 10 MB per file.</p>
-                </div>
-
-                <div class="flex justify-end gap-3">
-                    <button type="button" @click="showUploadOnBehalf = false"
-                            class="px-4 py-2 text-sm text-slate-600 hover:text-slate-800">Cancel</button>
-                    <button type="submit"
-                            class="px-4 py-2 bg-cyan-600 text-white rounded-lg text-sm font-medium hover:bg-cyan-700">
-                        Upload & Review
                     </button>
                 </div>
             </form>

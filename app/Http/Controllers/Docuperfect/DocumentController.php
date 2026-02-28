@@ -16,10 +16,16 @@ class DocumentController extends Controller
     {
         $user = $request->user();
         $packInstance = $request->query('pack_instance');
+        $filter = $request->query('filter', 'active');
 
-        $query = Document::active()
-            ->visibleTo($user)
-            ->with(['template', 'owner', 'branch']);
+        $query = Document::visibleTo($user)
+            ->with(['template', 'owner', 'branch', 'signatureTemplate']);
+
+        if ($filter === 'archived') {
+            $query->whereNotNull('archived_at');
+        } else {
+            $query->whereNull('archived_at');
+        }
 
         if ($packInstance) {
             $query->where('pack_instance_id', $packInstance);
@@ -34,7 +40,7 @@ class DocumentController extends Controller
                 ->get();
         }
 
-        return view('docuperfect.documents.index', compact('documents', 'packInstance', 'attachments', 'user'));
+        return view('docuperfect.documents.index', compact('documents', 'packInstance', 'attachments', 'user', 'filter'));
     }
 
     public function create(Request $request, $templateId)
@@ -193,6 +199,43 @@ class DocumentController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    public function combinedPdfData(Request $request, $instanceId)
+    {
+        $user = $request->user();
+
+        $documents = Document::active()
+            ->visibleTo($user)
+            ->where('pack_instance_id', $instanceId)
+            ->with('template')
+            ->orderByDesc('updated_at')
+            ->get();
+
+        if ($documents->isEmpty()) {
+            return response()->json(['error' => 'No documents found.'], 404);
+        }
+
+        $result = [];
+        foreach ($documents as $doc) {
+            $tpl = $doc->template;
+            if (!$tpl) {
+                continue;
+            }
+
+            $pageImages = [];
+            for ($n = 0; $n < $tpl->page_count; $n++) {
+                $pageImages[] = route('docuperfect.page.image', ['id' => $tpl->id, 'page' => $n]);
+            }
+
+            $result[] = [
+                'name' => $doc->name,
+                'fields' => $doc->fields_json ?? [],
+                'pageImages' => $pageImages,
+            ];
+        }
+
+        return response()->json(['documents' => $result]);
+    }
+
     public function rename(Request $request, $id)
     {
         $user = $request->user();
@@ -224,10 +267,53 @@ class DocumentController extends Controller
             abort(403);
         }
 
+        // Block archiving for documents in active signing workflows or active leases
+        $sigTemplate = $document->signatureTemplate;
+        if ($sigTemplate) {
+            $blockedStatuses = [
+                'awaiting_tenant',
+                'awaiting_landlord',
+                'signing',
+                'pending_agent_approval',
+                'completed',
+                'sent',
+            ];
+
+            if (in_array($sigTemplate->status, $blockedStatuses)) {
+                $statusLabels = [
+                    'awaiting_tenant' => 'awaiting tenant signature',
+                    'awaiting_landlord' => 'awaiting landlord signature',
+                    'signing' => 'currently being signed',
+                    'pending_agent_approval' => 'pending your approval',
+                    'completed' => 'a completed active lease',
+                    'sent' => 'sent for signing',
+                ];
+                $label = $statusLabels[$sigTemplate->status] ?? 'in an active workflow';
+
+                return redirect()->back()
+                    ->with('error', "Cannot archive \"{$document->name}\" — it is {$label}. Only draft and cancelled documents can be archived.");
+            }
+        }
+
         $document->update(['archived_at' => now()]);
 
         return redirect()->route('docuperfect.dashboard')
             ->with('status', "Document \"{$document->name}\" archived.");
+    }
+
+    public function restore(Request $request, $id)
+    {
+        $user = $request->user();
+        $document = Document::findOrFail($id);
+
+        if (!$user->isAdmin() && (int)$document->owner_id !== (int)$user->id) {
+            abort(403);
+        }
+
+        $document->update(['archived_at' => null]);
+
+        return redirect()->back()
+            ->with('status', "Document \"{$document->name}\" restored.");
     }
 
     public function destroy(Request $request, $id)
@@ -244,5 +330,34 @@ class DocumentController extends Controller
 
         return redirect()->route('docuperfect.dashboard')
             ->with('status', "Document \"{$name}\" deleted.");
+    }
+
+    /**
+     * Send a document to the Rental E-Signatures workflow.
+     */
+    public function sendToRentals(Request $request, $id)
+    {
+        $user = $request->user();
+        $document = Document::findOrFail($id);
+
+        if (!$user->isAdmin() && (int)$document->owner_id !== (int)$user->id) {
+            abort(403);
+        }
+
+        $request->validate([
+            'document_type' => 'required|string',
+            'property_id' => 'required|exists:rental_properties,id',
+        ]);
+
+        $property = \App\Models\Rental\RentalProperty::findOrFail($request->property_id);
+
+        $document->update([
+            'document_type' => $request->document_type,
+            'property_id' => $property->id,
+            'property_address' => $property->full_address,
+        ]);
+
+        return redirect()->route('docuperfect.signatures.setup', $document->id)
+            ->with('status', 'Document ready for signature setup.');
     }
 }

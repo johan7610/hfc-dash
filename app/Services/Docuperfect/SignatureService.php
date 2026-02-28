@@ -16,7 +16,6 @@ use App\Models\Docuperfect\SignatureRequest;
 use App\Models\Docuperfect\SignatureTemplate;
 use App\Models\Docuperfect\TemplateSignatureZone;
 use App\Models\Docuperfect\WetInkInspection;
-use App\Models\Rental\RentalReminderSetting;
 use App\Models\User;
 use App\Services\Docuperfect\SignaturePdfService;
 use Illuminate\Http\UploadedFile;
@@ -60,135 +59,6 @@ class SignatureService
         );
 
         return $template;
-    }
-
-    /**
-     * Supersede a signature template: mark old as superseded, expire requests,
-     * create new template with party config and markers copied, notify parties.
-     */
-    public function supersedeTemplate(SignatureTemplate $oldTemplate, User $user): SignatureTemplate
-    {
-        return DB::transaction(function () use ($oldTemplate, $user) {
-            // 1. Mark old template as superseded
-            $oldTemplate->update([
-                'status' => SignatureTemplate::STATUS_SUPERSEDED,
-            ]);
-
-            // 2. Expire all outstanding signing requests
-            $pendingRequests = $oldTemplate->requests()
-                ->whereIn('status', ['waiting', 'pending', 'viewed', 'partially_signed'])
-                ->get();
-
-            $oldTemplate->requests()
-                ->whereIn('status', ['waiting', 'pending', 'viewed', 'partially_signed'])
-                ->update([
-                    'status' => 'expired',
-                    'token_expires_at' => now(),
-                ]);
-
-            // 3. Create new template linked to old one
-            $newTemplate = SignatureTemplate::create([
-                'document_id' => $oldTemplate->document_id,
-                'status' => SignatureTemplate::STATUS_DRAFT,
-                'created_by' => $user->id,
-                'parties_json' => $oldTemplate->parties_json,
-                'signing_order_json' => $oldTemplate->signing_order_json,
-                'cosign_mode' => $oldTemplate->cosign_mode,
-                'supersedes_id' => $oldTemplate->id,
-            ]);
-
-            // Link old template to new one
-            $oldTemplate->update([
-                'superseded_by_id' => $newTemplate->id,
-            ]);
-
-            // 4. Copy marker positions (NOT signatures)
-            foreach ($oldTemplate->markers as $marker) {
-                SignatureMarker::create([
-                    'signature_template_id' => $newTemplate->id,
-                    'page_number' => $marker->page_number,
-                    'type' => $marker->type,
-                    'assigned_party' => $marker->assigned_party,
-                    'x_percent' => $marker->x_percent,
-                    'y_percent' => $marker->y_percent,
-                    'width_percent' => $marker->width_percent,
-                    'height_percent' => $marker->height_percent,
-                    'sort_order' => $marker->sort_order,
-                    'required' => $marker->required,
-                    'label' => $marker->label,
-                ]);
-            }
-
-            // 5. Audit log
-            SignatureAuditLog::log(
-                $oldTemplate,
-                'document_superseded',
-                SignatureAuditLog::ACTOR_USER,
-                $user->name,
-                $user->email,
-                $user->id,
-                null,
-                request()->ip(),
-                request()->userAgent(),
-                ['new_template_id' => $newTemplate->id]
-            );
-
-            SignatureAuditLog::log(
-                $newTemplate,
-                SignatureAuditLog::ACTION_CREATED,
-                SignatureAuditLog::ACTOR_USER,
-                $user->name,
-                $user->email,
-                $user->id,
-                null,
-                null,
-                null,
-                ['supersedes_id' => $oldTemplate->id]
-            );
-
-            // 6. Notify external parties that had pending requests
-            $this->notifySupersededParties($pendingRequests, $oldTemplate);
-
-            return $newTemplate;
-        });
-    }
-
-    /**
-     * Notify external parties that a document has been superseded.
-     */
-    private function notifySupersededParties($pendingRequests, SignatureTemplate $oldTemplate): void
-    {
-        $oldTemplate->loadMissing(['document', 'creator']);
-        $document = $oldTemplate->document;
-        $agent = $oldTemplate->creator;
-
-        foreach ($pendingRequests as $req) {
-            // Skip agent/internal parties
-            if (in_array($req->party_role, ['agent', 'cosigner'])) {
-                continue;
-            }
-
-            if (empty($req->signer_email)) {
-                continue;
-            }
-
-            try {
-                Mail::to($req->signer_email)->send(
-                    new \App\Mail\Signatures\SupersededNotificationMail(
-                        signerName: $req->signer_name,
-                        documentName: $document->name ?? 'Document',
-                        agentName: $agent->name ?? 'Home Finders Coastal',
-                        agentEmail: $agent->email ?? null,
-                    )
-                );
-            } catch (\Exception $e) {
-                Log::warning('Failed to send supersede notification', [
-                    'request_id' => $req->id,
-                    'email' => $req->signer_email,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
     }
 
     // ──────────────────────────────────────────────
@@ -437,9 +307,8 @@ class SignatureService
 
         $signingOrder = match ($partyRole) {
             'agent' => 1,
-            'cosigner' => 2,
-            'tenant' => 3,
-            'landlord' => 4,
+            'tenant' => 2,
+            'landlord' => 3,
             default => 99,
         };
 
@@ -498,7 +367,6 @@ class SignatureService
 
     /**
      * Send the template to the first party (agent) — initiates signing workflow.
-     * In "together" cosign mode, also sends to the cosigner simultaneously.
      */
     public function sendForSigning(SignatureTemplate $template, User $agent): void
     {
@@ -521,16 +389,6 @@ class SignatureService
 
             if ($agentRequest) {
                 $this->sendSigningRequest($agentRequest);
-            }
-
-            // In "together" cosign mode, also send to the cosigner simultaneously
-            if ($template->cosign_mode === 'together') {
-                $cosignerRequest = $template->requests()
-                    ->where('party_role', 'cosigner')
-                    ->first();
-                if ($cosignerRequest) {
-                    $this->sendSigningRequest($cosignerRequest);
-                }
             }
         });
     }
@@ -613,14 +471,14 @@ class SignatureService
     }
 
     /**
-     * Check if all parties (including witnesses and co-signers) have completed signing.
+     * Check if all parties have completed signing.
      */
     public function isFullyComplete(SignatureTemplate $template): bool
     {
-        $parties = $template->parties_json ?? [];
+        $order = $template->signing_order_json ?? ['agent', 'tenant', 'landlord'];
 
-        foreach ($parties as $party) {
-            if (!$this->isPartyComplete($template, $party['role'])) {
+        foreach ($order as $party) {
+            if (!$this->isPartyComplete($template, $party)) {
                 return false;
             }
         }
@@ -629,16 +487,12 @@ class SignatureService
     }
 
     /**
-     * Handle party completion — if a non-agent/non-cosigner party finished, require agent approval
-     * before advancing. Internal signers (agent/cosigner) auto-advance.
-     * Also triggers "after" witnesses when their linked party completes.
+     * Handle party completion — if a non-agent party finished, require agent approval
+     * before advancing. Agent signing auto-advances to the next external party.
      */
     public function handlePartyCompletion(SignatureTemplate $template, string $completedParty): void
     {
-        // Internal parties (agent, cosigner) are handled by signComplete in the controller
-        $internalParties = ['agent', 'cosigner'];
-
-        DB::transaction(function () use ($template, $completedParty, $internalParties) {
+        DB::transaction(function () use ($template, $completedParty) {
             // Mark the request as completed
             $request = $template->requests()
                 ->where('party_role', $completedParty)
@@ -652,17 +506,8 @@ class SignatureService
                 ]);
             }
 
-            // Send "after" witnesses their signing link now that the linked party completed
-            $this->sendAfterWitnesses($template, $completedParty);
-
-            // If an external party (non-agent, non-cosigner) just completed, require agent approval
-            if (!in_array($completedParty, $internalParties)) {
-                // Check if linked witnesses/co-signers are still pending — wait for them first
-                if (!$this->areLinkedPartiesComplete($template, $completedParty)) {
-                    // Don't advance yet — linked parties still signing
-                    return;
-                }
-
+            // If an external party (non-agent) just completed, require agent approval
+            if ($completedParty !== 'agent') {
                 $template->update(['status' => SignatureTemplate::STATUS_PENDING_AGENT_APPROVAL]);
 
                 SignatureAuditLog::log(
@@ -681,7 +526,7 @@ class SignatureService
                 return;
             }
 
-            // Internal signer finished — auto-advance to the next party
+            // Agent just finished — auto-advance to the first external party
             $this->advanceToNextParty($template, $completedParty);
         });
     }
@@ -691,10 +536,8 @@ class SignatureService
      */
     public function approveAndAdvance(SignatureTemplate $template): array
     {
-        $internalParties = ['agent', 'cosigner'];
-
-        return DB::transaction(function () use ($template, $internalParties) {
-            $order = $template->signing_order_json ?? ['agent', 'tenant', 'landlord', 'buyer', 'seller'];
+        return DB::transaction(function () use ($template) {
+            $order = $template->signing_order_json ?? ['agent', 'tenant', 'landlord'];
 
             // Find completed party roles
             $completedParties = $template->requests()
@@ -702,10 +545,10 @@ class SignatureService
                 ->pluck('party_role')
                 ->toArray();
 
-            // Find next unsigned external party (skip agent and cosigner — they're internal)
+            // Find next unsigned external party
             $nextParty = null;
             foreach ($order as $party) {
-                if (!in_array($party, $internalParties) && !in_array($party, $completedParties)) {
+                if ($party !== 'agent' && !in_array($party, $completedParties)) {
                     $nextParty = $party;
                     break;
                 }
@@ -721,8 +564,6 @@ class SignatureService
                 $statusMap = [
                     'tenant' => SignatureTemplate::STATUS_AWAITING_TENANT,
                     'landlord' => SignatureTemplate::STATUS_AWAITING_LANDLORD,
-                    'buyer' => SignatureTemplate::STATUS_AWAITING_BUYER,
-                    'seller' => SignatureTemplate::STATUS_AWAITING_SELLER,
                 ];
                 $newStatus = $statusMap[$nextParty] ?? SignatureTemplate::STATUS_SIGNING;
                 $template->update(['status' => $newStatus]);
@@ -735,9 +576,6 @@ class SignatureService
                 if ($nextRequest && $nextRequest->status === SignatureRequest::STATUS_WAITING) {
                     $this->sendSigningRequest($nextRequest);
                 }
-
-                // Also send to linked co-signer and "same_time" witness
-                $this->sendLinkedParties($template, $nextParty);
 
                 SignatureAuditLog::log(
                     $template,
@@ -773,22 +611,66 @@ class SignatureService
      */
     private function advanceToNextParty(SignatureTemplate $template, string $completedParty): void
     {
-        $order = $template->signing_order_json ?? ['agent', 'tenant', 'landlord', 'buyer', 'seller'];
+        $order = $template->signing_order_json ?? ['agent', 'tenant', 'landlord'];
         $currentIndex = array_search($completedParty, $order);
         $nextParty = $order[$currentIndex + 1] ?? null;
 
         if ($nextParty && !$this->isPartyComplete($template, $nextParty)) {
-            // Recalculate hash before sending to next party
+            // Recalculate hash before sending to next external party
             $template->update([
                 'document_hash' => $this->generateDocumentHash($template->document),
             ]);
 
             $statusMap = [
-                'cosigner' => SignatureTemplate::STATUS_AWAITING_COSIGNER,
                 'tenant' => SignatureTemplate::STATUS_AWAITING_TENANT,
                 'landlord' => SignatureTemplate::STATUS_AWAITING_LANDLORD,
-                'buyer' => SignatureTemplate::STATUS_AWAITING_BUYER,
-                'seller' => SignatureTemplate::STATUS_AWAITING_SELLER,
+            ];
+            $newStatus = $statusMap[$nextParty] ?? SignatureTemplate::STATUS_SIGNING;
+            $template->update(['status' => $newStatus]);
+
+            $nextRequest = $template->requests()
+                ->where('party_role', $nextParty)
+                ->first();
+
+            if ($nextRequest && $nextRequest->status === SignatureRequest::STATUS_WAITING) {
+                $this->sendSigningRequest($nextRequest);
+            }
+        } elseif ($this->isFullyComplete($template)) {
+            $this->completeDocument($template);
+        }
+    }
+
+    /**
+     * Advance to next party after wet-ink approval. The wet-ink review
+     * itself serves as the agent's approval, so we skip pending_agent_approval.
+     */
+    private function advanceAfterWetInkApproval(SignatureTemplate $template, string $completedParty): void
+    {
+        $order = $template->signing_order_json ?? ['agent', 'tenant', 'landlord'];
+
+        // Find completed party roles
+        $completedParties = $template->requests()
+            ->where('status', SignatureRequest::STATUS_COMPLETED)
+            ->pluck('party_role')
+            ->toArray();
+
+        // Find next unsigned party
+        $nextParty = null;
+        foreach ($order as $party) {
+            if ($party !== 'agent' && !in_array($party, $completedParties)) {
+                $nextParty = $party;
+                break;
+            }
+        }
+
+        if ($nextParty) {
+            $template->update([
+                'document_hash' => $this->generateDocumentHash($template->document),
+            ]);
+
+            $statusMap = [
+                'tenant' => SignatureTemplate::STATUS_AWAITING_TENANT,
+                'landlord' => SignatureTemplate::STATUS_AWAITING_LANDLORD,
             ];
             $newStatus = $statusMap[$nextParty] ?? SignatureTemplate::STATUS_SIGNING;
             $template->update(['status' => $newStatus]);
@@ -801,98 +683,19 @@ class SignatureService
                 $this->sendSigningRequest($nextRequest);
             }
 
-            // Also send to linked co-signer and "same_time" witness
-            $this->sendLinkedParties($template, $nextParty);
+            SignatureAuditLog::log(
+                $template,
+                'wet_ink_approved_advance',
+                SignatureAuditLog::ACTOR_SYSTEM,
+                'System',
+                metadata: [
+                    'completed_party' => $completedParty,
+                    'next_party' => $nextParty,
+                ],
+            );
         } elseif ($this->isFullyComplete($template)) {
             $this->completeDocument($template);
         }
-    }
-
-    /**
-     * Send signing links to linked co-signer and "same_time" witness for a main party.
-     * Called when a main external party (tenant/landlord/buyer/seller) is sent for signing.
-     */
-    private function sendLinkedParties(SignatureTemplate $template, string $mainPartyRole): void
-    {
-        $parties = $template->parties_json ?? [];
-
-        foreach ($parties as $party) {
-            $linkedTo = $party['linked_to'] ?? null;
-            if ($linkedTo !== $mainPartyRole) {
-                continue;
-            }
-
-            $role = $party['role'];
-
-            // Co-signers always sign in parallel with their linked party
-            $isCosigner = str_ends_with($role, '_cosigner');
-            // Witnesses with "same_time" timing sign in parallel
-            $isSameTimeWitness = str_ends_with($role, '_witness') && ($party['witness_timing'] ?? 'same_time') === 'same_time';
-
-            if ($isCosigner || $isSameTimeWitness) {
-                $linkedRequest = $template->requests()
-                    ->where('party_role', $role)
-                    ->first();
-
-                if ($linkedRequest && $linkedRequest->status === SignatureRequest::STATUS_WAITING) {
-                    $this->sendSigningRequest($linkedRequest);
-                }
-            }
-        }
-    }
-
-    /**
-     * Send signing links to "after" witnesses once their linked main party has completed.
-     */
-    private function sendAfterWitnesses(SignatureTemplate $template, string $completedParty): void
-    {
-        $parties = $template->parties_json ?? [];
-
-        foreach ($parties as $party) {
-            $linkedTo = $party['linked_to'] ?? null;
-            if ($linkedTo !== $completedParty) {
-                continue;
-            }
-
-            if (str_ends_with($party['role'], '_witness') && ($party['witness_timing'] ?? 'same_time') === 'after') {
-                $witnessRequest = $template->requests()
-                    ->where('party_role', $party['role'])
-                    ->first();
-
-                if ($witnessRequest && $witnessRequest->status === SignatureRequest::STATUS_WAITING) {
-                    $this->sendSigningRequest($witnessRequest);
-                }
-            }
-        }
-    }
-
-    /**
-     * Check if all linked parties (witnesses + co-signers) of a main party are complete.
-     * Used to decide whether to advance to agent approval or wait.
-     */
-    private function areLinkedPartiesComplete(SignatureTemplate $template, string $mainPartyRole): bool
-    {
-        $parties = $template->parties_json ?? [];
-
-        foreach ($parties as $party) {
-            $linkedTo = $party['linked_to'] ?? null;
-            if ($linkedTo !== $mainPartyRole) {
-                continue;
-            }
-
-            if (!$this->isPartyComplete($template, $party['role'])) {
-                // Also check request status (a party with 0 markers is "complete" by markers but may not have finished)
-                $request = $template->requests()
-                    ->where('party_role', $party['role'])
-                    ->first();
-
-                if ($request && $request->status !== SignatureRequest::STATUS_COMPLETED) {
-                    return false;
-                }
-            }
-        }
-
-        return true;
     }
 
     /**
@@ -1027,7 +830,10 @@ class SignatureService
                     'completed_at' => now(),
                 ]);
 
-                $this->handlePartyCompletion($template, $request->party_role);
+                // Wet-ink review IS the agent approval — advance directly
+                // without going through handlePartyCompletion (which would
+                // set pending_agent_approval and require a second review).
+                $this->advanceAfterWetInkApproval($template, $request->party_role);
             } else {
                 $request->update([
                     'wet_ink_status' => SignatureRequest::WET_INK_REJECTED,
@@ -1084,7 +890,7 @@ class SignatureService
     /**
      * Send a reminder for a pending request.
      */
-    public function resendNotification(SignatureRequest $request, ?RentalReminderSetting $settings = null): void
+    public function resendNotification(SignatureRequest $request): void
     {
         $request->update([
             'reminder_count' => $request->reminder_count + 1,
@@ -1100,7 +906,7 @@ class SignatureService
             metadata: ['reminder_number' => $request->reminder_count],
         );
 
-        $this->sendReminderEmail($request, $settings);
+        $this->sendReminderEmail($request);
     }
 
     /**
@@ -1190,17 +996,11 @@ class SignatureService
 
         $documentIds = $rentalDocuments->pluck('id');
 
-        // Get signature templates for these documents (latest non-superseded per document)
-        $allSignatureTemplates = SignatureTemplate::whereIn('document_id', $documentIds)
-            ->with(['requests', 'rejectedBy', 'supersedes'])
-            ->get();
-
-        // Key by document_id — prefer the latest non-superseded template
-        $signatureTemplates = collect();
-        foreach ($allSignatureTemplates->groupBy('document_id') as $docId => $templates) {
-            $active = $templates->firstWhere('status', '!=', SignatureTemplate::STATUS_SUPERSEDED);
-            $signatureTemplates->put($docId, $active ?? $templates->sortByDesc('id')->first());
-        }
+        // Get signature templates for these documents
+        $signatureTemplates = SignatureTemplate::whereIn('document_id', $documentIds)
+            ->with(['requests', 'rejectedBy'])
+            ->get()
+            ->keyBy('document_id');
 
         // Group documents by status
         $groups = [
@@ -1210,7 +1010,6 @@ class SignatureService
             'awaiting_signatures' => collect(),
             'completed' => collect(),
             'rejected' => collect(),
-            'superseded' => collect(),
         ];
 
         $fieldStatus = [];
@@ -1237,18 +1036,29 @@ class SignatureService
                 continue;
             }
 
-            match ($sigTemplate->status) {
-                SignatureTemplate::STATUS_COMPLETED => $groups['completed']->push($doc),
-                SignatureTemplate::STATUS_PENDING_AGENT_APPROVAL => $groups['pending_approval']->push($doc),
-                SignatureTemplate::STATUS_REJECTED => $groups['rejected']->push($doc),
-                SignatureTemplate::STATUS_SUPERSEDED => $groups['superseded']->push($doc),
+            // Check if any request has a wet-ink upload pending agent review
+            $hasWetInkPendingReview = $sigTemplate->requests
+                ->contains(fn($r) => $r->wet_ink_status === 'uploaded_pending_review');
+
+            if ($hasWetInkPendingReview && in_array($sigTemplate->status, [
                 SignatureTemplate::STATUS_SIGNING,
                 SignatureTemplate::STATUS_AWAITING_TENANT,
-                SignatureTemplate::STATUS_AWAITING_LANDLORD => $groups['awaiting_signatures']->push($doc),
-                SignatureTemplate::STATUS_READY,
-                SignatureTemplate::STATUS_DRAFT => $groups['ready_to_sign']->push($doc),
-                default => $groups['draft']->push($doc),
-            };
+                SignatureTemplate::STATUS_AWAITING_LANDLORD,
+            ])) {
+                $groups['pending_approval']->push($doc);
+            } else {
+                match ($sigTemplate->status) {
+                    SignatureTemplate::STATUS_COMPLETED => $groups['completed']->push($doc),
+                    SignatureTemplate::STATUS_PENDING_AGENT_APPROVAL => $groups['pending_approval']->push($doc),
+                    SignatureTemplate::STATUS_REJECTED => $groups['rejected']->push($doc),
+                    SignatureTemplate::STATUS_SIGNING,
+                    SignatureTemplate::STATUS_AWAITING_TENANT,
+                    SignatureTemplate::STATUS_AWAITING_LANDLORD => $groups['awaiting_signatures']->push($doc),
+                    SignatureTemplate::STATUS_READY,
+                    SignatureTemplate::STATUS_DRAFT => $groups['ready_to_sign']->push($doc),
+                    default => $groups['draft']->push($doc),
+                };
+            }
         }
 
         // Lease renewal data
@@ -1439,7 +1249,7 @@ class SignatureService
     /**
      * Send reminder email — FROM the agent.
      */
-    public function sendReminderEmail(SignatureRequest $request, ?RentalReminderSetting $settings = null): void
+    public function sendReminderEmail(SignatureRequest $request): void
     {
         try {
             $request->loadMissing(['template.document', 'template.creator']);
@@ -1455,9 +1265,6 @@ class SignatureService
                     signingUrl: $signingUrl,
                     expiresAt: $request->token_expires_at,
                     reminderNumber: $request->reminder_count,
-                    customSubject: $settings?->email_subject,
-                    customBody: $settings?->email_body,
-                    daysSinceSent: $request->daysSinceSent(),
                 ))->fromAgent($agent)
             );
         } catch (\Throwable $e) {
@@ -1601,9 +1408,7 @@ class SignatureService
     }
 
     /**
-     * Send completion notification emails to all external signers (not the agent).
-     * Emails contain a download link (token-based) — NOT the PDF as an attachment.
-     * The agent downloads from within Nexus.
+     * Send completion emails to all signers + the agent, with signed PDF attached.
      */
     private function sendCompletionEmails(SignatureTemplate $template, ?array $pdfPaths = null): void
     {
@@ -1611,31 +1416,40 @@ class SignatureService
             $template->loadMissing(['document', 'creator', 'requests']);
             $agent = $template->creator;
             $documentName = $template->document->name ?? 'Document';
+            $viewUrl = url("/docuperfect/documents/{$template->document_id}/signatures/audit");
             $progress = $template->partyProgress();
 
-            // Internal parties don't get completion emails — agent downloads from Nexus
-            $internalRoles = ['agent', 'cosigner'];
+            // Client copy — for external signers (no audit trail)
+            $clientPdfPath = $pdfPaths ? storage_path("app/{$pdfPaths['client']}") : null;
+            if ($clientPdfPath && !file_exists($clientPdfPath)) {
+                $clientPdfPath = null;
+            }
 
+            // Internal copy — for agent (with audit trail)
+            $internalPdfPath = $pdfPaths ? storage_path("app/{$pdfPaths['internal']}") : null;
+            if ($internalPdfPath && !file_exists($internalPdfPath)) {
+                $internalPdfPath = null;
+            }
+
+            $pdfFilename = "Signed - {$documentName}.pdf";
+
+            // Notify each signer — attach client copy (no audit trail)
+            // External signers (non-agent) do NOT get a link to Nexus — only the PDF attachment
             foreach ($template->requests as $request) {
                 if ($request->status !== SignatureRequest::STATUS_COMPLETED) {
                     continue;
                 }
 
-                // Skip agent and cosigner — they download from Nexus
-                if (in_array($request->party_role, $internalRoles)) {
-                    continue;
-                }
-
-                // Build token-based download URL for this party
-                $downloadUrl = $request->token
-                    ? url("/documents/download/{$request->token}")
-                    : null;
+                // Only agent gets the Nexus link; external parties cannot access it
+                $signerUrl = $request->party_role === 'agent' ? $viewUrl : null;
 
                 $mail = (new SignedDocumentMail(
                     recipientName: $request->signer_name,
                     documentName: $documentName,
-                    downloadUrl: $downloadUrl,
+                    envelopeUrl: $signerUrl,
                     progress: $progress,
+                    pdfPath: $clientPdfPath,
+                    pdfFilename: $clientPdfPath ? $pdfFilename : null,
                 ))->fromAgent($agent);
 
                 Mail::to($request->signer_email)->send($mail);
@@ -1649,7 +1463,36 @@ class SignatureService
                         'recipient_role' => $request->party_role,
                         'recipient_name' => $request->signer_name,
                         'recipient_email' => $request->signer_email,
-                        'download_url' => $downloadUrl,
+                        'pdf_attached' => $clientPdfPath !== null,
+                        'pdf_version' => 'client',
+                    ],
+                );
+            }
+
+            // Notify the agent — attach internal copy (with audit trail)
+            if ($agent) {
+                Mail::to($agent->email)->send(
+                    new SignedDocumentMail(
+                        recipientName: $agent->name,
+                        documentName: $documentName,
+                        envelopeUrl: $viewUrl,
+                        progress: $progress,
+                        pdfPath: $internalPdfPath,
+                        pdfFilename: $internalPdfPath ? $pdfFilename : null,
+                    )
+                );
+
+                SignatureAuditLog::log(
+                    $template,
+                    SignatureAuditLog::ACTION_SIGNED_PDF_EMAILED,
+                    SignatureAuditLog::ACTOR_SYSTEM,
+                    'System',
+                    metadata: [
+                        'recipient_role' => 'agent',
+                        'recipient_name' => $agent->name,
+                        'recipient_email' => $agent->email,
+                        'pdf_attached' => $internalPdfPath !== null,
+                        'pdf_version' => 'internal',
                     ],
                 );
             }

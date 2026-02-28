@@ -26,6 +26,7 @@ I am the business owner and non-technical project lead. I cannot code. You write
 - Don't bundle unrelated fixes together
 - Don't guess at file paths or code structure — tell VS Code Claude to investigate first
 - Don't skip the spec document for new feature areas
+- **Don't build across branches without confirming which branch you're on** — this caused a full day of rework on 2026-02-27
 
 ## Prompt Style That Works
 
@@ -62,6 +63,7 @@ For NEW features, use the structured spec format:
 - Finance engine with versioned formulas
 - Daily activity points system
 - Spec: `.ai/CLAUDE_AGENCYTRACKER.md`
+- **STATUS: Audit complete.** 3 deals verified, all math correct across dashboards.
 
 ### Presentation System
 - Data-driven seller presentations for listing appointments
@@ -84,27 +86,68 @@ For NEW features, use the structured spec format:
 ## Technical Context
 
 - **Stack:** Laravel PHP + Blade + Alpine.js, MySQL, Windows localhost:8000
+- **Working branch: `HFC2402`** — this is where all current dev happens
+- **`main` branch** has the original e-signature work (commit `e40ff7f`). Do NOT build on main unless told.
 - **VS Code Claude** is the coding agent — I paste prompts, it executes
 - **Spec files** live in `.ai/` folder — VS Code Claude reads these before every task
 - **Dev check:** `scripts/dev-check.ps1` runs 679 unit tests. 215 pre-existing feature test failures (SQLite INFORMATION_SCHEMA issue) are unrelated to our work.
 - **Two sidebars:** `sidebar.blade.php` (Nexus main) and `nexus-sidebar.blade.php` (Agency Tracker) — never modify one when working on the other unless explicitly told.
+- **Database:** Restored from `database/backup_20260227.sqlite` (pre-audit backup with test data intact)
 
-## Current Status (Update this section as work progresses)
+## Branch History — IMPORTANT
 
-**This week's focus:** Electronic signatures + document signing system
-- Electronic signing flow built and tested end-to-end (rental)
-- Wet-ink flow partially built, needs completion (sales)
-- Full system audit planned — backup DB, clean slate, test 4 deals end-to-end
-- Target: final commit to Andre → he merges weekend → server Monday → Wednesday meeting
+On 2026-02-27, e-signature builds 03–07 were run on `HFC2402` but they were a from-scratch rebuild that missed the template editor signature zone toolbar (which only existed on `main`). This broke the signing flow. After hours of debugging, we restored 138 e-signature files from `main` commit `e40ff7f` (2026-02-26 22:09) onto `HFC2402`. The pre-restore state is saved in git stash (`stash@{0}` — "HFC2402 pre-esign-restore backup").
+
+**Rule: Always confirm you're on `HFC2402` before making changes. Always check `git branch` first.**
+
+## Current Status (Updated 2026-02-27 evening)
+
+### E-Signatures — IN PROGRESS
+- **Electronic signing flow (rental): WORKING** — Agent → Tenant → Landlord tested end-to-end
+- **Wet-ink flow (rental): IN PROGRESS** — download-for-signing has issues (PDF missing content or "not available" error). Being investigated.
+- **Sales wet-ink: NOT TESTED** — sales uses wet-ink only (electronic is hard-blocked by law)
+- Template editor signature zones: restored and working (orange/green/blue color-coded)
+- Flattening: working for electronic flow, needs verification for wet-ink PDF generation
+
+### Agency Tracker — COMPLETE ✅
+- 3 deals audited (1001, 1002, 1003), all math verified
+- All dashboard fixes applied and confirmed
+- Do NOT touch agency tracker files
+
+### Unconfirmed Fixes (prompts sent, not verified)
+- Effective commission % ex VAT fix
+- Checksum VAT double-count on external deals
+- Branch performance zeros at /admin/branch/{id}/performance
+
+### Planned Improvements (not built yet)
+- Default to electronic for rental (bury wet-ink as secondary option)
+- Copy-paste signing link for agent to WhatsApp to next party
+- Full status agent signing queue (filtered by rental permissions — replaces complex candidate/BM setup)
+- Notification badges on dashboard for wet-ink reviews
+- Mobile-first audit on all external-facing pages
+
+### Key Design Decisions
+- Sequential signing is legally required — tenant signs AFTER agent, landlord AFTER tenant. No parallel signing.
+- ID verification on completion download is required — email interception is a real threat in SA real estate
+- Wet-ink signatures are required by law on sales documents — no exceptions
+- Only full status agents with rental permissions can co-sign rental documents
+
+## Reset Commands
+```
+php artisan docuperfect:reset-signing {document_id} --to=setup
+php artisan docuperfect:reset-signing {document_id} --to=agent-signed
+php artisan docuperfect:reset-signing {document_id} --to=tenant-signed
+```
 
 ## How To Start Each Session
 
 1. Ask me what we're working on today
-2. Check if there's a relevant spec in `.ai/`
-3. If building something new: ask questions first, write/update spec, then prompt
-4. If fixing bugs: ask me for the error message and screenshot, investigate, fix surgically
-5. One prompt at a time. Wait for confirmation before the next.
+2. **Confirm branch: `git branch` — must be on `HFC2402`**
+3. Check if there's a relevant spec in `.ai/`
+4. If building something new: ask questions first, write/update spec, then prompt
+5. If fixing bugs: ask me for the error message and screenshot, investigate, fix surgically
+6. One prompt at a time. Wait for confirmation before the next.
 
 ---
 
-*This prompt was created 2026-02-27. Update when workflow or project structure changes.*
+*This prompt was last updated 2026-02-27. Update when workflow or project structure changes.*

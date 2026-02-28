@@ -32,9 +32,7 @@
     <div style="padding: 30px 20px; background-color: #ffffff; border: 1px solid #e0e0e0; border-top: none;">
         <p>Hi {{ $signerName }},</p>
 
-        @if(!empty($customBody))
-            {!! nl2br(e($customBody)) !!}
-        @elseif($tone === 'final')
+        @if($tone === 'final')
             <p>This is a <strong>final reminder</strong> — your signature on the document below is still outstanding and the link will expire soon.</p>
         @elseif($tone === 'firm')
             <p>Just a reminder that your signature is still needed on the following document:</p>

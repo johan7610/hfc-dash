@@ -43,20 +43,20 @@
             </div>
         </a>
 
-        <a href="{{ route('rental.settings.reminders.index') }}"
-           class="block bg-white border rounded-lg p-5 hover:shadow-md transition">
+        {{-- Future: Reminder Rules --}}
+        <div class="bg-white border rounded-lg p-5 opacity-50 cursor-not-allowed">
             <div class="flex items-center gap-4">
-                <div class="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
-                    <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
                     </svg>
                 </div>
                 <div>
-                    <h3 class="font-semibold text-gray-900">Email Reminders</h3>
-                    <p class="text-sm text-gray-500">Configure automatic signature reminder schedule and email template</p>
+                    <h3 class="font-semibold text-gray-400">Lease Expiry Reminders</h3>
+                    <p class="text-sm text-gray-400">Coming soon — configure when to send expiry notifications</p>
                 </div>
             </div>
-        </a>
+        </div>
     </div>
 
 </div>

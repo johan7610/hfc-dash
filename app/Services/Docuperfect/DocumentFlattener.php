@@ -261,6 +261,148 @@ class DocumentFlattener
         return $pages;
     }
 
+    /**
+     * Create temporary annotated copies of page images with marker overlays.
+     * Used for wet-ink download PDFs so signers see where to sign/initial/fill.
+     *
+     * @param  \Illuminate\Support\Collection  $markers  Markers for the party
+     * @return array<int, string> Map of 0-indexed page => absolute temp file path
+     */
+    public function createAnnotatedPages(SignatureTemplate $template, $markers): array
+    {
+        $pageImages = $this->getPageImages($template);
+        if (empty($pageImages)) return [];
+
+        $tempPaths = [];
+
+        foreach ($pageImages as $pageNum => $storagePath) {
+            if (!$storagePath || !Storage::disk('local')->exists($storagePath)) {
+                continue;
+            }
+
+            $fullPath = Storage::disk('local')->path($storagePath);
+            $image = $this->loadImage($fullPath);
+            if (!$image) continue;
+
+            // Filter markers for this page (markers are 1-indexed, pageNum is 0-indexed)
+            $pageMarkers = $markers->filter(fn($m) => ($m->page_number - 1) === $pageNum);
+
+            if ($pageMarkers->isNotEmpty()) {
+                $this->overlayMarkerAnnotations($image, $pageMarkers);
+            }
+
+            // Save to temp file
+            $tempPath = sys_get_temp_dir() . '/dp_annotated_' . $template->id . '_page_' . $pageNum . '_' . uniqid() . '.png';
+            imagepng($image, $tempPath, 6);
+            imagedestroy($image);
+
+            $tempPaths[$pageNum] = $tempPath;
+        }
+
+        return $tempPaths;
+    }
+
+    /**
+     * Delete temporary annotated page images after PDF generation.
+     */
+    public static function cleanupTempImages(array $tempPaths): void
+    {
+        foreach ($tempPaths as $path) {
+            if (file_exists($path)) {
+                @unlink($path);
+            }
+        }
+    }
+
+    /**
+     * Overlay colored marker annotations onto a GD image.
+     */
+    private function overlayMarkerAnnotations($image, $markers): void
+    {
+        $imgWidth = imagesx($image);
+        $imgHeight = imagesy($image);
+
+        // GD alpha: 0 = opaque, 127 = transparent. ~30% opacity → alpha 89
+        $alpha = 89;
+
+        $configs = [
+            SignatureMarker::TYPE_SIGNATURE => [
+                'fill' => [173, 216, 230, $alpha], 'border' => [0, 102, 204], 'label' => 'SIGN HERE',
+            ],
+            SignatureMarker::TYPE_INITIAL => [
+                'fill' => [144, 238, 144, $alpha], 'border' => [34, 139, 34], 'label' => 'INITIAL HERE',
+            ],
+            SignatureMarker::TYPE_TEXT => [
+                'fill' => [255, 255, 200, $alpha], 'border' => [180, 160, 0], 'label' => 'FILL IN',
+            ],
+            SignatureMarker::TYPE_DATE => [
+                'fill' => [255, 200, 130, $alpha], 'border' => [210, 130, 0], 'label' => 'DATE',
+            ],
+        ];
+
+        imagealphablending($image, true);
+
+        foreach ($markers as $marker) {
+            $type = $marker->type ?? SignatureMarker::TYPE_SIGNATURE;
+            $cfg = $configs[$type] ?? $configs[SignatureMarker::TYPE_SIGNATURE];
+
+            $x = (floatval($marker->x_position) / 100) * $imgWidth;
+            $y = (floatval($marker->y_position) / 100) * $imgHeight;
+            $w = (floatval($marker->width) / 100) * $imgWidth;
+            $h = (floatval($marker->height) / 100) * $imgHeight;
+
+            // Semi-transparent fill
+            $fillColor = imagecolorallocatealpha($image, $cfg['fill'][0], $cfg['fill'][1], $cfg['fill'][2], $cfg['fill'][3]);
+            imagefilledrectangle($image, (int) $x, (int) $y, (int) ($x + $w), (int) ($y + $h), $fillColor);
+
+            // 2px solid border
+            $borderColor = imagecolorallocate($image, $cfg['border'][0], $cfg['border'][1], $cfg['border'][2]);
+            imagesetthickness($image, 2);
+            imagerectangle($image, (int) $x, (int) $y, (int) ($x + $w), (int) ($y + $h), $borderColor);
+            imagesetthickness($image, 1);
+
+            // Centered label text
+            $this->renderMarkerLabel($image, $cfg['label'], $x, $y, $w, $h);
+        }
+    }
+
+    /**
+     * Render a centered bold label inside a marker annotation box.
+     */
+    private function renderMarkerLabel($image, string $label, float $x, float $y, float $w, float $h): void
+    {
+        $textColor = imagecolorallocate($image, 0, 0, 0);
+        $font = $this->findFont(true);
+
+        if ($font && function_exists('imagettftext')) {
+            // Target ~60% of box height
+            $fontSize = max(8, $h * 0.6);
+
+            // Shrink if text overflows box width
+            $bbox = imagettfbbox($fontSize, 0, $font, $label);
+            $textWidth = abs($bbox[2] - $bbox[0]);
+            while ($textWidth > $w * 0.9 && $fontSize > 6) {
+                $fontSize -= 1;
+                $bbox = imagettfbbox($fontSize, 0, $font, $label);
+                $textWidth = abs($bbox[2] - $bbox[0]);
+            }
+
+            // Center horizontally and vertically
+            $textX = $x + ($w - $textWidth) / 2;
+            $textHeight = abs($bbox[7] - $bbox[1]);
+            $textY = $y + ($h + $textHeight) / 2;
+
+            imagettftext($image, $fontSize, 0, (int) $textX, (int) $textY, $textColor, $font, $label);
+        } else {
+            // Fallback: GD built-in font
+            $charWidth = imagefontwidth(3);
+            $builtinTextW = strlen($label) * $charWidth;
+            $textX = $x + ($w - $builtinTextW) / 2;
+            $textY = $y + ($h - imagefontheight(3)) / 2;
+            imagestring($image, 3, (int) $textX, (int) $textY, $label, $textColor);
+        }
+    }
+
     // ========== HELPER METHODS ==========
 
     /**
@@ -319,19 +461,24 @@ class DocumentFlattener
         $ttfFont = $this->findFont($bold);
 
         if ($ttfFont && function_exists('imagettftext')) {
-            // Calculate font size based on field height and style
-            $configuredSize = $style['fontSize'] ?? 12;
-            // Scale: the configured font size is relative to a browser rendering context.
-            // Page images are typically ~1650px wide for an A4 page.
-            // A 12px font in browser at ~800px wide container = ~24px at 1650px.
-            // Use the field height as the primary guide, capped by a reasonable range.
-            $fontSize = max(8, $h * 0.55);
-            $fontSize = min($fontSize, $h * 0.8); // Don't exceed field height
+            // Scale font size to match ~11pt physical text on an A4 page.
+            // GD's imagettftext renders at 96 DPI internally.
+            // Compute the image's effective DPI from its width vs A4 (8.27 inches),
+            // then scale the target point size by (effectiveDPI / 96).
+            $imgWidth = imagesx($image);
+            $targetPt = floatval($style['fontSize'] ?? 11);
+            $targetPt = max(8, min(16, $targetPt));
+            $effectiveDpi = $imgWidth / 8.27; // A4 width in inches
+            $fontSize = $targetPt * ($effectiveDpi / 96);
 
-            // TTF text baseline is at bottom of text, so offset Y
-            $textY = $y + ($h * 0.72);
+            // Cap so text never exceeds field height
+            $fontSize = min($fontSize, $h * 0.75);
 
-            imagettftext($image, $fontSize, 0, (int) $x + 2, (int) $textY, $color, $ttfFont, $text);
+            // Baseline near bottom of field box — text sits ON the line.
+            // Leave ~30% of font size below baseline for descenders.
+            $textY = $y + $h - ($fontSize * 0.3);
+
+            imagettftext($image, $fontSize, 0, (int) ($x + 2), (int) $textY, $color, $ttfFont, $text);
         } else {
             // Fallback to GD built-in fonts
             $font = $h > 20 ? 3 : 2;

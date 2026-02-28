@@ -13,11 +13,8 @@ return new class extends Migration
             $table->unsignedBigInteger('document_id');
             $table->string('document_hash', 64)->nullable();
             $table->enum('status', [
-                'draft', 'ready', 'signing',
-                'awaiting_tenant', 'awaiting_landlord', 'awaiting_cosigner',
-                'awaiting_buyer', 'awaiting_seller',
-                'pending_agent_approval',
-                'completed', 'expired', 'declined', 'rejected', 'superseded',
+                'draft', 'ready', 'signing', 'awaiting_tenant',
+                'awaiting_landlord', 'completed', 'expired', 'declined',
             ])->default('draft');
             $table->json('parties_json')->nullable();
             $table->json('signing_order_json')->nullable();

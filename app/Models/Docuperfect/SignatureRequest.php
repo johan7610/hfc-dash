@@ -30,7 +30,6 @@ class SignatureRequest extends Model
         'message',
         'signing_method',
         'wet_ink_upload_path',
-        'wet_ink_upload_method',
         'wet_ink_status',
         'wet_ink_rejection_note',
         'reviewed_by',

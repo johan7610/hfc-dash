@@ -16,9 +16,6 @@
                 @if($signingRequest->updated_at)
                     on {{ $signingRequest->updated_at->format('d M Y') }}
                 @endif
-                @if($signingRequest->wet_ink_upload_method)
-                    &mdash; received via {{ str_replace('_', ' ', $signingRequest->wet_ink_upload_method) }}
-                @endif
             </div>
         </div>
         <a href="{{ route('docuperfect.rental') }}"
@@ -64,77 +61,74 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {{-- Left: Marker checklist --}}
-        <div class="ds-status-card p-4 space-y-4">
+        <div class="ds-status-card p-4 space-y-3">
             <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wider">Signature Checklist</h3>
             <p class="text-xs text-slate-500">
-                Review the uploaded scan and mark each signature position as Present, Missing, or Unclear.
+                Review the uploaded scan and mark each signature position.
             </p>
 
-            <div class="space-y-3">
+            <div class="space-y-1.5">
                 @foreach($markers as $index => $marker)
-                <div class="p-3 rounded-xl border border-slate-200 bg-slate-50">
-                    <div class="flex items-center justify-between mb-2">
-                        <div>
-                            <span class="text-sm font-medium text-slate-700">
-                                Page {{ $marker->page_number }}:
-                                {{ ucfirst($marker->type) }}
+                <div class="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="flex-1 min-w-0">
+                            <span class="text-xs font-medium text-slate-700">
+                                P{{ $marker->page_number }}: {{ ucfirst($marker->type) }}
                                 @if($marker->label)
                                     &mdash; {{ $marker->label }}
                                 @endif
                             </span>
-                            <div class="text-xs text-slate-400">
-                                Position: {{ round($marker->x_position) }}%, {{ round($marker->y_position) }}% from top-left
-                            </div>
+                            <span class="text-[10px] text-slate-400 ml-1">({{ round($marker->x_position) }}%, {{ round($marker->y_position) }}%)</span>
                         </div>
-                    </div>
 
-                    <input type="hidden" :name="'checklist[{{ $index }}][marker_id]'" value="{{ $marker->id }}">
+                        <input type="hidden" :name="'checklist[{{ $index }}][marker_id]'" value="{{ $marker->id }}">
 
-                    <div class="flex gap-2">
-                        <label class="flex-1">
-                            <input type="radio"
-                                   name="checklist_status_{{ $marker->id }}"
-                                   value="present"
-                                   x-model="checklist[{{ $marker->id }}]"
-                                   class="sr-only peer">
-                            <div class="p-2 rounded-lg border-2 text-center text-xs font-medium cursor-pointer transition-all
-                                        peer-checked:border-emerald-500 peer-checked:bg-emerald-50 peer-checked:text-emerald-700
-                                        border-slate-200 text-slate-500 hover:border-emerald-300">
-                                Present
-                            </div>
-                        </label>
-                        <label class="flex-1">
-                            <input type="radio"
-                                   name="checklist_status_{{ $marker->id }}"
-                                   value="missing"
-                                   x-model="checklist[{{ $marker->id }}]"
-                                   class="sr-only peer">
-                            <div class="p-2 rounded-lg border-2 text-center text-xs font-medium cursor-pointer transition-all
-                                        peer-checked:border-red-500 peer-checked:bg-red-50 peer-checked:text-red-700
-                                        border-slate-200 text-slate-500 hover:border-red-300">
-                                Missing
-                            </div>
-                        </label>
-                        <label class="flex-1">
-                            <input type="radio"
-                                   name="checklist_status_{{ $marker->id }}"
-                                   value="unclear"
-                                   x-model="checklist[{{ $marker->id }}]"
-                                   class="sr-only peer">
-                            <div class="p-2 rounded-lg border-2 text-center text-xs font-medium cursor-pointer transition-all
-                                        peer-checked:border-amber-500 peer-checked:bg-amber-50 peer-checked:text-amber-700
-                                        border-slate-200 text-slate-500 hover:border-amber-300">
-                                Unclear
-                            </div>
-                        </label>
+                        <div class="flex gap-1 shrink-0">
+                            <label>
+                                <input type="radio"
+                                       name="checklist_status_{{ $marker->id }}"
+                                       value="present"
+                                       x-model="checklist[{{ $marker->id }}]"
+                                       class="sr-only peer">
+                                <div class="px-2 py-0.5 rounded-full border text-[10px] font-semibold cursor-pointer transition-all
+                                            peer-checked:border-emerald-500 peer-checked:bg-emerald-50 peer-checked:text-emerald-700
+                                            border-slate-200 text-slate-400 hover:border-emerald-300">
+                                    Present
+                                </div>
+                            </label>
+                            <label>
+                                <input type="radio"
+                                       name="checklist_status_{{ $marker->id }}"
+                                       value="missing"
+                                       x-model="checklist[{{ $marker->id }}]"
+                                       class="sr-only peer">
+                                <div class="px-2 py-0.5 rounded-full border text-[10px] font-semibold cursor-pointer transition-all
+                                            peer-checked:border-red-500 peer-checked:bg-red-50 peer-checked:text-red-700
+                                            border-slate-200 text-slate-400 hover:border-red-300">
+                                    Missing
+                                </div>
+                            </label>
+                            <label>
+                                <input type="radio"
+                                       name="checklist_status_{{ $marker->id }}"
+                                       value="unclear"
+                                       x-model="checklist[{{ $marker->id }}]"
+                                       class="sr-only peer">
+                                <div class="px-2 py-0.5 rounded-full border text-[10px] font-semibold cursor-pointer transition-all
+                                            peer-checked:border-amber-500 peer-checked:bg-amber-50 peer-checked:text-amber-700
+                                            border-slate-200 text-slate-400 hover:border-amber-300">
+                                    Unclear
+                                </div>
+                            </label>
+                        </div>
                     </div>
                 </div>
                 @endforeach
             </div>
 
             {{-- Summary --}}
-            <div class="p-3 rounded-xl bg-slate-100 text-sm">
-                <div class="flex items-center gap-4">
+            <div class="px-3 py-2 rounded-lg bg-slate-100 text-xs">
+                <div class="flex items-center gap-3">
                     <span class="text-emerald-600 font-medium"><span x-text="statusCounts.present"></span> Present</span>
                     <span class="text-red-600 font-medium"><span x-text="statusCounts.missing"></span> Missing</span>
                     <span class="text-amber-600 font-medium"><span x-text="statusCounts.unclear"></span> Unclear</span>
@@ -144,7 +138,7 @@
         </div>
 
         {{-- Right: Uploaded scan viewer --}}
-        <div class="ds-status-card p-4 space-y-4">
+        <div class="ds-status-card p-4 space-y-3">
             <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wider">Uploaded Scan</h3>
 
             @if(count($uploadFiles) === 0)
@@ -153,13 +147,13 @@
                 <div class="space-y-3">
                     @foreach($uploadFiles as $index => $file)
                     <div class="rounded-xl border border-slate-200 overflow-hidden">
-                        <div class="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
+                        <div class="flex items-center justify-between px-3 py-1.5 bg-slate-50 border-b border-slate-200">
                             <span class="text-xs font-medium text-slate-600">{{ $file['name'] }}</span>
                             @if($file['exists'])
                             <a href="{{ route('docuperfect.signatures.wetInkFile', ['document' => $document->id, 'signingRequest' => $signingRequest->id, 'fileIndex' => $index]) }}"
                                target="_blank"
-                               class="text-xs text-blue-600 hover:underline">
-                                Open Full Size
+                               class="text-[10px] text-blue-600 hover:underline">
+                                Open Full Size &#8599;
                             </a>
                             @endif
                         </div>
@@ -170,12 +164,10 @@
                                      class="w-full"
                                      alt="Uploaded scan">
                             @elseif(strtolower($file['extension']) === 'pdf')
-                                <div class="p-4 text-center text-sm text-slate-500">
-                                    <svg class="w-10 h-10 mx-auto text-slate-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                    PDF file — click "Open Full Size" to view
-                                </div>
+                                <embed src="{{ route('docuperfect.signatures.wetInkFile', ['document' => $document->id, 'signingRequest' => $signingRequest->id, 'fileIndex' => $index]) }}"
+                                       type="application/pdf"
+                                       class="w-full"
+                                       style="min-height: 600px;">
                             @endif
                         @else
                             <div class="p-4 text-center text-sm text-red-500">File not found on server.</div>
@@ -231,7 +223,7 @@
                         Reject &mdash; Request Re-sign
                     </button>
                     <button type="submit"
-                            @click.prevent="decision = 'approved'; $el.closest('form').submit();"
+                            @click.prevent="decision = 'approved'; $nextTick(() => $el.closest('form').submit())"
                             :disabled="!allChecked || statusCounts.missing > 0 || statusCounts.unclear > 0"
                             class="rounded-lg px-5 py-2.5 text-sm font-medium transition-colors"
                             :class="allChecked && statusCounts.missing === 0 && statusCounts.unclear === 0
@@ -250,11 +242,11 @@
 </div>
 
 @php
-    $markerData = $markers->map(fn($m) => ['id' => $m->id, 'page_number' => $m->page_number, 'type' => $m->type, 'label' => $m->label])->values();
+    $markersJson = $markers->map(fn($m) => ['id' => $m->id, 'page_number' => $m->page_number, 'type' => $m->type, 'label' => $m->label])->values();
 @endphp
 <script>
 function wetInkReview() {
-    const markers = @json($markerData);
+    const markers = @json($markersJson);
 
     // Build initial checklist state
     const checklist = {};

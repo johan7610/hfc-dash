@@ -12,62 +12,77 @@ abstract class BaseSignatureMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    protected ?User $agent = null;
+    protected ?User $sendingAgent = null;
 
     /**
-     * Set the agent (sender) for this email.
-     * Returns $this for fluent chaining.
+     * Set the agent who is sending this email.
+     * External-facing emails should always call this.
      */
-    public function fromAgent(User $agent): static
+    public function fromAgent(?User $agent): static
     {
-        $this->agent = $agent;
+        $this->sendingAgent = $agent;
         return $this;
     }
 
     /**
-     * Get the "from" address — uses the agent's email if set, otherwise falls back to system default.
+     * Get the From address.
+     * - Company-domain agents: send directly from their address.
+     * - Personal-email agents: send from system with "Name via Home Finders Coastal".
+     * - No agent: system default.
      */
     protected function getFromAddress(): Address
     {
-        if ($this->agent) {
-            return new Address($this->agent->email, $this->agent->name . ' — Home Finders Coastal');
+        if (!$this->sendingAgent) {
+            return new Address(
+                config('mail.from.address'),
+                config('mail.from.name', 'Home Finders Coastal')
+            );
         }
 
+        $companyDomain = config('signatures.emails.company_domain', 'hfcoastal.co.za');
+        $agentEmail = $this->sendingAgent->email;
+        $agentName = $this->sendingAgent->name;
+
+        if (str_ends_with(strtolower($agentEmail), '@' . $companyDomain)) {
+            return new Address($agentEmail, $agentName);
+        }
+
+        // Personal email — send from system but show agent name
         return new Address(
-            config('mail.from.address', 'noreply@hfcoastal.co.za'),
-            config('mail.from.name', 'Home Finders Coastal')
+            config('mail.from.address'),
+            "{$agentName} via Home Finders Coastal"
         );
     }
 
     /**
-     * Get the reply-to address — agent's email so replies go to the agent.
+     * Get Reply-To — always the agent's actual email so replies go to them.
      */
     protected function getReplyTo(): array
     {
-        if ($this->agent) {
-            return [new Address($this->agent->email, $this->agent->name)];
+        if (!$this->sendingAgent) {
+            return [];
         }
 
-        return [];
+        return [new Address($this->sendingAgent->email, $this->sendingAgent->name)];
     }
 
     /**
-     * Get agent footer data for the email template.
+     * Get agent contact details for the email footer.
      */
     protected function getAgentFooter(): array
     {
-        if ($this->agent) {
+        if (!$this->sendingAgent) {
             return [
-                'name' => $this->agent->name,
-                'email' => $this->agent->email,
-                'phone' => $this->agent->phone ?? null,
+                'name' => 'Home Finders Coastal',
+                'email' => config('mail.from.address'),
+                'phone' => null,
             ];
         }
 
         return [
-            'name' => 'Home Finders Coastal',
-            'email' => config('mail.from.address', 'noreply@hfcoastal.co.za'),
-            'phone' => null,
+            'name' => $this->sendingAgent->name,
+            'email' => $this->sendingAgent->email,
+            'phone' => $this->sendingAgent->phone ?? $this->sendingAgent->mobile ?? null,
         ];
     }
 }
