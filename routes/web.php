@@ -20,7 +20,9 @@ use App\Http\Controllers\Agent\DealRegisterController;
 use App\Http\Controllers\Admin\MonthlyGoalController;
 
 Route::get('/', function () {
-    return view('welcome');
+    return auth()->check()
+        ? redirect()->route('dashboard')
+        : redirect()->route('login');
 });
 
 Route::get('/dashboard', function () {
@@ -299,6 +301,12 @@ Route::get('/bm/listings', [\App\Http\Controllers\BM\ListingStockController::cla
         // Admin: TV Code Management (all branches)
         Route::post('/admin/tv-code/generate', [\App\Http\Controllers\Admin\TvCodeController::class, 'generate'])->name('admin.tv-code.generate');
         Route::post('/admin/tv-code/revoke', [\App\Http\Controllers\Admin\TvCodeController::class, 'revoke'])->name('admin.tv-code.revoke');
+        Route::post('/admin/tv-code/generate-company', [\App\Http\Controllers\Admin\TvCodeController::class, 'generateCompany'])->name('admin.tv-code.generate-company');
+        Route::post('/admin/tv-code/revoke-company', [\App\Http\Controllers\Admin\TvCodeController::class, 'revokeCompany'])->name('admin.tv-code.revoke-company');
+
+        // Agency switcher (super admin)
+        Route::post('/agency/switch/{agency}', [\App\Http\Controllers\Admin\AgencySwitcherController::class, 'switch'])->name('agency.switch');
+        Route::post('/agency/switch/clear', [\App\Http\Controllers\Admin\AgencySwitcherController::class, 'clear'])->name('agency.switch.clear');
     });
 
     Route::middleware(['branch_manager'])->group(function () {
@@ -522,6 +530,16 @@ Route::middleware(['auth', 'verified'])->prefix('nexus')->group(function () {
         ->middleware('admin')->name('nexus.role-manager.save');
     Route::post('/role-manager/user-role', [NexusRoleManagerController::class, 'updateUserRole'])
         ->middleware('admin')->name('nexus.role-manager.user-role');
+
+    // Properties — listing sync to website
+    Route::prefix('properties')->name('nexus.properties.')->group(function () {
+        Route::get('/',                [\App\Http\Controllers\Nexus\PropertyController::class, 'index'])->name('index');
+        Route::get('/create',          [\App\Http\Controllers\Nexus\PropertyController::class, 'create'])->name('create');
+        Route::post('/',               [\App\Http\Controllers\Nexus\PropertyController::class, 'store'])->name('store');
+        Route::get('/{property}/edit', [\App\Http\Controllers\Nexus\PropertyController::class, 'edit'])->name('edit');
+        Route::put('/{property}',      [\App\Http\Controllers\Nexus\PropertyController::class, 'update'])->name('update');
+        Route::delete('/{property}',   [\App\Http\Controllers\Nexus\PropertyController::class, 'destroy'])->name('destroy');
+    });
 });
 
 

@@ -69,9 +69,19 @@ class User extends Authenticatable
         return $this->branch_id ? (int) $this->branch_id : null;
     }
 
+    public function effectiveAgencyId(): ?int
+    {
+        $branchId = $this->effectiveBranchId();
+        if (!$branchId) {
+            return null;
+        }
+        $branch = Branch::find($branchId);
+        return $branch?->agency_id ? (int) $branch->agency_id : null;
+    }
+
     public function isEffectiveAdmin(): bool
     {
-        return $this->effectiveRole() === 'admin';
+        return in_array($this->effectiveRole(), ['admin', 'super_admin']);
     }
 
     public function isEffectiveBranchManager(): bool
@@ -92,7 +102,12 @@ class User extends Authenticatable
     // Real role (no View-As)
     public function isAdmin(): bool
     {
-        return ($this->role ?? '') === 'admin';
+        return in_array($this->role ?? '', ['admin', 'super_admin']);
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return ($this->role ?? '') === 'super_admin';
     }
 
     public function isBranchManager(): bool
@@ -130,6 +145,7 @@ class User extends Authenticatable
             'franchise-admin' => ['admin'],
             'role-manager'    => ['admin'],
             'settings'        => ['admin'],
+            'properties'      => ['admin', 'branch_manager', 'agent'],
         ];
 
         return in_array($this->effectiveRole(), $access[$section] ?? []);
