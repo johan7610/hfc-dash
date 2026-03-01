@@ -198,7 +198,8 @@ class WorksheetMarketController extends Controller
         $bm = Auth::user();
         $data = $request->validate([
             'period' => ['required', 'string', 'max:7', 'regex:/^\d{4}-\d{2}$/'],
-            
+            'avg' => ['array'],
+            'avg.*' => ['nullable', 'numeric', 'min:0'],
             'pct' => ['array'],
             'pct.*' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);

@@ -14,17 +14,7 @@
         </a>
     </div>
 
-    {{-- Flash messages --}}
-    @if(session('success'))
-        <div class="mb-4 px-4 py-3 bg-green-50 border border-green-200 text-green-800 rounded-lg text-sm">
-            {{ session('success') }}
-        </div>
-    @endif
-    @if(session('info'))
-        <div class="mb-4 px-4 py-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg text-sm">
-            {{ session('info') }}
-        </div>
-    @endif
+    {{-- Flash messages handled by global toast system --}}
 
     {{-- Content --}}
     <div class="ds-status-card">

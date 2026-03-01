@@ -3,10 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Support\Facades\DB;
 
 class User extends Authenticatable
 {
@@ -19,7 +17,6 @@ class User extends Authenticatable
         'role',
         'designation',
         'branch_id',
-        'agency_id',
         'is_active',
 
         // Admin-controlled commission defaults
@@ -54,19 +51,7 @@ class User extends Authenticatable
         'sliding_tier3_cut_percent' => 'decimal:2',
     ];
 
-    // --- Relationships ---
-
-    public function agency(): BelongsTo
-    {
-        return $this->belongsTo(Agency::class);
-    }
-
-    public function branch(): BelongsTo
-    {
-        return $this->belongsTo(Branch::class);
-    }
-
-    // --- View-As / Agency-Switch support (session overrides) ---
+    // --- View-As support (session override) ---
 
     public function effectiveRole(): string
     {
@@ -84,36 +69,14 @@ class User extends Authenticatable
         return $this->branch_id ? (int) $this->branch_id : null;
     }
 
-    /** Returns the active agency ID (Super Admin can switch agencies via session). */
-    public function effectiveAgencyId(): ?int
-    {
-        if ($this->isSuperAdmin()) {
-            $override = session('active_agency_id');
-            if ($override) {
-                return (int) $override;
-            }
-            return null; // null = all agencies
-        }
-
-        return $this->agency_id ? (int) $this->agency_id : null;
-    }
-
-    // --- Effective role helpers (respect View-As) ---
-
-    /** True for super_admin OR admin (both are "admin-level" for middleware). */
     public function isEffectiveAdmin(): bool
     {
-        return in_array($this->effectiveRole(), ['super_admin', 'admin']);
-    }
-
-    public function isEffectiveSuperAdmin(): bool
-    {
-        return $this->effectiveRole() === 'super_admin';
+        return $this->effectiveRole() === 'admin';
     }
 
     public function isEffectiveBranchManager(): bool
     {
-        // Admin-level roles are NEVER treated as Branch Manager (prevents NULL-branch filters)
+        // Admin is NEVER treated as Branch Manager (prevents NULL-branch filters)
         if ($this->isEffectiveAdmin()) {
             return false;
         }
@@ -126,18 +89,7 @@ class User extends Authenticatable
         return $this->effectiveRole() === 'agent';
     }
 
-    public function isEffectiveViewer(): bool
-    {
-        return $this->effectiveRole() === 'viewer';
-    }
-
-    // --- Real role helpers (no View-As) ---
-
-    public function isSuperAdmin(): bool
-    {
-        return ($this->role ?? '') === 'super_admin';
-    }
-
+    // Real role (no View-As)
     public function isAdmin(): bool
     {
         return ($this->role ?? '') === 'admin';
@@ -145,75 +97,31 @@ class User extends Authenticatable
 
     public function isBranchManager(): bool
     {
-        return ($this->role ?? '') === 'branch_manager';
+        return (($this->role ?? "") === "branch_manager");
     }
 
     public function isAgent(): bool
     {
-        return ($this->role ?? '') === 'agent';
+        return (($this->role ?? "") === "agent");
     }
 
-    public function isViewer(): bool
+    public function isCandidate(): bool
     {
-        return ($this->role ?? '') === 'viewer';
+        return stripos($this->designation ?? '', 'Candidate') !== false;
     }
 
-    // --- Nexus OS Section Access (DB-driven) ---
+    // --- Nexus OS Section Access ---
 
-    /**
-     * Check if this user can access a Nexus section.
-     * Super admin always has access. All other roles are checked against role_permissions table.
-     * Falls back to hardcoded defaults if the table is empty (first-run safety).
-     */
     public function canAccessNexusSection(string $section): bool
     {
-        // Super admin has access to everything
-        if ($this->isEffectiveSuperAdmin()) {
+        if ($this->isEffectiveAdmin()) {
             return true;
         }
 
-        $role = $this->effectiveRole();
-
-        // Map section to an access-gate permission key
-        $sectionPermMap = [
-            'dashboard'       => 'view_dashboard',
-            'agency-tracker'  => 'access_agency_tracker',
-            'compliance'      => 'access_compliance',
-            'supervision'     => 'access_supervision',
-            'training'        => 'access_training',
-            'communication'   => 'access_communication',
-            'client-portal'   => 'access_client_portal',
-            'franchise-admin' => 'access_franchise_admin',
-            'role-manager'    => 'access_role_manager',
-            'settings'        => 'access_settings',
-            'docuperfect'     => 'access_docuperfect',
-            'document-library' => 'access_document_library',
-            'presentations'   => 'access_presentations',
-            'pdf-splitter'    => 'access_pdf_splitter',
-            'knowledge-base'  => 'access_knowledge_base',
-            'finance-engine'  => 'access_finance_engine',
-            'agencies'        => 'access_agencies',
-        ];
-
-        $permKey = $sectionPermMap[$section] ?? null;
-        if (!$permKey) {
-            return false;
-        }
-
-        // Check DB
-        $granted = DB::table('role_permissions')
-            ->where('role', $role)
-            ->where('permission_key', $permKey)
-            ->exists();
-
-        if ($granted) {
-            return true;
-        }
-
-        // Fallback hardcoded defaults (safety net before seeder runs)
-        $fallback = [
-            'dashboard'       => ['admin', 'branch_manager', 'agent', 'viewer'],
+        $access = [
+            'dashboard'       => ['admin', 'branch_manager', 'agent'],
             'agency-tracker'  => ['admin', 'branch_manager', 'agent'],
+            'documents'       => ['admin', 'branch_manager', 'agent'],
             'compliance'      => ['admin', 'branch_manager'],
             'supervision'     => ['admin', 'branch_manager'],
             'training'        => ['admin', 'branch_manager', 'agent'],
@@ -224,6 +132,6 @@ class User extends Authenticatable
             'settings'        => ['admin'],
         ];
 
-        return in_array($role, $fallback[$section] ?? []);
+        return in_array($this->effectiveRole(), $access[$section] ?? []);
     }
 }

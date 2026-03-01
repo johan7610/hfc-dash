@@ -5,6 +5,21 @@
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
 
+    <x-sticky-action-bar>
+        <x-slot name="left">
+            <a href="{{ route('docuperfect.templates.index') }}" class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                Back
+            </a>
+        </x-slot>
+        <x-slot name="center">
+            <h2 class="text-sm font-semibold text-gray-700 truncate">Template: {{ $template->name }}</h2>
+        </x-slot>
+        <x-slot name="right">
+            <button type="button" onclick="document.getElementById('dpSaveBtn').click()" class="px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
+        </x-slot>
+    </x-sticky-action-bar>
+
     <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 flex items-center justify-between">
         <div>
             <h2 class="text-xl font-bold text-white leading-tight">Edit Template &mdash; {{ $template->name }}</h2>
@@ -16,11 +31,7 @@
         </div>
     </div>
 
-    @if(session('status'))
-        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 px-4 py-3 text-sm">
-            {{ session('status') }}
-        </div>
-    @endif
+    {{-- Flash messages handled by global toast system --}}
 
     {{-- Template metadata editor --}}
     <div class="ds-status-card p-4 space-y-3">
@@ -33,7 +44,7 @@
                 <label class="ds-label block mb-1">Type</label>
                 <select id="dpTemplateType" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
                     <option value="sales" {{ $template->template_type === 'sales' ? 'selected' : '' }}>Sales</option>
-                    <option value="rentals" {{ $template->template_type === 'rentals' ? 'selected' : '' }}>Rentals</option>
+                    <option value="rental" {{ $template->template_type === 'rental' ? 'selected' : '' }}>Rental</option>
                     <option value="compliance" {{ $template->template_type === 'compliance' ? 'selected' : '' }}>Compliance</option>
                 </select>
             </div>
@@ -68,8 +79,8 @@
     </div>
 
     {{-- Editor canvas area --}}
-    <div class="ds-status-card p-4">
-        <div id="docuperfect-editor"></div>
+    <div class="ds-status-card p-4" style="height:calc(100vh - 380px); min-height:300px;">
+        <div id="docuperfect-editor" style="height:100%;"></div>
     </div>
 
 </div>
@@ -97,7 +108,8 @@
         templateName: @json($template->name),
         templateType: @json($template->template_type),
         documentTypeId: @json($template->document_type_id),
-        namedFields: @json($namedFields)
+        namedFields: @json($namedFields),
+        signatureZones: @json($signatureZones ?? [])
     };
 </script>
 <script src="{{ asset('js/docuperfect-editor.js') }}"></script>

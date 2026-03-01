@@ -24,6 +24,26 @@
         </div>
     @endif
 
+    @if(session('error'))
+        <div class="rounded-2xl border border-red-200 bg-red-50 text-red-900 px-4 py-3 text-sm">
+            {{ session('error') }}
+        </div>
+    @endif
+
+    {{-- Active / Archived tab navigation --}}
+    @if(empty($packInstance))
+    <div class="flex gap-4 border-b border-slate-200">
+        <a href="{{ route('docuperfect.documents.index') }}"
+           class="pb-2 text-sm font-medium {{ ($filter ?? 'active') === 'active' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:text-slate-700' }}">
+            Active Documents
+        </a>
+        <a href="{{ route('docuperfect.documents.index', ['filter' => 'archived']) }}"
+           class="pb-2 text-sm font-medium {{ ($filter ?? 'active') === 'archived' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:text-slate-700' }}">
+            Archived
+        </a>
+    </div>
+    @endif
+
     @if($documents->isEmpty())
         <div class="ds-status-card p-6 text-center">
             <div class="text-sm text-slate-500">No documents yet. <a href="{{ route('docuperfect.dashboard') }}" class="ds-link">Create one from a template</a>.</div>
@@ -84,16 +104,43 @@
                         <td class="px-4 py-3 text-slate-600">{{ $doc->branch->name ?? '—' }}</td>
                         @endif
                         <td class="px-4 py-3 text-right space-x-2">
-                            <a href="{{ route('docuperfect.documents.edit', $doc->id) }}" class="ds-link text-sm">Edit</a>
-                            <form method="POST" action="{{ route('docuperfect.documents.archive', $doc->id) }}" class="inline" onsubmit="return confirm('Archive this document?');">
-                                @csrf
-                                <button class="text-sm text-slate-400 hover:text-amber-600">Archive</button>
-                            </form>
-                            <form method="POST" action="{{ route('docuperfect.documents.destroy', $doc->id) }}" class="inline" onsubmit="return confirm('Permanently delete this document?');">
-                                @csrf
-                                @method('DELETE')
-                                <button class="text-sm text-slate-400 hover:text-red-600">Delete</button>
-                            </form>
+                            @if(($filter ?? 'active') === 'archived')
+                                {{-- Archived view: show Restore button --}}
+                                <form method="POST" action="{{ route('docuperfect.documents.restore', $doc->id) }}" class="inline">
+                                    @csrf
+                                    <button class="text-sm text-blue-600 hover:text-blue-800">Restore</button>
+                                </form>
+                                <form method="POST" action="{{ route('docuperfect.documents.destroy', $doc->id) }}" class="inline" onsubmit="return confirm('Permanently delete this document? This cannot be undone.');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button class="text-sm text-slate-400 hover:text-red-600">Delete</button>
+                                </form>
+                            @else
+                                {{-- Active view: edit + conditional archive --}}
+                                <a href="{{ route('docuperfect.documents.edit', $doc->id) }}" class="ds-link text-sm">Edit</a>
+                                @php
+                                    $sigTemplate = $doc->signatureTemplate;
+                                    $isInActiveWorkflow = $sigTemplate && in_array($sigTemplate->status, [
+                                        'awaiting_tenant', 'awaiting_landlord', 'signing',
+                                        'pending_agent_approval', 'completed', 'sent',
+                                    ]);
+                                @endphp
+                                @if($isInActiveWorkflow)
+                                    <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Active — cannot archive</span>
+                                @else
+                                    <form method="POST" action="{{ route('docuperfect.documents.archive', $doc->id) }}" class="inline" onsubmit="return confirm('Archive this document? It will be moved to the Archived tab.');">
+                                        @csrf
+                                        <button class="text-sm text-slate-400 hover:text-amber-600">Archive</button>
+                                    </form>
+                                @endif
+                                @if(!$isInActiveWorkflow)
+                                <form method="POST" action="{{ route('docuperfect.documents.destroy', $doc->id) }}" class="inline" onsubmit="return confirm('Permanently delete this document? This cannot be undone.');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button class="text-sm text-slate-400 hover:text-red-600">Delete</button>
+                                </form>
+                                @endif
+                            @endif
                         </td>
                     </tr>
                     @endforeach

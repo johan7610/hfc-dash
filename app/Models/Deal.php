@@ -136,6 +136,24 @@ public function listingPool()
     }
 
     /**
+     * Branch-specific commission: sum of allocations for agents belonging to the given branch.
+     * Uses the canonical allocations() engine (respects settlements, external sides, our-share %).
+     */
+    public function branchCommission(int $branchId): float
+    {
+        $allocations = $this->allocations();
+        $total = 0.0;
+
+        foreach ($this->agents as $agent) {
+            if ((int) $agent->branch_id === $branchId) {
+                $total += (float) ($allocations[$agent->id] ?? 0);
+            }
+        }
+
+        return $total;
+    }
+
+    /**
      * Deal Register allocations:
      * - If settlement overrides exist (deal_settlements) for a side, use them (actual paid reality).
      * - Otherwise fall back to pivot agent_split_percent.
@@ -367,8 +385,16 @@ public function listingPool()
         $vatRate = $vatRatePercent / 100.0;
         $vatDiv = 1.0 + $vatRate;
 
+        // Use agent branch membership (same logic as statusSummaryForBranch)
+        // so cross-branch deals where this branch's agents participate are included.
         $q = self::query()
-              ->where('branch_id', $branchId);
+              ->whereIn('id', function ($sub) use ($branchId) {
+                  $sub->select('deal_user.deal_id')
+                      ->from('deal_user')
+                      ->join('users', 'users.id', '=', 'deal_user.user_id')
+                      ->where('users.branch_id', $branchId)
+                      ->distinct();
+              });
 
           // Period filter only applies when we are doing a single-month view.
           // For rolling windows (3m/6m) we pass dateFrom/dateTo and MUST NOT lock to a single period.
@@ -430,7 +456,7 @@ public function listingPool()
 
         foreach ($deals as $d) {
             $pvInc = (float)($d->property_value ?? 0);
-            $pvEx  = ($vatDiv > 0) ? ($pvInc / $vatDiv) : 0.0;
+            $pvEx  = $pvInc; // Sale price is not VAT-rated
 
             $cInc = (float)($d->total_commission ?? 0);
             $cEx  = ($vatDiv > 0) ? ($cInc / $vatDiv) : 0.0;
@@ -445,7 +471,7 @@ public function listingPool()
         $avgSaleInc = ($count > 0) ? ($salesInc / $count) : 0.0;
         $avgSaleEx  = ($count > 0) ? ($salesEx  / $count) : 0.0;
 
-        $effectiveCommPctEx = ($salesEx > 0) ? (($commEx / $salesEx) * 100.0) : 0.0;
+        $effectiveCommPctEx = ($salesInc > 0) ? (($commEx / $salesInc) * 100.0) : 0.0;
 
         return [
             'deals_count' => $count,
@@ -574,7 +600,15 @@ public function listingPool()
         }
 
         if (($user->role ?? '') === 'branch_manager') {
-            return $query->where('branch_id', $user->branch_id);
+            // Use agent branch membership so BMs see cross-branch deals
+            // where their branch's agents participate (matches tile counts).
+            return $query->whereIn('id', function ($sub) use ($user) {
+                $sub->select('deal_user.deal_id')
+                    ->from('deal_user')
+                    ->join('users', 'users.id', '=', 'deal_user.user_id')
+                    ->where('users.branch_id', $user->branch_id)
+                    ->distinct();
+            });
         }
 
         return $query->whereIn('id', function ($sub) use ($user) {

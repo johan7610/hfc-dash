@@ -109,7 +109,7 @@ public function index()
               $query->where('accepted_status', $st);
           }
       }
-$deals = $query->orderBy('deal_no')->get();
+$deals = $query->with('agents')->orderBy('deal_no')->get();
           // PAID_NOT_SETTLED_EXCEPTION: Admin-only exception report
           // Deals marked Paid in register but settlement not marked paid (agent might still be unpaid)
           $paidNotSettledDeals = collect();
@@ -138,7 +138,13 @@ $deals = $query->orderBy('deal_no')->get();
         $agents = User::orderBy('name')->get();
         $branches = Branch::orderBy('name')->get();
 
-        return view('admin.deals.index', compact('deals', 'agents', 'branches', 'paidNotSettledDeals'));
+        // Branch context for Branch Commission column (from URL or BM's own branch)
+        $branchIdContext = (int) request('branch_id');
+        if ($branchIdContext <= 0 && $user?->isEffectiveBranchManager()) {
+            $branchIdContext = (int) ($user->effectiveBranchId() ?? ($user->branch_id ?? 0));
+        }
+
+        return view('admin.deals.index', compact('deals', 'agents', 'branches', 'paidNotSettledDeals', 'branchIdContext'));
     }
 
     public function create()
@@ -670,7 +676,11 @@ $financialLocked = ($deal->exists && (($deal->commission_status ?? "") === "Paid
             }
         }
 
-        $checksumTotal = $totals['net'] + $totals['paye'] + $totals['deductions'] + $totals['company'] + $totals['external'];
+        // Convert external from inc VAT to ex VAT to avoid double-counting VAT
+        $externalExVat = ($pools['vatRate'] > 0 && $totals['external'] > 0)
+            ? $totals['external'] / (1.0 + $pools['vatRate'])
+            : $totals['external'];
+        $checksumTotal = $totals['net'] + $totals['paye'] + $totals['deductions'] + $totals['company'] + $externalExVat;
         $checksumOk = abs($checksumTotal - $totalCommissionExVat) <= 0.01;
 
         if (!empty($data['mark_paid']) && !$checksumOk) {
@@ -990,8 +1000,12 @@ $financialLocked = ($deal->exists && (($deal->commission_status ?? "") === "Paid
         $agentSummary = array_values($agentSummary);
         usort($agentSummary, fn($a, $b) => strcmp($a['name'], $b['name']));
 
-        $checksumTotal = $totals['net'] + $totals['paye'] + $totals['deductions'] + $totals['company'] + $totals['external'] + $pools['vatAmt'];
-        $checksumOk = abs($checksumTotal - $pools['totalCommissionExVat']) <= 0.01;
+        // Convert external from inc VAT to ex VAT to avoid double-counting VAT
+        $externalExVat = ($pools['vatRate'] > 0 && $totals['external'] > 0)
+            ? $totals['external'] / (1.0 + $pools['vatRate'])
+            : $totals['external'];
+        $checksumTotal = $totals['net'] + $totals['paye'] + $totals['deductions'] + $totals['company'] + $externalExVat + $pools['vatAmt'];
+        $checksumOk = abs($checksumTotal - $pools['totalCommissionIncVat']) <= 0.01;
 
         return [
             'listingRows' => $listingRows,
