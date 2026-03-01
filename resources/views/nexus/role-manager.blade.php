@@ -17,12 +17,12 @@
 
     {{-- Tabs --}}
     <div class="flex gap-1 rounded-xl p-1 w-fit" style="background:#f1f5f9;">
-        <button @click="activeTab = 'permissions'"
+        <button type="button" @click="activeTab = 'permissions'"
                 :style="activeTab === 'permissions' ? 'background:#0b2a4a;color:#fff;' : 'background:transparent;color:#64748b;'"
                 class="px-4 py-2 rounded-lg text-sm font-medium transition-all">
             Permissions Matrix
         </button>
-        <button @click="activeTab = 'users'"
+        <button type="button" @click="activeTab = 'users'"
                 :style="activeTab === 'users' ? 'background:#0b2a4a;color:#fff;' : 'background:transparent;color:#64748b;'"
                 class="px-4 py-2 rounded-lg text-sm font-medium transition-all">
             User Roles

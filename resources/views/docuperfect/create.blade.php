@@ -18,12 +18,12 @@
 
         {{-- Toggle bar --}}
         <div class="flex items-center gap-1 mb-5 border border-slate-300 rounded-lg overflow-hidden w-fit">
-            <button @click="tab = 'templates'"
+            <button type="button" @click="tab = 'templates'"
                     :class="tab === 'templates' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 hover:text-slate-800'"
                     class="px-4 py-2 text-sm font-medium transition-colors">
                 Templates
             </button>
-            <button @click="tab = 'packs'"
+            <button type="button" @click="tab = 'packs'"
                     :class="tab === 'packs' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 hover:text-slate-800'"
                     class="px-4 py-2 text-sm font-medium transition-colors">
                 Document Packs
@@ -46,14 +46,14 @@
                            class="rounded-lg border border-slate-300 bg-white text-slate-700 px-3 py-1.5 text-xs w-48" />
                 </div>
                 <div class="flex items-center border border-slate-300 rounded-lg overflow-hidden">
-                    <button @click="viewMode = 'grid'; localStorage.setItem('docuperfect_view_mode', 'grid')"
+                    <button type="button" @click="viewMode = 'grid'; localStorage.setItem('docuperfect_view_mode', 'grid')"
                             :class="viewMode === 'grid' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:text-slate-700'"
                             class="px-2 py-1.5 transition-colors" title="Grid view">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path d="M4 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5ZM14 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V5ZM4 15a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-4ZM14 15a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-4Z"/>
                         </svg>
                     </button>
-                    <button @click="viewMode = 'list'; localStorage.setItem('docuperfect_view_mode', 'list')"
+                    <button type="button" @click="viewMode = 'list'; localStorage.setItem('docuperfect_view_mode', 'list')"
                             :class="viewMode === 'list' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:text-slate-700'"
                             class="px-2 py-1.5 transition-colors" title="List view">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

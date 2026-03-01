@@ -1257,16 +1257,16 @@ input[type="radio"] {
 }
 
 .nexus-user-dropdown {
-    position: absolute;
-    bottom: 100%;
-    left: 0.5rem;
-    right: 0.5rem;
+    position: fixed;
+    bottom: 4rem;
+    left: calc(var(--nexus-sidebar-width) + 0.5rem);
+    width: 200px;
     background: #1e293b;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 0.5rem;
+    border-radius: 0.75rem;
     padding: 0.25rem;
-    z-index: 50;
-    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
+    z-index: 200;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
 .nexus-user-dropdown-item {
@@ -1313,16 +1313,16 @@ input[type="radio"] {
 }
 
 .nexus-switch-panel {
-    position: absolute;
-    bottom: 100%;
-    left: 0.5rem;
-    right: 0.5rem;
+    position: fixed;
+    bottom: 4rem;
+    left: calc(var(--nexus-sidebar-width) + 0.5rem);
+    width: 260px;
     background: #1e293b;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 0.5rem;
+    border-radius: 0.75rem;
     padding: 0.5rem 0.25rem;
-    z-index: 50;
-    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
+    z-index: 200;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
 .nexus-switch-list {
