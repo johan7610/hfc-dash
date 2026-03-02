@@ -24,9 +24,17 @@ class CompanyListingStockController extends Controller
             $filter = '';
         }
 
-        // MySQL day-diff expressions (day precision)
-        $domExpr  = "DATEDIFF(CURDATE(), DATE(COALESCE(listed_at, created_at)))";
-        $editExpr = "DATEDIFF(CURDATE(), DATE(COALESCE(modified_at, created_at)))";
+        $isSqlite = \DB::connection()->getDriverName() === 'sqlite';
+        $domExpr  = $isSqlite
+            ? "CAST((julianday(DATE('now')) - julianday(DATE(COALESCE(listed_at, created_at)))) AS INTEGER)"
+            : "DATEDIFF(CURDATE(), DATE(COALESCE(listed_at, created_at)))";
+        $editExpr = $isSqlite
+            ? "CAST((julianday(DATE('now')) - julianday(DATE(COALESCE(modified_at, created_at)))) AS INTEGER)"
+            : "DATEDIFF(CURDATE(), DATE(COALESCE(modified_at, created_at)))";
+        $expiresInExpr = $isSqlite
+            ? "CAST((julianday(DATE(expires_at)) - julianday(DATE('now'))) AS INTEGER)"
+            : "DATEDIFF(DATE(expires_at), CURDATE())";
+        $todayExpr = $isSqlite ? "DATE('now')" : "CURDATE()";
 
         $q = ListingStock::query()
             ->where('source', 'propcon');
@@ -47,10 +55,10 @@ class CompanyListingStockController extends Controller
             $q->whereRaw($editExpr . " >= 14");
         } elseif ($filter === 'expiring') {
             $q->whereNotNull('expires_at')
-              ->whereRaw("DATEDIFF(DATE(expires_at), CURDATE()) BETWEEN 0 AND 14");
+              ->whereRaw("$expiresInExpr BETWEEN 0 AND 14");
         } elseif ($filter === 'expired') {
             $q->whereNotNull('expires_at')
-              ->whereRaw("DATE(expires_at) < CURDATE()");
+              ->whereRaw("DATE(expires_at) < $todayExpr");
         } elseif ($filter === 'all') {
             // no-op
         }
@@ -101,7 +109,7 @@ class CompanyListingStockController extends Controller
         $totalFiltered = (clone $q)->count();
 
         $avgDom = (clone $q)
-            ->selectRaw("AVG(DATEDIFF(CURDATE(), DATE(coalesce(listed_at, created_at)))) as v")
+            ->selectRaw("AVG($domExpr) as v")
             ->value('v');
         $avgDom = $avgDom !== null ? (int)$avgDom : 0;
 
