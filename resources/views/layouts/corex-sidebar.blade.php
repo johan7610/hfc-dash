@@ -95,7 +95,7 @@
             <span class="flex-1 text-left truncate">{{ $activeAgency ? $activeAgency->name : 'All Agencies' }}</span>
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3 flex-shrink-0 transition-transform duration-150" :class="agencyOpen && 'rotate-90'"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
         </button>
-        <div x-show="agencyOpen" @click.outside="agencyOpen = false" x-transition
+        <div x-show="agencyOpen" x-cloak @click.outside="agencyOpen = false" x-transition
              class="mt-1 rounded-lg overflow-hidden shadow-lg"
              style="background:var(--brand-tertiary, #1a4a73); border:1px solid rgba(255,255,255,0.1);">
             {{-- All Agencies option --}}
@@ -333,13 +333,13 @@
 
         {{-- Commercial Evaluations --}}
         @if(\Illuminate\Support\Facades\Route::has('commercial-evaluations.index'))
-        <a href="{{ route('commercial-evaluations.index') }}" class="nexus-nav-item {{ request()->is('commercial-evaluations*') ? 'active' : '' }}">
+        <a href="{{ route('commercial-evaluations.index') }}" class="corex-nav-item {{ request()->is('commercial-evaluations*') ? 'active' : '' }}">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
                 <path d="M9 22V12h6v10"/>
             </svg>
             <span>Commercial Evaluations</span>
-            <svg class="nexus-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg class="corex-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m9 18 6-6-6-6"/>
             </svg>
         </a>
@@ -347,7 +347,7 @@
 
         {{-- Calculators --}}
         @if(\Illuminate\Support\Facades\Route::has('calculators.index'))
-        <a href="{{ route('calculators.index') }}" class="nexus-nav-item {{ request()->is('calculators*') ? 'active' : '' }}">
+        <a href="{{ route('calculators.index') }}" class="corex-nav-item {{ request()->is('calculators*') ? 'active' : '' }}">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="4" y="2" width="16" height="20" rx="2"/>
                 <line x1="8" y1="6" x2="16" y2="6"/>
@@ -359,7 +359,7 @@
                 <line x1="14" y1="18" x2="16" y2="18"/>
             </svg>
             <span>Calculators</span>
-            <svg class="nexus-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg class="corex-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m9 18 6-6-6-6"/>
             </svg>
         </a>
@@ -367,12 +367,12 @@
 
         {{-- Ellie AI --}}
         @if(\Illuminate\Support\Facades\Route::has('ellie.index'))
-        <a href="{{ route('ellie.index') }}" class="nexus-nav-item {{ request()->is('ai-buddy*') ? 'active' : '' }}">
+        <a href="{{ route('ellie.index') }}" class="corex-nav-item {{ request()->is('ai-buddy*') ? 'active' : '' }}">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
             </svg>
             <span>Ellie AI</span>
-            <svg class="nexus-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg class="corex-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m9 18 6-6-6-6"/>
             </svg>
         </a>
@@ -380,13 +380,13 @@
 
         {{-- P24 Alerts --}}
         @if(\Illuminate\Support\Facades\Route::has('admin.p24.index'))
-        <a href="{{ route('admin.p24.index') }}" class="nexus-nav-item {{ request()->is('admin/p24*') ? 'active' : '' }}">
+        <a href="{{ route('admin.p24.index') }}" class="corex-nav-item {{ request()->is('admin/p24*') ? 'active' : '' }}">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
                 <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
             </svg>
             <span>P24 Alerts</span>
-            <svg class="nexus-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg class="corex-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m9 18 6-6-6-6"/>
             </svg>
         </a>
@@ -530,7 +530,7 @@
         </div>
 
         {{-- Dropdown menu --}}
-        <div x-show="userMenu" @click.outside="userMenu = false" x-transition class="corex-user-dropdown">
+        <div x-show="userMenu" x-cloak @click.outside="userMenu = false" x-transition class="corex-user-dropdown">
             <a href="{{ route('profile.edit') }}" class="corex-user-dropdown-item">Profile</a>
             @if($canSwitchUsers)
             <button type="button" @click="switchPanel = !switchPanel; userMenu = false" class="corex-user-dropdown-item w-full text-left">Switch User</button>
@@ -543,7 +543,7 @@
 
         {{-- Switch user panel --}}
         @if($canSwitchUsers)
-        <div x-show="switchPanel" @click.outside="switchPanel = false" x-transition class="corex-switch-panel">
+        <div x-show="switchPanel" x-cloak @click.outside="switchPanel = false" x-transition class="corex-switch-panel">
             <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold px-2 py-1">Switch User</div>
             <div class="corex-switch-list">
                 @foreach($switchUsers as $su)
