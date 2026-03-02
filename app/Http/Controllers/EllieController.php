@@ -320,12 +320,12 @@ class EllieController extends Controller
 
               // Listings (active + stale)
               $listingsActive = (int) DB::table('listing_stocks')
-                  ->where('agent_id', (int)$user->id)
+                  ->where('user_id', (int)$user->id)
                   ->where('status', 'active')
                   ->count();
 
               $listingsStale = (int) DB::table('listing_stocks')
-                  ->where('agent_id', (int)$user->id)
+                  ->where('user_id', (int)$user->id)
                   ->where('status', 'active')
                   ->where('is_stale', 1)
                   ->count();
