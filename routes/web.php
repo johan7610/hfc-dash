@@ -214,11 +214,11 @@ Route::middleware(['auth','admin'])->group(function () {
 // Admin impersonation
 Route::middleware(['auth'])->group(function () {
 
-    Route::post('/admin/impersonate/{user}', [\App\Http\Controllers\Admin\ImpersonateController::class, 'start'])
-        ->middleware('admin')->name('impersonate.start');
-
     Route::post('/admin/impersonate/stop', [\App\Http\Controllers\Admin\ImpersonateController::class, 'stop'])
         ->name('impersonate.stop');
+
+    Route::post('/admin/impersonate/{user}', [\App\Http\Controllers\Admin\ImpersonateController::class, 'start'])
+        ->middleware('admin')->name('impersonate.start');
     // Allow click-through (GET) stop for sidebar UX (session-gated)
 });
 
