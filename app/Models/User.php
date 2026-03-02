@@ -69,9 +69,19 @@ class User extends Authenticatable
         return $this->branch_id ? (int) $this->branch_id : null;
     }
 
+    public function effectiveAgencyId(): ?int
+    {
+        $branchId = $this->effectiveBranchId();
+        if (!$branchId) {
+            return null;
+        }
+        $branch = Branch::find($branchId);
+        return $branch?->agency_id ? (int) $branch->agency_id : null;
+    }
+
     public function isEffectiveAdmin(): bool
     {
-        return $this->effectiveRole() === 'admin';
+        return in_array($this->effectiveRole(), ['admin', 'super_admin']);
     }
 
     public function isEffectiveBranchManager(): bool
@@ -92,7 +102,12 @@ class User extends Authenticatable
     // Real role (no View-As)
     public function isAdmin(): bool
     {
-        return ($this->role ?? '') === 'admin';
+        return in_array($this->role ?? '', ['admin', 'super_admin']);
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return ($this->role ?? '') === 'super_admin';
     }
 
     public function isBranchManager(): bool
@@ -119,17 +134,23 @@ class User extends Authenticatable
         }
 
         $access = [
-            'dashboard'       => ['admin', 'branch_manager', 'agent'],
-            'agency-tracker'  => ['admin', 'branch_manager', 'agent'],
-            'documents'       => ['admin', 'branch_manager', 'agent'],
-            'compliance'      => ['admin', 'branch_manager'],
-            'supervision'     => ['admin', 'branch_manager'],
-            'training'        => ['admin', 'branch_manager', 'agent'],
-            'communication'   => ['admin', 'branch_manager', 'agent'],
-            'client-portal'   => ['admin', 'branch_manager', 'agent'],
-            'franchise-admin' => ['admin'],
-            'role-manager'    => ['admin'],
-            'settings'        => ['admin'],
+            'dashboard'        => ['admin', 'branch_manager', 'agent'],
+            'agency-tracker'   => ['admin', 'branch_manager', 'agent'],
+            'compliance'       => ['admin', 'branch_manager'],
+            'supervision'      => ['admin', 'branch_manager'],
+            'training'         => ['admin', 'branch_manager', 'agent'],
+            'communication'    => ['admin', 'branch_manager', 'agent'],
+            'client-portal'    => ['admin', 'branch_manager', 'agent'],
+            'franchise-admin'  => ['admin'],
+            'docuperfect'      => ['admin', 'branch_manager', 'agent'],
+            'document-library' => ['admin', 'branch_manager', 'agent'],
+            'presentations'    => ['admin', 'branch_manager', 'agent'],
+            'pdf-splitter'     => ['admin', 'branch_manager', 'agent'],
+            'knowledge-base'   => ['admin'],
+            'finance-engine'   => ['admin'],
+            'properties'       => ['admin', 'branch_manager', 'agent'],
+            'role-manager'     => ['admin'],
+            'settings'         => ['admin'],
         ];
 
         return in_array($this->effectiveRole(), $access[$section] ?? []);

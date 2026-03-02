@@ -144,7 +144,7 @@
         <div class="px-5 py-4">
             <div class="flex items-center justify-between mb-3">
                 <h3 class="text-sm font-semibold text-gray-700">Financial Data</h3>
-                <button @click="showFinancialForm = !showFinancialForm" class="text-xs text-[#00b4d8] hover:text-[#0096b7] font-medium">
+                <button type="button" @click="showFinancialForm = !showFinancialForm" class="text-xs text-[#00b4d8] hover:text-[#0096b7] font-medium">
                     + Add Financial Year
                 </button>
             </div>
@@ -322,7 +322,7 @@
         <div class="px-5 py-4">
             <div class="flex items-center justify-between mb-3">
                 <h3 class="text-sm font-semibold text-gray-700">Rental Units</h3>
-                <button @click="showUnitForm = !showUnitForm" class="text-xs text-[#00b4d8] hover:text-[#0096b7] font-medium">
+                <button type="button" @click="showUnitForm = !showUnitForm" class="text-xs text-[#00b4d8] hover:text-[#0096b7] font-medium">
                     + Add Unit
                 </button>
             </div>
@@ -449,7 +449,7 @@
         <div class="px-5 py-4">
             <div class="flex items-center justify-between mb-3">
                 <h3 class="text-sm font-semibold text-gray-700">Assets</h3>
-                <button @click="showAssetForm = !showAssetForm" class="text-xs text-[#00b4d8] hover:text-[#0096b7] font-medium">
+                <button type="button" @click="showAssetForm = !showAssetForm" class="text-xs text-[#00b4d8] hover:text-[#0096b7] font-medium">
                     + Add Asset
                 </button>
             </div>
@@ -608,7 +608,7 @@
                     <svg class="w-4 h-4 inline-block mr-1 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
                     Crops & Orchards
                 </h3>
-                <button @click="showCropForm = !showCropForm" class="text-xs text-[#00b4d8] hover:text-[#0096b7] font-medium">
+                <button type="button" @click="showCropForm = !showCropForm" class="text-xs text-[#00b4d8] hover:text-[#0096b7] font-medium">
                     + Add Crop
                 </button>
             </div>
@@ -941,7 +941,7 @@
                     <svg class="w-4 h-4 inline-block mr-1 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14"/></svg>
                     Livestock
                 </h3>
-                <button @click="showLivestockForm = !showLivestockForm" class="text-xs text-[#00b4d8] hover:text-[#0096b7] font-medium">
+                <button type="button" @click="showLivestockForm = !showLivestockForm" class="text-xs text-[#00b4d8] hover:text-[#0096b7] font-medium">
                     + Add Livestock
                 </button>
             </div>
@@ -1187,7 +1187,7 @@
         <div class="px-5 py-4">
             <div class="flex items-center justify-between mb-3">
                 <h3 class="text-sm font-semibold text-gray-700">Comparable Sales</h3>
-                <button @click="showCompForm = !showCompForm" class="text-xs text-[#00b4d8] hover:text-[#0096b7] font-medium">
+                <button type="button" @click="showCompForm = !showCompForm" class="text-xs text-[#00b4d8] hover:text-[#0096b7] font-medium">
                     + Add Comparable
                 </button>
             </div>

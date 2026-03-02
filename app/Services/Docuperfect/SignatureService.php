@@ -188,8 +188,8 @@ class SignatureService
      */
     public function saveMarkers(SignatureTemplate $template, array $markers): int
     {
-        if (!$template->isDraft()) {
-            throw new \LogicException('Cannot modify markers on a template that is not in draft status.');
+        if (!in_array($template->status, [SignatureTemplate::STATUS_DRAFT, SignatureTemplate::STATUS_READY])) {
+            throw new \LogicException('Cannot modify markers — template must be in draft or ready status.');
         }
 
         return DB::transaction(function () use ($template, $markers) {
@@ -387,7 +387,10 @@ class SignatureService
                 ->where('party_role', 'agent')
                 ->first();
 
-            if ($agentRequest) {
+            if ($agentRequest && $agentRequest->status === SignatureRequest::STATUS_COMPLETED) {
+                // Agent already completed (pre-signed wet ink upload) — skip to next party
+                $this->advanceToNextParty($template, 'agent');
+            } elseif ($agentRequest) {
                 $this->sendSigningRequest($agentRequest);
             }
         });
@@ -402,14 +405,15 @@ class SignatureService
      */
     public function captureSignature(
         SignatureMarker $marker,
-        string $signatureData,
+        ?string $signatureData,
         string $signerName,
         string $signerEmail,
         string $ipAddress,
         ?string $userAgent = null,
         ?SignatureRequest $request = null,
         ?User $signerUser = null,
-        string $signatureType = 'drawn'
+        string $signatureType = 'drawn',
+        ?string $textValue = null
     ): Signature {
         $signature = Signature::create([
             'signature_template_id' => $marker->signature_template_id,
@@ -421,6 +425,7 @@ class SignatureService
             'signer_ip_address' => $ipAddress,
             'signer_user_agent' => $userAgent,
             'signature_data' => $signatureData,
+            'text_value' => $textValue,
             'signature_type' => $signatureType,
             'signed_at' => now(),
         ]);
@@ -453,6 +458,17 @@ class SignatureService
      */
     public function isPartyComplete(SignatureTemplate $template, string $party): bool
     {
+        // If the request for this party is already marked completed
+        // (e.g. wet-ink upload approved on behalf), treat as complete
+        $request = $template->requests()
+            ->where('party_role', $party)
+            ->where('status', SignatureRequest::STATUS_COMPLETED)
+            ->exists();
+
+        if ($request) {
+            return true;
+        }
+
         $requiredMarkers = $template->markers()
             ->where('assigned_party', $party)
             ->where('required', true)
@@ -564,6 +580,8 @@ class SignatureService
                 $statusMap = [
                     'tenant' => SignatureTemplate::STATUS_AWAITING_TENANT,
                     'landlord' => SignatureTemplate::STATUS_AWAITING_LANDLORD,
+                    'buyer' => SignatureTemplate::STATUS_AWAITING_BUYER,
+                    'seller' => SignatureTemplate::STATUS_AWAITING_SELLER,
                 ];
                 $newStatus = $statusMap[$nextParty] ?? SignatureTemplate::STATUS_SIGNING;
                 $template->update(['status' => $newStatus]);
@@ -624,6 +642,8 @@ class SignatureService
             $statusMap = [
                 'tenant' => SignatureTemplate::STATUS_AWAITING_TENANT,
                 'landlord' => SignatureTemplate::STATUS_AWAITING_LANDLORD,
+                'buyer' => SignatureTemplate::STATUS_AWAITING_BUYER,
+                'seller' => SignatureTemplate::STATUS_AWAITING_SELLER,
             ];
             $newStatus = $statusMap[$nextParty] ?? SignatureTemplate::STATUS_SIGNING;
             $template->update(['status' => $newStatus]);
@@ -635,6 +655,66 @@ class SignatureService
             if ($nextRequest && $nextRequest->status === SignatureRequest::STATUS_WAITING) {
                 $this->sendSigningRequest($nextRequest);
             }
+        } elseif ($this->isFullyComplete($template)) {
+            $this->completeDocument($template);
+        }
+    }
+
+    /**
+     * Advance to next party after wet-ink approval. The wet-ink review
+     * itself serves as the agent's approval, so we skip pending_agent_approval.
+     */
+    private function advanceAfterWetInkApproval(SignatureTemplate $template, string $completedParty): void
+    {
+        $order = $template->signing_order_json ?? ['agent', 'tenant', 'landlord'];
+
+        // Find completed party roles
+        $completedParties = $template->requests()
+            ->where('status', SignatureRequest::STATUS_COMPLETED)
+            ->pluck('party_role')
+            ->toArray();
+
+        // Find next unsigned party
+        $nextParty = null;
+        foreach ($order as $party) {
+            if ($party !== 'agent' && !in_array($party, $completedParties)) {
+                $nextParty = $party;
+                break;
+            }
+        }
+
+        if ($nextParty) {
+            $template->update([
+                'document_hash' => $this->generateDocumentHash($template->document),
+            ]);
+
+            $statusMap = [
+                'tenant' => SignatureTemplate::STATUS_AWAITING_TENANT,
+                'landlord' => SignatureTemplate::STATUS_AWAITING_LANDLORD,
+                'buyer' => SignatureTemplate::STATUS_AWAITING_BUYER,
+                'seller' => SignatureTemplate::STATUS_AWAITING_SELLER,
+            ];
+            $newStatus = $statusMap[$nextParty] ?? SignatureTemplate::STATUS_SIGNING;
+            $template->update(['status' => $newStatus]);
+
+            $nextRequest = $template->requests()
+                ->where('party_role', $nextParty)
+                ->first();
+
+            if ($nextRequest && $nextRequest->status === SignatureRequest::STATUS_WAITING) {
+                $this->sendSigningRequest($nextRequest);
+            }
+
+            SignatureAuditLog::log(
+                $template,
+                'wet_ink_approved_advance',
+                SignatureAuditLog::ACTOR_SYSTEM,
+                'System',
+                metadata: [
+                    'completed_party' => $completedParty,
+                    'next_party' => $nextParty,
+                ],
+            );
         } elseif ($this->isFullyComplete($template)) {
             $this->completeDocument($template);
         }
@@ -772,7 +852,14 @@ class SignatureService
                     'completed_at' => now(),
                 ]);
 
-                $this->handlePartyCompletion($template, $request->party_role);
+                // Replace flattened pages with the uploaded wet-ink scan so
+                // the next signing party sees the physical signatures.
+                $this->replaceWithWetInkScan($template, $request);
+
+                // Wet-ink review IS the agent approval — advance directly
+                // without going through handlePartyCompletion (which would
+                // set pending_agent_approval and require a second review).
+                $this->advanceAfterWetInkApproval($template, $request->party_role);
             } else {
                 $request->update([
                     'wet_ink_status' => SignatureRequest::WET_INK_REJECTED,
@@ -787,6 +874,70 @@ class SignatureService
 
             return $inspection;
         });
+    }
+
+    /**
+     * Upload on behalf: approve a wet-ink upload immediately (no separate review step).
+     *
+     * Used when an agent receives a signed document via WhatsApp/email/in-person
+     * and uploads it directly from the dashboard. The agent has already verified
+     * the signatures, so we skip the inspection checklist.
+     */
+    public function approveUploadOnBehalf(SignatureRequest $request, User $approver): void
+    {
+        DB::transaction(function () use ($request, $approver) {
+            $request->update([
+                'wet_ink_status'  => SignatureRequest::WET_INK_APPROVED,
+                'reviewed_by'    => $approver->id,
+                'reviewed_at'    => now(),
+                'status'         => SignatureRequest::STATUS_COMPLETED,
+                'completed_at'   => now(),
+            ]);
+
+            $template = $request->template;
+
+            SignatureAuditLog::log(
+                $template,
+                SignatureAuditLog::ACTION_WET_INK_APPROVED,
+                SignatureAuditLog::ACTOR_USER,
+                $approver->name,
+                $approver->email,
+                $approver->id,
+                $request->id,
+                metadata: ['upload_on_behalf_auto_approved' => true],
+            );
+
+            $this->replaceWithWetInkScan($template, $request);
+            $this->advanceAfterWetInkApproval($template, $request->party_role);
+        });
+    }
+
+    /**
+     * Convert the wet-ink uploaded scan into flattened page images.
+     *
+     * The uploaded scan (PDF or images) replaces the current flattened pages
+     * so subsequent signing parties see the physical signatures.
+     */
+    private function replaceWithWetInkScan(SignatureTemplate $template, SignatureRequest $request): void
+    {
+        $rawPath = $request->wet_ink_upload_path;
+        if (!$rawPath) {
+            return;
+        }
+
+        // wet_ink_upload_path may be a JSON array or a plain string
+        $decoded = json_decode($rawPath, true);
+        $uploadPaths = is_array($decoded) ? $decoded : [$rawPath];
+
+        if (empty($uploadPaths)) {
+            return;
+        }
+
+        $flattener = app(DocumentFlattener::class);
+        $flattener->flattenWetInkScan($template, $uploadPaths);
+
+        // Reload so advanceAfterWetInkApproval sees updated flattened_pages_json
+        $template->refresh();
     }
 
     // ──────────────────────────────────────────────
@@ -925,10 +1076,13 @@ class SignatureService
     public function getRentalDashboardData(User $user): array
     {
         // Get all rental documents visible to this user
+        // Include both template-based rentals AND standalone upload-and-send documents
         $rentalDocuments = Document::active()
             ->visibleTo($user)
-            ->whereHas('template', function ($q) {
-                $q->where('template_type', 'rental');
+            ->where(function ($q) {
+                $q->whereHas('template', function ($tq) {
+                    $tq->where('template_type', 'rental');
+                })->orWhere('document_type', 'rental_upload_send');
             })
             ->with(['template.documentType', 'owner'])
             ->get();
@@ -975,17 +1129,29 @@ class SignatureService
                 continue;
             }
 
-            match ($sigTemplate->status) {
-                SignatureTemplate::STATUS_COMPLETED => $groups['completed']->push($doc),
-                SignatureTemplate::STATUS_PENDING_AGENT_APPROVAL => $groups['pending_approval']->push($doc),
-                SignatureTemplate::STATUS_REJECTED => $groups['rejected']->push($doc),
+            // Check if any request has a wet-ink upload pending agent review
+            $hasWetInkPendingReview = $sigTemplate->requests
+                ->contains(fn($r) => $r->wet_ink_status === 'uploaded_pending_review');
+
+            if ($hasWetInkPendingReview && in_array($sigTemplate->status, [
                 SignatureTemplate::STATUS_SIGNING,
                 SignatureTemplate::STATUS_AWAITING_TENANT,
-                SignatureTemplate::STATUS_AWAITING_LANDLORD => $groups['awaiting_signatures']->push($doc),
-                SignatureTemplate::STATUS_READY,
-                SignatureTemplate::STATUS_DRAFT => $groups['ready_to_sign']->push($doc),
-                default => $groups['draft']->push($doc),
-            };
+                SignatureTemplate::STATUS_AWAITING_LANDLORD,
+            ])) {
+                $groups['pending_approval']->push($doc);
+            } else {
+                match ($sigTemplate->status) {
+                    SignatureTemplate::STATUS_COMPLETED => $groups['completed']->push($doc),
+                    SignatureTemplate::STATUS_PENDING_AGENT_APPROVAL => $groups['pending_approval']->push($doc),
+                    SignatureTemplate::STATUS_REJECTED => $groups['rejected']->push($doc),
+                    SignatureTemplate::STATUS_SIGNING,
+                    SignatureTemplate::STATUS_AWAITING_TENANT,
+                    SignatureTemplate::STATUS_AWAITING_LANDLORD => $groups['awaiting_signatures']->push($doc),
+                    SignatureTemplate::STATUS_READY,
+                    SignatureTemplate::STATUS_DRAFT => $groups['ready_to_sign']->push($doc),
+                    default => $groups['draft']->push($doc),
+                };
+            }
         }
 
         // Lease renewal data

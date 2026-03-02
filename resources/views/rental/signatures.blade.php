@@ -6,6 +6,10 @@
         showRejectModal: false,
         rejectDocId: null,
         rejectDocName: '',
+        showUploadOnBehalfModal: false,
+        uploadOnBehalfDocId: null,
+        uploadOnBehalfRequestId: null,
+        uploadOnBehalfPartyName: '',
         showRejected: false,
         savedIndicators: {},
         async saveMetadata(docId, field, value) {
@@ -46,6 +50,11 @@
                 &middot; Manage rental document signing workflows.
             </div>
         </div>
+        <a href="{{ route('docuperfect.rental.uploadAndSend') }}"
+           class="inline-flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-semibold rounded-xl transition-colors border border-white/20">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+            Upload &amp; Send for Signing
+        </a>
     </div>
 
     @if(session('status'))
@@ -241,6 +250,8 @@
                     $sigTemplate = $signatureTemplates->get($doc->id);
                     $requests = $sigTemplate ? $sigTemplate->requests->keyBy('party_role') : collect();
                     $completedReq = $sigTemplate ? $sigTemplate->requests->where('status', 'completed')->where('party_role', '!=', 'agent')->sortByDesc('completed_at')->first() : null;
+                    $wetInkReq = $sigTemplate ? $sigTemplate->requests->first(fn($r) => $r->wet_ink_status === 'uploaded_pending_review') : null;
+                    $isWetInkApproval = (bool) $wetInkReq;
                 @endphp
                 <div class="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
                     <div class="flex items-start justify-between">
@@ -258,10 +269,21 @@
                                         @if($req->status === 'completed')
                                             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
                                                 &#10003; {{ ucfirst($role) }} signed
+                                                @if($req->signing_method === 'wet_ink')
+                                                    <span class="text-slate-400">(wet ink)</span>
+                                                @endif
+                                            </span>
+                                        @elseif($req->wet_ink_status === 'uploaded_pending_review')
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-200 text-amber-800">
+                                                &#9888; {{ ucfirst($role) }} wet ink — pending review
                                             </span>
                                         @elseif($req->status === 'waiting')
                                             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500">
                                                 &#128274; {{ ucfirst($role) }} waiting
+                                            </span>
+                                        @elseif(in_array($req->status, ['pending', 'viewed', 'partially_signed']))
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700">
+                                                &#9993; {{ ucfirst($role) }} — {{ $req->status === 'viewed' ? 'viewed' : ($req->status === 'partially_signed' ? 'signing' : 'sent') }}
                                             </span>
                                         @endif
                                     @endif
@@ -300,10 +322,17 @@
                             </div>
                         </div>
                         <div class="flex flex-col gap-1.5 ml-4">
-                            <a href="{{ route('docuperfect.signatures.review', $doc) }}"
-                               class="inline-flex items-center px-4 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 whitespace-nowrap">
-                                Review &amp; Approve
-                            </a>
+                            @if($isWetInkApproval)
+                                <a href="{{ route('docuperfect.signatures.wetInkReview', ['document' => $doc->id, 'signingRequest' => $wetInkReq->id]) }}"
+                                   class="inline-flex items-center px-4 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 whitespace-nowrap">
+                                    Review Wet Ink
+                                </a>
+                            @else
+                                <a href="{{ route('docuperfect.signatures.review', $doc) }}"
+                                   class="inline-flex items-center px-4 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 whitespace-nowrap">
+                                    Review &amp; Approve
+                                </a>
+                            @endif
                             <button type="button"
                                     @click="rejectDocId = {{ $doc->id }}; rejectDocName = {{ Js::from($doc->name) }}; showRejectModal = true"
                                     class="text-xs text-red-500 hover:text-red-700 text-center">
@@ -442,15 +471,8 @@
                                 <a href="{{ route('docuperfect.signatures.setup', $doc) }}" class="text-blue-600 hover:underline text-xs">View</a>
                                 @if($sigTemplate)
                                     @php
-                                        $wetInkReq = $sigTemplate->requests->first(fn($r) => $r->wet_ink_status === 'uploaded_pending_review');
                                         $activeReq = $sigTemplate->requests->first(fn($r) => in_array($r->status, ['pending', 'viewed', 'partially_signed']));
                                     @endphp
-                                    @if($wetInkReq)
-                                        <a href="{{ route('docuperfect.signatures.wetInkReview', ['document' => $doc->id, 'signingRequest' => $wetInkReq->id]) }}"
-                                           class="text-amber-600 hover:underline text-xs font-medium">
-                                            Review Wet Ink
-                                        </a>
-                                    @endif
                                     @if($activeReq)
                                         <form method="POST" action="{{ route('docuperfect.signatures.sendReminder', ['document' => $doc->id, 'signatureRequest' => $activeReq->id]) }}" class="inline">
                                             @csrf
@@ -458,6 +480,11 @@
                                                 Send Reminder
                                             </button>
                                         </form>
+                                        <button type="button"
+                                                @click="uploadOnBehalfDocId = {{ $doc->id }}; uploadOnBehalfRequestId = {{ $activeReq->id }}; uploadOnBehalfPartyName = {{ Js::from($activeReq->signer_name) }}; showUploadOnBehalfModal = true"
+                                                class="text-indigo-600 hover:underline text-xs">
+                                            Upload on Behalf
+                                        </button>
                                     @endif
                                 @endif
                                 <button type="button"
@@ -512,7 +539,21 @@
                         <td class="px-4 py-3 text-slate-500">{{ $doc->owner->name ?? '-' }}</td>
                         @endif
                         <td class="px-4 py-3 text-right">
-                            <a href="{{ route('docuperfect.signatures.setup', $doc) }}" class="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700">Set Up Signatures</a>
+                            <div class="flex items-center justify-end gap-2">
+                                @if(!$hasSigTemplate || in_array($sigTemplate?->status, ['draft', 'ready']))
+                                    <form action="{{ route('docuperfect.signatures.uploadPresigned', $doc) }}" method="POST" enctype="multipart/form-data" class="inline-flex items-center gap-1"
+                                          x-data="{ files: null }" @submit.prevent="if (files) $el.submit()">
+                                        @csrf
+                                        <label class="inline-flex items-center px-3 py-1 bg-slate-100 text-slate-700 text-xs rounded-lg hover:bg-slate-200 cursor-pointer border border-slate-300">
+                                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                                            Upload Pre-Signed
+                                            <input type="file" name="presigned_files[]" multiple accept=".pdf,.jpg,.jpeg,.png" class="hidden"
+                                                   @change="files = $event.target.files; if (files.length) $el.closest('form').submit()">
+                                        </label>
+                                    </form>
+                                @endif
+                                <a href="{{ route('docuperfect.signatures.setup', $doc) }}" class="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700">Set Up Signatures</a>
+                            </div>
                         </td>
                     </tr>
                 @endforeach
@@ -571,7 +612,19 @@
                         <td class="px-4 py-3 text-slate-500">{{ $doc->owner->name ?? '-' }}</td>
                         @endif
                         <td class="px-4 py-3 text-right">
-                            <a href="{{ route('docuperfect.documents.edit', $doc) }}" class="text-blue-600 hover:underline text-xs">Edit Document</a>
+                            <div class="flex items-center justify-end gap-2">
+                                <form action="{{ route('docuperfect.signatures.uploadPresigned', $doc) }}" method="POST" enctype="multipart/form-data" class="inline-flex items-center gap-1"
+                                      x-data="{ files: null }">
+                                    @csrf
+                                    <label class="inline-flex items-center px-3 py-1 bg-slate-100 text-slate-700 text-xs rounded-lg hover:bg-slate-200 cursor-pointer border border-slate-300">
+                                        <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                                        Upload Pre-Signed
+                                        <input type="file" name="presigned_files[]" multiple accept=".pdf,.jpg,.jpeg,.png" class="hidden"
+                                               @change="files = $event.target.files; if (files.length) $el.closest('form').submit()">
+                                    </label>
+                                </form>
+                                <a href="{{ route('docuperfect.documents.edit', $doc) }}" class="text-blue-600 hover:underline text-xs">Edit Document</a>
+                            </div>
                         </td>
                     </tr>
                 @endforeach
@@ -894,6 +947,49 @@
         <div class="text-sm text-slate-500">No rental documents found. Create a document from a rental template to get started.</div>
     </div>
     @endif
+
+    {{-- Upload on Behalf Modal --}}
+    <div x-show="showUploadOnBehalfModal" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md" @click.away="showUploadOnBehalfModal = false">
+            <h3 class="text-lg font-bold text-indigo-700 mb-2">Upload on Behalf</h3>
+            <p class="text-sm text-gray-600 mb-4">Uploading signed document for <strong x-text="uploadOnBehalfPartyName"></strong></p>
+
+            <form method="POST"
+                  :action="'/docuperfect/documents/' + uploadOnBehalfDocId + '/signatures/inspect/' + uploadOnBehalfRequestId + '/upload-on-behalf'"
+                  enctype="multipart/form-data">
+                @csrf
+                <input type="hidden" name="auto_approve" value="1">
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Signed Document *</label>
+                    <input type="file" name="files[]" multiple required
+                           accept=".pdf,.jpg,.jpeg,.png"
+                           class="w-full text-sm border rounded-lg px-3 py-2 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                    <p class="text-[10px] text-slate-400 mt-1">PDF, JPG or PNG. Max 20MB per file.</p>
+                </div>
+
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">How was it received? *</label>
+                    <select name="receive_method" required class="w-full border rounded-lg px-3 py-2 text-sm">
+                        <option value="">-- Select --</option>
+                        <option value="whatsapp">WhatsApp</option>
+                        <option value="email">Email</option>
+                        <option value="in_person">In-person</option>
+                    </select>
+                </div>
+
+                <div class="flex justify-end gap-3">
+                    <button type="button" @click="showUploadOnBehalfModal = false"
+                            class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+                    <button type="submit"
+                            class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
+                        Upload &amp; Approve
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     {{-- Rejection Modal --}}
     <div x-show="showRejectModal" x-cloak
