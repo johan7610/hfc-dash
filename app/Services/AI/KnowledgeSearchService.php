@@ -253,6 +253,7 @@ class KnowledgeSearchService
             'am', 'it', 'its', 'my', 'your', 'his', 'her', 'our', 'their',
             'me', 'him', 'us', 'them', 'i', 'you', 'he', 'she', 'we', 'they',
             'tell', 'explain', 'say', 'says', 'said', 'please', 'thank', 'thanks',
+            'ellie', 'hey', 'hi', 'give', 'show', 'help', 'know',
         ];
 
         $words = preg_split('/[\s,.\-;:!?()]+/', mb_strtolower($query), -1, PREG_SPLIT_NO_EMPTY);
