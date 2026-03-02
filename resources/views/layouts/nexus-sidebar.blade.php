@@ -378,6 +378,20 @@
         </a>
         @endif
 
+        {{-- P24 Alerts --}}
+        @if(\Illuminate\Support\Facades\Route::has('admin.p24.index'))
+        <a href="{{ route('admin.p24.index') }}" class="nexus-nav-item {{ request()->is('admin/p24*') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+            </svg>
+            <span>P24 Alerts</span>
+            <svg class="nexus-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m9 18 6-6-6-6"/>
+            </svg>
+        </a>
+        @endif
+
         {{-- PDF Splitter --}}
         @if(\Illuminate\Support\Facades\Route::has('tools.pdf_splitter.index') && (!$user || $user->canAccessNexusSection('pdf-splitter')))
         <a href="{{ route('tools.pdf_splitter.index') }}" class="nexus-nav-item {{ request()->is('tools/pdf-splitter*') ? 'active' : '' }}">
