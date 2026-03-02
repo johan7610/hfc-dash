@@ -321,12 +321,18 @@ class EllieController extends Controller
               // Listings (active + stale)
               $listingsActive = (int) DB::table('listing_stocks')
                   ->where('user_id', (int)$user->id)
-                  ->where('status', 'active')
+                  ->where(function ($q) {
+                      $q->whereRaw("lower(coalesce(status,'')) like '%active%'")
+                        ->orWhereRaw("lower(coalesce(status,'')) like '%for sale%'");
+                  })
                   ->count();
 
               $listingsStale = (int) DB::table('listing_stocks')
                   ->where('user_id', (int)$user->id)
-                  ->where('status', 'active')
+                  ->where(function ($q) {
+                      $q->whereRaw("lower(coalesce(status,'')) like '%active%'")
+                        ->orWhereRaw("lower(coalesce(status,'')) like '%for sale%'");
+                  })
                   ->where('is_stale', 1)
                   ->count();
           } catch (\Throwable $e) {
