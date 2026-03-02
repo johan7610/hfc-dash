@@ -214,11 +214,11 @@ Route::middleware(['auth','admin'])->group(function () {
 // Admin impersonation
 Route::middleware(['auth'])->group(function () {
 
-    Route::post('/admin/impersonate/{user}', [\App\Http\Controllers\Admin\ImpersonateController::class, 'start'])
-        ->middleware('admin')->name('impersonate.start');
-
     Route::post('/admin/impersonate/stop', [\App\Http\Controllers\Admin\ImpersonateController::class, 'stop'])
         ->name('impersonate.stop');
+
+    Route::post('/admin/impersonate/{user}', [\App\Http\Controllers\Admin\ImpersonateController::class, 'start'])
+        ->middleware('admin')->name('impersonate.start');
     // Allow click-through (GET) stop for sidebar UX (session-gated)
 });
 
@@ -299,8 +299,8 @@ Route::get('/bm/listings', [\App\Http\Controllers\BM\ListingStockController::cla
         Route::post('/admin/tv-code/revoke-company', [\App\Http\Controllers\Admin\TvCodeController::class, 'revokeCompany'])->name('admin.tv-code.revoke-company');
 
         // Agency switcher (super admin)
-        Route::post('/agency/switch/{agency}', [\App\Http\Controllers\Admin\AgencySwitcherController::class, 'switch'])->name('agency.switch');
         Route::post('/agency/switch/clear', [\App\Http\Controllers\Admin\AgencySwitcherController::class, 'clear'])->name('agency.switch.clear');
+        Route::post('/agency/switch/{agency}', [\App\Http\Controllers\Admin\AgencySwitcherController::class, 'switch'])->name('agency.switch');
     });
 
     Route::middleware(['branch_manager'])->group(function () {
