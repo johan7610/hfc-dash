@@ -415,7 +415,7 @@ class EllieController extends Controller
         // Search knowledge base for relevant document chunks
         $knowledgeContext = '';
         $knowledgeSources = [];
-        $searchService = new \App\Services\AI\KnowledgeSearchService();
+        $searchService = app(\App\Services\AI\KnowledgeSearchService::class);
 
         \Log::info('ELLIE_KB_GATE', [
             'user_id' => (int)($user->id ?? 0),

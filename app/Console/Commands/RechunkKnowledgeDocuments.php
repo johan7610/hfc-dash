@@ -47,6 +47,7 @@ class RechunkKnowledgeDocuments extends Command
         $service->reprocess($doc);
         $doc->refresh();
 
-        $this->info("  → {$doc->chunk_count} chunks [{$doc->status}]");
+        $embedded = $doc->chunks()->where('has_embedding', true)->count();
+        $this->info("  → {$doc->chunk_count} chunks, {$embedded} embedded [{$doc->status}]");
     }
 }

@@ -9,6 +9,13 @@ use Illuminate\Support\Str;
 
 class DocumentProcessingService
 {
+    private EmbeddingService $embeddingService;
+
+    public function __construct(EmbeddingService $embeddingService)
+    {
+        $this->embeddingService = $embeddingService;
+    }
+
     private const MIN_CHUNK_SIZE = 500;
     private const MAX_CHUNK_SIZE = 4000;
 
@@ -54,6 +61,7 @@ class DocumentProcessingService
 
             $chunks = $this->chunkText($text);
             $this->storeChunks($document, $chunks);
+            $this->generateEmbeddings($document);
 
             $document->update([
                 'status' => 'ready',
@@ -97,6 +105,7 @@ class DocumentProcessingService
 
             $chunks = $this->chunkText($text);
             $this->storeChunks($document, $chunks);
+            $this->generateEmbeddings($document);
 
             $document->update([
                 'status' => 'ready',
@@ -546,5 +555,42 @@ class DocumentProcessingService
                 'word_count' => $chunk['word_count'],
             ]);
         }
+    }
+
+    /**
+     * Generate embeddings for all chunks of a document.
+     * Graceful degradation: if API fails, chunks remain without embeddings.
+     */
+    public function generateEmbeddings(KnowledgeDocument $document): int
+    {
+        $chunks = $document->chunks()->where('has_embedding', false)->get();
+        if ($chunks->isEmpty()) {
+            return 0;
+        }
+
+        // Build embedding input: section_title + content
+        $texts = $chunks->map(function ($chunk) {
+            $parts = [];
+            if ($chunk->section_title) {
+                $parts[] = $chunk->section_title;
+            }
+            $parts[] = $chunk->content;
+            return implode("\n", $parts);
+        })->toArray();
+
+        $embeddings = $this->embeddingService->embedBatch($texts);
+
+        $embedded = 0;
+        foreach ($chunks as $i => $chunk) {
+            if (isset($embeddings[$i]) && $embeddings[$i] !== null) {
+                $chunk->update([
+                    'embedding' => $embeddings[$i],
+                    'has_embedding' => true,
+                ]);
+                $embedded++;
+            }
+        }
+
+        return $embedded;
     }
 }
