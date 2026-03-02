@@ -3,23 +3,11 @@
 @section('nexus-content')
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
 
-    @php
-        $isSalesTemplate = ($templateType ?? 'rentals') === 'sales';
-        $backRoute = $isSalesTemplate ? route('docuperfect.sales') : route('docuperfect.rental');
-        $backLabel = $isSalesTemplate ? 'Back to Sales' : 'Back to Rental';
-        $partyOneRole = $isSalesTemplate ? 'buyer' : 'tenant';
-        $partyTwoRole = $isSalesTemplate ? 'seller' : 'landlord';
-        $partyOneLabel = ucfirst($partyOneRole);
-        $partyTwoLabel = $isSalesTemplate ? 'Seller' : 'Landlord / Owner';
-        $partyOneOrder = 'Signs Second';
-        $partyTwoOrder = 'Signs Third';
-    @endphp
-
     <x-sticky-action-bar>
         <x-slot name="left">
-            <a href="{{ $backRoute }}" class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
+            <a href="{{ route('docuperfect.rental') }}" class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-                {{ $backLabel }}
+                Back to Rental
             </a>
         </x-slot>
         <x-slot name="center">
@@ -52,8 +40,8 @@
                     Edit Parties
                 </a>
             @endif
-            <a href="{{ $backRoute }}"
-               class="text-sm text-white/70 hover:text-white">{{ $backLabel }}</a>
+            <a href="{{ route('docuperfect.rental') }}"
+               class="text-sm text-white/70 hover:text-white">Back to Rental</a>
         </div>
     </div>
 
@@ -71,10 +59,10 @@
          ═══════════════════════════════════════════════ --}}
     @if($step === 1)
     <div class="ds-status-card p-6" x-data="{
-        addPartyOneWitness: {{ !empty(collect($parties)->firstWhere('role', $partyOneRole . '_witness')) ? 'true' : 'false' }},
-        addPartyTwoWitness: {{ !empty(collect($parties)->firstWhere('role', $partyTwoRole . '_witness')) ? 'true' : 'false' }},
-        partyOneNotRequired: {{ old($partyOneRole . '_not_required') ? 'true' : (collect($parties)->isNotEmpty() && !collect($parties)->firstWhere('role', $partyOneRole) ? 'true' : 'false') }},
-        partyTwoNotRequired: {{ old($partyTwoRole . '_not_required') ? 'true' : (collect($parties)->isNotEmpty() && !collect($parties)->firstWhere('role', $partyTwoRole) ? 'true' : 'false') }},
+        addTenantWitness: {{ !empty(collect($parties)->firstWhere('role', 'tenant_witness')) ? 'true' : 'false' }},
+        addLandlordWitness: {{ !empty(collect($parties)->firstWhere('role', 'landlord_witness')) ? 'true' : 'false' }},
+        tenantNotRequired: {{ old('tenant_not_required') ? 'true' : (collect($parties)->isNotEmpty() && !collect($parties)->firstWhere('role', 'tenant') ? 'true' : 'false') }},
+        landlordNotRequired: {{ old('landlord_not_required') ? 'true' : (collect($parties)->isNotEmpty() && !collect($parties)->firstWhere('role', 'landlord') ? 'true' : 'false') }},
         submittingParties: false
     }">
         <form action="{{ route('docuperfect.signatures.saveParties', $document) }}" method="POST"
@@ -84,164 +72,151 @@
             <h3 class="text-lg font-semibold text-slate-800 mb-4">Signing Parties</h3>
 
             {{-- Agent --}}
-            @if(!empty($template->flattened_pages_json) && empty($parties))
-                {{-- Pre-signed wet ink upload — agent section is display-only --}}
-                <div class="mb-6 p-4 rounded-xl border border-emerald-200 bg-emerald-50/50">
-                    <div class="flex items-center gap-2 mb-1">
-                        <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        <span class="text-sm font-semibold text-emerald-700 uppercase tracking-wider">Agent (Pre-signed — Wet Ink Upload)</span>
+            <div class="mb-6 p-4 rounded-xl border border-blue-200 bg-blue-50/50">
+                <div class="text-sm font-semibold text-blue-700 mb-3 uppercase tracking-wider">Agent (Signs First)</div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Name</label>
+                        <input type="text" name="agent_name"
+                               value="{{ old('agent_name', collect($parties)->firstWhere('role', 'agent')['name'] ?? $user->name) }}"
+                               class="w-full rounded-lg border-slate-300 bg-slate-100 text-sm px-3 py-2" readonly>
                     </div>
-                    <p class="text-xs text-emerald-600 ml-7">Agent pre-signed document was uploaded. No electronic signature required.</p>
-                    <input type="hidden" name="agent_name" value="{{ $user->name }}">
-                    <input type="hidden" name="agent_email" value="{{ $user->email }}">
-                </div>
-            @else
-                <div class="mb-6 p-4 rounded-xl border border-blue-200 bg-blue-50/50">
-                    <div class="text-sm font-semibold text-blue-700 mb-3 uppercase tracking-wider">Agent (Signs First)</div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs font-medium text-slate-600 mb-1">Name</label>
-                            <input type="text" name="agent_name"
-                                   value="{{ old('agent_name', collect($parties)->firstWhere('role', 'agent')['name'] ?? $user->name) }}"
-                                   class="w-full rounded-lg border-slate-300 bg-slate-100 text-sm px-3 py-2" readonly>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-slate-600 mb-1">Email</label>
-                            <input type="email" name="agent_email"
-                                   value="{{ old('agent_email', collect($parties)->firstWhere('role', 'agent')['email'] ?? $user->email) }}"
-                                   class="w-full rounded-lg border-slate-300 bg-slate-100 text-sm px-3 py-2" readonly>
-                        </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Email</label>
+                        <input type="email" name="agent_email"
+                               value="{{ old('agent_email', collect($parties)->firstWhere('role', 'agent')['email'] ?? $user->email) }}"
+                               class="w-full rounded-lg border-slate-300 bg-slate-100 text-sm px-3 py-2" readonly>
                     </div>
                 </div>
-            @endif
+            </div>
 
-            {{-- Party One (Tenant for rental, Buyer for sales) --}}
-            <div class="mb-6 p-4 rounded-xl border border-green-200" :class="partyOneNotRequired ? 'bg-gray-50 opacity-60' : 'bg-green-50/50'">
+            {{-- Tenant --}}
+            <div class="mb-6 p-4 rounded-xl border border-green-200" :class="tenantNotRequired ? 'bg-gray-50 opacity-60' : 'bg-green-50/50'">
                 <div class="flex items-center justify-between mb-3">
-                    <div class="text-sm font-semibold text-green-700 uppercase tracking-wider">{{ $partyOneLabel }} ({{ $partyOneOrder }})</div>
+                    <div class="text-sm font-semibold text-green-700 uppercase tracking-wider">Tenant (Signs Second)</div>
                     <label class="flex items-center gap-2 text-sm cursor-pointer">
-                        <input type="checkbox" name="{{ $partyOneRole }}_not_required" value="1"
-                               x-model="partyOneNotRequired"
-                               @change="if(partyOneNotRequired) { addPartyOneWitness = false; }"
+                        <input type="checkbox" name="tenant_not_required" value="1"
+                               x-model="tenantNotRequired"
+                               @change="if(tenantNotRequired) { addTenantWitness = false; }"
                                class="rounded border-gray-300 text-gray-500 focus:ring-gray-400">
                         <span class="text-gray-500 text-xs">Not required for this document</span>
                     </label>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" :class="{ 'pointer-events-none': partyOneNotRequired }">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" :class="{ 'pointer-events-none': tenantNotRequired }">
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Name <span x-show="!partyOneNotRequired" class="text-red-500">*</span></label>
-                        <input type="text" name="{{ $partyOneRole }}_name" :required="!partyOneNotRequired" :disabled="partyOneNotRequired"
-                               value="{{ old($partyOneRole . '_name', collect($parties)->firstWhere('role', $partyOneRole)['name'] ?? '') }}"
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Name <span x-show="!tenantNotRequired" class="text-red-500">*</span></label>
+                        <input type="text" name="tenant_name" :required="!tenantNotRequired" :disabled="tenantNotRequired"
+                               value="{{ old('tenant_name', collect($parties)->firstWhere('role', 'tenant')['name'] ?? '') }}"
                                class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-green-500 focus:border-green-500"
-                               :class="{ 'bg-gray-100': partyOneNotRequired }"
+                               :class="{ 'bg-gray-100': tenantNotRequired }"
                                placeholder="Full name">
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Email <span x-show="!partyOneNotRequired" class="text-red-500">*</span></label>
-                        <input type="email" name="{{ $partyOneRole }}_email" :required="!partyOneNotRequired" :disabled="partyOneNotRequired"
-                               value="{{ old($partyOneRole . '_email', collect($parties)->firstWhere('role', $partyOneRole)['email'] ?? '') }}"
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Email <span x-show="!tenantNotRequired" class="text-red-500">*</span></label>
+                        <input type="email" name="tenant_email" :required="!tenantNotRequired" :disabled="tenantNotRequired"
+                               value="{{ old('tenant_email', collect($parties)->firstWhere('role', 'tenant')['email'] ?? '') }}"
                                class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-green-500 focus:border-green-500"
-                               :class="{ 'bg-gray-100': partyOneNotRequired }"
-                               placeholder="{{ $partyOneRole }}@email.com">
+                               :class="{ 'bg-gray-100': tenantNotRequired }"
+                               placeholder="tenant@email.com">
                     </div>
                     <div>
                         <label class="block text-xs font-medium text-slate-600 mb-1">ID Number <span class="text-slate-400">(optional)</span></label>
-                        <input type="text" name="{{ $partyOneRole }}_id_number" :disabled="partyOneNotRequired"
-                               value="{{ old($partyOneRole . '_id_number', collect($parties)->firstWhere('role', $partyOneRole)['id_number'] ?? '') }}"
+                        <input type="text" name="tenant_id_number" :disabled="tenantNotRequired"
+                               value="{{ old('tenant_id_number', collect($parties)->firstWhere('role', 'tenant')['id_number'] ?? '') }}"
                                class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-green-500 focus:border-green-500"
-                               :class="{ 'bg-gray-100': partyOneNotRequired }"
+                               :class="{ 'bg-gray-100': tenantNotRequired }"
                                placeholder="SA ID number" maxlength="20">
                     </div>
                 </div>
 
-                <div x-show="!partyOneNotRequired" x-cloak>
+                <div x-show="!tenantNotRequired" x-cloak>
                     <label class="flex items-center gap-2 mt-3 cursor-pointer text-sm text-slate-600">
-                        <input type="checkbox" name="add_{{ $partyOneRole }}_witness" value="1"
-                               x-model="addPartyOneWitness"
+                        <input type="checkbox" name="add_tenant_witness" value="1"
+                               x-model="addTenantWitness"
                                class="rounded border-slate-300 text-green-600 focus:ring-green-500">
-                        Add witness for {{ $partyOneLabel }}
+                        Add witness for Tenant
                     </label>
 
-                    <div x-show="addPartyOneWitness" x-cloak x-transition class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 pl-6 border-l-2 border-green-200">
+                    <div x-show="addTenantWitness" x-cloak x-transition class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 pl-6 border-l-2 border-green-200">
                         <div>
                             <label class="block text-xs font-medium text-slate-600 mb-1">Witness Name</label>
-                            <input type="text" name="{{ $partyOneRole }}_witness_name"
-                                   value="{{ old($partyOneRole . '_witness_name', collect($parties)->firstWhere('role', $partyOneRole . '_witness')['name'] ?? '') }}"
+                            <input type="text" name="tenant_witness_name"
+                                   value="{{ old('tenant_witness_name', collect($parties)->firstWhere('role', 'tenant_witness')['name'] ?? '') }}"
                                    class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="Witness full name"
-                                   :required="addPartyOneWitness && !partyOneNotRequired">
+                                   :required="addTenantWitness && !tenantNotRequired">
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-slate-600 mb-1">Witness Email</label>
-                            <input type="email" name="{{ $partyOneRole }}_witness_email"
-                                   value="{{ old($partyOneRole . '_witness_email', collect($parties)->firstWhere('role', $partyOneRole . '_witness')['email'] ?? '') }}"
+                            <input type="email" name="tenant_witness_email"
+                                   value="{{ old('tenant_witness_email', collect($parties)->firstWhere('role', 'tenant_witness')['email'] ?? '') }}"
                                    class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="witness@email.com"
-                                   :required="addPartyOneWitness && !partyOneNotRequired">
+                                   :required="addTenantWitness && !tenantNotRequired">
                         </div>
                     </div>
                 </div>
             </div>
 
-            {{-- Party Two (Landlord for rental, Seller for sales) --}}
-            <div class="mb-6 p-4 rounded-xl border border-orange-200" :class="partyTwoNotRequired ? 'bg-gray-50 opacity-60' : 'bg-orange-50/50'">
+            {{-- Landlord --}}
+            <div class="mb-6 p-4 rounded-xl border border-orange-200" :class="landlordNotRequired ? 'bg-gray-50 opacity-60' : 'bg-orange-50/50'">
                 <div class="flex items-center justify-between mb-3">
-                    <div class="text-sm font-semibold text-orange-700 uppercase tracking-wider">{{ $partyTwoLabel }} ({{ $partyTwoOrder }})</div>
+                    <div class="text-sm font-semibold text-orange-700 uppercase tracking-wider">Landlord / Owner (Signs Third)</div>
                     <label class="flex items-center gap-2 text-sm cursor-pointer">
-                        <input type="checkbox" name="{{ $partyTwoRole }}_not_required" value="1"
-                               x-model="partyTwoNotRequired"
-                               @change="if(partyTwoNotRequired) { addPartyTwoWitness = false; }"
+                        <input type="checkbox" name="landlord_not_required" value="1"
+                               x-model="landlordNotRequired"
+                               @change="if(landlordNotRequired) { addLandlordWitness = false; }"
                                class="rounded border-gray-300 text-gray-500 focus:ring-gray-400">
                         <span class="text-gray-500 text-xs">Not required for this document</span>
                     </label>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" :class="{ 'pointer-events-none': partyTwoNotRequired }">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" :class="{ 'pointer-events-none': landlordNotRequired }">
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Name <span x-show="!partyTwoNotRequired" class="text-red-500">*</span></label>
-                        <input type="text" name="{{ $partyTwoRole }}_name" :required="!partyTwoNotRequired" :disabled="partyTwoNotRequired"
-                               value="{{ old($partyTwoRole . '_name', collect($parties)->firstWhere('role', $partyTwoRole)['name'] ?? '') }}"
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Name <span x-show="!landlordNotRequired" class="text-red-500">*</span></label>
+                        <input type="text" name="landlord_name" :required="!landlordNotRequired" :disabled="landlordNotRequired"
+                               value="{{ old('landlord_name', collect($parties)->firstWhere('role', 'landlord')['name'] ?? '') }}"
                                class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
-                               :class="{ 'bg-gray-100': partyTwoNotRequired }"
+                               :class="{ 'bg-gray-100': landlordNotRequired }"
                                placeholder="Full name">
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-slate-600 mb-1">Email <span x-show="!partyTwoNotRequired" class="text-red-500">*</span></label>
-                        <input type="email" name="{{ $partyTwoRole }}_email" :required="!partyTwoNotRequired" :disabled="partyTwoNotRequired"
-                               value="{{ old($partyTwoRole . '_email', collect($parties)->firstWhere('role', $partyTwoRole)['email'] ?? '') }}"
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Email <span x-show="!landlordNotRequired" class="text-red-500">*</span></label>
+                        <input type="email" name="landlord_email" :required="!landlordNotRequired" :disabled="landlordNotRequired"
+                               value="{{ old('landlord_email', collect($parties)->firstWhere('role', 'landlord')['email'] ?? '') }}"
                                class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
-                               :class="{ 'bg-gray-100': partyTwoNotRequired }"
-                               placeholder="{{ $partyTwoRole }}@email.com">
+                               :class="{ 'bg-gray-100': landlordNotRequired }"
+                               placeholder="landlord@email.com">
                     </div>
                     <div>
                         <label class="block text-xs font-medium text-slate-600 mb-1">ID Number <span class="text-slate-400">(optional)</span></label>
-                        <input type="text" name="{{ $partyTwoRole }}_id_number" :disabled="partyTwoNotRequired"
-                               value="{{ old($partyTwoRole . '_id_number', collect($parties)->firstWhere('role', $partyTwoRole)['id_number'] ?? '') }}"
+                        <input type="text" name="landlord_id_number" :disabled="landlordNotRequired"
+                               value="{{ old('landlord_id_number', collect($parties)->firstWhere('role', 'landlord')['id_number'] ?? '') }}"
                                class="w-full rounded-lg border-slate-300 text-sm px-3 py-2 focus:ring-orange-500 focus:border-orange-500"
-                               :class="{ 'bg-gray-100': partyTwoNotRequired }"
+                               :class="{ 'bg-gray-100': landlordNotRequired }"
                                placeholder="SA ID number" maxlength="20">
                     </div>
                 </div>
 
-                <div x-show="!partyTwoNotRequired" x-cloak>
+                <div x-show="!landlordNotRequired" x-cloak>
                     <label class="flex items-center gap-2 mt-3 cursor-pointer text-sm text-slate-600">
-                        <input type="checkbox" name="add_{{ $partyTwoRole }}_witness" value="1"
-                               x-model="addPartyTwoWitness"
+                        <input type="checkbox" name="add_landlord_witness" value="1"
+                               x-model="addLandlordWitness"
                                class="rounded border-slate-300 text-orange-600 focus:ring-orange-500">
-                        Add witness for {{ $partyTwoLabel }}
+                        Add witness for Landlord
                     </label>
 
-                    <div x-show="addPartyTwoWitness" x-cloak x-transition class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 pl-6 border-l-2 border-orange-200">
+                    <div x-show="addLandlordWitness" x-cloak x-transition class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 pl-6 border-l-2 border-orange-200">
                         <div>
                             <label class="block text-xs font-medium text-slate-600 mb-1">Witness Name</label>
-                            <input type="text" name="{{ $partyTwoRole }}_witness_name"
-                                   value="{{ old($partyTwoRole . '_witness_name', collect($parties)->firstWhere('role', $partyTwoRole . '_witness')['name'] ?? '') }}"
+                            <input type="text" name="landlord_witness_name"
+                                   value="{{ old('landlord_witness_name', collect($parties)->firstWhere('role', 'landlord_witness')['name'] ?? '') }}"
                                    class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="Witness full name"
-                                   :required="addPartyTwoWitness && !partyTwoNotRequired">
+                                   :required="addLandlordWitness && !landlordNotRequired">
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-slate-600 mb-1">Witness Email</label>
-                            <input type="email" name="{{ $partyTwoRole }}_witness_email"
-                                   value="{{ old($partyTwoRole . '_witness_email', collect($parties)->firstWhere('role', $partyTwoRole . '_witness')['email'] ?? '') }}"
+                            <input type="email" name="landlord_witness_email"
+                                   value="{{ old('landlord_witness_email', collect($parties)->firstWhere('role', 'landlord_witness')['email'] ?? '') }}"
                                    class="w-full rounded-lg border-slate-300 text-sm px-3 py-2" placeholder="witness@email.com"
-                                   :required="addPartyTwoWitness && !partyTwoNotRequired">
+                                   :required="addLandlordWitness && !landlordNotRequired">
                         </div>
                     </div>
                 </div>
@@ -270,8 +245,8 @@
             @foreach($parties as $party)
                 <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium
                     @if($party['role'] === 'agent') bg-blue-100 text-blue-700
-                    @elseif(in_array($party['role'], ['tenant', 'buyer'])) bg-green-100 text-green-700
-                    @elseif(in_array($party['role'], ['landlord', 'seller'])) bg-orange-100 text-orange-700
+                    @elseif($party['role'] === 'tenant') bg-green-100 text-green-700
+                    @elseif($party['role'] === 'landlord') bg-orange-100 text-orange-700
                     @else bg-purple-100 text-purple-700
                     @endif">
                     {{ ucfirst(str_replace('_', ' ', $party['role'])) }}: {{ $party['name'] }}
@@ -633,15 +608,9 @@
                 const x = ((e.clientX - rect.left) / rect.width) * 100;
                 const y = ((e.clientY - rect.top) / rect.height) * 100;
 
-                const sizes = {
-                    signature: { w: 12, h: 5 },
-                    initial:   { w: 6,  h: 4 },
-                    text:      { w: 15, h: 3 },
-                    date:      { w: 8,  h: 3 },
-                };
-                const s = sizes[type] || sizes.signature;
-                const w = s.w;
-                const h = s.h;
+                const isSmall = type === 'initial' || type === 'date';
+                const w = isSmall ? 10 : 22;
+                const h = isSmall ? 4 : 5.5;
 
                 // Clamp to page bounds
                 const cx = Math.max(0, Math.min(x - w / 2, 100 - w));

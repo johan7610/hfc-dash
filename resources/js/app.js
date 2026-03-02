@@ -1,8 +1,10 @@
 import './bootstrap';
 import './nexus-charts';
 
+// Alpine.js — synchronous import from local bundle.
+// Eliminates the CDN race condition that caused "first click fails" globally.
 import Alpine from 'alpinejs';
-
-window.Alpine = Alpine;
-
-Alpine.start();
+if (!window.Alpine) {
+    window.Alpine = Alpine;
+    Alpine.start();
+}

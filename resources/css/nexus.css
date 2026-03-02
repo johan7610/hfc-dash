@@ -52,7 +52,7 @@
     font-size: 0.875rem;
     font-weight: 500;
     color: #9ca3af;
-    transition: all 150ms ease;
+    transition: background-color 150ms ease, color 150ms ease;
     text-decoration: none;
 }
 
@@ -217,7 +217,7 @@
     font-size: 0.8125rem;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms;
+    transition: background-color 150ms, color 150ms, border-color 150ms;
     text-decoration: none;
 }
 
@@ -998,7 +998,7 @@ input[type="radio"] {
     border-radius: 0.625rem;
     font-size: 0.8125rem;
     font-weight: 600;
-    transition: all 150ms ease;
+    transition: background-color 150ms ease, color 150ms ease, transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
     outline: none;
     border: none;
     cursor: pointer;
@@ -1174,7 +1174,7 @@ input[type="radio"] {
     font-weight: 500;
     color: #8899ab;
     text-decoration: none;
-    transition: all 150ms ease;
+    transition: background-color 150ms ease, color 150ms ease, border-left-color 150ms ease;
     border-left: 2px solid transparent;
 }
 
@@ -1222,7 +1222,7 @@ input[type="radio"] {
     border: none;
     color: #6b7280;
     cursor: pointer;
-    transition: all 150ms;
+    transition: background-color 150ms, color 150ms;
     flex-shrink: 0;
 }
 
@@ -1255,7 +1255,7 @@ input[type="radio"] {
     background: none;
     border: none;
     cursor: pointer;
-    transition: all 150ms;
+    transition: background-color 150ms, color 150ms;
 }
 
 .nexus-user-dropdown-item:hover {
@@ -1280,7 +1280,7 @@ input[type="radio"] {
     font-size: 0.6875rem;
     font-weight: 600;
     cursor: pointer;
-    transition: all 150ms;
+    transition: background-color 150ms;
 }
 
 .nexus-impersonate-btn:hover {
@@ -1314,7 +1314,7 @@ input[type="radio"] {
     background: none;
     border: 1px solid transparent;
     cursor: pointer;
-    transition: all 150ms;
+    transition: background-color 150ms, border-color 150ms;
 }
 
 .nexus-switch-item:hover {

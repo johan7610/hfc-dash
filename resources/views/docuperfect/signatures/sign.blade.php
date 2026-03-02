@@ -175,16 +175,13 @@
                         {{-- Signed agent marker (shows signature/value) --}}
                         <template x-if="marker.assigned_party === 'agent' && marker.signed">
                             <div class="flex flex-col items-center justify-center w-full h-full relative">
-                                <template x-if="marker.signature_data && marker.type !== 'date' && marker.type !== 'text'">
+                                <template x-if="marker.signature_data && marker.type !== 'date'">
                                     <img :src="marker.signature_data"
                                          class="w-full h-full object-contain p-0.5"
                                          alt="Signature">
                                 </template>
                                 <template x-if="marker.type === 'date'">
-                                    <span class="text-xs font-medium" x-text="marker.text_value || marker.date_value || formatDate(new Date())"></span>
-                                </template>
-                                <template x-if="marker.type === 'text'">
-                                    <span class="text-xs font-medium truncate px-1" x-text="marker.text_value || ''"></span>
+                                    <span class="text-xs font-medium" x-text="marker.date_value || formatDate(new Date())"></span>
                                 </template>
                                 <span class="absolute -bottom-0.5 right-0.5 text-[9px] text-emerald-700 font-semibold" x-text="marker.type === 'text' ? 'Done' : 'Signed'"></span>
                             </div>
@@ -301,8 +298,7 @@ $markersJson = $allMarkers->map(function($m) {
         'signed' => $sig !== null,
         'signature_data' => $sig ? $sig->signature_data : null,
         'signature_type' => $sig ? $sig->signature_type : null,
-        'text_value' => $sig ? $sig->text_value : null,
-        'date_value' => $sig && $m->type === 'date' ? ($sig->text_value ?? $sig->signed_at) : null,
+        'date_value' => $sig && $m->type === 'date' ? $sig->signed_at : null,
     ];
 })->values();
 @endphp
@@ -457,47 +453,63 @@ function signDocument() {
             }
         },
 
-        // ── Typed signature → PNG (4× resolution for crisp compositing) ──
+        // ── Typed signature → PNG ──
         generateTypedSignature(name) {
             const canvas = this.$refs.typedCanvas;
             if (!canvas) return null;
 
-            const scale = 4;
-            canvas.width = 400 * scale;
-            canvas.height = 100 * scale;
+            canvas.width = 400;
+            canvas.height = 100;
             const ctx = canvas.getContext('2d');
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.scale(scale, scale);
             ctx.font = '48px "Dancing Script", cursive';
             ctx.fillStyle = '#000000';
             ctx.textBaseline = 'middle';
-            ctx.imageSmoothingEnabled = true;
             ctx.fillText(name, 10, 50);
 
             return canvas.toDataURL('image/png');
         },
 
-        // ── Date marker auto-sign (plain text, rendered server-side) ──
+        // ── Date marker auto-sign ──
         async signDateMarker(marker) {
             const dateStr = this.formatDate(new Date());
-            const success = await this.submitSignature(marker, null, 'typed', dateStr);
-            if (success) {
-                marker.date_value = dateStr;
-                marker.text_value = dateStr;
-            }
+            // Generate date as text on canvas
+            const canvas = document.createElement('canvas');
+            canvas.width = 200;
+            canvas.height = 40;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.font = '16px sans-serif';
+            ctx.fillStyle = '#000000';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(dateStr, 5, 20);
+
+            const dataUrl = canvas.toDataURL('image/png');
+            await this.submitSignature(marker, dataUrl, 'typed');
+            marker.date_value = dateStr;
         },
 
-        // ── Text marker input (plain text, rendered server-side) ──
+        // ── Text marker input ──
         async applyTextValue() {
             if (!this.activeMarker || !this.textInputValue.trim()) return;
             this.applying = true;
 
             const text = this.textInputValue.trim();
-            const success = await this.submitSignature(this.activeMarker, null, 'typed', text);
+            const canvas = document.createElement('canvas');
+            canvas.width = 400;
+            canvas.height = 40;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.font = '16px sans-serif';
+            ctx.fillStyle = '#000000';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 5, 20);
+
+            const dataUrl = canvas.toDataURL('image/png');
+            const success = await this.submitSignature(this.activeMarker, dataUrl, 'typed');
 
             if (success) {
-                this.activeMarker.text_value = text;
                 this.showTextModal = false;
             }
 
@@ -561,13 +573,9 @@ function signDocument() {
         },
 
         // ── Submit single signature to server ──
-        async submitSignature(marker, signatureData, signatureType, textValue = null) {
+        async submitSignature(marker, signatureData, signatureType) {
             try {
                 const url = @json(url('/docuperfect/documents')) + '/{{ $document->id }}/sign/' + marker.id;
-                const body = { signature_type: signatureType };
-                if (signatureData) body.signature_data = signatureData;
-                if (textValue) body.text_value = textValue;
-
                 const resp = await fetch(url, {
                     method: 'POST',
                     headers: {
@@ -575,7 +583,10 @@ function signDocument() {
                         'Accept': 'application/json',
                         'X-CSRF-TOKEN': @json(csrf_token()),
                     },
-                    body: JSON.stringify(body),
+                    body: JSON.stringify({
+                        signature_data: signatureData,
+                        signature_type: signatureType,
+                    }),
                 });
 
                 const data = await resp.json();

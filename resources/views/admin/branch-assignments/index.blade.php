@@ -8,11 +8,7 @@
         <div class="text-sm text-white/60">Manage branches and their per-branch settings.</div>
     </div>
 
-    @if (session('success'))
-        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 px-4 py-3 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-100">
-            {{ session('success') }}
-        </div>
-    @endif
+    {{-- Flash messages handled by global toast system --}}
 
     @if($errors->any())
         <div class="rounded-2xl border border-rose-200 bg-rose-50 text-rose-900 px-4 py-3 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-100">

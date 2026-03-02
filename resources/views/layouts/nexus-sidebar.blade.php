@@ -4,14 +4,14 @@
 
     if (str_starts_with($currentPath, 'rental')) {
         $nexusSection = 'rental-division';
-    } elseif (str_starts_with($currentPath, 'docuperfect/sales')) {
-        $nexusSection = 'sales-documents';
     } elseif (str_starts_with($currentPath, 'docuperfect')) {
         $nexusSection = 'docuperfect';
     } elseif (str_starts_with($currentPath, 'documents/library')) {
         $nexusSection = 'document-library';
     } elseif ($currentPath === 'nexus' || $currentPath === 'nexus/') {
         $nexusSection = 'dashboard';
+    } elseif (str_starts_with($currentPath, 'nexus/documents')) {
+        $nexusSection = 'documents';
     } elseif (str_starts_with($currentPath, 'nexus/compliance')) {
         $nexusSection = 'compliance';
     } elseif (str_starts_with($currentPath, 'nexus/supervision')) {
@@ -30,6 +30,8 @@
         $nexusSection = 'settings';
     } elseif (str_starts_with($currentPath, 'admin/finance')) {
         $nexusSection = 'finance-engine';
+    } elseif (str_starts_with($currentPath, 'commercial-evaluations')) {
+        $nexusSection = 'commercial-evaluations';
     } elseif (str_starts_with($currentPath, 'calculators')) {
         $nexusSection = 'calculators';
     }
@@ -78,6 +80,17 @@
             </svg>
             <span>Dashboard</span>
         </a>
+
+        {{-- Documents --}}
+        @if(!$user || $user->canAccessNexusSection('documents'))
+        <a href="{{ route('nexus.documents') }}" class="nexus-nav-item {{ $nexusSection === 'documents' ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+            </svg>
+            <span>Documents</span>
+            <svg class="nexus-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+        </a>
+        @endif
 
         {{-- Compliance --}}
         @if(!$user || $user->canAccessNexusSection('compliance'))
@@ -155,22 +168,12 @@
                 <a href="{{ route('docuperfect.templates.index') }}" class="nexus-nav-subitem {{ request()->routeIs('docuperfect.templates.*') ? 'active' : '' }}">Template Management</a>
                 @endif
                 <a href="{{ route('docuperfect.packs.index') }}" class="nexus-nav-subitem {{ request()->routeIs('docuperfect.packs.*') ? 'active' : '' }}">Packs</a>
+                <a href="{{ route('docuperfect.sales') }}" class="nexus-nav-subitem {{ request()->routeIs('docuperfect.sales*') ? 'active' : '' }}">Sales Documents</a>
                 @if($navIsAdmin)
                 <a href="{{ route('docuperfect.settings.types') }}" class="nexus-nav-subitem {{ request()->routeIs('docuperfect.settings.*') ? 'active' : '' }}">Settings</a>
                 @endif
             </div>
         </div>
-        @endif
-
-        {{-- Sales Documents (top-level link into Docuperfect sales) --}}
-        @if(\Illuminate\Support\Facades\Route::has('docuperfect.sales'))
-        <a href="{{ route('docuperfect.sales') }}" class="nexus-nav-item {{ $nexusSection === 'sales-documents' ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v7.5M12 12.75h3m-3 0h-3m-2.25 0H5.625c-.621 0-1.125-.504-1.125-1.125V4.125c0-.621.504-1.125 1.125-1.125h5.25a2.25 2.25 0 0 1 2.25 2.25v1.5m-6 9V21m0-6.75h9" />
-            </svg>
-            <span>Sales Documents</span>
-            <svg class="nexus-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
-        </a>
         @endif
 
         {{-- Rental Division (expandable group) --}}
@@ -311,6 +314,19 @@
                 <path d="M12 14v6"/>
             </svg>
             <span>Presentations</span>
+            <svg class="nexus-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m9 18 6-6-6-6"/>
+            </svg>
+        </a>
+        @endif
+
+        {{-- Commercial Evaluations (route-guarded) --}}
+        @if(\Illuminate\Support\Facades\Route::has('commercial-evaluations.index'))
+        <a href="{{ route('commercial-evaluations.index') }}" class="nexus-nav-item {{ request()->is('commercial-evaluations*') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" />
+            </svg>
+            <span>Commercial Evaluations</span>
             <svg class="nexus-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m9 18 6-6-6-6"/>
             </svg>

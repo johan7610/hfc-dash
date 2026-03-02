@@ -14,12 +14,7 @@
 
     <div class="space-y-6">
 
-        {{-- Success flash --}}
-        @if(session('success'))
-        <div class="ds-status-card" style="border-left-color: var(--ds-green);">
-            <div class="text-sm text-green-700 font-semibold">{{ session('success') }}</div>
-        </div>
-        @endif
+        {{-- Flash messages handled by global toast system --}}
 
         {{-- Filter bar --}}
         <div class="ds-status-card">

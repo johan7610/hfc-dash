@@ -28,13 +28,7 @@
         </div>
     </div>
 
-    @if(session('status'))
-        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 px-4 py-3">{{ session('status') }}</div>
-    @endif
-
-    @if(session('error'))
-        <div class="rounded-2xl border border-rose-200 bg-rose-50 text-rose-900 px-4 py-3">{{ session('error') }}</div>
-    @endif
+    {{-- Flash messages handled by global toast system --}}
 
     <div class="ds-status-card p-5">
         <h3 class="ds-section-header mb-3">Run New Audit</h3>

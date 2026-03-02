@@ -85,6 +85,7 @@
 
         /* Audit Certificate Styles */
         .audit-page {
+            page-break-before: always;
             padding: 40px 50px;
             font-size: 11px;
             color: #333;

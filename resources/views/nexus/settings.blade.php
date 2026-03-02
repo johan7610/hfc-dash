@@ -8,9 +8,7 @@
         <div class="text-sm text-white/60">System configuration and preferences.</div>
     </div>
 
-    @if(session('success'))
-        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 px-4 py-3">{{ session('success') }}</div>
-    @endif
+    {{-- Flash messages handled by global toast system --}}
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="ds-status-card p-5">

@@ -11,7 +11,9 @@
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700,800&display=swap" rel="stylesheet" />
 
-        <!-- Scripts & Styles -->
+        <!-- x-cloak: inline so it works before Vite CSS loads -->
+        <style>[x-cloak] { display: none !important; }</style>
+        <!-- Scripts & Styles (Alpine.js bundled via Vite — no external CDN) -->
         @vite(['resources/css/app.css', 'resources/css/nexus.css', 'resources/js/app.js'])
         <link rel="stylesheet" href="/css/paye-fix.css">
         @stack('head')
@@ -73,6 +75,9 @@
                 </main>
             </div>
         </div>
+
+        {{-- Global toast notifications --}}
+        <x-toast-notifications />
 
         {{-- Ellie widget (available on all pages) --}}
         @auth

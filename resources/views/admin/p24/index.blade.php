@@ -8,13 +8,7 @@
 
     <div class="max-w-7xl mx-auto px-4 py-6 space-y-6">
 
-        {{-- Flash messages --}}
-        @if(session('success'))
-            <div class="mb-4 p-3 rounded-lg bg-green-100 text-green-800 text-sm">{{ session('success') }}</div>
-        @endif
-        @if(session('error'))
-            <div class="mb-4 p-3 rounded-lg bg-red-100 text-red-800 text-sm">{{ session('error') }}</div>
-        @endif
+        {{-- Flash messages handled by global toast system --}}
 
         {{-- SECTION 1: Import Status --}}
         <div class="ds-status-card">
