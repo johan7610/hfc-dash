@@ -3,18 +3,28 @@
    ======================================== */
 
 :root {
-    --nexus-sidebar-bg: #0b2a4a;
+    /* Brand colour vars — injected per-agency via nexus.blade.php <style> tag.
+       Only the sidebar reads these. Everything else uses hardcoded values. */
+    --brand-primary:   #0b2a4a;
+    --brand-secondary: #00b4d8;
+    --brand-tertiary:  #1a4a73;
+
+    /* Sidebar-only — follow the agency brand colours */
+    --nexus-sidebar-bg: var(--brand-primary);
+    --nexus-accent:     var(--brand-secondary);
+    --nexus-mid:        var(--brand-tertiary);
+
+    /* Everything else is fixed regardless of agency */
     --nexus-sidebar-width: 240px;
-    --nexus-content-bg: #f3f4f6;
-    --nexus-accent: #00b4d8;
+    --nexus-content-bg:   #f3f4f6;
     --nexus-accent-light: #33c4e0;
-    --nexus-card-bg: #ffffff;
-    --nexus-border: #e5e7eb;
-    --nexus-text: #111827;
-    --nexus-text-muted: #6b7280;
-    --nexus-navy: #0b2a4a;
-    --nexus-cyan: #00b4d8;
-    --nexus-crimson: #c41e3a;
+    --nexus-card-bg:      #ffffff;
+    --nexus-border:       #e5e7eb;
+    --nexus-text:         #111827;
+    --nexus-text-muted:   #6b7280;
+    --nexus-navy:         #0b2a4a;
+    --nexus-cyan:         #00b4d8;
+    --nexus-crimson:      #c41e3a;
 }
 
 /* ========== Cloak ========== */
@@ -28,6 +38,8 @@
     flex-direction: column;
     height: 100vh;
     overflow-y: auto;
+    overflow-x: hidden;
+    width: 100%;
 }
 
 .nexus-sidebar-logo {
@@ -54,6 +66,16 @@
     color: #9ca3af;
     transition: background-color 150ms ease, color 150ms ease;
     text-decoration: none;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.nexus-nav-item > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
 }
 
 .nexus-nav-item:hover {
@@ -486,9 +508,9 @@
 
 /* ========== HFC Styles (moved from app.blade.php inline) ========== */
 :root {
-    --hfc-blue: #0b2a4a;
+    --hfc-blue:   #0b2a4a;
     --hfc-blue-2: #0a2340;
-    --hfc-card: #ffffff;
+    --hfc-card:   #ffffff;
     --hfc-border: rgba(255,255,255,.18);
 }
 
@@ -603,15 +625,15 @@
 
 /* ========== Dashboard Design System (Phase 2) ========== */
 :root {
-    --ds-navy: #0b2a4a;
-    --ds-cyan: #00b4d8;
+    --ds-navy:    #0b2a4a;
+    --ds-cyan:    #00b4d8;
     --ds-crimson: #c41e3a;
-    --ds-amber: #f59e0b;
-    --ds-green: #059669;
-    --ds-label: #64748b;
-    --ds-value: #0f172a;
-    --ds-border: #e2e8f0;
-    --ds-track: #e2e8f0;
+    --ds-amber:   #f59e0b;
+    --ds-green:   #059669;
+    --ds-label:   #64748b;
+    --ds-value:   #0f172a;
+    --ds-border:  #e2e8f0;
+    --ds-track:   #e2e8f0;
 }
 
 /* Section Headers */
@@ -1148,7 +1170,7 @@ input[type="radio"] {
 
 /* ========== Expandable Nav Group (Agency Tracker) ========== */
 .nexus-nav-group-toggle {
-    width: 100%;
+    width: calc(100% - 1.25rem); /* subtract the 0.625rem margin on each side from nexus-nav-item */
     text-align: left;
     cursor: pointer;
     background: none;
@@ -1156,26 +1178,29 @@ input[type="radio"] {
 }
 
 .nexus-nav-children {
-    padding-left: 0.5rem;
+    padding-left: 0.75rem;
     margin: 0.125rem 0.625rem 0.25rem;
-    border-left: 2px solid rgba(0, 180, 216, 0.3);
-    background: rgba(255, 255, 255, 0.03);
+    border-left: 2px solid rgba(0, 180, 216, 0.45);
+    background: rgba(0, 0, 0, 0.12);
     border-radius: 0 0.5rem 0.5rem 0;
-    padding-top: 0.25rem;
-    padding-bottom: 0.25rem;
+    padding-top: 0.375rem;
+    padding-bottom: 0.375rem;
 }
 
 .nexus-nav-subitem {
     display: block;
-    padding: 0.3rem 0.75rem 0.3rem 1.5rem;
+    padding: 0.3rem 0.75rem 0.3rem 1.25rem;
     margin: 0.0625rem 0.25rem;
     border-radius: 0.375rem;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 500;
-    color: #94a3b8;
+    color: #8899ab;
     text-decoration: none;
     transition: background-color 150ms ease, color 150ms ease, border-left-color 150ms ease;
     border-left: 2px solid transparent;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .nexus-nav-subitem:hover {
@@ -1232,16 +1257,16 @@ input[type="radio"] {
 }
 
 .nexus-user-dropdown {
-    position: absolute;
-    bottom: 100%;
-    left: 0.5rem;
-    right: 0.5rem;
+    position: fixed;
+    bottom: 4rem;
+    left: calc(var(--nexus-sidebar-width) + 0.5rem);
+    width: 200px;
     background: #1e293b;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 0.5rem;
+    border-radius: 0.75rem;
     padding: 0.25rem;
-    z-index: 50;
-    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
+    z-index: 200;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
 .nexus-user-dropdown-item {
@@ -1288,16 +1313,16 @@ input[type="radio"] {
 }
 
 .nexus-switch-panel {
-    position: absolute;
-    bottom: 100%;
-    left: 0.5rem;
-    right: 0.5rem;
+    position: fixed;
+    bottom: 4rem;
+    left: calc(var(--nexus-sidebar-width) + 0.5rem);
+    width: 260px;
     background: #1e293b;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 0.5rem;
+    border-radius: 0.75rem;
     padding: 0.5rem 0.25rem;
-    z-index: 50;
-    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
+    z-index: 200;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
 .nexus-switch-list {

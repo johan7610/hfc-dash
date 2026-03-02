@@ -1,11 +1,5 @@
 <?php
 
-/* IMPERSONATE_STOP_GLOBAL_2026 */
-Route::post('/admin/impersonate/stop', [\App\Http\Controllers\Admin\ImpersonateController::class, 'stop'])
-    ->middleware(['web','auth'])
-    ->name('impersonate.stop');
-
-
 use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\ProfileController;
@@ -20,7 +14,9 @@ use App\Http\Controllers\Agent\DealRegisterController;
 use App\Http\Controllers\Admin\MonthlyGoalController;
 
 Route::get('/', function () {
-    return view('welcome');
+    return auth()->check()
+        ? redirect()->route('dashboard')
+        : redirect()->route('login');
 });
 
 Route::get('/dashboard', function () {
@@ -301,6 +297,10 @@ Route::get('/bm/listings', [\App\Http\Controllers\BM\ListingStockController::cla
         Route::post('/admin/tv-code/revoke', [\App\Http\Controllers\Admin\TvCodeController::class, 'revoke'])->name('admin.tv-code.revoke');
         Route::post('/admin/tv-code/generate-company', [\App\Http\Controllers\Admin\TvCodeController::class, 'generateCompany'])->name('admin.tv-code.generate-company');
         Route::post('/admin/tv-code/revoke-company', [\App\Http\Controllers\Admin\TvCodeController::class, 'revokeCompany'])->name('admin.tv-code.revoke-company');
+
+        // Agency switcher (super admin)
+        Route::post('/agency/switch/{agency}', [\App\Http\Controllers\Admin\AgencySwitcherController::class, 'switch'])->name('agency.switch');
+        Route::post('/agency/switch/clear', [\App\Http\Controllers\Admin\AgencySwitcherController::class, 'clear'])->name('agency.switch.clear');
     });
 
     Route::middleware(['branch_manager'])->group(function () {
@@ -371,7 +371,6 @@ Route::get('/tv/branch/{branchId}', [\App\Http\Controllers\TV\BranchTvController
 Route::get('/tv', [\App\Http\Controllers\TV\TvController::class, 'index'])->name('tv.index');
 Route::post('/tv/verify', [\App\Http\Controllers\TV\TvController::class, 'verify'])->name('tv.verify');
 Route::get('/tv/display/{code}', [\App\Http\Controllers\TV\TvController::class, 'display'])->name('tv.display');
-Route::get('/tv/company/{code}', [\App\Http\Controllers\TV\TvController::class, 'companyDisplay'])->name('tv.company');
 
 
 Route::post('/worksheet/align-company-target', [\App\Http\Controllers\WorksheetController::class, 'alignToCompany'])
@@ -525,8 +524,61 @@ Route::middleware(['auth', 'verified'])->prefix('nexus')->group(function () {
         ->middleware('admin')->name('nexus.role-manager.save');
     Route::post('/role-manager/user-role', [NexusRoleManagerController::class, 'updateUserRole'])
         ->middleware('admin')->name('nexus.role-manager.user-role');
+
+    // Agency Management (super_admin only)
+    Route::middleware('super_admin')->prefix('settings/agencies')->name('agencies.')->group(function () {
+        Route::get('/',              [\App\Http\Controllers\Admin\AgencyController::class, 'index'])->name('index');
+        Route::get('/create',        [\App\Http\Controllers\Admin\AgencyController::class, 'create'])->name('create');
+        Route::post('/',             [\App\Http\Controllers\Admin\AgencyController::class, 'store'])->name('store');
+        Route::get('/{agency}/edit', [\App\Http\Controllers\Admin\AgencyController::class, 'edit'])->name('edit');
+        Route::put('/{agency}',      [\App\Http\Controllers\Admin\AgencyController::class, 'update'])->name('update');
+    });
+
+    // Properties — listing sync to website
+    Route::prefix('properties')->name('nexus.properties.')->group(function () {
+        Route::get('/',                [\App\Http\Controllers\Nexus\PropertyController::class, 'index'])->name('index');
+        Route::get('/create',          [\App\Http\Controllers\Nexus\PropertyController::class, 'create'])->name('create');
+        Route::post('/',               [\App\Http\Controllers\Nexus\PropertyController::class, 'store'])->name('store');
+        Route::get('/{property}/edit', [\App\Http\Controllers\Nexus\PropertyController::class, 'edit'])->name('edit');
+        Route::get('/{property}/ad',   [\App\Http\Controllers\Nexus\PropertyController::class, 'ad'])->name('ad');
+        Route::put('/{property}',      [\App\Http\Controllers\Nexus\PropertyController::class, 'update'])->name('update');
+        Route::delete('/{property}',   [\App\Http\Controllers\Nexus\PropertyController::class, 'destroy'])->name('destroy');
+    });
+
+    // Ad Template Builder
+    Route::prefix('ad-templates')->name('nexus.ad-templates.')->group(function () {
+        Route::get('/builder',                    [\App\Http\Controllers\Nexus\PropertyAdTemplateController::class, 'builder'])->name('builder');
+        Route::get('/builder/{template}',         [\App\Http\Controllers\Nexus\PropertyAdTemplateController::class, 'builder'])->name('builder.edit');
+        Route::post('/',                          [\App\Http\Controllers\Nexus\PropertyAdTemplateController::class, 'store'])->name('store');
+        Route::put('/{template}',                 [\App\Http\Controllers\Nexus\PropertyAdTemplateController::class, 'update'])->name('update');
+        Route::delete('/{template}',              [\App\Http\Controllers\Nexus\PropertyAdTemplateController::class, 'destroy'])->name('destroy');
+    });
 });
 
+
+// ===== COMMERCIAL EVALUATIONS =====
+Route::middleware(['auth'])->prefix('commercial-evaluations')->name('commercial-evaluations.')->group(function () {
+    Route::get('/',                                          [\App\Http\Controllers\CommercialEvaluationController::class, 'index'])            ->name('index');
+    Route::get('/create',                                   [\App\Http\Controllers\CommercialEvaluationController::class, 'create'])           ->name('create');
+    Route::post('/',                                        [\App\Http\Controllers\CommercialEvaluationController::class, 'store'])            ->name('store');
+    Route::get('/{evaluation}',                             [\App\Http\Controllers\CommercialEvaluationController::class, 'show'])             ->name('show');
+    Route::get('/{evaluation}/edit',                        [\App\Http\Controllers\CommercialEvaluationController::class, 'edit'])             ->name('edit');
+    Route::put('/{evaluation}',                             [\App\Http\Controllers\CommercialEvaluationController::class, 'update'])           ->name('update');
+    Route::delete('/{evaluation}',                          [\App\Http\Controllers\CommercialEvaluationController::class, 'destroy'])          ->name('destroy');
+    Route::post('/{evaluation}/evaluate',                   [\App\Http\Controllers\CommercialEvaluationController::class, 'evaluate'])         ->name('evaluate');
+    Route::get('/{evaluation}/pdf',                         [\App\Http\Controllers\CommercialEvaluationController::class, 'downloadPdf'])      ->name('pdf');
+    Route::post('/{evaluation}/financials',                 [\App\Http\Controllers\CommercialEvaluationController::class, 'storeFinancials'])  ->name('financials.store');
+    Route::post('/{evaluation}/comparables',                [\App\Http\Controllers\CommercialEvaluationController::class, 'storeComparable']) ->name('comparables.store');
+    Route::delete('/{evaluation}/comparables/{comparable}', [\App\Http\Controllers\CommercialEvaluationController::class, 'destroyComparable'])->name('comparables.destroy');
+    Route::post('/{evaluation}/assets',                     [\App\Http\Controllers\CommercialEvaluationController::class, 'storeAsset'])       ->name('assets.store');
+    Route::delete('/{evaluation}/assets/{asset}',           [\App\Http\Controllers\CommercialEvaluationController::class, 'destroyAsset'])     ->name('assets.destroy');
+    Route::post('/{evaluation}/units',                      [\App\Http\Controllers\CommercialEvaluationController::class, 'storeUnit'])        ->name('units.store');
+    Route::delete('/{evaluation}/units/{unit}',             [\App\Http\Controllers\CommercialEvaluationController::class, 'destroyUnit'])      ->name('units.destroy');
+    Route::post('/{evaluation}/crops',                      [\App\Http\Controllers\CommercialEvaluationController::class, 'storeCrop'])        ->name('crops.store');
+    Route::delete('/{evaluation}/crops/{crop}',             [\App\Http\Controllers\CommercialEvaluationController::class, 'destroyCrop'])      ->name('crops.destroy');
+    Route::post('/{evaluation}/livestock',                  [\App\Http\Controllers\CommercialEvaluationController::class, 'storeLivestock'])   ->name('livestock.store');
+    Route::delete('/{evaluation}/livestock/{livestock}',    [\App\Http\Controllers\CommercialEvaluationController::class, 'destroyLivestock']) ->name('livestock.destroy');
+});
 
 // ===== PRESENTATION VERSION HISTORY (P17) =====
 Route::middleware(['auth', 'admin_or_bm'])->group(function () {
@@ -546,8 +598,6 @@ Route::middleware(['auth'])->prefix('presentations')->name('presentations.')->gr
     Route::post('/',      [\App\Http\Controllers\Presentation\PresentationController::class, 'store'])  ->name('store');
 
     Route::get('/{presentation}',              [\App\Http\Controllers\Presentation\PresentationController::class, 'show'])     ->name('show');
-    Route::get('/{presentation}/edit',         [\App\Http\Controllers\Presentation\PresentationController::class, 'edit'])     ->name('edit');
-    Route::patch('/{presentation}',            [\App\Http\Controllers\Presentation\PresentationController::class, 'update'])   ->name('update');
     Route::get('/{presentation}/analysis',     [\App\Http\Controllers\Presentation\PresentationController::class, 'analysis']) ->name('analysis');
     Route::post('/{presentation}/analysis/run',[\App\Http\Controllers\Presentation\PresentationController::class, 'runAnalysis'])  ->name('analysis.run');
     Route::patch('/{presentation}/analysis-selections', [\App\Http\Controllers\Presentation\PresentationController::class, 'updateAnalysisSelections'])
@@ -644,12 +694,6 @@ Route::middleware(['auth'])->prefix('presentations')->name('presentations.')->gr
     // Live snapshot polling (B1 — zero-refresh updates)
     Route::get('/{presentation}/live-snapshot', [\App\Http\Controllers\Presentation\PortalCaptureController::class, 'liveSnapshot'])
         ->name('live-snapshot');
-
-    // Article suggestions and management
-    Route::post('/{presentation}/articles', [\App\Http\Controllers\Presentation\PresentationArticleController::class, 'add'])
-        ->name('articles.add');
-    Route::delete('/{presentation}/articles/{article}', [\App\Http\Controllers\Presentation\PresentationArticleController::class, 'remove'])
-        ->name('articles.remove');
 });
 
 // ===== DOCUPERFECT =====
@@ -732,6 +776,10 @@ Route::prefix('docuperfect')->middleware('auth')->group(function () {
         return redirect()->route('rental.signatures');
     })->name('docuperfect.rental');
 
+    // Rental Upload & Send (standalone signing flow)
+    Route::get('/rental/upload-and-send', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'showUploadAndSend'])->name('docuperfect.rental.uploadAndSend');
+    Route::post('/rental/upload-and-send', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'processUploadAndSend'])->name('docuperfect.rental.uploadAndSend.store');
+
     // ===== SIGNATURES =====
 
     // Agent approval gate
@@ -740,6 +788,9 @@ Route::prefix('docuperfect')->middleware('auth')->group(function () {
 
     // Dashboard polling
     Route::get('/rental/status-check', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'statusCheck'])->name('docuperfect.rental.statusCheck');
+
+    // Pre-signed document upload
+    Route::post('/documents/{document}/signatures/upload-presigned', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'uploadPresigned'])->name('docuperfect.signatures.uploadPresigned');
 
     // Signature setup
     Route::get('/documents/{document}/signatures/setup', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'setup'])->name('docuperfect.signatures.setup');
@@ -765,6 +816,11 @@ Route::prefix('docuperfect')->middleware('auth')->group(function () {
     Route::get('/documents/{document}/signatures/inspect/{signingRequest}', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'wetInkReview'])->name('docuperfect.signatures.wetInkReview');
     Route::post('/documents/{document}/signatures/inspect/{signingRequest}/decision', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'wetInkDecision'])->name('docuperfect.signatures.wetInkDecision');
     Route::get('/documents/{document}/signatures/inspect/{signingRequest}/file/{fileIndex}', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'wetInkFile'])->name('docuperfect.signatures.wetInkFile');
+    Route::post('/documents/{document}/signatures/inspect/{signingRequest}/upload-on-behalf', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'uploadOnBehalf'])->name('docuperfect.signatures.uploadOnBehalf');
+
+    // Supersede & Reject
+    Route::post('/documents/{document}/supersede', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'supersede'])->name('docuperfect.signatures.supersede');
+    Route::post('/documents/{document}/reject', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'reject'])->name('docuperfect.signatures.reject');
 
     // Flattened page images (authenticated)
     Route::get('/signatures/{templateId}/flattened-page/{page}', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'flattenedPageImage'])->name('docuperfect.signatures.flattenedPage');
@@ -786,6 +842,11 @@ Route::prefix('docuperfect')->middleware('auth')->group(function () {
     Route::post('/sales/recipient/{recipient}/remind', [\App\Http\Controllers\Docuperfect\SalesDocumentController::class, 'sendManualReminder'])->name('docuperfect.sales.remind');
     Route::post('/sales/{send}/approve/{recipient}', [\App\Http\Controllers\Docuperfect\SalesDocumentController::class, 'approveAndSendNext'])->name('docuperfect.sales.approve');
     Route::get('/sales/{send}/download', [\App\Http\Controllers\Docuperfect\SalesDocumentController::class, 'downloadOriginal'])->name('docuperfect.sales.download');
+    Route::post('/sales/documents/{document}/upload-signed', [\App\Http\Controllers\Docuperfect\SalesDocumentController::class, 'uploadSignedDocument'])->name('docuperfect.sales.uploadSigned');
+    Route::post('/sales/{send}/cancel', [\App\Http\Controllers\Docuperfect\SalesDocumentController::class, 'cancel'])->name('docuperfect.sales.cancel');
+    Route::get('/sales/{send}/review/{recipient}', [\App\Http\Controllers\Docuperfect\SalesDocumentController::class, 'reviewUpload'])->name('docuperfect.sales.review');
+    Route::get('/sales/{send}/recipient/{recipient}/file/{index}', [\App\Http\Controllers\Docuperfect\SalesDocumentController::class, 'serveReturnedFile'])->name('docuperfect.sales.recipientFile');
+    Route::post('/sales/{send}/upload-on-behalf/{recipient}', [\App\Http\Controllers\Docuperfect\SalesDocumentController::class, 'uploadOnBehalf'])->name('docuperfect.sales.uploadOnBehalf');
 });
 
 // ===== RENTAL DIVISION =====
@@ -814,11 +875,17 @@ Route::prefix('rental')->middleware('auth')->name('rental.')->group(function () 
         Route::post('/document-types', [\App\Http\Controllers\Rental\RentalDocumentTypeController::class, 'store'])->name('document-types.store');
         Route::put('/document-types/{type}', [\App\Http\Controllers\Rental\RentalDocumentTypeController::class, 'update'])->name('document-types.update');
         Route::post('/document-types/{type}/toggle', [\App\Http\Controllers\Rental\RentalDocumentTypeController::class, 'toggleActive'])->name('document-types.toggle');
+
+        // Reminders
+        Route::get('/reminders', [\App\Http\Controllers\Rental\RentalReminderSettingsController::class, 'index'])->name('reminders.index');
+        Route::put('/reminders', [\App\Http\Controllers\Rental\RentalReminderSettingsController::class, 'update'])->name('reminders.update');
     });
 });
 
 // ===== SALES DOCUMENT RETURN (public, no auth, token-based) =====
 Route::get('/sales-documents/return/{token}', [\App\Http\Controllers\Docuperfect\SalesDocumentController::class, 'showUploadPage'])->name('sales-documents.upload');
+Route::post('/sales-documents/return/{token}/verify', [\App\Http\Controllers\Docuperfect\SalesDocumentController::class, 'verifySalesIdentity'])->name('sales-documents.verify');
+Route::get('/sales-documents/return/{token}/download', [\App\Http\Controllers\Docuperfect\SalesDocumentController::class, 'downloadForRecipient'])->name('sales-documents.download');
 Route::post('/sales-documents/return/{token}', [\App\Http\Controllers\Docuperfect\SalesDocumentController::class, 'handleUpload'])->name('sales-documents.upload.store');
 
 // ===== EXTERNAL SIGNING (no auth, token-based) =====
@@ -834,6 +901,11 @@ Route::prefix('sign')->group(function () {
     Route::post('/{token}/decline', [\App\Http\Controllers\Docuperfect\SigningController::class, 'decline'])->name('signatures.external.decline');
     Route::get('/{token}/flattened-page/{page}', [\App\Http\Controllers\Docuperfect\SigningController::class, 'flattenedPageImage'])->name('signatures.external.flattenedPage');
 });
+
+// ===== SIGNED DOCUMENT DOWNLOAD (no auth, token-based) =====
+Route::get('/documents/download/{token}', [\App\Http\Controllers\Docuperfect\SigningController::class, 'downloadPage'])->name('signatures.download.page');
+Route::post('/documents/download/{token}/verify', [\App\Http\Controllers\Docuperfect\SigningController::class, 'downloadVerify'])->name('signatures.download.verify');
+Route::get('/documents/download/{token}/file', [\App\Http\Controllers\Docuperfect\SigningController::class, 'downloadSignedFile'])->name('signatures.download.file');
 
 // ===== DOCUMENT LIBRARY =====
 Route::middleware(['auth'])->prefix('documents')->name('documents.')->group(function () {
@@ -851,45 +923,3 @@ Route::middleware(['auth'])->prefix('documents')->name('documents.')->group(func
 // Uses auth.portal_capture: session auth OR bearer token (for Chrome extension)
 Route::middleware(['auth.portal_capture'])->post('/portal-captures/ingest', [\App\Http\Controllers\Presentation\PortalCaptureController::class, 'ingest'])
     ->name('portal-captures.ingest');
-
-// ===== COMMERCIAL MARKET EVALUATIONS =====
-Route::prefix('commercial-evaluations')->middleware('auth')->name('commercial-evaluations.')->group(function () {
-    Route::get('/',       [\App\Http\Controllers\CommercialEvaluationController::class, 'index'])  ->name('index');
-    Route::get('/create', [\App\Http\Controllers\CommercialEvaluationController::class, 'create']) ->name('create');
-    Route::post('/',      [\App\Http\Controllers\CommercialEvaluationController::class, 'store'])  ->name('store');
-
-    Route::get('/{evaluation}',      [\App\Http\Controllers\CommercialEvaluationController::class, 'show'])    ->name('show');
-    Route::get('/{evaluation}/edit', [\App\Http\Controllers\CommercialEvaluationController::class, 'edit'])    ->name('edit');
-    Route::patch('/{evaluation}',    [\App\Http\Controllers\CommercialEvaluationController::class, 'update'])  ->name('update');
-    Route::delete('/{evaluation}',   [\App\Http\Controllers\CommercialEvaluationController::class, 'destroy']) ->name('destroy');
-
-    // Financial data
-    Route::post('/{evaluation}/financials',              [\App\Http\Controllers\CommercialEvaluationController::class, 'storeFinancials'])  ->name('financials.store');
-    Route::patch('/{evaluation}/financials/{financial}', [\App\Http\Controllers\CommercialEvaluationController::class, 'updateFinancials']) ->name('financials.update');
-
-    // Comparables
-    Route::post('/{evaluation}/comparables',                [\App\Http\Controllers\CommercialEvaluationController::class, 'storeComparable'])   ->name('comparables.store');
-    Route::delete('/{evaluation}/comparables/{comparable}', [\App\Http\Controllers\CommercialEvaluationController::class, 'destroyComparable']) ->name('comparables.destroy');
-
-    // Assets (hospitality + agricultural)
-    Route::post('/{evaluation}/assets',           [\App\Http\Controllers\CommercialEvaluationController::class, 'storeAsset'])   ->name('assets.store');
-    Route::delete('/{evaluation}/assets/{asset}', [\App\Http\Controllers\CommercialEvaluationController::class, 'destroyAsset']) ->name('assets.destroy');
-
-    // Rental units (commercial + industrial)
-    Route::post('/{evaluation}/units',          [\App\Http\Controllers\CommercialEvaluationController::class, 'storeUnit'])   ->name('units.store');
-    Route::delete('/{evaluation}/units/{unit}', [\App\Http\Controllers\CommercialEvaluationController::class, 'destroyUnit']) ->name('units.destroy');
-
-    // Crops (agricultural)
-    Route::post('/{evaluation}/crops',        [\App\Http\Controllers\CommercialEvaluationController::class, 'storeCrop'])   ->name('crops.store');
-    Route::delete('/{evaluation}/crops/{crop}', [\App\Http\Controllers\CommercialEvaluationController::class, 'destroyCrop']) ->name('crops.destroy');
-
-    // Livestock (agricultural)
-    Route::post('/{evaluation}/livestock',              [\App\Http\Controllers\CommercialEvaluationController::class, 'storeLivestock'])    ->name('livestock.store');
-    Route::delete('/{evaluation}/livestock/{livestock}', [\App\Http\Controllers\CommercialEvaluationController::class, 'destroyLivestock']) ->name('livestock.destroy');
-
-    // Run evaluation (Phase 2)
-    Route::post('/{evaluation}/evaluate', [\App\Http\Controllers\CommercialEvaluationController::class, 'evaluate']) ->name('evaluate');
-
-    // PDF download (Phase 2)
-    Route::get('/{evaluation}/pdf', [\App\Http\Controllers\CommercialEvaluationController::class, 'downloadPdf']) ->name('pdf');
-});

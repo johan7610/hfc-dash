@@ -10,6 +10,19 @@ use Illuminate\Support\Facades\DB;
 class AgentPerformanceService
 {
     /**
+     * Canonical SQL CASE expression for split-aware sales value.
+     * Each deal_user row contributes: property_value × side split %.
+     * Requires deal_user and deals tables to be joined in the query.
+     */
+    public static function splitAwareSalesValueExpr(): string
+    {
+        return "CASE deal_user.side
+            WHEN 'listing' THEN deals.property_value * deals.listing_split_percent / 100.0
+            WHEN 'selling' THEN deals.property_value * deals.selling_split_percent / 100.0
+            ELSE 0 END";
+    }
+
+    /**
      * Return ONLY safe, non-private fields for an agent monthly dashboard.
      * Never return personal_net_target/business_net_target/want_net_target/etc.
      */
@@ -80,20 +93,23 @@ class AgentPerformanceService
 
 
         // --- Actuals from deals (safe) ---
-          // IMPORTANT: avoid double counting when agent appears twice (listing + selling) on same deal.
-          $dealIdsSub = DB::table('deal_user')
-              ->where('user_id', $user->id)
-              ->select('deal_id')
-              ->distinct();
+          // Split-aware: each deal_user row contributes property_value × side split %.
+          // If agent is on both sides of a deal, both contributions are summed.
+          $splitExpr = self::splitAwareSalesValueExpr();
 
-          $q = DB::query()
-              ->fromSub($dealIdsSub, 'du')
-              ->join('deals', 'deals.id', '=', 'du.deal_id')
+          $q = DB::table('deal_user')
+              ->join('deals', 'deals.id', '=', 'deal_user.deal_id')
+              ->where('deal_user.user_id', $user->id)
               ->whereBetween('deals.deal_date', [$start->toDateString(), $end->toDateString()])
-              ->whereRaw("COALESCE(deals.accepted_status,'') != 'D'") // Exclude declined deals
-              ->selectRaw('COUNT(*) as deals_count')
-              ->selectRaw('COALESCE(SUM(deals.property_value),0) as sales_value')
-              ->selectRaw('COALESCE(SUM(deals.total_commission),0) as total_commission')
+              ->whereRaw("COALESCE(deals.accepted_status,'') != 'D'")
+              ->selectRaw('COUNT(DISTINCT deal_user.deal_id) as deals_count')
+              ->selectRaw("COALESCE(SUM({$splitExpr}), 0) as sales_value")
+              ->selectRaw("COALESCE(SUM(
+                  CASE deal_user.side
+                      WHEN 'listing' THEN deals.total_commission * deals.listing_split_percent / 100.0
+                      WHEN 'selling' THEN deals.total_commission * deals.selling_split_percent / 100.0
+                      ELSE 0 END
+              ), 0) as total_commission")
               ->first();
 
           $actualDealsCount = (int)($q->deals_count ?? 0);
@@ -109,13 +125,18 @@ class AgentPerformanceService
           $effectiveCommissionPercent = $actualSalesValue > 0 ? (($commissionExVat / $actualSalesValue) * 100.0) : 0.0;
 
           // --- ALL-TIME Actuals from deals (same rules, no date filter) ---
-          $qAll = DB::query()
-              ->fromSub($dealIdsSub, 'du_all')
-              ->join('deals', 'deals.id', '=', 'du_all.deal_id')
-              ->whereRaw("COALESCE(deals.accepted_status,'') != 'D'") // Exclude declined deals
-              ->selectRaw('COUNT(*) as deals_count')
-              ->selectRaw('COALESCE(SUM(deals.property_value),0) as sales_value')
-              ->selectRaw('COALESCE(SUM(deals.total_commission),0) as total_commission')
+          $qAll = DB::table('deal_user')
+              ->join('deals', 'deals.id', '=', 'deal_user.deal_id')
+              ->where('deal_user.user_id', $user->id)
+              ->whereRaw("COALESCE(deals.accepted_status,'') != 'D'")
+              ->selectRaw('COUNT(DISTINCT deal_user.deal_id) as deals_count')
+              ->selectRaw("COALESCE(SUM({$splitExpr}), 0) as sales_value")
+              ->selectRaw("COALESCE(SUM(
+                  CASE deal_user.side
+                      WHEN 'listing' THEN deals.total_commission * deals.listing_split_percent / 100.0
+                      WHEN 'selling' THEN deals.total_commission * deals.selling_split_percent / 100.0
+                      ELSE 0 END
+              ), 0) as total_commission")
               ->first();
 
           $actualDealsCountAll = (int)($qAll->deals_count ?? 0);

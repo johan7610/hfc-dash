@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Services\Admin\CompanyPerformanceService;
+use App\Services\Agent\AgentPerformanceService;
 use App\Services\Finance\CommissionCalculator;
 use App\Services\Finance\FinanceReadModel;
 use Carbon\Carbon;
@@ -41,13 +42,14 @@ class AgentPerformanceController extends Controller
             'points'   => (float)($target->points_target ?? 0),
         ];
 
-        // Deal actuals (count + sales value) — exclude declined
+        // Deal actuals (count + sales value) — exclude declined, split-aware
+        $splitExpr = AgentPerformanceService::splitAwareSalesValueExpr();
         $dealActuals = DB::table('deal_user')
             ->join('deals','deals.id','=','deal_user.deal_id')
             ->where('deal_user.user_id', $agent->id)
             ->whereBetween('deals.deal_date', [$start->toDateString(), $end->toDateString()])
             ->whereRaw("COALESCE(deals.accepted_status,'') != 'D'")
-            ->selectRaw('COUNT(DISTINCT deal_user.deal_id) as deals_count, COALESCE(SUM(deals.property_value),0) as sales_value')
+            ->selectRaw("COUNT(DISTINCT deal_user.deal_id) as deals_count, COALESCE(SUM({$splitExpr}),0) as sales_value")
             ->first();
 
         $dealsDone  = (int)($dealActuals->deals_count ?? 0);

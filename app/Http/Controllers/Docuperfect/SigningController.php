@@ -8,6 +8,7 @@ use App\Models\Docuperfect\SignatureMarker;
 use App\Models\Docuperfect\SignatureRequest;
 use App\Services\Docuperfect\DocumentFlattener;
 use App\Services\Docuperfect\SignatureService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -105,7 +106,7 @@ class SigningController extends Controller
         $flattenedPages = $template->flattened_pages_json ?? [];
         $hasFlattened = !empty($flattenedPages);
         $pageImages = [];
-        $pageCount = $docTemplate ? $docTemplate->page_count : 0;
+        $pageCount = !empty($flattenedPages) ? count($flattenedPages) : ($docTemplate ? $docTemplate->page_count : 0);
 
         for ($n = 0; $n < $pageCount; $n++) {
             if ($hasFlattened && isset($flattenedPages[$n])) {
@@ -257,9 +258,15 @@ class SigningController extends Controller
         }
 
         $request->validate([
-            'signature_data' => 'required|string',
+            'signature_data' => 'nullable|string',
+            'text_value' => 'nullable|string|max:1000',
             'signature_type' => 'nullable|string|in:drawn,typed',
         ]);
+
+        // At least one of signature_data or text_value must be provided
+        if (!$request->input('signature_data') && !$request->input('text_value')) {
+            return response()->json(['ok' => false, 'error' => 'Signature data or text value required.'], 422);
+        }
 
         $signature = $this->signatureService->captureSignature(
             $marker,
@@ -271,6 +278,7 @@ class SigningController extends Controller
             $signingRequest,
             null,
             $request->input('signature_type', 'drawn'),
+            $request->input('text_value'),
         );
 
         // FLATTEN: Bake this signature into the page image immediately
@@ -436,11 +444,14 @@ class SigningController extends Controller
 
     /**
      * Download document for wet ink signing.
+     * Generates a PDF on-the-fly from flattened page images (which include
+     * document fields + previous signers' entries baked in), with colored
+     * annotation markers overlaid showing where this party needs to sign/initial/fill.
      */
     public function downloadForSigning($token)
     {
         $signingRequest = SignatureRequest::where('token', $token)
-            ->with(['template.document.template'])
+            ->with(['template.document.template', 'template.markers'])
             ->firstOrFail();
 
         if ($signingRequest->isExpired()) {
@@ -448,20 +459,83 @@ class SigningController extends Controller
                 ->with('error', 'Signing link has expired.');
         }
 
-        $document = $signingRequest->template->document;
-        $docTemplate = $document->template;
+        $signatureTemplate = $signingRequest->template;
+        $document = $signatureTemplate->document;
+        $docTemplate = $document->template ?? null;
 
-        if (!$docTemplate || !$docTemplate->storage_path) {
+        $flattenedPages = $signatureTemplate->flattened_pages_json ?? [];
+        if (!$docTemplate && empty($flattenedPages)) {
             return redirect()->route('signatures.external', $token)
                 ->with('error', 'Document file not available for download.');
         }
 
-        $filePath = storage_path("app/{$docTemplate->storage_path}");
+        $flattener = app(DocumentFlattener::class);
 
-        if (!file_exists($filePath)) {
-            return redirect()->route('signatures.external', $token)
-                ->with('error', 'Document file not found.');
+        // Load this party's unsigned markers for annotation overlays
+        $partyMarkers = $signatureTemplate->markers()
+            ->where('assigned_party', $signingRequest->party_role)
+            ->whereDoesntHave('signatures')
+            ->orderBy('page_number')
+            ->get();
+
+        // Create annotated temp copies with marker overlays (or fall back to plain images)
+        $annotatedPages = [];
+        $usingAnnotated = false;
+
+        if ($partyMarkers->isNotEmpty()) {
+            $annotatedPages = $flattener->createAnnotatedPages($signatureTemplate, $partyMarkers);
+            $usingAnnotated = !empty($annotatedPages);
         }
+
+        // Fall back to plain page images if no markers or annotation failed
+        if (!$usingAnnotated) {
+            $annotatedPages = [];
+        }
+        $plainPages = $flattener->getPageImages($signatureTemplate);
+
+        // Build HTML with each page image as a full-page image
+        $html = '<html><head><style>'
+            . 'body { margin: 0; padding: 0; }'
+            . '.page { page-break-after: always; text-align: center; margin: 0; padding: 0; }'
+            . '.page:last-child { page-break-after: auto; }'
+            . '.page img { width: 100%; height: auto; display: block; }'
+            . '</style></head><body>';
+
+        $pageCount = !empty($flattenedPages) ? count($flattenedPages) : ($docTemplate ? $docTemplate->page_count : 0);
+        for ($pageNum = 0; $pageNum < $pageCount; $pageNum++) {
+            // Use annotated temp image if available, otherwise plain storage image
+            if ($usingAnnotated && isset($annotatedPages[$pageNum])) {
+                $content = @file_get_contents($annotatedPages[$pageNum]);
+                $mime = 'image/png';
+            } else {
+                $storagePath = $plainPages[$pageNum] ?? null;
+                if (!$storagePath || !Storage::disk('local')->exists($storagePath)) {
+                    continue;
+                }
+                $content = Storage::disk('local')->get($storagePath);
+                $ext = strtolower(pathinfo($storagePath, PATHINFO_EXTENSION));
+                $mime = match ($ext) {
+                    'jpg', 'jpeg' => 'image/jpeg',
+                    'gif' => 'image/gif',
+                    'webp' => 'image/webp',
+                    default => 'image/png',
+                };
+            }
+
+            if (!$content) continue;
+
+            $base64 = base64_encode($content);
+            $html .= '<div class="page">'
+                . '<img src="data:' . $mime . ';base64,' . $base64 . '">'
+                . '</div>';
+        }
+
+        $html .= '</body></html>';
+
+        $pdf = Pdf::loadHTML($html);
+        $pdf->setPaper('a4', 'portrait');
+        $pdf->setOption('isRemoteEnabled', true);
+        $pdf->setOption('isHtml5ParserEnabled', true);
 
         // Update signing method
         $signingRequest->update([
@@ -469,9 +543,16 @@ class SigningController extends Controller
             'wet_ink_status' => $signingRequest->wet_ink_status ?: SignatureRequest::WET_INK_PENDING_UPLOAD,
         ]);
 
-        $filename = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', $document->name) . '_for_signing.pdf';
+        $filename = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', $document->name) . ' - For Signing.pdf';
 
-        return response()->download($filePath, $filename);
+        $response = $pdf->download($filename);
+
+        // Clean up temp annotated images
+        if ($usingAnnotated) {
+            DocumentFlattener::cleanupTempImages($annotatedPages);
+        }
+
+        return $response;
     }
 
     /**
