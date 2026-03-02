@@ -29,12 +29,12 @@
 
             {{-- Sidebar --}}
             <aside :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
-                   class="fixed inset-y-0 left-0 z-50 w-60 transform transition-transform duration-200 ease-in-out lg:relative lg:translate-x-0 lg:flex-shrink-0">
+                   class="fixed inset-y-0 left-0 z-50 w-60 transform transition-transform duration-200 ease-in-out lg:relative lg:z-10 lg:translate-x-0 lg:flex-shrink-0">
                 @include('layouts.nexus-sidebar')
             </aside>
 
             {{-- Main area --}}
-            <div class="flex-1 flex flex-col overflow-hidden min-w-0">
+            <div class="flex-1 flex flex-col overflow-hidden min-w-0 relative z-0">
                 {{-- Header --}}
                 <div class="flex items-center lg:hidden px-4 py-2 bg-white border-b border-gray-200">
                     <button @click="sidebarOpen = true" type="button" class="text-gray-500 hover:text-gray-700">

@@ -101,7 +101,7 @@ class CompanyListingStockController extends Controller
         $totalFiltered = (clone $q)->count();
 
         $avgDom = (clone $q)
-            ->selectRaw("avg(julianday(date('now')) - julianday(date(coalesce(listed_at, created_at)))) as v")
+            ->selectRaw("AVG(DATEDIFF(CURDATE(), DATE(coalesce(listed_at, created_at)))) as v")
             ->value('v');
         $avgDom = $avgDom !== null ? (int)$avgDom : 0;
 
