@@ -1,10 +1,10 @@
 /**
- * Convert a self-contained HTML file to PDF using Edge (Chromium) via puppeteer-core.
+ * Convert a self-contained HTML file to PDF using a Chromium-based browser via puppeteer-core.
  *
  * Usage: node scripts/html-to-pdf.mjs <input.html> <output.pdf>
  *
- * Uses the system-installed Microsoft Edge browser — no additional browser download required.
- * Produces output identical to Ctrl+P → Save as PDF in the browser.
+ * Set PUPPETEER_BROWSER_PATH to the browser executable path.
+ * Falls back to common Edge paths on Windows, then /usr/bin/chromium-browser on Linux.
  */
 import puppeteer from 'puppeteer-core';
 import { existsSync } from 'fs';
@@ -26,16 +26,19 @@ if (!existsSync(inputPath)) {
     process.exit(1);
 }
 
-// Locate Edge — standard install paths on Windows
-const edgePaths = [
+// Locate browser — env var first, then Windows Edge paths, then Linux Chromium
+const candidatePaths = [
+    process.env.PUPPETEER_BROWSER_PATH,
     'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
     'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-    process.env.EDGE_PATH,
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/usr/bin/google-chrome',
 ].filter(Boolean);
 
-const executablePath = edgePaths.find(p => existsSync(p));
+const executablePath = candidatePaths.find(p => existsSync(p));
 if (!executablePath) {
-    console.error('Microsoft Edge not found. Set EDGE_PATH environment variable.');
+    console.error('No Chromium-based browser found. Set PUPPETEER_BROWSER_PATH environment variable.');
     process.exit(1);
 }
 

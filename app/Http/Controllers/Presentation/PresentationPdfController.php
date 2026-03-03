@@ -147,8 +147,12 @@ class PresentationPdfController extends Controller
         $tmpPath = storage_path('app/tmp_market_analysis_' . uniqid() . '.pdf');
         $scriptPath = base_path('scripts/html-to-pdf.mjs');
 
+        $browserPath = env('PUPPETEER_BROWSER_PATH', '');
+        $envPrefix = $browserPath ? sprintf('PUPPETEER_BROWSER_PATH=%s ', escapeshellarg($browserPath)) : '';
+
         $command = sprintf(
-            'node %s %s %s 2>&1',
+            '%snode %s %s %s 2>&1',
+            $envPrefix,
             escapeshellarg(str_replace('\\', '/', $scriptPath)),
             escapeshellarg(str_replace('\\', '/', $htmlFilePath)),
             escapeshellarg(str_replace('\\', '/', $tmpPath))
@@ -159,7 +163,7 @@ class PresentationPdfController extends Controller
         if (!file_exists($tmpPath)) {
             $errorMsg = $output ?: 'unknown error';
             logger()->error('PDF generation failed', ['command' => $command, 'output' => $errorMsg]);
-            abort(500, 'PDF generation failed. Check that Node.js and Microsoft Edge are installed.');
+            abort(500, 'PDF generation failed. Check that Node.js and a Chromium-based browser are installed.');
         }
 
         return $tmpPath;
