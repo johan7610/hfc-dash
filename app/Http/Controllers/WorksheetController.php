@@ -434,8 +434,8 @@ class WorksheetController extends Controller
             ->selectRaw("
                 CASE
                     WHEN deals.accepted_status = 'D' THEN 'declined'
-                    WHEN deals.registration_date IS NOT NULL AND deals.registration_date <> '' THEN 'registered'
-                    WHEN (deals.granted_at IS NOT NULL AND deals.granted_at <> '') OR deals.accepted_status = 'G' THEN 'granted'
+                    WHEN deals.registration_date IS NOT NULL THEN 'registered'
+                    WHEN deals.granted_at IS NOT NULL OR deals.accepted_status = 'G' THEN 'granted'
                     ELSE 'pending'
                 END AS stage,
                 SUM(deal_money_lines.agent_net_ex_vat) AS agent_net_ex_vat,
@@ -484,8 +484,8 @@ class WorksheetController extends Controller
             ->whereRaw("COALESCE(deals.accepted_status,'') != 'D'")
             ->selectRaw("
                 CASE
-                    WHEN deals.registration_date IS NOT NULL AND deals.registration_date <> '' THEN 'registered'
-                    WHEN (deals.granted_at IS NOT NULL AND deals.granted_at <> '') OR deals.accepted_status = 'G' THEN 'granted'
+                    WHEN deals.registration_date IS NOT NULL THEN 'registered'
+                    WHEN deals.granted_at IS NOT NULL OR deals.accepted_status = 'G' THEN 'granted'
                     ELSE 'pending'
                 END AS stage,
                 SUM(deal_money_lines.agent_net_ex_vat) AS agent_net_ex_vat
