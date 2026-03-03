@@ -3,15 +3,7 @@
 @section('corex-content')
 
 @php
-    $docTypeLabels = [
-        'suburb_stats'   => 'Suburb Stats',
-        'suburb_sales'   => 'Suburb Sales',
-        'vicinity_sales' => 'Vicinity Sales',
-        'cma'            => 'CMA',
-        'market_article' => 'Market Article',
-        'market_report'  => 'Market Report',
-        'other'          => 'Other',
-    ];
+    $docTypeLabels = $documentTypes->pluck('label', 'key')->toArray();
 @endphp
 
 <div class="mb-6">
@@ -127,6 +119,53 @@
                 <a href="{{ route('documents.library.index', array_filter(['presentation_id' => $presentationId, 'return' => $returnUrl])) }}"
                    class="block text-center text-xs text-gray-500 hover:text-gray-700">Clear Filters</a>
             </form>
+        </div>
+
+        {{-- Manage Document Types (collapsible) --}}
+        <div class="bg-white rounded-xl shadow" x-data="{ open: false }">
+            <button @click="open = !open" type="button"
+                    class="w-full flex items-center justify-between p-4 text-left">
+                <h2 class="text-sm font-semibold text-gray-700">Manage Document Types</h2>
+                <svg class="w-4 h-4 text-gray-400 transition-transform" :class="{ 'rotate-180': open }"
+                     xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+
+            <div x-show="open" x-cloak class="px-4 pb-4">
+            <div class="space-y-1.5 mb-3">
+                @foreach($documentTypes as $dt)
+                    <div class="flex items-center gap-1.5">
+                        <form method="POST" action="{{ route('documents.library.types.update', $dt) }}" class="flex-1 flex items-center gap-1.5">
+                            @csrf
+                            @method('PUT')
+                            <input type="text" name="label" value="{{ $dt->label }}"
+                                   class="flex-1 border border-gray-300 rounded px-2 py-1 text-xs">
+                            <button type="submit" class="text-[#00b4d8] hover:text-[#0b2a4a] text-xs font-medium" title="Save">Save</button>
+                        </form>
+                        <form method="POST" action="{{ route('documents.library.types.destroy', $dt) }}"
+                              onsubmit="return confirm('Delete type \'{{ $dt->label }}\'?')">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="text-red-400 hover:text-red-600 text-xs font-medium" title="Delete">&times;</button>
+                        </form>
+                    </div>
+                @endforeach
+            </div>
+
+            <form method="POST" action="{{ route('documents.library.types.store') }}" class="flex items-center gap-1.5">
+                @csrf
+                <input type="text" name="label" placeholder="New type name..." required
+                       class="flex-1 border border-gray-300 rounded px-2 py-1 text-xs">
+                <button type="submit"
+                        class="px-2 py-1 bg-[#0b2a4a] text-white text-xs font-medium rounded hover:bg-[#081f36]">
+                    Add
+                </button>
+            </form>
+            @error('label')
+                <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+            @enderror
+            </div>
         </div>
     </div>
 

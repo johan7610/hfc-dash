@@ -917,6 +917,14 @@ Route::middleware(['auth'])->prefix('documents')->name('documents.')->group(func
         ->name('library.download');
     Route::post('/library/attach', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'attach'])
         ->name('library.attach');
+
+    // Document type management
+    Route::post('/library/types', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'storeType'])
+        ->name('library.types.store');
+    Route::put('/library/types/{documentType}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'updateType'])
+        ->name('library.types.update');
+    Route::delete('/library/types/{documentType}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'destroyType'])
+        ->name('library.types.destroy');
 });
 
 // Portal capture ingest endpoint (outside presentation prefix — extension posts here)

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Documents;
 
 use App\Http\Controllers\Controller;
 use App\Models\DocumentLibraryItem;
+use App\Models\DocumentType;
 use App\Models\Presentation;
 use App\Models\PresentationDocumentLibraryItem;
 use App\Models\User;
@@ -47,6 +48,8 @@ class DocumentLibraryController extends Controller
 
         $docTypes = DocumentLibraryItem::select('doc_type')->distinct()->orderBy('doc_type')->pluck('doc_type');
 
+        $documentTypes = DocumentType::orderBy('sort_order')->orderBy('label')->get();
+
         // Already-attached IDs for this presentation (to show checkmarks)
         $attachedIds = [];
         if ($presentation) {
@@ -55,7 +58,7 @@ class DocumentLibraryController extends Controller
 
         return view('documents.library.index', compact(
             'items', 'presentation', 'presentationId', 'returnUrl',
-            'uploaders', 'docTypes', 'attachedIds'
+            'uploaders', 'docTypes', 'attachedIds', 'documentTypes'
         ));
     }
 
@@ -137,5 +140,54 @@ class DocumentLibraryController extends Controller
         $returnUrl = $request->input('return', route('presentations.show', $presentationId) . '#documents');
 
         return redirect($returnUrl)->with('success', count($itemIds) . ' document(s) attached from library.');
+    }
+
+    public function storeType(Request $request)
+    {
+        $request->validate([
+            'label' => 'required|string|max:100',
+        ]);
+
+        $key = Str::slug($request->input('label'), '_');
+
+        if (DocumentType::where('key', $key)->exists()) {
+            return redirect()->back()->with('error', 'A document type with that name already exists.');
+        }
+
+        $maxSort = DocumentType::max('sort_order') ?? 0;
+
+        DocumentType::create([
+            'key'        => $key,
+            'label'      => trim($request->input('label')),
+            'sort_order' => $maxSort + 1,
+        ]);
+
+        return redirect()->back()->with('success', 'Document type added.');
+    }
+
+    public function updateType(Request $request, DocumentType $documentType)
+    {
+        $request->validate([
+            'label' => 'required|string|max:100',
+        ]);
+
+        $documentType->update([
+            'label' => trim($request->input('label')),
+        ]);
+
+        return redirect()->back()->with('success', 'Document type updated.');
+    }
+
+    public function destroyType(DocumentType $documentType)
+    {
+        $inUse = DocumentLibraryItem::where('doc_type', $documentType->key)->exists();
+
+        if ($inUse) {
+            return redirect()->back()->with('error', 'Cannot delete — documents are using this type. Reassign them first.');
+        }
+
+        $documentType->delete();
+
+        return redirect()->back()->with('success', 'Document type deleted.');
     }
 }
