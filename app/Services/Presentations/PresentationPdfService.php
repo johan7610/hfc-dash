@@ -1834,6 +1834,52 @@ a:hover { text-decoration: underline; }
 <?php endif // end simulator page ?>
 
 <?php // ══════════════════════════════════════════════════════════════════════
+      // SELLER PRICING CONFIRMATION (conditional — only if seller live capture exists)
+      // ══════════════════════════════════════════════════════════════════════ ?>
+<?php
+    $sellerCapture = $presentation->seller_live_capture_json;
+    if ($sellerCapture && !empty($sellerCapture['price'])):
+        $capPrice = (int) $sellerCapture['price'];
+        $capProb  = $sellerCapture['probability'] ?? '';
+        $capNet   = (int) ($sellerCapture['net_proceeds'] ?? 0);
+        $capProbStyle = match(true) {
+            str_contains(strtolower($capProb), 'very likely') => 'background:#d1fae5;color:#059669',
+            str_contains(strtolower($capProb), 'likely')      => 'background:#dcfce7;color:#16a34a',
+            str_contains(strtolower($capProb), 'possible')    => 'background:#fef3c7;color:#d97706',
+            str_contains(strtolower($capProb), 'unlikely')    => 'background:#fed7aa;color:#ea580c',
+            default                                           => 'background:#fecaca;color:#dc2626',
+        };
+?>
+<div class="page-break"></div>
+<div class="section-header">
+    <span class="section-number">&bull;</span>
+    <h2>Seller Pricing Confirmation</h2>
+</div>
+
+<div class="avoid-break" style="background:var(--bg-alt);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:18px;">
+    <p style="font-size:11px;color:var(--text-muted);margin-bottom:16px;text-transform:uppercase;letter-spacing:0.05em;">
+        Price point confirmed during listing appointment
+    </p>
+    <table>
+        <tbody>
+            <tr>
+                <td style="font-weight:600;width:180px;">Confirmed Price</td>
+                <td style="font-size:16px;font-weight:700;"><?= $zar($capPrice) ?></td>
+            </tr>
+            <tr>
+                <td style="font-weight:600;">Probability of Sale</td>
+                <td><span class="cmp-badge" style="<?= $capProbStyle ?>"><?= $esc($capProb) ?></span></td>
+            </tr>
+            <tr>
+                <td style="font-weight:600;">Estimated Net Proceeds</td>
+                <td style="font-weight:700;"><?= $zar($capNet) ?></td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+<?php endif // end seller live capture ?>
+
+<?php // ══════════════════════════════════════════════════════════════════════
       // MARKET NEWS & ARTICLES (conditional — only if articles attached)
       // ══════════════════════════════════════════════════════════════════════ ?>
 <?php
