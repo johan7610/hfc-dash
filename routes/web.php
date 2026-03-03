@@ -40,11 +40,9 @@ Route::middleware('auth')->group(function () {
 
     // Ellie (AI Assistant)
     Route::get('/ellie', [\App\Http\Controllers\EllieController::class, 'index'])
-        ->middleware('verified')
         ->name('ellie.index');
 
     Route::post('/ellie/send', [\App\Http\Controllers\EllieController::class, 'send'])
-        ->middleware('verified')
         ->name('ellie.send');
 
 
