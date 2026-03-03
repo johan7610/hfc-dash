@@ -1457,23 +1457,22 @@ class PresentationController extends Controller
         if ($annualSales < 1) $annualSales = 12;
         $monthlySalesRate = round($annualSales / 12, 2);
 
-        // Pack all data for client-side JS
-        $jsData = [
-            'asking_price'        => (int) $askingPrice,
-            'cma_lower'           => $cmaLower ? (int) $cmaLower : null,
-            'cma_middle'          => $cmaMiddle ? (int) $cmaMiddle : null,
-            'cma_upper'           => $cmaUpper ? (int) $cmaUpper : null,
-            'commission_pct'      => (float) $config['commission_pct'],
-            'transfer_cost_pct'   => (float) $config['transfer_cost_pct'],
-            'monthly_holding_cost' => (float) $config['monthly_holding_cost'],
-            'listing_prices'      => $listingPrices,
-            'monthly_sales_rate'  => $monthlySalesRate,
-            'address'             => $address,
+        // Pack all data for client-side JS (camelCase keys for JS consumption)
+        $liveData = [
+            'askingPrice'        => (int) $askingPrice,
+            'cmaLower'           => $cmaLower ? (int) $cmaLower : null,
+            'cmaMiddle'          => $cmaMiddle ? (int) $cmaMiddle : null,
+            'cmaUpper'           => $cmaUpper ? (int) $cmaUpper : null,
+            'commissionPct'      => (float) $config['commission_pct'],
+            'transferCostPct'    => (float) $config['transfer_cost_pct'],
+            'monthlyHoldingCost' => (float) $config['monthly_holding_cost'],
+            'listingPrices'      => $listingPrices,
+            'monthlySalesRate'   => $monthlySalesRate,
         ];
 
         return view('presentations.seller-live', [
             'presentation' => $presentation,
-            'jsData'       => $jsData,
+            'liveData'     => $liveData,
         ]);
     }
 

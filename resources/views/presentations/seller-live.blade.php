@@ -1,456 +1,526 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Seller Live — {{ $presentation->property_address ?? 'Presentation' }}</title>
-    <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-        body {
-            background: #0a0a0a;
-            color: #f0f0f0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        /* ── Header ── */
-        .sl-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1.25rem 2rem;
-        }
-        .sl-address {
-            font-size: 1.1rem;
-            font-weight: 500;
-            color: #a0a0a0;
-            letter-spacing: 0.02em;
-        }
-        .sl-back {
-            color: #666;
-            text-decoration: none;
-            font-size: 0.85rem;
-            padding: 0.4rem 1rem;
-            border: 1px solid #333;
-            border-radius: 6px;
-            transition: all 0.2s;
-        }
-        .sl-back:hover { color: #ccc; border-color: #555; }
-
-        /* ── Main content ── */
-        .sl-main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 0 2rem;
-            gap: 2rem;
-        }
-
-        /* ── Price display ── */
-        .sl-price {
-            font-size: 4rem;
-            font-weight: 700;
-            letter-spacing: -0.02em;
-            text-align: center;
-            transition: color 0.3s;
-        }
-        @media (max-width: 640px) { .sl-price { font-size: 2.5rem; } }
-
-        /* ── Adjustment buttons ── */
-        .sl-adjustments {
-            display: flex;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        .sl-adj-btn {
-            background: #1a1a1a;
-            border: 1px solid #333;
-            color: #ccc;
-            padding: 0.6rem 1.2rem;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.15s;
-            user-select: none;
-        }
-        .sl-adj-btn:hover { background: #252525; border-color: #555; color: #fff; }
-        .sl-adj-btn:active { transform: scale(0.96); }
-        .sl-adj-btn.sl-minus { color: #ef4444; }
-        .sl-adj-btn.sl-plus { color: #22c55e; }
-
-        /* ── Probability card ── */
-        .sl-prob-card {
-            text-align: center;
-            padding: 1.5rem 3rem;
-            background: #111;
-            border-radius: 12px;
-            border: 1px solid #222;
-            min-width: 340px;
-        }
-        .sl-prob-label {
-            font-size: 2rem;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            transition: color 0.3s;
-        }
-        .sl-prob-subtitle {
-            font-size: 0.9rem;
-            color: #666;
-            margin-bottom: 1rem;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-        }
-        .sl-prob-stats {
-            display: flex;
-            justify-content: center;
-            gap: 2.5rem;
-            margin-top: 1rem;
-        }
-        .sl-stat-value {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: #fff;
-        }
-        .sl-stat-label {
-            font-size: 0.75rem;
-            color: #666;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-        }
-
-        /* ── Net proceeds bars ── */
-        .sl-net-card {
-            width: 100%;
-            max-width: 600px;
-            background: #111;
-            border-radius: 12px;
-            border: 1px solid #222;
-            padding: 1.25rem 1.5rem;
-        }
-        .sl-net-title {
-            font-size: 0.75rem;
-            color: #666;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            margin-bottom: 1rem;
-        }
-        .sl-bar-row {
-            margin-bottom: 0.75rem;
-        }
-        .sl-bar-row:last-child { margin-bottom: 0; }
-        .sl-bar-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 0.3rem;
-        }
-        .sl-bar-label {
-            font-size: 0.8rem;
-            color: #999;
-        }
-        .sl-bar-value {
-            font-size: 0.8rem;
-            font-weight: 600;
-            color: #fff;
-        }
-        .sl-bar-track {
-            height: 24px;
-            background: #1a1a1a;
-            border-radius: 6px;
-            overflow: hidden;
-        }
-        .sl-bar-fill {
-            height: 100%;
-            border-radius: 6px;
-            transition: width 0.5s ease, background-color 0.3s;
-        }
-        .sl-bar-fill.sl-current { background: #3b82f6; }
-        .sl-bar-fill.sl-cma { background: #666; }
-        .sl-bar-fill.sl-asking { background: #444; }
-
-        /* ── Capture button ── */
-        .sl-footer {
-            padding: 1.25rem 2rem;
-            text-align: center;
-        }
-        .sl-capture-btn {
-            background: #1a1a1a;
-            border: 1px solid #333;
-            color: #ccc;
-            padding: 0.7rem 2rem;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .sl-capture-btn:hover { background: #252525; border-color: #555; color: #fff; }
-        .sl-capture-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-        .sl-capture-btn.sl-captured {
-            border-color: #22c55e;
-            color: #22c55e;
-        }
-
-        /* ── Probability colors ── */
-        .prob-very-likely  { color: #22c55e; }
-        .prob-likely       { color: #84cc16; }
-        .prob-possible     { color: #eab308; }
-        .prob-unlikely     { color: #f97316; }
-        .prob-very-unlikely { color: #ef4444; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<title>Seller Live — {{ $presentation->property_address ?? 'Property' }}</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep: #0a1628;
+    --bg-card: rgba(15, 61, 76, 0.2);
+    --card-border: rgba(26, 92, 110, 0.35);
+    --teal-primary: #1a5c6e;
+    --teal-light: #2a8a9e;
+    --teal-glow: #0ef0d4;
+    --teal-accent: #0ef0d4;
+    --text-primary: #f0f7fa;
+    --text-secondary: rgba(240, 247, 250, 0.5);
+    --text-muted: rgba(240, 247, 250, 0.3);
+    --green: #22c55e;
+    --lime: #84cc16;
+    --yellow: #eab308;
+    --orange: #f97316;
+    --red: #ef4444;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: 'DM Sans', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    top: -30%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120%;
+    height: 60%;
+    background: radial-gradient(ellipse at center, rgba(14, 240, 212, 0.06) 0%, transparent 70%);
+    pointer-events: none;
+    transition: background 1.5s ease;
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    bottom: -20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    height: 50%;
+    background: radial-gradient(ellipse at center, rgba(14, 240, 212, 0.03) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .grid-overlay {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(14, 240, 212, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(14, 240, 212, 0.02) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .container {
+    position: relative;
+    z-index: 1;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 40px;
+  }
+  .header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .property-badge { display: flex; align-items: center; gap: 12px; }
+  .property-badge .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--teal-accent);
+    box-shadow: 0 0 12px var(--teal-accent);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; box-shadow: 0 0 12px var(--teal-accent); }
+    50% { opacity: 0.5; box-shadow: 0 0 4px var(--teal-accent); }
+  }
+  .property-address {
+    font-size: 14px; font-weight: 500; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--text-secondary);
+  }
+  .back-btn {
+    padding: 8px 20px; background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+    color: var(--text-secondary); font-family: 'DM Sans', sans-serif;
+    font-size: 13px; cursor: pointer; transition: all 0.3s; text-decoration: none;
+  }
+  .back-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+  .brand-line {
+    font-size: 11px; letter-spacing: 4px; text-transform: uppercase;
+    color: var(--text-muted); text-align: center; margin-bottom: 10px;
+  }
+  .price-section { text-align: center; margin-bottom: 14px; }
+  .price-label {
+    font-size: 12px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--text-muted); margin-bottom: 4px;
+  }
+  .price-display {
+    font-family: 'Playfair Display', serif; font-weight: 900;
+    font-size: 64px; letter-spacing: -1px; transition: color 0.6s ease;
+    position: relative; display: inline-block;
+  }
+  .price-display .currency {
+    font-size: 36px; font-weight: 700; vertical-align: top;
+    margin-right: 4px; opacity: 0.6; position: relative; top: 10px;
+  }
+  .price-glow {
+    position: absolute; inset: -20px -40px; border-radius: 20px;
+    filter: blur(40px); opacity: 0.15; transition: background 0.8s ease;
+    pointer-events: none; z-index: -1;
+  }
+  .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+  .adj-btn {
+    padding: 12px 22px; border-radius: 12px; font-family: 'DM Sans', sans-serif;
+    font-weight: 600; font-size: 15px; cursor: pointer; transition: all 0.25s ease;
+    position: relative; overflow: hidden;
+  }
+  .adj-btn.decrease {
+    background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5;
+  }
+  .adj-btn.decrease:hover {
+    background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.5);
+    color: #fecaca; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(239, 68, 68, 0.15);
+  }
+  .adj-btn.increase {
+    background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); color: #86efac;
+  }
+  .adj-btn.increase:hover {
+    background: rgba(34, 197, 94, 0.2); border-color: rgba(34, 197, 94, 0.5);
+    color: #bbf7d0; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(34, 197, 94, 0.15);
+  }
+  .adj-btn:active { transform: translateY(0) scale(0.97); }
+  .content-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+    width: 100%; max-width: 960px; flex: 1; min-height: 0;
+  }
+  .prob-card {
+    background: var(--bg-card); border: 1px solid var(--card-border);
+    border-radius: 20px; padding: 24px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; position: relative;
+    overflow: hidden; backdrop-filter: blur(10px);
+  }
+  .prob-card::before {
+    content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 80%; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--teal-accent), transparent); opacity: 0.3;
+  }
+  .prob-label-small {
+    font-size: 11px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--text-muted); margin-bottom: 10px;
+  }
+  .gauge-container { width: 180px; height: 110px; position: relative; margin-bottom: 12px; }
+  .gauge-svg { width: 100%; height: 100%; }
+  .gauge-bg { fill: none; stroke: rgba(255,255,255,0.05); stroke-width: 12; stroke-linecap: round; }
+  .gauge-fill {
+    fill: none; stroke-width: 12; stroke-linecap: round;
+    transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.6s ease;
+    filter: drop-shadow(0 0 8px currentColor);
+  }
+  .gauge-glow {
+    fill: none; stroke-width: 20; stroke-linecap: round; opacity: 0.15;
+    transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.6s ease;
+  }
+  .prob-text {
+    font-family: 'Playfair Display', serif; font-weight: 800; font-size: 28px;
+    letter-spacing: 2px; text-transform: uppercase; text-align: center;
+    transition: color 0.6s ease; animation: prob-enter 0.5s ease;
+  }
+  @keyframes prob-enter {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  .stats-row { display: flex; gap: 40px; margin-top: 16px; }
+  .stat-item { text-align: center; }
+  .stat-value {
+    font-family: 'Playfair Display', serif; font-weight: 700;
+    font-size: 28px; color: var(--text-primary); line-height: 1;
+  }
+  .stat-label {
+    font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--text-muted); margin-top: 6px;
+  }
+  .proceeds-card {
+    background: var(--bg-card); border: 1px solid var(--card-border);
+    border-radius: 20px; padding: 24px; display: flex; flex-direction: column;
+    position: relative; overflow: hidden; backdrop-filter: blur(10px);
+  }
+  .proceeds-card::before {
+    content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 80%; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--teal-accent), transparent); opacity: 0.3;
+  }
+  .proceeds-title {
+    font-size: 11px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--text-muted); margin-bottom: 20px;
+  }
+  .bar-group {
+    margin-bottom: 16px; flex: 1; display: flex; flex-direction: column;
+    justify-content: center; gap: 16px;
+  }
+  .bar-item { position: relative; }
+  .bar-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .bar-label { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+  .bar-label.active { color: var(--teal-accent); font-weight: 600; }
+  .bar-value {
+    font-family: 'Playfair Display', serif; font-weight: 700;
+    font-size: 18px; transition: color 0.6s ease;
+  }
+  .bar-value.active { color: var(--teal-accent); }
+  .bar-track {
+    height: 8px; background: rgba(255,255,255,0.05);
+    border-radius: 4px; overflow: hidden; position: relative;
+  }
+  .bar-fill {
+    height: 100%; border-radius: 4px;
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1), background 0.6s ease;
+    position: relative;
+  }
+  .bar-fill.active {
+    background: linear-gradient(90deg, var(--teal-primary), var(--teal-accent));
+    box-shadow: 0 0 16px rgba(14, 240, 212, 0.3);
+  }
+  .bar-fill.reference { background: rgba(255,255,255,0.15); }
+  .capture-section {
+    width: 100%; max-width: 960px; display: flex;
+    justify-content: center; padding: 12px 0;
+  }
+  .capture-btn {
+    padding: 14px 40px;
+    background: linear-gradient(135deg, var(--teal-primary), var(--teal-light));
+    border: 1px solid rgba(14, 240, 212, 0.3); border-radius: 14px;
+    color: var(--text-primary); font-family: 'DM Sans', sans-serif;
+    font-weight: 600; font-size: 15px; letter-spacing: 1px;
+    cursor: pointer; transition: all 0.3s ease; position: relative; overflow: hidden;
+  }
+  .capture-btn::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(135deg, transparent, rgba(14, 240, 212, 0.2));
+    opacity: 0; transition: opacity 0.3s;
+  }
+  .capture-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgba(14, 240, 212, 0.2);
+    border-color: var(--teal-accent);
+  }
+  .capture-btn:hover::before { opacity: 1; }
+  .capture-btn:active { transform: translateY(0) scale(0.98); }
+  .capture-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+  .capture-btn.captured {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.4); color: #86efac;
+  }
+  @media (max-width: 768px) {
+    .container { padding: 12px 16px; }
+    .price-display { font-size: 42px; }
+    .price-display .currency { font-size: 24px; top: 4px; }
+    .content-grid { grid-template-columns: 1fr; gap: 12px; }
+    .controls { gap: 4px; flex-wrap: wrap; }
+    .adj-btn { padding: 8px 14px; font-size: 13px; }
+    .gauge-container { width: 150px; height: 95px; }
+    .stats-row { gap: 24px; }
+    .stat-value { font-size: 22px; }
+    .prob-text { font-size: 22px; }
+  }
+</style>
 </head>
 <body>
-
-    <div class="sl-header">
-        <div class="sl-address" id="slAddress"></div>
-        <a href="{{ route('presentations.show', $presentation) }}" class="sl-back">Back</a>
+<div class="grid-overlay"></div>
+<div class="container">
+  <div class="header">
+    <div class="property-badge">
+      <div class="dot"></div>
+      <span class="property-address">{{ $presentation->property_address ?? 'Property' }}</span>
     </div>
-
-    <div class="sl-main">
-        <!-- Price Display -->
-        <div class="sl-price" id="slPrice"></div>
-
-        <!-- Adjustment Buttons -->
-        <div class="sl-adjustments">
-            <button class="sl-adj-btn sl-minus" onclick="adjustPrice(-100000)">-100k</button>
-            <button class="sl-adj-btn sl-minus" onclick="adjustPrice(-50000)">-50k</button>
-            <button class="sl-adj-btn sl-minus" onclick="adjustPrice(-10000)">-10k</button>
-            <button class="sl-adj-btn sl-plus"  onclick="adjustPrice(10000)">+10k</button>
-            <button class="sl-adj-btn sl-plus"  onclick="adjustPrice(50000)">+50k</button>
-            <button class="sl-adj-btn sl-plus"  onclick="adjustPrice(100000)">+100k</button>
-        </div>
-
-        <!-- Probability Card -->
-        <div class="sl-prob-card">
-            <div class="sl-prob-subtitle">Probability of Sale</div>
-            <div class="sl-prob-label" id="slProbLabel"></div>
-            <div class="sl-prob-stats">
-                <div>
-                    <div class="sl-stat-value" id="slCompeting">0</div>
-                    <div class="sl-stat-label">Competing Listings</div>
-                </div>
-                <div>
-                    <div class="sl-stat-value" id="slMonths">0</div>
-                    <div class="sl-stat-label">Est. Months to Sell</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Net Proceeds Comparison -->
-        <div class="sl-net-card">
-            <div class="sl-net-title">Net Proceeds Comparison</div>
-
-            <div class="sl-bar-row">
-                <div class="sl-bar-header">
-                    <span class="sl-bar-label">At this price</span>
-                    <span class="sl-bar-value" id="slNetCurrent"></span>
-                </div>
-                <div class="sl-bar-track">
-                    <div class="sl-bar-fill sl-current" id="slBarCurrent"></div>
-                </div>
-            </div>
-
-            <div class="sl-bar-row">
-                <div class="sl-bar-header">
-                    <span class="sl-bar-label">At CMA Middle</span>
-                    <span class="sl-bar-value" id="slNetCma"></span>
-                </div>
-                <div class="sl-bar-track">
-                    <div class="sl-bar-fill sl-cma" id="slBarCma"></div>
-                </div>
-            </div>
-
-            <div class="sl-bar-row">
-                <div class="sl-bar-header">
-                    <span class="sl-bar-label">At Asking Price</span>
-                    <span class="sl-bar-value" id="slNetAsking"></span>
-                </div>
-                <div class="sl-bar-track">
-                    <div class="sl-bar-fill sl-asking" id="slBarAsking"></div>
-                </div>
-            </div>
-        </div>
+    <a class="back-btn" href="{{ route('presentations.show', $presentation) }}">&larr; Back</a>
+  </div>
+  <div class="brand-line">Home Finders Coastal</div>
+  <div class="price-section">
+    <div class="price-label">Asking Price</div>
+    <div class="price-display" id="priceDisplay">
+      <div class="price-glow" id="priceGlow"></div>
+      <span class="currency">R</span><span id="priceValue"></span>
     </div>
-
-    <div class="sl-footer">
-        <button class="sl-capture-btn" id="slCaptureBtn" onclick="capturePrice()">
-            Capture &amp; Include in Pack
-        </button>
+  </div>
+  <div class="controls">
+    <button class="adj-btn decrease" onclick="adjustPrice(-100000)">&minus;100k</button>
+    <button class="adj-btn decrease" onclick="adjustPrice(-50000)">&minus;50k</button>
+    <button class="adj-btn decrease" onclick="adjustPrice(-10000)">&minus;10k</button>
+    <button class="adj-btn increase" onclick="adjustPrice(10000)">+10k</button>
+    <button class="adj-btn increase" onclick="adjustPrice(50000)">+50k</button>
+    <button class="adj-btn increase" onclick="adjustPrice(100000)">+100k</button>
+  </div>
+  <div class="content-grid">
+    <div class="prob-card">
+      <div class="prob-label-small">Probability of Sale</div>
+      <div class="gauge-container">
+        <svg class="gauge-svg" viewBox="0 0 220 130">
+          <path class="gauge-bg" d="M 20 120 A 90 90 0 0 1 200 120" />
+          <path class="gauge-glow" id="gaugeGlow" d="M 20 120 A 90 90 0 0 1 200 120"
+            stroke-dasharray="283" stroke-dashoffset="283" />
+          <path class="gauge-fill" id="gaugeFill" d="M 20 120 A 90 90 0 0 1 200 120"
+            stroke-dasharray="283" stroke-dashoffset="283" />
+        </svg>
+      </div>
+      <div class="prob-text" id="probText"></div>
+      <div class="stats-row">
+        <div class="stat-item">
+          <div class="stat-value" id="competingCount">0</div>
+          <div class="stat-label">Competing</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="estMonths">0</div>
+          <div class="stat-label">Est. Months</div>
+        </div>
+      </div>
     </div>
+    <div class="proceeds-card">
+      <div class="proceeds-title">Net Proceeds Comparison</div>
+      <div class="bar-group">
+        <div class="bar-item">
+          <div class="bar-header">
+            <span class="bar-label active">At This Price</span>
+            <span class="bar-value active" id="netCurrent"></span>
+          </div>
+          <div class="bar-track">
+            <div class="bar-fill active" id="barCurrent" style="width: 0%"></div>
+          </div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-header">
+            <span class="bar-label">At CMA Middle</span>
+            <span class="bar-value" id="netCma" style="color: var(--text-secondary)"></span>
+          </div>
+          <div class="bar-track">
+            <div class="bar-fill reference" id="barCma" style="width: 0%"></div>
+          </div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-header">
+            <span class="bar-label">At Asking Price</span>
+            <span class="bar-value" id="netAsking" style="color: var(--text-secondary)"></span>
+          </div>
+          <div class="bar-track">
+            <div class="bar-fill reference" id="barAsking" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="capture-section">
+    <button class="capture-btn" id="captureBtn" onclick="capturePrice()">
+      Capture &amp; Include in Presentation
+    </button>
+  </div>
+</div>
 
-    <script>
-        // ── Data from server ──
-        const DATA = @json($jsData);
+<script>
+  // Data from Laravel controller ($liveData)
+  const DATA = @json($liveData);
 
-        const CAPTURE_URL = @json(route('presentations.seller-live.capture', $presentation));
-        const CSRF_TOKEN  = document.querySelector('meta[name="csrf-token"]').content;
+  let currentPrice = DATA.askingPrice || 0;
 
-        // ── State ──
-        let currentPrice = DATA.asking_price || 0;
+  // Pre-computed reference values (fixed on page load)
+  const cmaMiddleNet = DATA.cmaMiddle ? calcNet(DATA.cmaMiddle) : null;
+  const askingNet    = DATA.askingPrice ? calcNet(DATA.askingPrice) : null;
 
-        // ── Pre-computed reference values (fixed on load) ──
-        const cmaMiddleNet = DATA.cma_middle ? computeNet(DATA.cma_middle) : null;
-        const askingNet    = DATA.asking_price ? computeNet(DATA.asking_price) : null;
+  // ── Competing count: listings with list_price <= price (matches PricingSimulatorService) ──
+  function competingCount(price) {
+    let count = 0;
+    const prices = DATA.listingPrices || [];
+    for (let i = 0; i < prices.length; i++) {
+      if (prices[i] <= price) count++;
+    }
+    return count;
+  }
 
-        // ── Formatting ──
-        function formatZar(val) {
-            if (val == null) return '—';
-            const neg = val < 0;
-            const abs = Math.abs(Math.round(val));
-            const str = abs.toLocaleString('en-ZA');
-            return (neg ? '-R ' : 'R ') + str;
-        }
+  // ── Est months: (competing+1)/monthlySalesRate, capped at 12, rounded to 1dp ──
+  function estMonthsCalc(competing) {
+    const rate = DATA.monthlySalesRate || 1;
+    if (rate <= 0) return 12;
+    let months = (competing + 1) / rate;
+    if (months > 12) months = 12;
+    return Math.round(months * 10) / 10;
+  }
 
-        // ── Competing count ──
-        function competingCount(price) {
-            let count = 0;
-            for (let i = 0; i < DATA.listing_prices.length; i++) {
-                if (DATA.listing_prices[i] <= price) count++;
-            }
-            return count;
-        }
+  // ── Net proceeds: matches PricingSimulatorService exactly (Math.round on intermediates) ──
+  function calcNet(price) {
+    const competing  = competingCount(price);
+    const months     = estMonthsCalc(competing);
+    const commission = Math.round(price * (DATA.commissionPct || 0) / 100);
+    const transfer   = Math.round(price * (DATA.transferCostPct || 0) / 100);
+    const holding    = Math.round(months * (DATA.monthlyHoldingCost || 0));
+    return price - commission - transfer - holding;
+  }
 
-        // ── Est months ──
-        function estMonths(competing) {
-            if (!DATA.monthly_sales_rate || DATA.monthly_sales_rate <= 0) return 12;
-            let months = (competing + 1) / DATA.monthly_sales_rate;
-            if (months > 12) months = 12;
-            return Math.round(months * 10) / 10;
-        }
+  // ── Probability: same thresholds as PricingSimulatorService::probabilityLabel() ──
+  function getProb(price) {
+    const cl = DATA.cmaLower || 0, cm = DATA.cmaMiddle || 0, cu = DATA.cmaUpper || 0;
+    if (cl && price <= cl) return { label: 'VERY LIKELY', color: 'var(--green)', pct: 95 };
+    if (cm && price <= cm) return { label: 'LIKELY', color: 'var(--lime)', pct: 75 };
+    if (cu && price <= cu) return { label: 'POSSIBLE', color: 'var(--yellow)', pct: 50 };
+    if (cu && price <= cu * 1.10) return { label: 'UNLIKELY', color: 'var(--orange)', pct: 25 };
+    return { label: 'VERY UNLIKELY', color: 'var(--red)', pct: 8 };
+  }
 
-        // ── Compute net proceeds for a given price ──
-        function computeNet(price) {
-            const competing = competingCount(price);
-            const months = estMonths(competing);
-            const commission = Math.round(price * DATA.commission_pct / 100);
-            const transfer   = Math.round(price * DATA.transfer_cost_pct / 100);
-            const holding    = Math.round(months * DATA.monthly_holding_cost);
-            return price - commission - transfer - holding;
-        }
+  // ── ZAR formatting: R 1 850 000 ──
+  function formatR(n) {
+    if (n == null) return '\u2014';
+    const neg = n < 0;
+    const str = Math.abs(Math.round(n)).toLocaleString('en-ZA');
+    return (neg ? '-R ' : 'R ') + str;
+  }
 
-        // ── Probability label ──
-        function probabilityLabel(price) {
-            if (DATA.cma_lower  && price <= DATA.cma_lower)          return 'Very Likely';
-            if (DATA.cma_middle && price <= DATA.cma_middle)         return 'Likely';
-            if (DATA.cma_upper  && price <= DATA.cma_upper)          return 'Possible';
-            if (DATA.cma_upper  && price <= DATA.cma_upper * 1.10)   return 'Unlikely';
-            return 'Very Unlikely';
-        }
+  function adjustPrice(amount) {
+    currentPrice = Math.max(0, currentPrice + amount);
+    updateDisplay();
+  }
 
-        // ── Probability CSS class ──
-        function probClass(label) {
-            const map = {
-                'Very Likely':   'prob-very-likely',
-                'Likely':        'prob-likely',
-                'Possible':      'prob-possible',
-                'Unlikely':      'prob-unlikely',
-                'Very Unlikely': 'prob-very-unlikely',
-            };
-            return map[label] || '';
-        }
+  function updateDisplay() {
+    const prob = getProb(currentPrice);
+    const competing = competingCount(currentPrice);
+    const months = estMonthsCalc(competing);
+    const net = calcNet(currentPrice);
 
-        // ── Update everything ──
-        function update() {
-            if (currentPrice < 0) currentPrice = 0;
+    // Price display
+    document.getElementById('priceValue').textContent =
+      Math.round(currentPrice).toLocaleString('en-ZA');
+    document.getElementById('priceDisplay').style.color = prob.color;
+    document.getElementById('priceGlow').style.background = prob.color;
 
-            const competing = competingCount(currentPrice);
-            const months    = estMonths(competing);
-            const netNow    = computeNet(currentPrice);
-            const prob      = probabilityLabel(currentPrice);
-            const cls       = probClass(prob);
+    // Gauge arc
+    const arcLen = 283;
+    const offset = arcLen - (arcLen * prob.pct / 100);
+    document.getElementById('gaugeFill').style.strokeDashoffset = offset;
+    document.getElementById('gaugeFill').style.stroke = prob.color;
+    document.getElementById('gaugeGlow').style.strokeDashoffset = offset;
+    document.getElementById('gaugeGlow').style.stroke = prob.color;
 
-            // Price
-            document.getElementById('slPrice').textContent = formatZar(currentPrice);
-            document.getElementById('slPrice').className = 'sl-price ' + cls;
+    // Probability label
+    const probEl = document.getElementById('probText');
+    probEl.textContent = prob.label;
+    probEl.style.color = prob.color;
+    probEl.style.animation = 'none';
+    probEl.offsetHeight; // force reflow
+    probEl.style.animation = 'prob-enter 0.4s ease';
 
-            // Probability
-            const probEl = document.getElementById('slProbLabel');
-            probEl.textContent = prob;
-            probEl.className = 'sl-prob-label ' + cls;
+    // Stats
+    document.getElementById('competingCount').textContent = competing;
+    document.getElementById('estMonths').textContent = months.toFixed(1);
 
-            // Stats
-            document.getElementById('slCompeting').textContent = competing;
-            document.getElementById('slMonths').textContent = months;
+    // Net proceeds bars
+    const vals = [net];
+    if (cmaMiddleNet != null) vals.push(cmaMiddleNet);
+    if (askingNet != null) vals.push(askingNet);
+    const maxNet = Math.max(...vals.map(function(v) { return Math.max(v, 0); }), 1);
 
-            // Net proceeds bars
-            const vals = [netNow];
-            if (cmaMiddleNet != null) vals.push(cmaMiddleNet);
-            if (askingNet != null) vals.push(askingNet);
-            const maxNet = Math.max(...vals.map(v => Math.max(v, 0)), 1);
+    document.getElementById('netCurrent').textContent = formatR(net);
+    document.getElementById('barCurrent').style.width = Math.max(net / maxNet * 100, 0) + '%';
 
-            document.getElementById('slNetCurrent').textContent = formatZar(netNow);
-            document.getElementById('slBarCurrent').style.width = Math.max((netNow / maxNet) * 100, 0) + '%';
+    if (cmaMiddleNet != null) {
+      document.getElementById('netCma').textContent = formatR(cmaMiddleNet);
+      document.getElementById('barCma').style.width = Math.max(cmaMiddleNet / maxNet * 100, 0) + '%';
+    } else {
+      document.getElementById('netCma').textContent = '\u2014';
+      document.getElementById('barCma').style.width = '0%';
+    }
 
-            if (cmaMiddleNet != null) {
-                document.getElementById('slNetCma').textContent = formatZar(cmaMiddleNet);
-                document.getElementById('slBarCma').style.width = Math.max((cmaMiddleNet / maxNet) * 100, 0) + '%';
-            } else {
-                document.getElementById('slNetCma').textContent = '—';
-                document.getElementById('slBarCma').style.width = '0%';
-            }
+    if (askingNet != null) {
+      document.getElementById('netAsking').textContent = formatR(askingNet);
+      document.getElementById('barAsking').style.width = Math.max(askingNet / maxNet * 100, 0) + '%';
+    } else {
+      document.getElementById('netAsking').textContent = '\u2014';
+      document.getElementById('barAsking').style.width = '0%';
+    }
+  }
 
-            if (askingNet != null) {
-                document.getElementById('slNetAsking').textContent = formatZar(askingNet);
-                document.getElementById('slBarAsking').style.width = Math.max((askingNet / maxNet) * 100, 0) + '%';
-            } else {
-                document.getElementById('slNetAsking').textContent = '—';
-                document.getElementById('slBarAsking').style.width = '0%';
-            }
-        }
+  function capturePrice() {
+    const prob = getProb(currentPrice);
+    const net = calcNet(currentPrice);
+    const btn = document.getElementById('captureBtn');
+    const token = document.querySelector('meta[name="csrf-token"]').content;
 
-        // ── Price adjustment ──
-        function adjustPrice(delta) {
-            currentPrice += delta;
-            update();
-        }
+    btn.disabled = true;
+    btn.textContent = 'Saving\u2026';
 
-        // ── Capture ──
-        async function capturePrice() {
-            const btn = document.getElementById('slCaptureBtn');
-            btn.disabled = true;
-            btn.textContent = 'Saving...';
+    fetch('{{ route("presentations.seller-live.capture", $presentation) }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
+      body: JSON.stringify({ price: Math.round(currentPrice), probability: prob.label, net_proceeds: Math.round(net) })
+    }).then(function(r) {
+      if (r.ok) {
+        btn.classList.add('captured');
+        btn.textContent = '\u2713 Captured at ' + formatR(currentPrice);
+      } else {
+        btn.textContent = 'Error \u2014 try again';
+        btn.disabled = false;
+      }
+    }).catch(function() {
+      btn.textContent = 'Error \u2014 try again';
+      btn.disabled = false;
+    });
+  }
 
-            try {
-                const resp = await fetch(CAPTURE_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': CSRF_TOKEN,
-                        'Accept': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        price: currentPrice,
-                        probability: probabilityLabel(currentPrice),
-                        net_proceeds: computeNet(currentPrice),
-                    }),
-                });
-
-                const data = await resp.json();
-                if (data.success) {
-                    btn.textContent = 'Captured \u2713 ' + formatZar(currentPrice);
-                    btn.classList.add('sl-captured');
-                } else {
-                    btn.textContent = 'Error — try again';
-                    btn.disabled = false;
-                }
-            } catch (e) {
-                btn.textContent = 'Error — try again';
-                btn.disabled = false;
-            }
-        }
-
-        // ── Init ──
-        document.getElementById('slAddress').textContent = DATA.address;
-        update();
-    </script>
+  // Init
+  updateDisplay();
+</script>
 </body>
 </html>
