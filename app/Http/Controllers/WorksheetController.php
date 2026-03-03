@@ -350,7 +350,9 @@ class WorksheetController extends Controller
         $deals = DB::query()
             ->fromSub($dealIdsSub, 'du')
             ->join('deals', 'deals.id', '=', 'du.deal_id')
-->whereBetween('deals.deal_date', [$start->toDateString(), $end->toDateString()])
+            ->whereNotNull('deals.deal_date')
+            ->where('deals.deal_date', '!=', '')
+            ->whereBetween('deals.deal_date', [$start->toDateString(), $end->toDateString()])
             ->select([
                 'deals.id',
                 'deals.property_value',
@@ -428,7 +430,9 @@ class WorksheetController extends Controller
         $stageMoney = DB::table('deal_money_lines')
             ->join('deals', 'deals.id', '=', 'deal_money_lines.deal_id')
             ->where('deal_money_lines.user_id', $userId)
-->whereBetween('deals.deal_date', [$start->toDateString(), $end->toDateString()])
+            ->whereNotNull('deals.deal_date')
+            ->where('deals.deal_date', '!=', '')
+            ->whereBetween('deals.deal_date', [$start->toDateString(), $end->toDateString()])
             ->selectRaw("
                 CASE
                     WHEN deals.accepted_status = 'D' THEN 'declined'
