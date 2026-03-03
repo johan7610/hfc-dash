@@ -1,6 +1,6 @@
-@extends('layouts.ellie')
+@extends('layouts.corex')
 
-@section('content')
+@section('corex-content')
 @php
   $archived = (string)request()->get('archived') === '1';
   $conversation = $conversation ?? ($activeConversation ?? null);
@@ -9,7 +9,7 @@
 
 <style>
   /* ELLIE_CHATGPT_UI_2026 — do NOT rely on Tailwind build output */
-  .ellie-app { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+  .ellie-app { height: calc(100vh - 130px); min-height: 400px; display: flex; flex-direction: column; }
   .ellie-top { display:flex; align-items:center; gap:12px; margin-bottom: 14px; flex: 0 0 auto; }
   .ellie-top img { width: 36px; height: 36px; border-radius: 9999px; }
 
@@ -51,11 +51,11 @@
 
 <div class="ellie-app">
 
-  <div class="ellie-top" style="color: rgba(255,255,255,0.95);">
+  <div class="ellie-top">
     <img src="/images/ellie-32-circle.png" alt="Ellie">
     <div>
-      <div style="font-weight:800; font-size:18px;">Ellie, Your AI Assistant</div>
-      <div style="font-size:12px; opacity:0.75;">Logged in as {{ auth()->user()->name }}</div>
+      <div style="font-weight:800; font-size:18px; color:#0f172a;">Ellie, Your AI Assistant</div>
+      <div style="font-size:12px; opacity:0.6; color:#0f172a;">Logged in as {{ auth()->user()->name }}</div>
     </div>
   </div>
 
@@ -131,7 +131,7 @@
               {{ $m->content }}
             </div>
           @empty
-            <div style="opacity:0.75;">Hi 👋 I’m Ellie. Ask me anything about your performance, targets, listings, or next actions.</div>
+            <div style="opacity:0.75;">Hi 👋 I'm Ellie. Ask me anything about your performance, targets, listings, or next actions.</div>
           @endforelse
         </div>
       </div>

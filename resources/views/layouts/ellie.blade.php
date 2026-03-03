@@ -36,7 +36,7 @@
   <body class="font-sans antialiased h-screen overflow-hidden">
     <div class="ellie-shell hfc-shell">
       <aside class="ellie-aside shrink-0">
-        <div class="ellie-aside-inner">@include('layouts.sidebar')</div>
+        <div class="ellie-aside-inner">@include('layouts.corex-sidebar')</div>
       </aside>
 
       <main class="ellie-main">
