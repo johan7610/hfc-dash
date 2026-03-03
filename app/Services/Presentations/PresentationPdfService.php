@@ -60,6 +60,12 @@ class PresentationPdfService
         $agent = \App\Models\User::find($presentation->created_by_user_id);
         $agentName = $agent->name ?? 'Agent';
         $agentEmail = $agent->email ?? '';
+        $agentPhone = $agent->phone ?? $agent->designation ?? '';
+        $agentPhotoPath = null;
+        if ($agent && $agent->agent_photo_path && file_exists(storage_path('app/public/' . $agent->agent_photo_path))) {
+            $agentPhotoPath = 'data:image/' . pathinfo($agent->agent_photo_path, PATHINFO_EXTENSION) . ';base64,'
+                . base64_encode(file_get_contents(storage_path('app/public/' . $agent->agent_photo_path)));
+        }
 
         // Compile analysis data from AnalysisDataService (real extracted data)
         $data = (new AnalysisDataService())->compile($presentation);
@@ -399,12 +405,43 @@ td.num, th.num { text-align: right; }
     line-height: 1.7;
 }
 .cover-meta {
-    font-size: 11px;
-    color: var(--text-light);
-    border-top: 1px solid var(--border);
-    padding-top: 16px;
     margin-top: auto;
-    line-height: 1.8;
+    padding-top: 20px;
+}
+.cover-agent-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    border-top: 2px solid var(--brand);
+    padding-top: 20px;
+}
+.cover-agent-info {
+    flex: 1;
+}
+.cover-agent-info .agent-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--brand);
+    margin-bottom: 4px;
+}
+.cover-agent-info .agent-company {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+}
+.cover-agent-info .agent-contact {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.7;
+}
+.cover-agent-photo {
+    width: 140px;
+    height: 170px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 3px solid var(--brand);
+    margin-left: 24px;
+    flex-shrink: 0;
 }
 
 /* ── FOOTER ──────────────────────────────────────────────────────────── */
@@ -557,10 +594,20 @@ a:hover { text-decoration: underline; }
     <p style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">Prepared for <strong style="color:var(--text)"><?= $sellerName ?></strong></p>
     <?php endif ?>
     <div class="cover-meta">
-        Prepared by <strong><?= $esc($agentName) ?></strong><br>
-        Home Finders Coastal — Shelly Beach, KZN South Coast<br>
-        <?php if ($agentEmail): ?><?= $esc($agentEmail) ?><br><?php endif ?>
-        <?= $compiledAt ?>
+        <div class="cover-agent-row">
+            <div class="cover-agent-info">
+                <div class="agent-name"><?= $esc($agentName) ?></div>
+                <div class="agent-company">Home Finders Coastal — Shelly Beach, KZN South Coast</div>
+                <div class="agent-contact">
+                    <?php if ($agentEmail): ?><?= $esc($agentEmail) ?><br><?php endif ?>
+                    <?php if (!empty($agentPhone)): ?><?= $esc($agentPhone) ?><br><?php endif ?>
+                    <?= $compiledAt ?>
+                </div>
+            </div>
+            <?php if ($agentPhotoPath): ?>
+            <img class="cover-agent-photo" src="<?= $agentPhotoPath ?>" alt="<?= $esc($agentName) ?>">
+            <?php endif ?>
+        </div>
     </div>
 </div>
 
