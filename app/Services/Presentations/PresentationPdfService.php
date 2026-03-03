@@ -67,6 +67,12 @@ class PresentationPdfService
                 . base64_encode(file_get_contents(storage_path('app/public/' . $agent->agent_photo_path)));
         }
 
+        $logoBase64 = null;
+        $logoFile = public_path('images/logo.png');
+        if (file_exists($logoFile)) {
+            $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoFile));
+        }
+
         // Compile analysis data from AnalysisDataService (real extracted data)
         $data = (new AnalysisDataService())->compile($presentation);
 
@@ -375,6 +381,8 @@ td.num, th.num { text-align: right; }
     font-size: 13px;
     font-weight: 700;
     text-transform: uppercase;
+    display: flex;
+    align-items: center;
     letter-spacing: 0.12em;
     color: var(--brand);
     margin-bottom: 12px;
@@ -579,7 +587,11 @@ a:hover { text-decoration: underline; }
       // PAGE 1 — COVER
       // ══════════════════════════════════════════════════════════════════════ ?>
 <div class="cover">
+    <?php if ($logoBase64): ?>
+    <div class="cover-brand"><img src="<?= $logoBase64 ?>" alt="Home Finders Coastal" style="max-height:60px;width:auto;"></div>
+    <?php else: ?>
     <div class="cover-brand">Home Finders Coastal</div>
+    <?php endif ?>
     <div class="cover-bar"></div>
     <h1>Market Analysis<br>&amp; Pricing Strategy</h1>
     <div style="height:24px"></div>
