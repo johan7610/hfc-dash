@@ -35,6 +35,7 @@ class Presentation extends Model
         'vicinity_selected_range',
         'excluded_active_listing_indices',
         'simulator_config_json',
+        'seller_live_capture_json',
     ];
 
     protected $casts = [
@@ -52,6 +53,7 @@ class Presentation extends Model
         'monthly_opportunity_cost' => 'float',
         'excluded_active_listing_indices' => 'array',
         'simulator_config_json'          => 'array',
+        'seller_live_capture_json'       => 'array',
     ];
 
     public function uploads()

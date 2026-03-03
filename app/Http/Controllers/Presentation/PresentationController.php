@@ -1411,4 +1411,95 @@ class PresentationController extends Controller
             'stock'        => $analysisData['stock_absorption'] ?? [],
         ]);
     }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // SELLER LIVE PROBABILITY SCREEN
+    // ══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Seller Live — dark full-screen probability tool for listing appointments.
+     */
+    public function sellerLive(Presentation $presentation)
+    {
+        $analysisService  = new AnalysisDataService();
+        $simulatorService = new PricingSimulatorService();
+
+        $analysisData = $analysisService->compile($presentation);
+
+        // Config — same defaults as pricing simulator
+        $savedConfig = $presentation->simulator_config_json;
+        $config = $savedConfig['config'] ?? [
+            'commission_pct'       => 7.5,
+            'transfer_cost_pct'    => 4.0,
+            'monthly_holding_cost' => $analysisData['holding_cost']['monthly_total'] ?? 0,
+        ];
+
+        // CMA values
+        $cmaLower  = $analysisData['cma_valuation']['cma_lower'] ?? null;
+        $cmaMiddle = $analysisData['cma_valuation']['cma_middle'] ?? null;
+        $cmaUpper  = $analysisData['cma_valuation']['cma_upper'] ?? null;
+
+        // Subject property
+        $askingPrice = $analysisData['subject_property']['asking_price'] ?? 0;
+        $address     = $presentation->property_address ?? $analysisData['subject_property']['address'] ?? 'Property';
+
+        // Active competition listings (prices for competing count calc)
+        $activeRows = $analysisData['active_competition']['rows'] ?? [];
+        $listingPrices = [];
+        foreach ($activeRows as $row) {
+            if (!empty($row['is_excluded'])) continue;
+            $lp = (int) ($row['list_price'] ?? 0);
+            if ($lp > 0) $listingPrices[] = $lp;
+        }
+
+        // Monthly sales rate
+        $annualSales = (int) ($analysisData['suburb_overview']['sales_count'] ?? 12);
+        if ($annualSales < 1) $annualSales = 12;
+        $monthlySalesRate = round($annualSales / 12, 2);
+
+        // Pack all data for client-side JS
+        $jsData = [
+            'asking_price'        => (int) $askingPrice,
+            'cma_lower'           => $cmaLower ? (int) $cmaLower : null,
+            'cma_middle'          => $cmaMiddle ? (int) $cmaMiddle : null,
+            'cma_upper'           => $cmaUpper ? (int) $cmaUpper : null,
+            'commission_pct'      => (float) $config['commission_pct'],
+            'transfer_cost_pct'   => (float) $config['transfer_cost_pct'],
+            'monthly_holding_cost' => (float) $config['monthly_holding_cost'],
+            'listing_prices'      => $listingPrices,
+            'monthly_sales_rate'  => $monthlySalesRate,
+            'address'             => $address,
+        ];
+
+        return view('presentations.seller-live', [
+            'presentation' => $presentation,
+            'jsData'       => $jsData,
+        ]);
+    }
+
+    /**
+     * Capture the seller-live selected price point for pack inclusion.
+     */
+    public function captureSellerLive(Request $request, Presentation $presentation)
+    {
+        $validated = $request->validate([
+            'price'        => ['required', 'integer', 'min:0'],
+            'probability'  => ['required', 'string'],
+            'net_proceeds' => ['required', 'integer'],
+        ]);
+
+        $presentation->update([
+            'seller_live_capture_json' => [
+                'price'        => $validated['price'],
+                'probability'  => $validated['probability'],
+                'net_proceeds' => $validated['net_proceeds'],
+                'captured_at'  => now()->toIso8601String(),
+            ],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Captured at R ' . number_format($validated['price'], 0, '.', ',') . ' — included in pack',
+        ]);
+    }
 }

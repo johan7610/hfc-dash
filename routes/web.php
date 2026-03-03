@@ -679,6 +679,12 @@ Route::middleware(['auth'])->prefix('presentations')->name('presentations.')->gr
     Route::get('/{presentation}/pricing-simulator/present', [\App\Http\Controllers\Presentation\PresentationController::class, 'pricingSimulatorPresent'])
         ->name('pricing-simulator.present');
 
+    // Seller Live Probability Screen
+    Route::get('/{presentation}/seller-live', [\App\Http\Controllers\Presentation\PresentationController::class, 'sellerLive'])
+        ->name('seller-live');
+    Route::post('/{presentation}/seller-live/capture', [\App\Http\Controllers\Presentation\PresentationController::class, 'captureSellerLive'])
+        ->name('seller-live.capture');
+
     // Legacy Brain route → redirect to Pricing Simulator
     Route::get('/{presentation}/brain', [\App\Http\Controllers\Presentation\PresentationController::class, 'brain'])
         ->name('brain');
