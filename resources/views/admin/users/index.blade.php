@@ -94,7 +94,7 @@
                     </div>
 
                     <div class="p-4">
-                        <form method="POST" action="{{ route('admin.users.role.update', $user) }}" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                        <form method="POST" action="{{ route('admin.users.role.update', $user) }}" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                             @csrf
 
                             <div class="md:col-span-3">
@@ -175,6 +175,42 @@
                                          {{ old('counts_for_branch_split', (int)($user->counts_for_branch_split ?? 1)) ? 'checked' : '' }} />
                                   <span class="text-sm text-slate-700 dark:text-slate-200 font-medium">Counts for Branch Split</span>
                               </div>
+
+                            {{-- Agent Photo --}}
+                            <div class="md:col-span-6 pt-2">
+                                <label class="block text-xs text-slate-600 dark:text-slate-300 mb-1">Agent Photo <span class="text-slate-400">(jpg, png, webp — max 2 MB)</span></label>
+                                @if($user->agent_photo_path)
+                                    <div class="flex items-center gap-3 mb-2">
+                                        <img src="{{ asset('storage/' . $user->agent_photo_path) }}" alt="Agent photo"
+                                             style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid #e2e8f0;">
+                                        <form method="POST" action="{{ route('admin.users.remove-file', $user) }}" class="inline" onsubmit="return confirm('Remove agent photo?');">
+                                            @csrf
+                                            <input type="hidden" name="field" value="agent_photo">
+                                            <button type="submit" class="text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 underline">Remove</button>
+                                        </form>
+                                    </div>
+                                @endif
+                                <input type="file" name="agent_photo" accept="image/jpeg,image/png,image/webp"
+                                       class="w-full text-sm text-slate-500 dark:text-slate-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-slate-300 dark:file:border-slate-700 file:text-sm file:font-medium file:bg-white dark:file:bg-slate-900 file:text-slate-700 dark:file:text-slate-200">
+                            </div>
+
+                            {{-- FFC Certificate --}}
+                            <div class="md:col-span-6 pt-2">
+                                <label class="block text-xs text-slate-600 dark:text-slate-300 mb-1">FFC Certificate <span class="text-slate-400">(pdf, jpg, png — max 5 MB)</span></label>
+                                @if($user->ffc_certificate_path)
+                                    <div class="flex items-center gap-3 mb-2">
+                                        <a href="{{ asset('storage/' . $user->ffc_certificate_path) }}" target="_blank"
+                                           class="text-sm text-blue-600 dark:text-blue-400 hover:underline truncate">{{ basename($user->ffc_certificate_path) }}</a>
+                                        <form method="POST" action="{{ route('admin.users.remove-file', $user) }}" class="inline" onsubmit="return confirm('Remove FFC certificate?');">
+                                            @csrf
+                                            <input type="hidden" name="field" value="ffc_certificate">
+                                            <button type="submit" class="text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 underline">Remove</button>
+                                        </form>
+                                    </div>
+                                @endif
+                                <input type="file" name="ffc_certificate" accept=".pdf,.jpg,.jpeg,.png"
+                                       class="w-full text-sm text-slate-500 dark:text-slate-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-slate-300 dark:file:border-slate-700 file:text-sm file:font-medium file:bg-white dark:file:bg-slate-900 file:text-slate-700 dark:file:text-slate-200">
+                            </div>
 
                             <div class="md:col-span-12 flex items-center justify-between gap-3 pt-2">
                                 <div class="text-xs text-slate-500 dark:text-slate-400">One save updates role/branch/designation + defaults.</div>

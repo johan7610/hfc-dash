@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Branch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class UserManagementController extends Controller
 {
@@ -161,7 +162,59 @@ class UserManagementController extends Controller
                 );
         }
 
+        // ---- Agent file uploads ----
+        $request->validate([
+            'agent_photo'     => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'ffc_certificate' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+        ]);
+
+        if ($request->hasFile('agent_photo')) {
+            if ($user->agent_photo_path) {
+                Storage::disk('public')->delete($user->agent_photo_path);
+            }
+            $ext = $request->file('agent_photo')->getClientOriginalExtension();
+            $path = $request->file('agent_photo')->storeAs(
+                "agents/{$user->id}", "photo.{$ext}", 'public'
+            );
+            $user->update(['agent_photo_path' => $path]);
+        }
+
+        if ($request->hasFile('ffc_certificate')) {
+            if ($user->ffc_certificate_path) {
+                Storage::disk('public')->delete($user->ffc_certificate_path);
+            }
+            $ext = $request->file('ffc_certificate')->getClientOriginalExtension();
+            $path = $request->file('ffc_certificate')->storeAs(
+                "agents/{$user->id}", "ffc.{$ext}", 'public'
+            );
+            $user->update(['ffc_certificate_path' => $path]);
+        }
+
         return back()->with('status', "Updated role/branch for {$user->name}.");
+    }
+
+    /**
+     * Remove an agent file (photo or FFC certificate).
+     */
+    public function removeAgentFile(Request $request, User $user)
+    {
+        abort_unless(auth()->user()?->isEffectiveAdmin(), 403);
+
+        $field = $request->input('field');
+
+        if ($field === 'agent_photo' && $user->agent_photo_path) {
+            Storage::disk('public')->delete($user->agent_photo_path);
+            $user->update(['agent_photo_path' => null]);
+            return back()->with('status', "Agent photo removed for {$user->name}.");
+        }
+
+        if ($field === 'ffc_certificate' && $user->ffc_certificate_path) {
+            Storage::disk('public')->delete($user->ffc_certificate_path);
+            $user->update(['ffc_certificate_path' => null]);
+            return back()->with('status', "FFC certificate removed for {$user->name}.");
+        }
+
+        return back();
     }
 
     public function toggle(User $user)

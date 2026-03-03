@@ -29,6 +29,10 @@ class User extends Authenticatable
         'sliding_tier1_cut_percent',
         'sliding_tier2_cut_percent',
         'sliding_tier3_cut_percent',
+
+        // Agent document uploads
+        'agent_photo_path',
+        'ffc_certificate_path',
     ];
 
     protected $hidden = [

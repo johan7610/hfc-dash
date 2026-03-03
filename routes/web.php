@@ -107,6 +107,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/admin/users/{user}/defaults', [App\Http\Controllers\Admin\UserManagementController::class, 'updateDefaults'])
         ->middleware('admin')->name('admin.users.defaults.update');
     Route::post('/admin/users/{user}/role', [App\Http\Controllers\Admin\UserManagementController::class, 'updateRole'])->middleware('admin')->name('admin.users.role.update');
+    Route::post('/admin/users/{user}/remove-file', [App\Http\Controllers\Admin\UserManagementController::class, 'removeAgentFile'])->middleware('admin')->name('admin.users.remove-file');
 
     Route::get('/admin/listing-targets', [ListingTargetController::class, 'index'])
         ->middleware('branch_manager')->name('admin.listing-targets');

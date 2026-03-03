@@ -111,6 +111,36 @@
         </template>
     </div>
 
+    {{-- Agent Documents (read-only) --}}
+    @if($user->agent_photo_path || $user->ffc_certificate_path)
+    <div style="background:#0d1f35; border:1px solid rgba(255,255,255,0.07); border-radius:16px; padding:20px 24px;">
+        <h3 style="font-size:1rem; font-weight:700; color:#fff; border-left:3px solid #00b4d8; padding-left:12px; margin:0 0 20px;">Agent Documents</h3>
+
+        <div style="display:flex; gap:24px; flex-wrap:wrap;">
+            @if($user->agent_photo_path)
+            <div>
+                <div style="font-size:0.75rem; font-weight:600; color:rgba(255,255,255,0.45); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.06em;">Agent Photo</div>
+                <img src="{{ asset('storage/' . $user->agent_photo_path) }}" alt="Agent photo"
+                     style="width:80px; height:80px; object-fit:cover; border-radius:10px; border:1px solid rgba(255,255,255,0.1);">
+            </div>
+            @endif
+
+            @if($user->ffc_certificate_path)
+            <div>
+                <div style="font-size:0.75rem; font-weight:600; color:rgba(255,255,255,0.45); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.06em;">FFC Certificate</div>
+                <a href="{{ asset('storage/' . $user->ffc_certificate_path) }}" target="_blank"
+                   style="display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.04); color:#00b4d8; font-size:0.8rem; font-weight:500; text-decoration:none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+                    {{ basename($user->ffc_certificate_path) }}
+                </a>
+            </div>
+            @endif
+        </div>
+
+        <p style="font-size:0.7rem; color:rgba(255,255,255,0.3); margin-top:14px;">Managed by admin — contact your branch manager to update.</p>
+    </div>
+    @endif
+
     {{-- Profile Information --}}
     <div style="background:#0d1f35; border:1px solid rgba(255,255,255,0.07); border-radius:16px; padding:20px 24px;">
         <h3 style="font-size:1rem; font-weight:700; color:#fff; border-left:3px solid #00b4d8; padding-left:12px; margin:0 0 6px;">Profile Information</h3>
