@@ -81,7 +81,7 @@ class P24EmailParserService
             }
 
             // Extract from subject if body parsing missed it
-            if (!$listing['property_type'] && preg_match(
+            if ((!$listing['property_type'] || !$listing['suburb']) && preg_match(
                 '/(House|Apartment|Townhouse|Flat|Duplex|Vacant\s+Land|Stand|Farm)\s+for\s+sale\s+in\s+(.+?)(?:\s+P24-|\s*$)/i',
                 $subject,
                 $subjectMatch
