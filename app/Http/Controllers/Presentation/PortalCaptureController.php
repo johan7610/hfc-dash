@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Presentation;
 
 use App\Http\Controllers\Controller;
 use App\Models\PortalCapture;
+use App\Models\PortalListing;
 use App\Models\Presentation;
 use App\Models\PresentationLink;
 use App\Services\Presentations\Evidence\Extractors\Property24SearchExtractorV1;
@@ -140,6 +141,33 @@ class PortalCaptureController extends Controller
                         'parse_status'          => 'parsed',
                         'extracted_fields_json' => $listingFields,
                     ]);
+
+                    // Track listing + write primary_image_url if we have a listing ID
+                    $listingId = $listingFields['listing_id'] ?? null;
+                    if ($listingId) {
+                        $sourceSite = $this->normalizeSourceSite($capture->source_site);
+                        $tracker = new PortalListingTrackingService();
+                        $trackingSummary = $tracker->processItems($capture, $sourceSite, [[
+                            'portal_listing_id' => $listingId,
+                            'url'               => $listingFields['url'] ?? null,
+                            'price'             => $listingFields['price'] ?? null,
+                            'beds'              => $listingFields['bedrooms'] ?? null,
+                            'baths'             => $listingFields['bathrooms'] ?? null,
+                            'size_m2'           => $listingFields['floor_m2'] ?? null,
+                            'erf_m2'            => $listingFields['erf_m2'] ?? null,
+                            'title'             => $listingFields['title'] ?? null,
+                            'image'             => $listingFields['image'] ?? null,
+                        ]]);
+
+                        // Write primary_image_url to portal_listing
+                        $imageUrl = $listingFields['image'] ?? null;
+                        if ($imageUrl) {
+                            PortalListing::where('source_site', $sourceSite)
+                                ->where('portal_listing_id', $listingId)
+                                ->whereNull('primary_image_url')
+                                ->update(['primary_image_url' => $imageUrl]);
+                        }
+                    }
                 }
             } catch (\Throwable $e) {
                 Log::warning('Portal listing extraction failed', [
@@ -882,6 +910,9 @@ class PortalCaptureController extends Controller
             }
         }
 
+        // ── Primary image ──
+        $fields['image'] = $this->extractListingImage($xpath, $html, $capture->jsonld_json);
+
         // ── Canonical URL ──
         $fields['url'] = $capture->source_url;
 
@@ -1123,6 +1154,73 @@ class PortalCaptureController extends Controller
             return null;
         }
         return Storage::disk('local')->get($capture->raw_html_path);
+    }
+
+    /**
+     * Extract the primary listing image from a P24 detail page.
+     * Strategies: og:image meta → JSON-LD image → lightbox/gallery img → first large img.
+     */
+    private function extractListingImage(\DOMXPath $xpath, string $html, ?array $jsonld): ?string
+    {
+        // Strategy 1: og:image meta tag (most reliable on P24 detail pages)
+        $ogNodes = $xpath->query('//meta[@property="og:image"]');
+        foreach ($ogNodes as $node) {
+            $content = $node->getAttribute('content');
+            if ($content !== '' && $this->isValidListingImageUrl($content)) {
+                return $content;
+            }
+        }
+
+        // Strategy 2: JSON-LD image field
+        if (!empty($jsonld)) {
+            $ld = isset($jsonld['@type']) ? $jsonld : ($jsonld[0] ?? []);
+            $ldImage = $ld['image'] ?? null;
+            if (is_string($ldImage) && $this->isValidListingImageUrl($ldImage)) {
+                return $ldImage;
+            }
+            if (is_array($ldImage)) {
+                $first = $ldImage[0] ?? null;
+                if (is_string($first) && $this->isValidListingImageUrl($first)) {
+                    return $first;
+                }
+            }
+        }
+
+        // Strategy 3: P24 gallery/lightbox image
+        $galleryNodes = $xpath->query('//img[contains(@class,"js_lightboxImage") or contains(@class,"p24_mainImage") or contains(@class,"mainImage") or contains(@class,"hero")]');
+        foreach ($galleryNodes as $img) {
+            $src = $img->getAttribute('data-src') ?: $img->getAttribute('src');
+            if ($src !== '' && $this->isValidListingImageUrl($src)) {
+                return $src;
+            }
+        }
+
+        // Strategy 4: First img inside a gallery/carousel container
+        $containerNodes = $xpath->query('//*[contains(@class,"gallery") or contains(@class,"carousel") or contains(@class,"slider") or contains(@class,"p24_images")]//img');
+        foreach ($containerNodes as $img) {
+            $src = $img->getAttribute('data-src') ?: $img->getAttribute('src');
+            if ($src !== '' && $this->isValidListingImageUrl($src)) {
+                return $src;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Check if a URL looks like a valid property listing image (not an icon/logo/tracker).
+     */
+    private function isValidListingImageUrl(string $url): bool
+    {
+        if ($url === '') return false;
+        $lower = strtolower($url);
+        // Exclude icons, logos, tracking pixels, SVGs
+        if (str_contains($lower, 'icon_') || str_contains($lower, '/logo')
+            || str_contains($lower, 'tracking') || str_contains($lower, '.svg')
+            || str_contains($lower, '1x1') || str_contains($lower, 'pixel')) {
+            return false;
+        }
+        return true;
     }
 
     /**

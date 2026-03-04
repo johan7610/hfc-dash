@@ -79,11 +79,8 @@ class Document extends Model
             return $query;
         }
 
-        if ($user->isBranchManager()) {
-            $branchId = $user->effectiveBranchId();
-            return $query->where('branch_id', $branchId);
-        }
-
-        return $query->where('owner_id', $user->id);
+        // Branch managers and agents both see all documents in their branch
+        $branchId = $user->effectiveBranchId();
+        return $query->where('branch_id', $branchId);
     }
 }
