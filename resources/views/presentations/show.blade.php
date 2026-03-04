@@ -1574,24 +1574,24 @@
 
                 var html = '<div class="rounded-lg border border-slate-100 overflow-hidden hover:border-slate-200 transition-colors">';
 
-                // Image + overlay
+                // Image + overlay (always show — placeholder if no image)
+                html += '<div class="relative h-28 bg-slate-100 overflow-hidden">';
                 if (f.image) {
-                    html += '<div class="relative h-28 bg-slate-100 overflow-hidden">';
-                    html += '<img src="' + esc(f.image) + '" alt="" class="w-full h-full object-cover" loading="lazy" onerror="this.parentElement.style.display=\'none\'">';
-                    if (priceStr) {
-                        html += '<div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2.5 py-1.5">';
-                        html += '<span class="text-sm font-bold text-white">' + esc(priceStr) + '</span>';
-                        html += '</div>';
-                    }
+                    html += '<img src="' + esc(f.image) + '" alt="" class="w-full h-full object-cover" loading="lazy" onerror="this.closest(\'.relative\').querySelector(\'.placeholder-icon\').classList.remove(\'hidden\');this.style.display=\'none\'">';
+                    html += '<div class="placeholder-icon hidden absolute inset-0 flex items-center justify-center">';
+                } else {
+                    html += '<div class="placeholder-icon absolute inset-0 flex items-center justify-center">';
+                }
+                html += '<svg class="w-10 h-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/></svg>';
+                html += '</div>';
+                if (priceStr) {
+                    html += '<div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2.5 py-1.5">';
+                    html += '<span class="text-sm font-bold text-white">' + esc(priceStr) + '</span>';
                     html += '</div>';
                 }
+                html += '</div>';
 
                 html += '<div class="px-3 py-2.5">';
-
-                // Price (shown here if no image)
-                if (!f.image && priceStr) {
-                    html += '<p class="text-sm font-bold text-slate-800 mb-0.5">' + esc(priceStr) + '</p>';
-                }
 
                 // Title / address
                 html += '<p class="text-xs font-semibold text-slate-700 truncate" title="' + esc(title) + '">' + esc(title || 'Property') + '</p>';

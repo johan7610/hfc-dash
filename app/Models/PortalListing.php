@@ -14,6 +14,7 @@ class PortalListing extends Model
         'last_seen_at',
         'last_capture_id',
         'current_fields_json',
+        'primary_image_url',
     ];
 
     protected $casts = [

@@ -87,16 +87,20 @@ class PortalListingTrackingService
         $changedFields = null;
         $priceChanged = false;
 
+        // Extract image URL from item (not a tracked/delta field, but stored on the listing)
+        $imageUrl = $item['image'] ?? null;
+
         if ($isNew) {
             // New listing
             $listing = PortalListing::create([
-                'source_site'        => $sourceSite,
-                'portal_listing_id'  => $portalListingId,
-                'canonical_url'      => $item['url'] ?? null,
-                'first_seen_at'      => $observedAt,
-                'last_seen_at'       => $observedAt,
-                'last_capture_id'    => $capture->id,
+                'source_site'         => $sourceSite,
+                'portal_listing_id'   => $portalListingId,
+                'canonical_url'       => $item['url'] ?? null,
+                'first_seen_at'       => $observedAt,
+                'last_seen_at'        => $observedAt,
+                'last_capture_id'     => $capture->id,
                 'current_fields_json' => $observedFields,
+                'primary_image_url'   => $imageUrl,
             ]);
         } else {
             // Existing listing — compute deltas
@@ -110,12 +114,19 @@ class PortalListingTrackingService
             // Merge: only overwrite fields with non-null new values
             $mergedFields = $this->mergeFields($currentFields, $observedFields);
 
-            $listing->update([
+            $updateData = [
                 'last_seen_at'        => $observedAt,
                 'last_capture_id'     => $capture->id,
                 'current_fields_json' => $mergedFields,
                 'canonical_url'       => $item['url'] ?? $listing->canonical_url,
-            ]);
+            ];
+
+            // Set primary_image_url if not already set
+            if ($imageUrl && !$listing->primary_image_url) {
+                $updateData['primary_image_url'] = $imageUrl;
+            }
+
+            $listing->update($updateData);
         }
 
         // Always create an observation record (for audit trail)

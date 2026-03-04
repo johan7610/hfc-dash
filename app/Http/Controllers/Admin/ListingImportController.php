@@ -144,13 +144,13 @@ class ListingImportController extends Controller
                     continue;
                 }
 
-                // Determine user_id from Agents column (robust)
-                $targetUser = null;
+                // Determine user(s) from Agents column (supports multi-agent)
+                $matchedUsers = [];
                 if (is_int($agentIdx)) {
                     $agentCell = $row[$agentIdx] ?? null;
-                    $targetUser = self::matchUserFromAgentCell($agentCell, $byEmail, $byName);
+                    $matchedUsers = self::matchAllUsersFromAgentCell($agentCell, $byEmail, $byName);
                 }
-                if (!$targetUser) $targetUser = $u;
+                $targetUser = $matchedUsers[0] ?? $u;
 
                 // Find existing listing (idempotent)
                 $q = ListingStock::query()->where('source', 'propcon');
@@ -199,11 +199,18 @@ class ListingImportController extends Controller
 
                 if ($existing) {
                     $existing->fill($data)->save();
+                    $listing = $existing;
                     $updated++;
                 } else {
-                    ListingStock::create($data);
+                    $listing = ListingStock::create($data);
                     $created++;
                 }
+
+                // Sync all matched agents to pivot table
+                $agentIds = !empty($matchedUsers)
+                    ? array_unique(array_map(fn($usr) => $usr->id, $matchedUsers))
+                    : [$targetUser->id];
+                $listing->agents()->sync($agentIds);
             }
 
             DB::commit();
@@ -264,6 +271,65 @@ class ListingImportController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * Match ALL agents from a cell like "Jenny Reichel and Cindy Pietersen".
+     * Returns array of User objects (may be empty).
+     */
+    private static function matchAllUsersFromAgentCell(mixed $cell, array $byEmail, array $byName): array
+    {
+        $s = '';
+        if (is_string($cell)) $s = trim($cell);
+        elseif (is_numeric($cell)) $s = (string)$cell;
+
+        if ($s === '') return [];
+
+        $matched = [];
+        $seenIds = [];
+
+        // 1) Email matches
+        if (preg_match_all('/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i', $s, $m)) {
+            foreach ($m[0] as $email) {
+                $k = self::normEmail($email);
+                if ($k && isset($byEmail[$k]) && !isset($seenIds[$byEmail[$k]->id])) {
+                    $matched[] = $byEmail[$k];
+                    $seenIds[$byEmail[$k]->id] = true;
+                }
+            }
+        }
+
+        // 2) Split on common separators and try name matching for each part
+        $parts = preg_split('/[;,\/\|\&]+|\band\b/i', $s) ?: [$s];
+        foreach ($parts as $part) {
+            $cand = trim((string)$part);
+            if ($cand === '') continue;
+
+            $cand = preg_replace('/\([^)]*\)/', '', $cand) ?? $cand;
+            $cand = trim($cand);
+
+            $nk = self::normName($cand);
+            if ($nk === '') continue;
+
+            // exact normalized match
+            if (isset($byName[$nk]) && !isset($seenIds[$byName[$nk]->id])) {
+                $matched[] = $byName[$nk];
+                $seenIds[$byName[$nk]->id] = true;
+                continue;
+            }
+
+            // loose contains match
+            foreach ($byName as $nameKey => $usr) {
+                if ($nameKey === '' || isset($seenIds[$usr->id])) continue;
+                if (str_contains($nk, $nameKey) || str_contains($nameKey, $nk)) {
+                    $matched[] = $usr;
+                    $seenIds[$usr->id] = true;
+                    break;
+                }
+            }
+        }
+
+        return $matched;
     }
 
     private static function normName(string $s): string
