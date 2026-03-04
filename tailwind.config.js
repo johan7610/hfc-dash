@@ -13,9 +13,9 @@ export default {
     theme: {
         extend: {
             fontFamily: {
-                sans:    ['DM Sans', 'Figtree', ...defaultTheme.fontFamily.sans],
+                sans:    ['Inter', ...defaultTheme.fontFamily.sans],
                 mono:    ['DM Mono', ...defaultTheme.fontFamily.mono],
-                display: ['Playfair Display', ...defaultTheme.fontFamily.serif],
+                display: ['Inter', ...defaultTheme.fontFamily.sans],
             },
             colors: {
                 nexus: {
