@@ -85,10 +85,33 @@ class RoleManagerController extends Controller
             'role'    => 'required|in:super_admin,admin,branch_manager,agent,viewer',
         ]);
 
+        // Only super_admins may assign the super_admin role
+        if ($request->role === 'super_admin' && !auth()->user()->isSuperAdmin()) {
+            abort(403, 'Only Super Admins can assign the Super Admin role.');
+        }
+
         $user = User::findOrFail($request->user_id);
         $user->role = $request->role;
         $user->save();
 
         return back()->with('success', "Role updated for {$user->name}.");
+    }
+
+    /**
+     * Allow an admin-role user to promote themselves to super_admin.
+     * This is a bootstrap mechanism for deployments where no super_admin exists yet.
+     */
+    public function selfPromote()
+    {
+        $user = auth()->user();
+
+        if ($user->role !== 'admin') {
+            abort(403, 'Only admin-role users can use this self-promotion.');
+        }
+
+        $user->role = 'super_admin';
+        $user->save();
+
+        return back()->with('success', "Your account has been upgraded to Super Admin.");
     }
 }

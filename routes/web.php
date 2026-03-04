@@ -529,6 +529,8 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         ->middleware('permission:edit_permissions')->name('corex.role-manager.save');
     Route::post('/role-manager/user-role', [CoreXRoleManagerController::class, 'updateUserRole'])
         ->middleware('permission:change_user_roles')->name('corex.role-manager.user-role');
+    Route::post('/role-manager/self-promote', [CoreXRoleManagerController::class, 'selfPromote'])
+        ->name('corex.role-manager.self-promote');
 
     // Agency Management (super_admin only)
     Route::middleware('permission:access_agencies')->prefix('settings/agencies')->name('agencies.')->group(function () {

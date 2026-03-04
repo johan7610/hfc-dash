@@ -169,6 +169,28 @@
              TAB 2: User Roles
         ───────────────────────────────────────────── --}}
         <div x-show="activeTab === 'users'" x-cloak>
+
+            {{-- Self-promote banner: shown only to admin-role users (not super_admin) --}}
+            @if(auth()->user()->role === 'admin')
+                <div class="rounded-xl border px-4 py-3 mb-4 flex items-center justify-between gap-4"
+                     style="background:#fff7ed;border-color:#fed7aa;">
+                    <div>
+                        <p class="text-sm font-semibold" style="color:#9a3412;">No Super Admin on this server?</p>
+                        <p class="text-xs mt-0.5" style="color:#c2410c;">As an Admin, you can claim Super Admin access. Do this once, then remove this button.</p>
+                    </div>
+                    <form method="POST" action="{{ route('corex.role-manager.self-promote') }}"
+                          onsubmit="return confirm('Promote your account to Super Admin?');">
+                        @csrf
+                        <button type="submit"
+                                class="px-4 py-2 rounded-lg text-xs font-semibold text-white whitespace-nowrap transition-colors"
+                                style="background:#9a3412;"
+                                onmouseover="this.style.background='#7c2d12'" onmouseout="this.style.background='#9a3412'">
+                            Claim Super Admin
+                        </button>
+                    </form>
+                </div>
+            @endif
+
             <div class="rounded-2xl border border-slate-200 bg-white overflow-hidden">
                 <div class="px-5 py-3 border-b border-slate-200 flex items-center justify-between" style="background:#f8fafc;">
                     <h3 class="font-semibold text-sm" style="color:#0b2a4a;">User Roles</h3>
@@ -230,7 +252,9 @@
                                                 <select name="role"
                                                         class="text-xs rounded-lg border border-slate-300 bg-white text-slate-800 py-1.5 px-2 focus:outline-none focus:border-[#00b4d8]"
                                                         style="max-width:160px;">
-                                                    <option value="super_admin" {{ $u->role === 'super_admin' ? 'selected' : '' }}>Super Admin</option>
+                                                    @if(auth()->user()->isSuperAdmin())
+                                                        <option value="super_admin" {{ $u->role === 'super_admin' ? 'selected' : '' }}>Super Admin</option>
+                                                    @endif
                                                     <option value="admin"          {{ $u->role === 'admin'          ? 'selected' : '' }}>Admin</option>
                                                     <option value="branch_manager" {{ $u->role === 'branch_manager' ? 'selected' : '' }}>Branch Manager</option>
                                                     <option value="agent"          {{ $u->role === 'agent'          ? 'selected' : '' }}>Agent</option>
