@@ -8,8 +8,18 @@
         <title>{{ config('app.name', 'Laravel') }}</title>
 
         <!-- Fonts -->
-        <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700,800&display=swap" rel="stylesheet" />
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:wght@600&display=swap" rel="stylesheet">
+
+        <!-- Theme init: apply dark class before paint to prevent flash -->
+        <script>
+            (function(){
+                if(localStorage.getItem('corex-theme')==='dark'){
+                    document.documentElement.classList.add('dark');
+                }
+            })();
+        </script>
 
         <!-- x-cloak: inline so it works before Vite CSS loads -->
         <style>[x-cloak] { display: none !important; }</style>
@@ -38,7 +48,7 @@
     </head>
     <body class="font-sans antialiased">
         {{-- Mobile sidebar toggle --}}
-        <div x-data="{ sidebarOpen: false, sidebarCollapsed: false }" class="flex h-screen overflow-hidden bg-gray-100">
+        <div x-data="{ sidebarOpen: false, sidebarCollapsed: false }" class="flex h-screen overflow-hidden" style="background:var(--bg)">
 
             {{-- Mobile overlay --}}
             <div x-show="sidebarOpen" x-transition:enter="transition-opacity ease-linear duration-200"
@@ -58,19 +68,19 @@
             {{-- Main area --}}
             <div class="flex-1 flex flex-col overflow-hidden min-w-0">
                 {{-- Header --}}
-                <div class="flex items-center lg:hidden px-4 py-2 bg-white border-b border-gray-200">
-                    <button @click="sidebarOpen = true" type="button" class="text-gray-500 hover:text-gray-700">
+                <div class="corex-mobile-bar flex items-center lg:hidden px-4 py-2">
+                    <button @click="sidebarOpen = true" type="button" style="color:var(--text-secondary)">
                         <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
                         </svg>
                     </button>
-                    <span class="ml-3 text-sm font-bold text-gray-900">CoreX <span class="text-[#00b4d8]">Os</span></span>
+                    <span class="ml-3 text-sm font-bold" style="color:var(--text-primary)">CoreX <span style="color:var(--accent)">Os</span></span>
                 </div>
 
                 @include('layouts.corex-header')
 
                 {{-- Content --}}
-                <main id="appScroll" class="flex-1 overflow-y-auto bg-gray-100 p-4 lg:p-6">
+                <main id="appScroll" class="flex-1 overflow-y-auto p-4 lg:p-6" style="background:var(--bg)">
                     @hasSection('corex-content')
                         @yield('corex-content')
                     @else
