@@ -15,7 +15,7 @@ class TemplateController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
+        if (!$user->hasPermission('manage_templates')) {
             abort(403);
         }
 
@@ -73,7 +73,7 @@ class TemplateController extends Controller
     public function upload(Request $request)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
+        if (!$user->hasPermission('manage_templates')) {
             abort(403);
         }
 
@@ -101,7 +101,7 @@ class TemplateController extends Controller
     public function edit(Request $request, $id)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
+        if (!$user->hasPermission('manage_templates')) {
             abort(403);
         }
 
@@ -138,7 +138,7 @@ class TemplateController extends Controller
     public function saveFields(Request $request, $id)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
+        if (!$user->hasPermission('manage_templates')) {
             abort(403);
         }
 
@@ -202,7 +202,7 @@ class TemplateController extends Controller
     public function uploadPageImages(Request $request, $id)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
+        if (!$user->hasPermission('manage_templates')) {
             abort(403);
         }
 
@@ -229,7 +229,7 @@ class TemplateController extends Controller
     public function archive(Request $request, $id)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
+        if (!$user->hasPermission('manage_templates')) {
             abort(403);
         }
 
@@ -243,7 +243,7 @@ class TemplateController extends Controller
     public function restore(Request $request, $id)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
+        if (!$user->hasPermission('manage_templates')) {
             abort(403);
         }
 
@@ -257,7 +257,7 @@ class TemplateController extends Controller
     public function copy(Request $request, $id)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
+        if (!$user->hasPermission('manage_templates')) {
             abort(403);
         }
 
@@ -296,7 +296,7 @@ class TemplateController extends Controller
     public function destroy(Request $request, $id)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
+        if (!$user->hasPermission('manage_templates')) {
             abort(403);
         }
 
