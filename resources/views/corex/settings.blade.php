@@ -207,7 +207,7 @@
             </div>
 
             {{-- Designations (inline) --}}
-            @can('manage_designations')
+            @permission('manage_designations')
             <div>
                 <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Designations</h3>
 
@@ -283,7 +283,7 @@
                     </div>
                 </div>
             </div>
-            @endcan
+            @endpermission
 
         </div>
 
