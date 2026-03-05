@@ -6,9 +6,13 @@ use Illuminate\Database\Eloquent\Model;
 
 class PropertySettingItem extends Model
 {
-    protected $fillable = ['group', 'name', 'sort_order'];
+    protected $fillable = ['group', 'name', 'sort_order', 'is_default', 'active'];
 
-    protected $casts = ['sort_order' => 'integer'];
+    protected $casts = [
+        'sort_order' => 'integer',
+        'is_default' => 'boolean',
+        'active'     => 'boolean',
+    ];
 
     // Allowed groups
     const GROUP_CATEGORY     = 'category';

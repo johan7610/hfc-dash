@@ -830,93 +830,237 @@
             </div>{{-- /contacts --}}
 
             {{-- PROPERTIES section --}}
-            <div x-show="featureSection === 'properties'" x-cloak class="space-y-8">
+            <div x-show="featureSection === 'properties'" x-cloak class="space-y-3">
 
                 @php
                 $propGroups = [
-                    ['key' => 'category',        'label' => 'Categories',     'items' => $propCategories,   'placeholder' => 'e.g. Residential, Commercial'],
-                    ['key' => 'property_type',   'label' => 'Property Types', 'items' => $propTypes,        'placeholder' => 'e.g. House, Flat, Townhouse'],
-                    ['key' => 'property_status', 'label' => 'Property Statuses', 'items' => $propStatuses, 'placeholder' => 'e.g. Active, Draft, Sold'],
-                    ['key' => 'mandate_type',    'label' => 'Mandate Types',  'items' => $propMandateTypes, 'placeholder' => 'e.g. Sole, Joint, Open'],
+                    ['key' => 'category',        'label' => 'Categories',        'items' => $propCategories,   'placeholder' => 'e.g. Residential, Commercial'],
+                    ['key' => 'property_type',   'label' => 'Property Types',    'items' => $propTypes,        'placeholder' => 'e.g. House, Flat, Townhouse'],
+                    ['key' => 'property_status', 'label' => 'Property Statuses', 'items' => $propStatuses,     'placeholder' => 'e.g. Active, Draft, Sold'],
+                    ['key' => 'mandate_type',    'label' => 'Mandate Types',     'items' => $propMandateTypes, 'placeholder' => 'e.g. Sole, Joint, Open'],
                 ];
+                $reorderUrl  = route('corex.settings.property-items.reorder');
+                $itemBaseUrl = url('corex/settings/property-items');
+                $csrfToken   = csrf_token();
                 @endphp
 
                 @foreach($propGroups as $pg)
-                <div x-data="{ editPSId_{{ $loop->index }}: null }">
-                    <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">{{ $pg['label'] }}</h3>
+                @php
+                    $defaultItems    = $pg['items']->where('is_default', true)->values();
+                    $customItems     = $pg['items']->where('is_default', false)->values();
+                    $hasDefaults     = $defaultItems->isNotEmpty();
+                    $totalCount      = $pg['items']->count();
+                    $batchToggleUrl  = route('corex.settings.property-items.batch-toggle', $pg['key']);
 
-                    {{-- Add item --}}
-                    <div class="p-4 rounded-xl mb-3" style="background:var(--surface-2); border:1px solid var(--border);">
-                        <div class="text-xs font-semibold mb-3" style="color:var(--text-secondary);">Add {{ rtrim($pg['label'], 's') }}</div>
-                        <form method="POST" action="{{ route('corex.settings.property-items.store') }}"
-                              class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                            @csrf
-                            <input type="hidden" name="group" value="{{ $pg['key'] }}">
-                            <div class="md:col-span-7">
-                                <input name="name" required placeholder="{{ $pg['placeholder'] }}"
-                                       class="w-full rounded-lg px-3 py-2 text-sm"
-                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                            </div>
-                            <div class="md:col-span-3">
-                                <input name="sort_order" type="number" step="1" min="0" placeholder="Sort order"
-                                       class="w-full rounded-lg px-3 py-2 text-sm"
-                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                            </div>
-                            <div class="md:col-span-2">
-                                <button class="w-full corex-btn-primary text-sm">Add</button>
-                            </div>
-                        </form>
-                    </div>
+                    $defsJson = $defaultItems->map(fn($i) => [
+                        'id' => $i->id, 'name' => $i->name,
+                        'sort_order' => (int)$i->sort_order, 'active' => (bool)$i->active,
+                    ])->toJson();
+                    $custsJson = $customItems->map(fn($i) => [
+                        'id' => $i->id, 'name' => $i->name,
+                        'sort_order' => (int)$i->sort_order,
+                    ])->toJson();
+                @endphp
 
-                    {{-- List --}}
-                    <div class="rounded-xl overflow-hidden" style="border:1px solid var(--border);">
-                        <div class="px-4 py-3 flex items-center justify-between" style="border-bottom:1px solid var(--border); background:var(--surface-2);">
-                            <div class="text-sm font-semibold" style="color:var(--text-primary);">Current {{ $pg['label'] }}</div>
-                            <div class="text-xs" style="color:var(--text-muted);">{{ count($pg['items']) }} total</div>
+                <div x-data="{
+                    open: false, addOpen: false,
+                    editId: null, editName: '', editSort: 0,
+                    defs:  {{ $defsJson }},
+                    custs: {{ $custsJson }},
+                    dragFrom: null, dragTarget: null,
+                    reorderUrl:     '{{ $reorderUrl }}',
+                    batchToggleUrl: '{{ $batchToggleUrl }}',
+                    itemBaseUrl:    '{{ $itemBaseUrl }}',
+                    csrf:           '{{ $csrfToken }}',
+                    startDrag(idx, list) { this.dragFrom = { idx, list }; },
+                    onOver(idx, list)    { if (this.dragFrom?.list === list) this.dragTarget = { idx, list }; },
+                    drop(toIdx, list) {
+                        if (!this.dragFrom || this.dragFrom.list !== list) { this.resetDrag(); return; }
+                        const arr = list === 'd' ? this.defs : this.custs;
+                        const fromIdx = this.dragFrom.idx;
+                        if (fromIdx === toIdx) { this.resetDrag(); return; }
+                        const a = [...arr];
+                        const [m] = a.splice(fromIdx, 1);
+                        a.splice(toIdx, 0, m);
+                        list === 'd' ? (this.defs = a) : (this.custs = a);
+                        this.resetDrag();
+                        fetch(this.reorderUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrf },
+                            body: JSON.stringify({ items: a.map((it, i) => ({ id: it.id, sort_order: i })) })
+                        });
+                    },
+                    resetDrag() { this.dragFrom = null; this.dragTarget = null; },
+                    startEdit(item) { this.editId = item.id; this.editName = item.name; this.editSort = item.sort_order; },
+                    saveDefaults() {
+                        const f = document.createElement('form');
+                        f.method = 'POST'; f.action = this.batchToggleUrl;
+                        const t = document.createElement('input'); t.type='hidden'; t.name='_token'; t.value=this.csrf; f.appendChild(t);
+                        this.defs.filter(d => d.active).forEach(d => {
+                            const i = document.createElement('input'); i.type='hidden'; i.name='enabled_ids[]'; i.value=d.id; f.appendChild(i);
+                        });
+                        document.body.appendChild(f); f.submit();
+                    },
+                    isDragTarget(idx, list) {
+                        return this.dragTarget?.idx === idx && this.dragTarget?.list === list && this.dragFrom?.list === list && this.dragFrom?.idx !== idx;
+                    }
+                }" class="rounded-xl overflow-hidden" style="border:1px solid var(--border);">
+
+                    {{-- Accordion header --}}
+                    <button type="button" @click="open = !open"
+                            class="w-full flex items-center justify-between px-4 py-3 transition-colors"
+                            style="background:var(--surface-2);"
+                            onmouseover="this.style.background='rgba(0,180,216,0.04)'"
+                            onmouseout="this.style.background='var(--surface-2)'">
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm font-semibold" style="color:var(--text-primary);">{{ $pg['label'] }}</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full font-medium" style="background:rgba(0,180,216,0.12); color:#00b4d8;">{{ $totalCount }}</span>
                         </div>
-                        @forelse($pg['items'] as $pItem)
+                        <svg class="w-4 h-4 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--text-muted);"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+
+                    {{-- Panel --}}
+                    <div x-show="open" x-cloak style="border-top:1px solid var(--border);">
+
+                        {{-- Add New --}}
                         <div style="border-bottom:1px solid var(--border);">
-                            <div x-show="editPSId_{{ $loop->parent->index }} !== {{ $pItem->id }}"
-                                 class="p-4 flex items-center justify-between gap-4">
-                                <span class="text-sm font-medium" style="color:var(--text-primary);">{{ $pItem->name }}</span>
-                                <div class="flex items-center gap-3">
-                                    <button @click="editPSId_{{ $loop->parent->index }} = {{ $pItem->id }}"
-                                            class="text-xs font-semibold text-[#00b4d8] hover:text-[#0091ae]">Edit</button>
-                                    <form method="POST" action="{{ route('corex.settings.property-items.destroy', $pItem) }}"
-                                          onsubmit="return confirm('Delete this item?');">
-                                        @csrf @method('DELETE')
-                                        <button class="text-xs font-semibold text-red-600 hover:text-red-700">Delete</button>
-                                    </form>
-                                </div>
-                            </div>
-                            <div x-show="editPSId_{{ $loop->parent->index }} === {{ $pItem->id }}" x-cloak
-                                 class="p-4" style="background:rgba(0,180,216,0.05); border-top:1px solid rgba(0,180,216,0.15);">
-                                <form method="POST" action="{{ route('corex.settings.property-items.update', $pItem) }}"
+                            <button type="button" @click="addOpen = !addOpen"
+                                    class="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors"
+                                    style="color:#00b4d8; background:var(--surface);"
+                                    onmouseover="this.style.background='rgba(0,180,216,0.04)'"
+                                    onmouseout="this.style.background='var(--surface)'">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+                                Add New
+                                <svg class="w-3.5 h-3.5 ml-auto transition-transform" :class="addOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            </button>
+                            <div x-show="addOpen" x-cloak class="px-4 pb-4 pt-3" style="background:rgba(0,180,216,0.03); border-top:1px solid var(--border);">
+                                <form method="POST" action="{{ route('corex.settings.property-items.store') }}"
                                       class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                                    @csrf @method('PUT')
+                                    @csrf
+                                    <input type="hidden" name="group" value="{{ $pg['key'] }}">
                                     <div class="md:col-span-7">
-                                        <input name="name" value="{{ $pItem->name }}" required
+                                        <label class="block text-xs font-medium mb-1" style="color:var(--text-muted);">Name</label>
+                                        <input name="name" required placeholder="{{ $pg['placeholder'] }}"
                                                class="w-full rounded-lg px-3 py-2 text-sm"
                                                style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                     </div>
                                     <div class="md:col-span-3">
-                                        <input name="sort_order" type="number" step="1" min="0" value="{{ (int)$pItem->sort_order }}"
+                                        <label class="block text-xs font-medium mb-1" style="color:var(--text-muted);">Sort Order</label>
+                                        <input name="sort_order" type="number" step="1" min="0" placeholder="0"
                                                class="w-full rounded-lg px-3 py-2 text-sm"
                                                style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                     </div>
-                                    <div class="md:col-span-2 flex gap-2">
-                                        <button type="submit" class="flex-1 corex-btn-primary text-sm">Save</button>
-                                        <button type="button" @click="editPSId_{{ $loop->parent->index }} = null"
-                                                class="flex-1 text-sm rounded-lg"
-                                                style="border:1px solid var(--border); color:var(--text-secondary);">Cancel</button>
+                                    <div class="md:col-span-2">
+                                        <button class="w-full corex-btn-primary text-sm">Add</button>
                                     </div>
                                 </form>
                             </div>
                         </div>
-                        @empty
-                        <div class="p-5 text-sm" style="color:var(--text-muted);">No {{ strtolower($pg['label']) }} yet. Add one above.</div>
-                        @endforelse
-                    </div>
+
+                        {{-- Defaults list --}}
+                        @if($hasDefaults)
+                        <template x-for="(item, idx) in defs" :key="item.id">
+                            <div :style="isDragTarget(idx,'d') ? 'border-top:2px solid #00b4d8; background:rgba(0,180,216,0.04);' : 'border-bottom:1px solid var(--border); background:var(--surface);'"
+                                 @dragover.prevent="onOver(idx,'d')"
+                                 @drop.prevent="drop(idx,'d')"
+                                 @dragleave="dragTarget=null">
+                                <div class="flex items-center gap-3 px-4 py-2.5 transition-opacity"
+                                     :class="dragFrom?.idx===idx && dragFrom?.list==='d' ? 'opacity-30' : ''"
+                                     draggable="true"
+                                     @dragstart="startDrag(idx,'d')"
+                                     @dragend="resetDrag()">
+                                    {{-- Drag handle --}}
+                                    <span class="cursor-grab flex-shrink-0" style="color:var(--text-muted);">
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><circle cx="7" cy="4" r="1.5"/><circle cx="13" cy="4" r="1.5"/><circle cx="7" cy="10" r="1.5"/><circle cx="13" cy="10" r="1.5"/><circle cx="7" cy="16" r="1.5"/><circle cx="13" cy="16" r="1.5"/></svg>
+                                    </span>
+                                    {{-- Toggle switch --}}
+                                    <label class="relative flex-shrink-0 cursor-pointer" style="width:36px; height:20px; display:block;">
+                                        <input type="checkbox" :checked="item.active" @change="item.active = !item.active" class="sr-only">
+                                        <span class="block w-full h-full rounded-full transition-colors duration-200"
+                                              :style="item.active ? 'background:#00b4d8' : 'background:var(--border-hover)'"></span>
+                                        <span class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200"
+                                              :style="item.active ? 'transform:translateX(16px)' : 'transform:translateX(0)'"></span>
+                                    </label>
+                                    <span class="flex-1 text-sm font-medium" x-text="item.name" style="color:var(--text-primary);"></span>
+                                    <span class="text-[10px] uppercase tracking-wide font-semibold" style="color:var(--text-muted);">Default</span>
+                                </div>
+                            </div>
+                        </template>
+                        {{-- Defaults save button --}}
+                        <div class="flex items-center justify-between px-4 py-3" style="background:var(--surface-2); border-top:1px solid var(--border);">
+                            <span class="text-xs" style="color:var(--text-muted);">Toggle on/off then save. Drag to reorder.</span>
+                            <button type="button" @click="saveDefaults()" class="corex-btn-primary text-sm px-5">Save Changes</button>
+                        </div>
+                        @endif
+
+                        {{-- Custom items (all groups) --}}
+                        <template x-for="(item, idx) in custs" :key="item.id">
+                            <div :style="isDragTarget(idx,'c') ? 'border-top:2px solid #00b4d8; background:rgba(0,180,216,0.04);' : 'border-bottom:1px solid var(--border);'"
+                                 @dragover.prevent="onOver(idx,'c')"
+                                 @drop.prevent="drop(idx,'c')"
+                                 @dragleave="dragTarget=null">
+                                {{-- View row --}}
+                                <div x-show="editId !== item.id"
+                                     class="flex items-center gap-3 px-4 py-2.5 transition-opacity"
+                                     :class="dragFrom?.idx===idx && dragFrom?.list==='c' ? 'opacity-30' : ''"
+                                     style="background:var(--surface);"
+                                     draggable="true"
+                                     @dragstart="startDrag(idx,'c')"
+                                     @dragend="resetDrag()">
+                                    <span class="cursor-grab flex-shrink-0" style="color:var(--text-muted);">
+                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><circle cx="7" cy="4" r="1.5"/><circle cx="13" cy="4" r="1.5"/><circle cx="7" cy="10" r="1.5"/><circle cx="13" cy="10" r="1.5"/><circle cx="7" cy="16" r="1.5"/><circle cx="13" cy="16" r="1.5"/></svg>
+                                    </span>
+                                    <span class="flex-1 text-sm font-medium" x-text="item.name" style="color:var(--text-primary);"></span>
+                                    <span class="text-xs tabular-nums" x-text="'#' + (idx+1)" style="color:var(--text-muted);"></span>
+                                    <button type="button" @click="startEdit(item)"
+                                            class="text-xs font-semibold" style="color:#00b4d8;"
+                                            onmouseover="this.style.color='#0091ae'" onmouseout="this.style.color='#00b4d8'">Edit</button>
+                                    <form :action="itemBaseUrl + '/' + item.id" method="POST"
+                                          @submit.prevent="if(confirm('Delete \'' + item.name + '\'?')) $el.submit()">
+                                        <input type="hidden" name="_token" :value="csrf">
+                                        <input type="hidden" name="_method" value="DELETE">
+                                        <button type="submit" class="text-xs font-semibold" style="color:var(--text-muted);"
+                                                onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='var(--text-muted)'">Delete</button>
+                                    </form>
+                                </div>
+                                {{-- Edit row --}}
+                                <div x-show="editId === item.id" x-cloak
+                                     class="px-4 py-3" style="background:rgba(0,180,216,0.04); border-top:1px solid rgba(0,180,216,0.15);">
+                                    <form :action="itemBaseUrl + '/' + item.id" method="POST"
+                                          class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                                        <input type="hidden" name="_token" :value="csrf">
+                                        <input type="hidden" name="_method" value="PUT">
+                                        <div class="md:col-span-7">
+                                            <input name="name" :value="editName" required
+                                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                        <div class="md:col-span-3">
+                                            <input name="sort_order" type="number" step="1" min="0" :value="editSort"
+                                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                        <div class="md:col-span-2 flex gap-2">
+                                            <button type="submit" class="flex-1 corex-btn-primary text-sm">Save</button>
+                                            <button type="button" @click="editId = null"
+                                                    class="flex-1 text-sm rounded-lg"
+                                                    style="border:1px solid var(--border); color:var(--text-secondary);">✕</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </template>
+
+                        {{-- Empty state --}}
+                        <div x-show="custs.length === 0" class="px-4 py-5 text-sm" style="color:var(--text-muted);">
+                            @if($hasDefaults)
+                            No custom {{ strtolower($pg['label']) }} yet — add one above.
+                            @else
+                            No {{ strtolower($pg['label']) }} yet — add one above.
+                            @endif
+                        </div>
+
+                    </div>{{-- /panel --}}
                 </div>
                 @endforeach
 

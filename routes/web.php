@@ -607,9 +607,12 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
 
     // Property Setting Items (settings)
     Route::prefix('settings/property-items')->middleware('permission:access_settings')->name('corex.settings.property-items.')->group(function () {
-        Route::post('/',              [\App\Http\Controllers\CoreX\SettingsController::class, 'storePropertySettingItem'])->name('store');
-        Route::put('/{item}',         [\App\Http\Controllers\CoreX\SettingsController::class, 'updatePropertySettingItem'])->name('update');
-        Route::delete('/{item}',      [\App\Http\Controllers\CoreX\SettingsController::class, 'destroyPropertySettingItem'])->name('destroy');
+        Route::post('/',                    [\App\Http\Controllers\CoreX\SettingsController::class, 'storePropertySettingItem'])->name('store');
+        Route::put('/{item}',              [\App\Http\Controllers\CoreX\SettingsController::class, 'updatePropertySettingItem'])->name('update');
+        Route::post('/{item}/toggle',      [\App\Http\Controllers\CoreX\SettingsController::class, 'togglePropertySettingItem'])->name('toggle');
+        Route::post('/reorder',               [\App\Http\Controllers\CoreX\SettingsController::class, 'reorderPropertySettingItems'])->name('reorder');
+        Route::post('/batch-toggle/{group}', [\App\Http\Controllers\CoreX\SettingsController::class, 'batchToggleDefaultItems'])->name('batch-toggle');
+        Route::delete('/{item}',           [\App\Http\Controllers\CoreX\SettingsController::class, 'destroyPropertySettingItem'])->name('destroy');
     });
 });
 

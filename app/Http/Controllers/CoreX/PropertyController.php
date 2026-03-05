@@ -108,7 +108,7 @@ class PropertyController extends Controller
 
         $settingItems = [
             'categories'   => PropertySettingItem::group('category')->get(),
-            'types'        => PropertySettingItem::group('property_type')->get(),
+            'types'        => PropertySettingItem::group('property_type')->where('active', true)->get(),
             'statuses'     => PropertySettingItem::group('property_status')->get(),
             'mandateTypes' => PropertySettingItem::group('mandate_type')->get(),
         ];
@@ -132,7 +132,7 @@ class PropertyController extends Controller
 
         $settingItems = [
             'categories'   => PropertySettingItem::group('category')->get(),
-            'types'        => PropertySettingItem::group('property_type')->get(),
+            'types'        => PropertySettingItem::group('property_type')->where('active', true)->get(),
             'statuses'     => PropertySettingItem::group('property_status')->get(),
             'mandateTypes' => PropertySettingItem::group('mandate_type')->get(),
         ];
@@ -168,9 +168,10 @@ class PropertyController extends Controller
             'property_type'    => 'nullable|string|max:50',
             'category'         => 'nullable|string|max:100',
             'mandate_type'     => 'nullable|string|max:50',
-            'status'           => 'required|in:draft,active,sold,withdrawn',
+            'status'           => 'nullable|string|max:100',
             'features'         => 'nullable|array',
             'features.*'       => 'string|max:100',
+            'spaces_json'      => 'nullable|string',
             'listed_date'      => 'nullable|date',
             'expiry_date'      => 'nullable|date',
             'branch_id'        => 'nullable|exists:branches,id',
@@ -193,11 +194,7 @@ class PropertyController extends Controller
             'pending_new_contacts'      => 'nullable|array',
         ]);
 
-        // Convert features array to JSON
-        if (isset($data['features'])) {
-            $data['features_json'] = array_values(array_filter($data['features']));
-            unset($data['features']);
-        }
+        $data = $this->processSpacesJson($data);
 
         $role = $user->effectiveRole();
         if (! in_array($role, ['super_admin', 'admin', 'branch_manager']) || empty($data['agent_id'])) {
@@ -304,9 +301,10 @@ class PropertyController extends Controller
             'property_type'    => 'nullable|string|max:50',
             'category'         => 'nullable|string|max:100',
             'mandate_type'     => 'nullable|string|max:50',
-            'status'           => 'required|in:draft,active,sold,withdrawn',
+            'status'           => 'nullable|string|max:100',
             'features'         => 'nullable|array',
             'features.*'       => 'string|max:100',
+            'spaces_json'      => 'nullable|string',
             'listed_date'      => 'nullable|date',
             'expiry_date'      => 'nullable|date',
             'branch_id'        => 'nullable|exists:branches,id',
@@ -322,10 +320,7 @@ class PropertyController extends Controller
             'gallery_images.*' => 'image|max:5120',
         ]);
 
-        if (isset($data['features'])) {
-            $data['features_json'] = array_values(array_filter($data['features']));
-            unset($data['features']);
-        }
+        $data = $this->processSpacesJson($data);
 
         if (! empty($data['publish']) && ! $property->isPublished()) {
             $data['published_at'] = now();
@@ -431,6 +426,44 @@ class PropertyController extends Controller
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
+
+    private function processSpacesJson(array $data): array
+    {
+        $rawJson = $data['spaces_json'] ?? null;
+        unset($data['features'], $data['spaces_json']);
+
+        if (!empty($rawJson)) {
+            $decoded = json_decode($rawJson, true);
+            if ($decoded) {
+                $data['spaces_json'] = $decoded;
+
+                // Build flat features_json for backward compat (overview tab)
+                $flat = [];
+                foreach ($decoded['spaces'] ?? [] as $sp) {
+                    foreach ($sp['featuresAll'] ?? [] as $f) { $flat[] = $f; }
+                    foreach ($sp['units'] ?? [] as $u) {
+                        foreach ($u['features'] ?? [] as $f) { $flat[] = $f; }
+                    }
+                }
+                foreach ($decoded['features'] ?? [] as $catArr) {
+                    if (is_array($catArr)) {
+                        foreach ($catArr as $f) { $flat[] = $f; }
+                    }
+                }
+                $data['features_json'] = array_values(array_unique(array_filter($flat)));
+
+                // Sync beds/baths from spaces so DB columns stay correct
+                foreach ($decoded['spaces'] ?? [] as $sp) {
+                    if ($sp['type'] === 'Bedroom')  { $data['beds']  = (int) ($sp['count'] ?? 0); }
+                    if ($sp['type'] === 'Bathroom') { $data['baths'] = (int) ($sp['count'] ?? 0); }
+                }
+            }
+        } else {
+            $data['spaces_json'] = null;
+        }
+
+        return $data;
+    }
 
     private function storeImages(Request $request, string $field, int $propertyId): array
     {
