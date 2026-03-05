@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use App\Models\AiConversation;
 use App\Models\AiMessage;
+use App\Services\PermissionService;
 use App\Services\PropertyCostService;
 
 class EllieController extends Controller
@@ -162,7 +163,7 @@ class EllieController extends Controller
           // Handle common questions deterministically (more reliable than LLM guesswork).
           $msgLower2 = function_exists('mb_strtolower') ? mb_strtolower((string)$data['message']) : strtolower((string)$data['message']);
 
-          $isAdminish = in_array((string)($user->role ?? ''), ['admin', 'branch_manager'], true);
+          $scope = PermissionService::getDataScope($user, 'ellie'); $isAdminish = $scope === 'all' || $scope === 'branch';
 
           $asksMyPerformance =
               (str_contains($msgLower2, 'my performance') || str_contains($msgLower2, 'how am i doing'));

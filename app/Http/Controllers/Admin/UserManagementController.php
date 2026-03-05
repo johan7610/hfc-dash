@@ -3,17 +3,19 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Role;
 use App\Models\User;
 use App\Models\Branch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class UserManagementController extends Controller
 {
     public function index()
     {
-        abort_unless(auth()->user()?->isEffectiveAdmin(), 403);
+        abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
 
         $users = User::orderBy('name')->get();
         $branches = Branch::orderBy('name')->get(['id','name']);
@@ -27,7 +29,7 @@ class UserManagementController extends Controller
 
     public function updateDefaults(Request $request, User $user)
     {
-        abort_unless(auth()->user()?->isEffectiveAdmin(), 403);
+        abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
 
         $data = $request->validate([
             'agent_cut_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -110,7 +112,7 @@ class UserManagementController extends Controller
         $user->can_capture_rentals = isset($defaults['can_capture_rentals']) && $defaults['can_capture_rentals'] == '1' ? 1 : 0;
 
           $user->counts_for_branch_split = isset($defaults['counts_for_branch_split']) && $defaults['counts_for_branch_split'] == '1' ? 1 : 0;
-        abort_unless(auth()->user()?->isEffectiveAdmin(), 403);
+        abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
 
         // Safety: prevent editing your own role/branch by mistake
         if ($user->id === auth()->id()) {
@@ -118,7 +120,7 @@ class UserManagementController extends Controller
         }
 
         $data = $request->validate([
-            'role' => ['required', 'in:agent,branch_manager,admin'],
+            'role' => ['required', Rule::in(Role::roleNames())],
             'designation' => ['nullable', 'string', 'max:100'],
             'branch_id' => ['nullable', 'integer'],
         ]);
@@ -198,7 +200,7 @@ class UserManagementController extends Controller
      */
     public function removeAgentFile(Request $request, User $user)
     {
-        abort_unless(auth()->user()?->isEffectiveAdmin(), 403);
+        abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
 
         $field = $request->input('field');
 
@@ -219,7 +221,7 @@ class UserManagementController extends Controller
 
     public function toggle(User $user)
     {
-        abort_unless(auth()->user()?->isEffectiveAdmin(), 403);
+        abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
 
         if ($user->id === auth()->id()) {
             return back()->withErrors('You cannot deactivate yourself.');
@@ -234,7 +236,7 @@ class UserManagementController extends Controller
 
     public function delete(User $user)
     {
-        abort_unless(auth()->user()?->isEffectiveAdmin(), 403);
+        abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
 
         if ($user->id === auth()->id()) {
             return back()->withErrors('You cannot delete yourself.');
@@ -245,8 +247,8 @@ class UserManagementController extends Controller
 
         DB::table('branch_assignments')->where('user_id', $user->id)->delete();
 
-        $user->delete();
+        $user->update(['is_active' => false]);
 
-        return back();
+        return back()->with('success', 'User deactivated.');
     }
 }

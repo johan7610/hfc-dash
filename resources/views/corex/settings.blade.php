@@ -148,8 +148,8 @@
             </div>
             @endif
 
-            {{-- Agency Management (super admin only) --}}
-            @if(auth()->user()?->isSuperAdmin())
+            {{-- Agency Management (owner role only) --}}
+            @if(auth()->user()?->isOwnerRole())
             <div>
                 <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:rgba(255,255,255,0.35);">Super Admin</h3>
                 <a href="{{ route('agencies.index') }}"

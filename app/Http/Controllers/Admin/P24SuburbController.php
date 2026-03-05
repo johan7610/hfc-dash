@@ -101,6 +101,6 @@ class P24SuburbController extends Controller
         $p24Suburb->delete();
 
         return redirect()->route('admin.p24-suburbs.index')
-            ->with('success', 'Suburb deleted.');
+            ->with('success', 'Suburb archived.');
     }
 }

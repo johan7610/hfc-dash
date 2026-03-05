@@ -84,45 +84,34 @@ class User extends Authenticatable
         return $branch?->agency_id ? (int) $branch->agency_id : null;
     }
 
-    public function isEffectiveAdmin(): bool
+    // ── Owner role checks (the ONLY hardcoded concept) ──
+
+    /**
+     * Check if the user's REAL role has the is_owner flag.
+     */
+    public function isOwnerRole(): bool
     {
-        return in_array($this->effectiveRole(), ['admin', 'super_admin']);
+        $roleModel = Role::allRoles()->firstWhere('name', $this->role ?? '');
+
+        return $roleModel && $roleModel->is_owner;
     }
 
-    public function isEffectiveBranchManager(): bool
+    /**
+     * Check if the user's EFFECTIVE role (respects View-As) has the is_owner flag.
+     */
+    public function isEffectiveOwner(): bool
     {
-        // Admin is NEVER treated as Branch Manager (prevents NULL-branch filters)
-        if ($this->isEffectiveAdmin()) {
-            return false;
-        }
+        $roleModel = Role::allRoles()->firstWhere('name', $this->effectiveRole());
 
-        return (string)($this->role ?? '') === 'branch_manager';
+        return $roleModel && $roleModel->is_owner;
     }
 
-    public function isEffectiveAgent(): bool
+    /**
+     * Get the Role model for this user's real role.
+     */
+    public function roleModel(): ?Role
     {
-        return $this->effectiveRole() === 'agent';
-    }
-
-    // Real role (no View-As)
-    public function isAdmin(): bool
-    {
-        return in_array($this->role ?? '', ['admin', 'super_admin']);
-    }
-
-    public function isSuperAdmin(): bool
-    {
-        return ($this->role ?? '') === 'super_admin';
-    }
-
-    public function isBranchManager(): bool
-    {
-        return (($this->role ?? "") === "branch_manager");
-    }
-
-    public function isAgent(): bool
-    {
-        return (($this->role ?? "") === "agent");
+        return Role::allRoles()->firstWhere('name', $this->role ?? '');
     }
 
     public function isCandidate(): bool
@@ -142,38 +131,4 @@ class User extends Authenticatable
         return PermissionService::userHasAnyPermission($this, $keys);
     }
 
-    // --- CoreX OS Section Access ---
-
-    /**
-     * @deprecated Use hasPermission() / hasAnyPermission() instead.
-     *             Will be removed after sidebar rewrite.
-     */
-    public function canAccessCorexSection(string $section): bool
-    {
-        if ($this->isEffectiveAdmin()) {
-            return true;
-        }
-
-        $access = [
-            'dashboard'        => ['admin', 'branch_manager', 'agent'],
-            'agency-tracker'   => ['admin', 'branch_manager', 'agent'],
-            'compliance'       => ['admin', 'branch_manager'],
-            'supervision'      => ['admin', 'branch_manager'],
-            'training'         => ['admin', 'branch_manager', 'agent'],
-            'communication'    => ['admin', 'branch_manager', 'agent'],
-            'client-portal'    => ['admin', 'branch_manager', 'agent'],
-            'franchise-admin'  => ['admin'],
-            'docuperfect'      => ['admin', 'branch_manager', 'agent'],
-            'document-library' => ['admin', 'branch_manager', 'agent'],
-            'presentations'    => ['admin', 'branch_manager', 'agent'],
-            'pdf-splitter'     => ['admin', 'branch_manager', 'agent'],
-            'knowledge-base'   => ['admin'],
-            'finance-engine'   => ['admin'],
-            'properties'       => ['admin', 'branch_manager', 'agent'],
-            'role-manager'     => ['admin'],
-            'settings'         => ['admin'],
-        ];
-
-        return in_array($this->effectiveRole(), $access[$section] ?? []);
-    }
 }

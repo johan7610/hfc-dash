@@ -7,6 +7,7 @@ use App\Models\MarketAnalyticsRun;
 use App\Models\Presentation;
 use App\Models\PresentationSnapshot;
 use App\Models\SaleProbabilityRun;
+use App\Services\PermissionService;
 use Illuminate\Http\Request;
 
 class PresentationSnapshotController extends Controller
@@ -14,9 +15,10 @@ class PresentationSnapshotController extends Controller
     private function authorizePresentation(Presentation $presentation): void
     {
         $user = auth()->user();
-        if ($user->isEffectiveAdmin()) return;
-        if ($user->isEffectiveBranchManager() && (int) $presentation->branch_id === (int) $user->effectiveBranchId()) return;
-        if ((int) $presentation->created_by_user_id === (int) $user->id) return;
+        $scope = PermissionService::getDataScope($user, 'presentations');
+        if ($scope === 'all') return;
+        if ($scope === 'branch' && (int) $presentation->branch_id === (int) $user->effectiveBranchId()) return;
+        if ($scope === 'own' && (int) $presentation->created_by_user_id === (int) $user->id) return;
         abort(403);
     }
 

@@ -3,9 +3,13 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class PresentationUpload extends Model
 {
+    use SoftDeletes;
+
+
     protected $fillable = [
         'presentation_id',
         'uploaded_by_user_id',

@@ -8,5 +8,5 @@ class CoreXPermission extends Model
 {
     protected $table = 'nexus_permissions';
 
-    protected $fillable = ['key', 'label', 'section', 'sort_order'];
+    protected $fillable = ['key', 'label', 'section', 'type', 'module', 'sort_order'];
 }

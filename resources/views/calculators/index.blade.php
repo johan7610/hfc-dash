@@ -10,7 +10,7 @@
     </div>
 
     {{-- Admin: Fee Scale Management --}}
-    @if(auth()->user()->isEffectiveAdmin())
+    @permission('calculators.manage')
     <div class="ds-status-card mb-6">
         <div class="ds-section-header" style="margin-bottom:0.5rem;">Fee Scale Management (Admin)</div>
         <p class="text-sm text-slate-500 mb-3">
@@ -43,7 +43,7 @@
             <div class="mt-3 text-red-600 text-sm font-medium">{{ session('fee_upload_error') }}</div>
         @endif
     </div>
-    @endif
+    @endpermission
 
     {{-- 2-column grid --}}
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">

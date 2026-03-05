@@ -5,9 +5,12 @@ namespace App\Models\Docuperfect;
 use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Document extends Model
 {
+    use SoftDeletes;
+
     protected $table = 'docuperfect_documents';
 
     protected $fillable = [
@@ -75,12 +78,12 @@ class Document extends Model
 
     public function scopeVisibleTo($query, User $user)
     {
-        if ($user->isAdmin()) {
-            return $query;
-        }
+        $scope = \App\Services\PermissionService::getDataScope($user, 'documents');
 
-        // Branch managers and agents both see all documents in their branch
-        $branchId = $user->effectiveBranchId();
-        return $query->where('branch_id', $branchId);
+        if ($scope === 'all') return $query;
+        if ($scope === 'branch') return $query->where('branch_id', $user->effectiveBranchId());
+        if ($scope === 'own') return $query->where('owner_id', $user->id);
+
+        return $query->whereRaw('1 = 0');
     }
 }

@@ -14,8 +14,7 @@ class AgentPerformanceController extends Controller
     public function show(Request $request, CompanyPerformanceService $service, int $userId)
     {
         $u = $request->user();
-        $role = strtolower(trim((string)($u?->role ?? '')));
-        abort_unless($u && $role === 'branch_manager', 403);
+        abort_unless($u && $u->hasPermission('view_performance'), 403);
 
         $bmBranchId = (int)($u->branch_id ?? 0);
         abort_unless($bmBranchId > 0, 403);

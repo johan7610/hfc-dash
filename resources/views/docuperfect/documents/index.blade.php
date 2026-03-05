@@ -65,10 +65,10 @@
                         <x-sort-header field="name" label="Name" />
                         <th class="text-left px-4 py-3">Template</th>
                         <x-sort-header field="updated_at" label="Last Edited" />
-                        @if($user->isAdmin() || $user->isBranchManager())
+                        @if($user->hasPermission('documents.edit'))
                         <th class="text-left px-4 py-3">Agent</th>
                         @endif
-                        @if($user->isAdmin())
+                        @if($user->hasPermission('manage_system'))
                         <th class="text-left px-4 py-3">Branch</th>
                         @endif
                         <th class="text-right px-4 py-3">Actions</th>
@@ -97,10 +97,10 @@
                         </td>
                         <td class="px-4 py-3 text-slate-600">{{ $doc->template->name ?? '—' }}</td>
                         <td class="px-4 py-3 text-slate-500">{{ $doc->updated_at->format('d M Y H:i') }}</td>
-                        @if($user->isAdmin() || $user->isBranchManager())
+                        @if($user->hasPermission('documents.edit'))
                         <td class="px-4 py-3 text-slate-600">{{ $doc->owner->name ?? '—' }}</td>
                         @endif
-                        @if($user->isAdmin())
+                        @if($user->hasPermission('manage_system'))
                         <td class="px-4 py-3 text-slate-600">{{ $doc->branch->name ?? '—' }}</td>
                         @endif
                         <td class="px-4 py-3 text-right space-x-2">

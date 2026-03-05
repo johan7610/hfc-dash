@@ -13,6 +13,7 @@ use App\Models\Docuperfect\WetInkInspection;
 use App\Services\Docuperfect\DocumentFlattener;
 use App\Services\Docuperfect\SignaturePdfService;
 use App\Services\Docuperfect\SignatureService;
+use App\Services\PermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -1308,11 +1309,13 @@ class SignatureController extends Controller
 
     private function authorizeDocument($user, Document $document): void
     {
-        if ($user->isAdmin()) {
+        $scope = PermissionService::getDataScope($user, 'documents');
+
+        if ($scope === 'all') {
             return;
         }
 
-        if ($user->isBranchManager()) {
+        if ($scope === 'branch') {
             if ($document->branch_id !== $user->effectiveBranchId()) {
                 abort(403);
             }

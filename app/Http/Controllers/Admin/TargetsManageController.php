@@ -11,6 +11,7 @@ use App\Models\Deal;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use App\Services\PermissionService;
 
 class TargetsManageController extends Controller
 {
@@ -58,8 +59,9 @@ class TargetsManageController extends Controller
         $period = (string)($request->get('period') ?: Carbon::now()->format('Y-m'));
         if (!preg_match('/^\d{4}\-\d{2}$/', $period)) $period = Carbon::now()->format('Y-m');
 
+        $scope = PermissionService::getDataScope($auth, 'targets');
         $branchId = (int)($request->get('branch_id') ?: 0);
-        if ($auth->isEffectiveBranchManager()) {
+        if ($scope === 'branch') {
             $branchId = (int)($auth->branch_id ?? 0);
         }
 
@@ -162,8 +164,8 @@ class TargetsManageController extends Controller
             'branchId' => $branchId,
             'branchNames' => $branchNames,
             'byBranch' => $byBranch,
-            'isAdmin' => $auth->isEffectiveAdmin(),
-            'isBM' => $auth->isEffectiveBranchManager(),
+            'isAdmin' => $scope === 'all',
+            'isBM' => $scope === 'branch',
         ]);
     }
 
@@ -192,8 +194,9 @@ class TargetsManageController extends Controller
                 if (!$u) continue;
                 if ((string)$u->role !== 'agent') continue;
 
-                // BM limited to branch
-                if (strtolower((string)$auth->role) === 'branch_manager') {
+                // Branch-scoped users limited to own branch
+                $saveScope = PermissionService::getDataScope($auth, 'targets');
+                if ($saveScope === 'branch') {
                     if ((int)($u->branch_id ?? 0) !== (int)($auth->branch_id ?? 0)) continue;
                 }
 

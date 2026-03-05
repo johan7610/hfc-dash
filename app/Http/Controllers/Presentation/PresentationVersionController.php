@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Presentation;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\PresentationVersion;
+use App\Services\PermissionService;
 use Illuminate\Http\Request;
 
 /**
@@ -21,18 +22,24 @@ class PresentationVersionController extends Controller
      */
     public function index(Request $request)
     {
-        $isAdmin = auth()->user()->isEffectiveAdmin();
+        $user = auth()->user();
+        $scope = PermissionService::getDataScope($user, 'presentations');
+        $isAdmin = $scope === 'all';
 
         $query = PresentationVersion::with(['presentation', 'compiledBy'])
             ->orderBy('compiled_at', 'desc');
 
-        // Branch scope for non-admins (branch managers)
-        if (!$isAdmin) {
-            $branchId = auth()->user()->effectiveBranchId();
+        // Scope-based filtering
+        if ($scope === 'branch') {
+            $branchId = $user->effectiveBranchId();
             $query->whereHas('presentation', fn ($q) => $q->where('branch_id', $branchId));
+        } elseif ($scope === 'own') {
+            $query->where('compiled_by', $user->id);
+        } elseif (!$scope) {
+            $query->whereRaw('1 = 0');
         }
 
-        // Filters (admin only: branch_id, user_id)
+        // Filters (all-scope only: branch_id, user_id)
         if ($isAdmin && $branchFilter = $request->integer('branch_id')) {
             $query->whereHas('presentation', fn ($q) => $q->where('branch_id', $branchFilter));
         }

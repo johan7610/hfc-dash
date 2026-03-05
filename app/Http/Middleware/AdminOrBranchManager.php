@@ -15,7 +15,7 @@ class AdminOrBranchManager
             abort(403);
         }
 
-        if ($user->isEffectiveAdmin() || $user->isEffectiveBranchManager()) {
+        if ($user->hasPermission('manage_system') || $user->hasPermission('manage_branch')) {
             return $next($request);
         }
 

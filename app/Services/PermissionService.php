@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Role;
 use App\Models\RolePermission;
 use App\Models\User;
 
@@ -9,6 +10,9 @@ class PermissionService
 {
     /** @var array<string, string[]> Cached permissions keyed by role */
     protected static array $cache = [];
+
+    /** @var array<string, array<string, ?string>> Cached scopes: role -> permKey -> scope */
+    protected static array $scopeCache = [];
 
     /** @var bool|null Whether the role_permissions table has been seeded */
     protected static ?bool $seeded = null;
@@ -30,15 +34,69 @@ class PermissionService
     }
 
     /**
+     * Get scope values for a role (cached per-request).
+     * Returns array: permission_key => scope ('own'|'branch'|'all'|null)
+     */
+    protected static function getScopesForRole(string $role): array
+    {
+        if (!isset(static::$scopeCache[$role])) {
+            static::$scopeCache[$role] = RolePermission::where('role', $role)
+                ->whereNotNull('scope')
+                ->pluck('scope', 'permission_key')
+                ->all();
+        }
+
+        return static::$scopeCache[$role];
+    }
+
+    /**
+     * Get the data scope for a user on a specific module.
+     *
+     * Looks up role_permissions where permission_key = '{module}.view'
+     * Returns: 'own', 'branch', 'all', or null (no access)
+     * Owner role always returns 'all'.
+     */
+    public static function getDataScope(User $user, string $module): ?string
+    {
+        $role = $user->effectiveRole();
+
+        // Owner role always gets full scope
+        $roleModel = Role::allRoles()->firstWhere('name', $role);
+        if ($roleModel && $roleModel->is_owner) {
+            return 'all';
+        }
+
+        // If unseeded, use role-based defaults (graceful for tests / fresh DBs)
+        if (static::$seeded === null) {
+            static::$seeded = RolePermission::exists();
+        }
+        if (!static::$seeded) {
+            return match ($role) {
+                'super_admin', 'admin' => 'all',
+                'branch_manager', 'office_admin' => 'branch',
+                default => 'own', // agent, viewer, etc.
+            };
+        }
+
+        $scopes = static::getScopesForRole($role);
+        $viewKey = $module . '.view';
+
+        return $scopes[$viewKey] ?? null;
+    }
+
+    /**
      * Check if a user has a specific permission via their role.
-     * super_admin bypasses all permission checks.
+     * Owner role bypasses all permission checks.
      * If role_permissions table is empty (unseeded DB / tests), allow all.
+     * For {module}.view keys, having any scope value = has permission.
      */
     public static function userHasPermission(User $user, string $permissionKey): bool
     {
         $role = $user->effectiveRole();
 
-        if ($role === 'super_admin') {
+        // Owner role bypasses all permission checks
+        $roleModel = Role::allRoles()->firstWhere('name', $role);
+        if ($roleModel && $roleModel->is_owner) {
             return true;
         }
 
@@ -48,6 +106,14 @@ class PermissionService
         }
         if (!static::$seeded) {
             return true;
+        }
+
+        // For {module}.view keys, check scope instead of simple presence
+        if (str_ends_with($permissionKey, '.view')) {
+            $scopes = static::getScopesForRole($role);
+            if (isset($scopes[$permissionKey])) {
+                return true;
+            }
         }
 
         $permissions = static::getPermissionsForRole($role);
@@ -60,11 +126,8 @@ class PermissionService
      */
     public static function userHasAnyPermission(User $user, array $permissionKeys): bool
     {
-        $role = $user->effectiveRole();
-        $permissions = static::getPermissionsForRole($role);
-
         foreach ($permissionKeys as $key) {
-            if (in_array($key, $permissions, true)) {
+            if (static::userHasPermission($user, $key)) {
                 return true;
             }
         }
@@ -78,6 +141,7 @@ class PermissionService
     public static function clearCache(): void
     {
         static::$cache = [];
+        static::$scopeCache = [];
         static::$seeded = null;
     }
 }

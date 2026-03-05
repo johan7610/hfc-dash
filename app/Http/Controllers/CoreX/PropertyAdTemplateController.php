@@ -4,6 +4,7 @@ namespace App\Http\Controllers\CoreX;
 
 use App\Http\Controllers\Controller;
 use App\Models\PropertyAdTemplate;
+use App\Services\PermissionService;
 use Illuminate\Http\Request;
 
 class PropertyAdTemplateController extends Controller
@@ -26,8 +27,8 @@ class PropertyAdTemplateController extends Controller
 
         /** @var \App\Models\User $user */
         $user      = auth()->user();
-        $role      = $user->effectiveRole();
-        $isGlobal  = ($data['is_global'] ?? false) && in_array($role, ['super_admin', 'admin']);
+        $scope     = PermissionService::getDataScope($user, 'properties');
+        $isGlobal  = ($data['is_global'] ?? false) && $scope === 'all';
 
         $tpl = PropertyAdTemplate::create([
             'user_id'     => $user->id,
@@ -51,8 +52,8 @@ class PropertyAdTemplateController extends Controller
 
         /** @var \App\Models\User $user */
         $user     = auth()->user();
-        $role     = $user->effectiveRole();
-        $isGlobal = ($data['is_global'] ?? false) && in_array($role, ['super_admin', 'admin']);
+        $scope    = PermissionService::getDataScope($user, 'properties');
+        $isGlobal = ($data['is_global'] ?? false) && $scope === 'all';
 
         $template->update([
             'name'        => $data['name'],
@@ -67,16 +68,16 @@ class PropertyAdTemplateController extends Controller
     {
         $this->authorizeTemplate($template);
         $template->delete();
-        return redirect()->back()->with('success', 'Template deleted.');
+        return redirect()->back()->with('success', 'Template archived.');
     }
 
     private function authorizeTemplate(PropertyAdTemplate $template): void
     {
         /** @var \App\Models\User $user */
         $user = auth()->user();
-        $role = $user->effectiveRole();
+        $scope = PermissionService::getDataScope($user, 'properties');
 
-        if (in_array($role, ['super_admin', 'admin'])) return;
+        if ($scope === 'all') return;
         if ((int) $template->user_id === (int) $user->id) return;
 
         abort(403);

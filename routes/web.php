@@ -88,6 +88,10 @@ Route::middleware('auth')->group(function () {
         ->middleware('permission:access_branch_assignments')
         ->name('admin.branches.delete');
 
+    Route::post('/admin/branches/{branch}/restore', [BranchAssignmentController::class, 'restoreBranch'])
+        ->middleware('permission:access_branch_assignments')
+        ->name('admin.branches.restore')->withTrashed();
+
     Route::post('/admin/branch-settings/{branch}', [BranchAssignmentController::class, 'updateBranchSettings'])
         ->middleware('permission:access_branch_assignments')
         ->name('admin.branch-settings.update');
@@ -295,6 +299,7 @@ Route::get('/bm/listings', [\App\Http\Controllers\BM\ListingStockController::cla
         Route::post('/admin/tv-messages', [\App\Http\Controllers\TvMessageController::class, 'adminStore'])->name('admin.tv-messages.store');
         Route::post('/admin/tv-messages/{tvMessage}', [\App\Http\Controllers\TvMessageController::class, 'adminUpdate'])->name('admin.tv-messages.update');
         Route::post('/admin/tv-messages/{tvMessage}/delete', [\App\Http\Controllers\TvMessageController::class, 'adminDelete'])->name('admin.tv-messages.delete');
+        Route::post('/admin/tv-messages/{tvMessage}/restore', [\App\Http\Controllers\TvMessageController::class, 'adminRestore'])->name('admin.tv-messages.restore')->withTrashed();
 
         // Admin: TV Code Management (all branches)
         Route::post('/admin/tv-code/generate', [\App\Http\Controllers\Admin\TvCodeController::class, 'generate'])->name('admin.tv-code.generate');
@@ -500,6 +505,7 @@ Route::middleware(['auth', 'permission:access_filing_register'])->group(function
     Route::post('/filing-register', [\App\Http\Controllers\DocumentFilingController::class, 'store'])->name('filing-register.store');
     Route::put('/filing-register/{id}', [\App\Http\Controllers\DocumentFilingController::class, 'update'])->name('filing-register.update');
     Route::delete('/filing-register/{id}', [\App\Http\Controllers\DocumentFilingController::class, 'destroy'])->name('filing-register.destroy');
+    Route::post('/filing-register/{filing}/restore', [\App\Http\Controllers\DocumentFilingController::class, 'restore'])->name('filing-register.restore')->withTrashed();
 });
 
 // ===== NEXUS OS ROUTES =====
@@ -523,14 +529,19 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::get('/settings', [CoreXSettingsController::class, 'index'])->middleware('permission:access_settings')->name('corex.settings');
     Route::post('/settings/generate-token', [CoreXSettingsController::class, 'generateApiToken'])->middleware('permission:access_settings')->name('corex.settings.generate-token');
 
-    // Role Manager (admin only)
+    // Role Manager
     Route::get('/role-manager', [CoreXRoleManagerController::class, 'index'])->middleware('permission:access_role_manager')->name('corex.role-manager');
     Route::post('/role-manager/permissions', [CoreXRoleManagerController::class, 'savePermissions'])
         ->middleware('permission:edit_permissions')->name('corex.role-manager.save');
     Route::post('/role-manager/user-role', [CoreXRoleManagerController::class, 'updateUserRole'])
         ->middleware('permission:change_user_roles')->name('corex.role-manager.user-role');
-    Route::post('/role-manager/self-promote', [CoreXRoleManagerController::class, 'selfPromote'])
-        ->name('corex.role-manager.self-promote');
+    // Role CRUD
+    Route::post('/role-manager/roles', [CoreXRoleManagerController::class, 'storeRole'])
+        ->middleware('permission:edit_permissions')->name('corex.role-manager.roles.store');
+    Route::put('/role-manager/roles/{role}', [CoreXRoleManagerController::class, 'updateRole'])
+        ->middleware('permission:edit_permissions')->name('corex.role-manager.roles.update');
+    Route::delete('/role-manager/roles/{role}', [CoreXRoleManagerController::class, 'destroyRole'])
+        ->middleware('permission:edit_permissions')->name('corex.role-manager.roles.destroy');
 
     // Agency Management (super_admin only)
     Route::middleware('permission:access_agencies')->prefix('settings/agencies')->name('agencies.')->group(function () {
@@ -550,6 +561,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::get('/{property}/ad',   [\App\Http\Controllers\CoreX\PropertyController::class, 'ad'])->name('ad');
         Route::put('/{property}',      [\App\Http\Controllers\CoreX\PropertyController::class, 'update'])->name('update');
         Route::delete('/{property}',   [\App\Http\Controllers\CoreX\PropertyController::class, 'destroy'])->name('destroy');
+        Route::post('/{property}/restore', [\App\Http\Controllers\CoreX\PropertyController::class, 'restore'])->name('restore')->withTrashed();
     });
 
     // Ad Template Builder
@@ -572,6 +584,7 @@ Route::middleware(['auth', 'permission:access_commercial_evaluations'])->prefix(
     Route::get('/{evaluation}/edit',                        [\App\Http\Controllers\CommercialEvaluationController::class, 'edit'])             ->name('edit');
     Route::put('/{evaluation}',                             [\App\Http\Controllers\CommercialEvaluationController::class, 'update'])           ->name('update');
     Route::delete('/{evaluation}',                          [\App\Http\Controllers\CommercialEvaluationController::class, 'destroy'])          ->name('destroy');
+    Route::post('/{evaluation}/restore',                    [\App\Http\Controllers\CommercialEvaluationController::class, 'restore'])          ->name('restore')->withTrashed();
     Route::post('/{evaluation}/evaluate',                   [\App\Http\Controllers\CommercialEvaluationController::class, 'evaluate'])         ->name('evaluate');
     Route::get('/{evaluation}/pdf',                         [\App\Http\Controllers\CommercialEvaluationController::class, 'downloadPdf'])      ->name('pdf');
     Route::post('/{evaluation}/financials',                 [\App\Http\Controllers\CommercialEvaluationController::class, 'storeFinancials'])  ->name('financials.store');
@@ -709,6 +722,10 @@ Route::middleware(['auth', 'permission:access_presentations'])->prefix('presenta
     // Live snapshot polling (B1 — zero-refresh updates)
     Route::get('/{presentation}/live-snapshot', [\App\Http\Controllers\Presentation\PortalCaptureController::class, 'liveSnapshot'])
         ->name('live-snapshot');
+
+    // Restore soft-deleted presentation
+    Route::post('/{presentation}/restore', [\App\Http\Controllers\Presentation\PresentationController::class, 'restore'])
+        ->name('restore')->withTrashed();
 });
 
 // ===== DOCUPERFECT =====
@@ -752,6 +769,7 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
     Route::put('/clauses/{id}', [\App\Http\Controllers\Docuperfect\ClauseController::class, 'update'])->name('docuperfect.clauses.update');
     Route::post('/clauses/{id}/copy', [\App\Http\Controllers\Docuperfect\ClauseController::class, 'copy'])->name('docuperfect.clauses.copy');
     Route::delete('/clauses/{id}', [\App\Http\Controllers\Docuperfect\ClauseController::class, 'destroy'])->name('docuperfect.clauses.destroy');
+    Route::post('/clauses/{clause}/restore', [\App\Http\Controllers\Docuperfect\ClauseController::class, 'restore'])->name('docuperfect.clauses.restore')->withTrashed();
     Route::get('/api/clauses', [\App\Http\Controllers\Docuperfect\ClauseController::class, 'listJson'])->name('docuperfect.clauses.json');
 
     // Page images (authenticated)
@@ -762,6 +780,7 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
     Route::post('/settings/types', [\App\Http\Controllers\Docuperfect\DocumentTypeController::class, 'store'])->name('docuperfect.settings.types.store');
     Route::put('/settings/types/{id}', [\App\Http\Controllers\Docuperfect\DocumentTypeController::class, 'update'])->name('docuperfect.settings.types.update');
     Route::delete('/settings/types/{id}', [\App\Http\Controllers\Docuperfect\DocumentTypeController::class, 'destroy'])->name('docuperfect.settings.types.destroy');
+    Route::post('/settings/types/{type}/restore', [\App\Http\Controllers\Docuperfect\DocumentTypeController::class, 'restore'])->name('docuperfect.settings.types.restore')->withTrashed();
     Route::post('/settings/types/reorder', [\App\Http\Controllers\Docuperfect\DocumentTypeController::class, 'reorder'])->name('docuperfect.settings.types.reorder');
 
     // Named Fields settings (admin)
@@ -769,6 +788,7 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
     Route::post('/settings/named-fields', [\App\Http\Controllers\Docuperfect\NamedFieldController::class, 'store'])->name('docuperfect.settings.namedFields.store');
     Route::put('/settings/named-fields/{id}', [\App\Http\Controllers\Docuperfect\NamedFieldController::class, 'update'])->name('docuperfect.settings.namedFields.update');
     Route::delete('/settings/named-fields/{id}', [\App\Http\Controllers\Docuperfect\NamedFieldController::class, 'destroy'])->name('docuperfect.settings.namedFields.destroy');
+    Route::post('/settings/named-fields/{field}/restore', [\App\Http\Controllers\Docuperfect\NamedFieldController::class, 'restore'])->name('docuperfect.settings.namedFields.restore')->withTrashed();
     Route::post('/settings/named-fields/reorder', [\App\Http\Controllers\Docuperfect\NamedFieldController::class, 'reorder'])->name('docuperfect.settings.namedFields.reorder');
 
     // Document Packs
@@ -778,6 +798,7 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
     Route::get('/packs/{id}/edit', [\App\Http\Controllers\Docuperfect\PackController::class, 'edit'])->name('docuperfect.packs.edit');
     Route::put('/packs/{id}', [\App\Http\Controllers\Docuperfect\PackController::class, 'update'])->name('docuperfect.packs.update');
     Route::delete('/packs/{id}', [\App\Http\Controllers\Docuperfect\PackController::class, 'destroy'])->name('docuperfect.packs.destroy');
+    Route::post('/packs/{pack}/restore', [\App\Http\Controllers\Docuperfect\PackController::class, 'restore'])->name('docuperfect.packs.restore')->withTrashed();
     Route::get('/packs/{id}/launch', [\App\Http\Controllers\Docuperfect\PackController::class, 'showLaunch'])->name('docuperfect.packs.showLaunch');
     Route::post('/packs/{id}/launch', [\App\Http\Controllers\Docuperfect\PackController::class, 'executeLaunch'])->name('docuperfect.packs.launch');
     Route::get('/attachments/{id}/download', [\App\Http\Controllers\Docuperfect\PackController::class, 'downloadAttachment'])->name('docuperfect.attachments.download');

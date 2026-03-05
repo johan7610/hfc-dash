@@ -11,7 +11,7 @@ class NamedFieldController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        if (!$user->isAdmin()) {
+        if (!$user->hasPermission('manage_templates')) {
             abort(403);
         }
 
@@ -23,7 +23,7 @@ class NamedFieldController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
-        if (!$user->isAdmin()) {
+        if (!$user->hasPermission('manage_templates')) {
             abort(403);
         }
 
@@ -56,7 +56,7 @@ class NamedFieldController extends Controller
     public function update(Request $request, $id)
     {
         $user = $request->user();
-        if (!$user->isAdmin()) {
+        if (!$user->hasPermission('manage_templates')) {
             abort(403);
         }
 
@@ -87,7 +87,7 @@ class NamedFieldController extends Controller
     public function destroy(Request $request, $id)
     {
         $user = $request->user();
-        if (!$user->isAdmin()) {
+        if (!$user->hasPermission('manage_templates')) {
             abort(403);
         }
 
@@ -95,13 +95,13 @@ class NamedFieldController extends Controller
         $name = $field->name;
         $field->delete();
 
-        return back()->with('status', "Named field \"{$name}\" deleted.");
+        return back()->with('status', "Named field \"{$name}\" archived.");
     }
 
     public function reorder(Request $request)
     {
         $user = $request->user();
-        if (!$user->isAdmin()) {
+        if (!$user->hasPermission('manage_templates')) {
             abort(403);
         }
 
@@ -115,5 +115,15 @@ class NamedFieldController extends Controller
         }
 
         return response()->json(['ok' => true]);
+    }
+
+    // ── Restore soft-deleted ──
+
+    public function restore($id)
+    {
+        abort_unless(auth()->user()->hasPermission('manage_templates'), 403);
+        $record = NamedField::onlyTrashed()->findOrFail($id);
+        $record->restore();
+        return redirect()->back()->with('success', 'Record restored.');
     }
 }

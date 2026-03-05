@@ -3,9 +3,12 @@
 namespace App\Models\Docuperfect;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class DocumentType extends Model
 {
+    use SoftDeletes;
+
     protected $table = 'docuperfect_document_types';
 
     protected $fillable = [

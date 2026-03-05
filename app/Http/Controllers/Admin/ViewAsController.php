@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 
 class ViewAsController extends Controller
 {
@@ -12,13 +14,13 @@ class ViewAsController extends Controller
     {
         $user = Auth::user();
 
-        // Only REAL admins may use this feature
-        if (!$user || !$user->isAdmin()) {
+        // Only users with REAL owner role or impersonate permission may use this feature
+        if (!$user || !($user->isOwnerRole() || $user->hasPermission('impersonate_users'))) {
             abort(403);
         }
 
         $data = $request->validate([
-            'role' => ['required', 'in:admin,branch_manager,agent'],
+            'role' => ['required', Rule::in(Role::where('is_owner', false)->pluck('name'))],
             'branch_id' => ['nullable', 'integer'],
         ]);
 
@@ -35,7 +37,7 @@ class ViewAsController extends Controller
     {
         $user = Auth::user();
 
-        if (!$user || !$user->isAdmin()) {
+        if (!$user || !($user->isOwnerRole() || $user->hasPermission('impersonate_users'))) {
             abort(403);
         }
 

@@ -39,6 +39,7 @@
                         <option value="Active" {{ request('status') === 'Active' ? 'selected' : '' }}>Active</option>
                         <option value="Expiring" {{ request('status') === 'Expiring' ? 'selected' : '' }}>Expiring Soon</option>
                         <option value="Expired" {{ request('status') === 'Expired' ? 'selected' : '' }}>Expired</option>
+                        <option value="Archived" {{ request('status') === 'Archived' ? 'selected' : '' }}>Archived</option>
                     </select>
                 </div>
                 @if($isAdmin)
@@ -93,6 +94,7 @@
         </div>
 
         {{-- Add new filing --}}
+        @permission('filing.create')
         <div class="ds-status-card" x-data="{ open: false }">
             <button type="button" @click="open = !open" class="flex items-center gap-2 text-sm font-semibold" style="color: var(--ds-navy);">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
@@ -156,6 +158,7 @@
                 </div>
             </form>
         </div>
+        @endpermission
 
         {{-- Main table --}}
         <div class="ds-status-card" style="padding:0; overflow:hidden;">
@@ -207,7 +210,9 @@
                             </template>
                             <template x-if="!editing">
                                 <td class="px-4 py-3">
-                                    @if($filing->status === 'active')
+                                    @if($showArchived)
+                                        <span class="ds-badge ds-badge-warning">Archived</span>
+                                    @elseif($filing->status === 'active')
                                         <span class="ds-badge ds-badge-success">Active</span>
                                     @elseif($filing->status === 'expiring')
                                         <span class="ds-badge ds-badge-warning">Expires in {{ (int) now()->diffInDays($filing->expiry_date) }}d</span>
@@ -218,11 +223,22 @@
                             </template>
                             <template x-if="!editing">
                                 <td class="px-4 py-3 text-right whitespace-nowrap">
-                                    <button @click="editing = true" class="text-xs text-blue-600 hover:underline mr-2">Edit</button>
-                                    <form method="POST" action="{{ route('filing-register.destroy', $filing->id) }}" class="inline" onsubmit="return confirm('Delete this filing entry?')">
-                                        @csrf @method('DELETE')
-                                        <button type="submit" class="text-xs text-red-600 hover:underline">Delete</button>
-                                    </form>
+                                    @if($showArchived)
+                                        <form method="POST" action="{{ route('filing-register.restore', $filing->id) }}" class="inline">
+                                            @csrf
+                                            <button type="submit" class="text-xs text-emerald-600 hover:underline">Restore</button>
+                                        </form>
+                                    @else
+                                        @permission('filing.edit')
+                                        <button @click="editing = true" class="text-xs text-blue-600 hover:underline mr-2">Edit</button>
+                                        @endpermission
+                                        @permission('filing.archive')
+                                        <form method="POST" action="{{ route('filing-register.destroy', $filing->id) }}" class="inline" onsubmit="return confirm('Delete this filing entry?')">
+                                            @csrf @method('DELETE')
+                                            <button type="submit" class="text-xs text-red-600 hover:underline">Delete</button>
+                                        </form>
+                                        @endpermission
+                                    @endif
                                 </td>
                             </template>
 

@@ -40,7 +40,7 @@ class ClauseController extends Controller
         $clauses = $query->paginate(20)->withQueryString();
 
         $branches = Branch::orderBy('name')->get();
-        $canEdit = $user->isAdmin() || $user->isBranchManager();
+        $canEdit = $user->hasPermission('clauses.edit');
 
         return view('docuperfect.clauses.index', compact('clauses', 'branches', 'canEdit', 'user'));
     }
@@ -48,9 +48,7 @@ class ClauseController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
-            abort(403);
-        }
+        abort_unless($user->hasPermission('clauses.edit'), 403);
 
         $request->validate([
             'name' => 'required|string|max:255',
@@ -78,9 +76,7 @@ class ClauseController extends Controller
     public function update(Request $request, $id)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
-            abort(403);
-        }
+        abort_unless($user->hasPermission('clauses.edit'), 403);
 
         $clause = Clause::findOrFail($id);
 
@@ -111,9 +107,7 @@ class ClauseController extends Controller
     public function copy(Request $request, $id)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
-            abort(403);
-        }
+        abort_unless($user->hasPermission('clauses.edit'), 403);
 
         $original = Clause::with('branches')->findOrFail($id);
 
@@ -131,16 +125,14 @@ class ClauseController extends Controller
     public function destroy(Request $request, $id)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
-            abort(403);
-        }
+        abort_unless($user->hasPermission('clauses.edit'), 403);
 
         $clause = Clause::findOrFail($id);
         $name = $clause->name;
         $clause->delete();
 
         return redirect()->route('docuperfect.clauses.index')
-            ->with('status', "Clause \"{$name}\" deleted.");
+            ->with('status', "Clause \"{$name}\" archived.");
     }
 
     public function listJson(Request $request)
@@ -152,5 +144,15 @@ class ClauseController extends Controller
             ->get(['id', 'name', 'text', 'is_global']);
 
         return response()->json($clauses);
+    }
+
+    // ── Restore soft-deleted ──
+
+    public function restore($id)
+    {
+        abort_unless(auth()->user()->hasPermission('clauses.edit'), 403);
+        $record = Clause::onlyTrashed()->findOrFail($id);
+        $record->restore();
+        return redirect()->back()->with('success', 'Record restored.');
     }
 }

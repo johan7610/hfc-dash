@@ -12,7 +12,7 @@ class AgentCommissionController extends Controller
 {
     public function index(Request $request)
     {
-        abort_unless(auth()->user()?->isEffectiveAdmin(), 403);
+        abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
 
         $period = $request->query('period', now()->format('Y-m'));
 

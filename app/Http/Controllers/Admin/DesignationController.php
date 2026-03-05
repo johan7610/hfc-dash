@@ -87,6 +87,6 @@ class DesignationController extends Controller
 
         $designation->delete();
 
-        return back()->with('status', 'Designation deleted.');
+        return back()->with('status', 'Designation archived.');
     }
 }

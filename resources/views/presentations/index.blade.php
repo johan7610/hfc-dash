@@ -11,9 +11,14 @@
     >
         <x-slot:filters>
             <select name="status" onchange="this.form.submit()" class="list-header-filter">
+                <option value="active" {{ request('status', 'active') === 'active' ? 'selected' : '' }}>Active</option>
+                <option value="archived" {{ request('status') === 'archived' ? 'selected' : '' }}>Archived</option>
+            </select>
+
+            <select name="record_status" onchange="this.form.submit()" class="list-header-filter">
                 <option value="">All statuses</option>
                 @foreach($statuses as $s)
-                <option value="{{ $s }}" {{ request('status') === $s ? 'selected' : '' }}>{{ ucfirst($s) }}</option>
+                <option value="{{ $s }}" {{ request('record_status') === $s ? 'selected' : '' }}>{{ ucfirst($s) }}</option>
                 @endforeach
             </select>
 
@@ -91,16 +96,20 @@
                                     {{ $pres->seller_name ?? '—' }}
                                 </td>
                                 <td class="px-4 py-3">
-                                    @php
-                                        $badgeClass = match($pres->status) {
-                                            'presented' => 'ds-badge-info',
-                                            'locked'    => 'ds-badge-success',
-                                            default     => 'ds-badge-default',
-                                        };
-                                    @endphp
-                                    <span class="ds-badge {{ $badgeClass }}">
-                                        {{ ucfirst($pres->status) }}
-                                    </span>
+                                    @if($showArchived)
+                                        <span class="ds-badge ds-badge-warning">Archived</span>
+                                    @else
+                                        @php
+                                            $badgeClass = match($pres->status) {
+                                                'presented' => 'ds-badge-info',
+                                                'locked'    => 'ds-badge-success',
+                                                default     => 'ds-badge-default',
+                                            };
+                                        @endphp
+                                        <span class="ds-badge {{ $badgeClass }}">
+                                            {{ ucfirst($pres->status) }}
+                                        </span>
+                                    @endif
                                 </td>
                                 @if($agents->isNotEmpty())
                                 <td class="px-4 py-3 text-gray-600 text-xs">
@@ -111,10 +120,17 @@
                                     {{ $pres->created_at->format('d M Y') }}
                                 </td>
                                 <td class="px-4 py-3">
-                                    <a href="{{ route('presentations.show', $pres) }}"
-                                       class="ds-agent-link text-xs font-medium">
-                                        Open &rarr;
-                                    </a>
+                                    @if($showArchived)
+                                        <form method="POST" action="{{ route('presentations.restore', $pres->id) }}" class="inline">
+                                            @csrf
+                                            <button type="submit" class="text-xs font-medium text-emerald-600 hover:text-emerald-800">Restore</button>
+                                        </form>
+                                    @else
+                                        <a href="{{ route('presentations.show', $pres) }}"
+                                           class="ds-agent-link text-xs font-medium">
+                                            Open &rarr;
+                                        </a>
+                                    @endif
                                 </td>
                             </tr>
                         @endforeach

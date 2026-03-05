@@ -303,13 +303,10 @@ class TemplateController extends Controller
         $template = Template::findOrFail($id);
         $name = $template->name;
 
-        // Delete page images
-        $dir = "docuperfect/templates/{$template->id}";
-        Storage::deleteDirectory($dir);
-
+        // Soft delete — page images preserved on disk for potential restore
         $template->delete();
 
         return redirect()->route('docuperfect.templates.index')
-            ->with('status', "Template \"{$name}\" deleted.");
+            ->with('status', "Template \"{$name}\" archived.");
     }
 }

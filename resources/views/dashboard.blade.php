@@ -21,10 +21,6 @@
 
     @php
         $u = auth()->user();
-        $role = strtolower(trim((string)($u?->effectiveRole() ?? ($u->role ?? ''))));
-        $isAdmin = (bool)($u?->isEffectiveAdmin());
-        $isBM = ($role === 'branch_manager');
-        $isAgent = ($role === 'agent');
     @endphp
 
     <div class="py-8">
@@ -51,7 +47,7 @@
                 </a>
 
                 {{-- Agent --}}
-                @if($isAgent)
+                @permission('view_own_stats')
                     <a href="{{ route('agent.dashboard') }}"
                        class="bg-white border rounded-lg shadow-sm hover:shadow p-5 transition">
                         <div class="flex items-start justify-between">
@@ -73,10 +69,10 @@
                             <div class="text-2xl">✅</div>
                         </div>
                     </a>
-                @endif
+                @endpermission
 
-                {{-- Branch Manager (match navigation.blade.php BM items) --}}
-                @if($isBM)
+                {{-- Branch Manager --}}
+                @permission('view_branch_stats')
                       <a href="{{ route('bm.my.dashboard') }}"
                          class="bg-white border rounded-lg shadow-sm hover:shadow p-5 transition">
                           <div class="flex items-start justify-between">
@@ -156,10 +152,10 @@
                             </div>
                         </a>
                     @endif
-                @endif
+                @endpermission
 
-                {{-- Admin (match navigation admin items) --}}
-                @if($isAdmin)
+                {{-- Admin --}}
+                @permission('view_company_stats')
                     <a href="{{ route('admin.dashboard') }}"
                        class="bg-white border rounded-lg shadow-sm hover:shadow p-5 transition">
                         <div class="flex items-start justify-between">
@@ -260,7 +256,7 @@
                             <div class="text-2xl">🛠️</div>
                         </div>
                     </a>
-                @endif
+                @endpermission
 
             </div>
         </div>

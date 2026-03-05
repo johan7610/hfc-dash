@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Presentation;
 use App\Http\Controllers\Controller;
 use App\Models\Presentation;
 use App\Models\PresentationVersion;
+use App\Services\PermissionService;
 use App\Services\Presentations\PresentationPdfService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -23,9 +24,10 @@ class PresentationPdfController extends Controller
     private function authorizePresentation(Presentation $presentation): void
     {
         $user = auth()->user();
-        if ($user->isEffectiveAdmin()) return;
-        if ($user->isEffectiveBranchManager() && (int) $presentation->branch_id === (int) $user->effectiveBranchId()) return;
-        if ((int) $presentation->created_by_user_id === (int) $user->id) return;
+        $scope = PermissionService::getDataScope($user, 'presentations');
+        if ($scope === 'all') return;
+        if ($scope === 'branch' && (int) $presentation->branch_id === (int) $user->effectiveBranchId()) return;
+        if ($scope === 'own' && (int) $presentation->created_by_user_id === (int) $user->id) return;
         abort(403);
     }
 

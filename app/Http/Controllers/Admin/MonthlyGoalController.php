@@ -8,6 +8,7 @@ use App\Models\MonthlyTargetGoal;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use App\Services\PermissionService;
 
 class MonthlyGoalController extends Controller
 {
@@ -34,9 +35,10 @@ class MonthlyGoalController extends Controller
             $period = Carbon::now()->format('Y-m');
         }
 
-        // Branch scope (Admin can choose; BM locked to own branch)
+        // Branch scope (all-scope can choose; branch-scope locked to own branch)
+        $scope = PermissionService::getDataScope($auth, 'targets');
         $branchId = (int)($request->get('branch_id') ?: 0);
-        if ($auth->isEffectiveBranchManager()) {
+        if ($scope === 'branch') {
             $branchId = (int)($auth->branch_id ?? 0);
         }
 
@@ -110,8 +112,8 @@ class MonthlyGoalController extends Controller
             'branchRollups' => $branchRollups,
             'companyRollup' => $companyRollup,
 
-            'isAdmin' => $auth->isEffectiveAdmin(),
-            'isBM' => $auth->isEffectiveBranchManager(),
+            'isAdmin' => $scope === 'all',
+            'isBM' => $scope === 'branch',
         ]);
     }
 
@@ -130,10 +132,11 @@ class MonthlyGoalController extends Controller
         $scope = strtolower(trim((string)($request->input('scope') ?? 'company'))); // company|branch
 
         // Scope rules:
-        // - Admin can save company or any branch
-        // - BM can only save branch goal for their branch
+        // - all-scope can save company or any branch
+        // - branch-scope can only save branch goal for their branch
+        $dataScope = PermissionService::getDataScope($auth, 'targets');
         $branchId = (int)($request->input('branch_id') ?? 0);
-        if ($auth->isEffectiveBranchManager()) {
+        if ($dataScope === 'branch') {
             $branchId = (int)($auth->branch_id ?? 0);
             $scope = 'branch';
         }
@@ -180,7 +183,7 @@ class MonthlyGoalController extends Controller
 
         return redirect()->route('admin.monthly-goals', [
             'period' => $period,
-            'branch_id' => $auth->isEffectiveBranchManager() ? (int)($auth->branch_id ?? 0) : $branchId,
+            'branch_id' => $dataScope === 'branch' ? (int)($auth->branch_id ?? 0) : $branchId,
         ])->with('status', 'Monthly goal saved.');
     }
 

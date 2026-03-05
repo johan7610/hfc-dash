@@ -45,9 +45,9 @@
 
 <x-page-header title="PDF Pack Splitter" :flush="true">
     <x-slot:actions>
-        @if(auth()->user()?->isEffectiveAdmin())
+        @permission('calculators.manage')
         <a href="{{ route('admin.splitter.doc-types.index') }}" class="corex-btn-outline text-xs">Manage Labels</a>
-        @endif
+        @endpermission
         <button type="submit" form="pdf-upload-form" class="corex-btn-primary text-sm">Upload &amp; Split</button>
     </x-slot:actions>
 </x-page-header>

@@ -39,6 +39,7 @@ use App\Services\SaleProbability\ConfidenceScoringService;
 use App\Services\SaleProbability\InterpretationService;
 use App\Services\SaleProbability\SaleProbabilityService;
 use App\Support\Presentation\LinkImportedFieldPresenter;
+use App\Services\PermissionService;
 use Illuminate\Http\Request;
 
 class PresentationController extends Controller
@@ -49,16 +50,17 @@ class PresentationController extends Controller
     private function authorizePresentation(Presentation $presentation): void
     {
         $user = auth()->user();
+        $scope = PermissionService::getDataScope($user, 'presentations');
 
-        if ($user->isEffectiveAdmin()) {
+        if ($scope === 'all') {
             return;
         }
 
-        if ($user->isEffectiveBranchManager() && (int) $presentation->branch_id === (int) $user->effectiveBranchId()) {
+        if ($scope === 'branch' && (int) $presentation->branch_id === (int) $user->effectiveBranchId()) {
             return;
         }
 
-        if ((int) $presentation->created_by_user_id === (int) $user->id) {
+        if ($scope === 'own' && (int) $presentation->created_by_user_id === (int) $user->id) {
             return;
         }
 
@@ -70,7 +72,15 @@ class PresentationController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Presentation::visibleTo(auth()->user())->with(['snapshots', 'creator']);
+        // Active/Archived filter (soft-delete toggle)
+        $status = $request->input('status', 'active');
+        $showArchived = $status === 'archived';
+
+        if ($showArchived) {
+            $query = Presentation::onlyTrashed()->visibleTo(auth()->user())->with(['snapshots', 'creator']);
+        } else {
+            $query = Presentation::visibleTo(auth()->user())->with(['snapshots', 'creator']);
+        }
 
         // Search
         if ($search = $request->input('search')) {
@@ -83,8 +93,8 @@ class PresentationController extends Controller
         }
 
         // Filters
-        if ($status = $request->input('status')) {
-            $query->where('status', $status);
+        if ($recordStatus = $request->input('record_status')) {
+            $query->where('status', $recordStatus);
         }
         if ($propertyType = $request->input('property_type')) {
             $query->where('property_type', $propertyType);
@@ -108,13 +118,14 @@ class PresentationController extends Controller
         $statuses = Presentation::visibleTo(auth()->user())->distinct()->pluck('status')->filter()->sort()->values();
         $propertyTypes = Presentation::visibleTo(auth()->user())->whereNotNull('property_type')->distinct()->pluck('property_type')->sort()->values();
         $agents = collect();
-        if (auth()->user()->isEffectiveAdmin() || auth()->user()->isEffectiveBranchManager()) {
+        $indexScope = PermissionService::getDataScope(auth()->user(), 'presentations');
+        if ($indexScope === 'all' || $indexScope === 'branch') {
             $agents = \App\Models\User::orderBy('name')
                 ->whereIn('id', Presentation::visibleTo(auth()->user())->distinct()->pluck('created_by_user_id'))
                 ->get(['id', 'name']);
         }
 
-        return view('presentations.index', compact('presentations', 'statuses', 'propertyTypes', 'agents'));
+        return view('presentations.index', compact('presentations', 'statuses', 'propertyTypes', 'agents', 'status', 'showArchived'));
     }
 
     /**
@@ -123,7 +134,8 @@ class PresentationController extends Controller
      */
     public function create()
     {
-        $isAdmin = auth()->user()->isEffectiveAdmin();
+        $scope = PermissionService::getDataScope(auth()->user(), 'presentations');
+        $isAdmin = $scope === 'all';
         $branches = $isAdmin ? Branch::orderBy('name')->get() : collect();
 
         return view('presentations.create', compact('branches', 'isAdmin'));
@@ -136,7 +148,8 @@ class PresentationController extends Controller
      */
     public function store(Request $request)
     {
-        $isAdmin = auth()->user()->isEffectiveAdmin();
+        $scope = PermissionService::getDataScope(auth()->user(), 'presentations');
+        $isAdmin = $scope === 'all';
 
         $rules = [
             'title'            => ['required', 'string', 'max:255'],
@@ -191,7 +204,8 @@ class PresentationController extends Controller
     public function edit(Presentation $presentation)
     {
         $this->authorizePresentation($presentation);
-        $isAdmin = auth()->user()->isEffectiveAdmin();
+        $scope = PermissionService::getDataScope(auth()->user(), 'presentations');
+        $isAdmin = $scope === 'all';
         $branches = $isAdmin ? Branch::orderBy('name')->get() : collect();
 
         return view('presentations.edit', compact('presentation', 'branches', 'isAdmin'));
@@ -203,7 +217,8 @@ class PresentationController extends Controller
     public function update(Request $request, Presentation $presentation)
     {
         $this->authorizePresentation($presentation);
-        $isAdmin = auth()->user()->isEffectiveAdmin();
+        $scope = PermissionService::getDataScope(auth()->user(), 'presentations');
+        $isAdmin = $scope === 'all';
 
         $rules = [
             'title'            => ['required', 'string', 'max:255'],
@@ -294,7 +309,8 @@ class PresentationController extends Controller
             }
         }
 
-        $isAdmin = auth()->user()->isEffectiveAdmin();
+        $scope = PermissionService::getDataScope(auth()->user(), 'presentations');
+        $isAdmin = $scope === 'all';
 
         // Polling cursor init values for live updates
         $maxCaptureId        = $presentation->portalCaptures()->max('id') ?? 0;
@@ -631,20 +647,16 @@ class PresentationController extends Controller
 
         $filename = $upload->original_filename ?? 'document';
 
-        // Delete related extracted data
+        // Delete related extracted data (hard delete — derivative, re-extractable)
         \App\Models\PresentationField::where('source_upload_id', $upload->id)->delete();
         \App\Models\PresentationSoldComp::where('source_upload_id', $upload->id)->delete();
         \App\Models\PresentationActiveListing::where('source_upload_id', $upload->id)->delete();
 
-        // Delete the stored file
-        if ($upload->storage_path) {
-            \Illuminate\Support\Facades\Storage::disk('local')->delete($upload->storage_path);
-        }
-
+        // Soft delete — stored file preserved on disk for potential restore
         $upload->delete();
 
         return redirect()->route('presentations.show', $presentation)
-            ->with('success', "Deleted \"{$filename}\" and related extracted data.");
+            ->with('success', "Archived \"{$filename}\" and removed extracted data.");
     }
 
     /**
@@ -773,7 +785,8 @@ class PresentationController extends Controller
         }
 
         // A1: resolve admin status once — used for branch enforcement and branch list
-        $isAdmin = auth()->user()->isEffectiveAdmin();
+        $scope = PermissionService::getDataScope(auth()->user(), 'presentations');
+        $isAdmin = $scope === 'all';
 
         $validated = $request->validate([
             'suburb'        => ['required', 'string', 'max:100'],
@@ -988,7 +1001,8 @@ class PresentationController extends Controller
         if (config('features.presentation_readiness_check', false)) {
             $readiness = (new PresentationReadinessService())->evaluate($presentation);
             if (!$readiness['can_compile']) {
-                $isAdmin   = auth()->user()->isEffectiveAdmin();
+                $compileScope = PermissionService::getDataScope(auth()->user(), 'presentations');
+                $isAdmin   = $compileScope === 'all';
                 $hasForce  = $request->boolean('force');
                 if (!($isAdmin && $hasForce)) {
                     $missing = implode('; ', array_column($readiness['missing_required'], 'label'));
@@ -1091,7 +1105,8 @@ class PresentationController extends Controller
             'branch_id'     => ['nullable', 'integer', 'exists:branches,id'],
         ]);
 
-        $isAdmin           = auth()->user()->isEffectiveAdmin();
+        $scope             = PermissionService::getDataScope(auth()->user(), 'presentations');
+        $isAdmin           = $scope === 'all';
         $effectiveBranchId = $isAdmin
             ? (isset($validated['branch_id']) ? (int) $validated['branch_id'] : null)
             : (int) auth()->user()->effectiveBranchId();
@@ -1270,7 +1285,8 @@ class PresentationController extends Controller
             'days_per_step' => ['nullable', 'integer', 'min:1', 'max:365'],
         ]);
 
-        $isAdmin           = auth()->user()->isEffectiveAdmin();
+        $scope             = PermissionService::getDataScope(auth()->user(), 'presentations');
+        $isAdmin           = $scope === 'all';
         $effectiveBranchId = $isAdmin
             ? (isset($validated['branch_id']) ? (int) $validated['branch_id'] : null)
             : (int) auth()->user()->effectiveBranchId();
@@ -1316,7 +1332,8 @@ class PresentationController extends Controller
             'steps'         => ['nullable', 'integer', 'min:3', 'max:21'],
         ]);
 
-        $isAdmin           = auth()->user()->isEffectiveAdmin();
+        $scope             = PermissionService::getDataScope(auth()->user(), 'presentations');
+        $isAdmin           = $scope === 'all';
         $effectiveBranchId = $isAdmin
             ? (isset($validated['branch_id']) ? (int) $validated['branch_id'] : null)
             : (int) auth()->user()->effectiveBranchId();
@@ -1595,5 +1612,15 @@ class PresentationController extends Controller
             'success' => true,
             'message' => 'Captured at R ' . number_format($validated['price'], 0, '.', ',') . ' — included in pack',
         ]);
+    }
+
+    // ── Restore soft-deleted ──
+
+    public function restore($id)
+    {
+        abort_unless(auth()->user()->hasPermission('presentations.edit'), 403);
+        $record = Presentation::onlyTrashed()->findOrFail($id);
+        $record->restore();
+        return redirect()->back()->with('success', 'Record restored.');
     }
 }

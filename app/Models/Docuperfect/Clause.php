@@ -5,9 +5,12 @@ namespace App\Models\Docuperfect;
 use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Clause extends Model
 {
+    use SoftDeletes;
+
     protected $table = 'docuperfect_clauses';
 
     protected $fillable = [
@@ -33,9 +36,9 @@ class Clause extends Model
 
     public function scopeVisibleTo($query, User $user)
     {
-        if ($user->isAdmin()) {
-            return $query;
-        }
+        $scope = \App\Services\PermissionService::getDataScope($user, 'clauses');
+
+        if ($scope === 'all') return $query;
 
         $branchId = $user->effectiveBranchId();
 

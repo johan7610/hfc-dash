@@ -25,9 +25,9 @@ class AiConversation extends Model
 
     public function scopeVisibleTo($query, \App\Models\User $user)
     {
-        if ($user->isEffectiveAdmin()) {
-            return $query;
-        }
+        $scope = \App\Services\PermissionService::getDataScope($user, 'ellie');
+
+        if ($scope === 'all') return $query;
 
         // AI conversations are private — only the owner can see them
         return $query->where('user_id', $user->id);

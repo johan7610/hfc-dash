@@ -73,10 +73,7 @@ class DailyActivityController extends Controller
 
 
         $u = $request->user();
-        $role = strtolower(trim((string)($u?->effectiveRole() ?? '')));
-
-        // Agent-only. (Optional legacy fallback: allow blank role)
-        abort_unless($u && ($role === '' || $role === 'agent') || auth()->user()?->isEffectiveBranchManager() || auth()->user()?->isEffectiveAdmin(), 403);// Temporary bridge: keep existing output unchanged
+        abort_unless($u && $u->hasPermission('daily_activity.view'), 403);
         // === V2 DAILY ACTIVITY ===
         $user = $request->user();
         $branchId = $user->branch_id ?? null;
@@ -152,10 +149,7 @@ class DailyActivityController extends Controller
         \Illuminate\Support\Facades\View::share('agentDailyWeek', $meta);
 
         $u = $request->user();
-        $role = strtolower(trim((string)($u?->effectiveRole() ?? '')));
-
-        // Match index() authorization logic (bridge kept)
-        abort_unless($u && ($role === '' || $role === 'agent') || auth()->user()?->isEffectiveBranchManager() || auth()->user()?->isEffectiveAdmin(), 403);
+        abort_unless($u && $u->hasPermission('daily_activity.view'), 403);
 
         // === V2 DAILY ACTIVITY (same as index) ===
         $user = $request->user();
@@ -227,10 +221,7 @@ class DailyActivityController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
-        abort_unless($user, 403);
-
-        $role = strtolower(trim((string)($user?->effectiveRole() ?? '')));
-        abort_unless(($role === '' || $role === 'agent') || $user->isEffectiveBranchManager() || $user->isEffectiveAdmin(), 403);
+        abort_unless($user && $user->hasPermission('daily_activity.view'), 403);
 
         $data = $request->validate([
             'activity_date' => ['required', 'date'],

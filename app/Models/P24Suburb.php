@@ -3,9 +3,13 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class P24Suburb extends Model
 {
+    use SoftDeletes;
+
+
     protected $table = 'p24_suburbs';
 
     protected $fillable = [

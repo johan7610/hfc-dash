@@ -26,7 +26,7 @@ class PackController extends Controller
             ->orderBy('name')
             ->get();
 
-        $canManage = $user->isAdmin() || $user->isBranchManager();
+        $canManage = $user->hasPermission('packs.edit');
 
         return view('docuperfect.packs.index', compact('packs', 'canManage', 'user'));
     }
@@ -34,7 +34,7 @@ class PackController extends Controller
     public function create(Request $request)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
+        if (!$user->hasPermission('packs.create')) {
             abort(403);
         }
 
@@ -53,7 +53,7 @@ class PackController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
+        if (!$user->hasPermission('packs.create')) {
             abort(403);
         }
 
@@ -94,7 +94,7 @@ class PackController extends Controller
     public function edit(Request $request, $id)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
+        if (!$user->hasPermission('packs.edit')) {
             abort(403);
         }
 
@@ -128,7 +128,7 @@ class PackController extends Controller
     public function update(Request $request, $id)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
+        if (!$user->hasPermission('packs.edit')) {
             abort(403);
         }
 
@@ -174,7 +174,7 @@ class PackController extends Controller
     public function destroy(Request $request, $id)
     {
         $user = $request->user();
-        if (!$user->isAdmin() && !$user->isBranchManager()) {
+        if (!$user->hasPermission('packs.archive')) {
             abort(403);
         }
 
@@ -183,7 +183,7 @@ class PackController extends Controller
         $pack->delete();
 
         return redirect()->route('docuperfect.packs.index')
-            ->with('status', "Pack \"{$name}\" deleted.");
+            ->with('status', "Pack \"{$name}\" archived.");
     }
 
     public function showLaunch(Request $request, $id)
@@ -385,5 +385,15 @@ class PackController extends Controller
                 'is_optional' => !empty($slotData['is_optional']),
             ]);
         }
+    }
+
+    // ── Restore soft-deleted ──
+
+    public function restore($id)
+    {
+        abort_unless(auth()->user()->hasPermission('packs.edit'), 403);
+        $record = Pack::onlyTrashed()->findOrFail($id);
+        $record->restore();
+        return redirect()->back()->with('success', 'Record restored.');
     }
 }

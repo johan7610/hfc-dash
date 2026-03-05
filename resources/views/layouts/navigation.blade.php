@@ -9,16 +9,13 @@
                 </div>
 
                 @php
-                    /* NAV_ROLE_HELPERS_2026_SAFE */
+                    /* NAV_ROLE_HELPERS_2026_SAFE — permission-based */
                     $u = auth()->user();
-
-                    // Use View-As overrides (session) when present
-                    $effectiveRole = strtolower(trim((string)($u?->effectiveRole() ?? ($u->role ?? ""))));
                     $effectiveBranchId = $u?->effectiveBranchId();
 
-                    $navIsAdmin = ($effectiveRole === "admin") || (bool)($u->is_admin ?? 0);
-                    $navIsBM = ($effectiveRole === "branch_manager");
-                    $navIsAgent = ($effectiveRole === "agent");
+                    $navIsAdmin = $u->hasPermission('manage_system');
+                    $navIsBM    = $u->hasPermission('manage_branch') && !$u->hasPermission('manage_system');
+                    $navIsAgent = !$u->hasPermission('manage_system') && !$u->hasPermission('manage_branch');
                 @endphp
 
                 <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex hidden"> <!-- SIDEBAR_NAV_DISABLED_2026 -->
@@ -81,7 +78,7 @@
                     <x-slot name="content">
                         <x-dropdown-link :href="route('profile.edit')">Profile</x-dropdown-link>
 
-                        @if(auth()->user()?->isAdmin())
+                        @permission('impersonate_users')
                             <div class="px-4 py-2 text-xs text-gray-500 uppercase">View As</div>
 
                             <form method="POST" action="{{ url('/admin/view-as') }}">@csrf
@@ -104,7 +101,7 @@
                             </form>
 
                             <div class="border-t my-1"></div>
-                        @endif
+                        @endpermission
 
                         <form method="POST" action="{{ route('logout') }}">@csrf
                             <x-dropdown-link :href="route('logout')" onclick="event.preventDefault(); this.closest('form').submit();">

@@ -57,7 +57,8 @@
          class="flex flex-wrap items-center gap-3">
 
         {{-- Scope toggle — agents only --}}
-        @if(!in_array($role, ['super_admin', 'admin', 'branch_manager']))
+        @php $dataScope = \App\Services\PermissionService::getDataScope(auth()->user(), 'properties'); @endphp
+        @if($dataScope === 'own')
         <div class="flex rounded-lg overflow-hidden border" style="border-color:rgba(11,42,74,0.18);">
             @foreach(['my' => 'My Listings', 'branch' => 'Branch'] as $val => $lbl)
             <a href="{{ request()->fullUrlWithQuery(['scope' => $val, 'status' => $status]) }}"

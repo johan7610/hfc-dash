@@ -87,7 +87,7 @@ class BranchAssignmentController extends Controller
 
     private function authorizeAdmin()
     {
-        abort_unless(auth()->user()?->isEffectiveAdmin(), 403);
+        abort_unless(auth()->user()?->hasPermission('access_branch_assignments'), 403);
     }
 
     public function updateBranchSettings(Request $request, Branch $branch)
@@ -110,4 +110,13 @@ class BranchAssignmentController extends Controller
         return redirect()->back()->with('success', 'Branch settings updated.');
     }
 
+    // ── Restore soft-deleted branch ──
+
+    public function restoreBranch($id)
+    {
+        abort_unless(auth()->user()->hasPermission('manage_system'), 403);
+        $record = Branch::onlyTrashed()->findOrFail($id);
+        $record->restore();
+        return redirect()->back()->with('success', 'Record restored.');
+    }
 }

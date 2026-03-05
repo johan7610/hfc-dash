@@ -3,9 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Presentation extends Model
 {
+    use SoftDeletes;
+
     // Status values: draft | presented | locked
     protected $fillable = [
         'branch_id',
@@ -127,15 +130,13 @@ class Presentation extends Model
 
     public function scopeVisibleTo($query, \App\Models\User $user)
     {
-        if ($user->isEffectiveAdmin()) {
-            return $query;
-        }
+        $scope = \App\Services\PermissionService::getDataScope($user, 'presentations');
 
-        if ($user->isEffectiveBranchManager()) {
-            return $query->where('branch_id', $user->effectiveBranchId());
-        }
+        if ($scope === 'all') return $query;
+        if ($scope === 'branch') return $query->where('branch_id', $user->effectiveBranchId());
+        if ($scope === 'own') return $query->where('created_by_user_id', $user->id);
 
-        return $query->where('created_by_user_id', $user->id);
+        return $query->whereRaw('1 = 0');
     }
 
     /**

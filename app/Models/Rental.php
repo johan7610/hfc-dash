@@ -6,9 +6,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Rental extends Model
 {
+    use SoftDeletes;
+
     protected $table = 'rentals';
 
     protected $fillable = [
@@ -34,17 +37,17 @@ class Rental extends Model
 
     public function scopeVisibleTo($query, \App\Models\User $user)
     {
-        if ($user->isEffectiveAdmin()) {
-            return $query;
+        $scope = \App\Services\PermissionService::getDataScope($user, 'rentals');
+
+        if ($scope === 'all') return $query;
+        if ($scope === 'branch') return $query->where('branch_id', $user->effectiveBranchId());
+        if ($scope === 'own') {
+            return $query->whereHas('agents', function ($q) use ($user) {
+                $q->where('users.id', $user->id);
+            });
         }
 
-        if ($user->isEffectiveBranchManager()) {
-            return $query->where('branch_id', $user->effectiveBranchId());
-        }
-
-        return $query->whereHas('agents', function ($q) use ($user) {
-            $q->where('users.id', $user->id);
-        });
+        return $query->whereRaw('1 = 0');
     }
 
     public function branch(): BelongsTo

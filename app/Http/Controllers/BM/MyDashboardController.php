@@ -12,7 +12,7 @@ class MyDashboardController extends Controller
     public function index(Request $request, AgentPerformanceService $svc)
     {
         $u = $request->user();
-        abort_unless($u && $u->isEffectiveBranchManager(), 403);
+        abort_unless($u && $u->hasPermission('view_performance'), 403);
 
         $period = (string)($request->query('period') ?? '');
         if (!preg_match('/^\d{4}\-\d{2}$/', $period)) {

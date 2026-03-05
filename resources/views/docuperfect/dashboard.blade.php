@@ -31,7 +31,7 @@
                         <th class="text-left px-4 py-3">Name</th>
                         <th class="text-left px-4 py-3">Template</th>
                         <th class="text-left px-4 py-3">Last Edited</th>
-                        @if($user->isAdmin() || $user->isBranchManager())
+                        @if($user->hasPermission('documents.edit'))
                         <th class="text-left px-4 py-3">Agent</th>
                         @endif
                         <th class="text-right px-4 py-3">Actions</th>
@@ -43,7 +43,7 @@
                         <td class="px-4 py-3 font-medium text-slate-900">{{ $doc->name }}</td>
                         <td class="px-4 py-3 text-slate-600">{{ $doc->template->name ?? '—' }}</td>
                         <td class="px-4 py-3 text-slate-500">{{ $doc->updated_at->format('d M Y H:i') }}</td>
-                        @if($user->isAdmin() || $user->isBranchManager())
+                        @if($user->hasPermission('documents.edit'))
                         <td class="px-4 py-3 text-slate-600">{{ $doc->owner->name ?? '—' }}</td>
                         @endif
                         <td class="px-4 py-3 text-right space-x-2">

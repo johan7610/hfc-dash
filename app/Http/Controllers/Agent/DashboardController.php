@@ -12,15 +12,7 @@ class DashboardController extends Controller
     public function index(Request $request, AgentPerformanceService $svc)
     {
         $u = $request->user();
-        $role = strtolower(trim((string)($u?->effectiveRole() ?? '')));
-
-        // Agent-only. (Optional legacy fallback: allow blank role)
-        abort_unless(
-            $u && (
-                $role === '' || $role === 'agent' || $role === 'branch_manager'
-            ),
-            403
-        );
+        abort_unless($u && $u->hasPermission('view_dashboard'), 403);
 
 // Period selector: ?period=YYYY-MM
         $period = (string)($request->query('period') ?? '');

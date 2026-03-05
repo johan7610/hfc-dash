@@ -1,6 +1,6 @@
 <x-app-layout>
 
-    @if(isset($paidNotSettledDeals) && $paidNotSettledDeals->count() > 0 && auth()->user()?->isEffectiveAdmin())
+    @if(isset($paidNotSettledDeals) && $paidNotSettledDeals->count() > 0 && auth()->user()?->hasPermission('settle_deals'))
         <div x-data="{ openPaidExceptions: false }" class="mb-4">
             <div class="rounded-xl border border-red-500 bg-red-50 px-4 py-3 text-sm text-red-900 flex items-center justify-between gap-3">
                 <div class="font-semibold">
@@ -86,14 +86,14 @@
                 <option value="Loss" {{ request('commission') === 'Loss' ? 'selected' : '' }}>Loss</option>
             </select>
 
-            @if(auth()->user()->isEffectiveAdmin())
+            @permission('settle_deals')
             <select name="branch" onchange="this.form.submit()" class="list-header-filter">
                 <option value="">All branches</option>
                 @foreach($branches as $br)
                 <option value="{{ $br->id }}" {{ request('branch') == $br->id ? 'selected' : '' }}>{{ $br->name }}</option>
                 @endforeach
             </select>
-            @endif
+            @endpermission
 
             <select name="agent" onchange="this.form.submit()" class="list-header-filter">
                 <option value="">All agents</option>
@@ -104,7 +104,9 @@
         </x-slot:filters>
 
         <x-slot:actions>
+            @permission('deals.create')
             <a href="{{ route('admin.deals.create') }}" class="corex-btn-primary text-sm">+ Add Deal</a>
+            @endpermission
         </x-slot:actions>
     </x-list-header>
 
@@ -218,10 +220,12 @@
                                 <td class="px-4 py-3 text-right">
                                     <div class="flex items-center justify-end gap-1.5">
                                         <a href="{{ route('admin.deals.log', $deal) }}" class="corex-btn-outline text-xs px-2 py-1">Log</a>
+                                        @permission('deals.edit')
                                         <a href="{{ route('admin.deals.edit', $deal) }}" class="corex-btn-outline text-xs px-2 py-1">Edit</a>
-                                        @if(auth()->user()->isEffectiveAdmin())
+                                        @endpermission
+                                        @permission('settle_deals')
                                             <a href="{{ route('admin.deals.settle', $deal) }}" class="corex-btn-primary text-xs px-2 py-1">Pay</a>
-                                        @endif
+                                        @endpermission
                                     </div>
                                 </td>
                             </tr>

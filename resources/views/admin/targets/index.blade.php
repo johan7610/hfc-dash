@@ -31,7 +31,7 @@
                     <h2 class="text-xl font-bold text-white leading-tight">Targets</h2>
                     <div class="text-sm text-white/60">
                         @if($isAdmin) Admin scope
-                        @elseif($isBranchManager) Branch Manager scope
+                        @elseif($isBM) Branch Manager scope
                         @else Agent scope
                         @endif
                     </div>

@@ -290,7 +290,7 @@
         <?php endif; ?>
 
         
-        <?php if($user && $user->role === 'admin'): ?>
+        <?php if($user && $user->hasPermission('manage_system')): ?>
         <div class="nexus-nav-divider"></div>
         <div class="px-4 py-1">
             <span class="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-semibold">Finance Engine</span>

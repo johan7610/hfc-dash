@@ -8,6 +8,7 @@ use App\Models\Docuperfect\NamedField;
 use App\Models\Docuperfect\PackAttachment;
 use App\Models\Docuperfect\PackInstanceValue;
 use App\Models\Docuperfect\Template;
+use App\Services\PermissionService;
 use Illuminate\Http\Request;
 
 class DocumentController extends Controller
@@ -95,15 +96,14 @@ class DocumentController extends Controller
         $document = Document::with(['template', 'template.branches'])->findOrFail($id);
 
         // Access check
-        if (!$user->isAdmin()) {
-            if ($user->isBranchManager()) {
-                if ($document->branch_id !== $user->effectiveBranchId()) {
-                    abort(403);
-                }
-            } else {
-                if ((int)$document->owner_id !== (int)$user->id) {
-                    abort(403);
-                }
+        $scope = PermissionService::getDataScope($user, 'documents');
+        if ($scope === 'branch') {
+            if ($document->branch_id !== $user->effectiveBranchId()) {
+                abort(403);
+            }
+        } elseif ($scope !== 'all') {
+            if ((int)$document->owner_id !== (int)$user->id) {
+                abort(403);
             }
         }
 
@@ -145,7 +145,7 @@ class DocumentController extends Controller
         $document = Document::findOrFail($id);
 
         // Access check
-        if (!$user->isAdmin() && (int)$document->owner_id !== (int)$user->id) {
+        if (!$user->hasPermission('documents.edit') && (int)$document->owner_id !== (int)$user->id) {
             abort(403);
         }
 
@@ -257,7 +257,7 @@ class DocumentController extends Controller
         $user = $request->user();
         $document = Document::findOrFail($id);
 
-        if (!$user->isAdmin() && (int)$document->owner_id !== (int)$user->id) {
+        if (!$user->hasPermission('documents.edit') && (int)$document->owner_id !== (int)$user->id) {
             abort(403);
         }
 
@@ -279,7 +279,7 @@ class DocumentController extends Controller
         $user = $request->user();
         $document = Document::findOrFail($id);
 
-        if (!$user->isAdmin() && (int)$document->owner_id !== (int)$user->id) {
+        if (!$user->hasPermission('documents.archive') && (int)$document->owner_id !== (int)$user->id) {
             abort(403);
         }
 
@@ -322,7 +322,7 @@ class DocumentController extends Controller
         $user = $request->user();
         $document = Document::findOrFail($id);
 
-        if (!$user->isAdmin() && (int)$document->owner_id !== (int)$user->id) {
+        if (!$user->hasPermission('documents.archive') && (int)$document->owner_id !== (int)$user->id) {
             abort(403);
         }
 
@@ -337,7 +337,7 @@ class DocumentController extends Controller
         $user = $request->user();
         $document = Document::findOrFail($id);
 
-        if (!$user->isAdmin() && (int)$document->owner_id !== (int)$user->id) {
+        if (!$user->hasPermission('documents.archive') && (int)$document->owner_id !== (int)$user->id) {
             abort(403);
         }
 
@@ -345,7 +345,7 @@ class DocumentController extends Controller
         $document->delete();
 
         return redirect()->route('docuperfect.dashboard')
-            ->with('status', "Document \"{$name}\" deleted.");
+            ->with('status', "Document \"{$name}\" archived.");
     }
 
     /**
@@ -356,7 +356,7 @@ class DocumentController extends Controller
         $user = $request->user();
         $document = Document::findOrFail($id);
 
-        if (!$user->isAdmin() && (int)$document->owner_id !== (int)$user->id) {
+        if (!$user->hasPermission('documents.edit') && (int)$document->owner_id !== (int)$user->id) {
             abort(403);
         }
 

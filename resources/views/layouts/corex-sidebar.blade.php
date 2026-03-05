@@ -1,24 +1,22 @@
 @php
     $user = auth()->user();
     $effectiveRole = $user ? $user->effectiveRole() : 'agent';
-    $isAdmin = in_array($effectiveRole, ['admin', 'super_admin']);
-    $isBM = ($effectiveRole === 'branch_manager');
-    $isAgent = ($effectiveRole === 'agent');
     $effectiveBranchId = $user?->effectiveBranchId();
 
     $userInitials = $user ? collect(explode(' ', $user->name))->map(fn($w) => strtoupper(substr($w, 0, 1)))->take(2)->join('') : '??';
-    $userRole = $user ? str_replace('_', ' ', $effectiveRole) : '';
+    $userRoleModel = $user ? \App\Models\Role::allRoles()->firstWhere('name', $effectiveRole) : null;
+    $userRole = $userRoleModel?->label ?? ($user ? ucfirst(str_replace('_', ' ', $effectiveRole)) : '');
 
-    // Super Admin & Agency Switcher
-    $isSuperAdmin = $user && $user->isSuperAdmin();
+    // Owner role & Agency Switcher
+    $isOwner = $user && $user->isOwnerRole();
     $activeAgencyId = session('active_agency_id');
-    $agencies = $isSuperAdmin ? \App\Models\Agency::orderBy('name')->get() : collect();
-    $activeAgency = ($isSuperAdmin && $activeAgencyId) ? $agencies->find($activeAgencyId) : null;
+    $agencies = $isOwner ? \App\Models\Agency::orderBy('name')->get() : collect();
+    $activeAgency = ($isOwner && $activeAgencyId) ? $agencies->find($activeAgencyId) : null;
 
     // Impersonation state
     $impersonatorId  = (int) session('impersonator_id', 0);
     $isImpersonating = $impersonatorId > 0;
-    $canSwitchUsers  = !$isImpersonating && $isAdmin;
+    $canSwitchUsers  = !$isImpersonating && ($user && $user->hasPermission('impersonate_users'));
     $impersonatorName = null;
     if ($isImpersonating) {
         $impersonatorName = \Illuminate\Support\Facades\DB::table('users')->where('id', $impersonatorId)->value('name');
@@ -59,8 +57,8 @@
         CoreX <span>Os</span>
     </div>
 
-    {{-- Agency Switcher (super_admin only) --}}
-    @if($isSuperAdmin)
+    {{-- Agency Switcher (owner role only) --}}
+    @if($isOwner)
     <div x-data="{ agencyOpen: false }" class="px-3 pb-2">
         <button type="button" @click="agencyOpen = !agencyOpen"
                 class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors"
@@ -143,8 +141,8 @@
                 <a href="{{ route('rentals.index') }}" class="corex-nav-subitem {{ request()->routeIs('rentals.*') ? 'active' : '' }}">Rentals</a>
                 @endpermission
 
-                {{-- Agent section --}}
-                @if($isAgent)
+                {{-- Agent section (view own stats) --}}
+                @permission('view_own_stats')
                 <div class="corex-nav-sublabel">My Performance</div>
                 @permission('view_daily_activity')
                 <a href="{{ route('agent.daily.summary') }}" class="corex-nav-subitem {{ request()->routeIs('agent.daily.summary*') ? 'active' : '' }}">Daily Activity Summary</a>
@@ -153,10 +151,10 @@
                 @permission('view_deals')
                 <a href="{{ route('agent.deals.index') }}" class="corex-nav-subitem {{ request()->routeIs('agent.deals.*') ? 'active' : '' }}">My Deals</a>
                 @endpermission
-                @endif
+                @endpermission
 
-                {{-- Branch Manager section --}}
-                @if($isBM)
+                {{-- Branch Manager section (view branch stats) --}}
+                @permission('view_branch_stats')
                 <div class="corex-nav-sublabel">Branch</div>
                 @permission('view_performance')
                 <a href="{{ route('bm.performance') }}" class="corex-nav-subitem {{ request()->routeIs('bm.performance*') ? 'active' : '' }}">Branch Performance</a>
@@ -191,10 +189,10 @@
                 <a href="{{ route('agent.daily') }}" class="corex-nav-subitem {{ request()->routeIs('agent.daily') && !request()->routeIs('agent.daily.summary*') ? 'active' : '' }}">Daily Activity Capture</a>
                 @endif
                 @endpermission
-                @endif
+                @endpermission
 
-                {{-- Admin section --}}
-                @if($isAdmin)
+                {{-- Admin section (view company stats) --}}
+                @permission('view_company_stats')
                 <div class="corex-nav-sublabel">Admin</div>
                 @permission('view_performance')
                 <a href="{{ route('admin.performance') }}" class="corex-nav-subitem {{ request()->routeIs('admin.performance') ? 'active' : '' }}">Performance</a>
@@ -227,7 +225,7 @@
                 @permission('access_tv_messages')
                 <a href="{{ route('admin.tv-messages') }}" class="corex-nav-subitem {{ request()->routeIs('admin.tv-messages*') ? 'active' : '' }}">TV Messages</a>
                 @endpermission
-                @endif
+                @endpermission
 
                 {{-- Tools (all roles within AT) --}}
                 @permission('access_calculators')

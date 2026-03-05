@@ -462,15 +462,9 @@ class PortalCaptureController extends Controller
             'extracted_at'      => null,
         ]);
 
-        // Delete stored HTML and screenshot files
-        if ($capture->raw_html_path && Storage::disk('local')->exists($capture->raw_html_path)) {
-            Storage::disk('local')->delete($capture->raw_html_path);
-        }
-        if ($capture->screenshot_path && Storage::disk('local')->exists($capture->screenshot_path)) {
-            Storage::disk('local')->delete($capture->screenshot_path);
-        }
+        // Soft delete — stored files preserved on disk for potential restore
 
-        Log::info('[PortalCapture:destroy] Capture deleted', [
+        Log::info('[PortalCapture:destroy] Capture archived', [
             'capture_id'      => $capture->id,
             'presentation_id' => $presentation->id,
             'page_type'       => $capture->page_type,

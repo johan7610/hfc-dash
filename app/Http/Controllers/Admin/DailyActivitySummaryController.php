@@ -41,7 +41,7 @@ class DailyActivitySummaryController extends Controller
     public function index(Request $request)
     {
         $u = $request->user();
-        abort_unless($u && $u->isEffectiveAdmin(), 403);
+        abort_unless($u && $u->hasPermission('daily_activity.view'), 403);
 
         [$range, $start, $end, $month] = $this->rangeFromRequest($request);
 
@@ -97,7 +97,7 @@ class DailyActivitySummaryController extends Controller
     public function activity(Request $request, int $definition)
     {
         $u = $request->user();
-        abort_unless($u && $u->isEffectiveAdmin(), 403);
+        abort_unless($u && $u->hasPermission('daily_activity.view'), 403);
 
         [$range, $start, $end, $month] = $this->rangeFromRequest($request);
 
@@ -144,7 +144,7 @@ class DailyActivitySummaryController extends Controller
     public function branch(Request $request, int $definition, int $branch)
     {
         $u = $request->user();
-        abort_unless($u && $u->isEffectiveAdmin(), 403);
+        abort_unless($u && $u->hasPermission('daily_activity.view'), 403);
 
         [$range, $start, $end, $month] = $this->rangeFromRequest($request);
 
@@ -201,7 +201,7 @@ class DailyActivitySummaryController extends Controller
     public function agent(Request $request, int $definition, int $branch, int $user)
     {
         $u = $request->user();
-        abort_unless($u && $u->isEffectiveAdmin(), 403);
+        abort_unless($u && $u->hasPermission('daily_activity.view'), 403);
 
         [$range, $start, $end, $month] = $this->rangeFromRequest($request);
 

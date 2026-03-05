@@ -12,15 +12,12 @@ class BranchManagerMiddleware
     public function handle(Request $request, Closure $next): Response
     {
         if (!Auth::check()) {
-        $u = auth()->user();
-        abort_unless($u && ($u->isEffectiveAdmin() || $u->isEffectiveBranchManager()), 403);
-        return $next($request);
-
+            abort(403);
         }
 
         $user = Auth::user();
 
-        if ($user->isEffectiveAdmin() || $user->isEffectiveBranchManager()) {
+        if ($user->hasPermission('manage_system') || $user->hasPermission('manage_branch')) {
             return $next($request);
         }
 

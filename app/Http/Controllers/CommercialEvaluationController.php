@@ -12,6 +12,7 @@ use App\Models\CommercialEvaluationLivestock;
 use App\Models\Branch;
 use App\Services\CommercialEvaluation\CommercialEvaluationService;
 use App\Services\CommercialEvaluation\CommercialEvaluationPdfService;
+use App\Services\PermissionService;
 use Illuminate\Http\Request;
 
 class CommercialEvaluationController extends Controller
@@ -19,29 +20,39 @@ class CommercialEvaluationController extends Controller
     private function authorizeEvaluation(CommercialEvaluation $evaluation): void
     {
         $user = auth()->user();
-        if ($user->isEffectiveAdmin()) return;
-        if ($user->isEffectiveBranchManager() && (int) $evaluation->branch_id === (int) $user->effectiveBranchId()) return;
-        if ((int) $evaluation->created_by_user_id === (int) $user->id) return;
+        $scope = PermissionService::getDataScope($user, 'commercial_evals');
+        if ($scope === 'all') return;
+        if ($scope === 'branch' && (int) $evaluation->branch_id === (int) $user->effectiveBranchId()) return;
+        if ($scope === 'own' && (int) $evaluation->created_by_user_id === (int) $user->id) return;
         abort(403);
     }
 
     // ── Index ──
 
-    public function index()
+    public function index(Request $request)
     {
-        $evaluations = CommercialEvaluation::visibleTo(auth()->user())
-            ->with(['creator'])
-            ->latest()
-            ->paginate(25);
+        $status = $request->input('status', 'active');
+        $showArchived = $status === 'archived';
 
-        return view('commercial-evaluations.index', compact('evaluations'));
+        if ($showArchived) {
+            $query = CommercialEvaluation::onlyTrashed()->visibleTo(auth()->user());
+        } else {
+            $query = CommercialEvaluation::visibleTo(auth()->user());
+        }
+
+        $evaluations = $query->with(['creator'])
+            ->latest()
+            ->paginate(25)
+            ->withQueryString();
+
+        return view('commercial-evaluations.index', compact('evaluations', 'status', 'showArchived'));
     }
 
     // ── Create ──
 
     public function create()
     {
-        $isAdmin = auth()->user()->isEffectiveAdmin();
+        $scope = PermissionService::getDataScope(auth()->user(), 'commercial_evals'); $isAdmin = $scope === 'all';
         $branches = $isAdmin ? Branch::orderBy('name')->get() : collect();
 
         return view('commercial-evaluations.create', compact('branches', 'isAdmin'));
@@ -51,7 +62,7 @@ class CommercialEvaluationController extends Controller
 
     public function store(Request $request)
     {
-        $isAdmin = auth()->user()->isEffectiveAdmin();
+        $scope = PermissionService::getDataScope(auth()->user(), 'commercial_evals'); $isAdmin = $scope === 'all';
 
         $rules = [
             'property_type'         => ['required', 'in:commercial,industrial,hospitality,agricultural'],
@@ -115,7 +126,7 @@ class CommercialEvaluationController extends Controller
     public function edit(CommercialEvaluation $evaluation)
     {
         $this->authorizeEvaluation($evaluation);
-        $isAdmin = auth()->user()->isEffectiveAdmin();
+        $scope = PermissionService::getDataScope(auth()->user(), 'commercial_evals'); $isAdmin = $scope === 'all';
         $branches = $isAdmin ? Branch::orderBy('name')->get() : collect();
 
         return view('commercial-evaluations.edit', compact('evaluation', 'branches', 'isAdmin'));
@@ -126,7 +137,7 @@ class CommercialEvaluationController extends Controller
     public function update(Request $request, CommercialEvaluation $evaluation)
     {
         $this->authorizeEvaluation($evaluation);
-        $isAdmin = auth()->user()->isEffectiveAdmin();
+        $scope = PermissionService::getDataScope(auth()->user(), 'commercial_evals'); $isAdmin = $scope === 'all';
 
         $rules = [
             'property_type'         => ['required', 'in:commercial,industrial,hospitality,agricultural'],
@@ -180,7 +191,7 @@ class CommercialEvaluationController extends Controller
         $evaluation->delete();
 
         return redirect()->route('commercial-evaluations.index')
-            ->with('success', 'Evaluation deleted.');
+            ->with('success', 'Evaluation archived.');
     }
 
     // ══════════════════════════════════════════
@@ -704,5 +715,15 @@ class CommercialEvaluationController extends Controller
         return response($html, 200, [
             'Content-Type' => 'text/html; charset=UTF-8',
         ]);
+    }
+
+    // ── Restore soft-deleted ──
+
+    public function restore($id)
+    {
+        abort_unless(auth()->user()->hasPermission('commercial_evaluations.edit'), 403);
+        $record = CommercialEvaluation::onlyTrashed()->findOrFail($id);
+        $record->restore();
+        return redirect()->back()->with('success', 'Record restored.');
     }
 }

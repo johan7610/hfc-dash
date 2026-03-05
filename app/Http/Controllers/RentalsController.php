@@ -6,41 +6,33 @@ use App\Models\Rental;
 use App\Models\RentalAmountVersion;
 use App\Models\User;
 use App\Models\Branch;
+use App\Services\PermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
 class RentalsController extends Controller
 {
-    private function isAdmin($user): bool
+    private function getScope(): string
     {
-        return ($user->role ?? null) === 'admin';
-    }
-
-    private function isBranchManager($user): bool
-    {
-        return ($user->role ?? null) === 'branch_manager';
-    }
-
-    private function isAgent($user): bool
-    {
-        return !$this->isAdmin($user) && !$this->isBranchManager($user);
+        return PermissionService::getDataScope(Auth::user(), 'rentals') ?? 'own';
     }
 
     private function assertCanViewRental(Rental $rental): void
     {
         $user = Auth::user();
+        $scope = $this->getScope();
 
-        if ($this->isAdmin($user)) {
+        if ($scope === 'all') {
             return;
         }
 
-        if ($this->isBranchManager($user)) {
-            abort_unless((int)$rental->branch_id === (int)$user->branch_id, 403);
+        if ($scope === 'branch') {
+            abort_unless((int)$rental->branch_id === (int)$user->effectiveBranchId(), 403);
             return;
         }
 
-        // Agent
+        // Own scope
         abort_unless((bool)($user->can_capture_rentals ?? false), 403);
 
         $isAssigned = $rental->agents()->where('users.id', $user->id)->exists();
@@ -50,15 +42,16 @@ class RentalsController extends Controller
     private function assertCanCreateInBranch(int $branchId): void
     {
         $user = Auth::user();
+        $scope = $this->getScope();
 
-        if ($this->isAdmin($user)) {
+        if ($scope === 'all') {
             return;
         }
 
-        // BM and agents only within their own branch
-        abort_unless((int)$user->branch_id === (int)$branchId, 403);
+        // Branch and own scope: only within their own branch
+        abort_unless((int)$user->effectiveBranchId() === (int)$branchId, 403);
 
-        if ($this->isAgent($user)) {
+        if ($scope === 'own') {
             abort_unless((bool)($user->can_capture_rentals ?? false), 403);
         }
     }
@@ -71,10 +64,12 @@ class RentalsController extends Controller
             ->with(['branch', 'currentAmountVersion', 'agents'])
             ->orderBy('lease_address');
 
-        if ($this->isAdmin($user)) {
+        $scope = $this->getScope();
+
+        if ($scope === 'all') {
             // no filter
-        } elseif ($this->isBranchManager($user)) {
-            $query->where('branch_id', $user->branch_id);
+        } elseif ($scope === 'branch') {
+            $query->where('branch_id', $user->effectiveBranchId());
         } else {
             abort_unless((bool)($user->can_capture_rentals ?? false), 403);
 
@@ -113,13 +108,8 @@ class RentalsController extends Controller
         ];
 
         try {
-            if ($this->isAdmin($user)) {
-                $branchId = (int)($user->branch_id ?? 0);
-                if ($branchId > 0) {
-                    $periodRentals = $svc->calculateForBranchPeriod($branchId, $periodStart, $periodEnd);
-                }
-            } elseif ($this->isBranchManager($user)) {
-                $branchId = (int)($user->branch_id ?? 0);
+            if ($scope === 'all' || $scope === 'branch') {
+                $branchId = (int)($user->effectiveBranchId() ?? 0);
                 if ($branchId > 0) {
                     $periodRentals = $svc->calculateForBranchPeriod($branchId, $periodStart, $periodEnd);
                 }
@@ -257,7 +247,7 @@ class RentalsController extends Controller
         
         // Agent headline totals must match THEIR portion (same as Worksheet),
         // not the combined total across all agents on shared rentals.
-        if ($this->isAgent($user)) {
+        if ($scope === 'own') {
             $uid = (int)$user->id;
 
             $mineCount = 0;
@@ -290,7 +280,7 @@ $summary_per_agent = collect(array_values($agentSplit))->sortBy('name')->values(
     {
         $user = Auth::user();
 
-        if ($this->isAgent($user)) {
+        if ($this->getScope() === 'own') {
             abort_unless((bool)($user->can_capture_rentals ?? false), 403);
         }
 
@@ -355,7 +345,7 @@ $summary_per_agent = collect(array_values($agentSplit))->sortBy('name')->values(
         $agentIds = array_map('intval', $validated['rental_agents'] ?? []);
 
         // If agent is creating, always ensure they are assigned
-        if ($this->isAgent($user)) {
+        if ($this->getScope() === 'own') {
             if (!in_array((int)$user->id, $agentIds, true)) {
                 $agentIds[] = (int)$user->id;
             }
@@ -404,7 +394,8 @@ $summary_per_agent = collect(array_values($agentSplit))->sortBy('name')->values(
             'commission_excl' => ['nullable', 'numeric'],
         ]);
 
-        if (!$this->isAdmin($user)) {
+        $scope = $this->getScope();
+        if ($scope !== 'all') {
             $validated['branch_id'] = (int)$rental->branch_id;
         } else {
             $this->assertCanCreateInBranch((int)$validated['branch_id']);
@@ -422,7 +413,7 @@ $summary_per_agent = collect(array_values($agentSplit))->sortBy('name')->values(
 
         $agentIds = array_map('intval', $validated['rental_agents'] ?? []);
 
-        if ($this->isAgent($user)) {
+        if ($scope === 'own') {
             if (!in_array((int)$user->id, $agentIds, true)) {
                 $agentIds[] = (int)$user->id;
             }

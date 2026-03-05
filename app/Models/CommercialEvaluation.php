@@ -3,9 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class CommercialEvaluation extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'created_by_user_id',
         'branch_id',
@@ -53,15 +56,13 @@ class CommercialEvaluation extends Model
 
     public function scopeVisibleTo($query, \App\Models\User $user)
     {
-        if ($user->isEffectiveAdmin()) {
-            return $query;
-        }
+        $scope = \App\Services\PermissionService::getDataScope($user, 'commercial_evals');
 
-        if ($user->isEffectiveBranchManager()) {
-            return $query->where('branch_id', $user->effectiveBranchId());
-        }
+        if ($scope === 'all') return $query;
+        if ($scope === 'branch') return $query->where('branch_id', $user->effectiveBranchId());
+        if ($scope === 'own') return $query->where('created_by_user_id', $user->id);
 
-        return $query->where('created_by_user_id', $user->id);
+        return $query->whereRaw('1 = 0');
     }
 
     // ── Relationships ──

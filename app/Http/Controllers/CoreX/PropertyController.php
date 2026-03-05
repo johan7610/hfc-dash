@@ -7,6 +7,7 @@ use App\Models\Branch;
 use App\Models\Property;
 use App\Models\PropertyAdTemplate;
 use App\Models\User;
+use App\Services\PermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -16,28 +17,28 @@ class PropertyController extends Controller
     {
         /** @var User $user */
         $user           = auth()->user();
-        $role           = $user->effectiveRole();
-        $scope          = $request->query('scope', 'my');   // 'my' | 'branch'
+        $dataScope      = PermissionService::getDataScope($user, 'properties');
+        $viewScope      = $request->query('scope', 'my');   // 'my' | 'branch'
         $status         = $request->query('status', '');    // '' | draft | active | sold | withdrawn
         $search         = trim($request->query('search', ''));
         $filterAgentId  = $request->query('agent_id', '');  // admin/bm: view a specific agent's listings
 
         $query = Property::with(['agent', 'branch']);
 
-        $canPickAgent = in_array($role, ['super_admin', 'admin', 'branch_manager']);
+        $canPickAgent = in_array($dataScope, ['all', 'branch']);
 
         // Scope
         if ($canPickAgent && $filterAgentId !== '') {
             // Admin/BM viewing a specific agent
             $query->where('agent_id', (int) $filterAgentId);
-        } elseif (in_array($role, ['super_admin', 'admin'])) {
+        } elseif ($dataScope === 'all') {
             // Admin sees everything — no scope restriction
-        } elseif ($role === 'branch_manager') {
+        } elseif ($dataScope === 'branch') {
             $branchId = $user->effectiveBranchId();
             if ($branchId) $query->where('branch_id', $branchId);
         } else {
             // Agent: 'my' = own listings only; 'branch' = all branch listings
-            if ($scope === 'branch' && $user->branch_id) {
+            if ($viewScope === 'branch' && $user->branch_id) {
                 $query->where('branch_id', $user->branch_id);
             } else {
                 $query->where('agent_id', $user->id);
@@ -75,8 +76,10 @@ class PropertyController extends Controller
             ? $agentList->firstWhere('id', (int) $filterAgentId)
             : null;
 
+        $scope = $viewScope;
+
         return view('corex.properties.index', compact(
-            'properties', 'stats', 'scope', 'status', 'search', 'role',
+            'properties', 'stats', 'scope', 'status', 'search',
             'filterAgentId', 'agentList', 'selectedAgent', 'canPickAgent'
         ));
     }
@@ -126,8 +129,8 @@ class PropertyController extends Controller
             'gallery_images.*' => 'image|max:5120',
         ]);
 
-        $role = $user->effectiveRole();
-        if (! in_array($role, ['super_admin', 'admin', 'branch_manager']) || empty($data['agent_id'])) {
+        $storeScope = PermissionService::getDataScope($user, 'properties');
+        if (! in_array($storeScope, ['all', 'branch']) || empty($data['agent_id'])) {
             $data['agent_id'] = $user->id;
         }
         $data['agency_id'] = $user->effectiveAgencyId();
@@ -235,7 +238,6 @@ class PropertyController extends Controller
 
         /** @var User $user */
         $user = auth()->user();
-        $role = $user->effectiveRole();
 
         // Saved custom templates: own + global ones
         $savedTemplates = PropertyAdTemplate::where('user_id', $user->id)
@@ -243,7 +245,7 @@ class PropertyController extends Controller
             ->orderByDesc('updated_at')
             ->get(['id', 'user_id', 'name', 'layout_json', 'is_global', 'updated_at']);
 
-        $canManageTemplates = in_array($role, ['super_admin', 'admin', 'branch_manager', 'agent']);
+        $canManageTemplates = $user->hasPermission('properties.view');
 
         return view('corex.properties.ad', compact('property', 'savedTemplates', 'canManageTemplates'));
     }
@@ -266,16 +268,16 @@ class PropertyController extends Controller
     {
         /** @var User $user */
         $user = auth()->user();
-        $role = $user->effectiveRole();
+        $scope = PermissionService::getDataScope($user, 'properties');
 
         $query = User::orderBy('name')->where('is_active', 1);
 
-        if ($role === 'branch_manager') {
+        if ($scope === 'branch') {
             $branchId = $user->effectiveBranchId();
             if ($branchId) {
                 $query->where('branch_id', $branchId);
             }
-        } elseif (! in_array($role, ['super_admin', 'admin'])) {
+        } elseif ($scope !== 'all') {
             $query->where('id', $user->id);
         }
 
@@ -286,12 +288,22 @@ class PropertyController extends Controller
     {
         /** @var User $user */
         $user = auth()->user();
-        $role = $user->effectiveRole();
+        $scope = PermissionService::getDataScope($user, 'properties');
 
-        if (in_array($role, ['super_admin', 'admin'])) return;
-        if ($role === 'branch_manager' && (int) $property->branch_id === (int) $user->effectiveBranchId()) return;
-        if ((int) $property->agent_id === (int) $user->id) return;
+        if ($scope === 'all') return;
+        if ($scope === 'branch' && (int) $property->branch_id === (int) $user->effectiveBranchId()) return;
+        if ($scope === 'own' && (int) $property->agent_id === (int) $user->id) return;
 
         abort(403);
+    }
+
+    // ── Restore soft-deleted ──
+
+    public function restore($id)
+    {
+        abort_unless(auth()->user()->hasPermission('properties.edit'), 403);
+        $record = Property::onlyTrashed()->findOrFail($id);
+        $record->restore();
+        return redirect()->back()->with('success', 'Record restored.');
     }
 }

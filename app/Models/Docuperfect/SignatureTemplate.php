@@ -98,11 +98,11 @@ class SignatureTemplate extends Model
 
     public function scopeVisibleTo($query, User $user)
     {
-        if ($user->isAdmin()) {
-            return $query;
-        }
+        $scope = \App\Services\PermissionService::getDataScope($user, 'documents');
 
-        if ($user->isBranchManager()) {
+        if ($scope === 'all') return $query;
+
+        if ($scope === 'branch') {
             $branchId = $user->effectiveBranchId();
             return $query->whereHas('document', function ($q) use ($branchId) {
                 $q->where('branch_id', $branchId);

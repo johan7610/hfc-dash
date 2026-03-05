@@ -58,11 +58,11 @@ class SalesDocumentSend extends Model
 
     public function scopeVisibleTo($query, User $user)
     {
-        if ($user->isEffectiveAdmin()) {
-            return $query;
-        }
+        $scope = \App\Services\PermissionService::getDataScope($user, 'sales_docs');
 
-        if ($user->isEffectiveBranchManager()) {
+        if ($scope === 'all') return $query;
+
+        if ($scope === 'branch') {
             return $query->whereIn('sent_by', function ($sub) use ($user) {
                 $sub->select('id')
                     ->from('users')
@@ -70,6 +70,8 @@ class SalesDocumentSend extends Model
             });
         }
 
-        return $query->where('sent_by', $user->id);
+        if ($scope === 'own') return $query->where('sent_by', $user->id);
+
+        return $query->whereRaw('1 = 0');
     }
 }

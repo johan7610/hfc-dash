@@ -382,7 +382,7 @@ class SalesDocumentController extends Controller
         $user = $request->user();
 
         // Verify ownership / access
-        if (!$user->isAdmin() && !$user->isBranchManager() && (int) $document->owner_id !== (int) $user->id) {
+        if (!$user->hasPermission('sales_docs.edit') && (int) $document->owner_id !== (int) $user->id) {
             abort(403);
         }
 
@@ -425,8 +425,8 @@ class SalesDocumentController extends Controller
     {
         $user = $request->user();
 
-        // Authorization: owner, admin, or BM
-        if (!$user->isAdmin() && !$user->isBranchManager() && (int) $send->sent_by !== (int) $user->id) {
+        // Authorization: owner or user with sales_docs.edit permission
+        if (!$user->hasPermission('sales_docs.edit') && (int) $send->sent_by !== (int) $user->id) {
             abort(403);
         }
 
@@ -452,7 +452,7 @@ class SalesDocumentController extends Controller
     {
         $user = $request->user();
 
-        if (!$user->isAdmin() && !$user->isBranchManager() && (int) $send->sent_by !== (int) $user->id) {
+        if (!$user->hasPermission('sales_docs.edit') && (int) $send->sent_by !== (int) $user->id) {
             abort(403);
         }
 
@@ -509,7 +509,7 @@ class SalesDocumentController extends Controller
     {
         $user = $request->user();
 
-        if (!$user->isAdmin() && !$user->isBranchManager() && (int) $send->sent_by !== (int) $user->id) {
+        if (!$user->hasPermission('sales_docs.view') && (int) $send->sent_by !== (int) $user->id) {
             abort(403);
         }
 
@@ -539,7 +539,7 @@ class SalesDocumentController extends Controller
     {
         $user = $request->user();
 
-        if (!$user->isAdmin() && !$user->isBranchManager() && (int) $send->sent_by !== (int) $user->id) {
+        if (!$user->hasPermission('sales_docs.edit') && (int) $send->sent_by !== (int) $user->id) {
             abort(403);
         }
 

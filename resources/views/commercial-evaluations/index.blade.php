@@ -9,9 +9,17 @@
             <h2 class="text-xl font-bold text-white">Commercial Market Evaluations</h2>
             <p class="text-sm text-white/60 mt-0.5">Evaluate commercial, industrial, hospitality & agricultural properties</p>
         </div>
-        <a href="{{ route('commercial-evaluations.create') }}" class="corex-btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.3); background:transparent;">
-            + New Evaluation
-        </a>
+        <div class="flex items-center gap-3">
+            <form method="GET" action="{{ route('commercial-evaluations.index') }}">
+                <select name="status" onchange="this.form.submit()" class="px-3 py-2 border border-white/30 rounded-lg text-sm bg-transparent text-white">
+                    <option value="active" {{ request('status', 'active') === 'active' ? 'selected' : '' }}>Active</option>
+                    <option value="archived" {{ request('status') === 'archived' ? 'selected' : '' }}>Archived</option>
+                </select>
+            </form>
+            <a href="{{ route('commercial-evaluations.create') }}" class="corex-btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.3); background:transparent;">
+                + New Evaluation
+            </a>
+        </div>
     </div>
 
     {{-- Flash messages handled by global toast system --}}
@@ -58,23 +66,34 @@
                             </td>
                             <td class="px-4 py-3 text-gray-600">{{ $eval->town ?? '—' }}</td>
                             <td class="px-4 py-3">
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ \App\Models\CommercialEvaluation::statusBadgeColor($eval->status) }}">
-                                    {{ ucfirst($eval->status) }}
-                                </span>
+                                @if($showArchived)
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">Archived</span>
+                                @else
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ \App\Models\CommercialEvaluation::statusBadgeColor($eval->status) }}">
+                                        {{ ucfirst($eval->status) }}
+                                    </span>
+                                @endif
                             </td>
                             <td class="px-4 py-3 text-right text-gray-700 font-mono text-xs">{{ $eval->asking_price_display }}</td>
                             <td class="px-4 py-3 text-right text-gray-700 font-mono text-xs">{{ $eval->recommended_range_display }}</td>
                             <td class="px-4 py-3 text-gray-500 text-xs">{{ $eval->created_at->format('Y-m-d') }}</td>
                             <td class="px-4 py-3 text-right">
-                                <div class="flex items-center justify-end gap-2">
-                                    <a href="{{ route('commercial-evaluations.show', $eval) }}" class="text-[#00b4d8] hover:text-[#0096b7] text-xs font-medium">View</a>
-                                    <a href="{{ route('commercial-evaluations.edit', $eval) }}" class="text-gray-500 hover:text-gray-700 text-xs font-medium">Edit</a>
-                                    <form method="POST" action="{{ route('commercial-evaluations.destroy', $eval) }}" class="inline" onsubmit="return confirm('Delete this evaluation?')">
+                                @if($showArchived)
+                                    <form method="POST" action="{{ route('commercial-evaluations.restore', $eval->id) }}" class="inline">
                                         @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="text-red-500 hover:text-red-700 text-xs font-medium">Delete</button>
+                                        <button type="submit" class="text-emerald-600 hover:text-emerald-800 text-xs font-medium">Restore</button>
                                     </form>
-                                </div>
+                                @else
+                                    <div class="flex items-center justify-end gap-2">
+                                        <a href="{{ route('commercial-evaluations.show', $eval) }}" class="text-[#00b4d8] hover:text-[#0096b7] text-xs font-medium">View</a>
+                                        <a href="{{ route('commercial-evaluations.edit', $eval) }}" class="text-gray-500 hover:text-gray-700 text-xs font-medium">Edit</a>
+                                        <form method="POST" action="{{ route('commercial-evaluations.destroy', $eval) }}" class="inline" onsubmit="return confirm('Delete this evaluation?')">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="text-red-500 hover:text-red-700 text-xs font-medium">Delete</button>
+                                        </form>
+                                    </div>
+                                @endif
                             </td>
                         </tr>
                         @endforeach

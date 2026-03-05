@@ -58,9 +58,9 @@ class MigrateDocuperfect extends Command
             $this->warn('Wiping existing Docuperfect data...');
             DB::table('docuperfect_clause_branches')->truncate();
             DB::table('docuperfect_template_branches')->truncate();
-            Document::query()->delete();
-            Clause::query()->delete();
-            Template::query()->delete();
+            Document::withTrashed()->forceDelete();
+            Clause::withTrashed()->forceDelete();
+            Template::withTrashed()->forceDelete();
             // Remove stored page images
             Storage::deleteDirectory('docuperfect/templates');
         }

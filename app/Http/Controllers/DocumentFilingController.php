@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DocumentFiling;
 use App\Models\Branch;
 use App\Models\User;
+use App\Services\PermissionService;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 
@@ -13,19 +14,19 @@ class DocumentFilingController extends Controller
     public function index(Request $request)
     {
         $user = auth()->user();
-        $isAdmin = $user->isEffectiveAdmin();
-        $isBM = $user->isEffectiveBranchManager();
+        $scope = PermissionService::getDataScope($user, 'filing');
+        $isAdmin = $scope === 'all';
+        $isBM = $scope === 'branch';
         $branchId = $user->effectiveBranchId();
 
-        // Build query
-        $query = DocumentFiling::with(['agent', 'branch', 'capturedBy']);
+        // Build query with permission-based scoping
+        $query = DocumentFiling::with(['agent', 'branch', 'capturedBy'])
+            ->visibleTo($user);
 
-        // Branch scoping
+        // Additional branch filter for users with 'all' scope
         if ($isAdmin && $request->filled('branch_id')) {
             $query->forBranch($request->branch_id);
             $branchId = $request->branch_id;
-        } elseif (!$isAdmin) {
-            $query->forBranch($branchId);
         }
 
         // Agent filter
@@ -44,8 +45,27 @@ class DocumentFilingController extends Controller
         }
 
         // Status filter
+        $showArchived = false;
         if ($request->filled('status') && $request->status !== 'All') {
-            if ($request->status === 'Active') {
+            if ($request->status === 'Archived') {
+                // Switch to soft-deleted records only
+                $showArchived = true;
+                $query = DocumentFiling::onlyTrashed()
+                    ->with(['agent', 'branch', 'capturedBy'])
+                    ->visibleTo($user);
+                if ($isAdmin && $request->filled('branch_id')) {
+                    $query->forBranch($request->branch_id);
+                }
+                if ($request->filled('agent_id')) {
+                    $query->forAgent($request->agent_id);
+                }
+                if ($request->filled('search')) {
+                    $query->search($request->search);
+                }
+                if ($request->filled('document_type') && $request->document_type !== 'All') {
+                    $query->where('document_type', $request->document_type);
+                }
+            } elseif ($request->status === 'Active') {
                 $query->where(function ($q) {
                     $q->whereNull('expiry_date')
                       ->orWhere('expiry_date', '>', Carbon::today()->addDays(30));
@@ -59,12 +79,10 @@ class DocumentFilingController extends Controller
 
         $filings = $query->orderBy('created_at', 'desc')->get();
 
-        // Summary counts (scoped to same branch filter)
-        $countQuery = DocumentFiling::query();
+        // Summary counts (scoped to same visibility)
+        $countQuery = DocumentFiling::visibleTo($user);
         if ($isAdmin && $request->filled('branch_id')) {
             $countQuery->forBranch($request->branch_id);
-        } elseif (!$isAdmin) {
-            $countQuery->forBranch($user->effectiveBranchId());
         }
 
         $allFilings = $countQuery->get();
@@ -90,7 +108,7 @@ class DocumentFilingController extends Controller
 
         return view('filing-register.index', compact(
             'filings', 'branches', 'agents', 'branchName',
-            'isAdmin', 'isBM',
+            'isAdmin', 'isBM', 'showArchived',
             'totalCount', 'activeCount', 'expiringCount', 'expiredCount'
         ));
     }
@@ -111,8 +129,9 @@ class DocumentFilingController extends Controller
             'notes' => 'nullable|string|max:2000',
         ]);
 
-        // Non-admins can only add to their own branch
-        if (!$user->isEffectiveAdmin()) {
+        // Non-'all' scope users can only add to their own branch
+        $scope = PermissionService::getDataScope($user, 'filing');
+        if ($scope !== 'all') {
             $validated['branch_id'] = $user->effectiveBranchId();
         }
 
@@ -154,6 +173,16 @@ class DocumentFilingController extends Controller
         $filing->delete();
 
         return redirect()->route('filing-register.index')
-            ->with('success', 'Filing entry deleted.');
+            ->with('success', 'Filing entry archived.');
+    }
+
+    // ── Restore soft-deleted ──
+
+    public function restore($id)
+    {
+        abort_unless(auth()->user()->hasPermission('filing.edit'), 403);
+        $record = DocumentFiling::onlyTrashed()->findOrFail($id);
+        $record->restore();
+        return redirect()->back()->with('success', 'Record restored.');
     }
 }

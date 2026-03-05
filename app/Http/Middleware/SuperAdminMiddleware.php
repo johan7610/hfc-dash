@@ -16,7 +16,7 @@ class SuperAdminMiddleware
         }
 
         // Uses real role only (not View-As) — prevents privilege escalation
-        if (!Auth::user()->isSuperAdmin()) {
+        if (!Auth::user()->isOwnerRole()) {
             abort(403);
         }
 

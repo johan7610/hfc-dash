@@ -139,7 +139,7 @@
                                 <th class="text-left py-3 px-4 font-semibold text-gray-700">Name</th>
                                 <th class="text-left py-3 px-4 font-semibold text-gray-700">Email</th>
                                 <th class="text-left py-3 px-4 font-semibold text-gray-700">Current Role</th>
-                                <?php if(auth()->user()->isEffectiveAdmin()): ?>
+                                <?php if(auth()->user()->hasPermission('manage_system')): ?>
                                     <th class="text-left py-3 px-4 font-semibold text-gray-700">Change Role</th>
                                 <?php endif; ?>
                             </tr>
@@ -159,7 +159,7 @@
                                         ?>
                                         <span class="nexus-badge <?php echo e($roleBadge); ?>"><?php echo e(str_replace('_', ' ', $u->role)); ?></span>
                                     </td>
-                                    <?php if(auth()->user()->isEffectiveAdmin()): ?>
+                                    <?php if(auth()->user()->hasPermission('manage_system')): ?>
                                         <td class="py-2.5 px-4">
                                             <form method="POST" action="<?php echo e(route('nexus.role-manager.user-role')); ?>" class="flex items-center gap-2">
                                                 <?php echo csrf_field(); ?>

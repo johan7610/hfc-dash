@@ -62,7 +62,7 @@ class SplitterDocTypeController extends Controller
         $label = $doc_type->label;
         $doc_type->delete();
 
-        return back()->with('success', "'{$label}' deleted.");
+        return back()->with('success', "'{$label}' archived.");
     }
 
     public function bulkSave(Request $request)

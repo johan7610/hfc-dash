@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\ListingTarget;
 use App\Models\User;
+use App\Services\PermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -19,8 +20,9 @@ class ListingTargetController extends Controller
         // Base: staff we can target (exclude admins)
         $query = User::whereIn('role', ['agent', 'branch_manager']);
 
-        // Branch Manager: only their branch
-        if ($viewer->isEffectiveBranchManager()) {
+        // Branch-scoped: only their branch
+        $scope = PermissionService::getDataScope($viewer, 'listings');
+        if ($scope === 'branch') {
             $query->where('branch_id', $viewer->branch_id);
         }
 
@@ -51,7 +53,8 @@ class ListingTargetController extends Controller
         // Determine which user IDs the viewer is allowed to edit
         $allowedUserIdsQuery = User::whereIn('role', ['agent', 'branch_manager']);
 
-        if ($viewer->isEffectiveBranchManager()) {
+        $scope = PermissionService::getDataScope($viewer, 'listings');
+        if ($scope === 'branch') {
             $allowedUserIdsQuery->where('branch_id', $viewer->branch_id);
         }
 

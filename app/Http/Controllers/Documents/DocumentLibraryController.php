@@ -188,6 +188,6 @@ class DocumentLibraryController extends Controller
 
         $documentType->delete();
 
-        return redirect()->back()->with('success', 'Document type deleted.');
+        return redirect()->back()->with('success', 'Document type archived.');
     }
 }

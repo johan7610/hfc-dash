@@ -123,7 +123,7 @@ class KnowledgeController extends Controller
         // Chunks are cascade-deleted by the DB
         $document->delete();
 
-        return redirect()->back()->with('status', "Document '{$title}' deleted.");
+        return redirect()->back()->with('status', "Document '{$title}' archived.");
     }
 
     public function preview($documentId)
@@ -186,7 +186,7 @@ class KnowledgeController extends Controller
         $name = $category->name;
         $category->delete();
 
-        return redirect()->back()->with('status', "Category '{$name}' deleted.");
+        return redirect()->back()->with('status', "Category '{$name}' archived.");
     }
 
     public function reorderCategories(Request $request)

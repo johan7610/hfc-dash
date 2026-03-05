@@ -17,7 +17,7 @@ class AdminMiddleware
 
         $user = Auth::user();
 
-        if ($user->isEffectiveAdmin()) {
+        if ($user->hasPermission('manage_system')) {
             return $next($request);
         }
 

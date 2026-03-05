@@ -264,7 +264,7 @@
                         <th class="text-left px-4 py-3">Document</th>
                         <th class="text-left px-4 py-3">Type</th>
                         <th class="text-left px-4 py-3">Signing Progress</th>
-                        @if($user->isAdmin() || $user->isBranchManager())
+                        @if($user->hasPermission('documents.edit'))
                         <th class="text-left px-4 py-3">Agent</th>
                         @endif
                         <th class="text-right px-4 py-3">Actions</th>
@@ -350,7 +350,7 @@
                             </div>
                             @endif
                         </td>
-                        @if($user->isAdmin() || $user->isBranchManager())
+                        @if($user->hasPermission('documents.edit'))
                         <td class="px-4 py-3 text-slate-500">{{ $doc->owner->name ?? '-' }}</td>
                         @endif
                         <td class="px-4 py-3 text-right">
@@ -397,7 +397,7 @@
                         <th class="text-left px-4 py-3">Document</th>
                         <th class="text-left px-4 py-3">Type</th>
                         <th class="text-left px-4 py-3">Status</th>
-                        @if($user->isAdmin() || $user->isBranchManager())
+                        @if($user->hasPermission('documents.edit'))
                         <th class="text-left px-4 py-3">Agent</th>
                         @endif
                         <th class="text-right px-4 py-3">Actions</th>
@@ -419,7 +419,7 @@
                                 <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">All fields complete</span>
                             @endif
                         </td>
-                        @if($user->isAdmin() || $user->isBranchManager())
+                        @if($user->hasPermission('documents.edit'))
                         <td class="px-4 py-3 text-slate-500">{{ $doc->owner->name ?? '-' }}</td>
                         @endif
                         <td class="px-4 py-3 text-right">
@@ -444,7 +444,7 @@
                         <th class="text-left px-4 py-3">Document</th>
                         <th class="text-left px-4 py-3">Type</th>
                         <th class="text-left px-4 py-3">Field Progress</th>
-                        @if($user->isAdmin() || $user->isBranchManager())
+                        @if($user->hasPermission('documents.edit'))
                         <th class="text-left px-4 py-3">Agent</th>
                         @endif
                         <th class="text-right px-4 py-3">Actions</th>
@@ -478,7 +478,7 @@
                                 <span class="text-xs text-slate-400">No required fields</span>
                             @endif
                         </td>
-                        @if($user->isAdmin() || $user->isBranchManager())
+                        @if($user->hasPermission('documents.edit'))
                         <td class="px-4 py-3 text-slate-500">{{ $doc->owner->name ?? '-' }}</td>
                         @endif
                         <td class="px-4 py-3 text-right">
@@ -502,7 +502,7 @@
                     <tr>
                         <th class="text-left px-4 py-3">Document</th>
                         <th class="text-left px-4 py-3">Type</th>
-                        @if($user->isAdmin() || $user->isBranchManager())
+                        @if($user->hasPermission('documents.edit'))
                         <th class="text-left px-4 py-3">Agent</th>
                         @endif
                         <th class="text-right px-4 py-3">Actions</th>
@@ -513,7 +513,7 @@
                     <tr>
                         <td class="px-4 py-3 font-medium">{{ $doc->name }}</td>
                         <td class="px-4 py-3 text-slate-500">{{ $doc->template->documentType->name ?? '-' }}</td>
-                        @if($user->isAdmin() || $user->isBranchManager())
+                        @if($user->hasPermission('documents.edit'))
                         <td class="px-4 py-3 text-slate-500">{{ $doc->owner->name ?? '-' }}</td>
                         @endif
                         <td class="px-4 py-3 text-right">

@@ -9,14 +9,6 @@ use Illuminate\Support\Facades\DB;
 
 class DailyActivitySummaryController extends Controller
 {
-    private function isAgentStrict(): bool
-    {
-        $u = auth()->user();
-        if (!$u) return false;
-        $role = strtolower(trim((string)($u?->effectiveRole() ?? ($u->role ?? ""))));
-        return $role === "agent";
-    }
-
     private function rangeFromRequest(Request $request): array
     {
         $tz = config('app.timezone') ?: 'UTC';
@@ -49,10 +41,9 @@ class DailyActivitySummaryController extends Controller
 
     public function index(Request $request)
     {
-        abort_unless($this->isAgentStrict(), 403);
-
         $u = $request->user();
-        abort_unless($u && (int)($u->is_active ?? 0) === 1, 403);
+        abort_unless($u && $u->hasPermission('daily_activity.view'), 403);
+        abort_unless((int)($u->is_active ?? 0) === 1, 403);
 
         [$range, $start, $end, $month] = $this->rangeFromRequest($request);
 
@@ -123,10 +114,9 @@ class DailyActivitySummaryController extends Controller
 
     public function activity(Request $request, int $definition)
     {
-        abort_unless($this->isAgentStrict(), 403);
-
         $u = $request->user();
-        abort_unless($u && (int)($u->is_active ?? 0) === 1, 403);
+        abort_unless($u && $u->hasPermission('daily_activity.view'), 403);
+        abort_unless((int)($u->is_active ?? 0) === 1, 403);
 
         [$range, $start, $end, $month] = $this->rangeFromRequest($request);
 

@@ -10,14 +10,13 @@ class DashboardController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $role = strtolower(trim((string)($user->effectiveRole() ?? ($user->role ?? ''))));
 
-        // Role-based redirect to the appropriate dashboard
-        if ($role === 'admin' || $user->is_admin) {
+        // Permission-based redirect to the appropriate dashboard
+        if ($user->hasPermission('manage_system')) {
             return redirect()->route('admin.performance');
         }
 
-        if ($role === 'branch_manager') {
+        if ($user->hasPermission('manage_branch')) {
             return redirect()->route('bm.performance');
         }
 

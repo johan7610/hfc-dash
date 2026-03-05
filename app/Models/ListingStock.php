@@ -96,15 +96,13 @@ return $d < 0 ? 0 : $d;
 
     public function scopeVisibleTo($query, \App\Models\User $user)
     {
-        if ($user->isEffectiveAdmin()) {
-            return $query;
-        }
+        $scope = \App\Services\PermissionService::getDataScope($user, 'listings');
 
-        if ($user->isEffectiveBranchManager()) {
-            return $query->where('branch_id', $user->effectiveBranchId());
-        }
+        if ($scope === 'all') return $query;
+        if ($scope === 'branch') return $query->where('branch_id', $user->effectiveBranchId());
+        if ($scope === 'own') return $query->where('user_id', $user->id);
 
-        return $query->where('user_id', $user->id);
+        return $query->whereRaw('1 = 0');
     }
 
     public function user(): BelongsTo

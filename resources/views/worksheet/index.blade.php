@@ -44,7 +44,7 @@
     {{-- ============================================================ --}}
     {{-- RENTALS (conditional) --}}
     {{-- ============================================================ --}}
-    @if(auth()->user()->can_capture_rentals || in_array(auth()->user()->role, ['admin','branch_manager']))
+    @if(auth()->user()->can_capture_rentals || auth()->user()->hasPermission('rentals.create'))
     @php
         $rentalsActive = (int)($calc['rentals_active_count'] ?? 0);
         $rentalsAssist = (int)($calc['rentals_assist_count'] ?? 0);

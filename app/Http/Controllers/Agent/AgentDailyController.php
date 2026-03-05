@@ -10,19 +10,10 @@ use Illuminate\Support\Facades\DB;
 
 class AgentDailyController extends Controller
 {
-    private function isAgentStrict(): bool
-    {
-        $u = auth()->user();
-        if (!$u) return false;
-        $role = strtolower(trim((string)(method_exists($u, "effectiveRole") ? $u->effectiveRole() : ($u->role ?? ""))));
-        return $role === "agent";
-    }
-
     public function index(Request $request)
     {
-        abort_unless($this->isAgentStrict(), 403);
-
         $auth = auth()->user();
+        abort_unless($auth && $auth->hasPermission('daily_activity.view'), 403);
         abort_unless((int)($auth->is_active ?? 0) === 1, 403);
 
         $month = (string)($request->get('month') ?: Carbon::now()->format('Y-m'));
@@ -84,9 +75,8 @@ class AgentDailyController extends Controller
 
     public function save(Request $request)
     {
-        abort_unless($this->isAgentStrict(), 403);
-
         $auth = auth()->user();
+        abort_unless($auth && $auth->hasPermission('daily_activity.view'), 403);
         abort_unless((int)($auth->is_active ?? 0) === 1, 403);
 
         $month = (string)$request->input('month');

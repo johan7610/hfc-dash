@@ -4,9 +4,12 @@ namespace App\Models;
 
 use App\Services\Finance\CommissionCalculator;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Deal extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'deal_no',
 
@@ -595,27 +598,29 @@ public function listingPool()
      */
     public function scopeVisibleTo($query, \App\Models\User $user)
     {
-        if ((int)($user->is_admin ?? 0) === 1 || ($user->role ?? '') === 'admin') {
-            return $query; // global
-        }
+        $scope = \App\Services\PermissionService::getDataScope($user, 'deals');
 
-        if (($user->role ?? '') === 'branch_manager') {
-            // Use agent branch membership so BMs see cross-branch deals
-            // where their branch's agents participate (matches tile counts).
+        if ($scope === 'all') return $query;
+
+        if ($scope === 'branch') {
             return $query->whereIn('id', function ($sub) use ($user) {
                 $sub->select('deal_user.deal_id')
                     ->from('deal_user')
                     ->join('users', 'users.id', '=', 'deal_user.user_id')
-                    ->where('users.branch_id', $user->branch_id)
+                    ->where('users.branch_id', $user->effectiveBranchId())
                     ->distinct();
             });
         }
 
-        return $query->whereIn('id', function ($sub) use ($user) {
-            $sub->select('deal_id')
-                ->from('deal_user')
-                ->where('user_id', $user->id);
-        });
+        if ($scope === 'own') {
+            return $query->whereIn('id', function ($sub) use ($user) {
+                $sub->select('deal_id')
+                    ->from('deal_user')
+                    ->where('user_id', $user->id);
+            });
+        }
+
+        return $query->whereRaw('1 = 0');
     }
 
 

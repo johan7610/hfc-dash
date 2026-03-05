@@ -94,8 +94,9 @@
 
                   @php
                       $u = auth()->user();
-                      $isBM = $u && method_exists($u, 'isEffectiveBranchManager') && $u->isEffectiveBranchManager();
-                      $effectiveBranchId = $u && method_exists($u, 'effectiveBranchId') ? $u->effectiveBranchId() : null;
+                      $dealScope = \App\Services\PermissionService::getDataScope($u, 'deals');
+                      $isBM = $dealScope === 'branch';
+                      $effectiveBranchId = $u?->effectiveBranchId();
                   @endphp
 
                   @if($isBM)

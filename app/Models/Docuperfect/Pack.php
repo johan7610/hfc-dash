@@ -6,9 +6,12 @@ use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Pack extends Model
 {
+    use SoftDeletes;
+
     protected $table = 'docuperfect_packs';
 
     protected $fillable = [
@@ -52,9 +55,9 @@ class Pack extends Model
 
     public function scopeVisibleTo($query, User $user)
     {
-        if ($user->isAdmin()) {
-            return $query;
-        }
+        $scope = \App\Services\PermissionService::getDataScope($user, 'packs');
+
+        if ($scope === 'all') return $query;
 
         $branchId = $user->effectiveBranchId();
 

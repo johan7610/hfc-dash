@@ -11,6 +11,7 @@ use App\Models\DealSettlement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Services\DealMoneyLineRebuilder;
+use App\Services\PermissionService;
 use App\Services\SlidingScaleService;
 
 class DealController extends Controller
@@ -49,7 +50,7 @@ class DealController extends Controller
     
     public function addRemark(Request $request, Deal $deal)
     {
-        abort_unless(auth()->user()?->isEffectiveAdmin() || auth()->user()?->isEffectiveBranchManager(), 403);
+        abort_unless(auth()->user()?->hasPermission('deals.create'), 403);
 
         $data = $request->validate([
             'remark' => ['required', 'string', 'max:2000'],
@@ -72,7 +73,7 @@ class DealController extends Controller
 
 public function log(Deal $deal)
     {
-        abort_unless(auth()->user()?->isEffectiveAdmin() || auth()->user()?->isEffectiveBranchManager(), 403);
+        abort_unless(auth()->user()?->hasPermission('deals.view'), 403);
 
         $logs = DealLog::query()
             ->where('deal_id', $deal->id)
@@ -87,9 +88,10 @@ public function log(Deal $deal)
 
 public function index(Request $request)
     {
-        abort_unless(auth()->user()?->isEffectiveAdmin() || auth()->user()?->isEffectiveBranchManager(), 403);
+        abort_unless(auth()->user()?->hasPermission('deals.view'), 403);
 
         $user = auth()->user();
+        $scope = PermissionService::getDataScope($user, 'deals');
         $query = Deal::query()->visibleTo($user)->with('agents');
 
         // Search
@@ -123,8 +125,8 @@ public function index(Request $request)
             $query->where('commission_status', $commStatus);
         }
 
-        // Branch filter (admin only)
-        if ($user->isEffectiveAdmin() && ($branchFilter = $request->input('branch'))) {
+        // Branch filter (all-scope only)
+        if ($scope === 'all' && ($branchFilter = $request->input('branch'))) {
             $query->where('branch_id', $branchFilter);
         }
 
@@ -146,7 +148,7 @@ public function index(Request $request)
 
         // PAID_NOT_SETTLED_EXCEPTION: Admin-only exception report (always checks ALL paid deals)
         $paidNotSettledDeals = collect();
-        if ($user->isEffectiveAdmin()) {
+        if ($scope === 'all') {
             $allPaidDeals = Deal::query()->visibleTo($user)->where('commission_status', 'Paid')->get();
             $paidDealIds = $allPaidDeals->pluck('id')->map(fn($v) => (int)$v)->all();
 
@@ -172,7 +174,7 @@ public function index(Request $request)
 
         // Branch context for Branch Commission column
         $branchIdContext = (int) $request->input('branch_id');
-        if ($branchIdContext <= 0 && $user->isEffectiveBranchManager()) {
+        if ($branchIdContext <= 0 && $scope === 'branch') {
             $branchIdContext = (int) ($user->effectiveBranchId() ?? ($user->branch_id ?? 0));
         }
 
@@ -181,16 +183,17 @@ public function index(Request $request)
 
     public function create()
     {
-        abort_unless(auth()->user()?->isEffectiveAdmin() || auth()->user()?->isEffectiveBranchManager(), 403);
+        abort_unless(auth()->user()?->hasPermission('deals.create'), 403);
 
         $user = auth()->user();
+        $scope = PermissionService::getDataScope($user, 'deals');
         $defaultBranchId = $user?->effectiveBranchId();
 
         $agents = User::orderBy('name')->get();
 
-        // Branch managers should only see (and use) their branch
+        // Branch-scope users should only see (and use) their branch
         $branches = Branch::orderBy('name');
-        if ($user && $user->isEffectiveBranchManager()) {
+        if ($scope === 'branch') {
             $branches->where('id', $defaultBranchId);
         }
         $branches = $branches->get();
@@ -211,7 +214,7 @@ public function index(Request $request)
         ]);
     }public function edit(Deal $deal)
     {
-        abort_unless(auth()->user()?->isEffectiveAdmin() || auth()->user()?->isEffectiveBranchManager(), 403);
+        abort_unless(auth()->user()?->hasPermission('deals.edit'), 403);
 
 
         $agents = User::orderBy('name')->get();
@@ -227,7 +230,7 @@ public function index(Request $request)
 
     public function store(Request $request)
     {
-        abort_unless(auth()->user()?->isEffectiveAdmin() || auth()->user()?->isEffectiveBranchManager(), 403);
+        abort_unless(auth()->user()?->hasPermission('deals.create'), 403);
 
         return DB::transaction(function () use ($request) {
             $deal = new Deal();            // NUMERIC DEAL NUMBERING — supports legacy D-#### and numeric formats
@@ -263,7 +266,7 @@ public function index(Request $request)
 
     public function update(Request $request, Deal $deal)
     {
-        abort_unless(auth()->user()?->isEffectiveAdmin() || auth()->user()?->isEffectiveBranchManager(), 403);
+        abort_unless(auth()->user()?->hasPermission('deals.edit'), 403);
 
 
         return $this->persistDeal($deal, $request);
@@ -272,7 +275,7 @@ public function index(Request $request)
     
     public function quickUpdate(Request $request, Deal $deal)
     {
-        abort_unless(auth()->user()?->isEffectiveAdmin() || auth()->user()?->isEffectiveBranchManager(), 403);
+        abort_unless(auth()->user()?->hasPermission('deals.edit'), 403);
 
         $oldAccepted = (string)($deal->accepted_status ?? '');
         $oldCommission = (string)($deal->commission_status ?? '');
@@ -352,9 +355,10 @@ $financialLocked = ($deal->exists && $this->isLocked($deal));
 
         // Defaults + safety enforcement for new deals
         $user = auth()->user();
+        $scope = PermissionService::getDataScope($user, 'deals');
 
-        // Branch managers are forced to their branch (UI may still submit something else)
-        if ($user && $user->isEffectiveBranchManager()) {
+        // Branch-scope users are forced to their branch (UI may still submit something else)
+        if ($user && $scope === 'branch') {
             $data['branch_id'] = $user->effectiveBranchId();
         }
 
@@ -565,9 +569,7 @@ $financialLocked = ($deal->exists && (($deal->commission_status ?? "") === "Paid
     {
 
         // BM_SETTLEMENT_GUARD
-        abort_unless(auth()->user()?->isEffectiveAdmin() || auth()->user()?->isEffectiveBranchManager(), 403);
-
-        abort_unless(auth()->user()?->isEffectiveAdmin() || auth()->user()?->isEffectiveBranchManager(), 403);
+        abort_unless(auth()->user()?->hasPermission('settle_deals'), 403);
 
         $deal->load('agents');
 
@@ -597,12 +599,10 @@ $financialLocked = ($deal->exists && (($deal->commission_status ?? "") === "Paid
 
     public function saveSettlement(Request $request, Deal $deal)
     {
-        
+
 
         // BM_SETTLEMENT_GUARD
-        abort_unless(auth()->user()?->isEffectiveAdmin() || auth()->user()?->isEffectiveBranchManager(), 403);
-
-        abort_unless(auth()->user()?->isEffectiveAdmin() || auth()->user()?->isEffectiveBranchManager(), 403);
+        abort_unless(auth()->user()?->hasPermission('settle_deals'), 403);
 
         // Allow settlement save if marking paid (needed to populate paid_at)
         if ($this->isLocked($deal) && !$request->boolean('mark_paid')) {
@@ -873,7 +873,7 @@ $financialLocked = ($deal->exists && (($deal->commission_status ?? "") === "Paid
     public function printSettlement(Deal $deal)
     {
         // BM_SETTLEMENT_GUARD
-        abort_unless(auth()->user()?->isEffectiveAdmin() || auth()->user()?->isEffectiveBranchManager(), 403);
+        abort_unless(auth()->user()?->hasPermission('settle_deals'), 403);
 
         $deal->load('agents');
 
@@ -923,7 +923,7 @@ $financialLocked = ($deal->exists && (($deal->commission_status ?? "") === "Paid
     public function printAgentPayslip(Deal $deal, User $user)
     {
         // BM_SETTLEMENT_GUARD
-        abort_unless(auth()->user()?->isEffectiveAdmin() || auth()->user()?->isEffectiveBranchManager(), 403);
+        abort_unless(auth()->user()?->hasPermission('settle_deals'), 403);
 
         $deal->load('agents');
 

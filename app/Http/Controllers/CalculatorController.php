@@ -22,9 +22,7 @@ class CalculatorController extends Controller
 
     public function uploadFeeSheet(Request $request)
     {
-        if (!auth()->user()->isEffectiveAdmin()) {
-            abort(403);
-        }
+        abort_unless(auth()->user()->hasPermission('calculators.manage'), 403);
 
         $request->validate([
             'fee_sheet' => 'required|file|mimes:pdf|max:10240',

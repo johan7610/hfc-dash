@@ -4,9 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class TvMessage extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'branch_id',
         'created_by_user_id',

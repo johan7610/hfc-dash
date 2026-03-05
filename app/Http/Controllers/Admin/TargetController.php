@@ -12,47 +12,16 @@ use App\Models\Branch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use App\Services\PermissionService;
 
 class TargetController extends Controller
 {
-    private function isAdmin(): bool
+    public function index(Request $request)
     {
-        $u = auth()->user();
-        if (!$u) return false;
-
-        // Prefer effective role (View-As), but fall back to DB role
-        if (method_exists($u, 'isEffectiveAdmin') && (bool)$u->isEffectiveAdmin()) return true;
-
-        $role = strtolower(trim((string)($u->role ?? '')));
-        return ($role === 'admin');
-    }
-
-    private function isBranchManager(): bool
-    {
-        $u = auth()->user();
-        if (!$u) return false;
-
-        if (method_exists($u, 'isEffectiveBranchManager') && (bool)$u->isEffectiveBranchManager()) return true;
-
-        $role = strtolower(trim((string)($u->role ?? '')));
-        return ($role === 'branch_manager');
-    }
-
-    private function isAgent(): bool
-    {
-        // Agent: not admin/BM, and role is empty/null/"agent" (case-insensitive)
-        $u = auth()->user();
-        if (!$u) return false;
-        if ($this->isAdmin() || $this->isBranchManager()) return false;
-
-        $role = strtolower(trim((string)($u->role ?? '')));
-        return ($role === '' || $role === 'agent');
-    }
-public function index(Request $request)
-    {
-        abort_unless($this->isAdmin() || $this->isBranchManager() || $this->isAgent(), 403);
-
         $auth = auth()->user();
+        abort_unless($auth->hasPermission('targets.view'), 403);
+
+        $scope = PermissionService::getDataScope($auth, 'targets');
 
         // Period
         $period = (string)($request->get('period') ?: Carbon::now()->format('Y-m'));
@@ -82,9 +51,9 @@ public function index(Request $request)
                   ->orWhere('role', 'branch_manager');
             });
 
-        if ($this->isAgent()) {
+        if ($scope === 'own') {
             $usersQ->where('id', (int)$auth->id);
-        } elseif ($this->isBranchManager()) {
+        } elseif ($scope === 'branch') {
             $usersQ->where('branch_id', (int)$auth->branch_id);
         }
 
@@ -249,7 +218,7 @@ public function index(Request $request)
 
         $effectiveCols = [];
 
-        if ($this->isAdmin()) {
+        if ($scope === 'all') {
             // global only
             foreach ($dailyCols as $k => $c) {
                 if ((int)$c['enabled'] === 1) $effectiveCols[] = $c;
@@ -348,17 +317,17 @@ public function index(Request $request)
 
             'branchNames' => $branchNames,
 
-            'isAdmin' => $this->isAdmin(),
-            'isBranchManager' => $this->isBranchManager(),
-            'isAgent' => $this->isAgent(),
-            'canEditTargets' => ($this->isAdmin() || $this->isBranchManager()),
+            'isAdmin' => $scope === 'all',
+            'isBM' => $scope === 'branch',
+            'isAgent' => $scope === 'own',
+            'canEditTargets' => $auth->hasPermission('manage_targets'),
         ]);
     }
 
     public function save(Request $request)
     {
-        // Monthly targets: Admin/BM only
-        abort_unless($this->isAdmin() || $this->isBranchManager(), 403);
+        // Monthly targets: manage_targets permission required
+        abort_unless(auth()->user()->hasPermission('manage_targets'), 403);
 
         $period = (string)$request->input('period');
         if (!preg_match('/^\d{4}\-\d{2}$/', $period)) {
@@ -372,6 +341,7 @@ public function index(Request $request)
         if (!is_array($data)) $data = [];
 
         DB::transaction(function () use ($data, $period, $auth, $branchId) {
+            $saveScope = PermissionService::getDataScope($auth, 'targets');
             foreach ($data as $userId => $row) {
                 $userId = (int)$userId;
                 if ($userId <= 0) continue;
@@ -379,8 +349,8 @@ public function index(Request $request)
                 $u = User::find($userId);
                 if (!$u) continue;
 
-                // Branch manager can only save for their branch
-                if ((string)($auth?->role ?? '') === 'branch_manager' || (bool)($auth?->isEffectiveBranchManager())) {
+                // Branch-scoped users can only save for their branch
+                if ($saveScope === 'branch') {
                     if ((int)$u->branch_id !== (int)$branchId) continue;
                 }
 
@@ -417,20 +387,23 @@ public function index(Request $request)
     
     public function agentDaily(Request $request)
     {
+        $auth = auth()->user();
+        abort_unless($auth->hasPermission('targets.view'), 403);
+
+        $agentScope = PermissionService::getDataScope($auth, 'targets');
+
         // Agents: dedicated daily capture screen
         // BM/Admin: redirect to the Targets page (which already contains Daily Activity capture and scopes correctly)
-        if (! $this->isAgent()) {
+        if ($agentScope !== 'own') {
             $dailyDate = (string)($request->get('date') ?: \Illuminate\Support\Carbon::now()->toDateString());
             if (!preg_match('/^\d{4}\-\d{2}\-\d{2}$/', $dailyDate)) {
                 $dailyDate = \Illuminate\Support\Carbon::now()->toDateString();
             }
             $period = substr($dailyDate, 0, 7);
 
-            abort_unless($this->isAdmin() || $this->isBranchManager(), 403);
             return redirect()->route('admin.targets', ['period' => $period, 'date' => $dailyDate]);
         }
 
-        $auth = auth()->user();
         $userId = (int)($auth?->id ?? 0);
         if ($userId <= 0) abort(403);
 
@@ -599,7 +572,7 @@ public function index(Request $request)
             'branchNames' => $branchNames,
 
             'isAdmin' => false,
-            'isBranchManager' => false,
+            'isBM' => false,
             'isAgent' => true,
         
             // Week UI
@@ -610,10 +583,13 @@ public function index(Request $request)
 ]);
     }
 
-public function saveDaily(Request $request)
+    public function saveDaily(Request $request)
     {
-        // Daily activity: Admin/BM can capture (review/testing), Agents always capture themselves (Pattern C)
-        abort_unless($this->isAdmin() || $this->isBranchManager() || $this->isAgent(), 403);
+        // Daily activity: permission-based access
+        $auth = auth()->user();
+        abort_unless($auth->hasPermission('targets.view'), 403);
+
+        $dailyScope = PermissionService::getDataScope($auth, 'targets');
 
         $activityDate = (string)$request->input('activity_date');
         if (!preg_match('/^\d{4}\-\d{2}\-\d{2}$/', $activityDate)) {
@@ -622,7 +598,6 @@ public function saveDaily(Request $request)
 
         $period = substr($activityDate, 0, 7);
 
-        $auth = auth()->user();
         $branchId = $auth?->branch_id;
 
         $data = $request->input('daily', []);
@@ -656,21 +631,21 @@ public function saveDaily(Request $request)
             'created_at' => true,
             'updated_at' => true,
         ];
-DB::transaction(function () use ($data, $activityDate, $period, $auth, $branchId, $allowed, $blocked) {
+        DB::transaction(function () use ($data, $activityDate, $period, $auth, $branchId, $allowed, $blocked, $dailyScope) {
             foreach ($data as $userId => $row) {
                 $userId = (int)$userId;
                 if ($userId <= 0) continue;
 
-                // Agent can ONLY save their own row
-                if (($auth->role === null || (string)$auth->role === 'agent') && !($auth->isEffectiveAdmin() || $auth->isEffectiveBranchManager())) {
+                // Own-scoped users can ONLY save their own row
+                if ($dailyScope === 'own') {
                     if ($userId !== (int)$auth->id) continue;
                 }
 
                 $u = User::find($userId);
                 if (!$u) continue;
 
-                // Branch manager can only save for their branch
-                if ((string)($auth?->role ?? '') === 'branch_manager' || (bool)($auth?->isEffectiveBranchManager())) {
+                // Branch-scoped users can only save for their branch
+                if ($dailyScope === 'branch') {
                     if ((int)$u->branch_id !== (int)$branchId) continue;
                 }
 
@@ -714,7 +689,7 @@ DB::transaction(function () use ($data, $activityDate, $period, $auth, $branchId
             }
         });
 
-        if ($this->isAgent()) {
+        if ($dailyScope === 'own') {
             return redirect()->route('agent.daily', ['date' => $activityDate])
                 ->with('status', 'Daily activity saved.');
         }
@@ -727,17 +702,18 @@ DB::transaction(function () use ($data, $activityDate, $period, $auth, $branchId
     // =========================
     // V2: Activity Definitions (new model)
     // =========================
-        public function activityDefinitions(Request $request)
+    public function activityDefinitions(Request $request)
     {
-        abort_unless($this->isAdmin() || $this->isBranchManager(), 403);
+        abort_unless(auth()->user()->hasPermission('manage_targets'), 403);
 
         $auth = auth()->user();
+        $defScope = PermissionService::getDataScope($auth, 'targets');
 
         // Scope:
-        // - Branch Manager: see global + their branch-specific definitions
-        // - Admin: for now, see global definitions (we'll add branch switch next)
+        // - Branch-scoped: see global + their branch-specific definitions
+        // - All-scoped: for now, see global definitions (we'll add branch switch next)
         $branchId = null;
-        if ($this->isBranchManager()) {
+        if ($defScope === 'branch') {
             $branchId = (int)($auth?->branch_id ?? 0);
             if ($branchId <= 0) $branchId = null;
         }
@@ -759,8 +735,8 @@ DB::transaction(function () use ($data, $activityDate, $period, $auth, $branchId
         return view('admin.targets.activity-definitions', [
             'definitions' => $definitions,
             'branchId' => $branchId,
-            'isAdmin' => $this->isAdmin(),
-            'isBranchManager' => $this->isBranchManager(),
+            'isAdmin' => $defScope === 'all',
+            'isBM' => $defScope === 'branch',
         ]);
     }
 
@@ -769,12 +745,13 @@ DB::transaction(function () use ($data, $activityDate, $period, $auth, $branchId
     
     public function activityDefinitionsSave(Request $request)
     {
-        abort_unless($this->isAdmin() || $this->isBranchManager(), 403);
+        abort_unless(auth()->user()->hasPermission('manage_targets'), 403);
 
         $auth = auth()->user();
+        $defSaveScope = PermissionService::getDataScope($auth, 'targets');
 
         $branchId = null;
-        if ($this->isBranchManager()) {
+        if ($defSaveScope === 'branch') {
             $branchId = (int)($auth?->branch_id ?? 0);
             if ($branchId <= 0) $branchId = null;
         }
@@ -827,19 +804,20 @@ DB::transaction(function () use ($data, $activityDate, $period, $auth, $branchId
 
 
 
-public function activitySetup(Request $request)
+    public function activitySetup(Request $request)
     {
-        abort_unless($this->isAdmin() || $this->isBranchManager(), 403);
+        abort_unless(auth()->user()->hasPermission('manage_targets'), 403);
 
         $auth = auth()->user();
+        $setupScope = PermissionService::getDataScope($auth, 'targets');
 
         // Branch context:
-        // - Branch Manager: always their branch
-        // - Admin: optional branch_id querystring to edit overrides; otherwise edits global defaults
+        // - Branch-scoped: always their branch
+        // - All-scoped: optional branch_id querystring to edit overrides; otherwise edits global defaults
         $branchId = null;
-        if ($this->isBranchManager()) {
+        if ($setupScope === 'branch') {
             $branchId = (int)($auth?->branch_id ?? 0);
-        } elseif ($this->isAdmin()) {
+        } elseif ($setupScope === 'all') {
             $branchId = (int)($request->get('branch_id') ?? 0);
         }
         if ($branchId <= 0) $branchId = null;
@@ -867,7 +845,7 @@ public function activitySetup(Request $request)
         }
 
         $branches = [];
-        if ($this->isAdmin()) {
+        if ($setupScope === 'all') {
             $branches = DB::table('branches')->select('id', 'name')->orderBy('name')->get();
         }
 
@@ -876,21 +854,22 @@ public function activitySetup(Request $request)
             'branchId' => $branchId,
             'branchOverrides' => $branchOverrides,
             'branches' => $branches,
-            'isAdmin' => $this->isAdmin(),
-            'isBranchManager' => $this->isBranchManager(),
+            'isAdmin' => $setupScope === 'all',
+            'isBM' => $setupScope === 'branch',
         ]);
     }
 
     public function activitySetupSave(Request $request)
     {
-        abort_unless($this->isAdmin() || $this->isBranchManager(), 403);
+        abort_unless(auth()->user()->hasPermission('manage_targets'), 403);
 
         $auth = auth()->user();
+        $setupSaveScope = PermissionService::getDataScope($auth, 'targets');
 
         $branchId = null;
-        if ($this->isBranchManager()) {
+        if ($setupSaveScope === 'branch') {
             $branchId = (int)($auth?->branch_id ?? 0);
-        } elseif ($this->isAdmin()) {
+        } elseif ($setupSaveScope === 'all') {
             $branchId = (int)($request->input('branch_id') ?? 0);
         }
         if ($branchId <= 0) $branchId = null;
@@ -984,8 +963,9 @@ public function activitySetup(Request $request)
 
     public function activityColumnCreate(Request $request)
     {
-        // Admin-only: create a new activity column definition
-        abort_unless($this->isAdmin(), 403);
+        // All-scoped only: create a new activity column definition
+        $colScope = PermissionService::getDataScope(auth()->user(), 'targets');
+        abort_unless($colScope === 'all', 403);
 
         $key = strtolower(trim((string)$request->input('key', '')));
         $label = trim((string)$request->input('label', ''));

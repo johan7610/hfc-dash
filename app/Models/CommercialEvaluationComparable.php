@@ -3,9 +3,13 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class CommercialEvaluationComparable extends Model
 {
+    use SoftDeletes;
+
+
     protected $table = 'commercial_evaluation_comparables';
 
     protected $fillable = [

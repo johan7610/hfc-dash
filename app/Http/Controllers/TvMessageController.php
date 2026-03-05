@@ -16,15 +16,28 @@ class TvMessageController extends Controller
     {
         $branches = Branch::query()->orderBy('name')->get();
 
-        $messages = TvMessage::query()
-            ->with(['branch', 'creator'])
-            ->orderByRaw('case when branch_id is null then 0 else 1 end') // global first
-            ->orderBy('id', 'desc')
-            ->get();
+        $status = $request->input('status', 'active');
+        $showArchived = $status === 'archived';
+
+        if ($showArchived) {
+            $messages = TvMessage::onlyTrashed()
+                ->with(['branch', 'creator'])
+                ->orderByRaw('case when branch_id is null then 0 else 1 end')
+                ->orderBy('id', 'desc')
+                ->get();
+        } else {
+            $messages = TvMessage::query()
+                ->with(['branch', 'creator'])
+                ->orderByRaw('case when branch_id is null then 0 else 1 end')
+                ->orderBy('id', 'desc')
+                ->get();
+        }
 
         return view('admin.tv-messages.index', [
             'branches' => $branches,
             'messages' => $messages,
+            'status' => $status,
+            'showArchived' => $showArchived,
         ]);
     }
 
@@ -75,7 +88,7 @@ class TvMessageController extends Controller
     {
         $tvMessage->delete();
 
-        return redirect()->route('admin.tv-messages')->with('status', 'TV message deleted.');
+        return redirect()->route('admin.tv-messages')->with('status', 'TV message archived.');
     }
 
     // -------------------------
@@ -174,6 +187,16 @@ class TvMessageController extends Controller
 
         $tvMessage->delete();
 
-        return redirect()->route('bm.tv-messages')->with('status', 'TV message deleted.');
+        return redirect()->route('bm.tv-messages')->with('status', 'TV message archived.');
+    }
+
+    // ── Restore soft-deleted (admin) ──
+
+    public function adminRestore($id)
+    {
+        abort_unless(auth()->user()->hasPermission('manage_system'), 403);
+        $record = TvMessage::onlyTrashed()->findOrFail($id);
+        $record->restore();
+        return redirect()->back()->with('success', 'Record restored.');
     }
 }

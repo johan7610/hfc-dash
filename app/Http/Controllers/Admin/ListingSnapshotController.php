@@ -9,6 +9,7 @@ use App\Models\Branch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use App\Services\PermissionService;
 
 class ListingSnapshotController extends Controller
 {
@@ -27,8 +28,9 @@ class ListingSnapshotController extends Controller
         $period = (string)($request->get('period') ?: Carbon::now()->format('Y-m'));
         if (!preg_match('/^\d{4}\-\d{2}$/', $period)) $period = Carbon::now()->format('Y-m');
 
+        $scope = PermissionService::getDataScope($auth, 'listings');
         $branchId = (int)($request->get('branch_id') ?: 0);
-        if ($auth->isEffectiveBranchManager()) {
+        if ($scope === 'branch') {
             $branchId = (int)($auth->branch_id ?? 0);
         }
 
@@ -52,8 +54,8 @@ class ListingSnapshotController extends Controller
             'branchNames' => $branchNames,
             'users' => $users,
             'snapshots' => $snap,
-            'isAdmin' => $auth->isEffectiveAdmin(),
-            'isBM' => $auth->isEffectiveBranchManager(),
+            'isAdmin' => $scope === 'all',
+            'isBM' => $scope === 'branch',
         ]);
     }
 
@@ -81,9 +83,9 @@ class ListingSnapshotController extends Controller
                 $u = User::find($userId);
                 if (!$u) continue;
 
-                // BM can only save their own branch
-                $role = strtolower(trim((string)($auth->role ?? '')));
-                if ($role === 'branch_manager') {
+                // Branch-scoped users can only save their own branch
+                $scope = PermissionService::getDataScope($auth, 'listings');
+                if ($scope === 'branch') {
                     if ((int)($u->branch_id ?? 0) !== (int)($auth->branch_id ?? 0)) continue;
                 }
 
