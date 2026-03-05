@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Contact extends Model
@@ -36,6 +37,13 @@ class Contact extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(ContactDocument::class)->latest();
+    }
+
+    public function properties(): BelongsToMany
+    {
+        return $this->belongsToMany(Property::class, 'contact_property')
+                    ->withPivot('role')
+                    ->withTimestamps();
     }
 
     public function getFullNameAttribute(): string

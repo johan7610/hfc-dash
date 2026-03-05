@@ -1,8 +1,9 @@
 @extends('layouts.corex')
 
 @section('corex-content')
+@php $isNew = !$property->exists; @endphp
 <div class="w-full space-y-4"
-     x-data="{ activeTab: '{{ session('tab', $activeTab) }}' }">
+     x-data="{ activeTab: '{{ $isNew ? 'info' : session('tab', $activeTab) }}' }">
 
     {{-- Top bar: back + flash --}}
     <div class="flex items-center gap-4 flex-wrap">
@@ -63,8 +64,8 @@
                         <span class="text-xs px-2 py-0.5 rounded-full font-semibold flex-shrink-0" style="background:rgba(34,197,94,0.12); color:#22c55e; border:1px solid rgba(34,197,94,0.3);">LIVE</span>
                         @endif
                     </div>
-                    <h1 class="text-base font-extrabold leading-tight mt-2" style="color:var(--text-primary);">{{ $property->title }}</h1>
-                    <div class="text-lg font-bold mt-1" style="color:#00b4d8;">{{ $property->formattedPrice() }}</div>
+                    <h1 class="text-base font-extrabold leading-tight mt-2" style="color:var(--text-primary);">{{ $property->title ?: 'New Property' }}</h1>
+                    @if(!$isNew)<div class="text-lg font-bold mt-1" style="color:#00b4d8;">{{ $property->formattedPrice() }}</div>@endif
                     @if($property->suburb)
                     <div class="text-xs mt-1" style="color:var(--text-muted);">
                         {{ $property->suburb }}{{ $property->city ? ', '.$property->city : '' }}
@@ -140,6 +141,7 @@
                 </div>
 
                 {{-- Actions --}}
+                @if(!$isNew)
                 <div class="grid grid-cols-1 gap-2 pt-1">
                     <a href="{{ route('corex.properties.ad', $property) }}"
                        class="flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold no-underline transition-colors"
@@ -149,6 +151,7 @@
                         Ad Builder
                     </a>
                 </div>
+                @endif
             </div>
         </aside>
 
@@ -162,7 +165,7 @@
                 <img src="{{ $thumb }}" alt="" class="w-14 h-14 rounded-xl object-cover flex-shrink-0">
                 @endif
                 <div class="flex-1 min-w-0">
-                    <h1 class="text-base font-extrabold leading-tight" style="color:var(--text-primary);">{{ $property->title }}</h1>
+                    <h1 class="text-base font-extrabold leading-tight" style="color:var(--text-primary);">{{ $property->title ?: 'New Property' }}</h1>
                     <div class="text-base font-bold mt-0.5" style="color:#00b4d8;">{{ $property->formattedPrice() }}</div>
                     <div class="flex items-center gap-2 mt-1 flex-wrap">
                         <span class="text-xs px-2 py-0.5 rounded-full font-semibold"
@@ -176,11 +179,12 @@
     {{-- Tab bar (shared) --}}
         <div class="flex overflow-x-auto" style="border-bottom:1px solid var(--border);">
             @foreach([
-                ['key'=>'overview', 'label'=>'Overview'],
-                ['key'=>'info',     'label'=>'Info'],
-                ['key'=>'gallery',  'label'=>'Gallery'],
-                ['key'=>'notes',    'label'=>'Notes'],
-                ['key'=>'drive',    'label'=>'Drive'],
+                ['key'=>'overview',  'label'=>'Overview'],
+                ['key'=>'info',      'label'=>'Info'],
+                ['key'=>'gallery',   'label'=>'Gallery'],
+                ['key'=>'contacts',  'label'=>'Contacts'],
+                ['key'=>'notes',     'label'=>'Notes'],
+                ['key'=>'drive',     'label'=>'Drive'],
             ] as $tab)
             <button type="button"
                     @click="activeTab = '{{ $tab['key'] }}'"
@@ -189,10 +193,13 @@
                     class="px-6 py-4 text-sm font-semibold whitespace-nowrap flex-shrink-0 transition-colors duration-150 outline-none focus:outline-none"
                     style="background:transparent;">
                 {{ $tab['label'] }}
-                @if($tab['key'] === 'notes' && $property->notes->count())
+                @if(!$isNew && $tab['key'] === 'contacts' && $property->contacts->count())
+                <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded-full" style="background:rgba(0,180,216,0.2);color:#00b4d8;">{{ $property->contacts->count() }}</span>
+                @endif
+                @if(!$isNew && $tab['key'] === 'notes' && $property->notes->count())
                 <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded-full" style="background:rgba(0,180,216,0.2);color:#00b4d8;">{{ $property->notes->count() }}</span>
                 @endif
-                @if($tab['key'] === 'drive' && $property->files->count())
+                @if(!$isNew && $tab['key'] === 'drive' && $property->files->count())
                 <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded-full" style="background:rgba(0,180,216,0.2);color:#00b4d8;">{{ $property->files->count() }}</span>
                 @endif
             </button>
@@ -200,7 +207,7 @@
         </div>
 
         {{-- ── OVERVIEW TAB ──────────────────────────────────────────────── --}}
-        <div x-show="activeTab === 'overview'" class="p-6 space-y-6">
+        <div x-show="activeTab === 'overview'" x-cloak class="p-6 space-y-6">
 
             <div class="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-4 gap-4">
                 @foreach([
@@ -284,14 +291,18 @@
             @endif
 
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                @if($property->created_at)
                 <div>
                     <div class="text-xs font-medium mb-0.5" style="color:var(--text-muted);">Loaded</div>
                     <div class="text-sm" style="color:var(--text-primary);">{{ $property->created_at->format('d M Y') }}</div>
                 </div>
+                @endif
+                @if($property->updated_at)
                 <div>
                     <div class="text-xs font-medium mb-0.5" style="color:var(--text-muted);">Modified</div>
                     <div class="text-sm" style="color:var(--text-primary);">{{ $property->updated_at->format('d M Y H:i') }}</div>
                 </div>
+                @endif
                 @if($property->listed_date)
                 <div>
                     <div class="text-xs font-medium mb-0.5" style="color:var(--text-muted);">Listed Date</div>
@@ -309,9 +320,12 @@
         </div>
 
         {{-- ── INFO TAB ───────────────────────────────────────────────────── --}}
-        <div x-show="activeTab === 'info'" x-cloak class="p-6">
-            <form method="POST" action="{{ route('corex.properties.update', $property) }}" class="space-y-6">
-                @csrf @method('PUT')
+        <div x-show="activeTab === 'info'" {{ $isNew ? '' : 'x-cloak' }} class="p-6">
+            <form id="prop-update-form" method="POST" enctype="multipart/form-data"
+                  action="{{ $isNew ? route('corex.properties.store') : route('corex.properties.update', $property) }}"
+                  class="space-y-6">
+                @csrf
+                @if(!$isNew) @method('PUT') @endif
 
                 {{-- Classification --}}
                 <div>
@@ -533,6 +547,7 @@
                                    class="w-full rounded-lg px-3 py-2 text-sm"
                                    style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); color-scheme: light dark;">
                         </div>
+                        @if(!$isNew)
                         <div>
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Loaded</label>
                             <input type="text" value="{{ $property->created_at->format('d M Y H:i') }}" disabled
@@ -545,6 +560,7 @@
                                    class="w-full rounded-lg px-3 py-2 text-sm cursor-not-allowed"
                                    style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-muted);">
                         </div>
+                        @endif
                     </div>
                 </div>
 
@@ -584,28 +600,44 @@
                     </div>
                 </div>
 
-                {{-- Save / Delete --}}
-                <div class="flex items-center justify-between pt-2">
-                    <button type="submit"
-                            class="px-5 py-2 rounded-lg text-sm font-semibold text-white"
-                            style="background:var(--brand-primary,#0b2a4a); border:1px solid var(--border);"
-                            onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
-                        Save Changes
+            </form>{{-- /prop-update-form --}}
+
+            {{-- Save / Delete — outside the update form to prevent nesting --}}
+            <div class="flex items-center justify-between pt-4">
+                <button type="submit" form="prop-update-form"
+                        class="px-5 py-2 rounded-lg text-sm font-semibold text-white"
+                        style="background:var(--brand-primary,#0b2a4a); border:1px solid var(--border);"
+                        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+                    {{ $isNew ? 'Create Property' : 'Save Changes' }}
+                </button>
+                @if(!$isNew)
+                <form method="POST" action="{{ route('corex.properties.destroy', $property) }}"
+                      onsubmit="return confirm('Delete this property?')">
+                    @csrf @method('DELETE')
+                    <button type="submit" class="text-sm font-semibold text-red-500 hover:text-red-600 px-4 py-2 rounded-lg hover:bg-red-500/10 transition-colors">
+                        Delete Property
                     </button>
-                    <form method="POST" action="{{ route('corex.properties.destroy', $property) }}"
-                          onsubmit="return confirm('Delete this property?')">
-                        @csrf @method('DELETE')
-                        <button type="submit" class="text-sm font-semibold text-red-500 hover:text-red-600 px-4 py-2 rounded-lg hover:bg-red-500/10 transition-colors">
-                            Delete Property
-                        </button>
-                    </form>
-                </div>
-            </form>
+                </form>
+                @endif
+            </div>
         </div>
 
         {{-- ── GALLERY TAB ────────────────────────────────────────────────── --}}
         <div x-show="activeTab === 'gallery'" x-cloak class="p-6 space-y-6"
              x-data="galleryManager()">
+        @if($isNew)
+            <div>
+                <p class="text-xs mb-4" style="color:var(--text-muted);">Images will be uploaded when you click <strong style="color:var(--text-secondary);">Create Property</strong>.</p>
+                <label class="flex items-center gap-3 px-4 py-3 rounded-xl border border-dashed cursor-pointer text-sm transition-colors"
+                       style="border-color:var(--border-hover); color:var(--text-secondary);"
+                       onmouseover="this.style.borderColor='#00b4d8'" onmouseout="this.style.borderColor='var(--border-hover)'">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
+                    <span id="gallery_images-create-label">Select images (multiple allowed)</span>
+                    <input type="file" name="gallery_images[]" multiple accept="image/*" form="prop-update-form" class="hidden"
+                           onchange="document.getElementById('gallery_images-create-label').textContent = this.files.length + ' file' + (this.files.length !== 1 ? 's' : '') + ' selected';">
+                </label>
+            </div>
+        @else
 
             {{-- Upload new images --}}
             <div>
@@ -747,11 +779,295 @@
                     1 / 1
                 </div>
             </div>
+        @endif {{-- /!$isNew gallery --}}
+        </div>
+
+        {{-- ── CONTACTS TAB ─────────────────────────────────────────────────── --}}
+        <div x-show="activeTab === 'contacts'" x-cloak class="p-6 space-y-6"
+             @if($isNew)
+             x-data="pendingContactsManager('{{ route('corex.properties.contacts.search-global') }}')"
+             @else
+             x-data="propertyContactsManager('{{ route('corex.properties.contacts.search', $property) }}')"
+             @endif>
+        @if($isNew)
+
+            {{-- Pending linked contacts list --}}
+            <div>
+                <h3 class="text-xs font-bold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Contacts to Link</h3>
+                <template x-if="pending.length === 0 && pendingNew.length === 0">
+                    <div class="text-sm" style="color:var(--text-muted);">None selected yet. Search below to add contacts.</div>
+                </template>
+                <template x-for="(c, idx) in pending" :key="'e'+idx">
+                    <div class="flex items-center gap-3 px-4 py-3 rounded-xl mb-2" style="background:var(--surface-2); border:1px solid var(--border);">
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-semibold" style="color:var(--text-primary);" x-text="c.name"></div>
+                            <div class="text-xs mt-0.5" style="color:var(--text-muted);" x-text="[c.phone, c.email].filter(Boolean).join(' · ')"></div>
+                        </div>
+                        <input type="hidden" :name="'pending_contact_ids['+idx+']'" :value="c.id" form="prop-update-form">
+                        <button type="button" @click="remove(idx)"
+                                class="text-xs font-semibold text-red-500 hover:text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors">Remove</button>
+                    </div>
+                </template>
+                <template x-for="(nc, idx) in pendingNew" :key="'n'+idx">
+                    <div class="flex items-center gap-3 px-4 py-3 rounded-xl mb-2" style="background:var(--surface-2); border:1px solid var(--border);">
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-semibold" style="color:var(--text-primary);" x-text="nc.first_name + ' ' + nc.last_name"></div>
+                            <div class="text-xs mt-0.5" style="color:var(--text-muted);" x-text="[nc.phone, nc.email].filter(Boolean).join(' · ')"></div>
+                            <div class="text-xs font-medium mt-0.5" style="color:#00b4d8;">New contact (will be created)</div>
+                        </div>
+                        <input type="hidden" :name="'pending_new_contacts['+idx+'][first_name]'" :value="nc.first_name" form="prop-update-form">
+                        <input type="hidden" :name="'pending_new_contacts['+idx+'][last_name]'"  :value="nc.last_name"  form="prop-update-form">
+                        <input type="hidden" :name="'pending_new_contacts['+idx+'][phone]'"      :value="nc.phone"      form="prop-update-form">
+                        <input type="hidden" :name="'pending_new_contacts['+idx+'][email]'"      :value="nc.email"      form="prop-update-form">
+                        <input type="hidden" :name="'pending_new_contacts['+idx+'][contact_type_id]'" :value="nc.contact_type_id" form="prop-update-form">
+                        <button type="button" @click="removeNew(idx)"
+                                class="text-xs font-semibold text-red-500 hover:text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors">Remove</button>
+                    </div>
+                </template>
+            </div>
+
+            {{-- Search & link existing contact --}}
+            <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:20px;">
+                <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Link Existing Contact</h3>
+                <div class="relative mb-3">
+                    <input type="text" x-model="query" @input.debounce.300ms="search()"
+                           placeholder="Search by name, phone or email…"
+                           class="w-full rounded-lg px-3 py-2 text-sm pr-10"
+                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                    <div x-show="loading" class="absolute right-3 top-2.5">
+                        <svg class="animate-spin w-4 h-4" style="color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                    </div>
+                </div>
+                <div x-show="results.length > 0" class="rounded-xl overflow-hidden mb-3" style="border:1px solid var(--border);">
+                    <template x-for="r in results" :key="r.id">
+                        <button type="button" @click="add(r)"
+                                class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[#00b4d8]/10 transition-colors"
+                                style="border-bottom:1px solid var(--border); background:var(--surface);">
+                            <div>
+                                <div class="text-sm font-semibold" style="color:var(--text-primary);" x-text="r.first_name + ' ' + r.last_name"></div>
+                                <div class="text-xs mt-0.5" style="color:var(--text-muted);" x-text="[r.phone, r.email].filter(Boolean).join(' · ')"></div>
+                            </div>
+                            <span class="ml-auto text-xs font-semibold flex-shrink-0" style="color:#00b4d8;">+ Add</span>
+                        </button>
+                    </template>
+                </div>
+                <div x-show="searched && results.length === 0" class="text-sm" style="color:var(--text-muted);">No matching contacts found.</div>
+            </div>
+
+            {{-- Create new contact & add to pending --}}
+            <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:20px;">
+                <button type="button" @click="showNewForm = !showNewForm"
+                        class="flex items-center gap-2 text-sm font-semibold"
+                        style="color:#00b4d8; background:none; border:none; cursor:pointer; padding:0;">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4"
+                         :class="showNewForm ? 'rotate-45' : ''" style="transition:transform .2s;">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    <span x-text="showNewForm ? 'Cancel' : 'Create new contact &amp; link'"></span>
+                </button>
+                <div x-show="showNewForm" x-cloak class="mt-5 space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">First Name <span class="text-red-500">*</span></label>
+                            <input type="text" x-model="newForm.first_name"
+                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Surname <span class="text-red-500">*</span></label>
+                            <input type="text" x-model="newForm.last_name"
+                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Phone <span class="text-red-500">*</span></label>
+                            <input type="text" x-model="newForm.phone"
+                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Email</label>
+                            <input type="email" x-model="newForm.email"
+                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Contact Type</label>
+                            <select x-model="newForm.contact_type_id"
+                                    class="w-full rounded-lg px-3 py-2 text-sm"
+                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                <option value="">— None —</option>
+                                @foreach(\App\Models\ContactType::where('is_active',true)->orderBy('sort_order')->get() as $ct)
+                                <option value="{{ $ct->id }}">{{ $ct->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+                    <button type="button" @click="addNew()"
+                            class="px-5 py-2 rounded-lg text-sm font-semibold text-white"
+                            style="background:#00b4d8;">
+                        Add to Pending
+                    </button>
+                </div>
+            </div>
+
+        @else
+
+            {{-- Linked contacts --}}
+            <div>
+                <h3 class="text-xs font-bold uppercase tracking-wider mb-3" style="color:var(--text-muted);">
+                    Linked Contacts ({{ $property->contacts->count() }})
+                </h3>
+                @forelse($property->contacts as $c)
+                <div class="flex items-center gap-3 px-4 py-3 rounded-xl mb-2" style="background:var(--surface-2); border:1px solid var(--border);">
+                    <div class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-sm font-bold text-white"
+                         style="background:{{ $c->type?->color ?? '#334155' }};">
+                        {{ $c->initials }}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <a href="{{ route('corex.contacts.show', $c) }}"
+                           class="text-sm font-semibold no-underline hover:underline"
+                           style="color:var(--text-primary);">{{ $c->full_name }}</a>
+                        <div class="text-xs mt-0.5 flex gap-3" style="color:var(--text-muted);">
+                            @if($c->phone)<span>{{ $c->phone }}</span>@endif
+                            @if($c->email)<span>{{ $c->email }}</span>@endif
+                            @if($c->pivot->role)<span class="font-semibold" style="color:#00b4d8;">{{ ucfirst($c->pivot->role) }}</span>@endif
+                        </div>
+                    </div>
+                    <form method="POST" action="{{ route('corex.properties.contacts.unlink', [$property, $c]) }}"
+                          onsubmit="return confirm('Unlink {{ addslashes($c->full_name) }} from this property?')">
+                        @csrf @method('DELETE')
+                        <button type="submit" class="text-xs font-semibold text-red-500 hover:text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors">Unlink</button>
+                    </form>
+                </div>
+                @empty
+                <div class="rounded-xl p-6 text-center" style="background:var(--surface-2); border:1px dashed var(--border-hover);">
+                    <div class="text-sm" style="color:var(--text-secondary);">No contacts linked yet.</div>
+                </div>
+                @endforelse
+            </div>
+
+            {{-- Link existing contact --}}
+            <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:20px;">
+                <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Link Existing Contact</h3>
+
+                <div class="relative mb-3">
+                    <input type="text" x-model="query" @input.debounce.300ms="search()"
+                           placeholder="Search by name, phone or email…"
+                           class="w-full rounded-lg px-3 py-2 text-sm pr-10"
+                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                    <div x-show="loading" class="absolute right-3 top-2.5">
+                        <svg class="animate-spin w-4 h-4" style="color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                    </div>
+                </div>
+
+                <div x-show="results.length > 0" class="rounded-xl overflow-hidden mb-3"
+                     style="border:1px solid var(--border);">
+                    <template x-for="r in results" :key="r.id">
+                        <form method="POST" action="{{ route('corex.properties.contacts.link', $property) }}">
+                            @csrf
+                            <input type="hidden" name="contact_id" :value="r.id">
+                            <button type="submit" class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[#00b4d8]/10 transition-colors"
+                                    style="border-bottom:1px solid var(--border); background:var(--surface);">
+                                <div>
+                                    <div class="text-sm font-semibold" style="color:var(--text-primary);" x-text="r.first_name + ' ' + r.last_name"></div>
+                                    <div class="text-xs mt-0.5" style="color:var(--text-muted);" x-text="[r.phone, r.email].filter(Boolean).join(' · ')"></div>
+                                </div>
+                                <span class="ml-auto text-xs font-semibold flex-shrink-0" style="color:#00b4d8;">+ Link</span>
+                            </button>
+                        </form>
+                    </template>
+                </div>
+
+                <div x-show="searched && results.length === 0" class="text-sm mb-3" style="color:var(--text-muted);">
+                    No matching contacts found.
+                </div>
+            </div>
+
+            {{-- Create new contact and link --}}
+            <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:20px;"
+                 x-data="{ open: false }">
+                <button type="button" @click="open = !open"
+                        class="flex items-center gap-2 text-sm font-semibold"
+                        style="color:#00b4d8; background:none; border:none; cursor:pointer; padding:0;">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4"
+                         :class="open ? 'rotate-45' : ''" style="transition:transform .2s;">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    <span x-text="open ? 'Cancel' : 'Create new contact &amp; link'"></span>
+                </button>
+
+                <div x-show="open" x-cloak class="mt-5 space-y-4">
+                    <form method="POST" action="{{ route('corex.properties.contacts.createAndLink', $property) }}" class="space-y-4">
+                        @csrf
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">First Name <span class="text-red-500">*</span></label>
+                                <input type="text" name="first_name" required
+                                       class="w-full rounded-lg px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Surname <span class="text-red-500">*</span></label>
+                                <input type="text" name="last_name" required
+                                       class="w-full rounded-lg px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Phone <span class="text-red-500">*</span></label>
+                                <input type="text" name="phone" required
+                                       class="w-full rounded-lg px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Email</label>
+                                <input type="email" name="email"
+                                       class="w-full rounded-lg px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Contact Type</label>
+                                <select name="contact_type_id"
+                                        class="w-full rounded-lg px-3 py-2 text-sm"
+                                        style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                    <option value="">— None —</option>
+                                    @foreach(\App\Models\ContactType::where('is_active',true)->orderBy('sort_order')->get() as $ct)
+                                    <option value="{{ $ct->id }}">{{ $ct->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Role (optional)</label>
+                                <input type="text" name="role" placeholder="e.g. owner, buyer, tenant"
+                                       class="w-full rounded-lg px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                            </div>
+                        </div>
+                        <button type="submit"
+                                class="px-5 py-2 rounded-lg text-sm font-semibold text-white"
+                                style="background:#00b4d8;">
+                            Create Contact &amp; Link
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+        @endif {{-- /!$isNew contacts --}}
         </div>
 
         {{-- ── NOTES TAB ───────────────────────────────────────────────────── --}}
         <div x-show="activeTab === 'notes'" x-cloak class="p-6 space-y-5">
-
+        @if($isNew)
+            <div class="space-y-2">
+                <label class="block text-xs font-bold uppercase tracking-wider" style="color:var(--text-muted);">
+                    Initial Note <span class="font-normal normal-case text-xs">(optional — saved with the property)</span>
+                </label>
+                <textarea name="initial_note" rows="5" form="prop-update-form"
+                          class="w-full rounded-xl px-4 py-3 text-sm resize-none"
+                          style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);"
+                          placeholder="Add an optional note...">{{ old('initial_note') }}</textarea>
+            </div>
+        @else
             {{-- Add note --}}
             <form method="POST" action="{{ route('corex.properties.notes.store', $property) }}" class="space-y-2">
                 @csrf
@@ -793,10 +1109,26 @@
                 </div>
                 @endforelse
             </div>
+        @endif {{-- /!$isNew notes --}}
         </div>
 
         {{-- ── DRIVE TAB ────────────────────────────────────────────────────── --}}
         <div x-show="activeTab === 'drive'" x-cloak class="p-6 space-y-5">
+        @if($isNew)
+            <div>
+                <h3 class="text-xs font-bold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Upload Files</h3>
+                <p class="text-xs mb-4" style="color:var(--text-muted);">Files will be uploaded when you click <strong style="color:var(--text-secondary);">Create Property</strong>.</p>
+                <label class="flex items-center gap-3 px-4 py-3 rounded-xl border border-dashed cursor-pointer text-sm transition-colors"
+                       style="border-color:var(--border-hover); color:var(--text-secondary);"
+                       onmouseover="this.style.borderColor='#00b4d8'" onmouseout="this.style.borderColor='var(--border-hover)'">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" /></svg>
+                    <span id="drive-create-label">Select files (multiple allowed, max 50 MB each)</span>
+                    <input type="file" name="drive_files[]" multiple form="prop-update-form" class="hidden"
+                           onchange="updateDriveCreateList(this);">
+                </label>
+                <ul id="drive-create-list" class="mt-3 space-y-1"></ul>
+            </div>
+        @else
 
             {{-- Upload --}}
             <div>
@@ -864,6 +1196,7 @@
                 </div>
                 @endforelse
             </div>
+        @endif {{-- /!$isNew drive --}}
         </div>
 
         </div>{{-- /tab container (right column) --}}
@@ -874,6 +1207,95 @@
 
 @push('scripts')
 <script>
+// Pending contacts manager (create form — no property ID yet)
+function pendingContactsManager(searchUrl) {
+    return {
+        query: '',
+        results: [],
+        loading: false,
+        searched: false,
+        pending: [],    // existing contacts to link: { id, name, phone, email }
+        pendingNew: [], // new contacts to create+link: { first_name, last_name, phone, email, contact_type_id }
+        newForm: { first_name: '', last_name: '', phone: '', email: '', contact_type_id: '' },
+        showNewForm: false,
+
+        async search() {
+            if (this.query.length < 1) { this.results = []; this.searched = false; return; }
+            this.loading = true;
+            try {
+                const excludeIds = this.pending.map(p => p.id).filter(Boolean);
+                let url = searchUrl + '?q=' + encodeURIComponent(this.query);
+                excludeIds.forEach(id => { url += '&exclude[]=' + id; });
+                const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                this.results = await res.json();
+                this.searched = true;
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        add(contact) {
+            if (!this.pending.find(p => p.id === contact.id)) {
+                this.pending.push({
+                    id:    contact.id,
+                    name:  contact.first_name + ' ' + contact.last_name,
+                    phone: contact.phone || '',
+                    email: contact.email || '',
+                });
+            }
+            this.results = [];
+            this.query   = '';
+        },
+
+        remove(idx)    { this.pending.splice(idx, 1); },
+        removeNew(idx) { this.pendingNew.splice(idx, 1); },
+
+        addNew() {
+            if (!this.newForm.first_name.trim() || !this.newForm.last_name.trim() || !this.newForm.phone.trim()) {
+                alert('First name, last name and phone are required.');
+                return;
+            }
+            this.pendingNew.push({ ...this.newForm });
+            this.newForm      = { first_name: '', last_name: '', phone: '', email: '', contact_type_id: '' };
+            this.showNewForm  = false;
+        },
+    };
+}
+
+// Drive files selected during create: update label + file list
+function updateDriveCreateList(input) {
+    const label = document.getElementById('drive-create-label');
+    const list  = document.getElementById('drive-create-list');
+    const files = Array.from(input.files);
+    label.textContent = files.length + ' file' + (files.length !== 1 ? 's' : '') + ' selected';
+    list.innerHTML = files.map(f =>
+        '<li class="text-xs" style="color:var(--text-muted);">• ' + f.name + ' (' + (f.size / 1024 / 1024).toFixed(1) + ' MB)</li>'
+    ).join('');
+}
+
+// Property contacts search manager
+function propertyContactsManager(searchUrl) {
+    return {
+        query: '',
+        results: [],
+        loading: false,
+        searched: false,
+        async search() {
+            if (this.query.length < 1) { this.results = []; this.searched = false; return; }
+            this.loading = true;
+            try {
+                const res = await fetch(searchUrl + '?q=' + encodeURIComponent(this.query), {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                this.results = await res.json();
+                this.searched = true;
+            } finally {
+                this.loading = false;
+            }
+        }
+    };
+}
+
 // Features manager
 function featuresManager(initial) {
     return {
@@ -968,7 +1390,7 @@ document.addEventListener('keydown', function(e) {
     function saveOrder() {
         const items = Array.from(grid.querySelectorAll('.gallery-item'));
         const order = items.map(i => parseInt(i.dataset.index));
-        fetch('{{ route('corex.properties.reorderImages', $property) }}', {
+        fetch('{{ $isNew ? '' : route('corex.properties.reorderImages', $property) }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

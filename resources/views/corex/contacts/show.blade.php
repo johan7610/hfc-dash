@@ -2,7 +2,8 @@
 
 @section('corex-content')
 <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5"
-     x-data="{ activeTab: '{{ request('tab', 'info') }}' }">
+     x-data="contactShowData('{{ route('corex.contacts.properties.search', $contact) }}', '{{ request('tab', 'info') }}')"
+     x-init="activeTab = initTab">
 
     {{-- Back link --}}
     <a href="{{ route('corex.contacts.index') }}"
@@ -105,6 +106,7 @@
         <div class="flex" style="border-bottom:1px solid var(--border);" id="tab-bar">
             @foreach([
                 ['key'=>'info','label'=>'Info'],
+                ['key'=>'properties','label'=>'Properties <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full" style="background:var(--surface-2);">'. $contact->properties->count() .'</span>'],
                 ['key'=>'notes','label'=>'Notes <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full" style="background:var(--surface-2);">'. $contact->contactNotes->count() .'</span>'],
                 ['key'=>'drive','label'=>'Drive <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full" style="background:var(--surface-2);">'. $contact->documents->count() .'</span>'],
             ] as $t)
@@ -202,6 +204,98 @@
                     <a href="{{ route('corex.contacts.index') }}" class="text-sm" style="color:var(--text-muted);">Cancel</a>
                 </div>
             </form>
+        </div>
+
+        {{-- ════════════════════════════
+             PROPERTIES TAB
+             ════════════════════════════ --}}
+        <div x-show="activeTab === 'properties'" x-cloak class="p-6 space-y-6">
+
+            {{-- Linked properties list --}}
+            <div>
+                <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">
+                    Linked Properties ({{ $contact->properties->count() }})
+                </h3>
+                @forelse($contact->properties as $prop)
+                @php
+                $propThumb = $prop->gallery_images_json[0] ?? ($prop->dawn_images_json[0] ?? null);
+                $propSc = ['active'=>'#22c55e','draft'=>'#94a3b8','sold'=>'#3b82f6','withdrawn'=>'#f59e0b'][$prop->status] ?? '#94a3b8';
+                @endphp
+                <div class="flex items-center gap-3 px-4 py-3 rounded-xl mb-2" style="background:var(--surface-2); border:1px solid var(--border);">
+                    {{-- Thumb --}}
+                    <div class="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0" style="background:var(--surface);">
+                        @if($propThumb)
+                        <img src="{{ $propThumb }}" alt="" class="w-full h-full object-cover">
+                        @else
+                        <div class="w-full h-full flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="w-6 h-6" style="color:var(--text-muted);opacity:.4;"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" /></svg>
+                        </div>
+                        @endif
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <a href="{{ route('corex.properties.show', $prop) }}"
+                           class="text-sm font-semibold no-underline hover:underline"
+                           style="color:var(--text-primary);">{{ $prop->title }}</a>
+                        <div class="text-xs mt-0.5 flex flex-wrap gap-2" style="color:var(--text-muted);">
+                            <span style="color:{{ $propSc }};">{{ ucfirst($prop->status) }}</span>
+                            <span>{{ $prop->formattedPrice() }}</span>
+                            @if($prop->address)<span>{{ $prop->address }}{{ $prop->suburb ? ', '.$prop->suburb : '' }}</span>@elseif($prop->suburb)<span>{{ $prop->suburb }}</span>@endif
+                            @if($prop->pivot->role)<span class="font-semibold" style="color:#00b4d8;">{{ ucfirst($prop->pivot->role) }}</span>@endif
+                        </div>
+                    </div>
+                    <form method="POST" action="{{ route('corex.contacts.properties.unlink', [$contact, $prop]) }}"
+                          onsubmit="return confirm('Unlink this property from {{ addslashes($contact->full_name) }}?')">
+                        @csrf @method('DELETE')
+                        <button type="submit" class="text-xs font-semibold text-red-500 hover:text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors flex-shrink-0">Unlink</button>
+                    </form>
+                </div>
+                @empty
+                <div class="rounded-xl p-6 text-center" style="background:var(--surface-2); border:1px dashed var(--border-hover);">
+                    <div class="text-sm" style="color:var(--text-secondary);">No properties linked yet.</div>
+                </div>
+                @endforelse
+            </div>
+
+            {{-- Link property by address search --}}
+            <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:20px;">
+                <h3 class="text-xs font-bold uppercase tracking-widest mb-4" style="color:var(--text-muted);">Link a Property</h3>
+                <p class="text-xs mb-4" style="color:var(--text-muted);">Search by address, suburb or title.</p>
+
+                <div class="relative mb-3">
+                    <input type="text" x-model="propSearch" @input.debounce.300ms="searchProps()"
+                           placeholder="e.g. 21 Dee Road, Uvongo…"
+                           class="w-full rounded-lg px-3 py-2 text-sm pr-10"
+                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                    <div x-show="propLoading" class="absolute right-3 top-2.5">
+                        <svg class="animate-spin w-4 h-4" style="color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                    </div>
+                </div>
+
+                <div x-show="propResults.length > 0" class="rounded-xl overflow-hidden mb-3" style="border:1px solid var(--border);">
+                    <template x-for="r in propResults" :key="r.id">
+                        <form method="POST" action="{{ route('corex.contacts.properties.link', $contact) }}">
+                            @csrf
+                            <input type="hidden" name="property_id" :value="r.id">
+                            <button type="submit" class="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[#00b4d8]/10 transition-colors"
+                                    style="border-bottom:1px solid var(--border); background:var(--surface);">
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-sm font-semibold" style="color:var(--text-primary);" x-text="r.title"></div>
+                                    <div class="text-xs mt-0.5" style="color:var(--text-muted);" x-text="(r.address || '') + ' · ' + r.price"></div>
+                                </div>
+                                <span class="text-xs font-semibold flex-shrink-0 px-2 py-1 rounded-full"
+                                      :style="`background:${statusColor(r.status)}22; color:${statusColor(r.status)}; border:1px solid ${statusColor(r.status)}44;`"
+                                      x-text="r.status.charAt(0).toUpperCase() + r.status.slice(1)"></span>
+                                <span class="text-xs font-semibold flex-shrink-0" style="color:#00b4d8;">+ Link</span>
+                            </button>
+                        </form>
+                    </template>
+                </div>
+
+                <div x-show="propSearched && propResults.length === 0" class="text-sm" style="color:var(--text-muted);">
+                    No matching properties found.
+                </div>
+            </div>
+
         </div>
 
         {{-- ════════════════════════════
@@ -337,15 +431,36 @@
 
 </div>
 
-{{-- Auto-open correct tab from fragment --}}
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const hash = window.location.hash;
-        if (hash === '#tab-notes') {
-            document.querySelector('[\\@click="activeTab = \'notes\'"]')?.click();
-        } else if (hash === '#tab-drive') {
-            document.querySelector('[\\@click="activeTab = \'drive\'"]')?.click();
+function contactShowData(searchUrl, initTab) {
+    return {
+        activeTab: initTab || 'info',
+        initTab: initTab || 'info',
+        propSearch: '',
+        propResults: [],
+        propLoading: false,
+        propSearched: false,
+        async searchProps() {
+            if (this.propSearch.length < 1) { this.propResults = []; this.propSearched = false; return; }
+            this.propLoading = true;
+            try {
+                const r = await fetch(searchUrl + '?q=' + encodeURIComponent(this.propSearch), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                this.propResults = await r.json();
+                this.propSearched = true;
+            } finally { this.propLoading = false; }
+        },
+        statusColor(s) {
+            return {active:'#22c55e', draft:'#94a3b8', sold:'#3b82f6', withdrawn:'#f59e0b'}[s] || '#94a3b8';
         }
-    });
+    };
+}
+document.addEventListener('DOMContentLoaded', function () {
+    const hash = window.location.hash;
+    if (hash === '#tab-notes') {
+        document.querySelector('[\\@click="activeTab = \'notes\'"]')?.click();
+    } else if (hash === '#tab-drive') {
+        document.querySelector('[\\@click="activeTab = \'drive\'"]')?.click();
+    }
+});
 </script>
 @endsection

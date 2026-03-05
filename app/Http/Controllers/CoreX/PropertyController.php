@@ -27,6 +27,25 @@ class PropertyController extends Controller
 
         $canPickAgent = in_array($role, ['super_admin', 'admin', 'branch_manager']);
 
+        // Agent filter with session persistence (admin/BM only)
+        if ($canPickAgent) {
+            if ($request->has('agent_id')) {
+                $raw           = $request->query('agent_id', '');
+                $filterAgentId = $raw;
+                session(['corex_properties_agent_id' => $raw === '' ? 'all' : $raw]);
+            } else {
+                $saved = session('corex_properties_agent_id');
+                if ($saved === null) {
+                    $filterAgentId = (string) $user->id;
+                    session(['corex_properties_agent_id' => $filterAgentId]);
+                } elseif ($saved === 'all') {
+                    $filterAgentId = '';
+                } else {
+                    $filterAgentId = $saved;
+                }
+            }
+        }
+
         // Scope
         if ($canPickAgent && $filterAgentId !== '') {
             // Admin/BM viewing a specific agent
@@ -85,7 +104,7 @@ class PropertyController extends Controller
     public function show(Property $property)
     {
         $this->authorizeProperty($property);
-        $property->load(['agent', 'branch', 'notes.user', 'files.user']);
+        $property->load(['agent', 'branch', 'notes.user', 'files.user', 'contacts.type']);
 
         $settingItems = [
             'categories'   => PropertySettingItem::group('category')->get(),
@@ -105,20 +124,23 @@ class PropertyController extends Controller
 
     public function create()
     {
-        $branches = Branch::orderBy('name')->get();
-        $agents   = $this->agentList();
+        $property          = new Property();
+        $property->status  = 'draft';
+        $property->beds    = 0;
+        $property->baths   = 0;
+        $property->garages = 0;
+
         $settingItems = [
             'categories'   => PropertySettingItem::group('category')->get(),
             'types'        => PropertySettingItem::group('property_type')->get(),
             'statuses'     => PropertySettingItem::group('property_status')->get(),
             'mandateTypes' => PropertySettingItem::group('mandate_type')->get(),
         ];
-        return view('corex.properties.create-edit', [
-            'property'     => null,
-            'branches'     => $branches,
-            'agents'       => $agents,
-            'settingItems' => $settingItems,
-        ]);
+        $branches  = Branch::orderBy('name')->get();
+        $agents    = $this->agentList();
+        $activeTab = 'info';
+
+        return view('corex.properties.show', compact('property', 'settingItems', 'branches', 'agents', 'activeTab'));
     }
 
     public function store(Request $request)
@@ -154,14 +176,21 @@ class PropertyController extends Controller
             'branch_id'        => 'nullable|exists:branches,id',
             'agent_id'         => 'nullable|exists:users,id',
             'publish'          => 'nullable|boolean',
-            'dawn_images'      => 'nullable|array',
-            'dawn_images.*'    => 'image|max:5120',
-            'noon_images'      => 'nullable|array',
-            'noon_images.*'    => 'image|max:5120',
-            'dusk_images'      => 'nullable|array',
-            'dusk_images.*'    => 'image|max:5120',
-            'gallery_images'   => 'nullable|array',
-            'gallery_images.*' => 'image|max:5120',
+            'dawn_images'               => 'nullable|array',
+            'dawn_images.*'             => 'image|max:5120',
+            'noon_images'               => 'nullable|array',
+            'noon_images.*'             => 'image|max:5120',
+            'dusk_images'               => 'nullable|array',
+            'dusk_images.*'             => 'image|max:5120',
+            'gallery_images'            => 'nullable|array',
+            'gallery_images.*'          => 'image|max:5120',
+            // Create-form extras
+            'initial_note'              => 'nullable|string|max:5000',
+            'drive_files'               => 'nullable|array',
+            'drive_files.*'             => 'file|max:51200',
+            'pending_contact_ids'       => 'nullable|array',
+            'pending_contact_ids.*'     => 'integer',
+            'pending_new_contacts'      => 'nullable|array',
         ]);
 
         // Convert features array to JSON
@@ -194,6 +223,50 @@ class PropertyController extends Controller
         // Re-sync with images if published (first create had no images yet)
         if ($property->isPublished()) {
             \App\Jobs\SyncPropertyToWebsite::dispatchSync($property->fresh(['agent', 'branch', 'agency']), 'upsert');
+        }
+
+        // Initial note (written from create form)
+        if ($request->filled('initial_note')) {
+            $property->notes()->create([
+                'user_id' => auth()->id(),
+                'content' => $request->input('initial_note'),
+            ]);
+        }
+
+        // Drive files uploaded during create
+        if ($request->hasFile('drive_files')) {
+            foreach ($request->file('drive_files') as $file) {
+                $path = $file->store("properties/{$property->id}/files", 'public');
+                $property->files()->create([
+                    'user_id'   => auth()->id(),
+                    'name'      => $file->getClientOriginalName(),
+                    'path'      => $path,
+                    'size'      => $file->getSize(),
+                    'mime_type' => $file->getMimeType(),
+                ]);
+            }
+        }
+
+        // Link existing contacts selected during create
+        foreach ((array) $request->input('pending_contact_ids', []) as $cid) {
+            $cid = (int) $cid;
+            if ($cid > 0) {
+                $property->contacts()->syncWithoutDetaching([$cid => ['role' => null]]);
+            }
+        }
+
+        // Create + link new contacts added during create
+        foreach ((array) $request->input('pending_new_contacts', []) as $nc) {
+            if (empty($nc['first_name']) || empty($nc['last_name']) || empty($nc['phone'])) continue;
+            $contact = \App\Models\Contact::create([
+                'first_name'         => substr($nc['first_name'], 0, 100),
+                'last_name'          => substr($nc['last_name'],  0, 100),
+                'phone'              => substr($nc['phone'],       0, 30),
+                'email'              => !empty($nc['email']) ? substr($nc['email'], 0, 150) : null,
+                'contact_type_id'    => !empty($nc['contact_type_id']) ? (int) $nc['contact_type_id'] : null,
+                'created_by_user_id' => auth()->id(),
+            ]);
+            $property->contacts()->attach($contact->id, ['role' => null]);
         }
 
         return redirect()->route('corex.properties.show', $property)
