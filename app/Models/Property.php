@@ -17,8 +17,12 @@ class Property extends Model
         'excerpt',
         'description',
         'price',
+        'rates_taxes',
+        'levy',
+        'special_levy',
         'city',
         'suburb',
+        'address',
         'region',
         'beds',
         'baths',
@@ -26,8 +30,10 @@ class Property extends Model
         'size_m2',
         'erf_size_m2',
         'property_type',
+        'category',
         'mandate_type',
         'status',
+        'features_json',
         'images_json',
         'dawn_images_json',
         'noon_images_json',
@@ -37,6 +43,8 @@ class Property extends Model
         'branch_id',
         'agency_id',
         'published_at',
+        'listed_date',
+        'expiry_date',
     ];
 
     protected $casts = [
@@ -45,8 +53,14 @@ class Property extends Model
         'noon_images_json'    => 'array',
         'dusk_images_json'    => 'array',
         'gallery_images_json' => 'array',
+        'features_json'       => 'array',
         'published_at'        => 'datetime',
         'price'               => 'integer',
+        'rates_taxes'         => 'integer',
+        'levy'                => 'integer',
+        'special_levy'        => 'integer',
+        'listed_date'         => 'date',
+        'expiry_date'         => 'date',
     ];
 
     protected static function boot(): void
@@ -73,6 +87,16 @@ class Property extends Model
     public function agency(): BelongsTo
     {
         return $this->belongsTo(Agency::class);
+    }
+
+    public function notes(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(PropertyNote::class)->latest();
+    }
+
+    public function files(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(PropertyFile::class)->latest();
     }
 
     // ── Scopes ──

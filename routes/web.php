@@ -543,13 +543,22 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
 
     // Properties — listing sync to website
     Route::prefix('properties')->middleware('permission:access_properties')->name('corex.properties.')->group(function () {
-        Route::get('/',                [\App\Http\Controllers\CoreX\PropertyController::class, 'index'])->name('index');
-        Route::get('/create',          [\App\Http\Controllers\CoreX\PropertyController::class, 'create'])->name('create');
-        Route::post('/',               [\App\Http\Controllers\CoreX\PropertyController::class, 'store'])->name('store');
-        Route::get('/{property}/edit', [\App\Http\Controllers\CoreX\PropertyController::class, 'edit'])->name('edit');
-        Route::get('/{property}/ad',   [\App\Http\Controllers\CoreX\PropertyController::class, 'ad'])->name('ad');
-        Route::put('/{property}',      [\App\Http\Controllers\CoreX\PropertyController::class, 'update'])->name('update');
-        Route::delete('/{property}',   [\App\Http\Controllers\CoreX\PropertyController::class, 'destroy'])->name('destroy');
+        Route::get('/',                        [\App\Http\Controllers\CoreX\PropertyController::class, 'index'])->name('index');
+        Route::get('/create',                  [\App\Http\Controllers\CoreX\PropertyController::class, 'create'])->name('create');
+        Route::post('/',                       [\App\Http\Controllers\CoreX\PropertyController::class, 'store'])->name('store');
+        Route::get('/{property}',              [\App\Http\Controllers\CoreX\PropertyController::class, 'show'])->name('show');
+        Route::get('/{property}/edit',         [\App\Http\Controllers\CoreX\PropertyController::class, 'edit'])->name('edit');
+        Route::get('/{property}/ad',           [\App\Http\Controllers\CoreX\PropertyController::class, 'ad'])->name('ad');
+        Route::put('/{property}',              [\App\Http\Controllers\CoreX\PropertyController::class, 'update'])->name('update');
+        Route::delete('/{property}',           [\App\Http\Controllers\CoreX\PropertyController::class, 'destroy'])->name('destroy');
+        Route::post('/{property}/delete-image',[\App\Http\Controllers\CoreX\PropertyController::class, 'deleteImage'])->name('deleteImage');
+        Route::post('/{property}/reorder-images',[\App\Http\Controllers\CoreX\PropertyController::class, 'reorderImages'])->name('reorderImages');
+        // Notes
+        Route::post('/{property}/notes',                [\App\Http\Controllers\CoreX\PropertyNoteController::class, 'store'])->name('notes.store');
+        Route::delete('/{property}/notes/{note}',       [\App\Http\Controllers\CoreX\PropertyNoteController::class, 'destroy'])->name('notes.destroy');
+        // Files (Drive)
+        Route::post('/{property}/files',                [\App\Http\Controllers\CoreX\PropertyFileController::class, 'store'])->name('files.store');
+        Route::delete('/{property}/files/{file}',       [\App\Http\Controllers\CoreX\PropertyFileController::class, 'destroy'])->name('files.destroy');
     });
 
     // Ad Template Builder
@@ -559,6 +568,38 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/',                          [\App\Http\Controllers\CoreX\PropertyAdTemplateController::class, 'store'])->name('store');
         Route::put('/{template}',                 [\App\Http\Controllers\CoreX\PropertyAdTemplateController::class, 'update'])->name('update');
         Route::delete('/{template}',              [\App\Http\Controllers\CoreX\PropertyAdTemplateController::class, 'destroy'])->name('destroy');
+    });
+
+    // Contacts
+    Route::prefix('contacts')->middleware('permission:access_contacts')->name('corex.contacts.')->group(function () {
+        Route::get('/',                   [\App\Http\Controllers\CoreX\ContactController::class, 'index'])->name('index');
+        Route::post('/',                  [\App\Http\Controllers\CoreX\ContactController::class, 'store'])->name('store');
+        Route::get('/{contact}',          [\App\Http\Controllers\CoreX\ContactController::class, 'show'])->name('show');
+        Route::put('/{contact}',          [\App\Http\Controllers\CoreX\ContactController::class, 'update'])->name('update');
+        Route::delete('/{contact}',       [\App\Http\Controllers\CoreX\ContactController::class, 'destroy'])->name('destroy');
+
+        // Notes
+        Route::post('/{contact}/notes',          [\App\Http\Controllers\CoreX\ContactNoteController::class, 'store'])->name('notes.store');
+        Route::delete('/{contact}/notes/{note}', [\App\Http\Controllers\CoreX\ContactNoteController::class, 'destroy'])->name('notes.destroy');
+
+        // Documents (Drive)
+        Route::post('/{contact}/documents',                    [\App\Http\Controllers\CoreX\ContactDocumentController::class, 'store'])->name('documents.store');
+        Route::get('/{contact}/documents/{document}/download', [\App\Http\Controllers\CoreX\ContactDocumentController::class, 'download'])->name('documents.download');
+        Route::delete('/{contact}/documents/{document}',       [\App\Http\Controllers\CoreX\ContactDocumentController::class, 'destroy'])->name('documents.destroy');
+    });
+
+    // Contact Types (settings)
+    Route::prefix('settings/contact-types')->middleware('permission:access_settings')->name('corex.settings.contact-types.')->group(function () {
+        Route::post('/',              [\App\Http\Controllers\CoreX\ContactTypeController::class, 'store'])->name('store');
+        Route::put('/{contactType}',  [\App\Http\Controllers\CoreX\ContactTypeController::class, 'update'])->name('update');
+        Route::delete('/{contactType}', [\App\Http\Controllers\CoreX\ContactTypeController::class, 'destroy'])->name('destroy');
+    });
+
+    // Property Setting Items (settings)
+    Route::prefix('settings/property-items')->middleware('permission:access_settings')->name('corex.settings.property-items.')->group(function () {
+        Route::post('/',              [\App\Http\Controllers\CoreX\SettingsController::class, 'storePropertySettingItem'])->name('store');
+        Route::put('/{item}',         [\App\Http\Controllers\CoreX\SettingsController::class, 'updatePropertySettingItem'])->name('update');
+        Route::delete('/{item}',      [\App\Http\Controllers\CoreX\SettingsController::class, 'destroyPropertySettingItem'])->name('destroy');
     });
 });
 

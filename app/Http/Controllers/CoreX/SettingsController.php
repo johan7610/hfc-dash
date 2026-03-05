@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\CoreX;
 
 use App\Http\Controllers\Controller;
+use App\Models\ContactType;
 use App\Models\Designation;
+use App\Models\PropertySettingItem;
 use App\Models\Docuperfect\DocumentType;
 use App\Models\Docuperfect\NamedField;
 use App\Models\PerformanceSetting;
@@ -19,7 +21,8 @@ class SettingsController extends Controller
         $user = auth()->user();
 
         $data = [
-            'activeTab' => $request->get('tab', 'agency'),
+            'activeTab'      => $request->get('tab', 'agency'),
+            'featureSection' => $request->get('fsec', 'documents'),
         ];
 
         // User Settings tab: Designations
@@ -35,6 +38,15 @@ class SettingsController extends Controller
         $data['rentalDocTypes']         = RentalDocumentType::orderBy('sort_order')->get();
         $data['rentalReminderSettings'] = RentalReminderSetting::current();
 
+        // Feature Settings tab: Contacts
+        $data['contactTypes'] = ContactType::orderBy('sort_order')->orderBy('name')->get();
+
+        // Feature Settings tab: Properties
+        $data['propCategories']   = PropertySettingItem::group('category')->get();
+        $data['propTypes']        = PropertySettingItem::group('property_type')->get();
+        $data['propStatuses']     = PropertySettingItem::group('property_status')->get();
+        $data['propMandateTypes'] = PropertySettingItem::group('mandate_type')->get();
+
         // Agency Settings tab: Company / Performance Settings
         if ($user?->hasPermission('manage_performance_settings')) {
             $data['vatRate']         = (float)  PerformanceSetting::get('vat_rate', 15);
@@ -47,6 +59,35 @@ class SettingsController extends Controller
         }
 
         return view('corex.settings', $data);
+    }
+
+    // ── Property Setting Items CRUD ─────────────────────────────────────────
+
+    public function storePropertySettingItem(Request $request)
+    {
+        $data = $request->validate([
+            'group'      => 'required|in:category,property_type,property_status,mandate_type',
+            'name'       => 'required|string|max:100',
+            'sort_order' => 'nullable|integer|min:0',
+        ]);
+        PropertySettingItem::create($data);
+        return back()->with('success', 'Item added.')->with('tab', 'feature')->with('fsec', 'properties');
+    }
+
+    public function updatePropertySettingItem(Request $request, PropertySettingItem $item)
+    {
+        $data = $request->validate([
+            'name'       => 'required|string|max:100',
+            'sort_order' => 'nullable|integer|min:0',
+        ]);
+        $item->update($data);
+        return back()->with('success', 'Item updated.')->with('tab', 'feature')->with('fsec', 'properties');
+    }
+
+    public function destroyPropertySettingItem(PropertySettingItem $item)
+    {
+        $item->delete();
+        return back()->with('success', 'Item deleted.')->with('tab', 'feature')->with('fsec', 'properties');
     }
 
     public function generateApiToken(Request $request)

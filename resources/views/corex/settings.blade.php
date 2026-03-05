@@ -295,7 +295,7 @@
              Contains: Documents (Docuperfect), Rentals
              ============================================================ --}}
         <div x-show="activeTab === 'feature'" x-cloak class="p-6 space-y-8"
-             x-data="{ featureSection: 'documents' }">
+             x-data="{ featureSection: '{{ $featureSection }}' }">
 
             {{-- Feature sub-nav --}}
             <div class="flex gap-2 flex-wrap" style="border-bottom:1px solid rgba(255,255,255,0.07); padding-bottom:16px;">
@@ -312,6 +312,20 @@
                         class="px-4 py-2 rounded-lg text-sm font-semibold border transition-colors duration-150 outline-none"
                         style="background:transparent;">
                     Rentals
+                </button>
+                <button type="button"
+                        @click="featureSection = 'contacts'"
+                        :class="featureSection === 'contacts' ? 'bg-[#00b4d8]/15 text-[#00b4d8] border-[#00b4d8]/40' : 'text-white/50 border-white/10 hover:text-white/80'"
+                        class="px-4 py-2 rounded-lg text-sm font-semibold border transition-colors duration-150 outline-none"
+                        style="background:transparent;">
+                    Contacts
+                </button>
+                <button type="button"
+                        @click="featureSection = 'properties'"
+                        :class="featureSection === 'properties' ? 'bg-[#00b4d8]/15 text-[#00b4d8] border-[#00b4d8]/40' : 'text-white/50 border-white/10 hover:text-white/80'"
+                        class="px-4 py-2 rounded-lg text-sm font-semibold border transition-colors duration-150 outline-none"
+                        style="background:transparent;">
+                    Properties
                 </button>
             </div>
 
@@ -708,6 +722,209 @@
                 </div>
 
             </div>{{-- /rentals --}}
+
+            {{-- CONTACTS section --}}
+            <div x-show="featureSection === 'contacts'" x-cloak class="space-y-6">
+
+                <div>
+                    <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:rgba(255,255,255,0.35);">Contact Types</h3>
+                    <p class="text-xs mb-4" style="color:rgba(255,255,255,0.35);">Types appear in the contact form when creating or editing a contact.</p>
+
+                    {{-- Add Contact Type --}}
+                    <div class="p-4 rounded-xl mb-3" style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07);">
+                        <div class="text-xs font-semibold mb-3 text-white/60">Add Contact Type</div>
+                        <form method="POST" action="{{ route('corex.settings.contact-types.store') }}"
+                              class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                            @csrf
+                            <div class="md:col-span-6">
+                                <label class="block text-xs mb-1" style="color:rgba(255,255,255,0.4);">Name</label>
+                                <input name="name" required placeholder="e.g. Buyer, Seller, Tenant"
+                                       class="w-full rounded-lg px-3 py-2 text-sm text-white"
+                                       style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-xs mb-1" style="color:rgba(255,255,255,0.4);">Color</label>
+                                <input type="color" name="color" value="#6366f1"
+                                       class="w-full h-9 rounded-lg cursor-pointer border"
+                                       style="border-color:rgba(255,255,255,0.12); background:rgba(255,255,255,0.06);">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-xs mb-1" style="color:rgba(255,255,255,0.4);">Sort order</label>
+                                <input name="sort_order" type="number" step="1" min="0" placeholder="0"
+                                       class="w-full rounded-lg px-3 py-2 text-sm text-white"
+                                       style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">
+                            </div>
+                            <div class="md:col-span-2">
+                                <button class="w-full corex-btn-primary text-sm">Add</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    {{-- Contact Types list --}}
+                    <div class="rounded-xl overflow-hidden" style="border:1px solid rgba(255,255,255,0.07);">
+                        <div class="px-4 py-3 flex items-center justify-between" style="border-bottom:1px solid rgba(255,255,255,0.07); background:rgba(255,255,255,0.02);">
+                            <div class="text-sm font-semibold text-white">Current Types</div>
+                            <div class="text-xs" style="color:rgba(255,255,255,0.35);">{{ count($contactTypes) }} total</div>
+                        </div>
+                        <div x-data="{ editCTId: null }">
+                            @forelse($contactTypes as $cType)
+                            <div style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                                {{-- View row --}}
+                                <div x-show="editCTId !== {{ $cType->id }}"
+                                     class="p-4 flex items-center justify-between gap-4">
+                                    <div class="flex items-center gap-3">
+                                        <span class="w-4 h-4 rounded-full flex-shrink-0"
+                                              style="background-color: {{ $cType->color }}"></span>
+                                        <span class="text-sm font-medium text-white">{{ $cType->name }}</span>
+                                        <span class="text-xs" style="color:rgba(255,255,255,0.35);">{{ $cType->contacts()->count() }} contact{{ $cType->contacts()->count() !== 1 ? 's' : '' }}</span>
+                                    </div>
+                                    <div class="flex items-center gap-3">
+                                        <button @click="editCTId = {{ $cType->id }}"
+                                                class="text-xs font-semibold" style="color:#00b4d8;">Edit</button>
+                                        <form method="POST" action="{{ route('corex.settings.contact-types.destroy', $cType) }}"
+                                              onsubmit="return confirm('Delete this contact type?');">
+                                            @csrf @method('DELETE')
+                                            <button class="text-xs font-semibold text-red-400 hover:text-red-300"
+                                                    {{ $cType->contacts()->count() > 0 ? 'disabled title=Cannot delete — contacts assigned' : '' }}>
+                                                Delete
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                                {{-- Edit row --}}
+                                <div x-show="editCTId === {{ $cType->id }}" x-cloak
+                                     class="p-4" style="background:rgba(0,180,216,0.05); border-top:1px solid rgba(0,180,216,0.15);">
+                                    <form method="POST" action="{{ route('corex.settings.contact-types.update', $cType) }}"
+                                          class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                                        @csrf @method('PUT')
+                                        <div class="md:col-span-6">
+                                            <label class="block text-xs mb-1" style="color:rgba(255,255,255,0.4);">Name</label>
+                                            <input name="name" value="{{ $cType->name }}" required
+                                                   class="w-full rounded-lg px-3 py-2 text-sm text-white"
+                                                   style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">
+                                        </div>
+                                        <div class="md:col-span-2">
+                                            <label class="block text-xs mb-1" style="color:rgba(255,255,255,0.4);">Color</label>
+                                            <input type="color" name="color" value="{{ $cType->color }}"
+                                                   class="w-full h-9 rounded-lg cursor-pointer border"
+                                                   style="border-color:rgba(255,255,255,0.12); background:rgba(255,255,255,0.06);">
+                                        </div>
+                                        <div class="md:col-span-2">
+                                            <label class="block text-xs mb-1" style="color:rgba(255,255,255,0.4);">Sort order</label>
+                                            <input name="sort_order" type="number" step="1" min="0" value="{{ (int)$cType->sort_order }}"
+                                                   class="w-full rounded-lg px-3 py-2 text-sm text-white"
+                                                   style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">
+                                        </div>
+                                        <div class="md:col-span-2 flex gap-2">
+                                            <button type="submit" class="flex-1 corex-btn-primary text-sm">Save</button>
+                                            <button type="button" @click="editCTId = null"
+                                                    class="flex-1 text-sm rounded-lg"
+                                                    style="border:1px solid rgba(255,255,255,0.1); color:rgba(255,255,255,0.5);">Cancel</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                            @empty
+                            <div class="p-5 text-sm" style="color:rgba(255,255,255,0.4);">No contact types yet. Add one above.</div>
+                            @endforelse
+                        </div>
+                    </div>
+                </div>
+
+            </div>{{-- /contacts --}}
+
+            {{-- PROPERTIES section --}}
+            <div x-show="featureSection === 'properties'" x-cloak class="space-y-8">
+
+                @php
+                $propGroups = [
+                    ['key' => 'category',        'label' => 'Categories',     'items' => $propCategories,   'placeholder' => 'e.g. Residential, Commercial'],
+                    ['key' => 'property_type',   'label' => 'Property Types', 'items' => $propTypes,        'placeholder' => 'e.g. House, Flat, Townhouse'],
+                    ['key' => 'property_status', 'label' => 'Property Statuses', 'items' => $propStatuses, 'placeholder' => 'e.g. Active, Draft, Sold'],
+                    ['key' => 'mandate_type',    'label' => 'Mandate Types',  'items' => $propMandateTypes, 'placeholder' => 'e.g. Sole, Joint, Open'],
+                ];
+                @endphp
+
+                @foreach($propGroups as $pg)
+                <div x-data="{ editPSId_{{ $loop->index }}: null }">
+                    <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:rgba(255,255,255,0.35);">{{ $pg['label'] }}</h3>
+
+                    {{-- Add item --}}
+                    <div class="p-4 rounded-xl mb-3" style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07);">
+                        <div class="text-xs font-semibold mb-3 text-white/60">Add {{ rtrim($pg['label'], 's') }}</div>
+                        <form method="POST" action="{{ route('corex.settings.property-items.store') }}"
+                              class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                            @csrf
+                            <input type="hidden" name="group" value="{{ $pg['key'] }}">
+                            <div class="md:col-span-7">
+                                <input name="name" required placeholder="{{ $pg['placeholder'] }}"
+                                       class="w-full rounded-lg px-3 py-2 text-sm text-white"
+                                       style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">
+                            </div>
+                            <div class="md:col-span-3">
+                                <input name="sort_order" type="number" step="1" min="0" placeholder="Sort order"
+                                       class="w-full rounded-lg px-3 py-2 text-sm text-white"
+                                       style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">
+                            </div>
+                            <div class="md:col-span-2">
+                                <button class="w-full corex-btn-primary text-sm">Add</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    {{-- List --}}
+                    <div class="rounded-xl overflow-hidden" style="border:1px solid rgba(255,255,255,0.07);">
+                        <div class="px-4 py-3 flex items-center justify-between" style="border-bottom:1px solid rgba(255,255,255,0.07); background:rgba(255,255,255,0.02);">
+                            <div class="text-sm font-semibold text-white">Current {{ $pg['label'] }}</div>
+                            <div class="text-xs" style="color:rgba(255,255,255,0.35);">{{ count($pg['items']) }} total</div>
+                        </div>
+                        @forelse($pg['items'] as $pItem)
+                        <div style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                            <div x-show="editPSId_{{ $loop->parent->index }} !== {{ $pItem->id }}"
+                                 class="p-4 flex items-center justify-between gap-4">
+                                <span class="text-sm font-medium text-white">{{ $pItem->name }}</span>
+                                <div class="flex items-center gap-3">
+                                    <button @click="editPSId_{{ $loop->parent->index }} = {{ $pItem->id }}"
+                                            class="text-xs font-semibold" style="color:#00b4d8;">Edit</button>
+                                    <form method="POST" action="{{ route('corex.settings.property-items.destroy', $pItem) }}"
+                                          onsubmit="return confirm('Delete this item?');">
+                                        @csrf @method('DELETE')
+                                        <button class="text-xs font-semibold text-red-400 hover:text-red-300">Delete</button>
+                                    </form>
+                                </div>
+                            </div>
+                            <div x-show="editPSId_{{ $loop->parent->index }} === {{ $pItem->id }}" x-cloak
+                                 class="p-4" style="background:rgba(0,180,216,0.05); border-top:1px solid rgba(0,180,216,0.15);">
+                                <form method="POST" action="{{ route('corex.settings.property-items.update', $pItem) }}"
+                                      class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                                    @csrf @method('PUT')
+                                    <div class="md:col-span-7">
+                                        <input name="name" value="{{ $pItem->name }}" required
+                                               class="w-full rounded-lg px-3 py-2 text-sm text-white"
+                                               style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">
+                                    </div>
+                                    <div class="md:col-span-3">
+                                        <input name="sort_order" type="number" step="1" min="0" value="{{ (int)$pItem->sort_order }}"
+                                               class="w-full rounded-lg px-3 py-2 text-sm text-white"
+                                               style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">
+                                    </div>
+                                    <div class="md:col-span-2 flex gap-2">
+                                        <button type="submit" class="flex-1 corex-btn-primary text-sm">Save</button>
+                                        <button type="button" @click="editPSId_{{ $loop->parent->index }} = null"
+                                                class="flex-1 text-sm rounded-lg"
+                                                style="border:1px solid rgba(255,255,255,0.1); color:rgba(255,255,255,0.5);">Cancel</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        @empty
+                        <div class="p-5 text-sm" style="color:rgba(255,255,255,0.4);">No {{ strtolower($pg['label']) }} yet. Add one above.</div>
+                        @endforelse
+                    </div>
+                </div>
+                @endforeach
+
+            </div>{{-- /properties --}}
 
         </div>
 

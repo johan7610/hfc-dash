@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\Property;
 use App\Models\PropertyAdTemplate;
+use App\Models\PropertySettingItem;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -81,14 +82,42 @@ class PropertyController extends Controller
         ));
     }
 
+    public function show(Property $property)
+    {
+        $this->authorizeProperty($property);
+        $property->load(['agent', 'branch', 'notes.user', 'files.user']);
+
+        $settingItems = [
+            'categories'   => PropertySettingItem::group('category')->get(),
+            'types'        => PropertySettingItem::group('property_type')->get(),
+            'statuses'     => PropertySettingItem::group('property_status')->get(),
+            'mandateTypes' => PropertySettingItem::group('mandate_type')->get(),
+        ];
+
+        $branches = Branch::orderBy('name')->get();
+        $agents   = $this->agentList();
+        $activeTab = request('tab', 'overview');
+
+        return view('corex.properties.show', compact(
+            'property', 'settingItems', 'branches', 'agents', 'activeTab'
+        ));
+    }
+
     public function create()
     {
         $branches = Branch::orderBy('name')->get();
         $agents   = $this->agentList();
+        $settingItems = [
+            'categories'   => PropertySettingItem::group('category')->get(),
+            'types'        => PropertySettingItem::group('property_type')->get(),
+            'statuses'     => PropertySettingItem::group('property_status')->get(),
+            'mandateTypes' => PropertySettingItem::group('mandate_type')->get(),
+        ];
         return view('corex.properties.create-edit', [
-            'property' => null,
-            'branches' => $branches,
-            'agents'   => $agents,
+            'property'     => null,
+            'branches'     => $branches,
+            'agents'       => $agents,
+            'settingItems' => $settingItems,
         ]);
     }
 
@@ -102,17 +131,26 @@ class PropertyController extends Controller
             'excerpt'          => 'nullable|string|max:500',
             'description'      => 'nullable|string',
             'price'            => 'required|integer|min:0',
+            'rates_taxes'      => 'nullable|integer|min:0',
+            'levy'             => 'nullable|integer|min:0',
+            'special_levy'     => 'nullable|integer|min:0',
             'city'             => 'nullable|string|max:100',
             'suburb'           => 'required|string|max:100',
+            'address'          => 'nullable|string|max:300',
             'region'           => 'nullable|string|max:100',
             'beds'             => 'required|integer|min:0|max:20',
             'baths'            => 'required|integer|min:0|max:20',
             'garages'          => 'required|integer|min:0|max:20',
             'size_m2'          => 'nullable|integer|min:0',
             'erf_size_m2'      => 'nullable|integer|min:0',
-            'property_type'    => 'required|string|max:50',
+            'property_type'    => 'nullable|string|max:50',
+            'category'         => 'nullable|string|max:100',
             'mandate_type'     => 'nullable|string|max:50',
             'status'           => 'required|in:draft,active,sold,withdrawn',
+            'features'         => 'nullable|array',
+            'features.*'       => 'string|max:100',
+            'listed_date'      => 'nullable|date',
+            'expiry_date'      => 'nullable|date',
             'branch_id'        => 'nullable|exists:branches,id',
             'agent_id'         => 'nullable|exists:users,id',
             'publish'          => 'nullable|boolean',
@@ -125,6 +163,12 @@ class PropertyController extends Controller
             'gallery_images'   => 'nullable|array',
             'gallery_images.*' => 'image|max:5120',
         ]);
+
+        // Convert features array to JSON
+        if (isset($data['features'])) {
+            $data['features_json'] = array_values(array_filter($data['features']));
+            unset($data['features']);
+        }
 
         $role = $user->effectiveRole();
         if (! in_array($role, ['super_admin', 'admin', 'branch_manager']) || empty($data['agent_id'])) {
@@ -152,16 +196,15 @@ class PropertyController extends Controller
             \App\Jobs\SyncPropertyToWebsite::dispatchSync($property->fresh(['agent', 'branch', 'agency']), 'upsert');
         }
 
-        return redirect()->route('corex.properties.index')
-            ->with('success', 'Property listing created.');
+        return redirect()->route('corex.properties.show', $property)
+            ->with('success', 'Property created.')
+            ->with('tab', 'info');
     }
 
     public function edit(Property $property)
     {
-        $this->authorizeProperty($property);
-        $branches = Branch::orderBy('name')->get();
-        $agents   = $this->agentList();
-        return view('corex.properties.create-edit', compact('property', 'branches', 'agents'));
+        // Redirect edit to the show page's info tab
+        return redirect()->route('corex.properties.show', $property);
     }
 
     public function update(Request $request, Property $property)
@@ -173,17 +216,26 @@ class PropertyController extends Controller
             'excerpt'          => 'nullable|string|max:500',
             'description'      => 'nullable|string',
             'price'            => 'required|integer|min:0',
+            'rates_taxes'      => 'nullable|integer|min:0',
+            'levy'             => 'nullable|integer|min:0',
+            'special_levy'     => 'nullable|integer|min:0',
             'city'             => 'nullable|string|max:100',
             'suburb'           => 'required|string|max:100',
+            'address'          => 'nullable|string|max:300',
             'region'           => 'nullable|string|max:100',
             'beds'             => 'required|integer|min:0|max:20',
             'baths'            => 'required|integer|min:0|max:20',
             'garages'          => 'required|integer|min:0|max:20',
             'size_m2'          => 'nullable|integer|min:0',
             'erf_size_m2'      => 'nullable|integer|min:0',
-            'property_type'    => 'required|string|max:50',
+            'property_type'    => 'nullable|string|max:50',
+            'category'         => 'nullable|string|max:100',
             'mandate_type'     => 'nullable|string|max:50',
             'status'           => 'required|in:draft,active,sold,withdrawn',
+            'features'         => 'nullable|array',
+            'features.*'       => 'string|max:100',
+            'listed_date'      => 'nullable|date',
+            'expiry_date'      => 'nullable|date',
             'branch_id'        => 'nullable|exists:branches,id',
             'agent_id'         => 'nullable|exists:users,id',
             'publish'          => 'nullable|boolean',
@@ -196,6 +248,11 @@ class PropertyController extends Controller
             'gallery_images'   => 'nullable|array',
             'gallery_images.*' => 'image|max:5120',
         ]);
+
+        if (isset($data['features'])) {
+            $data['features_json'] = array_values(array_filter($data['features']));
+            unset($data['features']);
+        }
 
         if (! empty($data['publish']) && ! $property->isPublished()) {
             $data['published_at'] = now();
@@ -216,8 +273,9 @@ class PropertyController extends Controller
 
         $property->update($data);
 
-        return redirect()->route('corex.properties.index')
-            ->with('success', 'Property listing updated.');
+        return redirect()->route('corex.properties.show', $property)
+            ->with('success', 'Property updated.')
+            ->with('tab', 'info');
     }
 
     public function destroy(Property $property)
@@ -226,6 +284,57 @@ class PropertyController extends Controller
         $property->delete();
         return redirect()->route('corex.properties.index')
             ->with('success', 'Property listing removed.');
+    }
+
+    public function deleteImage(Request $request, Property $property)
+    {
+        $this->authorizeProperty($property);
+
+        $request->validate([
+            'group' => 'required|in:gallery_images_json,dawn_images_json,noon_images_json,dusk_images_json',
+            'index' => 'required|integer|min:0',
+        ]);
+
+        $group  = $request->group;
+        $index  = (int) $request->index;
+        $images = $property->$group ?? [];
+
+        if (isset($images[$index])) {
+            // Delete the file from storage
+            $url  = $images[$index];
+            $path = str_replace('/storage/', '', parse_url($url, PHP_URL_PATH));
+            Storage::disk('public')->delete($path);
+
+            array_splice($images, $index, 1);
+            $property->update([$group => $images]);
+        }
+
+        return back()->with('success', 'Image deleted.')->with('tab', 'gallery');
+    }
+
+    public function reorderImages(Request $request, Property $property)
+    {
+        $this->authorizeProperty($property);
+
+        $request->validate([
+            'group'  => 'required|in:gallery_images_json,dawn_images_json,noon_images_json,dusk_images_json',
+            'order'  => 'required|array',
+            'order.*'=> 'integer|min:0',
+        ]);
+
+        $group     = $request->group;
+        $oldImages = $property->$group ?? [];
+        $newImages = [];
+
+        foreach ($request->order as $oldIndex) {
+            if (isset($oldImages[(int) $oldIndex])) {
+                $newImages[] = $oldImages[(int) $oldIndex];
+            }
+        }
+
+        $property->update([$group => $newImages]);
+
+        return response()->json(['ok' => true]);
     }
 
     public function ad(Property $property)
