@@ -280,9 +280,24 @@ class RoleManagerController extends Controller
             'can_be_deleted' => true,
         ]);
 
-        Role::clearCache();
+        // Seed new role with agent's permissions as a starting point
+        $agentPerms = RolePermission::where('role', 'agent')->get();
+        if ($agentPerms->isNotEmpty()) {
+            $now  = now();
+            $rows = $agentPerms->map(fn($p) => [
+                'role'           => $role->name,
+                'permission_key' => $p->permission_key,
+                'scope'          => $p->scope,
+                'created_at'     => $now,
+                'updated_at'     => $now,
+            ])->all();
+            RolePermission::insert($rows);
+        }
 
-        return back()->with('success', "Role '{$role->label}' created.");
+        Role::clearCache();
+        PermissionService::clearCache();
+
+        return back()->with('success', "Role '{$role->label}' created with agent permissions as default.");
     }
 
     public function updateRole(Request $request, Role $role)
