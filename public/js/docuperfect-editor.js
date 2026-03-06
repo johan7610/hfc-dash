@@ -32,6 +32,10 @@
     var selectedZoneId = null;
     var placementZoneType = null; // 'signature' or 'initial'
 
+    // Copy-paste state (template mode)
+    var copiedField = null;
+    var lastClickPos = null; // { pageIndex, x, y }
+
     // DOM refs (set in init)
     var editorEl, sidebarEl, canvasEl;
 
@@ -43,6 +47,7 @@
         { type: 'strikethrough', label: 'Strike',     icon: '\u2014', strikethroughType: 'horizontal' },
         { type: 'strikethrough', label: 'Diagonal',   icon: '\u2572', strikethroughType: 'diagonal' },
         { type: 'selection',     label: 'Select',     icon: '\u2261' },
+        { type: 'tick',          label: 'Tick',       icon: '\u2611' },
         { type: 'initial',       label: 'Initial',    icon: 'In' },
         { type: 'date',          label: 'Date',       icon: 'Dt' },
         { type: 'condition',     label: 'Clause',     icon: '\u00A7' },
@@ -102,6 +107,20 @@
         // Global drag handlers
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
+
+        // Keyboard shortcuts (Ctrl+C copy, Ctrl+V paste, template mode)
+        document.addEventListener('keydown', function (e) {
+            if (C.mode !== 'template') return;
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+            if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selectedFieldId) {
+                e.preventDefault();
+                copySelectedField();
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'v' && copiedField && lastClickPos) {
+                e.preventDefault();
+                pasteField(lastClickPos.pageIndex, lastClickPos.x, lastClickPos.y);
+            }
+        });
 
         // Fix-position page header and toolbar
         setupFixedBars();
@@ -213,8 +232,16 @@
             badge.textContent = 'Page ' + (idx + 1);
             container.appendChild(badge);
 
-            // Click on page image to place field
+            // Click on page image to place field / track last click position
             container.addEventListener('mousedown', function (e) {
+                if (!e.target.closest('.dp-field') && !e.target.closest('.dp-zone')) {
+                    var r = container.getBoundingClientRect();
+                    lastClickPos = {
+                        pageIndex: idx,
+                        x: ((e.clientX - r.left) / r.width) * 100,
+                        y: ((e.clientY - r.top) / r.height) * 100
+                    };
+                }
                 if (placementMode && !e.target.closest('.dp-field')) {
                     onPlacementStart(e, container, idx);
                 }
@@ -247,6 +274,16 @@
     }
 
     function createFieldElement(field) {
+        // Backward compat: migrate old selection+renderMode:"tick" → type "tick"
+        if (field.type === 'selection' && field.renderMode === 'tick') {
+            field.type = 'tick';
+            delete field.renderMode;
+        }
+        // Clean up renderMode from selection fields (no longer used)
+        if (field.type === 'selection' && field.renderMode) {
+            delete field.renderMode;
+        }
+
         var el = document.createElement('div');
         el.className = 'dp-field' + (field.id === selectedFieldId ? ' selected' : '');
         el.dataset.fieldId = field.id;
@@ -303,8 +340,32 @@
         // Handles
         appendHandles(el, field.id);
 
-        // Selection-type options editor (when selected)
-        if (field.type === 'selection' && field.id === selectedFieldId) {
+        // Tick-type zone preview (column dividers + labels)
+        if (field.type === 'tick') {
+            var opts = field.options || [];
+            if (opts.length > 1) {
+                for (var zi = 0; zi < opts.length; zi++) {
+                    // Faint label centered in each zone
+                    var zLbl = document.createElement('div');
+                    var zoneW = 100 / opts.length;
+                    zLbl.style.cssText = 'position:absolute;top:0;height:100%;display:flex;align-items:center;justify-content:center;font-size:8px;color:rgba(0,0,0,0.3);pointer-events:none;overflow:hidden;white-space:nowrap;';
+                    zLbl.style.left = (zi * zoneW) + '%';
+                    zLbl.style.width = zoneW + '%';
+                    zLbl.textContent = opts[zi];
+                    el.appendChild(zLbl);
+                    // Divider line (skip first)
+                    if (zi > 0) {
+                        var zDiv = document.createElement('div');
+                        zDiv.style.cssText = 'position:absolute;top:0;height:100%;width:1px;background:rgba(0,0,0,0.12);pointer-events:none;';
+                        zDiv.style.left = (zi * zoneW) + '%';
+                        el.appendChild(zDiv);
+                    }
+                }
+            }
+        }
+
+        // Options editor for selection and tick types (when selected)
+        if ((field.type === 'selection' || field.type === 'tick') && field.id === selectedFieldId) {
             el.appendChild(buildOptionsEditor(field));
         }
 
@@ -333,6 +394,7 @@
             case 'placeholder':   renderPlaceholderInput(field, el); break;
             case 'date':          renderDateInput(field, el);        break;
             case 'selection':     renderSelectionPills(field, el);   break;
+            case 'tick':          renderTickPills(field, el);       break;
             case 'strikethrough': renderStrikeToggle(field, el);     break;
             case 'condition':     renderConditionArea(field, el);    break;
             case 'initial':
@@ -386,19 +448,98 @@
     }
 
     function renderSelectionPills(field, el) {
+        var hasSolidBg = !!field.solidBg;
+        var opts = field.options || [];
+        var optCount = opts.length || 1;
+
         el.style.background = 'transparent';
         setBorderForDoc(el, field, 'rgba(34,197,94,0.3)');
 
+        if (field.selectedValue) {
+            var selIdx = opts.indexOf(field.selectedValue);
+            if (selIdx === -1) selIdx = 0;
+            var sectionW = 100 / optCount;
+
+            if (hasSolidBg) {
+                var bgRect = document.createElement('div');
+                bgRect.style.cssText = 'position:absolute;top:0;height:100%;background:white;pointer-events:none;z-index:1;';
+                bgRect.style.left = (selIdx * sectionW) + '%';
+                bgRect.style.width = sectionW + '%';
+                el.appendChild(bgRect);
+            }
+
+            var textOverlay = document.createElement('div');
+            textOverlay.style.cssText = 'position:absolute;top:0;height:100%;display:flex;align-items:center;justify-content:center;color:#000;pointer-events:none;z-index:2;overflow:hidden;white-space:nowrap;';
+            textOverlay.style.left = (selIdx * sectionW) + '%';
+            textOverlay.style.width = sectionW + '%';
+            textOverlay.style.fontSize = (el.offsetHeight ? Math.round(el.offsetHeight * 0.6) + 'px' : '0.85em');
+            textOverlay.textContent = field.selectedValue;
+            el.appendChild(textOverlay);
+        } else if (hasSolidBg) {
+            el.style.background = 'white';
+        }
+
+        // Option pills for interaction
         var wrap = document.createElement('div');
         wrap.className = 'dp-option-pills';
 
-        (field.options || []).forEach(function (opt) {
+        opts.forEach(function (opt) {
             var pill = document.createElement('span');
             pill.className = 'dp-option-pill' + (field.selectedValue === opt ? ' selected' : '');
             pill.textContent = opt;
             pill.addEventListener('click', function (e) {
                 e.stopPropagation();
-                field.selectedValue = opt;
+                field.selectedValue = (field.selectedValue === opt) ? null : opt;
+                isDirty = true;
+                renderFieldsForPage(field.pageIndex);
+            });
+            wrap.appendChild(pill);
+        });
+
+        el.appendChild(wrap);
+    }
+
+    function renderTickPills(field, el) {
+        var hasSolidBg = field.solidBg !== false;
+        var opts = field.options || [];
+        var optCount = opts.length || 1;
+
+        el.style.background = 'transparent';
+        setBorderForDoc(el, field, 'rgba(34,197,94,0.3)');
+
+        if (field.selectedValue) {
+            var selIdx = opts.indexOf(field.selectedValue);
+            if (selIdx === -1) selIdx = 0;
+            var sectionW = 100 / optCount;
+
+            if (hasSolidBg) {
+                var bgRect = document.createElement('div');
+                bgRect.style.cssText = 'position:absolute;top:0;height:100%;background:white;pointer-events:none;z-index:1;';
+                bgRect.style.left = (selIdx * sectionW) + '%';
+                bgRect.style.width = sectionW + '%';
+                el.appendChild(bgRect);
+            }
+
+            var tickOverlay = document.createElement('div');
+            tickOverlay.style.cssText = 'position:absolute;top:0;height:100%;display:flex;align-items:center;justify-content:center;font-weight:bold;color:#000;pointer-events:none;z-index:2;';
+            tickOverlay.style.left = (selIdx * sectionW) + '%';
+            tickOverlay.style.width = sectionW + '%';
+            tickOverlay.style.fontSize = (el.offsetHeight ? Math.round(el.offsetHeight * 0.8) + 'px' : '1.2em');
+            tickOverlay.textContent = 'X';
+            el.appendChild(tickOverlay);
+        }
+
+        // Option pills for interaction (hidden until hover)
+        var wrap = document.createElement('div');
+        wrap.className = 'dp-option-pills dp-tick-pills-overlay';
+
+        opts.forEach(function (opt) {
+            var pill = document.createElement('span');
+            pill.className = 'dp-option-pill' + (field.selectedValue === opt ? ' selected' : '');
+            pill.textContent = opt;
+            pill.addEventListener('click', function (e) {
+                e.stopPropagation();
+                field.selectedValue = (field.selectedValue === opt) ? null : opt;
                 isDirty = true;
                 renderFieldsForPage(field.pageIndex);
             });
@@ -495,6 +636,20 @@
         rs.className = 'dp-resize-handle';
         rs.addEventListener('mousedown', function (e) { e.stopPropagation(); startDrag(e, fieldId, 'resize'); });
         el.appendChild(rs);
+
+        // Duplicate button (template mode only)
+        if (C.mode === 'template') {
+            var dup = document.createElement('div');
+            dup.className = 'dp-dup-btn';
+            dup.textContent = '\u29C9';
+            dup.title = 'Duplicate field';
+            dup.addEventListener('mousedown', function (e) {
+                e.stopPropagation();
+                selectField(fieldId);
+                duplicateSelectedField();
+            });
+            el.appendChild(dup);
+        }
 
         var del = document.createElement('div');
         del.className = 'dp-delete-btn';
@@ -650,24 +805,44 @@
         return bar;
     }
 
-    /** Build comma-separated options editor for selection fields */
+    /** Build comma-separated options editor for selection and tick fields */
     function buildOptionsEditor(field) {
         var wrap = document.createElement('div');
         wrap.className = 'dp-options-editor';
+        wrap.style.cssText = 'min-width:240px;padding:12px;';
         wrap.addEventListener('mousedown', stopProp);
 
+        // --- Options input ---
         var lbl = document.createElement('label');
         lbl.textContent = 'Options (comma-separated)';
+        lbl.style.cssText = 'display:block;font-size:12px;color:#64748b;margin-bottom:4px;';
         wrap.appendChild(lbl);
 
         var inp = document.createElement('input');
         inp.type = 'text';
         inp.value = (field.options || []).join(', ');
+        inp.style.cssText = 'width:100%;border:1px solid #e2e8f0;border-radius:4px;padding:6px 8px;font-size:12px;box-sizing:border-box;outline:none;';
         inp.addEventListener('change', function () {
             field.options = this.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
             isDirty = true;
         });
+        inp.addEventListener('focus', function () { this.style.borderColor = '#00b4d8'; });
+        inp.addEventListener('blur', function () { this.style.borderColor = '#e2e8f0'; });
         wrap.appendChild(inp);
+
+        // --- Solid background checkbox ---
+        var bgLbl = document.createElement('label');
+        bgLbl.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#334155;margin-top:8px;';
+        var bgCb = document.createElement('input');
+        bgCb.type = 'checkbox';
+        bgCb.checked = field.type === 'tick' ? (field.solidBg !== false) : !!field.solidBg;
+        bgCb.addEventListener('change', function () {
+            field.solidBg = this.checked;
+            isDirty = true;
+        });
+        bgLbl.appendChild(bgCb);
+        bgLbl.appendChild(document.createTextNode('Solid background'));
+        wrap.appendChild(bgLbl);
 
         return wrap;
     }
@@ -797,7 +972,8 @@
 
         // Type-specific defaults
         if (placementMode === 'strikethrough')  { nf.active = false; nf.strikethroughType = placementStrikeType || 'horizontal'; }
-        if (placementMode === 'selection')      { nf.options = ['Option 1', 'Option 2']; nf.selectedValue = null; }
+        if (placementMode === 'selection')      { nf.options = ['Option 1', 'Option 2']; nf.selectedValue = null; nf.solidBg = false; }
+        if (placementMode === 'tick')           { nf.options = ['Yes', 'No', 'N/A']; nf.selectedValue = null; nf.solidBg = true; }
         if (placementMode === 'condition')      { nf.text = ''; }
         if (C.mode === 'document')              { nf.isUserAdded = true; }
 
@@ -1316,6 +1492,10 @@
                     pdf.addImage(img, 'PNG', 0, 0, W, H);
 
                     fields.filter(function (f) { return f.pageIndex === i; }).forEach(function (f) {
+                        // Backward compat: migrate old renderMode:"tick" → type "tick"
+                        if (f.type === 'selection' && f.renderMode === 'tick') { f.type = 'tick'; delete f.renderMode; }
+                        if (f.type === 'selection' && f.renderMode) { delete f.renderMode; }
+
                         var x = (f.position.x / 100) * W;
                         var y = (f.position.y / 100) * H;
                         var w = (f.size.width / 100) * W;
@@ -1352,7 +1532,43 @@
                                 pdf.text(f.type, x, y + h - 7);
                                 break;
                             case 'selection':
-                                if (f.selectedValue) pdf.text(f.selectedValue, x + 2, y + h / 2, { baseline: 'middle' });
+                                var selOpts = f.options || [];
+                                var selCount = selOpts.length || 1;
+                                if (f.selectedValue) {
+                                    var selIdx = selOpts.indexOf(f.selectedValue);
+                                    if (selIdx === -1) selIdx = 0;
+                                    var secW = w / selCount;
+                                    var secX = x + selIdx * secW;
+                                    if (f.solidBg) {
+                                        pdf.setFillColor(255, 255, 255);
+                                        pdf.rect(secX, y, secW, h, 'F');
+                                    }
+                                    var txtFs = Math.round(h * 0.6);
+                                    pdf.setFontSize(txtFs > 4 ? txtFs : 8);
+                                    pdf.text(f.selectedValue, secX + secW / 2, y + h / 2, { align: 'center', baseline: 'middle' });
+                                } else if (f.solidBg) {
+                                    pdf.setFillColor(255, 255, 255);
+                                    pdf.rect(x, y, w, h, 'F');
+                                }
+                                break;
+                            case 'tick':
+                                var tickOpts = f.options || [];
+                                var tickCount = tickOpts.length || 1;
+                                if (f.selectedValue) {
+                                    var tIdx = tickOpts.indexOf(f.selectedValue);
+                                    if (tIdx === -1) tIdx = 0;
+                                    var tSecW = w / tickCount;
+                                    var tSecX = x + tIdx * tSecW;
+                                    if (f.solidBg !== false) {
+                                        pdf.setFillColor(255, 255, 255);
+                                        pdf.rect(tSecX, y, tSecW, h, 'F');
+                                    }
+                                    var tickFs = Math.round(h * 0.8);
+                                    pdf.setFontSize(tickFs > 4 ? tickFs : 10);
+                                    pdf.setFont('helvetica', 'bold');
+                                    pdf.text('X', tSecX + tSecW / 2, y + h / 2, { align: 'center', baseline: 'middle' });
+                                    pdf.setFont('helvetica', 'normal');
+                                }
                                 break;
                             case 'strikethrough':
                                 if (f.active) {
@@ -1516,7 +1732,7 @@
         typeGroup.appendChild(typeLbl);
         var typeSel = document.createElement('select');
         typeSel.id = 'dp-nf-type';
-        [['text', 'Text'], ['date', 'Date'], ['selection', 'Selection']].forEach(function (t) {
+        [['text', 'Text'], ['date', 'Date'], ['selection', 'Selection'], ['tick', 'Tick']].forEach(function (t) {
             var o = document.createElement('option');
             o.value = t[0];
             o.textContent = t[1];
@@ -1531,7 +1747,7 @@
         modal.appendChild(optGroup.wrap);
 
         typeSel.addEventListener('change', function () {
-            optGroup.wrap.style.display = this.value === 'selection' ? '' : 'none';
+            optGroup.wrap.style.display = (this.value === 'selection' || this.value === 'tick') ? '' : 'none';
         });
 
         // Auto-generate name from label
@@ -1595,7 +1811,7 @@
             var payload = {
                 name: label,
                 field_type: typeSel.value,
-                default_options: typeSel.value === 'selection' ? optGroup.input.value : null,
+                default_options: (typeSel.value === 'selection' || typeSel.value === 'tick') ? optGroup.input.value : null,
             };
 
             fetch('/docuperfect/settings/named-fields', {
@@ -1838,6 +2054,46 @@
                 value: value
             })
         }).catch(function () { /* silent fail for debounced saves */ });
+    }
+
+    // ======================================================================
+    // COPY / PASTE / DUPLICATE (template mode)
+    // ======================================================================
+    function copySelectedField() {
+        var field = findField(selectedFieldId);
+        if (!field) return;
+        copiedField = JSON.parse(JSON.stringify(field));
+        showToast('Field copied', 'success');
+    }
+
+    function pasteField(pageIndex, xPercent, yPercent) {
+        if (!copiedField) return;
+        var nf = JSON.parse(JSON.stringify(copiedField));
+        nf.id = genId();
+        nf.pageIndex = pageIndex;
+        nf.position = { x: xPercent, y: yPercent };
+        nf.named_field_id = null;
+        nf.named_field_name = null;
+        fields.push(nf);
+        isDirty = true;
+        selectedFieldId = nf.id;
+        renderFieldsForPage(pageIndex);
+        showToast('Field pasted', 'success');
+    }
+
+    function duplicateSelectedField() {
+        var field = findField(selectedFieldId);
+        if (!field) return;
+        var nf = JSON.parse(JSON.stringify(field));
+        nf.id = genId();
+        nf.position = { x: field.position.x + 2, y: field.position.y + 2 };
+        nf.named_field_id = null;
+        nf.named_field_name = null;
+        fields.push(nf);
+        isDirty = true;
+        selectedFieldId = nf.id;
+        renderFieldsForPage(field.pageIndex);
+        showToast('Field duplicated', 'success');
     }
 
     // ======================================================================

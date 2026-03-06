@@ -244,6 +244,63 @@
 
 .dp-field.selected .dp-delete-btn { display: block; }
 
+/* === Duplicate Button === */
+.dp-dup-btn {
+    position: absolute;
+    top: -8px;
+    right: 14px;
+    width: 18px;
+    height: 18px;
+    background: #00b4d8;
+    border: 2px solid white;
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 30;
+    display: none;
+    color: white;
+    font-size: 11px;
+    line-height: 14px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.dp-field.selected .dp-dup-btn { display: block; }
+
+/* === Tick Display (selection renderMode=tick) === */
+.dp-tick-display {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #000;
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* When tick is shown, option pills float above on hover */
+.dp-tick-pills-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity 0.15s;
+    background: rgba(255,255,255,0.9);
+}
+
+.dp-field:hover .dp-tick-pills-overlay {
+    opacity: 1;
+}
+
 /* === Inline Toolbar === */
 .dp-inline-toolbar {
     position: absolute;
