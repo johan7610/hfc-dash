@@ -146,10 +146,12 @@ public function listingPool()
     {
         $allocations = $this->allocations();
         $total = 0.0;
+        $counted = [];
 
         foreach ($this->agents as $agent) {
-            if ((int) $agent->branch_id === $branchId) {
+            if ((int) $agent->branch_id === $branchId && !in_array($agent->id, $counted)) {
                 $total += (float) ($allocations[$agent->id] ?? 0);
+                $counted[] = $agent->id;
             }
         }
 
@@ -277,9 +279,11 @@ public function listingPool()
 
             // Branch share = sum of allocated amounts for agents in this branch
             $branchShare = 0.0;
+            $counted = [];
             foreach ($deal->agents as $agent) {
-                if ((int) $agent->branch_id === $branchId) {
+                if ((int) $agent->branch_id === $branchId && !in_array($agent->id, $counted)) {
                     $branchShare += (float) ($allocations[$agent->id] ?? 0);
+                    $counted[] = $agent->id;
                 }
             }
 
