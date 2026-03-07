@@ -36,6 +36,9 @@
     var copiedField = null;
     var lastClickPos = null; // { pageIndex, x, y }
 
+    // System field placement state (template mode)
+    var pendingSystemField = null; // { id, name, sourceType, sourceContactType }
+
     // DOM refs (set in init)
     var editorEl, sidebarEl, canvasEl;
 
@@ -139,6 +142,14 @@
         // Body row: optional fields panel (left) + canvas (right)
         var bodyRow = document.createElement('div');
         bodyRow.className = 'dp-body-row';
+
+        // System fields panel (template mode only)
+        if (C.mode === 'template' && C.systemFields) {
+            var sfPanel = document.createElement('div');
+            sfPanel.className = 'dp-system-fields-panel';
+            buildSystemFieldsPanel(sfPanel);
+            bodyRow.appendChild(sfPanel);
+        }
 
         // Quick fill sidebar (document mode only)
         if (C.mode === 'document') {
@@ -247,6 +258,52 @@
                 }
             });
 
+            // Drag-and-drop: page container is a drop target
+            container.addEventListener('dragover', function (e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+                container.classList.add('dp-drop-target');
+            });
+            container.addEventListener('dragleave', function (e) {
+                // Only remove if leaving the container itself (not entering a child)
+                if (!container.contains(e.relatedTarget)) {
+                    container.classList.remove('dp-drop-target');
+                }
+            });
+            container.addEventListener('drop', function (e) {
+                e.preventDefault();
+                container.classList.remove('dp-drop-target');
+                var raw = e.dataTransfer.getData('application/json');
+                if (!raw) return;
+                try {
+                    var data = JSON.parse(raw);
+                } catch (err) { return; }
+
+                var rect = container.getBoundingClientRect();
+                var xP = ((e.clientX - rect.left) / rect.width) * 100;
+                var yP = ((e.clientY - rect.top) / rect.height) * 100;
+
+                if (data._dropType === 'zone') {
+                    createZoneAtPosition({
+                        pageIndex: idx,
+                        x: xP,
+                        y: yP,
+                        zoneType: data.zoneType
+                    });
+                } else {
+                    createFieldAtPosition({
+                        type: data.type || 'placeholder',
+                        pageIndex: idx,
+                        x: xP,
+                        y: yP,
+                        named_field_id: data.named_field_id || null,
+                        named_field_name: data.named_field_name || '',
+                        assignedTo: data.assignedTo || 'creator',
+                        strikethroughType: data.strikethroughType || null
+                    });
+                }
+            });
+
             canvasEl.appendChild(container);
         });
     }
@@ -285,7 +342,9 @@
         }
 
         var el = document.createElement('div');
-        el.className = 'dp-field' + (field.id === selectedFieldId ? ' selected' : '');
+        var cls = 'dp-field' + (field.id === selectedFieldId ? ' selected' : '');
+        if (field.named_field_id && isSystemField(field.named_field_id)) cls += ' dp-system-field';
+        el.className = cls;
         el.dataset.fieldId = field.id;
         el.dataset.type = field.type;
 
@@ -886,6 +945,14 @@
             });
 
             bar.appendChild(nfSel);
+
+            // Show auto-fill source info for system-linked fields
+            if (field.named_field_id && isSystemField(field.named_field_id)) {
+                var sourceInfo = document.createElement('span');
+                sourceInfo.style.cssText = 'font-size:10px;color:#60a5fa;white-space:nowrap;padding:0 4px;';
+                sourceInfo.textContent = '\uD83D\uDD17 Auto-fills: ' + (field.named_field_name || 'System');
+                bar.appendChild(sourceInfo);
+            }
         }
 
         return bar;
@@ -997,8 +1064,12 @@
         placementMode = null;
         placementStrikeType = null;
         placementZoneType = null;
+        pendingSystemField = null;
         editorEl.classList.remove('dp-placement-active');
         if (sidebarEl) sidebarEl.querySelectorAll('.dp-toolbar-btn').forEach(function (b) { b.classList.remove('active'); });
+        // Deactivate system fields panel items
+        var activeItems = document.querySelectorAll('.dp-sf-item.active');
+        activeItems.forEach(function (el) { el.classList.remove('active'); });
     }
 
     function startZonePlacement(zoneType) {
@@ -1008,6 +1079,61 @@
         sidebarEl.querySelectorAll('.dp-toolbar-btn').forEach(function (b) {
             b.classList.toggle('active', b.dataset.zoneType === zoneType);
         });
+    }
+
+    /**
+     * Create a field at a specific position (used by both click-to-place and drag-and-drop).
+     * @param {object} config - { type, pageIndex, x, y, named_field_id, named_field_name, assignedTo, strikethroughType }
+     */
+    function createFieldAtPosition(config) {
+        var nf = {
+            id: genId(),
+            type: config.type || 'placeholder',
+            pageIndex: config.pageIndex,
+            position: { x: config.x, y: config.y },
+            size: { width: config.width || 15, height: config.height || 2.5 },
+            style: { fontSize: 12, fontFamily: 'Helvetica', bold: false, underline: false, solidBackground: false }
+        };
+
+        nf.assignedTo = config.assignedTo || 'creator';
+        if (nf.type === 'strikethrough')  { nf.active = false; nf.strikethroughType = config.strikethroughType || 'horizontal'; }
+        if (nf.type === 'selection')      { nf.options = ['Option 1', 'Option 2']; nf.selectedValue = null; nf.solidBg = false; }
+        if (nf.type === 'tick')           { nf.options = ['Yes', 'No', 'N/A']; nf.selectedValue = null; nf.solidBg = true; }
+        if (nf.type === 'condition')      { nf.text = ''; }
+
+        if (config.named_field_id) {
+            nf.named_field_id = config.named_field_id;
+            nf.named_field_name = config.named_field_name || '';
+        }
+
+        fields.push(nf);
+        isDirty = true;
+        selectedFieldId = nf.id;
+        renderAllFields();
+        return nf;
+    }
+
+    /**
+     * Create a signature zone at a specific position (used by drag-and-drop).
+     */
+    function createZoneAtPosition(config) {
+        var nz = {
+            _id: genId(),
+            page_index: config.pageIndex,
+            x_position: config.x,
+            y_position: config.y,
+            width: config.width || 15,
+            height: config.height || 4,
+            type: config.zoneType || 'signature',
+            assigned_parties: ['agent', 'tenant', 'landlord'],
+            label: '',
+            required: true
+        };
+        signatureZones.push(nz);
+        isDirty = true;
+        selectedZoneId = nz._id;
+        renderAllFields();
+        return nz;
     }
 
     function onPlacementStart(e, container, pageIndex) {
@@ -1063,6 +1189,17 @@
         if (placementMode === 'tick')           { nf.options = ['Yes', 'No', 'N/A']; nf.selectedValue = null; nf.solidBg = true; }
         if (placementMode === 'condition')      { nf.text = ''; }
         if (C.mode === 'document')              { nf.isUserAdded = true; }
+
+        // Apply system field data if placing from the System Fields panel
+        if (pendingSystemField) {
+            nf.named_field_id = pendingSystemField.id;
+            nf.named_field_name = pendingSystemField.name;
+            nf.assignedTo = pendingSystemField.assignedTo || 'creator';
+            pendingSystemField = null;
+            // Deactivate the active item in the panel
+            var activeItems = document.querySelectorAll('.dp-sf-item.active');
+            activeItems.forEach(function (el) { el.classList.remove('active'); });
+        }
 
         fields.push(nf);
         isDirty = true;
@@ -2016,6 +2153,249 @@
         var d = document.createElement('div');
         d.appendChild(document.createTextNode(str));
         return d.innerHTML;
+    }
+
+    // ======================================================================
+    // SYSTEM FIELDS PANEL (template mode)
+    // ======================================================================
+
+    // Cache of system field IDs for quick lookup
+    var _systemFieldIds = null;
+    function isSystemField(namedFieldId) {
+        if (!C.systemFields) return false;
+        if (!_systemFieldIds) {
+            _systemFieldIds = {};
+            Object.keys(C.systemFields).forEach(function (groupKey) {
+                (C.systemFields[groupKey] || []).forEach(function (sf) {
+                    _systemFieldIds[sf.id] = true;
+                });
+            });
+        }
+        return !!_systemFieldIds[namedFieldId];
+    }
+
+    function buildSystemFieldsPanel(panel) {
+        // Header
+        var header = document.createElement('div');
+        header.className = 'dp-sf-header';
+        var headerLabel = document.createElement('span');
+        headerLabel.textContent = 'System Fields';
+        header.appendChild(headerLabel);
+        var toggleBtn = document.createElement('button');
+        toggleBtn.className = 'dp-sf-toggle';
+        toggleBtn.innerHTML = '\u00AB';
+        toggleBtn.addEventListener('click', function () {
+            panel.classList.toggle('collapsed');
+            toggleBtn.innerHTML = panel.classList.contains('collapsed') ? '\u00BB' : '\u00AB';
+        });
+        header.appendChild(toggleBtn);
+        panel.appendChild(header);
+
+        var content = document.createElement('div');
+        content.className = 'dp-sf-content';
+
+        // Group display config
+        var groupConfig = {
+            property:        { label: 'Property',  icon: '\uD83C\uDFE0' },
+            contact_lessor:  { label: 'Lessor',     icon: '\uD83D\uDC64' },
+            contact_lessee:  { label: 'Lessee',     icon: '\uD83D\uDC64' },
+            contact_seller:  { label: 'Seller',     icon: '\uD83D\uDC64' },
+            contact_buyer:   { label: 'Buyer',      icon: '\uD83D\uDC64' },
+            agent:           { label: 'Agent',      icon: '\uD83D\uDC68\u200D\uD83D\uDCBC' },
+            computed:        { label: 'Computed',    icon: '\uD83D\uDDA9' },
+            static:          { label: 'Static',     icon: '\uD83D\uDCCC' }
+        };
+
+        // assignedTo mapping based on source group
+        var assignedToMap = {
+            property:        'creator',
+            contact_lessor:  'lessor',
+            contact_lessee:  'lessee',
+            contact_seller:  'seller',
+            contact_buyer:   'buyer',
+            agent:           'creator',
+            computed:        'creator',
+            static:          'creator'
+        };
+
+        // Build groups from server data
+        var groupOrder = ['property', 'contact_lessor', 'contact_lessee', 'contact_seller', 'contact_buyer', 'agent', 'computed', 'static'];
+        groupOrder.forEach(function (groupKey) {
+            var items = C.systemFields[groupKey];
+            if (!items || items.length === 0) return;
+
+            var cfg = groupConfig[groupKey] || { label: groupKey, icon: '\uD83D\uDCCB' };
+            var group = document.createElement('div');
+            group.className = 'dp-sf-group';
+
+            var groupHeader = document.createElement('div');
+            groupHeader.className = 'dp-sf-group-header';
+            groupHeader.innerHTML = '<span class="dp-sf-group-arrow">\u25BE</span>' +
+                '<span class="dp-sf-group-icon">' + cfg.icon + '</span>' +
+                '<span>' + cfg.label + '</span>';
+            groupHeader.addEventListener('click', function () {
+                group.classList.toggle('collapsed');
+            });
+            group.appendChild(groupHeader);
+
+            var itemsContainer = document.createElement('div');
+            itemsContainer.className = 'dp-sf-group-items';
+
+            items.forEach(function (sf) {
+                var item = document.createElement('div');
+                item.className = 'dp-sf-item';
+                item.dataset.source = groupKey;
+                item.dataset.fieldId = sf.id;
+                item.draggable = true;
+                item.innerHTML = '<span class="dp-sf-item-dot"></span>' + escHtml(sf.name);
+                item.title = 'Drag onto page or click to place: ' + sf.name;
+
+                // Drag-and-drop
+                item.addEventListener('dragstart', function (e) {
+                    e.dataTransfer.setData('application/json', JSON.stringify({
+                        _dropType: 'field',
+                        type: 'placeholder',
+                        named_field_id: parseInt(sf.id),
+                        named_field_name: sf.name,
+                        assignedTo: assignedToMap[groupKey] || 'creator'
+                    }));
+                    e.dataTransfer.effectAllowed = 'copy';
+                    item.classList.add('dp-sf-dragging');
+                });
+                item.addEventListener('dragend', function () {
+                    item.classList.remove('dp-sf-dragging');
+                });
+
+                // Click-to-place (fallback)
+                item.addEventListener('click', function () {
+                    var wasActive = item.classList.contains('active');
+
+                    // Deactivate all items
+                    panel.querySelectorAll('.dp-sf-item.active').forEach(function (el) {
+                        el.classList.remove('active');
+                    });
+
+                    if (wasActive) {
+                        // Toggle off
+                        pendingSystemField = null;
+                        cancelPlacement();
+                    } else {
+                        // Activate this item and enter placement mode
+                        item.classList.add('active');
+                        pendingSystemField = {
+                            id: parseInt(sf.id),
+                            name: sf.name,
+                            sourceType: sf.source_type,
+                            sourceContactType: sf.source_contact_type,
+                            assignedTo: assignedToMap[groupKey] || 'creator'
+                        };
+                        startPlacement('placeholder');
+                    }
+                });
+
+                itemsContainer.appendChild(item);
+            });
+
+            group.appendChild(itemsContainer);
+            content.appendChild(group);
+        });
+
+        // Divider before ad-hoc section
+        var divider = document.createElement('div');
+        divider.className = 'dp-sf-divider';
+        content.appendChild(divider);
+
+        var adhocLabel = document.createElement('div');
+        adhocLabel.className = 'dp-sf-section-label';
+        adhocLabel.textContent = 'Ad Hoc Fields';
+        content.appendChild(adhocLabel);
+
+        // Ad-hoc field type items (same types as toolbar)
+        TYPES.forEach(function (t) {
+            var item = document.createElement('div');
+            item.className = 'dp-sf-item';
+            item.dataset.source = 'adhoc';
+            item.draggable = true;
+            item.innerHTML = '<span class="dp-sf-item-dot" style="background:#64748b"></span>' +
+                '<span style="font-weight:600;margin-right:4px">' + t.icon + '</span> ' + t.label;
+
+            // Drag-and-drop
+            item.addEventListener('dragstart', function (e) {
+                e.dataTransfer.setData('application/json', JSON.stringify({
+                    _dropType: 'field',
+                    type: t.type,
+                    assignedTo: 'creator',
+                    strikethroughType: t.strikethroughType || null
+                }));
+                e.dataTransfer.effectAllowed = 'copy';
+                item.classList.add('dp-sf-dragging');
+            });
+            item.addEventListener('dragend', function () {
+                item.classList.remove('dp-sf-dragging');
+            });
+
+            // Click-to-place (fallback)
+            item.addEventListener('click', function () {
+                pendingSystemField = null;
+                panel.querySelectorAll('.dp-sf-item.active').forEach(function (el) { el.classList.remove('active'); });
+                if (placementMode === t.type && (!t.strikethroughType || placementStrikeType === t.strikethroughType)) {
+                    cancelPlacement();
+                } else {
+                    startPlacement(t.type, t.strikethroughType);
+                }
+            });
+            content.appendChild(item);
+        });
+
+        // Divider before sign zones
+        var divider2 = document.createElement('div');
+        divider2.className = 'dp-sf-divider';
+        content.appendChild(divider2);
+
+        var zoneLabel = document.createElement('div');
+        zoneLabel.className = 'dp-sf-section-label';
+        zoneLabel.textContent = 'Sign Zones';
+        content.appendChild(zoneLabel);
+
+        var ZONE_ITEMS = [
+            { zoneType: 'signature', label: 'Signature Zone', icon: '\u270D' },
+            { zoneType: 'initial',   label: 'Initials Zone',  icon: 'Iz' }
+        ];
+        ZONE_ITEMS.forEach(function (zt) {
+            var item = document.createElement('div');
+            item.className = 'dp-sf-item';
+            item.dataset.source = 'zone';
+            item.draggable = true;
+            item.innerHTML = '<span class="dp-sf-item-dot" style="background:#f59e0b"></span>' +
+                '<span style="font-weight:600;margin-right:4px">' + zt.icon + '</span> ' + zt.label;
+
+            // Drag-and-drop
+            item.addEventListener('dragstart', function (e) {
+                e.dataTransfer.setData('application/json', JSON.stringify({
+                    _dropType: 'zone',
+                    zoneType: zt.zoneType
+                }));
+                e.dataTransfer.effectAllowed = 'copy';
+                item.classList.add('dp-sf-dragging');
+            });
+            item.addEventListener('dragend', function () {
+                item.classList.remove('dp-sf-dragging');
+            });
+
+            // Click-to-place (fallback)
+            item.addEventListener('click', function () {
+                pendingSystemField = null;
+                panel.querySelectorAll('.dp-sf-item.active').forEach(function (el) { el.classList.remove('active'); });
+                if (placementMode === 'zone' && placementZoneType === zt.zoneType) {
+                    cancelPlacement();
+                } else {
+                    startZonePlacement(zt.zoneType);
+                }
+            });
+            content.appendChild(item);
+        });
+
+        panel.appendChild(content);
     }
 
     // ======================================================================

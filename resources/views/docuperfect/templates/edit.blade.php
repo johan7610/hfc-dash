@@ -101,6 +101,7 @@
         templateType: @json($template->template_type),
         documentTypeId: @json($template->document_type_id),
         namedFields: @json($namedFields),
+        systemFields: @json($systemFields ?? []),
         signatureZones: @json($signatureZones ?? [])
     };
 </script>

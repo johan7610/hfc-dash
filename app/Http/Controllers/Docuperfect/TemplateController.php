@@ -8,6 +8,7 @@ use App\Models\Docuperfect\NamedField;
 use App\Models\Docuperfect\Template;
 use App\Models\Docuperfect\TemplateSignatureZone;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class TemplateController extends Controller
@@ -110,6 +111,22 @@ class TemplateController extends Controller
         $documentTypes = DocumentType::orderBy('sort_order')->get();
         $namedFields = NamedField::orderBy('sort_order')->get();
 
+        // Load source-mapped named fields grouped by source type for System Fields panel
+        $systemFields = DB::table('docuperfect_named_fields')
+            ->whereNull('deleted_at')
+            ->whereNotNull('source_type')
+            ->where('source_type', '!=', 'manual')
+            ->orderBy('source_type')
+            ->orderBy('source_contact_type')
+            ->orderBy('name')
+            ->get()
+            ->groupBy(function ($f) {
+                if ($f->source_type === 'contact') {
+                    return 'contact_' . strtolower($f->source_contact_type ?? 'other');
+                }
+                return $f->source_type;
+            });
+
         // Load signature zones for the JS editor
         $signatureZones = $template->signatureZones()
             ->orderBy('page_index')
@@ -132,7 +149,7 @@ class TemplateController extends Controller
             })
             ->values();
 
-        return view('docuperfect.templates.edit', compact('template', 'branches', 'documentTypes', 'namedFields', 'signatureZones', 'user'));
+        return view('docuperfect.templates.edit', compact('template', 'branches', 'documentTypes', 'namedFields', 'systemFields', 'signatureZones', 'user'));
     }
 
     public function saveFields(Request $request, $id)

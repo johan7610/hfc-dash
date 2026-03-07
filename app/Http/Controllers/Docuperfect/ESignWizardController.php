@@ -536,219 +536,175 @@ class ESignWizardController extends Controller
     /**
      * Auto-fill template fields from wizard step data.
      *
-     * Uses contains-based matching against named_field_name to handle
-     * variations like "Rental - Lessor", "Lessor Contact Number", etc.
+     * Uses source_type/source_column/source_contact_type from
+     * docuperfect_named_fields to resolve each field's value.
      */
     private function autoFillFields(array $fields, array $stepData): array
     {
-        // Collect wizard data into structured sources
+        // Load named field source mappings
+        $namedFieldMappings = DB::table('docuperfect_named_fields')
+            ->whereNotNull('source_type')
+            ->where('source_type', '!=', 'manual')
+            ->get()
+            ->keyBy('id');
+
+        // Build data pools from step_data
         $property   = $stepData['property'] ?? [];
         $recipients = $stepData['recipients']['recipients'] ?? [];
         $details    = $stepData['details'] ?? [];
+        $agent      = auth()->user();
 
-        $address     = $property['title'] ?? $property['address'] ?? $property['property_address'] ?? '';
-        $suburb      = $property['suburb'] ?? '';
-        $erf         = $property['erf'] ?? $property['erf_number'] ?? '';
-        $complexName = $property['complex_name'] ?? '';
-        $unitNr      = $property['unit_number'] ?? '';
-
-        // Index recipients by role (first of each role wins)
-        $byRole = [];
+        // Build contact lookup by role (ucfirst to match source_contact_type)
+        $contactsByRole = [];
         foreach ($recipients as $r) {
-            $role = $r['role'] ?? '';
-            if ($role && !isset($byRole[$role])) {
-                $byRole[$role] = $r;
+            $role = ucfirst($r['role'] ?? '');
+            if ($role && !isset($contactsByRole[$role])) {
+                $contactsByRole[$role] = $r;
             }
         }
 
-        // Helper: get recipient field by role aliases
-        $recipientVal = function (array $roles, string $key) use ($byRole): string {
-            foreach ($roles as $role) {
-                if (isset($byRole[$role][$key]) && $byRole[$role][$key] !== '') {
-                    return $byRole[$role][$key];
-                }
+        // Role aliases: wizard uses "landlord"/"tenant", DB uses "Lessor"/"Lessee"
+        $roleAliases = [
+            'Landlord' => 'Lessor', 'Tenant' => 'Lessee',
+            'Lessor' => 'Lessor', 'Lessee' => 'Lessee',
+            'Seller' => 'Seller', 'Buyer' => 'Buyer',
+        ];
+
+        // Merge aliased roles into contactsByRole
+        foreach ($roleAliases as $wizardRole => $dbRole) {
+            if (isset($contactsByRole[$wizardRole]) && !isset($contactsByRole[$dbRole])) {
+                $contactsByRole[$dbRole] = $contactsByRole[$wizardRole];
             }
-            return '';
-        };
-
-        $landlordName  = $recipientVal(['landlord'], 'name');
-        $landlordEmail = $recipientVal(['landlord'], 'email');
-        $landlordCell  = $recipientVal(['landlord'], 'cell');
-        $landlordId    = $recipientVal(['landlord'], 'id_number');
-        $tenantName    = $recipientVal(['tenant'], 'name');
-        $tenantEmail   = $recipientVal(['tenant'], 'email');
-        $tenantCell    = $recipientVal(['tenant'], 'cell');
-        $tenantId      = $recipientVal(['tenant'], 'id_number');
-        $sellerName    = $recipientVal(['seller'], 'name');
-        $sellerEmail   = $recipientVal(['seller'], 'email');
-        $buyerName     = $recipientVal(['buyer'], 'name');
-        $buyerEmail    = $recipientVal(['buyer'], 'email');
-        $agentName     = $recipientVal(['agent'], 'name');
-
-        $rental     = $details['monthly_rental'] ?? '';
-        $deposit    = $details['deposit'] ?? '';
-        $leaseStart = $details['lease_start'] ?? '';
-        $leaseEnd   = $details['lease_end'] ?? '';
-        $commission = $details['commission'] ?? '';
-        $marketing  = $details['marketing_fee'] ?? '';
-        $price      = $details['price'] ?? $rental; // sales price or rental amount
-
-        // Build matching rules: [ [patterns_array, value], ... ]
-        // A field matches if its normalized named_field_name CONTAINS any pattern.
-        // Rules are checked top-to-bottom; first match wins (most specific first).
-        $rules = [];
-
-        // --- Property ---
-        if ($address) {
-            $rules[] = [['property address', 'property_address', 'street'], $address];
-        }
-        if ($suburb) {
-            $rules[] = [['suburb', 'area', 'town'], $suburb];
-        }
-        if ($erf) {
-            $rules[] = [['property number', 'property_number', 'erf', 'stand'], $erf];
-        }
-        if ($complexName) {
-            $rules[] = [['rental complex', 'complex', 'building', 'scheme'], $complexName];
-        }
-        if ($unitNr) {
-            $rules[] = [['unit nr', 'unit_nr', 'unit number'], $unitNr];
         }
 
-        // --- Landlord / Lessor (specific patterns first) ---
-        if ($landlordEmail) {
-            $rules[] = [['lessor email', 'lessor_email', 'landlord email', 'landlord_email', 'verhuurder email'], $landlordEmail];
-        }
-        if ($landlordCell) {
-            $rules[] = [['lessor contact', 'lessor_contact', 'lessor cell', 'lessor_cell', 'lessor phone', 'lessor_phone', 'landlord cell', 'landlord_cell', 'landlord phone', 'verhuurder tel'], $landlordCell];
-        }
-        if ($landlordId) {
-            $rules[] = [['lessor id', 'lessor_id', 'landlord id', 'landlord_id', 'verhuurder id'], $landlordId];
-        }
-        if ($landlordName) {
-            // "Rental - Lessor", "Lessor Name", "Landlord", etc.
-            $rules[] = [['lessor name', 'lessor_name', 'landlord name', 'landlord_name', 'verhuurder'], $landlordName];
-            // Generic catch-all: exclude sub-fields (address, email, id, contact, cell, phone, account, bank)
-            $rules[] = [['lessor', 'landlord'], $landlordName, ['address', 'email', 'id', 'contact', 'cell', 'phone', 'account', 'bank']];
-        }
-
-        // --- Tenant / Lessee (specific first) ---
-        if ($tenantEmail) {
-            $rules[] = [['lessee email', 'lessee_email', 'tenant email', 'tenant_email', 'huurder email'], $tenantEmail];
-        }
-        if ($tenantCell) {
-            $rules[] = [['lessee contact', 'lessee_contact', 'lessee cell', 'lessee_cell', 'lessee phone', 'tenant cell', 'tenant_cell', 'tenant phone', 'huurder tel'], $tenantCell];
-        }
-        if ($tenantId) {
-            $rules[] = [['lessee id', 'lessee_id', 'tenant id', 'tenant_id', 'huurder id'], $tenantId];
-        }
-        if ($tenantName) {
-            $rules[] = [['lessee name', 'lessee_name', 'tenant name', 'tenant_name', 'huurder'], $tenantName];
-            $rules[] = [['lessee', 'tenant'], $tenantName, ['address', 'email', 'id', 'contact', 'cell', 'phone', 'account', 'bank']];
-        }
-
-        // --- Seller ---
-        if ($sellerEmail) {
-            $rules[] = [['seller email', 'seller_email', 'verkoper email'], $sellerEmail];
-        }
-        if ($sellerName) {
-            $rules[] = [['seller name', 'seller_name', 'verkoper'], $sellerName];
-            $rules[] = [['seller'], $sellerName, ['address', 'email', 'id', 'contact', 'cell', 'phone']];
-        }
-
-        // --- Buyer ---
-        if ($buyerEmail) {
-            $rules[] = [['buyer email', 'buyer_email', 'koper email'], $buyerEmail];
-        }
-        if ($buyerName) {
-            $rules[] = [['buyer name', 'buyer_name', 'koper'], $buyerName];
-            $rules[] = [['buyer'], $buyerName, ['address', 'email', 'id', 'contact', 'cell', 'phone']];
-        }
-
-        // --- Agent ---
-        if ($agentName) {
-            $rules[] = [['agent name', 'agent_name'], $agentName];
-        }
-
-        // --- Financial ---
-        if ($rental) {
-            $rules[] = [['rental amount', 'rental_amount', 'monthly rental', 'monthly_rental', 'huur'], $rental];
-        }
-        if ($deposit) {
-            $rules[] = [['deposit', 'deposito'], $deposit];
-        }
-        if ($price) {
-            // "Price" and "Amount" — only match if not already matched by rental/deposit
-            $rules[] = [['price'], $price];
-            $rules[] = [['amount'], $rental ?: $price];
-        }
-        if ($commission) {
-            $rules[] = [['commission', 'kommissie', 'comm_percent'], $commission];
-        }
-        if ($marketing) {
-            $rules[] = [['marketing', 'advertising'], $marketing];
-        }
-
-        // --- Dates ---
-        if ($leaseStart) {
-            // Break date into components for Day/Month/Year fields
-            $parts = explode('-', $leaseStart); // YYYY-MM-DD
-            if (count($parts) === 3) {
-                $rules[] = [['lease date day', 'lease_date_day'], (int) $parts[2]];
-                $rules[] = [['lease date month', 'lease_date_month'], (int) $parts[1]];
-                $rules[] = [['lease date year', 'lease_date_year'], $parts[0]];
-            }
-            $rules[] = [['lease start', 'lease_start', 'commencement', 'begin', 'lease date', 'lease_date'], $leaseStart];
-        }
-        if ($leaseEnd) {
-            $rules[] = [['lease end', 'lease_end', 'expiry', 'termination'], $leaseEnd];
-        }
-
-        // --- Apply rules to fields ---
         foreach ($fields as &$field) {
             if (!empty($field['value'])) {
                 continue; // Don't overwrite existing values
             }
 
-            $rawName = $field['named_field_name'] ?? $field['label'] ?? '';
-            if ($rawName === '') {
+            $namedFieldId = $field['named_field_id'] ?? null;
+            if (!$namedFieldId || !isset($namedFieldMappings[$namedFieldId])) {
                 continue;
             }
 
-            $normalized = strtolower(trim($rawName));
+            $mapping = $namedFieldMappings[$namedFieldId];
+            $sourceType   = $mapping->source_type;
+            $sourceColumn = $mapping->source_column;
+            $contactType  = $mapping->source_contact_type;
 
-            foreach ($rules as $rule) {
-                $patterns  = $rule[0];
-                $value     = $rule[1];
-                $excludes  = $rule[2] ?? [];
+            $value = $this->resolveFieldValue($sourceType, $sourceColumn, $contactType, $property, $contactsByRole, $details, $agent);
 
-                if ($value === '' || $value === null) {
-                    continue;
-                }
-
-                // Check exclusion keywords — skip this rule if field name contains any
-                $excluded = false;
-                foreach ($excludes as $ex) {
-                    if (str_contains($normalized, $ex)) {
-                        $excluded = true;
-                        break;
-                    }
-                }
-                if ($excluded) {
-                    continue;
-                }
-
-                foreach ($patterns as $pattern) {
-                    if (str_contains($normalized, $pattern)) {
-                        $field['value'] = (string) $value;
-                        break 2; // First matching rule wins
-                    }
-                }
+            if ($value !== null && $value !== '') {
+                $field['value'] = (string) $value;
             }
         }
         unset($field);
 
         return $fields;
+    }
+
+    /**
+     * Resolve a single field's value from its source mapping.
+     */
+    private function resolveFieldValue(string $sourceType, ?string $sourceColumn, ?string $contactType, array $property, array $contactsByRole, array $details, $agent)
+    {
+        if (!$sourceColumn) {
+            return null;
+        }
+
+        switch ($sourceType) {
+            case 'property':
+                return $this->resolvePropertyValue($sourceColumn, $property, $details);
+
+            case 'contact':
+                $contact = $contactsByRole[$contactType] ?? null;
+                if (!$contact) return null;
+                return $this->resolveContactValue($sourceColumn, $contact);
+
+            case 'agent':
+                if ($sourceColumn === 'name') return $agent->name ?? '';
+                return null;
+
+            case 'computed':
+                return $this->resolveComputedValue($sourceColumn, $property, $details);
+
+            case 'static':
+                return $sourceColumn; // The column IS the literal value
+
+            default:
+                return null;
+        }
+    }
+
+    private function resolvePropertyValue(string $column, array $property, array $details)
+    {
+        return match ($column) {
+            'address'           => $property['address'] ?? $property['title'] ?? '',
+            'suburb'            => $property['suburb'] ?? '',
+            'address+suburb'    => trim(($property['address'] ?? $property['title'] ?? '') . ', ' . ($property['suburb'] ?? ''), ', '),
+            'rental_amount'     => $details['monthly_rental'] ?? $property['rental_amount'] ?? '',
+            'deposit_amount'    => $details['deposit'] ?? $property['deposit_amount'] ?? '',
+            'commission_percent'=> $details['commission'] ?? $details['commission_percent'] ?? '',
+            'lease_start_date'  => $details['lease_start'] ?? '',
+            'lease_end_date'    => $details['lease_end'] ?? '',
+            'property_number'   => $property['erf'] ?? $property['erf_number'] ?? $property['property_number'] ?? '',
+            'complex_name'      => $property['complex_name'] ?? '',
+            'unit_number'       => $property['unit_number'] ?? '',
+            'district'          => $property['district'] ?? '',
+            'price'             => $details['price'] ?? $property['price'] ?? '',
+            'expiry_date'       => $details['expiry_date'] ?? $property['expiry_date'] ?? '',
+            default             => '',
+        };
+    }
+
+    private function resolveContactValue(string $column, array $contact)
+    {
+        return match ($column) {
+            'first_name+last_name' => $contact['name'] ?? '',
+            'address'              => $contact['address'] ?? '',
+            'id_number'            => $contact['id_number'] ?? '',
+            'email'                => $contact['email'] ?? '',
+            'phone'                => $contact['cell'] ?? $contact['phone'] ?? '',
+            'bank_name'            => $contact['bank_name'] ?? '',
+            'bank_account_name'    => $contact['bank_account_name'] ?? '',
+            'bank_account_number'  => $contact['bank_account_number'] ?? '',
+            'bank_branch_name'     => $contact['bank_branch_name'] ?? '',
+            default                => '',
+        };
+    }
+
+    private function resolveComputedValue(string $column, array $property, array $details)
+    {
+        $leaseStart = $details['lease_start'] ?? '';
+        $price = $details['price'] ?? $details['monthly_rental'] ?? $property['price'] ?? '';
+
+        return match ($column) {
+            'lease_start_day' => $leaseStart ? (int) date('d', strtotime($leaseStart)) : '',
+            'lease_start_month' => $leaseStart ? date('F', strtotime($leaseStart)) : '',
+            'lease_start_year' => $leaseStart ? date('Y', strtotime($leaseStart)) : '',
+            'price_in_words' => $price ? $this->numberToWords((int) $price) : '',
+            default => '',
+        };
+    }
+
+    private function numberToWords(int $number): string
+    {
+        if ($number === 0) return 'zero';
+
+        $ones = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
+                 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen',
+                 'seventeen', 'eighteen', 'nineteen'];
+        $tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+
+        $convert = function (int $n) use (&$convert, $ones, $tens): string {
+            if ($n < 20) return $ones[$n];
+            if ($n < 100) return $tens[(int)($n / 10)] . ($n % 10 ? '-' . $ones[$n % 10] : '');
+            if ($n < 1000) return $ones[(int)($n / 100)] . ' hundred' . ($n % 100 ? ' and ' . $convert($n % 100) : '');
+            if ($n < 1000000) return $convert((int)($n / 1000)) . ' thousand' . ($n % 1000 ? ' ' . $convert($n % 1000) : '');
+            return $convert((int)($n / 1000000)) . ' million' . ($n % 1000000 ? ' ' . $convert($n % 1000000) : '');
+        };
+
+        return ucfirst($convert($number));
     }
 
     private function stepKey(int $step): string

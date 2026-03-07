@@ -210,6 +210,13 @@
                                            class="w-full rounded-lg border px-3 py-2 text-sm"
                                            :class="r.readonly ? 'border-gray-200 bg-gray-100 text-gray-500' : 'border-slate-300 bg-white text-slate-900'">
                                 </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-600 mb-1">ID Number</label>
+                                    <input type="text" x-model="r.id_number" :readonly="r.readonly"
+                                           class="w-full rounded-lg border px-3 py-2 text-sm"
+                                           :class="r.readonly ? 'border-gray-200 bg-gray-100 text-gray-500' : 'border-slate-300 bg-white text-slate-900'"
+                                           placeholder="SA ID or Passport">
+                                </div>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div>
                                         <label class="block text-xs font-medium text-gray-600 mb-1">Email</label>
@@ -223,6 +230,13 @@
                                                class="w-full rounded-lg border px-3 py-2 text-sm"
                                                :class="r.readonly ? 'border-gray-200 bg-gray-100 text-gray-500' : 'border-slate-300 bg-white text-slate-900'">
                                     </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-600 mb-1">Physical Address</label>
+                                    <input type="text" x-model="r.address" :readonly="r.readonly"
+                                           class="w-full rounded-lg border px-3 py-2 text-sm"
+                                           :class="r.readonly ? 'border-gray-200 bg-gray-100 text-gray-500' : 'border-slate-300 bg-white text-slate-900'"
+                                           placeholder="Residential address">
                                 </div>
                             </div>
                         </div>
@@ -645,7 +659,7 @@ function esignWizard() {
         // Step 3: Recipients
         recipients: serverRecipients.length > 0
             ? serverRecipients.map((r, i) => ({ ...r, readonly: i === 0 && r.role === 'agent' }))
-            : [{ order: 1, role: 'agent', name: currentUser.name, email: currentUser.email || '', cell: '', readonly: true }],
+            : [{ order: 1, role: 'agent', name: currentUser.name, id_number: '', email: currentUser.email || '', cell: '', address: '', readonly: true }],
 
         // Step 4: Details
         details: {
@@ -942,8 +956,10 @@ function esignWizard() {
                         order: i + 1,
                         role: r.role,
                         name: r.name,
+                        id_number: r.id_number || '',
                         email: r.email,
                         cell: r.cell,
+                        address: r.address || '',
                     })),
                 };
                 case 4: return { ...this.details };
@@ -1066,7 +1082,7 @@ function esignWizard() {
 
         // ---- Recipients ----
         addRecipient() {
-            this.recipients.push({ order: this.recipients.length + 1, role: 'landlord', name: '', email: '', cell: '', readonly: false });
+            this.recipients.push({ order: this.recipients.length + 1, role: 'landlord', name: '', id_number: '', email: '', cell: '', address: '', readonly: false });
         },
 
         removeRecipient(index) {

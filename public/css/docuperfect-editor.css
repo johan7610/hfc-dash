@@ -1079,3 +1079,200 @@
     opacity: 0.6;
     cursor: not-allowed;
 }
+
+/* === System Fields Panel (template mode) === */
+.dp-system-fields-panel {
+    width: 260px;
+    min-width: 260px;
+    background: #0f172a;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    max-height: calc(100vh - 100px);
+    border-right: 1px solid rgba(255,255,255,0.08);
+}
+
+.dp-system-fields-panel.collapsed {
+    width: 36px;
+    min-width: 36px;
+}
+
+.dp-system-fields-panel.collapsed .dp-sf-content {
+    display: none;
+}
+
+.dp-sf-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    flex-shrink: 0;
+}
+
+.dp-sf-header span {
+    font-size: 11px;
+    font-weight: 700;
+    color: #94a3b8;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.dp-sf-toggle {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #94a3b8;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s;
+}
+
+.dp-sf-toggle:hover {
+    background: rgba(255,255,255,0.1);
+    color: white;
+}
+
+.dp-sf-content {
+    padding: 4px 0;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.dp-sf-group {
+    margin-bottom: 2px;
+}
+
+.dp-sf-group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    color: #cbd5e1;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background 0.1s;
+    user-select: none;
+}
+
+.dp-sf-group-header:hover {
+    background: rgba(255,255,255,0.05);
+}
+
+.dp-sf-group-arrow {
+    font-size: 10px;
+    transition: transform 0.15s;
+    width: 12px;
+    text-align: center;
+}
+
+.dp-sf-group.collapsed .dp-sf-group-arrow {
+    transform: rotate(-90deg);
+}
+
+.dp-sf-group.collapsed .dp-sf-group-items {
+    display: none;
+}
+
+.dp-sf-group-icon {
+    font-size: 13px;
+}
+
+.dp-sf-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px 5px 30px;
+    cursor: pointer;
+    color: #94a3b8;
+    font-size: 12px;
+    transition: all 0.1s;
+    user-select: none;
+}
+
+.dp-sf-item:hover {
+    background: rgba(59,130,246,0.15);
+    color: #93c5fd;
+}
+
+.dp-sf-item.active {
+    background: rgba(59,130,246,0.25);
+    color: #60a5fa;
+}
+
+.dp-sf-item-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #3b82f6;
+    flex-shrink: 0;
+}
+
+.dp-sf-item[data-source="contact_lessor"] .dp-sf-item-dot { background: #f59e0b; }
+.dp-sf-item[data-source="contact_lessee"] .dp-sf-item-dot { background: #10b981; }
+.dp-sf-item[data-source="contact_seller"] .dp-sf-item-dot { background: #ec4899; }
+.dp-sf-item[data-source="contact_buyer"] .dp-sf-item-dot { background: #8b5cf6; }
+.dp-sf-item[data-source="agent"] .dp-sf-item-dot { background: #06b6d4; }
+.dp-sf-item[data-source="computed"] .dp-sf-item-dot { background: #f97316; }
+.dp-sf-item[data-source="static"] .dp-sf-item-dot { background: #6b7280; }
+
+.dp-sf-divider {
+    height: 1px;
+    background: rgba(255,255,255,0.08);
+    margin: 6px 12px;
+}
+
+.dp-sf-section-label {
+    padding: 8px 12px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* System-linked field visual distinction */
+.dp-field.dp-system-field {
+    border: 1.5px solid rgba(59,130,246,0.5);
+    border-radius: 2px;
+}
+
+.dp-field.dp-system-field .dp-named-badge {
+    background: #2563eb;
+}
+
+.dp-field.dp-system-field::after {
+    content: '\1F517';
+    position: absolute;
+    top: -8px;
+    right: -2px;
+    font-size: 10px;
+    pointer-events: none;
+    z-index: 26;
+}
+
+/* Drag-and-drop feedback */
+.dp-sf-item[draggable] {
+    cursor: grab;
+}
+
+.dp-sf-item[draggable]:active {
+    cursor: grabbing;
+}
+
+.dp-sf-item.dp-sf-dragging {
+    opacity: 0.4;
+}
+
+.dp-page-container.dp-drop-target {
+    outline: 2px dashed #3b82f6;
+    outline-offset: -2px;
+    background: rgba(59, 130, 246, 0.05);
+}
