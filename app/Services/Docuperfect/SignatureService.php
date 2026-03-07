@@ -293,6 +293,87 @@ class SignatureService
         return $count;
     }
 
+    /**
+     * Create signature markers from fields_json sign/initial entries.
+     * Used by the e-sign wizard when no TemplateSignatureZone records exist.
+     */
+    public function convertFieldsJsonToMarkers(SignatureTemplate $sigTemplate, array $fieldsJson): int
+    {
+        $count = 0;
+        $sortOrder = $sigTemplate->markers()->max('sort_order') ?? -1;
+
+        foreach ($fieldsJson as $field) {
+            $type = strtolower($field['type'] ?? '');
+            if (!in_array($type, ['sign', 'initial'])) {
+                continue;
+            }
+
+            $assignedTo = $field['assignedTo'] ?? $field['assigned_to'] ?? 'agent';
+            $pageIndex = (int) ($field['pageIndex'] ?? $field['page_index'] ?? 0);
+            $markerType = ($type === 'sign') ? SignatureMarker::TYPE_SIGNATURE : SignatureMarker::TYPE_INITIAL;
+
+            $sortOrder++;
+
+            SignatureMarker::create([
+                'signature_template_id' => $sigTemplate->id,
+                'page_number'           => $pageIndex + 1, // convert 0-based to 1-based
+                'x_position'            => $field['x'] ?? 0,
+                'y_position'            => $field['y'] ?? 0,
+                'width'                 => $field['width'] ?? 10,
+                'height'                => $field['height'] ?? 4,
+                'type'                  => $markerType,
+                'assigned_party'        => $assignedTo,
+                'label'                 => $field['label'] ?? $field['named_field_name'] ?? (ucfirst($assignedTo) . ' ' . $type . ' — Page ' . ($pageIndex + 1)),
+                'sort_order'            => $sortOrder,
+                'required'              => !empty($field['required']),
+            ]);
+            $count++;
+        }
+
+        return $count;
+    }
+
+    /**
+     * Create one default signature marker per party on the last page.
+     * Used when the template has no sign/initial fields and no signature zones.
+     */
+    public function createDefaultMarkers(SignatureTemplate $sigTemplate): int
+    {
+        $document = $sigTemplate->document;
+        $docTemplate = $document ? $document->template : null;
+        $lastPage = $docTemplate ? $docTemplate->page_count : 1;
+
+        $signingOrder = $sigTemplate->signing_order_json ?? [];
+        if (empty($signingOrder)) {
+            $signingOrder = ['agent'];
+        }
+
+        $count = 0;
+        $sortOrder = $sigTemplate->markers()->max('sort_order') ?? -1;
+
+        foreach ($signingOrder as $i => $party) {
+            $sortOrder++;
+            $yPos = 75 + ($i * 8); // Stack vertically near bottom of page
+
+            SignatureMarker::create([
+                'signature_template_id' => $sigTemplate->id,
+                'page_number'           => $lastPage,
+                'x_position'            => 10,
+                'y_position'            => min(92, $yPos),
+                'width'                 => 25,
+                'height'                => 6,
+                'type'                  => SignatureMarker::TYPE_SIGNATURE,
+                'assigned_party'        => $party,
+                'label'                 => ucfirst($party) . ' Signature',
+                'sort_order'            => $sortOrder,
+                'required'              => true,
+            ]);
+            $count++;
+        }
+
+        return $count;
+    }
+
     // ──────────────────────────────────────────────
     // Signing requests
     // ──────────────────────────────────────────────

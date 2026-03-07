@@ -20,13 +20,17 @@ class Template extends Model
         'page_count',
         'fields_json',
         'is_global',
+        'is_esign',
+        'wizard_config',
         'owner_id',
         'archived_at',
     ];
 
     protected $casts = [
         'fields_json' => 'array',
+        'wizard_config' => 'array',
         'is_global' => 'boolean',
+        'is_esign' => 'boolean',
         'archived_at' => 'datetime',
     ];
 
@@ -48,6 +52,11 @@ class Template extends Model
     public function documents()
     {
         return $this->hasMany(Document::class, 'template_id');
+    }
+
+    public function flows()
+    {
+        return $this->hasMany(Flow::class, 'template_id');
     }
 
     public function signatureZones()

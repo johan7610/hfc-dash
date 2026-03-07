@@ -838,6 +838,12 @@ class SignatureController extends Controller
         // Determine next party label for the success message
         $nextPartyLabel = $nextPartyRole ? ucfirst($nextPartyRole) : 'the next party';
 
+        // If signing was initiated from the e-sign wizard, redirect to wizard success page
+        $wizardFlowId = session()->pull('esign_wizard_flow_id');
+        if ($wizardFlowId) {
+            return redirect()->route('docuperfect.esign.signingComplete', ['flow' => $wizardFlowId]);
+        }
+
         return redirect()->route('docuperfect.signatures.sendConfirmation', $document)
             ->with('success', "You have signed all your markers. Now send to {$nextPartyLabel}.");
     }

@@ -259,6 +259,7 @@
                  class="corex-nav-children">
                 @permission('create_docuperfect_docs')
                 <a href="{{ route('docuperfect.create') }}" class="corex-nav-subitem {{ request()->routeIs('docuperfect.create') ? 'active' : '' }}">Create Document</a>
+                <a href="{{ route('docuperfect.esign.create') }}" class="corex-nav-subitem {{ request()->routeIs('docuperfect.esign.*') ? 'active' : '' }}">E-Sign Document</a>
                 @endpermission
                 <a href="{{ route('docuperfect.dashboard') }}" class="corex-nav-subitem {{ request()->routeIs('docuperfect.dashboard') ? 'active' : '' }}">My Documents</a>
                 @permission('access_docuperfect_packs')
