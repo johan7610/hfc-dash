@@ -306,7 +306,7 @@
                 ['key'=>'drive',        'label'=>'Drive'],
                 ['key'=>'core-matches', 'label'=>'Core Matches'],
             ] as $tab)
-            @if($tab['key'] === 'core-matches' && (!\App\Models\PerformanceSetting::get('matches_enabled', 1) || !\App\Models\PerformanceSetting::get('matches_show_on_properties', 1)))
+            @if($tab['key'] === 'core-matches' && (!\App\Models\PerformanceSetting::get('matches_enabled', 1) || !\App\Models\PerformanceSetting::get('matches_show_on_properties', 1) || !auth()->user()->hasPermission('access_core_matches')))
                 @continue
             @endif
             <button type="button"

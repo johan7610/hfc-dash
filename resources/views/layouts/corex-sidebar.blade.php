@@ -429,8 +429,10 @@
             <span>Contacts</span>
         </a>
         @endif
+        @endpermission
 
         {{-- Core Matches --}}
+        @permission('access_core_matches')
         @if(\Illuminate\Support\Facades\Route::has('corex.core-matches.index') && \App\Models\PerformanceSetting::get('matches_enabled', 1))
         <a href="{{ route('corex.core-matches.index') }}" class="corex-nav-item {{ request()->routeIs('corex.core-matches.*') ? 'active' : '' }}">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">

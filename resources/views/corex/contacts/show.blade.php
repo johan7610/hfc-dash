@@ -111,7 +111,7 @@
                 ['key'=>'drive','label'=>'Drive <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full" style="background:var(--surface-2);">'. $contact->documents->count() .'</span>'],
                 ['key'=>'matches','label'=>'Core Matches <span class="ml-1 text-xs px-1.5 py-0.5 rounded-full" style="background:var(--surface-2);">'. $contact->matches->count() .'</span>'],
             ] as $t)
-            @if($t['key'] === 'matches' && !\App\Models\PerformanceSetting::get('matches_enabled', 1))
+            @if($t['key'] === 'matches' && (!\App\Models\PerformanceSetting::get('matches_enabled', 1) || !auth()->user()->hasPermission('access_core_matches')))
                 @continue
             @endif
             <button type="button"

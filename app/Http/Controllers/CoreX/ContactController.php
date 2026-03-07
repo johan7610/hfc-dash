@@ -7,6 +7,7 @@ use App\Models\Contact;
 use App\Models\ContactType;
 use App\Models\PropertySettingItem;
 use App\Models\User;
+use App\Services\PermissionService;
 use Illuminate\Http\Request;
 
 class ContactController extends Controller
@@ -15,8 +16,8 @@ class ContactController extends Controller
     {
         /** @var User $user */
         $user         = auth()->user();
-        $role         = $user->effectiveRole();
-        $canPickAgent = in_array($role, ['super_admin', 'admin', 'branch_manager']);
+        $dataScope    = PermissionService::getDataScope($user, 'contacts');
+        $canPickAgent = in_array($dataScope, ['all', 'branch']);
 
         // Agent filter with session persistence
         if ($request->has('agent_id')) {
@@ -42,10 +43,12 @@ class ContactController extends Controller
         if ($canPickAgent) {
             if ($filterAgentId !== '') {
                 $query->where('created_by_user_id', (int) $filterAgentId);
+            } elseif ($dataScope === 'branch' && $user->branch_id) {
+                $query->whereHas('createdBy', fn($q) => $q->where('branch_id', $user->branch_id));
             }
-            // empty = show all contacts
+            // 'all' scope with no filter = show all contacts
         } else {
-            // Regular agents see only their own
+            // 'own' scope: agents see only their own
             $query->where('created_by_user_id', $user->id);
         }
 
@@ -96,6 +99,24 @@ class ContactController extends Controller
             'contact_type_id' => 'nullable|exists:contact_types,id',
             'notes'           => 'nullable|string|max:1000',
         ]);
+
+        // Duplicate check — email or phone already exists under a different contact
+        $duplicate = Contact::with('createdBy')
+            ->where(function ($q) use ($data) {
+                $q->where('phone', $data['phone']);
+                if (!empty($data['email'])) {
+                    $q->orWhere('email', $data['email']);
+                }
+            })
+            ->first();
+
+        if ($duplicate) {
+            $ownerName = optional($duplicate->createdBy)->name ?? 'another agent';
+            $field     = $duplicate->phone === $data['phone'] ? 'phone number' : 'email address';
+            return back()->withInput()->withErrors([
+                'phone' => "This contact's {$field} already exists under a contact created by {$ownerName}.",
+            ]);
+        }
 
         $data['created_by_user_id'] = auth()->id();
 
