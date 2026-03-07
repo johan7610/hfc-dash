@@ -5,6 +5,7 @@ namespace App\Http\Controllers\CoreX;
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
 use App\Models\ContactType;
+use App\Models\PropertySettingItem;
 use App\Models\User;
 use Illuminate\Http\Request;
 
@@ -77,10 +78,12 @@ class ContactController extends Controller
 
     public function show(Contact $contact)
     {
-        $contact->load(['type', 'createdBy', 'contactNotes.user', 'documents.uploadedBy', 'properties']);
-        $contactTypes = ContactType::where('is_active', true)->orderBy('sort_order')->orderBy('name')->get();
+        $contact->load(['type', 'createdBy', 'contactNotes.user', 'documents.uploadedBy', 'properties', 'matches.createdBy']);
+        $contactTypes     = ContactType::where('is_active', true)->orderBy('sort_order')->orderBy('name')->get();
+        $matchCategories  = PropertySettingItem::group('category')->get();
+        $matchTypes       = PropertySettingItem::group('property_type')->where('active', true)->get();
 
-        return view('corex.contacts.show', compact('contact', 'contactTypes'));
+        return view('corex.contacts.show', compact('contact', 'contactTypes', 'matchCategories', 'matchTypes'));
     }
 
     public function store(Request $request)
