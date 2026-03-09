@@ -1,0 +1,51 @@
+# Spec: Agency Tracker
+
+**Status:** Live — Deal linkage consolidation pending
+
+---
+
+## What Agency Tracker Does
+
+Agency Tracker is the financial performance engine of CoreX. It tracks all sales and rental transactions, calculates agent commissions, manages branch performance, and provides the principal with real-time financial visibility across the agency.
+
+It is the replacement for the manual spreadsheet-based tracking currently done in Sage.
+
+---
+
+## Core Features
+
+### Commission Calculation
+- Configurable commission percentages per deal type
+- VAT-exclusive commission calculation (commission rate applied before VAT)
+- Joint agent commission splits (configurable per deal)
+- BM (Branch Manager) worksheet with override capability
+- Handles sole mandate and open mandate scenarios
+
+### Branch Performance Dashboard
+- Per-branch breakdown of sales value, commission earned, deals closed
+- Agent performance per branch
+- Month/quarter/year filters
+
+### Agent Performance
+- Individual agent deal count, value, commission
+- Comparative view across agents
+- Leaderboard data (feeds TV Display module)
+
+---
+
+## Consolidation Items (Phase 1)
+
+- [ ] Commission record linked to Deal record — currently standalone
+- [ ] Deal record must exist before commission is calculated (not possible to calculate commission without a linked deal)
+- [ ] FICA flag visible on the deal being tracked
+
+---
+
+## Known Fixed Issues (Reference)
+
+Historical bugs that have been resolved — documented to avoid regression:
+
+- Sales value split calculation bug — fixed
+- BM worksheet override not persisting — fixed  
+- VAT-exclusive percentage calculation applied incorrectly — fixed
+- Branch performance dashboard double-counting joint agent deals — fixed
