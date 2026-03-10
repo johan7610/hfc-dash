@@ -23,9 +23,10 @@ class Agency extends Model
         'vat_no',
         'ffc_no',
         'fic_no',
-        'primary_color',
-        'secondary_color',
-        'tertiary_color',
+        'sidebar_color',
+        'icon_color',
+        'default_color',
+        'button_color',
         'logo_path',
         'is_active',
     ];
