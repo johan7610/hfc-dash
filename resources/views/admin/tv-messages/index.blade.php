@@ -3,137 +3,164 @@
 @section('content')
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div>
-            <h2 class="text-xl font-bold text-white leading-tight">TV Messages (Admin)</h2>
-            <div class="text-sm text-white/60">Create global messages (all TVs) or branch-specific messages.</div>
+    {{-- Page Header --}}
+    <div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <h2 class="text-xl font-bold text-white leading-tight tracking-tight">TV Messages (Admin)</h2>
+                <div class="text-sm text-white/60">Create global messages (all TVs) or branch-specific messages.</div>
+            </div>
+            <form method="GET" action="{{ route('admin.tv-messages') }}">
+                <select name="status" onchange="this.form.submit()"
+                        class="px-3 py-2 rounded-md text-sm transition-all duration-300"
+                        style="border: 1px solid rgba(255,255,255,0.3); background: transparent; color: white;">
+                    <option value="active" style="background: var(--surface); color: var(--text-primary);" {{ request('status', 'active') === 'active' ? 'selected' : '' }}>Active</option>
+                    <option value="archived" style="background: var(--surface); color: var(--text-primary);" {{ request('status') === 'archived' ? 'selected' : '' }}>Archived</option>
+                </select>
+            </form>
         </div>
-        <form method="GET" action="{{ route('admin.tv-messages') }}">
-            <select name="status" onchange="this.form.submit()" class="px-3 py-2 border border-white/30 rounded-lg text-sm bg-transparent text-white">
-                <option value="active" {{ request('status', 'active') === 'active' ? 'selected' : '' }}>Active</option>
-                <option value="archived" {{ request('status') === 'archived' ? 'selected' : '' }}>Archived</option>
-            </select>
-        </form>
     </div>
 
+    {{-- Flash Messages --}}
     @if (session('status'))
-        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 px-4 py-3">{{ session('status') }}</div>
+        <div class="rounded-md px-4 py-3 text-sm" style="border: 1px solid color-mix(in srgb, #10b981 30%, transparent); background: color-mix(in srgb, #10b981 10%, var(--surface)); color: #10b981;">
+            {{ session('status') }}
+        </div>
     @endif
 
     @if ($errors->any())
-        <div class="rounded-2xl border border-rose-200 bg-rose-50 text-rose-900 px-4 py-3">{{ $errors->first() }}</div>
+        <div class="rounded-md px-4 py-3 text-sm" style="border: 1px solid color-mix(in srgb, #ef4444 30%, transparent); background: color-mix(in srgb, #ef4444 10%, var(--surface)); color: #ef4444;">
+            {{ $errors->first() }}
+        </div>
     @endif
 
+    {{-- Add Message Form --}}
     @if(!$showArchived)
-    <div class="ds-status-card p-5">
-        <h3 class="ds-section-header mb-3">Add TV Message</h3>
+    <div class="rounded-md p-5" style="background: var(--surface); border: 1px solid var(--border);">
+        <h3 class="text-sm font-semibold mb-4" style="color: var(--text-primary);">Add TV Message</h3>
 
         <form method="POST" action="{{ route('admin.tv-messages.store') }}"
-              class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+              class="space-y-4">
             @csrf
 
-            <div class="md:col-span-3">
-                <label class="block text-xs text-slate-600 dark:text-slate-300 mb-1">Branch (blank = global)</label>
-                <select name="branch_id"
-                        class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm">
-                    <option value="">Global</option>
-                    @foreach($branches as $b)
-                        <option value="{{ $b->id }}">{{ $b->name }}</option>
-                    @endforeach
-                </select>
-            </div>
-
-            <div class="md:col-span-9">
-                <label class="block text-xs text-slate-600 dark:text-slate-300 mb-1">Message</label>
-                <input name="message" required
-                       class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm"
-                       placeholder="Motivational message, announcement, etc.">
-
-                <div class="mt-2">
-                    <div class="text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Insert values</div>
-                    <div class="flex flex-wrap gap-2">
-                        @php
-                            $__tvPh = [
-                                '{{branch_name}}','{{period}}',
-                                '{{deals_target}}','{{deals_actual}}','{{deals_remaining}}',
-                                '{{value_target}}','{{value_actual}}','{{value_remaining}}',
-                                '{{points_target}}','{{points_actual}}','{{points_status}}',
-                                '{{listings_active}}','{{listings_avg_dom}}','{{listings_stale}}','{{listings_expiring}}','{{listings_expired}}',
-                            ];
-                        @endphp
-                        @foreach($__tvPh as $ph)
-                            <button type="button"
-                                class="px-2 py-1 rounded-full border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs hover:bg-white dark:hover:bg-slate-800"
-                                data-ph="{{ $ph }}" onclick="window.__tvInsertPh(this)">
-                                {{ $ph }}
-                            </button>
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                <div class="md:col-span-3">
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Branch (blank = global)</label>
+                    <select name="branch_id"
+                            class="w-full rounded-md text-sm px-3 py-2 transition-all duration-300"
+                            style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
+                        <option value="">Global</option>
+                        @foreach($branches as $b)
+                            <option value="{{ $b->id }}">{{ $b->name }}</option>
                         @endforeach
+                    </select>
+                </div>
+
+                <div class="md:col-span-9">
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Message</label>
+                    <input name="message" required
+                           class="w-full rounded-md text-sm px-3 py-2 transition-all duration-300 placeholder:opacity-50"
+                           style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);"
+                           onfocus="this.style.borderColor='var(--brand-button, #0ea5e9)';this.style.boxShadow='0 0 0 2px color-mix(in srgb, var(--brand-button, #0ea5e9) 20%, transparent)'"
+                           onblur="this.style.borderColor='var(--border)';this.style.boxShadow='none'"
+                           placeholder="Motivational message, announcement, etc.">
+
+                    <div class="mt-3">
+                        <div class="text-[11px] uppercase tracking-wider mb-2" style="color: var(--text-muted);">Insert values</div>
+                        <div class="flex flex-wrap gap-1.5">
+                            @php
+                                $__tvPh = [
+                                    '{{branch_name}}','{{period}}',
+                                    '{{deals_target}}','{{deals_actual}}','{{deals_remaining}}',
+                                    '{{value_target}}','{{value_actual}}','{{value_remaining}}',
+                                    '{{points_target}}','{{points_actual}}','{{points_status}}',
+                                    '{{listings_active}}','{{listings_avg_dom}}','{{listings_stale}}','{{listings_expiring}}','{{listings_expired}}',
+                                ];
+                            @endphp
+                            @foreach($__tvPh as $ph)
+                                <button type="button"
+                                    class="px-2 py-1 rounded-md text-xs transition-all duration-300"
+                                    style="border: 1px solid var(--border); background: var(--surface-2); color: var(--text-secondary);"
+                                    onmouseover="this.style.background='var(--surface)';this.style.color='var(--text-primary)'"
+                                    onmouseout="this.style.background='var(--surface-2)';this.style.color='var(--text-secondary)'"
+                                    data-ph="{{ $ph }}" onclick="window.__tvInsertPh(this)">
+                                    {{ $ph }}
+                                </button>
+                            @endforeach
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="md:col-span-2">
-                <label class="block text-xs text-slate-600 dark:text-slate-300 mb-1">Show on</label>
-                <select name="display_area" class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm">
-                    <option value="both" selected>Hero + Ticker</option>
-                    <option value="hero">Hero only</option>
-                    <option value="ticker">Ticker only</option>
-                </select>
-            </div>
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                <div class="md:col-span-3">
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Show on</label>
+                    <select name="display_area"
+                            class="w-full rounded-md text-sm px-3 py-2 transition-all duration-300"
+                            style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
+                        <option value="both" selected>Hero + Ticker</option>
+                        <option value="hero">Hero only</option>
+                        <option value="ticker">Ticker only</option>
+                    </select>
+                </div>
 
-            <div class="md:col-span-2 flex items-center gap-2">
-                <input type="hidden" name="is_enabled" value="0">
-                <input type="checkbox" name="is_enabled" value="1" checked class="rounded border-slate-300 dark:border-slate-700">
-                <span class="text-sm text-slate-700 dark:text-slate-200">Enabled</span>
-            </div>
+                <div class="md:col-span-2 flex items-center gap-2">
+                    <input type="hidden" name="is_enabled" value="0">
+                    <input type="checkbox" name="is_enabled" value="1" checked
+                           class="rounded-md" style="border-color: var(--border); accent-color: var(--brand-button, #0ea5e9);">
+                    <span class="text-sm" style="color: var(--text-secondary);">Enabled</span>
+                </div>
 
-            <div class="md:col-span-2">
-                <button class="corex-btn-primary text-sm w-full">Add</button>
+                <div class="md:col-span-2">
+                    <button class="w-full corex-btn-primary text-sm">Add Message</button>
+                </div>
             </div>
-
         </form>
     </div>
     @endif
 
-    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden">
-
-        <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
-            <h3 class="ds-section-header">{{ $showArchived ? 'Archived Messages' : 'Existing Messages' }}</h3>
-            <div class="text-xs text-slate-500 dark:text-slate-400">{{ count($messages) }} total</div>
+    {{-- Messages List --}}
+    <div class="rounded-md overflow-hidden" style="border: 1px solid var(--border); background: var(--surface);">
+        <div class="px-5 py-3 flex items-center justify-between" style="border-bottom: 1px solid var(--border);">
+            <div class="text-sm font-semibold" style="color: var(--text-primary);">{{ $showArchived ? 'Archived Messages' : 'Existing Messages' }}</div>
+            <div class="text-xs" style="color: var(--text-muted);">{{ count($messages) }} total</div>
         </div>
 
-        <div class="divide-y divide-slate-200 dark:divide-slate-800">
-
+        <div>
             @forelse($messages as $m)
-
-                <div class="p-4 space-y-2">
+                <div class="px-5 py-4 space-y-3" style="border-bottom: 1px solid var(--border);">
 
                     @if($showArchived)
-                        <div class="flex items-center justify-between">
+                        <div class="flex items-center justify-between gap-4">
                             <div>
-                                <div class="text-sm text-slate-900 dark:text-slate-100">{{ $m->message }}</div>
-                                <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 mr-2">Archived</span>
-                                    {{ $m->branch?->name ?? 'Global' }}
-                                    &middot; Created by: {{ $m->creator->name ?? 'System' }}
+                                <div class="text-sm" style="color: var(--text-primary);">{{ $m->message }}</div>
+                                <div class="text-xs mt-1.5 flex flex-wrap items-center gap-2" style="color: var(--text-muted);">
+                                    <span class="inline-flex items-center text-[11px] px-2 py-0.5 rounded-md" style="background: color-mix(in srgb, #f59e0b 10%, transparent); color: #f59e0b;">
+                                        Archived
+                                    </span>
+                                    <span>{{ $m->branch?->name ?? 'Global' }}</span>
+                                    <span>&middot;</span>
+                                    <span>Created by: <span class="font-semibold" style="color: var(--text-secondary);">{{ $m->creator->name ?? 'System' }}</span></span>
                                 </div>
                             </div>
-                            <form method="POST" action="{{ route('admin.tv-messages.restore', $m->id) }}" class="inline">
+                            <form method="POST" action="{{ route('admin.tv-messages.restore', $m->id) }}" class="inline shrink-0">
                                 @csrf
-                                <button type="submit" class="text-xs font-medium text-emerald-600 hover:text-emerald-800">Restore</button>
+                                <button type="submit" class="text-xs font-semibold transition-all duration-300" style="color: #10b981;" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">
+                                    Restore
+                                </button>
                             </form>
                         </div>
                     @else
                         <form method="POST"
                               action="{{ route('admin.tv-messages.update', $m->id) }}"
                               class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-
                             @csrf
 
                             <div class="md:col-span-3">
-                                <label class="block text-xs text-slate-600 dark:text-slate-300 mb-1">Branch</label>
+                                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Branch</label>
                                 <select name="branch_id"
-                                        class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm">
+                                        class="w-full rounded-md text-sm px-3 py-2 transition-all duration-300"
+                                        style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
                                     <option value="">Global</option>
                                     @foreach($branches as $b)
                                         <option value="{{ $b->id }}"
@@ -144,64 +171,79 @@
                                 </select>
                             </div>
 
-                            <div class="md:col-span-6">
-                                <label class="block text-xs text-slate-600 dark:text-slate-300 mb-1">Message</label>
+                            <div class="md:col-span-5">
+                                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Message</label>
                                 <input name="message"
                                        value="{{ $m->message }}"
-                                       class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm">
+                                       class="w-full rounded-md text-sm px-3 py-2 transition-all duration-300"
+                                       style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);"
+                                       onfocus="this.style.borderColor='var(--brand-button, #0ea5e9)';this.style.boxShadow='0 0 0 2px color-mix(in srgb, var(--brand-button, #0ea5e9) 20%, transparent)'"
+                                       onblur="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
                             </div>
 
                             <div class="md:col-span-2">
-                                <label class="block text-xs text-slate-600 dark:text-slate-300 mb-1">Show on</label>
-                                <select name="display_area" class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm">
+                                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Show on</label>
+                                <select name="display_area"
+                                        class="w-full rounded-md text-sm px-3 py-2 transition-all duration-300"
+                                        style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
                                     <option value="both" {{ (($m->display_area ?? 'both') === 'both') ? 'selected' : '' }}>Hero + Ticker</option>
                                     <option value="hero" {{ (($m->display_area ?? 'both') === 'hero') ? 'selected' : '' }}>Hero only</option>
                                     <option value="ticker" {{ (($m->display_area ?? 'both') === 'ticker') ? 'selected' : '' }}>Ticker only</option>
                                 </select>
                             </div>
 
-                            <div class="md:col-span-2 flex items-center gap-2">
+                            <div class="md:col-span-1 flex items-center gap-2">
                                 <input type="hidden" name="is_enabled" value="0">
                                 <input type="checkbox"
                                        name="is_enabled"
                                        value="1"
                                        {{ $m->is_enabled ? 'checked' : '' }}
-                                       class="rounded border-slate-300 dark:border-slate-700">
-                                <span class="text-sm text-slate-700 dark:text-slate-200">Enabled</span>
+                                       class="rounded-md" style="border-color: var(--border); accent-color: var(--brand-button, #0ea5e9);">
+                                <span class="text-sm" style="color: var(--text-secondary);">On</span>
                             </div>
 
                             <div class="md:col-span-1">
-                                <button class="corex-btn-primary text-sm">Save</button>
+                                <button class="w-full corex-btn-primary text-sm">Save</button>
+                            </div>
+                        </form>
+
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div class="text-xs flex flex-wrap items-center gap-2" style="color: var(--text-muted);">
+                                <span>
+                                    Created by: <span class="font-semibold" style="color: var(--text-secondary);">{{ $m->creator->name ?? 'System' }}</span>
+                                    <span class="opacity-70">({{ $m->creator->email ?? '-' }})</span>
+                                </span>
+
+                                @if(is_null($m->branch_id))
+                                    <span class="inline-flex items-center text-[11px] px-2 py-0.5 rounded-md" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 10%, transparent); color: var(--brand-icon, #0ea5e9);">
+                                        Global
+                                    </span>
+                                @else
+                                    <span class="inline-flex items-center text-[11px] px-2 py-0.5 rounded-md" style="background: color-mix(in srgb, #10b981 10%, transparent); color: #10b981;">
+                                        {{ $m->branch?->name ?? 'Branch' }}
+                                    </span>
+                                @endif
                             </div>
 
-                        </form>
-
-                        <div class="text-xs text-slate-500 dark:text-slate-400">
-                            Created by:
-                            {{ $m->creator->name ?? 'System' }}
-                            ({{ $m->creator->email ?? '-' }})
+                            <form method="POST"
+                                  action="{{ route('admin.tv-messages.delete', $m->id) }}"
+                                  onsubmit="return confirm('Delete message?');">
+                                @csrf
+                                <button class="text-xs font-semibold transition-all duration-300" style="color: #ef4444;" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">
+                                    Delete
+                                </button>
+                            </form>
                         </div>
-
-                        <form method="POST"
-                              action="{{ route('admin.tv-messages.delete', $m->id) }}"
-                              onsubmit="return confirm('Delete message?');">
-                            @csrf
-                            <button class="text-xs text-rose-600 hover:underline">Delete</button>
-                        </form>
                     @endif
 
                 </div>
 
             @empty
-
-                <div class="p-6 text-sm text-slate-500 dark:text-slate-400">
+                <div class="px-5 py-8 text-center text-sm" style="color: var(--text-muted);">
                     {{ $showArchived ? 'No archived TV messages.' : 'No TV messages yet.' }}
                 </div>
-
             @endforelse
-
         </div>
-
     </div>
 
 </div>

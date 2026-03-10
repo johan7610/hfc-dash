@@ -79,25 +79,25 @@
     $searchValue = $isServerSide ? request($searchName, '') : '';
 @endphp
 
-<div class="{{ $sticky ? 'sticky top-0 z-30' : '' }} bg-white border-b border-gray-200 shadow-sm -mx-4 -mt-4 mb-4 lg:-mx-6 lg:-mt-6 lg:mb-6">
+<div class="{{ $sticky ? 'sticky top-0 z-30' : '' }} -mx-4 -mt-4 mb-6 lg:-mx-6 lg:-mt-6 lg:mb-8" style="background: var(--surface); border-bottom: 1px solid var(--border); box-shadow: 0 1px 2px var(--shadow, rgba(0,0,0,0.05));">
     <div class="px-4 sm:px-6 lg:px-8 py-3">
         {{-- Top row: title + count + actions --}}
         <div class="flex items-center justify-between gap-4">
             <div class="flex items-center gap-3 min-w-0">
                 @if($backRoute)
-                <a href="{{ $backRoute }}" class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 flex-shrink-0">
+                <a href="{{ $backRoute }}" class="inline-flex items-center gap-1 text-sm flex-shrink-0 transition-all duration-300" style="color: var(--text-muted);">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
                     {{ $backLabel }}
                 </a>
-                <span class="text-gray-300 flex-shrink-0">|</span>
+                <span class="flex-shrink-0" style="color: var(--border);">|</span>
                 @endif
-                <h1 class="text-lg font-semibold text-gray-800 truncate">{{ $title }}</h1>
+                <h1 class="text-lg font-semibold truncate" style="color: var(--text-primary);">{{ $title }}</h1>
                 @if(!is_null($showFrom) && !is_null($showTo) && !is_null($showTotal))
-                <span class="text-sm text-gray-400 flex-shrink-0">Showing {{ $showFrom }} to {{ $showTo }} of {{ $showTotal }} results</span>
+                <span class="text-sm flex-shrink-0" style="color: var(--text-muted);">Showing {{ $showFrom }} to {{ $showTo }} of {{ $showTotal }} results</span>
                 @elseif(!is_null($showCount) && !is_null($showTotal))
-                <span class="text-sm text-gray-400 flex-shrink-0">Showing {{ $showCount }} of {{ $showTotal }}</span>
+                <span class="text-sm flex-shrink-0" style="color: var(--text-muted);">Showing {{ $showCount }} of {{ $showTotal }}</span>
                 @elseif(!is_null($showCount))
-                <span class="text-sm text-gray-400 flex-shrink-0">{{ $showCount }} results</span>
+                <span class="text-sm flex-shrink-0" style="color: var(--text-muted);">{{ $showCount }} results</span>
                 @endif
             </div>
 
@@ -118,14 +118,15 @@
             @endif
 
             <div class="relative flex-1 max-w-sm">
-                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style="color: var(--text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/>
                 </svg>
                 <input type="text"
                        name="{{ $searchName }}"
                        value="{{ $searchValue }}"
                        placeholder="{{ $searchPlaceholder }}"
-                       class="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400">
+                       class="w-full pl-10 pr-3 py-2 text-sm rounded-md focus:outline-none transition-all duration-300"
+                       style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
             </div>
 
             @if(isset($filters))
@@ -136,19 +137,20 @@
 
             <button type="submit" class="corex-btn-outline text-xs px-3 py-2">Search</button>
             @if(collect(request()->except(['sort', 'direction', 'page']))->filter(fn($v) => $v !== null && $v !== '')->isNotEmpty())
-            <a href="{{ $formAction }}" class="text-xs text-gray-500 hover:text-gray-700 underline">Clear</a>
+            <a href="{{ $formAction }}" class="text-xs underline transition-all duration-300" style="color: var(--text-muted);">Clear</a>
             @endif
         </form>
         @else
         <div class="flex items-center gap-3 mt-2">
             <div class="relative flex-1 max-w-sm">
-                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style="color: var(--text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/>
                 </svg>
                 <input type="text"
                        x-model.debounce.300ms="{{ $searchModel }}"
                        placeholder="{{ $searchPlaceholder }}"
-                       class="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400">
+                       class="w-full pl-10 pr-3 py-2 text-sm rounded-md focus:outline-none transition-all duration-300"
+                       style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
             </div>
 
             @if(isset($filters))

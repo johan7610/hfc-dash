@@ -95,11 +95,19 @@ class TvMessageController extends Controller
     // Branch Manager (own branch only)
     // -------------------------
 
-    public function bmIndex(Request $request)
+    private function bmBranchId(): int
     {
         $u = auth()->user();
-        $branchId = (int)($u?->effectiveBranchId() ?? 0);
+        $branchId = (int)($u?->effectiveBranchId() ?? ($u?->branch_id ?? 0));
+        if ($branchId === 0 && $u?->isOwnerRole()) {
+            $branchId = (int) \DB::table('branches')->orderBy('id')->value('id');
+        }
+        return $branchId;
+    }
 
+    public function bmIndex(Request $request)
+    {
+        $branchId = $this->bmBranchId();
         abort_unless($branchId > 0, 403);
 
         $messages = TvMessage::query()
@@ -123,8 +131,7 @@ class TvMessageController extends Controller
 
     public function bmStore(Request $request)
     {
-        $u = auth()->user();
-        $branchId = (int)($u?->effectiveBranchId() ?? 0);
+        $branchId = $this->bmBranchId();
         abort_unless($branchId > 0, 403);
 
         $data = $request->validate([
@@ -149,8 +156,7 @@ class TvMessageController extends Controller
 
     public function bmUpdate(Request $request, TvMessage $tvMessage)
     {
-        $u = auth()->user();
-        $branchId = (int)($u?->effectiveBranchId() ?? 0);
+        $branchId = $this->bmBranchId();
         abort_unless($branchId > 0, 403);
 
         // BM can only edit their own branch messages (never global)
@@ -179,8 +185,7 @@ class TvMessageController extends Controller
 
     public function bmDelete(TvMessage $tvMessage)
     {
-        $u = auth()->user();
-        $branchId = (int)($u?->effectiveBranchId() ?? 0);
+        $branchId = $this->bmBranchId();
         abort_unless($branchId > 0, 403);
 
         abort_unless((int)$tvMessage->branch_id === $branchId, 403);

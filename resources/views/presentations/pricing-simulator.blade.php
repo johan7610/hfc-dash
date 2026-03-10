@@ -5,7 +5,7 @@
 {{-- ══════════════════════════════════════════════════════════════════════════
      PAGE HEADER
 ══════════════════════════════════════════════════════════════════════════ --}}
-<div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-6">
+<div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4 mb-6">
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div>
             <h2 class="text-xl font-bold text-white leading-tight">Pricing Simulator</h2>
@@ -39,17 +39,17 @@
             <label class="ds-label block mb-1">Commission %</label>
             <input type="number" id="cfg-commission" value="{{ $config['commission_pct'] ?? 5.0 }}"
                    step="0.5" min="0" max="15"
-                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                   class="pres-input w-full px-3 py-2 text-sm">
         </div>
         <div>
             <label class="ds-label block mb-1">Transfer Cost %</label>
             <input type="number" id="cfg-transfer" value="{{ $config['transfer_cost_pct'] ?? 4.0 }}"
                    step="0.5" min="0" max="10"
-                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                   class="pres-input w-full px-3 py-2 text-sm">
         </div>
         <div>
             <label class="ds-label block mb-1">Monthly Holding Cost</label>
-            <div class="flex items-center border border-gray-200 rounded px-3 py-2 bg-gray-50 text-sm text-gray-700">
+            <div class="flex items-center rounded-md px-3 py-2 text-sm" style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
                 R {{ number_format($config['monthly_holding_cost'] ?? 0, 0, '.', ' ') }}
             </div>
             <input type="hidden" id="cfg-holding" value="{{ (int)($config['monthly_holding_cost'] ?? 0) }}">
@@ -71,10 +71,10 @@
         'amber'  => 'bg-amber-50 border-amber-200 text-amber-800',
         'orange' => 'bg-orange-50 border-orange-200 text-orange-800',
         'red'    => 'bg-red-50 border-red-200 text-red-800',
-        default  => 'bg-gray-50 border-gray-200 text-gray-800',
+        default  => 'border text-inherit',
     };
 @endphp
-<div class="rounded-lg border p-4 mb-6 {{ $stockColorClass }}">
+<div class="rounded-md border p-4 mb-6 {{ $stockColorClass }}">
     <div class="flex items-center flex-wrap gap-3 text-sm">
         <span class="font-bold text-lg">{{ $stock['total_active_stock'] }}</span>
         <span>competing listings</span>
@@ -109,8 +109,8 @@
     <div class="flex items-center justify-between mb-3">
         <h2 class="ds-section-header">Pricing Scenarios</h2>
         <div class="flex gap-2">
-            <button id="btn-add-scenario" class="text-xs px-3 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200">+ Add Scenario</button>
-            <button id="btn-reset" class="text-xs px-3 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200">Reset to Defaults</button>
+            <button id="btn-add-scenario" class="corex-btn-outline text-xs px-3 py-1">+ Add Scenario</button>
+            <button id="btn-reset" class="corex-btn-outline text-xs px-3 py-1">Reset to Defaults</button>
         </div>
     </div>
 
@@ -194,9 +194,9 @@
 {{-- ══════════════════════════════════════════════════════════════════════════
      NARRATIVE CALLOUT
 ══════════════════════════════════════════════════════════════════════════ --}}
-<div class="bg-sky-50 border border-sky-200 rounded-lg p-4 mb-6" id="narrative-box">
-    <h3 class="text-xs font-semibold text-[#0b2a4a] uppercase tracking-wide mb-2">Key Insight</h3>
-    <p class="text-sm text-[#0b2a4a] leading-relaxed" id="narrative-text">{{ $narrative }}</p>
+<div class="rounded-md p-4 mb-6" id="narrative-box" style="background: color-mix(in srgb, var(--brand-icon) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--brand-icon) 20%, transparent);">
+    <h3 class="text-xs font-semibold uppercase tracking-wide mb-2" style="color: var(--brand-default, #0b2a4a);">Key Insight</h3>
+    <p class="text-sm leading-relaxed" id="narrative-text" style="color: var(--text-primary);">{{ $narrative }}</p>
 </div>
 
 {{-- ══════════════════════════════════════════════════════════════════════════
@@ -211,9 +211,9 @@
         Save Configuration
     </button>
 
-    <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+    <label class="flex items-center gap-2 text-sm cursor-pointer" style="color: var(--text-primary);">
         <input type="checkbox" id="chk-include-pdf" {{ $includeInPdf ? 'checked' : '' }}
-               class="rounded border-gray-300 text-[#00b4d8] focus:ring-[#00b4d8]">
+               class="rounded" style="border-color: var(--border); color: var(--brand-button, #0ea5e9);">
         Include in PDF
     </label>
 
@@ -223,7 +223,7 @@
     </a>
 
     <a href="{{ route('presentations.analysis', $presentation) }}"
-       class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded hover:bg-gray-200">
+       class="corex-btn-outline text-sm">
         &larr; Back to Analysis
     </a>
 </div>

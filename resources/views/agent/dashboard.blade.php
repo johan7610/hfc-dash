@@ -1,9 +1,9 @@
 <x-app-layout>
     <x-slot name="header">
-        <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+        <div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                 <div>
-                    <h2 class="text-xl font-bold text-white leading-tight">
+                    <h2 class="text-xl font-bold text-white leading-tight tracking-tight">
                         Agent Dashboard — {{ $snapshot['month_label'] }}
                     </h2>
                     <div class="text-sm text-white/60">
@@ -92,11 +92,11 @@
                 ->expiringSoon(30)->count();
         @endphp
         @if($expiringMandateCount > 0)
-        <div class="ds-status-card" style="border-left-color: var(--ds-amber); background: #fffbeb;">
+        <div class="ds-status-card" style="border-left: 3px solid var(--ds-amber);">
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5" style="color: var(--ds-amber);"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
-                    <span class="text-sm font-semibold" style="color: #92400e;">You have {{ $expiringMandateCount }} mandate{{ $expiringMandateCount === 1 ? '' : 's' }} expiring in the next 30 days</span>
+                    <span class="text-sm font-semibold" style="color: var(--ds-amber);">You have {{ $expiringMandateCount }} mandate{{ $expiringMandateCount === 1 ? '' : 's' }} expiring in the next 30 days</span>
                 </div>
                 <a href="{{ route('filing-register.index', ['agent_id' => auth()->id(), 'status' => 'Expiring']) }}" class="text-xs font-semibold underline" style="color: var(--ds-amber);">View</a>
             </div>
@@ -118,12 +118,15 @@
 
                     <div class="flex flex-wrap md:flex-nowrap items-center gap-2">
                         <form method="GET" action="{{ route('agent.dashboard') }}" class="flex items-center gap-2">
-                            <label class="text-sm font-semibold text-gray-700">Period</label>
-                            <input type="month" class="h-10 px-2 text-sm w-auto" name="period" value="{{ $snapshot['period'] ?? '' }}" />
-                            <button type="submit" class="px-3 py-2 text-sm rounded-lg border bg-white hover:bg-gray-50">Go</button>
+                            <label class="text-sm font-semibold" style="color: var(--text-secondary);">Period</label>
+                            <input type="month" class="h-10 px-2 text-sm w-auto rounded-md transition-all duration-300"
+                                   style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);"
+                                   name="period" value="{{ $snapshot['period'] ?? '' }}" />
+                            <button type="submit" class="px-3 py-2 text-sm rounded-md transition-all duration-300"
+                                    style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">Go</button>
                         </form>
 
-                        <a href="{{ route('agent.daily') }}" class="btn-primary inline-flex items-center justify-center min-h-[40px] px-4 whitespace-nowrap">
+                        <a href="{{ route('agent.daily') }}" class="corex-btn-primary inline-flex items-center justify-center min-h-[40px] px-4 whitespace-nowrap">
                             Daily Activity
                         </a>
                     </div>
@@ -132,28 +135,28 @@
                 {{-- Points + Value (agent-focused) --}}
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {{-- Points --}}
-                    <div class="rounded-2xl border border-black/10 bg-gray-50 p-4">
+                    <div class="ds-status-card">
                         <div class="flex items-end justify-between gap-4">
                             <div>
-                                <div class="text-sm text-gray-600 font-semibold">Points</div>
-                                <div class="text-3xl font-extrabold text-gray-900 leading-tight">
+                                <div class="ds-label">Points</div>
+                                <div class="ds-value-xl leading-tight">
                                     {{ number_format($pointsActual, 1) }}
-                                    <span class="text-gray-400 font-bold">/ {{ number_format($pointsTarget, 0) }}</span>
+                                    <span style="color: var(--text-muted);" class="font-bold">/ {{ number_format($pointsTarget, 0) }}</span>
                                     @if($pointsTarget > 0 && $pointsActual >= $pointsTarget)
                                         <span title="Target achieved">🏆</span>
                                     @endif
                                 </div>
-                                <div class="text-sm text-gray-700 mt-1 font-semibold">
+                                <div class="text-sm font-semibold mt-1" style="color: var(--text-secondary);">
                                     Progress {{ $p['points_pct'] ?? '—' }}%
                                 </div>
                             </div>
 
                             <div class="text-right">
-                                <div class="text-sm text-gray-600 font-semibold">Remaining</div>
-                                <div class="text-2xl font-extrabold text-gray-900 leading-tight">
+                                <div class="ds-label">Remaining</div>
+                                <div class="ds-value-lg leading-tight">
                                     {{ number_format($pointsRemaining, 1) }}
                                 </div>
-                                <div class="text-sm text-gray-700 mt-1">
+                                <div class="text-sm mt-1" style="color: var(--text-secondary);">
                                     Need <span class="font-bold">{{ number_format($pointsPerDayNeeded, 1) }}</span>/day
                                 </div>
                             </div>
@@ -166,25 +169,25 @@
                     </div>
 
                     {{-- Value --}}
-                    <div class="rounded-2xl border border-black/10 bg-gray-50 p-4">
+                    <div class="ds-status-card">
                         <div class="flex items-end justify-between gap-4">
                             <div>
-                                <div class="text-sm text-gray-600 font-semibold">Sales Value</div>
-                                <div class="text-3xl font-extrabold text-gray-900 leading-tight">
+                                <div class="ds-label">Sales Value</div>
+                                <div class="ds-value-xl leading-tight">
                                     R {{ number_format((float)($a['sales_value'] ?? 0),0) }}
-                                    <span class="text-gray-400 font-bold">/ R {{ number_format((float)($t['value_target'] ?? 0),0) }}</span>
+                                    <span style="color: var(--text-muted);" class="font-bold">/ R {{ number_format((float)($t['value_target'] ?? 0),0) }}</span>
                                     @if(($t['value_target'] ?? 0) > 0 && ((float)($a['sales_value'] ?? 0) >= (float)($t['value_target'] ?? 0)))
                                         <span title="Target achieved">🏆</span>
                                     @endif
                                 </div>
-                                <div class="text-sm text-gray-700 mt-1 font-semibold">
+                                <div class="text-sm font-semibold mt-1" style="color: var(--text-secondary);">
                                     Progress {{ $p['value_pct'] ?? '—' }}%
                                 </div>
                             </div>
 
                             <div class="text-right">
-                                <div class="text-sm text-gray-600 font-semibold">Remaining</div>
-                                <div class="text-2xl font-extrabold text-gray-900 leading-tight">
+                                <div class="ds-label">Remaining</div>
+                                <div class="ds-value-lg leading-tight">
                                     R {{ number_format(max(0, (float)($t['value_target'] ?? 0) - (float)($a['sales_value'] ?? 0)), 0) }}
                                 </div>
                             </div>
@@ -209,68 +212,67 @@
             </div>
         </div>
 
-<div class="ds-status-card">
-                <h3 class="ds-section-header mb-4">Your Actuals</h3>
-                    <div class="text-xs text-gray-500 -mt-2 mb-4">What you’ve done so far — updated from Deals + Daily Activity + Points.</div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                    <div class="rounded-xl border border-black/10 bg-gray-50 p-4">
-                        <div class="text-sm text-gray-600">Deals done</div>
-                                                <div class="text-2xl font-bold text-gray-900">{{ $a['deals_count'] }}</div>
-                        <div class="mt-1 text-xs text-gray-500">All-time: {{ $a['deals_count_all_time'] ?? 0 }}</div>
-                    </div>
-                    <div class="rounded-xl border border-black/10 bg-gray-50 p-4">
-                        <div class="text-sm text-gray-600">Sales value</div>
-                                                <div class="text-2xl font-bold text-gray-900">R {{ number_format((float)$a['sales_value'],0) }}</div>
-                        <div class="mt-1 text-xs text-gray-500">All-time: R {{ number_format((float)($a['sales_value_all_time'] ?? 0),0) }}</div>
-                    </div>
-                    <div class="rounded-xl border border-black/10 bg-gray-50 p-4">
-                        <div class="text-sm text-gray-600">Avg sale price (captured)</div>
-                                                <div class="text-2xl font-bold text-gray-900">R {{ number_format((float)($a['avg_sale_price_actual'] ?? 0), 0) }}</div>
-                        <div class="mt-1 text-xs text-gray-500">All-time: R {{ number_format((float)($a['avg_sale_price_actual_all_time'] ?? 0), 0) }}</div>
-                    </div>
-                    <div class="rounded-xl border border-black/10 bg-gray-50 p-4">
-                        <div class="text-sm text-gray-600">Avg commission % (Ex VAT)</div>
-                                                <div class="text-2xl font-bold text-gray-900">{{ number_format((float)($a['effective_commission_percent'] ?? 0), 2) }}%</div>
-                        <div class="mt-1 text-xs text-gray-500">All-time: {{ number_format((float)($a['effective_commission_percent_all_time'] ?? 0), 2) }}%</div>
-                    </div>
+        {{-- YOUR ACTUALS --}}
+        <div class="ds-status-card">
+            <h3 class="ds-section-header mb-1">Your Actuals</h3>
+            <div class="ds-section-sub mb-4">What you've done so far — updated from Deals + Daily Activity + Points.</div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                <div class="ds-status-card">
+                    <div class="ds-label">Deals done</div>
+                    <div class="ds-value-lg">{{ $a['deals_count'] }}</div>
+                    <div class="mt-1 ds-label" style="text-transform:none; letter-spacing:normal;">All-time: {{ $a['deals_count_all_time'] ?? 0 }}</div>
+                </div>
+                <div class="ds-status-card">
+                    <div class="ds-label">Sales value</div>
+                    <div class="ds-value-lg">R {{ number_format((float)$a['sales_value'],0) }}</div>
+                    <div class="mt-1 ds-label" style="text-transform:none; letter-spacing:normal;">All-time: R {{ number_format((float)($a['sales_value_all_time'] ?? 0),0) }}</div>
+                </div>
+                <div class="ds-status-card">
+                    <div class="ds-label">Avg sale price (captured)</div>
+                    <div class="ds-value-lg">R {{ number_format((float)($a['avg_sale_price_actual'] ?? 0), 0) }}</div>
+                    <div class="mt-1 ds-label" style="text-transform:none; letter-spacing:normal;">All-time: R {{ number_format((float)($a['avg_sale_price_actual_all_time'] ?? 0), 0) }}</div>
+                </div>
+                <div class="ds-status-card">
+                    <div class="ds-label">Avg commission % (Ex VAT)</div>
+                    <div class="ds-value-lg">{{ number_format((float)($a['effective_commission_percent'] ?? 0), 2) }}%</div>
+                    <div class="mt-1 ds-label" style="text-transform:none; letter-spacing:normal;">All-time: {{ number_format((float)($a['effective_commission_percent_all_time'] ?? 0), 2) }}%</div>
+                </div>
 
-                    <div class="rounded-xl border border-black/10 bg-gray-50 p-4">
-                        <div class="text-sm text-gray-600">Daily activity entries</div>
-
-                                                <div class="text-2xl font-bold text-gray-900">{{ $a['daily_rows'] }}</div>
-                        <div class="mt-1 text-xs text-gray-500">All-time: {{ $a['daily_rows_all_time'] ?? 0 }}</div>
-                    </div>
-                    <div class="rounded-xl border border-black/10 bg-gray-50 p-4">
-<div class="text-sm text-gray-600">Listing stock</div>
-                        <div class="mt-2 grid grid-cols-2 gap-3">
-                            <div>
-                                <div class="text-xs text-gray-500">Active</div>
-                                <div class="text-xl font-bold text-gray-900"><a class="underline hover:no-underline" href="{{ route('agent.listings', ['filter' => 'active']) }}">{{ (int)($listingStats['total'] ?? 0) }}</a></div>
-                            </div>
-                            <div>
-                                <div class="text-xs text-gray-500">Avg DOM</div>
-                                <div class="text-xl font-bold text-gray-900"><a class="underline hover:no-underline" href="{{ route('agent.listings', ['filter' => 'dom']) }}">{{ (int)($listingStats['avg_days_on_market'] ?? 0) }}</a></div>
-                            </div>
-                            <div>
-                                <div class="text-xs text-gray-500">Stale (14d)</div>
-                                <div class="text-xl font-bold text-gray-900"><a class="underline hover:no-underline" href="{{ route('agent.listings', ['filter' => 'stale']) }}">{{ (int)($listingStats['stale'] ?? 0) }}</a></div>
-                            </div>
-                            <div>
-                                <div class="text-xs text-gray-500">Expiring (14d)</div>
-                                <div class="text-xl font-bold text-gray-900"><a class="underline hover:no-underline" href="{{ route('agent.listings', ['filter' => 'expiring']) }}">{{ (int)($listingStats['expiring_soon'] ?? 0) }}</a></div>
-                            </div>
+                <div class="ds-status-card">
+                    <div class="ds-label">Daily activity entries</div>
+                    <div class="ds-value-lg">{{ $a['daily_rows'] }}</div>
+                    <div class="mt-1 ds-label" style="text-transform:none; letter-spacing:normal;">All-time: {{ $a['daily_rows_all_time'] ?? 0 }}</div>
+                </div>
+                <div class="ds-status-card">
+                    <div class="ds-label">Listing stock</div>
+                    <div class="mt-2 grid grid-cols-2 gap-3">
+                        <div>
+                            <div class="ds-label" style="text-transform:none; letter-spacing:normal;">Active</div>
+                            <div class="ds-value-lg"><a class="ds-link" href="{{ route('agent.listings', ['filter' => 'active']) }}">{{ (int)($listingStats['total'] ?? 0) }}</a></div>
                         </div>
-                        <div class="mt-2 text-xs text-gray-500">Expired: <a class="underline hover:no-underline" href="{{ route('agent.listings', ['filter' => 'expired']) }}">{{ (int)($listingStats['expired'] ?? 0) }}</a></div>
+                        <div>
+                            <div class="ds-label" style="text-transform:none; letter-spacing:normal;">Avg DOM</div>
+                            <div class="ds-value-lg"><a class="ds-link" href="{{ route('agent.listings', ['filter' => 'dom']) }}">{{ (int)($listingStats['avg_days_on_market'] ?? 0) }}</a></div>
+                        </div>
+                        <div>
+                            <div class="ds-label" style="text-transform:none; letter-spacing:normal;">Stale (14d)</div>
+                            <div class="ds-value-lg"><a class="ds-link" href="{{ route('agent.listings', ['filter' => 'stale']) }}">{{ (int)($listingStats['stale'] ?? 0) }}</a></div>
+                        </div>
+                        <div>
+                            <div class="ds-label" style="text-transform:none; letter-spacing:normal;">Expiring (14d)</div>
+                            <div class="ds-value-lg"><a class="ds-link" href="{{ route('agent.listings', ['filter' => 'expiring']) }}">{{ (int)($listingStats['expiring_soon'] ?? 0) }}</a></div>
+                        </div>
                     </div>
+                    <div class="mt-2 ds-label" style="text-transform:none; letter-spacing:normal;">Expired: <a class="ds-link" href="{{ route('agent.listings', ['filter' => 'expired']) }}">{{ (int)($listingStats['expired'] ?? 0) }}</a></div>
                 </div>
             </div>
         </div>
 
-                {{-- YOU vs BRANCH vs COMPANY (WOW scorecards, totals only) --}}
+        {{-- YOU vs BRANCH vs COMPANY (WOW scorecards, totals only) --}}
         <div class="ds-status-card">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="ds-section-header">You vs Branch vs Company</h3>
-                <div class="text-xs text-gray-500">Totals only (privacy safe)</div>
+                <div class="ds-label" style="text-transform:none; letter-spacing:normal;">Totals only (privacy safe)</div>
             </div>
 
             @php
@@ -307,21 +309,21 @@
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {{-- YOU --}}
-                <div class="rounded-2xl border border-black/10 bg-gray-50 p-4">
+                <div class="ds-status-card">
                     <div class="flex items-start justify-between gap-3">
                         <div>
-                            <div class="text-xs uppercase tracking-wide text-gray-500 font-semibold">You</div>
-                            <div class="mt-1 text-2xl font-extrabold text-gray-900 leading-tight">
+                            <div class="ds-label">You</div>
+                            <div class="mt-1 ds-value-lg leading-tight">
                                 {{ number_format($youPointsA, 1) }}
-                                <span class="text-gray-400 font-bold">/ {{ number_format($youPointsT, 0) }}</span>
+                                <span style="color: var(--text-muted);" class="font-bold">/ {{ number_format($youPointsT, 0) }}</span>
                                 @if($youPointsT > 0 && $youPointsA >= $youPointsT) <span title="Target achieved">🏆</span> @endif
                             </div>
-                            <div class="text-sm text-gray-700 font-semibold">Points</div>
+                            <div class="text-sm font-semibold" style="color: var(--text-secondary);">Points</div>
                         </div>
 
                         <div class="text-right">
-                            <div class="text-xs uppercase tracking-wide text-gray-500 font-semibold">Status</div>
-                            <div class="mt-1 text-lg font-extrabold text-gray-900">
+                            <div class="ds-label">Status</div>
+                            <div class="mt-1 ds-value-lg">
                                 {{ $pointsStatus ?? '—' }}
                             </div>
                         </div>
@@ -335,11 +337,11 @@
                     <div class="mt-4 grid grid-cols-2 gap-3">
 
                           <div>
-                              <div class="text-xs text-gray-600 font-semibold">Value</div>
-                            <div class="text-lg font-extrabold text-gray-900">
+                              <div class="ds-label" style="text-transform:none; letter-spacing:normal;">Value</div>
+                            <div class="ds-value-lg">
                                 R {{ number_format($youValueA,0) }}
                             </div>
-                            <div class="text-xs text-gray-500">
+                            <div class="ds-label" style="text-transform:none; letter-spacing:normal;">
                                 / R {{ number_format($youValueT,0) }}
                                 @if($youValueT > 0 && $youValueA >= $youValueT) <span title="Target achieved">🏆</span> @endif
                             </div>
@@ -349,31 +351,31 @@
                         </div>
                     </div>
 
-                    <div class="mt-4 text-xs text-gray-600">
-                        Daily activity entries: <span class="font-bold text-gray-900">{{ (int)($a['daily_rows'] ?? 0) }}</span>
+                    <div class="mt-4 text-xs" style="color: var(--text-secondary);">
+                        Daily activity entries: <span class="font-bold" style="color: var(--text-primary);">{{ (int)($a['daily_rows'] ?? 0) }}</span>
                     </div>
                 </div>
 
                 {{-- BRANCH --}}
-                <div class="rounded-2xl border border-black/10 bg-gray-50 p-4">
-                    <div class="text-xs uppercase tracking-wide text-gray-500 font-semibold">Your Branch</div>
+                <div class="ds-status-card">
+                    <div class="ds-label">Your Branch</div>
 
                     @if($cmpBranch)
                         <div class="mt-4 ds-label">Value progress</div>
-                        <div class="mt-1 text-lg font-extrabold text-gray-900">
+                        <div class="mt-1 ds-value-lg">
                             R {{ number_format($bValueA,0) }}
-                            <span class="text-gray-400 font-bold">/ R {{ number_format($bValueT,0) }}</span>
+                            <span style="color: var(--text-muted);" class="font-bold">/ R {{ number_format($bValueT,0) }}</span>
                             @if($bValueT > 0 && $bValueA >= $bValueT) <span title="Target achieved">🏆</span> @endif
                         </div>
                         <div class="mt-2 ds-progress-track">
                             <div class="ds-progress-bar {{ $barClass($bValuePct) }}" style="width: {{ (int)($bValuePct ?? 0) }}%"></div>
                         </div>
 
-                        <div class="mt-4 text-xs text-gray-600">
-                            Daily activity entries: <span class="font-bold text-gray-900">{{ (int)($cmpBranch['actuals']['daily_rows'] ?? 0) }}</span>
+                        <div class="mt-4 text-xs" style="color: var(--text-secondary);">
+                            Daily activity entries: <span class="font-bold" style="color: var(--text-primary);">{{ (int)($cmpBranch['actuals']['daily_rows'] ?? 0) }}</span>
                         </div>
                     @else
-                        <div class="mt-2 text-sm text-gray-600">No branch assigned.</div>
+                        <div class="mt-2 text-sm" style="color: var(--text-secondary);">No branch assigned.</div>
                         <div class="mt-3 ds-progress-track">
                             <div class="ds-progress-bar ds-bar-navy" style="width: 10%"></div>
                         </div>
@@ -381,25 +383,25 @@
                 </div>
 
                 {{-- COMPANY --}}
-                <div class="rounded-2xl border border-black/10 bg-gray-50 p-4">
-                    <div class="text-xs uppercase tracking-wide text-gray-500 font-semibold">Company</div>
+                <div class="ds-status-card">
+                    <div class="ds-label">Company</div>
 
                     @if($cmpCompany)
                         <div class="mt-4 ds-label">Value progress</div>
-                        <div class="mt-1 text-lg font-extrabold text-gray-900">
+                        <div class="mt-1 ds-value-lg">
                             R {{ number_format($cValueA,0) }}
-                            <span class="text-gray-400 font-bold">/ R {{ number_format($cValueT,0) }}</span>
+                            <span style="color: var(--text-muted);" class="font-bold">/ R {{ number_format($cValueT,0) }}</span>
                             @if($cValueT > 0 && $cValueA >= $cValueT) <span title="Target achieved">🏆</span> @endif
                         </div>
                         <div class="mt-2 ds-progress-track">
                             <div class="ds-progress-bar {{ $barClass($cValuePct) }}" style="width: {{ (int)($cValuePct ?? 0) }}%"></div>
                         </div>
 
-                        <div class="mt-4 text-xs text-gray-600">
-                            Daily activity entries: <span class="font-bold text-gray-900">{{ (int)($cmpCompany['actuals']['daily_rows'] ?? 0) }}</span>
+                        <div class="mt-4 text-xs" style="color: var(--text-secondary);">
+                            Daily activity entries: <span class="font-bold" style="color: var(--text-primary);">{{ (int)($cmpCompany['actuals']['daily_rows'] ?? 0) }}</span>
                         </div>
                     @else
-                        <div class="mt-2 text-sm text-gray-600">Not available.</div>
+                        <div class="mt-2 text-sm" style="color: var(--text-secondary);">Not available.</div>
                         <div class="mt-3 ds-progress-track">
                             <div class="ds-progress-bar ds-bar-navy" style="width: 10%"></div>
                         </div>
@@ -408,10 +410,11 @@
             </div>
         </div>
 
+        {{-- MOMENTUM --}}
         <div class="ds-status-card">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="ds-section-header">Momentum — last 7 days</h3>
-                <div class="text-xs text-gray-500">Points per day + streak (no JS)</div>
+                <div class="ds-label" style="text-transform:none; letter-spacing:normal;">Points per day + streak</div>
             </div>
 
             @php
@@ -451,27 +454,27 @@
                         $pts = $pointsByDate[$d] ?? 0;
                         $h = (int)round(($pts / $maxPts) * 64);
                     @endphp
-                    <div class="rounded-xl border border-black/10 bg-gray-50 p-2 text-center">
-                        <div class="text-[10px] text-gray-600 font-semibold">{{ $dt->format('D') }}</div>
+                    <div class="ds-status-card p-2 text-center">
+                        <div class="ds-label" style="text-transform:none; letter-spacing:normal; font-size:10px;">{{ $dt->format('D') }}</div>
                         <div class="mt-2 h-16 flex items-end justify-center">
-                            <div class="w-6 rounded" style="height: {{ $h }}px; background: #0b2a4a;"></div>
+                            <div class="w-6 rounded-md" style="height: {{ $h }}px; background: var(--brand-default, #0b2a4a);"></div>
                         </div>
-                        <div class="mt-2 text-xs font-extrabold text-gray-900">{{ number_format($pts, 1) }}</div>
+                        <div class="mt-2 text-xs font-extrabold" style="color: var(--text-primary);">{{ number_format($pts, 1) }}</div>
                     </div>
                 @endforeach
             </div>
 
             <div class="mt-4 flex items-center justify-between">
-                <div class="text-sm text-gray-700">
-                    Streak: <span class="font-extrabold text-gray-900">{{ $streak }}</span> day{{ $streak === 1 ? '' : 's' }}
+                <div class="text-sm" style="color: var(--text-secondary);">
+                    Streak: <span class="font-extrabold" style="color: var(--text-primary);">{{ $streak }}</span> day{{ $streak === 1 ? '' : 's' }}
                 </div>
-                <div class="text-sm text-gray-600">
-                    Today aim: <span class="font-bold text-gray-900">{{ number_format(max(10, round($pointsPerDayNeeded, 0)), 0) }}</span> pts
+                <div class="text-sm" style="color: var(--text-secondary);">
+                    Today aim: <span class="font-bold" style="color: var(--text-primary);">{{ number_format(max(10, round($pointsPerDayNeeded, 0)), 0) }}</span> pts
                 </div>
             </div>
         </div>
 
-        <div class="text-xs text-gray-500">
+        <div class="text-xs" style="color: var(--text-muted);">
             Privacy: Agent view shows only derived targets + actuals. No worksheet net-income fields are exposed to anyone else.
         </div>
 

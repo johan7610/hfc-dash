@@ -5,32 +5,31 @@
      x-data="{ showAdd: false, editId: null }">
 
     {{-- Page header --}}
-    <div class="rounded-2xl px-6 py-5 flex items-center justify-between" style="background:var(--brand-default,#0b2a4a);">
+    <div class="rounded-md px-6 py-5 flex items-center justify-between" style="background:var(--brand-default,#0b2a4a);">
         <div>
-            <h2 class="text-xl font-bold text-white">Contacts</h2>
+            <h2 class="text-xl font-bold text-white tracking-tight">Contacts</h2>
             <p class="text-sm mt-0.5" style="color:rgba(255,255,255,0.55);">Manage your contacts and leads.</p>
         </div>
-        <button type="button" @click="showAdd = !showAdd"
-                class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-opacity"
-                style="background:var(--brand-button,#0ea5e9);"
-                onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+        <button type="button" @click="showAdd = !showAdd" class="corex-btn-primary text-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+            </svg>
             Add Contact
         </button>
     </div>
 
     @if(session('success'))
-        <div class="rounded-xl border px-4 py-3 text-sm font-medium" style="border-color:#bbf7d0; background:#f0fdf4; color:#166534;">
+        <div class="rounded-md border px-4 py-3 text-sm font-medium" style="border-color:#bbf7d0; background:#f0fdf4; color:#166534;">
             {{ session('success') }}
         </div>
     @endif
     @if(session('error'))
-        <div class="rounded-xl border px-4 py-3 text-sm font-medium" style="border-color:#fecaca; background:#fef2f2; color:#991b1b;">
+        <div class="rounded-md border px-4 py-3 text-sm font-medium" style="border-color:#fecaca; background:#fef2f2; color:#991b1b;">
             {{ session('error') }}
         </div>
     @endif
     @if($errors->any())
-        <div class="rounded-xl border px-4 py-3 text-sm" style="border-color:#fecaca; background:#fef2f2; color:#991b1b;">
+        <div class="rounded-md border px-4 py-3 text-sm" style="border-color:#fecaca; background:#fef2f2; color:#991b1b;">
             {{ $errors->first() }}
         </div>
     @endif
@@ -38,7 +37,7 @@
     {{-- Add Contact Form (collapsible) --}}
     <div x-show="showAdd" x-cloak
          x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0 -translate-y-2" x-transition:enter-end="opacity-100 translate-y-0"
-         style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:24px;">
+         class="rounded-md" style="background:var(--surface); border:1px solid var(--border); padding:24px;">
         <div class="text-sm font-bold mb-4" style="color:var(--text-primary);">New Contact</div>
         <form method="POST" action="{{ route('corex.contacts.store') }}" class="space-y-4">
             @csrf
@@ -47,34 +46,34 @@
                     <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">First Name <span class="text-red-500">*</span></label>
                     <input type="text" name="first_name" value="{{ old('first_name') }}" required
                            placeholder="e.g. John"
-                           class="w-full rounded-lg px-3 py-2 text-sm"
-                           style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                           class="w-full rounded-md px-3 py-2 text-sm transition-all duration-300"
+                           style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); outline:none;">
                 </div>
                 <div>
                     <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Surname <span class="text-red-500">*</span></label>
                     <input type="text" name="last_name" value="{{ old('last_name') }}" required
                            placeholder="e.g. Smith"
-                           class="w-full rounded-lg px-3 py-2 text-sm"
-                           style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                           class="w-full rounded-md px-3 py-2 text-sm transition-all duration-300"
+                           style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); outline:none;">
                 </div>
                 <div>
                     <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Phone Number <span class="text-red-500">*</span></label>
                     <input type="text" name="phone" value="{{ old('phone') }}" required
                            placeholder="e.g. 082 123 4567"
-                           class="w-full rounded-lg px-3 py-2 text-sm"
-                           style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                           class="w-full rounded-md px-3 py-2 text-sm transition-all duration-300"
+                           style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); outline:none;">
                 </div>
                 <div>
                     <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Email <span style="color:var(--text-muted); font-weight:400;">(optional)</span></label>
                     <input type="email" name="email" value="{{ old('email') }}"
                            placeholder="e.g. john@example.com"
-                           class="w-full rounded-lg px-3 py-2 text-sm"
-                           style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                           class="w-full rounded-md px-3 py-2 text-sm transition-all duration-300"
+                           style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); outline:none;">
                 </div>
                 <div>
                     <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Contact Type</label>
                     <select name="contact_type_id"
-                            class="w-full rounded-lg px-3 py-2 text-sm"
+                            class="w-full rounded-md px-3 py-2 text-sm transition-all duration-300"
                             style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
                         <option value="">— No type —</option>
                         @foreach($contactTypes as $type)
@@ -84,19 +83,19 @@
                         @endforeach
                     </select>
                     @if($contactTypes->isEmpty())
-                        <p class="text-xs mt-1" style="color:var(--text-muted);">No types yet — add them in <a href="{{ route('corex.settings', ['tab'=>'feature','fsec'=>'contacts']) }}" class="underline text-[#00b4d8]">Settings → Feature Settings → Contacts</a>.</p>
+                        <p class="text-xs mt-1" style="color:var(--text-muted);">No types yet — add them in <a href="{{ route('corex.settings', ['tab'=>'feature','fsec'=>'contacts']) }}" class="underline" style="color:var(--brand-icon,#0ea5e9);">Settings → Feature Settings → Contacts</a>.</p>
                     @endif
                 </div>
                 <div class="sm:col-span-2 lg:col-span-1">
                     <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Notes <span style="color:var(--text-muted); font-weight:400;">(optional)</span></label>
                     <textarea name="notes" rows="2" placeholder="Any additional notes..."
-                              class="w-full rounded-lg px-3 py-2 text-sm resize-none"
-                              style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">{{ old('notes') }}</textarea>
+                              class="w-full rounded-md px-3 py-2 text-sm resize-none transition-all duration-300"
+                              style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); outline:none;">{{ old('notes') }}</textarea>
                 </div>
             </div>
             <div class="flex items-center gap-3 pt-2">
                 <button type="submit" class="corex-btn-primary text-sm">Save Contact</button>
-                <button type="button" @click="showAdd = false" class="text-sm" style="color:var(--text-muted);">Cancel</button>
+                <button type="button" @click="showAdd = false" class="text-sm transition-all duration-300" style="color:var(--text-muted);">Cancel</button>
             </div>
         </form>
     </div>
@@ -112,139 +111,132 @@
                 return this.agents.filter(a => a.name.toLowerCase().includes(q) || a.email.toLowerCase().includes(q));
             }
          }"
-         class="flex flex-wrap items-center gap-3">
+         class="rounded-md px-4 py-3" style="background:var(--surface);border:1px solid var(--border);">
 
-        {{-- Agent picker (admin/BM only) --}}
-        @if($canPickAgent)
-        <div class="relative">
-            <button type="button" @click="agentPicker = !agentPicker"
-                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors"
-                    style="{{ $selectedAgent ? 'background:var(--brand-default,#0b2a4a);color:#fff;border-color:var(--brand-default,#0b2a4a);' : 'background:var(--surface);color:var(--text-secondary);border-color:var(--border);' }}">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <circle cx="9" cy="7" r="4"/><path stroke-linecap="round" stroke-linejoin="round" d="M3 21v-1a6 6 0 016-6h0M16 19l2 2 4-4"/>
+        <form method="GET" action="{{ route('corex.contacts.index') }}" class="flex flex-wrap items-center gap-3">
+
+            {{-- Search --}}
+            <div class="relative flex-1 min-w-[180px] max-w-xs">
+                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style="color:var(--text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/>
                 </svg>
-                @if($selectedAgent)
-                    {{ $selectedAgent->name }}
-                @else
-                    View Agent
-                @endif
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
-                </svg>
-            </button>
-
-            @if($selectedAgent)
-            <a href="{{ route('corex.contacts.index', ['search' => request('search'), 'type' => request('type'), 'agent_id' => '']) }}"
-               class="ml-1 inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold"
-               style="background:#fee2e2;color:#991b1b;" title="Show all contacts">&times;</a>
-            @endif
-
-            {{-- Picker dropdown --}}
-            <div x-show="agentPicker"
-                 x-transition:enter="transition ease-out duration-100"
-                 x-transition:enter-start="opacity-0 scale-95"
-                 x-transition:enter-end="opacity-100 scale-100"
-                 x-transition:leave="transition ease-in duration-75"
-                 x-transition:leave-start="opacity-100 scale-100"
-                 x-transition:leave-end="opacity-0 scale-95"
-                 @click.outside="agentPicker = false"
-                 style="position:absolute;top:calc(100% + 6px);left:0;z-index:50;width:300px;background:var(--surface);border-radius:14px;border:1px solid var(--border);box-shadow:0 10px 40px var(--shadow);overflow:hidden;"
-                 x-cloak>
-
-                <div style="padding:12px 14px 8px;border-bottom:1px solid var(--border);">
-                    <p class="text-xs font-semibold" style="color:var(--text-primary);margin-bottom:8px;">Filter by agent</p>
-                    <div class="relative">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style="color:var(--text-muted);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"/><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35"/>
-                        </svg>
-                        <input type="text" x-model="agentSearch" placeholder="Search agents…"
-                               class="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg outline-none"
-                               style="border:1px solid var(--border);background:var(--surface-2);color:var(--text-primary);"
-                               @keydown.escape="agentPicker = false">
-                    </div>
-                </div>
-
-                <div style="max-height:260px;overflow-y:auto;">
-                    <a href="{{ route('corex.contacts.index', ['search' => request('search'), 'type' => request('type'), 'agent_id' => '']) }}"
-                       class="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold"
-                       style="color:var(--text-secondary);border-bottom:1px solid var(--border);"
-                       onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
-                        <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold" style="background:var(--surface-2);color:var(--text-secondary);">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-1a4 4 0 00-4-4H6a4 4 0 00-4 4v1h5M12 12a4 4 0 100-8 4 4 0 000 8z"/></svg>
-                        </span>
-                        All agents
-                    </a>
-
-                    <template x-for="agent in filtered" :key="agent.id">
-                        <a :href="`{{ route('corex.contacts.index') }}?agent_id=${agent.id}&search={{ urlencode(request('search','')) }}&type={{ urlencode(request('type','')) }}`"
-                           class="flex items-center gap-2.5 px-4 py-2.5 text-xs"
-                           onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
-                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold flex-shrink-0"
-                                  style="background:var(--brand-default,#0b2a4a);color:#fff;"
-                                  x-text="agent.name.charAt(0).toUpperCase()">
-                            </span>
-                            <div class="min-w-0">
-                                <div class="font-semibold truncate" style="color:var(--text-primary);" x-text="agent.name"></div>
-                                <div class="truncate" style="color:var(--text-muted);" x-text="agent.email"></div>
-                            </div>
-                            <template x-if="{{ $filterAgentId ? $filterAgentId : 0 }} === agent.id">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 ml-auto flex-shrink-0" style="color:#00b4d8;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-                                </svg>
-                            </template>
-                        </a>
-                    </template>
-
-                    <div x-show="filtered.length === 0" class="px-4 py-4 text-xs text-center" style="color:var(--text-muted);">
-                        No agents found
-                    </div>
-                </div>
+                <input type="text" name="search" value="{{ request('search') }}"
+                       placeholder="Search name, phone, email…"
+                       class="w-full pl-10 pr-3 py-2 text-sm rounded-md transition-all duration-300"
+                       style="border:1px solid var(--border);background:var(--surface-2);color:var(--text-primary);outline:none;">
             </div>
-        </div>
-        @endif
 
-        {{-- Type filter --}}
-        <form method="GET" action="{{ route('corex.contacts.index') }}" class="flex flex-wrap items-center gap-2">
+            {{-- Preserve agent_id in form submission --}}
             @if($filterAgentId !== '')
             <input type="hidden" name="agent_id" value="{{ $filterAgentId }}">
             @endif
-            <select name="type"
-                    class="rounded-lg px-3 py-1.5 text-xs"
-                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
-                    onchange="this.form.submit()">
+
+            {{-- Type filter --}}
+            <select name="type" onchange="this.form.submit()" class="list-header-filter">
                 <option value="">All Types</option>
                 @foreach($contactTypes as $type)
                     <option value="{{ $type->id }}" {{ request('type') == $type->id ? 'selected' : '' }}>{{ $type->name }}</option>
                 @endforeach
             </select>
 
-            {{-- Search --}}
-            <div class="relative">
-                <svg xmlns="http://www.w3.org/2000/svg" class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style="color:#94a3b8;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <circle cx="11" cy="11" r="8"/><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35"/>
-                </svg>
-                <input type="text" name="search" value="{{ request('search') }}"
-                       placeholder="Search name, phone, email…"
-                       class="pl-8 pr-3 py-1.5 rounded-lg text-xs outline-none"
-                       style="border:1px solid var(--border);width:230px;background:var(--surface);color:var(--text-primary);"
-                       onfocus="this.style.borderColor='#00b4d8';this.style.boxShadow='0 0 0 2px rgba(0,180,216,0.15)'"
-                       onblur="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
+            {{-- Agent picker (admin/BM only) --}}
+            @if($canPickAgent)
+            <div class="relative" @click.outside="agentPicker = false">
+                <button type="button" @click="agentPicker = !agentPicker"
+                        class="list-header-filter inline-flex items-center gap-1.5 cursor-pointer"
+                        style="{{ $selectedAgent ? 'border-color:var(--brand-icon,#0ea5e9);color:var(--brand-icon,#0ea5e9);' : '' }}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <circle cx="9" cy="7" r="4"/><path stroke-linecap="round" stroke-linejoin="round" d="M3 21v-1a6 6 0 016-6h0M16 19l2 2 4-4"/>
+                    </svg>
+                    {{ $selectedAgent ? $selectedAgent->name : 'All Agents' }}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+
+                @if($selectedAgent)
+                <a href="{{ route('corex.contacts.index', ['search' => request('search'), 'type' => request('type'), 'agent_id' => '']) }}"
+                   class="ml-1 inline-flex items-center justify-center w-6 h-6 rounded-md text-xs font-bold transition-all duration-300"
+                   style="color:var(--text-muted);" title="Clear agent filter">&times;</a>
+                @endif
+
+                {{-- Picker dropdown --}}
+                <div x-show="agentPicker"
+                     x-transition:enter="transition ease-out duration-150"
+                     x-transition:enter-start="opacity-0 translate-y-1"
+                     x-transition:enter-end="opacity-100 translate-y-0"
+                     x-transition:leave="transition ease-in duration-100"
+                     x-transition:leave-start="opacity-100 translate-y-0"
+                     x-transition:leave-end="opacity-0 translate-y-1"
+                     class="absolute top-full mt-1.5 left-0 z-50 w-72 rounded-md overflow-hidden"
+                     style="background:var(--surface);border:1px solid var(--border);box-shadow:0 8px 30px rgba(0,0,0,0.12);"
+                     x-cloak>
+
+                    <div class="p-3" style="border-bottom:1px solid var(--border);">
+                        <div class="relative">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style="color:var(--text-muted);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"/><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35"/>
+                            </svg>
+                            <input type="text" x-model="agentSearch" placeholder="Search agents..."
+                                   class="w-full pl-8 pr-3 py-1.5 text-xs rounded-md outline-none transition-all duration-300"
+                                   style="border:1px solid var(--border);background:var(--surface-2);color:var(--text-primary);"
+                                   @keydown.escape="agentPicker = false">
+                        </div>
+                    </div>
+
+                    <div style="max-height:260px;overflow-y:auto;">
+                        <a href="{{ route('corex.contacts.index', ['search' => request('search'), 'type' => request('type'), 'agent_id' => '']) }}"
+                           class="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold transition-all duration-300"
+                           style="color:var(--text-secondary);border-bottom:1px solid var(--border);"
+                           onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
+                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md text-xs font-bold" style="background:var(--surface-2);color:var(--text-secondary);">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-1a4 4 0 00-4-4H6a4 4 0 00-4 4v1h5M12 12a4 4 0 100-8 4 4 0 000 8z"/></svg>
+                            </span>
+                            All agents
+                        </a>
+
+                        <template x-for="agent in filtered" :key="agent.id">
+                            <a :href="`{{ route('corex.contacts.index') }}?agent_id=${agent.id}&search={{ urlencode(request('search','')) }}&type={{ urlencode(request('type','')) }}`"
+                               class="flex items-center gap-2.5 px-4 py-2.5 text-xs transition-all duration-300"
+                               :style="({{ $filterAgentId ? $filterAgentId : 0 }} === agent.id ? 'background:var(--surface-2);' : '')"
+                               onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
+                                <span class="inline-flex items-center justify-center w-6 h-6 rounded-md text-xs font-bold flex-shrink-0"
+                                      style="background:var(--brand-default,#0b2a4a);color:#fff;"
+                                      x-text="agent.name.charAt(0).toUpperCase()">
+                                </span>
+                                <div class="min-w-0">
+                                    <div class="font-semibold truncate" style="color:var(--text-primary);" x-text="agent.name"></div>
+                                    <div class="truncate" style="color:var(--text-muted);" x-text="agent.email"></div>
+                                </div>
+                                <template x-if="{{ $filterAgentId ? $filterAgentId : 0 }} === agent.id">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 ml-auto flex-shrink-0" style="color:var(--brand-icon,#0ea5e9);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                                    </svg>
+                                </template>
+                            </a>
+                        </template>
+
+                        <div x-show="filtered.length === 0" class="px-4 py-4 text-xs text-center" style="color:var(--text-muted);">
+                            No agents found
+                        </div>
+                    </div>
+                </div>
             </div>
-            <button type="submit"
-                    class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white"
-                    style="background:var(--brand-button,#0ea5e9);">Search</button>
+            @endif
+
+            <button type="submit" class="corex-btn-outline text-xs px-3 py-2">Search</button>
             @if(request()->hasAny(['search','type']))
             <a href="{{ route('corex.contacts.index', $filterAgentId ? ['agent_id' => $filterAgentId] : []) }}"
-               class="px-3 py-1.5 rounded-lg text-xs font-semibold"
-               style="color:var(--text-secondary);border:1px solid var(--border);background:var(--surface);">Clear</a>
+               class="text-xs underline transition-all duration-300" style="color:var(--text-muted);">Clear</a>
             @endif
+
         </form>
 
     </div>
 
     {{-- Contacts table --}}
-    <div style="background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden;">
-        <div class="px-5 py-4 flex items-center justify-between" style="border-bottom:1px solid var(--border); background:var(--surface-2);">
+    <div class="rounded-md overflow-hidden" style="background:var(--surface); border:1px solid var(--border);">
+        <div class="px-5 py-3 flex items-center justify-between" style="border-bottom:1px solid var(--border); background:var(--surface-2);">
             <div class="text-sm font-bold" style="color:var(--text-primary);">
                 Contacts
                 @if($selectedAgent)
@@ -255,24 +247,26 @@
         </div>
 
         @forelse($contacts as $contact)
-        <div class="px-5 py-4" style="border-bottom:1px solid var(--border);">
+        <div class="px-5 py-4 transition-all duration-300" style="border-bottom:1px solid var(--border);"
+             onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
 
             {{-- View row --}}
             <div x-show="editId !== {{ $contact->id }}" class="flex items-start justify-between gap-4">
                 <div class="flex items-start gap-4 flex-1 min-w-0">
                     {{-- Avatar --}}
                     <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold text-white"
-                         style="background: {{ $contact->type?->color ?? '#334155' }};">
+                         style="background: var(--brand-icon,#0ea5e9);">
                         {{ strtoupper(substr($contact->first_name, 0, 1) . substr($contact->last_name, 0, 1)) }}
                     </div>
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 flex-wrap">
                             <a href="{{ route('corex.contacts.show', $contact) }}"
-                               class="text-sm font-semibold no-underline hover:text-[#00b4d8] transition-colors"
-                               style="color:var(--text-primary);">{{ $contact->full_name }}</a>
+                               class="text-sm font-semibold no-underline transition-all duration-300"
+                               style="color:var(--text-primary);"
+                               onmouseover="this.style.color='var(--brand-icon,#0ea5e9)'" onmouseout="this.style.color='var(--text-primary)'">{{ $contact->full_name }}</a>
                             @if($contact->type)
-                            <span class="text-xs px-2 py-0.5 rounded-full font-medium"
-                                  style="background:{{ $contact->type->color }}22; color:{{ $contact->type->color }}; border:1px solid {{ $contact->type->color }}44;">
+                            <span class="text-xs px-2 py-0.5 rounded-md font-medium"
+                                  style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 12%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 25%, transparent);">
                                 {{ $contact->type->name }}
                             </span>
                             @endif
@@ -294,52 +288,56 @@
                         </div>
                     </div>
                 </div>
-                <div class="flex items-center gap-3 flex-shrink-0">
+                <div class="flex items-center gap-1 flex-shrink-0">
                     <a href="{{ route('corex.contacts.show', $contact) }}"
-                       class="text-xs font-semibold no-underline" style="color:#00b4d8;">View</a>
+                       class="corex-btn-outline text-[10px] px-2 py-1">View</a>
                     <form method="POST" action="{{ route('corex.contacts.destroy', $contact) }}"
                           onsubmit="return confirm('Delete {{ addslashes($contact->full_name) }}?');">
                         @csrf @method('DELETE')
-                        <button type="submit" class="text-xs font-semibold text-red-600 hover:text-red-700">Delete</button>
+                        <button type="submit"
+                                class="text-[10px] font-medium px-2 py-1 rounded-md transition-all duration-300"
+                                style="color:var(--text-muted);"
+                                onmouseover="this.style.color='#ef4444';this.style.background='rgba(239,68,68,0.08)'"
+                                onmouseout="this.style.color='var(--text-muted)';this.style.background=''">Delete</button>
                     </form>
                 </div>
             </div>
 
             {{-- Edit row (inline) --}}
             <div x-show="editId === {{ $contact->id }}" x-cloak
-                 class="rounded-xl p-4 mt-1"
-                 style="background:rgba(0,180,216,0.05); border:1px solid rgba(0,180,216,0.2);">
+                 class="rounded-md p-4 mt-1"
+                 style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 5%, transparent); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 20%, transparent);">
                 <form method="POST" action="{{ route('corex.contacts.update', $contact) }}" class="space-y-3">
                     @csrf @method('PUT')
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         <div>
                             <label class="block text-xs mb-1" style="color:var(--text-muted);">First Name</label>
                             <input type="text" name="first_name" value="{{ $contact->first_name }}" required
-                                   class="w-full rounded-lg px-3 py-1.5 text-sm"
-                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                   class="w-full rounded-md px-3 py-1.5 text-sm transition-all duration-300"
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary); outline:none;">
                         </div>
                         <div>
                             <label class="block text-xs mb-1" style="color:var(--text-muted);">Surname</label>
                             <input type="text" name="last_name" value="{{ $contact->last_name }}" required
-                                   class="w-full rounded-lg px-3 py-1.5 text-sm"
-                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                   class="w-full rounded-md px-3 py-1.5 text-sm transition-all duration-300"
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary); outline:none;">
                         </div>
                         <div>
                             <label class="block text-xs mb-1" style="color:var(--text-muted);">Phone</label>
                             <input type="text" name="phone" value="{{ $contact->phone }}" required
-                                   class="w-full rounded-lg px-3 py-1.5 text-sm"
-                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                   class="w-full rounded-md px-3 py-1.5 text-sm transition-all duration-300"
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary); outline:none;">
                         </div>
                         <div>
                             <label class="block text-xs mb-1" style="color:var(--text-muted);">Email (optional)</label>
                             <input type="email" name="email" value="{{ $contact->email }}"
-                                   class="w-full rounded-lg px-3 py-1.5 text-sm"
-                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                   class="w-full rounded-md px-3 py-1.5 text-sm transition-all duration-300"
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary); outline:none;">
                         </div>
                         <div>
                             <label class="block text-xs mb-1" style="color:var(--text-muted);">Contact Type</label>
                             <select name="contact_type_id"
-                                    class="w-full rounded-lg px-3 py-1.5 text-sm"
+                                    class="w-full rounded-md px-3 py-1.5 text-sm"
                                     style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                 <option value="">— No type —</option>
                                 @foreach($contactTypes as $type)
@@ -350,13 +348,13 @@
                         <div>
                             <label class="block text-xs mb-1" style="color:var(--text-muted);">Notes (optional)</label>
                             <textarea name="notes" rows="2"
-                                      class="w-full rounded-lg px-3 py-1.5 text-sm resize-none"
-                                      style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">{{ $contact->notes }}</textarea>
+                                      class="w-full rounded-md px-3 py-1.5 text-sm resize-none transition-all duration-300"
+                                      style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary); outline:none;">{{ $contact->notes }}</textarea>
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
-                        <button type="submit" class="px-4 py-1.5 bg-[#00b4d8] text-white text-sm font-semibold rounded-lg hover:bg-[#0096b7]">Save</button>
-                        <button type="button" @click="editId = null" class="text-sm" style="color:var(--text-muted);">Cancel</button>
+                        <button type="submit" class="corex-btn-primary text-sm">Save</button>
+                        <button type="button" @click="editId = null" class="text-sm transition-all duration-300" style="color:var(--text-muted);">Cancel</button>
                     </div>
                 </form>
             </div>
@@ -366,7 +364,7 @@
         <div class="p-8 text-center" style="color:var(--text-muted);">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="w-10 h-10 mx-auto mb-3 opacity-30"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>
             <div class="text-sm">No contacts yet.</div>
-            <button type="button" @click="showAdd = true" class="mt-3 text-sm font-semibold" style="color:#00b4d8;">Add your first contact</button>
+            <button type="button" @click="showAdd = true" class="mt-3 text-sm font-semibold" style="color:var(--brand-icon,#0ea5e9);">Add your first contact</button>
         </div>
         @endforelse
 

@@ -15,7 +15,7 @@
 ═══════════════════════════════════════════════════════════════════════════ --}}
 
 {{-- Navy header bar --}}
-<div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-6">
+<div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4 mb-6">
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div>
             <h2 class="text-xl font-bold text-white leading-tight">Brain Simulation</h2>
@@ -47,7 +47,7 @@
 <div class="mb-8">
 
     {{-- Command card --}}
-    <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+    <div class="bg-gray-900 border border-gray-800 rounded-md p-5">
 
         {{-- Price input row --}}
         <div class="flex flex-wrap items-end gap-4 mb-4">
@@ -59,17 +59,17 @@
                     <input type="text" id="inp-price"
                            value="{{ $defaults['price'] ?? '' }}"
                            placeholder="2,500,000"
-                           class="w-full bg-gray-800 border border-gray-700 rounded-lg pl-7 pr-3 py-2.5 text-lg font-semibold text-white placeholder-gray-600 focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none transition-colors"
+                           class="w-full bg-gray-800 border border-gray-700 rounded-md pl-7 pr-3 py-2.5 text-lg font-semibold text-white placeholder-gray-600 focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none transition-colors"
                            inputmode="numeric">
                 </div>
             </div>
 
             {{-- Quick adjust buttons --}}
             <div class="flex gap-1.5">
-                <button data-adjust="-100000" class="adj-btn px-2.5 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-gray-400 hover:text-white hover:border-gray-600 transition-colors">-100k</button>
-                <button data-adjust="-50000" class="adj-btn px-2.5 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-gray-400 hover:text-white hover:border-gray-600 transition-colors">-50k</button>
-                <button data-adjust="-25000" class="adj-btn px-2.5 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-gray-400 hover:text-white hover:border-gray-600 transition-colors">-25k</button>
-                <button data-adjust="50000" class="adj-btn px-2.5 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-green-500 hover:text-green-400 hover:border-gray-600 transition-colors">+50k</button>
+                <button data-adjust="-100000" class="adj-btn px-2.5 py-2 bg-gray-800 border border-gray-700 rounded-md text-xs text-gray-400 hover:text-white hover:border-gray-600 transition-colors">-100k</button>
+                <button data-adjust="-50000" class="adj-btn px-2.5 py-2 bg-gray-800 border border-gray-700 rounded-md text-xs text-gray-400 hover:text-white hover:border-gray-600 transition-colors">-50k</button>
+                <button data-adjust="-25000" class="adj-btn px-2.5 py-2 bg-gray-800 border border-gray-700 rounded-md text-xs text-gray-400 hover:text-white hover:border-gray-600 transition-colors">-25k</button>
+                <button data-adjust="50000" class="adj-btn px-2.5 py-2 bg-gray-800 border border-gray-700 rounded-md text-xs text-green-500 hover:text-green-400 hover:border-gray-600 transition-colors">+50k</button>
             </div>
         </div>
 
@@ -78,11 +78,11 @@
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Suburb</label>
                 <input type="text" id="inp-suburb" value="{{ $defaults['suburb'] }}"
-                       class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:border-[#00b4d8] outline-none transition-colors">
+                       class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-1.5 text-xs text-gray-200 focus:border-[#00b4d8] outline-none transition-colors">
             </div>
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Type</label>
-                <select id="inp-type" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:border-[#00b4d8] outline-none transition-colors">
+                <select id="inp-type" class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-1.5 text-xs text-gray-200 focus:border-[#00b4d8] outline-none transition-colors">
                     @foreach(['house','unit','land','other'] as $t)
                         <option value="{{ $t }}" {{ $defaults['type'] === $t ? 'selected' : '' }}>{{ ucfirst($t) }}</option>
                     @endforeach
@@ -91,12 +91,12 @@
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Bedrooms</label>
                 <input type="number" id="inp-bedrooms" min="0" max="20" value="{{ $defaults['bedrooms'] ?? '' }}"
-                       class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:border-[#00b4d8] outline-none transition-colors">
+                       class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-1.5 text-xs text-gray-200 focus:border-[#00b4d8] outline-none transition-colors">
             </div>
             <div>
                 <label class="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Size m&sup2;</label>
                 <input type="number" id="inp-size" min="0" value="{{ $defaults['size_m2'] ?? '' }}"
-                       class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-200 focus:border-[#00b4d8] outline-none transition-colors">
+                       class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-1.5 text-xs text-gray-200 focus:border-[#00b4d8] outline-none transition-colors">
             </div>
         </div>
 
@@ -107,7 +107,7 @@
         <div class="flex flex-wrap items-center gap-3">
             {{-- Primary: Simulate --}}
             <button id="btn-simulate"
-                    class="px-5 py-2.5 bg-[#0b2a4a] text-white text-sm font-medium rounded-lg hover:bg-[#00b4d8] active:bg-[#081f36] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                    class="px-5 py-2.5 bg-[#0b2a4a] text-white text-sm font-medium rounded-md hover:bg-[#00b4d8] active:bg-[#081f36] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
                     {{ $canSimulate ? '' : 'disabled' }}>
                 <span id="btn-simulate-text">Run Simulation</span>
                 <svg id="btn-simulate-spin" class="hidden animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
@@ -121,7 +121,7 @@
             {{-- Secondary: Price Band --}}
             <div class="relative group">
                 <button id="btn-priceband"
-                        class="px-4 py-2 bg-gray-800 border border-gray-700 text-gray-300 text-xs font-medium rounded-lg hover:border-gray-500 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        class="px-4 py-2 bg-gray-800 border border-gray-700 text-gray-300 text-xs font-medium rounded-md hover:border-gray-500 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                         {{ $canPriceBand ? '' : 'disabled' }}>
                     Price Band
                 </button>
@@ -133,7 +133,7 @@
             {{-- Secondary: Threats --}}
             <div class="relative group">
                 <button id="btn-threats"
-                        class="px-4 py-2 bg-gray-800 border border-gray-700 text-gray-300 text-xs font-medium rounded-lg hover:border-gray-500 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        class="px-4 py-2 bg-gray-800 border border-gray-700 text-gray-300 text-xs font-medium rounded-md hover:border-gray-500 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                         {{ $canThreats ? '' : 'disabled' }}>
                     Competitive Threats
                 </button>
@@ -145,7 +145,7 @@
             {{-- Secondary: Trajectory --}}
             <div class="relative group">
                 <button id="btn-trajectory"
-                        class="px-4 py-2 bg-gray-800 border border-gray-700 text-gray-300 text-xs font-medium rounded-lg hover:border-gray-500 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        class="px-4 py-2 bg-gray-800 border border-gray-700 text-gray-300 text-xs font-medium rounded-md hover:border-gray-500 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                         {{ $canTrajectory ? '' : 'disabled' }}>
                     Trajectory
                 </button>
@@ -163,7 +163,7 @@
 <div id="tactical-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
 
     {{-- Card 1: Probability --}}
-    <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+    <div class="bg-gray-900 border border-gray-800 rounded-md p-5">
         <p class="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Probability</p>
         <div id="card-prob-empty" class="text-center py-4">
             <p class="text-gray-600 text-xs">Run a simulation to see results</p>
@@ -196,7 +196,7 @@
     </div>
 
     {{-- Card 2: Launch Position / Confidence --}}
-    <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+    <div class="bg-gray-900 border border-gray-800 rounded-md p-5">
         <p class="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Position</p>
         <div id="card-pos-empty" class="text-center py-4">
             <p class="text-gray-600 text-xs">Run a simulation to see results</p>
@@ -226,7 +226,7 @@
     </div>
 
     {{-- Card 3: Market Pressure --}}
-    <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+    <div class="bg-gray-900 border border-gray-800 rounded-md p-5">
         <p class="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Market Pressure</p>
         <div id="card-mkt-empty" class="text-center py-4">
             <p class="text-gray-600 text-xs">Run a simulation to see results</p>
@@ -254,7 +254,7 @@
     </div>
 
     {{-- Card 4: Holding Cost --}}
-    <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+    <div class="bg-gray-900 border border-gray-800 rounded-md p-5">
         <p class="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Holding Cost</p>
         <div id="card-hold-empty" class="text-center py-4">
             <p class="text-gray-600 text-xs">Run a simulation to see results</p>
@@ -288,18 +288,18 @@
 
     {{-- Key Drivers + Risks --}}
     <div id="strategy-drivers" class="hidden grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+        <div class="bg-gray-900 border border-gray-800 rounded-md p-5">
             <p class="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Key Drivers</p>
             <ul id="drivers-list" class="space-y-1.5"></ul>
         </div>
-        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+        <div class="bg-gray-900 border border-gray-800 rounded-md p-5">
             <p class="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Risk Factors</p>
             <ul id="risks-list" class="space-y-1.5"></ul>
         </div>
     </div>
 
     {{-- Competitive Threats table --}}
-    <div id="strategy-threats" class="hidden bg-gray-900 border border-gray-800 rounded-2xl p-5">
+    <div id="strategy-threats" class="hidden bg-gray-900 border border-gray-800 rounded-md p-5">
         <details>
             <summary class="text-[10px] uppercase tracking-widest text-gray-500 cursor-pointer hover:text-gray-400 transition-colors">
                 Competitive Threats <span id="threats-count" class="text-gray-600"></span>
@@ -312,7 +312,7 @@
     <div id="strategy-priceband" class="hidden">
         <p class="text-[10px] uppercase tracking-widest text-gray-500 mb-3">Price Band</p>
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-3" id="priceband-cards"></div>
-        <details id="priceband-scan-wrap" class="hidden mt-3 bg-gray-900 border border-gray-800 rounded-2xl p-4">
+        <details id="priceband-scan-wrap" class="hidden mt-3 bg-gray-900 border border-gray-800 rounded-md p-4">
             <summary class="text-[10px] uppercase tracking-widest text-gray-500 cursor-pointer hover:text-gray-400 transition-colors">
                 Scan Detail
             </summary>
@@ -321,7 +321,7 @@
     </div>
 
     {{-- Trajectory table --}}
-    <div id="strategy-trajectory" class="hidden bg-gray-900 border border-gray-800 rounded-2xl p-5">
+    <div id="strategy-trajectory" class="hidden bg-gray-900 border border-gray-800 rounded-md p-5">
         <details>
             <summary class="text-[10px] uppercase tracking-widest text-gray-500 cursor-pointer hover:text-gray-400 transition-colors">
                 Price Trajectory
@@ -430,7 +430,7 @@
             warn:  'bg-amber-900/90 border-amber-700 text-amber-200',
         };
         var div = document.createElement('div');
-        div.className = 'pointer-events-auto border rounded-lg px-4 py-3 text-xs shadow-lg transition-all ' + (colors[type] || colors.info);
+        div.className = 'pointer-events-auto border rounded-md px-4 py-3 text-xs shadow-lg transition-all ' + (colors[type] || colors.info);
         div.textContent = msg;
         container.appendChild(div);
         setTimeout(function () {
@@ -708,7 +708,7 @@
                     var cardsHtml = '';
                     bandConfig.forEach(function (cfg) {
                         var b = d[cfg.key];
-                        cardsHtml += '<div class="bg-gray-900 border ' + cfg.border + ' rounded-2xl p-5 text-center">';
+                        cardsHtml += '<div class="bg-gray-900 border ' + cfg.border + ' rounded-md p-5 text-center">';
                         cardsHtml += '<p class="text-[10px] uppercase tracking-widest text-gray-500 mb-2">' + cfg.label + '</p>';
                         if (b) {
                             cardsHtml += '<p class="text-xl font-bold ' + cfg.accent + ' tabular-nums">' + fmtR(b.price) + '</p>';

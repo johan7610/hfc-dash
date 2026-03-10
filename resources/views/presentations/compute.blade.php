@@ -3,7 +3,7 @@
 @section('corex-content')
 
 {{-- Navy header bar --}}
-<div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-6">
+<div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4 mb-6">
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div>
             <h2 class="text-xl font-bold text-white leading-tight">Market Analysis Results</h2>
@@ -31,12 +31,12 @@
             <div>
                 <label class="ds-label block mb-1">Suburb <span class="text-red-500">*</span></label>
                 <input type="text" name="suburb" value="{{ $inputs['suburb'] }}" required
-                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                       class="w-full pres-input px-3 py-2 text-sm">
                 @error('suburb')<p class="mt-1 text-xs text-red-600">{{ $message }}</p>@enderror
             </div>
             <div>
                 <label class="ds-label block mb-1">Property Type <span class="text-red-500">*</span></label>
-                <select name="type" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                <select name="type" required class="w-full pres-input px-3 py-2 text-sm">
                     @foreach(['house','unit','land','other'] as $t)
                         <option value="{{ $t }}" {{ ($inputs['type'] ?? '') === $t ? 'selected' : '' }}>{{ ucfirst($t) }}</option>
                     @endforeach
@@ -44,7 +44,7 @@
             </div>
             <div>
                 <label class="ds-label block mb-1">Period <span class="text-red-500">*</span></label>
-                <select name="period_months" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                <select name="period_months" required class="w-full pres-input px-3 py-2 text-sm">
                     @foreach([6,12,24] as $m)
                         <option value="{{ $m }}" {{ ($inputs['period_months'] ?? 12) == $m ? 'selected' : '' }}>{{ $m }} months</option>
                     @endforeach
@@ -53,21 +53,21 @@
             <div>
                 <label class="ds-label block mb-1">Price (R)</label>
                 <input type="number" name="price" value="{{ $inputs['price'] ?? '' }}" step="1" min="0"
-                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                       class="w-full pres-input px-3 py-2 text-sm">
             </div>
             <div>
                 <label class="ds-label block mb-1">Floor Area (m²)</label>
                 <input type="number" name="size_m2" value="{{ $inputs['size_m2'] ?? '' }}" min="0"
-                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                       class="w-full pres-input px-3 py-2 text-sm">
             </div>
             <div>
                 <label class="ds-label block mb-1">Bedrooms</label>
                 <input type="number" name="bedrooms" value="{{ $inputs['bedrooms'] ?? '' }}" min="0" max="20"
-                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                       class="w-full pres-input px-3 py-2 text-sm">
             </div>
             <div>
                 <label class="ds-label block mb-1">Branch</label>
-                <select name="branch_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                <select name="branch_id" class="w-full pres-input px-3 py-2 text-sm">
                     <option value="">— Any —</option>
                     @foreach($branches as $branch)
                         <option value="{{ $branch->id }}" {{ ($inputs['branch_id'] ?? null) == $branch->id ? 'selected' : '' }}>
@@ -88,12 +88,12 @@
 {{-- ══════════════════════════════════════════════════════════════════════════
      SELLER SUMMARY HERO — "Sale Probability at Your Price"
 ══════════════════════════════════════════════════════════════════════════ --}}
-<div class="bg-gradient-to-br from-[#0b2a4a] to-[#061a30] rounded-xl shadow-lg p-6 mb-6 text-white">
+<div class="bg-gradient-to-br from-[#0b2a4a] to-[#061a30] rounded-md shadow-lg p-6 mb-6 text-white">
     <p class="text-sky-200 text-xs font-semibold uppercase tracking-widest mb-1">Seller Summary</p>
     <h2 class="text-xl font-bold mb-5">Sale Probability at Your Price</h2>
 
     @if($spResult->skipReason)
-        <div class="bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-sm text-sky-100">
+        <div class="bg-white/10 border border-white/20 rounded-md px-4 py-3 text-sm text-sky-100">
             <strong class="text-white">Insufficient data:</strong>
             {{ $spResult->skipReason }}
         </div>
@@ -101,7 +101,7 @@
         {{-- Probability chips --}}
         <div class="grid grid-cols-3 gap-3 mb-5">
             {{-- 30 days --}}
-            <div class="bg-white/10 border border-white/20 rounded-lg p-4 text-center">
+            <div class="bg-white/10 border border-white/20 rounded-md p-4 text-center">
                 <p class="text-sky-200 text-xs mb-1 font-medium">Sold in 30 days</p>
                 <p class="text-3xl font-bold">
                     @if($spResult->p30 !== null)
@@ -112,7 +112,7 @@
                 </p>
             </div>
             {{-- 60 days --}}
-            <div class="bg-white/15 border border-white/30 rounded-lg p-4 text-center ring-1 ring-white/30">
+            <div class="bg-white/15 border border-white/30 rounded-md p-4 text-center ring-1 ring-white/30">
                 <p class="text-sky-200 text-xs mb-1 font-medium">Sold in 60 days</p>
                 <p class="text-3xl font-bold">
                     @if($spResult->p60 !== null)
@@ -123,7 +123,7 @@
                 </p>
             </div>
             {{-- 90 days --}}
-            <div class="bg-white/10 border border-white/20 rounded-lg p-4 text-center">
+            <div class="bg-white/10 border border-white/20 rounded-md p-4 text-center">
                 <p class="text-sky-200 text-xs mb-1 font-medium">Sold in 90 days</p>
                 <p class="text-3xl font-bold">
                     @if($spResult->p90 !== null)
@@ -136,7 +136,7 @@
         </div>
 
         {{-- Expected days banner --}}
-        <div class="bg-white/10 border border-white/20 rounded-lg px-4 py-3 flex items-center justify-between">
+        <div class="bg-white/10 border border-white/20 rounded-md px-4 py-3 flex items-center justify-between">
             <span class="text-sky-200 text-sm">Estimated time to sell</span>
             @if($spResult->expectedDays !== null)
                 <span class="text-white font-bold text-lg">{{ $spResult->expectedDays }} days</span>
@@ -181,7 +181,7 @@
 
     @if(empty($topSignals))
         <div class="py-6 text-center">
-            <p class="text-sm text-gray-400 italic">Not enough market evidence yet.</p>
+            <p class="text-sm italic" style="color: var(--text-muted);">Not enough market evidence yet.</p>
         </div>
     @else
         <div class="space-y-4">
@@ -226,16 +226,16 @@
                 @endphp
                 <div class="flex items-start gap-4">
                     {{-- Rank circle --}}
-                    <div class="shrink-0 w-7 h-7 rounded-full bg-sky-100 text-[#0b2a4a] flex items-center justify-center text-xs font-bold">
+                    <div class="shrink-0 w-7 h-7 rounded-full bg-sky-100 flex items-center justify-center text-xs font-bold" style="color: var(--brand-default, #0b2a4a);">
                         {{ $loop->iteration }}
                     </div>
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center justify-between mb-1">
-                            <span class="text-sm font-medium text-gray-800">{{ $label }}</span>
-                            <span class="text-xs font-semibold text-[#0b2a4a] ml-2 shrink-0">{{ $contribPct }}%</span>
+                            <span class="text-sm font-medium" style="color: var(--text-primary);">{{ $label }}</span>
+                            <span class="text-xs font-semibold ml-2 shrink-0" style="color: var(--brand-default, #0b2a4a);">{{ $contribPct }}%</span>
                         </div>
                         <div class="flex items-center gap-2 mb-1.5">
-                            <span class="text-xs text-gray-500">
+                            <span class="text-xs" style="color: var(--text-secondary);">
                                 @if($raw !== null)
                                     @if($name === 'price')
                                         Raw: {{ number_format($raw, 1) }}%
@@ -254,9 +254,9 @@
                                     Raw: —
                                 @endif
                             </span>
-                            <span class="text-xs text-[#00b4d8] bg-sky-50 rounded px-1.5 py-0.5 truncate">{{ $interp }}</span>
+                            <span class="text-xs bg-sky-50 rounded px-1.5 py-0.5 truncate" style="color: var(--brand-icon, #0ea5e9);">{{ $interp }}</span>
                         </div>
-                        <div class="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                        <div class="h-1.5 rounded-full overflow-hidden" style="background: var(--surface-2);">
                             <div class="h-full bg-sky-500 rounded-full" style="width: {{ $barWidth }}%"></div>
                         </div>
                     </div>
@@ -305,12 +305,12 @@
                                     : null;
                 }
             @endphp
-            <div class="border border-gray-200 rounded-lg p-4">
-                <p class="text-xs text-gray-500 font-medium mb-2">{{ $drop['label'] }}</p>
+            <div class="border rounded-md p-4" style="border-color: var(--border);">
+                <p class="text-xs font-medium mb-2" style="color: var(--text-secondary);">{{ $drop['label'] }}</p>
                 @if($hasData)
-                    <p class="text-2xl font-bold text-gray-800 mb-1">
+                    <p class="text-2xl font-bold mb-1" style="color: var(--text-primary);">
                         {{ number_format($row['p60'] * 100, 0) }}<span class="text-base">%</span>
-                        <span class="text-sm text-gray-400 font-normal ml-1">p60</span>
+                        <span class="text-sm font-normal ml-1" style="color: var(--text-muted);">p60</span>
                     </p>
                     <p class="text-xs @if($p60Delta >= 0) text-green-600 @else text-red-500 @endif font-medium">
                         @if($p60Delta >= 0)
@@ -331,7 +331,7 @@
                         </p>
                     @endif
                 @else
-                    <p class="text-sm text-gray-400 italic">—</p>
+                    <p class="text-sm italic" style="color: var(--text-muted);">—</p>
                 @endif
             </div>
         @endforeach
@@ -339,7 +339,7 @@
 
     {{-- Full 21-row table inside <details> --}}
     <details>
-        <summary class="cursor-pointer text-xs text-[#00b4d8] hover:text-[#0b2a4a] select-none font-medium">
+        <summary class="cursor-pointer text-xs select-none font-medium" style="color: var(--brand-icon, #0ea5e9);">
             Show full price sensitivity curve (21 steps)
         </summary>
         <div class="mt-3 overflow-x-auto">
@@ -370,16 +370,16 @@
                             </td>
                             <td class="py-1.5 px-3">
                                 @if($row['skip_reason'] ?? null)
-                                    <span class="text-gray-400 italic">N/A</span>
+                                    <span class="italic" style="color: var(--text-muted);">N/A</span>
                                 @elseif(isset($row['adjusted_deviation_pct']))
                                     {{ number_format($row['adjusted_deviation_pct'], 1) }}%
                                 @else
-                                    <span class="text-gray-400">—</span>
+                                    <span style="color: var(--text-muted);">—</span>
                                 @endif
                             </td>
                             <td class="py-1.5 px-3">
                                 @if(($row['skip_reason'] ?? null) || $row['composite_score'] === null)
-                                    <span class="text-gray-400">—</span>
+                                    <span style="color: var(--text-muted);">—</span>
                                 @else
                                     {{ number_format($row['composite_score'], 3) }}
                                 @endif
@@ -388,28 +388,28 @@
                                 @if($row['p30'] !== null)
                                     {{ number_format($row['p30'] * 100, 1) }}%
                                 @else
-                                    <span class="text-gray-400">—</span>
+                                    <span style="color: var(--text-muted);">—</span>
                                 @endif
                             </td>
                             <td class="py-1.5 px-3">
                                 @if($row['p60'] !== null)
                                     {{ number_format($row['p60'] * 100, 1) }}%
                                 @else
-                                    <span class="text-gray-400">—</span>
+                                    <span style="color: var(--text-muted);">—</span>
                                 @endif
                             </td>
                             <td class="py-1.5 px-3">
                                 @if($row['p90'] !== null)
                                     {{ number_format($row['p90'] * 100, 1) }}%
                                 @else
-                                    <span class="text-gray-400">—</span>
+                                    <span style="color: var(--text-muted);">—</span>
                                 @endif
                             </td>
                             <td class="py-1.5 px-3">
                                 @if($row['expected_days'] !== null)
                                     {{ $row['expected_days'] }}
                                 @else
-                                    <span class="text-gray-400">—</span>
+                                    <span style="color: var(--text-muted);">—</span>
                                 @endif
                             </td>
                         </tr>
@@ -427,67 +427,67 @@
 @php $domCurve = $maResult->domCurve; @endphp
 <div class="ds-status-card mb-6" style="border-left-color: var(--ds-cyan);">
     <h2 class="ds-section-header mb-1">Market Evidence</h2>
-    <p class="text-xs text-gray-400 mb-4">
+    <p class="text-xs mb-4" style="color: var(--text-muted);">
         {{ $inputs['suburb'] }} · {{ ucfirst($inputs['type']) }} · {{ $inputs['period_months'] }} month window
     </p>
     <dl class="grid grid-cols-2 gap-x-8 gap-y-3 text-sm md:grid-cols-3">
         <div>
-            <dt class="text-xs text-gray-400 mb-0.5">Months of Inventory</dt>
-            <dd class="font-semibold text-gray-800">
+            <dt class="text-xs mb-0.5" style="color: var(--text-muted);">Months of Inventory</dt>
+            <dd class="font-semibold" style="color: var(--text-primary);">
                 @if($maResult->monthsOfInventory !== null)
                     {{ number_format($maResult->monthsOfInventory, 1) }} mo
                 @else
-                    <span class="text-gray-300">—</span>
+                    <span style="color: var(--text-muted);">—</span>
                 @endif
             </dd>
         </div>
         <div>
-            <dt class="text-xs text-gray-400 mb-0.5">Demand / Supply Ratio</dt>
-            <dd class="font-semibold text-gray-800">
+            <dt class="text-xs mb-0.5" style="color: var(--text-muted);">Demand / Supply Ratio</dt>
+            <dd class="font-semibold" style="color: var(--text-primary);">
                 @if($maResult->demandSupplyRatio !== null)
                     {{ number_format($maResult->demandSupplyRatio, 2) }}×
                 @else
-                    <span class="text-gray-300">—</span>
+                    <span style="color: var(--text-muted);">—</span>
                 @endif
             </dd>
         </div>
         <div>
-            <dt class="text-xs text-gray-400 mb-0.5">Price/m² vs Market</dt>
-            <dd class="font-semibold text-gray-800">
+            <dt class="text-xs mb-0.5" style="color: var(--text-muted);">Price/m² vs Market</dt>
+            <dd class="font-semibold" style="color: var(--text-primary);">
                 @if($maResult->pricePerSqmDeviationPct !== null)
                     {{ number_format($maResult->pricePerSqmDeviationPct, 1) }}%
                 @else
-                    <span class="text-gray-300">—</span>
+                    <span style="color: var(--text-muted);">—</span>
                 @endif
             </dd>
         </div>
         <div>
-            <dt class="text-xs text-gray-400 mb-0.5">DOM Median (p50)</dt>
-            <dd class="font-semibold text-gray-800">
+            <dt class="text-xs mb-0.5" style="color: var(--text-muted);">DOM Median (p50)</dt>
+            <dd class="font-semibold" style="color: var(--text-primary);">
                 @if(is_array($domCurve) && isset($domCurve['p50']))
                     {{ $domCurve['p50'] }} days
                 @else
-                    <span class="text-gray-300">—</span>
+                    <span style="color: var(--text-muted);">—</span>
                 @endif
             </dd>
         </div>
         <div>
-            <dt class="text-xs text-gray-400 mb-0.5">DOM p75</dt>
-            <dd class="font-semibold text-gray-800">
+            <dt class="text-xs mb-0.5" style="color: var(--text-muted);">DOM p75</dt>
+            <dd class="font-semibold" style="color: var(--text-primary);">
                 @if(is_array($domCurve) && isset($domCurve['p75']))
                     {{ $domCurve['p75'] }} days
                 @else
-                    <span class="text-gray-300">—</span>
+                    <span style="color: var(--text-muted);">—</span>
                 @endif
             </dd>
         </div>
         <div>
-            <dt class="text-xs text-gray-400 mb-0.5">Elasticity (days/%)</dt>
-            <dd class="font-semibold text-gray-800">
+            <dt class="text-xs mb-0.5" style="color: var(--text-muted);">Elasticity (days/%)</dt>
+            <dd class="font-semibold" style="color: var(--text-primary);">
                 @if($maResult->elasticityDaysPerPct !== null)
                     {{ number_format($maResult->elasticityDaysPerPct, 2) }}
                 @else
-                    <span class="text-gray-300">—</span>
+                    <span style="color: var(--text-muted);">—</span>
                 @endif
             </dd>
         </div>
@@ -499,7 +499,7 @@
 ══════════════════════════════════════════════════════════════════════════ --}}
 <div class="ds-status-card mb-6" style="border-left-color: var(--ds-cyan);">
     <h2 class="ds-section-header mb-1">Save Snapshot</h2>
-    <p class="text-xs text-gray-400 mb-4">
+    <p class="text-xs mb-4" style="color: var(--text-muted);">
         Lock these results as an immutable snapshot attached to Presentation #{{ $presentation->id }}.
         MA run #{{ $maRun->id }} · SP run #{{ $spRun->id }}.
     </p>
@@ -519,24 +519,24 @@
      AUDIT MODE
 ══════════════════════════════════════════════════════════════════════════ --}}
 <div class="mb-2">
-    <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Audit Mode</h2>
+    <h2 class="text-xs font-semibold uppercase tracking-widest" style="color: var(--text-muted);">Audit Mode</h2>
 </div>
 
 <details class="mb-3">
-    <summary class="cursor-pointer text-sm text-gray-500 hover:text-gray-700 select-none">
+    <summary class="cursor-pointer text-sm select-none" style="color: var(--text-secondary);">
         Market Analytics breakdown (MA run #{{ $maRun->id }} · {{ $maRun->model_version }})
     </summary>
-    <div class="mt-2 bg-gray-50 border border-gray-200 rounded p-4 overflow-x-auto">
-        <pre class="text-xs text-gray-700 whitespace-pre-wrap">{{ json_encode($maRun->breakdown_json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) }}</pre>
+    <div class="mt-2 rounded-md p-4 overflow-x-auto" style="background: var(--surface-2); border: 1px solid var(--border);">
+        <pre class="text-xs whitespace-pre-wrap" style="color: var(--text-primary);">{{ json_encode($maRun->breakdown_json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) }}</pre>
     </div>
 </details>
 
 <details class="mb-8">
-    <summary class="cursor-pointer text-sm text-gray-500 hover:text-gray-700 select-none">
+    <summary class="cursor-pointer text-sm select-none" style="color: var(--text-secondary);">
         Sale Probability breakdown (SP run #{{ $spRun->id }} · {{ $spRun->model_version }})
     </summary>
-    <div class="mt-2 bg-gray-50 border border-gray-200 rounded p-4 overflow-x-auto">
-        <pre class="text-xs text-gray-700 whitespace-pre-wrap">{{ json_encode($spRun->breakdown_json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) }}</pre>
+    <div class="mt-2 rounded-md p-4 overflow-x-auto" style="background: var(--surface-2); border: 1px solid var(--border);">
+        <pre class="text-xs whitespace-pre-wrap" style="color: var(--text-primary);">{{ json_encode($spRun->breakdown_json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) }}</pre>
     </div>
 </details>
 

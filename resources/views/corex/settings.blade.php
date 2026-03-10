@@ -5,34 +5,34 @@
      x-data="{ activeTab: '{{ $activeTab }}' }">
 
     {{-- Page header --}}
-    <div style="background:#0b2a4a; border-radius:16px; padding:20px 24px;">
+    <div style="background:var(--brand-default, #0b2a4a); border-radius:6px; padding:20px 24px;">
         <h2 style="font-size:1.25rem; font-weight:800; color:#fff; margin:0 0 4px;">Settings</h2>
         <div style="font-size:0.875rem; color:rgba(255,255,255,0.55);">System configuration and preferences.</div>
     </div>
 
     @if(session('success'))
-        <div class="rounded-xl border px-4 py-3 text-sm font-medium" style="border-color:#bbf7d0; background:#f0fdf4; color:#166534;">
+        <div class="rounded-md border px-4 py-3 text-sm font-medium" style="border-color:#bbf7d0; background:#f0fdf4; color:#166534;">
             {{ session('success') }}
         </div>
     @endif
     @if(session('status'))
-        <div class="rounded-xl border px-4 py-3 text-sm font-medium" style="border-color:#bbf7d0; background:#f0fdf4; color:#166534;">
+        <div class="rounded-md border px-4 py-3 text-sm font-medium" style="border-color:#bbf7d0; background:#f0fdf4; color:#166534;">
             {{ session('status') }}
         </div>
     @endif
     @if(session('error'))
-        <div class="rounded-xl border px-4 py-3 text-sm font-medium" style="border-color:#fecaca; background:#fef2f2; color:#991b1b;">
+        <div class="rounded-md border px-4 py-3 text-sm font-medium" style="border-color:#fecaca; background:#fef2f2; color:#991b1b;">
             {{ session('error') }}
         </div>
     @endif
     @if($errors->any())
-        <div class="rounded-xl border px-4 py-3 text-sm" style="border-color:#fecaca; background:#fef2f2; color:#991b1b;">
+        <div class="rounded-md border px-4 py-3 text-sm" style="border-color:#fecaca; background:#fef2f2; color:#991b1b;">
             {{ $errors->first() }}
         </div>
     @endif
 
     {{-- Tab container --}}
-    <div style="background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden;">
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:6px; overflow:hidden;">
 
         {{-- Tab bar --}}
         <div class="flex overflow-x-auto" style="border-bottom:1px solid var(--border);">
@@ -44,9 +44,9 @@
             ] as $tab)
             <button type="button"
                     @click="activeTab = '{{ $tab['key'] }}'"
-                    :class="activeTab === '{{ $tab['key'] }}' ? 'text-[#00b4d8] border-b-2 border-[#00b4d8] bg-[#00b4d8]/5' : 'border-b-2 border-transparent'"
-                    :style="activeTab !== '{{ $tab['key'] }}' ? 'color:var(--text-secondary);' : ''"
-                    class="px-6 py-4 text-sm font-semibold whitespace-nowrap flex-shrink-0 transition-colors duration-150 outline-none focus:outline-none hover:opacity-80"
+                    :class="activeTab === '{{ $tab['key'] }}' ? 'border-b-2' : 'border-b-2 border-transparent'"
+                    :style="activeTab === '{{ $tab['key'] }}' ? 'color:var(--brand-icon, #0ea5e9); border-color:var(--brand-icon, #0ea5e9); background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 5%, transparent);' : 'color:var(--text-secondary);'"
+                    class="px-6 py-4 text-sm font-semibold whitespace-nowrap flex-shrink-0 transition-all duration-300 outline-none focus:outline-none hover:opacity-80"
                     style="background:transparent;">
                 {{ $tab['label'] }}
             </button>
@@ -63,9 +63,9 @@
             <div>
                 <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Structure</h3>
                 <a href="{{ route('admin.branch-assignments') }}"
-                   class="flex items-center gap-3 p-3 rounded-xl transition-colors duration-150 no-underline group hover:bg-black/[0.03]"
+                   class="flex items-center gap-3 p-3 rounded-md transition-all duration-300 no-underline group hover:bg-white/5"
                    style="border:1px solid var(--border);">
-                    <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(14,165,233,0.12);">
+                    <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background:rgba(14,165,233,0.12);">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#0ea5e9" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" /></svg>
                     </div>
                     <div class="flex-1">
@@ -81,7 +81,7 @@
             <div>
                 <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Company Settings</h3>
                 <form method="POST" action="{{ route('corex.settings.agency.update') }}" enctype="multipart/form-data"
-                      class="space-y-5 p-4 rounded-xl" style="background:var(--surface-2); border:1px solid var(--border);"
+                      class="space-y-5 p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);"
                       x-data="{ removelogo: false }">
                     @csrf
                     @method('PUT')
@@ -92,42 +92,42 @@
                         <div>
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Trading Name</label>
                             <input type="text" name="trading_name" value="{{ old('trading_name', $agency->trading_name) }}"
-                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
                                    placeholder="e.g. Johan and Elize Properties T/A">
                         </div>
                         <div>
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Tagline</label>
                             <input type="text" name="tagline" value="{{ old('tagline', $agency->tagline) }}"
-                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
                                    placeholder="e.g. THE MANDATE COMPANY">
                         </div>
                         <div>
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Registration No</label>
                             <input type="text" name="reg_no" value="{{ old('reg_no', $agency->reg_no) }}"
-                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
                                    placeholder="e.g. 2017/431318/07">
                         </div>
                         <div>
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">VAT No</label>
                             <input type="text" name="vat_no" value="{{ old('vat_no', $agency->vat_no) }}"
-                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
                                    placeholder="e.g. 4870264498">
                         </div>
                         <div>
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">FFC No</label>
                             <input type="text" name="ffc_no" value="{{ old('ffc_no', $agency->ffc_no) }}"
-                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
                                    placeholder="e.g. FFC40/43916/5">
                         </div>
                         <div>
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">FIC No</label>
                             <input type="text" name="fic_no" value="{{ old('fic_no', $agency->fic_no) }}"
-                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
                                    placeholder="e.g. 58538">
                         </div>
@@ -139,35 +139,35 @@
                         <div class="sm:col-span-2">
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Address</label>
                             <textarea name="address" rows="2"
-                                      class="w-full rounded-lg px-3 py-2 text-sm"
+                                      class="w-full rounded-md px-3 py-2 text-sm"
                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
                                       placeholder="Physical address">{{ old('address', $agency->address) }}</textarea>
                         </div>
                         <div>
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Primary Cell (Elize)</label>
                             <input type="text" name="phone" value="{{ old('phone', $agency->phone) }}"
-                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
                                    placeholder="e.g. 071 351 0291">
                         </div>
                         <div>
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Secondary Cell (Johan)</label>
                             <input type="text" name="phone_secondary" value="{{ old('phone_secondary', $agency->phone_secondary) }}"
-                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
                                    placeholder="e.g. 079 495 5994">
                         </div>
                         <div>
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Fax</label>
                             <input type="text" name="fax" value="{{ old('fax', $agency->fax) }}"
-                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
                                    placeholder="e.g. 086 514 7632">
                         </div>
                         <div>
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Email</label>
                             <input type="text" name="email" value="{{ old('email', $agency->email) }}"
-                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
                                    placeholder="e.g. admin@hfcoastal.co.za">
                         </div>
@@ -187,7 +187,7 @@
                         @endif
                         <div x-show="!removelogo">
                             <input type="file" name="logo" accept="image/jpeg,image/png,image/webp"
-                                   class="block w-full text-sm rounded-lg px-3 py-2"
+                                   class="block w-full text-sm rounded-md px-3 py-2"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-secondary);">
                             <p class="text-xs mt-1" style="color:var(--text-muted);">JPG, PNG, or WebP — max 2 MB.</p>
                         </div>
@@ -205,7 +205,7 @@
             <div>
                 <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Performance Settings</h3>
                 <form method="POST" action="{{ route('admin.performance-settings.update') }}"
-                      class="space-y-4 p-4 rounded-xl" style="background:var(--surface-2); border:1px solid var(--border);">
+                      class="space-y-4 p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
                     @csrf
                     {{-- Hidden fields to satisfy PerformanceSettingsController validation --}}
                     <input type="hidden" name="company_name" value="">
@@ -217,13 +217,13 @@
                         <div>
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">VAT Rate (%)</label>
                             <input type="number" step="0.01" min="0" max="100" name="vat_rate" value="{{ old('vat_rate', $vatRate) }}"
-                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                         </div>
                         <div>
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Listings per Sale</label>
                             <input type="number" step="0.01" min="0.01" name="listings_per_sale" value="{{ old('listings_per_sale', $listingsPerSale) }}"
-                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                             <p class="text-xs mt-1" style="color:var(--text-muted);">Used to calculate how many listings are needed for the target sales.</p>
                         </div>
@@ -240,9 +240,9 @@
             <div>
                 <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Super Admin</h3>
                 <a href="{{ route('agencies.index') }}"
-                   class="flex items-center gap-3 p-3 rounded-xl transition-colors duration-150 no-underline hover:bg-black/[0.03]"
+                   class="flex items-center gap-3 p-3 rounded-md transition-all duration-300 no-underline hover:bg-white/5"
                    style="border:1px solid var(--border);">
-                    <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(99,102,241,0.12);">
+                    <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background:rgba(99,102,241,0.12);">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#818cf8" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" /></svg>
                     </div>
                     <div class="flex-1">
@@ -267,9 +267,9 @@
                 <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Management</h3>
                 <div class="space-y-2">
                     <a href="{{ route('admin.users') }}"
-                       class="flex items-center gap-3 p-3 rounded-xl transition-colors duration-150 no-underline hover:bg-black/[0.03]"
+                       class="flex items-center gap-3 p-3 rounded-md transition-all duration-300 no-underline hover:bg-white/5"
                        style="border:1px solid var(--border);">
-                        <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(34,197,94,0.12);">
+                        <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background:rgba(34,197,94,0.12);">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#22c55e" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>
                         </div>
                         <div class="flex-1">
@@ -279,9 +279,9 @@
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" class="w-4 h-4 flex-shrink-0" style="color:var(--border-hover);"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
                     </a>
                     <a href="{{ route('corex.role-manager') }}"
-                       class="flex items-center gap-3 p-3 rounded-xl transition-colors duration-150 no-underline hover:bg-black/[0.03]"
+                       class="flex items-center gap-3 p-3 rounded-md transition-all duration-300 no-underline hover:bg-white/5"
                        style="border:1px solid var(--border);">
-                        <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(0,180,216,0.12);">
+                        <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background:rgba(0,180,216,0.12);">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#00b4d8" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg>
                         </div>
                         <div class="flex-1">
@@ -299,7 +299,7 @@
                 <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Designations</h3>
 
                 {{-- Add designation --}}
-                <div class="p-4 rounded-xl mb-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                <div class="p-4 rounded-md mb-3" style="background:var(--surface-2); border:1px solid var(--border);">
                     <div class="text-xs font-semibold mb-3" style="color:var(--text-secondary);">Add Designation</div>
                     <form method="POST" action="{{ url('/admin/designations') }}"
                           class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
@@ -307,13 +307,13 @@
                         <div class="md:col-span-6">
                             <label class="block text-xs mb-1" style="color:var(--text-muted);">Name</label>
                             <input name="name" required placeholder="e.g. Property Practitioner"
-                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                         </div>
                         <div class="md:col-span-3">
                             <label class="block text-xs mb-1" style="color:var(--text-muted);">Sort order</label>
                             <input name="sort_order" type="number" step="1" min="0" placeholder="0"
-                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                         </div>
                         <div class="md:col-span-2 flex items-center gap-2">
@@ -328,7 +328,7 @@
                 </div>
 
                 {{-- Designations list --}}
-                <div class="rounded-xl overflow-hidden" style="border:1px solid var(--border);">
+                <div class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
                     <div class="px-4 py-3 flex items-center justify-between" style="border-bottom:1px solid var(--border); background:var(--surface-2);">
                         <div class="text-sm font-semibold" style="color:var(--text-primary);">Current Designations</div>
                         <div class="text-xs" style="color:var(--text-muted);">{{ count($designations) }} total</div>
@@ -341,12 +341,12 @@
                                 @csrf
                                 <div class="md:col-span-6">
                                     <input name="name" value="{{ $d->name }}" required
-                                           class="w-full rounded-lg px-3 py-2 text-sm"
+                                           class="w-full rounded-md px-3 py-2 text-sm"
                                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                 </div>
                                 <div class="md:col-span-3">
                                     <input name="sort_order" type="number" step="1" min="0" value="{{ (int)$d->sort_order }}"
-                                           class="w-full rounded-lg px-3 py-2 text-sm"
+                                           class="w-full rounded-md px-3 py-2 text-sm"
                                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                 </div>
                                 <div class="md:col-span-2 flex items-center gap-2">
@@ -379,7 +379,7 @@
 
                 {{-- Token expiry warning --}}
                 @if(isset($socialAccountExpiringSoon) && $socialAccountExpiringSoon)
-                <div class="flex items-start gap-3 rounded-xl border px-4 py-3 mb-4 text-sm"
+                <div class="flex items-start gap-3 rounded-md border px-4 py-3 mb-4 text-sm"
                      x-data="{ show: true }" x-show="show"
                      style="background:#fefce8; border-color:#fde68a; color:#92400e;">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 flex-shrink-0 mt-0.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
@@ -393,9 +393,9 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
                     {{-- Facebook Card --}}
                     @php $fbSocial = isset($agentSocialAccounts) ? $agentSocialAccounts->firstWhere('platform', 'facebook') : null; @endphp
-                    <div class="rounded-xl p-4 space-y-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                    <div class="rounded-md p-4 space-y-3" style="background:var(--surface-2); border:1px solid var(--border);">
                         <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:#1877f222;">
+                            <div class="w-10 h-10 rounded-md flex items-center justify-center flex-shrink-0" style="background:#1877f222;">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#1877f2" class="w-5 h-5"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
                             </div>
                             <div class="flex-1 min-w-0">
@@ -423,14 +423,14 @@
                             @csrf
                             <input type="hidden" name="platform" value="facebook">
                             <button type="submit" onclick="return confirm('Disconnect Facebook? This will stop all Facebook publishing.')"
-                                    class="text-xs px-3 py-1.5 rounded-lg font-medium" style="background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid rgba(239,68,68,0.2);">
+                                    class="text-xs px-3 py-1.5 rounded-md font-medium" style="background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid rgba(239,68,68,0.2);">
                                 Disconnect Facebook
                             </button>
                         </form>
                         @else
                         @if(\Illuminate\Support\Facades\Route::has('corex.social.oauth.redirect'))
                         <a href="{{ route('corex.social.oauth.redirect', ['platform' => 'facebook']) }}"
-                           class="inline-flex items-center gap-2 text-xs px-4 py-2 rounded-lg font-semibold no-underline"
+                           class="inline-flex items-center gap-2 text-xs px-4 py-2 rounded-md font-semibold no-underline"
                            style="background:#1877f2; color:#fff;">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" class="w-3.5 h-3.5"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
                             Connect Facebook
@@ -441,9 +441,9 @@
 
                     {{-- Instagram Card --}}
                     @php $igSocial = isset($agentSocialAccounts) ? $agentSocialAccounts->firstWhere('platform', 'instagram') : null; @endphp
-                    <div class="rounded-xl p-4 space-y-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                    <div class="rounded-md p-4 space-y-3" style="background:var(--surface-2); border:1px solid var(--border);">
                         <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:#e1306c22;">
+                            <div class="w-10 h-10 rounded-md flex items-center justify-center flex-shrink-0" style="background:#e1306c22;">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#e1306c" class="w-5 h-5"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>
                             </div>
                             <div class="flex-1 min-w-0">
@@ -471,14 +471,14 @@
                             @csrf
                             <input type="hidden" name="platform" value="instagram">
                             <button type="submit" onclick="return confirm('Disconnect Instagram?')"
-                                    class="text-xs px-3 py-1.5 rounded-lg font-medium" style="background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid rgba(239,68,68,0.2);">
+                                    class="text-xs px-3 py-1.5 rounded-md font-medium" style="background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid rgba(239,68,68,0.2);">
                                 Disconnect Instagram
                             </button>
                         </form>
                         @else
                         @if(\Illuminate\Support\Facades\Route::has('corex.social.oauth.redirect'))
                         <a href="{{ route('corex.social.oauth.redirect', ['platform' => 'instagram']) }}"
-                           class="inline-flex items-center gap-2 text-xs px-4 py-2 rounded-lg font-semibold no-underline"
+                           class="inline-flex items-center gap-2 text-xs px-4 py-2 rounded-md font-semibold no-underline"
                            style="background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888); color:#fff;">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" class="w-3.5 h-3.5"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>
                             Connect Instagram
@@ -489,7 +489,7 @@
                 </div>
 
                 {{-- How to connect (collapsible) --}}
-                <div x-data="{ open: false }" class="rounded-xl overflow-hidden" style="border:1px solid var(--border);">
+                <div x-data="{ open: false }" class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
                     <button type="button" @click="open = !open"
                             class="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold transition-colors hover:opacity-80"
                             style="background:var(--surface-2); color:var(--text-primary);">
@@ -535,35 +535,35 @@
                 <button type="button"
                         @click="featureSection = 'documents'"
                         :class="featureSection === 'documents' ? 'bg-[#00b4d8]/10 text-[#00b4d8] border-[#00b4d8]/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
-                        class="px-4 py-2 rounded-lg text-sm font-semibold border transition-colors duration-150 outline-none"
+                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
                         style="background:transparent;">
                     Documents
                 </button>
                 <button type="button"
                         @click="featureSection = 'rentals'"
                         :class="featureSection === 'rentals' ? 'bg-[#00b4d8]/10 text-[#00b4d8] border-[#00b4d8]/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
-                        class="px-4 py-2 rounded-lg text-sm font-semibold border transition-colors duration-150 outline-none"
+                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
                         style="background:transparent;">
                     Rentals
                 </button>
                 <button type="button"
                         @click="featureSection = 'contacts'"
                         :class="featureSection === 'contacts' ? 'bg-[#00b4d8]/10 text-[#00b4d8] border-[#00b4d8]/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
-                        class="px-4 py-2 rounded-lg text-sm font-semibold border transition-colors duration-150 outline-none"
+                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
                         style="background:transparent;">
                     Contacts
                 </button>
                 <button type="button"
                         @click="featureSection = 'properties'"
                         :class="featureSection === 'properties' ? 'bg-[#00b4d8]/10 text-[#00b4d8] border-[#00b4d8]/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
-                        class="px-4 py-2 rounded-lg text-sm font-semibold border transition-colors duration-150 outline-none"
+                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
                         style="background:transparent;">
                     Properties
                 </button>
                 <button type="button"
                         @click="featureSection = 'matches'"
                         :class="featureSection === 'matches' ? 'bg-[#00b4d8]/10 text-[#00b4d8] border-[#00b4d8]/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
-                        class="px-4 py-2 rounded-lg text-sm font-semibold border transition-colors duration-150 outline-none"
+                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
                         style="background:transparent;">
                     Matches
                 </button>
@@ -575,19 +575,19 @@
                 {{-- Document Types --}}
                 <div>
                     <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Document Types</h3>
-                    <div class="p-4 rounded-xl mb-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                    <div class="p-4 rounded-md mb-3" style="background:var(--surface-2); border:1px solid var(--border);">
                         <div class="text-xs font-semibold mb-3" style="color:var(--text-secondary);">Add Document Type</div>
                         <form method="POST" action="{{ route('docuperfect.settings.types.store') }}"
                               class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                             @csrf
                             <div class="md:col-span-7">
                                 <input name="name" required placeholder="e.g. Mandates"
-                                       class="w-full rounded-lg px-3 py-2 text-sm"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
                                        style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                             </div>
                             <div class="md:col-span-3">
                                 <input name="sort_order" type="number" step="1" min="0" placeholder="Sort order"
-                                       class="w-full rounded-lg px-3 py-2 text-sm"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
                                        style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                             </div>
                             <div class="md:col-span-2">
@@ -595,7 +595,7 @@
                             </div>
                         </form>
                     </div>
-                    <div class="rounded-xl overflow-hidden" style="border:1px solid var(--border);">
+                    <div class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
                         <div class="px-4 py-3 flex items-center justify-between" style="border-bottom:1px solid var(--border); background:var(--surface-2);">
                             <div class="text-sm font-semibold" style="color:var(--text-primary);">Current Types</div>
                             <div class="text-xs" style="color:var(--text-muted);">{{ count($docTypes) }} total</div>
@@ -607,12 +607,12 @@
                                 @csrf @method('PUT')
                                 <div class="md:col-span-7">
                                     <input name="name" value="{{ $type->name }}" required
-                                           class="w-full rounded-lg px-3 py-2 text-sm"
+                                           class="w-full rounded-md px-3 py-2 text-sm"
                                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                 </div>
                                 <div class="md:col-span-3">
                                     <input name="sort_order" type="number" step="1" min="0" value="{{ (int)$type->sort_order }}"
-                                           class="w-full rounded-lg px-3 py-2 text-sm"
+                                           class="w-full rounded-md px-3 py-2 text-sm"
                                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                 </div>
                                 <div class="md:col-span-2">
@@ -640,19 +640,19 @@
                 {{-- Named Fields --}}
                 <div>
                     <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Named Fields</h3>
-                    <div class="p-4 rounded-xl mb-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                    <div class="p-4 rounded-md mb-3" style="background:var(--surface-2); border:1px solid var(--border);">
                         <div class="text-xs font-semibold mb-3" style="color:var(--text-secondary);">Add Named Field</div>
                         <form method="POST" action="{{ route('docuperfect.settings.namedFields.store') }}"
                               class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                             @csrf
                             <div class="md:col-span-4">
                                 <input name="name" required placeholder="e.g. Seller Name"
-                                       class="w-full rounded-lg px-3 py-2 text-sm"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
                                        style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                             </div>
                             <div class="md:col-span-2">
                                 <select name="field_type"
-                                        class="w-full rounded-lg px-3 py-2 text-sm"
+                                        class="w-full rounded-md px-3 py-2 text-sm"
                                         style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                     <option value="text">Text</option>
                                     <option value="date">Date</option>
@@ -661,12 +661,12 @@
                             </div>
                             <div class="md:col-span-3">
                                 <input name="default_options" placeholder="Options (comma-separated)"
-                                       class="w-full rounded-lg px-3 py-2 text-sm"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
                                        style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                             </div>
                             <div class="md:col-span-2">
                                 <input name="sort_order" type="number" step="1" min="0" placeholder="Sort order"
-                                       class="w-full rounded-lg px-3 py-2 text-sm"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
                                        style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                             </div>
                             <div class="md:col-span-1">
@@ -674,7 +674,7 @@
                             </div>
                         </form>
                     </div>
-                    <div class="rounded-xl overflow-hidden" style="border:1px solid var(--border);">
+                    <div class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
                         <div class="px-4 py-3 flex items-center justify-between" style="border-bottom:1px solid var(--border); background:var(--surface-2);">
                             <div class="text-sm font-semibold" style="color:var(--text-primary);">Current Named Fields</div>
                             <div class="text-xs" style="color:var(--text-muted);">{{ count($namedFields) }} total</div>
@@ -686,12 +686,12 @@
                                 @csrf @method('PUT')
                                 <div class="md:col-span-4">
                                     <input name="name" value="{{ $field->name }}" required
-                                           class="w-full rounded-lg px-3 py-2 text-sm"
+                                           class="w-full rounded-md px-3 py-2 text-sm"
                                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                 </div>
                                 <div class="md:col-span-2">
                                     <select name="field_type"
-                                            class="w-full rounded-lg px-3 py-2 text-sm"
+                                            class="w-full rounded-md px-3 py-2 text-sm"
                                             style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         <option value="text" {{ $field->field_type === 'text' ? 'selected' : '' }}>Text</option>
                                         <option value="date" {{ $field->field_type === 'date' ? 'selected' : '' }}>Date</option>
@@ -701,12 +701,12 @@
                                 <div class="md:col-span-3">
                                     <input name="default_options"
                                            value="{{ is_array($field->default_options) ? implode(', ', $field->default_options) : '' }}"
-                                           class="w-full rounded-lg px-3 py-2 text-sm"
+                                           class="w-full rounded-md px-3 py-2 text-sm"
                                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                 </div>
                                 <div class="md:col-span-2">
                                     <input name="sort_order" type="number" step="1" min="0" value="{{ (int)$field->sort_order }}"
-                                           class="w-full rounded-lg px-3 py-2 text-sm"
+                                           class="w-full rounded-md px-3 py-2 text-sm"
                                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                 </div>
                                 <div class="md:col-span-1">
@@ -734,9 +734,9 @@
                 <div>
                     <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Properties</h3>
                     <a href="{{ route('rental.settings.properties.index') }}"
-                       class="flex items-center gap-3 p-3 rounded-xl transition-colors duration-150 no-underline hover:bg-black/[0.03]"
+                       class="flex items-center gap-3 p-3 rounded-md transition-all duration-300 no-underline hover:bg-white/5"
                        style="border:1px solid var(--border);">
-                        <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(34,197,94,0.12);">
+                        <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background:rgba(34,197,94,0.12);">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#22c55e" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" /></svg>
                         </div>
                         <div class="flex-1">
@@ -752,7 +752,7 @@
                     <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Rental Document Types</h3>
                     <div class="space-y-2 mb-3" x-data="{ showAdd: false, editId: null }">
                         @foreach($rentalDocTypes as $rType)
-                        <div class="flex items-center justify-between p-3 rounded-lg {{ !$rType->is_active ? 'opacity-50' : '' }}"
+                        <div class="flex items-center justify-between p-3 rounded-md {{ !$rType->is_active ? 'opacity-50' : '' }}"
                              style="background:var(--surface-2); border:1px solid var(--border);">
                             <div class="flex items-center gap-3">
                                 <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color: {{ $rType->color }}"></span>
@@ -775,7 +775,7 @@
                             </div>
                         </div>
                         {{-- Inline edit --}}
-                        <div x-show="editId === {{ $rType->id }}" x-cloak class="rounded-lg p-3"
+                        <div x-show="editId === {{ $rType->id }}" x-cloak class="rounded-md p-3"
                              style="background:rgba(59,130,246,0.06); border:1px solid rgba(59,130,246,0.2);">
                             <form method="POST" action="{{ route('rental.settings.document-types.update', $rType) }}"
                                   class="flex flex-wrap items-end gap-3">
@@ -806,7 +806,7 @@
                         <div class="mt-2">
                             <button @click="showAdd = !showAdd"
                                     class="text-sm text-blue-600 hover:text-blue-700 font-medium">+ Add Document Type</button>
-                            <div x-show="showAdd" x-cloak class="rounded-lg p-3 mt-2"
+                            <div x-show="showAdd" x-cloak class="rounded-md p-3 mt-2"
                                  style="background:rgba(34,197,94,0.06); border:1px solid rgba(34,197,94,0.2);">
                                 <form method="POST" action="{{ route('rental.settings.document-types.store') }}"
                                       class="flex flex-wrap items-end gap-3">
@@ -844,7 +844,7 @@
                           class="space-y-4">
                         @csrf @method('PUT')
 
-                        <div class="p-4 rounded-xl" style="background:var(--surface-2); border:1px solid var(--border);">
+                        <div class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
                             <div class="flex items-center justify-between">
                                 <div>
                                     <div class="text-sm font-semibold" style="color:var(--text-primary);">Automatic Reminders</div>
@@ -859,17 +859,17 @@
                         </div>
 
                         <div x-show="enabled" x-cloak class="space-y-4">
-                            <div class="p-4 rounded-xl" style="background:var(--surface-2); border:1px solid var(--border);">
+                            <div class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
                                 <div class="text-sm font-semibold mb-3" style="color:var(--text-primary);">Reminder Mode</div>
                                 <div class="grid grid-cols-2 gap-3">
                                     <label :class="mode === 'escalating' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'"
-                                           class="border rounded-lg p-3 cursor-pointer transition">
+                                           class="border rounded-md p-3 cursor-pointer transition">
                                         <input type="radio" name="mode" value="escalating" x-model="mode" class="sr-only">
                                         <div class="font-medium text-sm" style="color:var(--text-primary);">Escalating</div>
                                         <div class="text-xs mt-1" style="color:var(--text-secondary);">Gentle → Firm → Team Alert → Final</div>
                                     </label>
                                     <label :class="mode === 'simple' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'"
-                                           class="border rounded-lg p-3 cursor-pointer transition">
+                                           class="border rounded-md p-3 cursor-pointer transition">
                                         <input type="radio" name="mode" value="simple" x-model="mode" class="sr-only">
                                         <div class="font-medium text-sm" style="color:var(--text-primary);">Simple Interval</div>
                                         <div class="text-xs mt-1" style="color:var(--text-secondary);">Same reminder every N days</div>
@@ -877,7 +877,7 @@
                                 </div>
                             </div>
 
-                            <div x-show="mode === 'escalating'" x-cloak class="p-4 rounded-xl space-y-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                            <div x-show="mode === 'escalating'" x-cloak class="p-4 rounded-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border);">
                                 <div class="text-sm font-semibold" style="color:var(--text-primary);">Escalation Schedule</div>
                                 <div class="grid grid-cols-2 gap-3">
                                     @foreach([
@@ -890,7 +890,7 @@
                                         <label class="block text-xs font-medium mb-1" style="color:var(--text-muted);">{{ $rf['label'] }}</label>
                                         <input type="number" name="{{ $rf['key'] }}"
                                                value="{{ old($rf['key'], $rentalReminderSettings->{$rf['key']}) }}"
-                                               class="w-full rounded-lg px-3 py-2 text-sm"
+                                               class="w-full rounded-md px-3 py-2 text-sm"
                                                style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                     </div>
                                     @endforeach
@@ -898,33 +898,33 @@
                                         <label class="block text-xs font-medium mb-1" style="color:var(--text-muted);">Max reminders per signer</label>
                                         <input type="number" name="max_escalating_reminders"
                                                value="{{ old('max_escalating_reminders', $rentalReminderSettings->max_escalating_reminders) }}"
-                                               class="w-full rounded-lg px-3 py-2 text-sm"
+                                               class="w-full rounded-md px-3 py-2 text-sm"
                                                style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                     </div>
                                 </div>
                             </div>
 
-                            <div x-show="mode === 'simple'" x-cloak class="p-4 rounded-xl space-y-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                            <div x-show="mode === 'simple'" x-cloak class="p-4 rounded-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border);">
                                 <div class="text-sm font-semibold" style="color:var(--text-primary);">Simple Interval</div>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div>
                                         <label class="block text-xs font-medium mb-1" style="color:var(--text-muted);">Send every (days)</label>
                                         <input type="number" name="interval_days"
                                                value="{{ old('interval_days', $rentalReminderSettings->interval_days) }}"
-                                               class="w-full rounded-lg px-3 py-2 text-sm"
+                                               class="w-full rounded-md px-3 py-2 text-sm"
                                                style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                     </div>
                                     <div>
                                         <label class="block text-xs font-medium mb-1" style="color:var(--text-muted);">Max reminders per signer</label>
                                         <input type="number" name="max_simple_reminders"
                                                value="{{ old('max_simple_reminders', $rentalReminderSettings->max_simple_reminders) }}"
-                                               class="w-full rounded-lg px-3 py-2 text-sm"
+                                               class="w-full rounded-md px-3 py-2 text-sm"
                                                style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="p-4 rounded-xl space-y-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                            <div class="p-4 rounded-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border);">
                                 <div class="text-sm font-semibold" style="color:var(--text-primary);">Custom Email Template</div>
                                 <div class="flex flex-wrap gap-1 text-xs">
                                     @foreach(['{signer_name}','{document_name}','{agent_name}','{signing_link}','{days_waiting}'] as $ph)
@@ -936,13 +936,13 @@
                                     <input type="text" name="email_subject"
                                            value="{{ old('email_subject', $rentalReminderSettings->email_subject) }}"
                                            placeholder="e.g. Reminder: Please sign {document_name}"
-                                           class="w-full rounded-lg px-3 py-2 text-sm"
+                                           class="w-full rounded-md px-3 py-2 text-sm"
                                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                 </div>
                                 <div>
                                     <label class="block text-xs font-medium mb-1" style="color:var(--text-muted);">Body</label>
                                     <textarea name="email_body" rows="5"
-                                              class="w-full rounded-lg px-3 py-2 text-sm"
+                                              class="w-full rounded-md px-3 py-2 text-sm"
                                               style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">{{ old('email_body', $rentalReminderSettings->email_body) }}</textarea>
                                 </div>
                             </div>
@@ -970,7 +970,7 @@
                     <p class="text-xs mb-4" style="color:var(--text-muted);">Types appear in the contact form when creating or editing a contact.</p>
 
                     {{-- Add Contact Type --}}
-                    <div class="p-4 rounded-xl mb-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                    <div class="p-4 rounded-md mb-3" style="background:var(--surface-2); border:1px solid var(--border);">
                         <div class="text-xs font-semibold mb-3" style="color:var(--text-secondary);">Add Contact Type</div>
                         <form method="POST" action="{{ route('corex.settings.contact-types.store') }}"
                               class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
@@ -978,19 +978,19 @@
                             <div class="md:col-span-6">
                                 <label class="block text-xs mb-1" style="color:var(--text-muted);">Name</label>
                                 <input name="name" required placeholder="e.g. Buyer, Seller, Tenant"
-                                       class="w-full rounded-lg px-3 py-2 text-sm"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
                                        style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                             </div>
                             <div class="md:col-span-2">
                                 <label class="block text-xs mb-1" style="color:var(--text-muted);">Color</label>
                                 <input type="color" name="color" value="#6366f1"
-                                       class="w-full h-9 rounded-lg cursor-pointer border"
+                                       class="w-full h-9 rounded-md cursor-pointer border"
                                        style="border-color:var(--border); background:var(--surface);">
                             </div>
                             <div class="md:col-span-2">
                                 <label class="block text-xs mb-1" style="color:var(--text-muted);">Sort order</label>
                                 <input name="sort_order" type="number" step="1" min="0" placeholder="0"
-                                       class="w-full rounded-lg px-3 py-2 text-sm"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
                                        style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                             </div>
                             <div class="md:col-span-2">
@@ -1000,7 +1000,7 @@
                     </div>
 
                     {{-- Contact Types list --}}
-                    <div class="rounded-xl overflow-hidden" style="border:1px solid var(--border);">
+                    <div class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
                         <div class="px-4 py-3 flex items-center justify-between" style="border-bottom:1px solid var(--border); background:var(--surface-2);">
                             <div class="text-sm font-semibold" style="color:var(--text-primary);">Current Types</div>
                             <div class="text-xs" style="color:var(--text-muted);">{{ count($contactTypes) }} total</div>
@@ -1039,25 +1039,25 @@
                                         <div class="md:col-span-6">
                                             <label class="block text-xs mb-1" style="color:var(--text-muted);">Name</label>
                                             <input name="name" value="{{ $cType->name }}" required
-                                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                                   class="w-full rounded-md px-3 py-2 text-sm"
                                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
                                         <div class="md:col-span-2">
                                             <label class="block text-xs mb-1" style="color:var(--text-muted);">Color</label>
                                             <input type="color" name="color" value="{{ $cType->color }}"
-                                                   class="w-full h-9 rounded-lg cursor-pointer border"
+                                                   class="w-full h-9 rounded-md cursor-pointer border"
                                                    style="border-color:var(--border); background:var(--surface);">
                                         </div>
                                         <div class="md:col-span-2">
                                             <label class="block text-xs mb-1" style="color:var(--text-muted);">Sort order</label>
                                             <input name="sort_order" type="number" step="1" min="0" value="{{ (int)$cType->sort_order }}"
-                                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                                   class="w-full rounded-md px-3 py-2 text-sm"
                                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
                                         <div class="md:col-span-2 flex gap-2">
                                             <button type="submit" class="flex-1 corex-btn-primary text-sm">Save</button>
                                             <button type="button" @click="editCTId = null"
-                                                    class="flex-1 text-sm rounded-lg"
+                                                    class="flex-1 text-sm rounded-md"
                                                     style="border:1px solid var(--border); color:var(--text-secondary);">Cancel</button>
                                         </div>
                                     </form>
@@ -1088,7 +1088,7 @@
                 @endphp
 
                 {{-- Marketing Toggle --}}
-                <div class="p-4 rounded-xl flex items-center justify-between gap-4" style="background:var(--surface-2); border:1px solid var(--border);">
+                <div class="p-4 rounded-md flex items-center justify-between gap-4" style="background:var(--surface-2); border:1px solid var(--border);">
                     <div>
                         <div class="text-sm font-semibold" style="color:var(--text-primary);">Property Marketing</div>
                         <div class="text-xs mt-0.5" style="color:var(--text-secondary);">When disabled, the "Market Property" button will not appear on property pages.</div>
@@ -1173,7 +1173,7 @@
                     isDragTarget(idx, list) {
                         return this.dragTarget?.idx === idx && this.dragTarget?.list === list && this.dragFrom?.list === list && this.dragFrom?.idx !== idx;
                     }
-                }" class="rounded-xl overflow-hidden" style="border:1px solid var(--border);">
+                }" class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
 
                     {{-- Accordion header --}}
                     <button type="button" @click="open = !open"
@@ -1210,13 +1210,13 @@
                                     <div class="md:col-span-7">
                                         <label class="block text-xs font-medium mb-1" style="color:var(--text-muted);">Name</label>
                                         <input name="name" required placeholder="{{ $pg['placeholder'] }}"
-                                               class="w-full rounded-lg px-3 py-2 text-sm"
+                                               class="w-full rounded-md px-3 py-2 text-sm"
                                                style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                     </div>
                                     <div class="md:col-span-3">
                                         <label class="block text-xs font-medium mb-1" style="color:var(--text-muted);">Sort Order</label>
                                         <input name="sort_order" type="number" step="1" min="0" placeholder="0"
-                                               class="w-full rounded-lg px-3 py-2 text-sm"
+                                               class="w-full rounded-md px-3 py-2 text-sm"
                                                style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                     </div>
                                     <div class="md:col-span-2">
@@ -1301,18 +1301,18 @@
                                         <input type="hidden" name="_method" value="PUT">
                                         <div class="md:col-span-7">
                                             <input name="name" :value="editName" required
-                                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                                   class="w-full rounded-md px-3 py-2 text-sm"
                                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
                                         <div class="md:col-span-3">
                                             <input name="sort_order" type="number" step="1" min="0" :value="editSort"
-                                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                                   class="w-full rounded-md px-3 py-2 text-sm"
                                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
                                         <div class="md:col-span-2 flex gap-2">
                                             <button type="submit" class="flex-1 corex-btn-primary text-sm">Save</button>
                                             <button type="button" @click="editId = null"
-                                                    class="flex-1 text-sm rounded-lg"
+                                                    class="flex-1 text-sm rounded-md"
                                                     style="border:1px solid var(--border); color:var(--text-secondary);">✕</button>
                                         </div>
                                     </form>
@@ -1339,7 +1339,7 @@
             <div x-show="featureSection === 'matches'" x-cloak class="space-y-5">
 
                 {{-- Enable / Disable toggle --}}
-                <div class="p-4 rounded-xl flex items-center justify-between gap-4" style="background:var(--surface-2); border:1px solid var(--border);">
+                <div class="p-4 rounded-md flex items-center justify-between gap-4" style="background:var(--surface-2); border:1px solid var(--border);">
                     <div>
                         <div class="text-sm font-semibold" style="color:var(--text-primary);">Core Matches</div>
                         <div class="text-xs mt-0.5" style="color:var(--text-secondary);">When disabled, the Core Matches tab is hidden on contacts and properties, and the sidebar link is removed.</div>
@@ -1365,7 +1365,7 @@
                 </div>
 
                 {{-- Show on Properties toggle --}}
-                <div class="p-4 rounded-xl flex items-center justify-between gap-4" style="background:var(--surface-2); border:1px solid var(--border);">
+                <div class="p-4 rounded-md flex items-center justify-between gap-4" style="background:var(--surface-2); border:1px solid var(--border);">
                     <div>
                         <div class="text-sm font-semibold" style="color:var(--text-primary);">Show Core Matches on Properties</div>
                         <div class="text-xs mt-0.5" style="color:var(--text-secondary);">When disabled, the Core Matches tab is hidden on individual property pages only. Contacts and the sidebar are unaffected.</div>
@@ -1391,7 +1391,7 @@
                 </div>
 
                 {{-- WhatsApp message template --}}
-                <div class="p-4 rounded-xl space-y-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                <div class="p-4 rounded-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border);">
                     <div>
                         <div class="text-sm font-semibold" style="color:var(--text-primary);">WhatsApp Message Template</div>
                         <div class="text-xs mt-0.5" style="color:var(--text-secondary);">
@@ -1401,7 +1401,7 @@
                     <form method="POST" action="{{ route('corex.settings.matches-wa-message') }}" class="space-y-3">
                         @csrf
                         <textarea name="matches_wa_message" rows="8" maxlength="1000"
-                                  class="w-full rounded-lg px-3 py-2 text-sm font-mono"
+                                  class="w-full rounded-md px-3 py-2 text-sm font-mono"
                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary); resize:vertical; line-height:1.6;">{{ old('matches_wa_message', $matchesWaMessage) }}</textarea>
                         <div class="flex items-center justify-between">
                             <span class="text-[10px]" style="color:var(--text-muted);">Max 1000 characters.</span>
@@ -1423,12 +1423,12 @@
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
                 {{-- General --}}
-                <div class="p-4 rounded-xl space-y-4" style="background:var(--surface-2); border:1px solid var(--border);">
+                <div class="p-4 rounded-md space-y-4" style="background:var(--surface-2); border:1px solid var(--border);">
                     <h3 class="text-xs font-bold uppercase tracking-widest" style="color:var(--text-muted); border-left:3px solid #00b4d8; padding-left:10px;">General</h3>
                     <div>
                         <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Application Name</label>
                         <input type="text" value="{{ config('app.name') }}" disabled
-                               class="w-full rounded-lg px-3 py-2 text-sm cursor-not-allowed"
+                               class="w-full rounded-md px-3 py-2 text-sm cursor-not-allowed"
                                style="background:var(--surface); border:1px solid var(--border); color:var(--text-muted);">
                         <p class="text-xs mt-1" style="color:var(--text-muted);">Configured in environment settings.</p>
                     </div>
@@ -1449,9 +1449,9 @@
                 {{-- P24 Suburbs + quick links --}}
                 <div class="space-y-2">
                     <a href="{{ route('admin.p24-suburbs.index') }}"
-                       class="flex items-center gap-3 p-3 rounded-xl transition-colors duration-150 no-underline hover:bg-black/[0.03]"
+                       class="flex items-center gap-3 p-3 rounded-md transition-all duration-300 no-underline hover:bg-white/5"
                        style="border:1px solid var(--border);">
-                        <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(0,180,216,0.12);">
+                        <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background:rgba(0,180,216,0.12);">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#00b4d8" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
                         </div>
                         <div class="flex-1">
@@ -1474,7 +1474,7 @@
                         ['label'=>'Database','value'=>config('database.default')],
                         ['label'=>'Users','value'=>\App\Models\User::count()],
                     ] as $stat)
-                    <div class="p-4 rounded-xl" style="background:var(--surface-2); border:1px solid var(--border);">
+                    <div class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
                         <div class="text-xs font-bold uppercase tracking-widest mb-2" style="color:var(--text-muted);">{{ $stat['label'] }}</div>
                         <div class="text-xl font-bold" style="color:var(--text-primary);">{{ $stat['value'] }}</div>
                     </div>

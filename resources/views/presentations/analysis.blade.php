@@ -8,17 +8,17 @@
 @section('corex-content')
 
 {{-- Sticky action bar — <main> padding zeroed, pins flush --}}
-<div class="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
+<div class="sticky top-0 z-40 shadow-sm" style="background: var(--surface); border-bottom: 1px solid var(--border);">
     <div class="px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-14">
             <div class="flex items-center gap-3">
-                <a href="{{ route('presentations.show', $presentation) }}" class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
+                <a href="{{ route('presentations.show', $presentation) }}" class="inline-flex items-center gap-1 text-sm transition-all duration-300" style="color: var(--text-secondary);">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
                     Overview
                 </a>
             </div>
             <div class="flex-1 text-center truncate mx-4">
-                <h2 class="text-sm font-semibold text-gray-700 truncate">Market Analysis — {{ $presentation->title }}</h2>
+                <h2 class="text-sm font-semibold truncate" style="color: var(--text-primary);">Market Analysis — {{ $presentation->title }}</h2>
             </div>
             <div class="flex items-center gap-2">
                 @if(isset($latestSnapshot) && $latestSnapshot && $latestSnapshot->generated_at)
@@ -34,7 +34,7 @@
 {{-- ══════════════════════════════════════════════════════════════════════════
      PAGE HEADER
 ══════════════════════════════════════════════════════════════════════════ --}}
-<div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-6">
+<div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4 mb-6">
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div>
             <h2 class="text-xl font-bold text-white leading-tight">Market Analysis</h2>
@@ -59,21 +59,21 @@
     $lastUpload  = $presentation->uploads->sortByDesc('created_at')->first();
 @endphp
 @if($linkCount > 0 || $uploadCount > 0)
-<div class="mb-4 flex flex-wrap gap-4 text-xs text-gray-500">
+<div class="mb-4 flex flex-wrap gap-4 text-xs" style="color: var(--text-secondary);">
     @if($linkCount > 0)
         <span>
-            <span class="font-medium text-gray-700">{{ $linkCount }}</span>
+            <span class="font-medium" style="color: var(--text-primary);">{{ $linkCount }}</span>
             {{ $linkCount === 1 ? 'link' : 'links' }} attached
             <a href="{{ route('presentations.show', $presentation) }}#links"
-               class="ml-1 text-[#00b4d8] hover:underline">manage</a>
+               class="ml-1 hover:underline" style="color: var(--brand-icon, #0ea5e9);">manage</a>
         </span>
     @endif
     @if($uploadCount > 0)
         <span>
-            <span class="font-medium text-gray-700">{{ $uploadCount }}</span>
+            <span class="font-medium" style="color: var(--text-primary);">{{ $uploadCount }}</span>
             {{ $uploadCount === 1 ? 'document' : 'documents' }} uploaded
             @if($lastUpload)
-                <span class="text-gray-400">· last {{ $lastUpload->created_at->format('d M') }}</span>
+                <span style="color: var(--text-muted);">· last {{ $lastUpload->created_at->format('d M') }}</span>
             @endif
         </span>
     @endif
@@ -100,9 +100,9 @@
                 <input type="number" name="asking_price_inc"
                        value="{{ $presentation->asking_price_inc ?? '' }}"
                        step="1" min="0"
-                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none"
+                       class="w-full pres-input px-3 py-2 text-sm"
                        placeholder="e.g. 2500000">
-                <p class="mt-0.5 text-xs text-gray-400">Saves to presentation and freezes analysis snapshot.</p>
+                <p class="mt-0.5 text-xs" style="color: var(--text-muted);">Saves to presentation and freezes analysis snapshot.</p>
                 @error('asking_price_inc')<p class="mt-1 text-xs text-red-600">{{ $message }}</p>@enderror
             </div>
             <div class="flex items-end">
@@ -113,11 +113,11 @@
         </div>
 
         {{-- Context fields (read-only, from presentation record) --}}
-        <div class="mt-4 pt-3 border-t grid grid-cols-2 gap-x-8 gap-y-1 text-xs text-gray-500 md:grid-cols-4">
-            <div>Suburb: <span class="font-medium text-gray-700">{{ $presentation->suburb ?? '—' }}</span></div>
-            <div>Type: <span class="font-medium text-gray-700">{{ ucfirst($presentation->property_type ?? '—') }}</span></div>
-            <div>Bedrooms: <span class="font-medium text-gray-700">{{ $presentation->bedrooms ?? '—' }}</span></div>
-            <div>Floor area: <span class="font-medium text-gray-700">{{ $presentation->floor_area_m2 ? $presentation->floor_area_m2 . ' m²' : '—' }}</span></div>
+        <div class="mt-4 pt-3 border-t grid grid-cols-2 gap-x-8 gap-y-1 text-xs md:grid-cols-4" style="color: var(--text-secondary);">
+            <div>Suburb: <span class="font-medium" style="color: var(--text-primary);">{{ $presentation->suburb ?? '—' }}</span></div>
+            <div>Type: <span class="font-medium" style="color: var(--text-primary);">{{ ucfirst($presentation->property_type ?? '—') }}</span></div>
+            <div>Bedrooms: <span class="font-medium" style="color: var(--text-primary);">{{ $presentation->bedrooms ?? '—' }}</span></div>
+            <div>Floor area: <span class="font-medium" style="color: var(--text-primary);">{{ $presentation->floor_area_m2 ? $presentation->floor_area_m2 . ' m²' : '—' }}</span></div>
         </div>
     </form>
 </div>
@@ -135,7 +135,7 @@
         </button>
     </form>
     @else
-    <button disabled class="px-4 py-2 bg-gray-300 text-gray-500 text-sm font-medium rounded cursor-not-allowed" title="Complete readiness checklist first">
+    <button disabled class="px-4 py-2 text-sm font-medium rounded-md" style="background: var(--surface-2); color: var(--text-muted); cursor: not-allowed;" title="Complete readiness checklist first">
         Compile Pack
     </button>
     @endif
@@ -162,7 +162,7 @@
 
     {{-- Back to Overview --}}
     <a href="{{ route('presentations.show', $presentation) }}"
-       class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded hover:bg-gray-200">
+       class="corex-btn-outline">
         &larr; Back to Overview
     </a>
 </div>
@@ -198,11 +198,11 @@
             <div class="flex items-center gap-2">
                 @if($item['ok'])
                     <span class="text-emerald-500 font-bold">✓</span>
-                    <span class="text-gray-700">{{ $item['label'] }}</span>
+                    <span style="color: var(--text-primary);">{{ $item['label'] }}</span>
                 @else
-                    <span class="text-gray-300 font-bold">○</span>
-                    <span class="text-gray-400">{{ $item['label'] }}
-                        <span class="text-[#00b4d8]"> — {{ $item['fix'] }}</span>
+                    <span class="font-bold" style="color: var(--text-muted);">○</span>
+                    <span style="color: var(--text-muted);">{{ $item['label'] }}
+                        <span style="color: var(--brand-icon, #0ea5e9);"> — {{ $item['fix'] }}</span>
                     </span>
                 @endif
             </div>

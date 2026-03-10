@@ -47,25 +47,25 @@
 
 <x-app-layout>
     <x-slot name="header">
-        <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+        <div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                 <div>
-                    <h2 class="text-xl font-bold text-white leading-tight">
+                    <h2 class="text-xl font-bold text-white leading-tight tracking-tight">
                         Company Dashboard — {{ $r['period'] ?? now()->format('Y-m') }}
                     </h2>
                     <div class="text-sm text-white/60">Admin view</div>
                 </div>
                 <div class="flex items-center gap-2">
                     <form method="GET" action="{{ route('admin.performance') }}" class="flex items-center gap-2">
-                        <input type="month" name="period" value="{{ $r['period'] ?? now()->format('Y-m') }}" class="h-8 text-sm rounded border border-white/20 bg-white/10 text-white px-2" />
-                        <button type="submit" class="px-3 py-1.5 text-sm font-semibold rounded bg-white/20 text-white hover:bg-white/30">Go</button>
+                        <input type="month" name="period" value="{{ $r['period'] ?? now()->format('Y-m') }}" class="h-8 text-sm rounded-md border border-white/20 bg-white/10 text-white px-2 transition-all duration-300" />
+                        <button type="submit" class="px-3 py-1.5 text-sm font-semibold rounded-md bg-white/20 text-white hover:bg-white/30 transition-all duration-300">Go</button>
                     </form>
                 </div>
             </div>
         </div>
     </x-slot>
 
-    <div class="space-y-8">
+    <div class="space-y-6">
 
         {{-- STATUS TILES --}}
         <div class="space-y-3">
@@ -73,7 +73,7 @@
             {{-- Set 1: Period (counts) --}}
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
 
-                <a href="/admin/deals?status=Declined&period={{ $r['period'] ?? now()->format('Y-m') }}" class="block">
+                <a href="/admin/deals?status=Declined&period={{ $r['period'] ?? now()->format('Y-m') }}" class="block transition-all duration-300">
                     <div class="ds-status-card ds-status-declined">
                         <div class="ds-label mb-2">Declined</div>
                         <div class="grid grid-cols-2 gap-3">
@@ -89,7 +89,7 @@
                     </div>
                 </a>
 
-                <a href="/admin/deals?status=Pending&period={{ $r['period'] ?? now()->format('Y-m') }}" class="block">
+                <a href="/admin/deals?status=Pending&period={{ $r['period'] ?? now()->format('Y-m') }}" class="block transition-all duration-300">
                     <div class="ds-status-card ds-status-pending">
                         <div class="ds-label mb-2">Pending</div>
                         <div class="grid grid-cols-2 gap-3">
@@ -105,7 +105,7 @@
                     </div>
                 </a>
 
-                <a href="/admin/deals?status=Granted&period={{ $r['period'] ?? now()->format('Y-m') }}" class="block">
+                <a href="/admin/deals?status=Granted&period={{ $r['period'] ?? now()->format('Y-m') }}" class="block transition-all duration-300">
                     <div class="ds-status-card ds-status-granted">
                         <div class="ds-label mb-2">Granted</div>
                         <div class="grid grid-cols-2 gap-3">
@@ -121,7 +121,7 @@
                     </div>
                 </a>
 
-                <a href="/admin/deals?status=Registered&period={{ $r['period'] ?? now()->format('Y-m') }}" class="block">
+                <a href="/admin/deals?status=Registered&period={{ $r['period'] ?? now()->format('Y-m') }}" class="block transition-all duration-300">
                     <div class="ds-status-card ds-status-registered">
                         <div class="ds-label mb-2">Registered</div>
                         <div class="grid grid-cols-2 gap-3">
@@ -142,19 +142,19 @@
             <h2 class="ds-section-header">Outstanding Commission</h2>
             {{-- Set 2: Outstanding (Not Paid) — Company ex VAT --}}
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <a href="/admin/deals?status=Pending&commission_status=Not%20Paid" class="block">
+                <a href="/admin/deals?status=Pending&commission_status=Not%20Paid" class="block transition-all duration-300">
                     <div class="ds-status-card ds-money-pending">
                         <div class="ds-label">Pending (Not Paid) — Company ex VAT</div>
-                        <div class="ds-value-xl mt-1" style="color:#0b2a4a">
+                        <div class="ds-value-xl mt-1">
                             R {{ number_format((float)($statusSummary['pending_unpaid_company_ex_vat'] ?? 0), 0) }}
                         </div>
                     </div>
                 </a>
 
-                <a href="/admin/deals?status=Granted&commission_status=Not%20Paid" class="block">
+                <a href="/admin/deals?status=Granted&commission_status=Not%20Paid" class="block transition-all duration-300">
                     <div class="ds-status-card ds-money-granted">
                         <div class="ds-label">Granted (Not Paid) — Company ex VAT</div>
-                        <div class="ds-value-xl mt-1" style="color:#0b2a4a">
+                        <div class="ds-value-xl mt-1">
                             R {{ number_format((float)($statusSummary['granted_unpaid_company_ex_vat'] ?? 0), 0) }}
                         </div>
                         <div class="mt-1 ds-label" style="text-transform:none;font-size:0.75rem">
@@ -163,10 +163,10 @@
                     </div>
                 </a>
 
-                <a href="/admin/deals?status=Registered&commission_status=Not%20Paid" class="block">
+                <a href="/admin/deals?status=Registered&commission_status=Not%20Paid" class="block transition-all duration-300">
                     <div class="ds-status-card ds-money-registered">
                         <div class="ds-label">Registered (Not Paid) — Company ex VAT</div>
-                        <div class="ds-value-xl mt-1" style="color:#0b2a4a">
+                        <div class="ds-value-xl mt-1">
                             R {{ number_format((float)($statusSummary['registered_unpaid_company_ex_vat'] ?? 0), 0) }}
                         </div>
                         <div class="mt-1 ds-label" style="text-transform:none;font-size:0.75rem">
@@ -178,13 +178,13 @@
         </div>
 
         @if(session("status"))
-            <div class="bg-green-500/10 border border-green-500/20 text-green-200 rounded-xl p-3 text-sm">
+            <div class="bg-green-500/10 border border-green-500/20 rounded-md p-3 text-sm" style="color: var(--text-primary);">
                 {{ session("status") }}
             </div>
         @endif
 
         @if(isset($errors) && $errors->any())
-            <div class="bg-red-500/10 border border-red-500/20 text-red-200 rounded-xl p-3 text-sm">
+            <div class="bg-red-500/10 border border-red-500/20 rounded-md p-3 text-sm" style="color: var(--text-primary);">
                 {{ implode(", ", $errors->all()) }}
             </div>
         @endif
@@ -198,27 +198,27 @@
 
             <div class="ds-status-card">
                 <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-                    <a href="{{ route('admin.listings.stock', ['filter' => 'active']) }}" class="ds-status-card hover:shadow-md transition block">
+                    <a href="{{ route('admin.listings.stock', ['filter' => 'active']) }}" class="ds-status-card hover:shadow-md transition-all duration-300 block">
                         <div class="ds-label">Active</div>
                         <div class="ds-value-lg mt-1">{{ (int)($listingStats['total'] ?? 0) }}</div>
                     </a>
 
-                    <a href="{{ route('admin.listings.stock', ['filter' => 'dom']) }}" class="ds-status-card hover:shadow-md transition block">
+                    <a href="{{ route('admin.listings.stock', ['filter' => 'dom']) }}" class="ds-status-card hover:shadow-md transition-all duration-300 block">
                         <div class="ds-label">Avg DOM</div>
                         <div class="ds-value-lg mt-1">{{ (int)($listingStats['avg_days_on_market'] ?? 0) }}</div>
                     </a>
 
-                    <a href="{{ route('admin.listings.stock', ['filter' => 'stale']) }}" class="ds-status-card hover:shadow-md transition block">
+                    <a href="{{ route('admin.listings.stock', ['filter' => 'stale']) }}" class="ds-status-card hover:shadow-md transition-all duration-300 block">
                         <div class="ds-label">Stale</div>
                         <div class="ds-value-lg mt-1">{{ (int)($listingStats['stale'] ?? 0) }}</div>
                     </a>
 
-                    <a href="{{ route('admin.listings.stock', ['filter' => 'expiring']) }}" class="ds-status-card hover:shadow-md transition block">
+                    <a href="{{ route('admin.listings.stock', ['filter' => 'expiring']) }}" class="ds-status-card hover:shadow-md transition-all duration-300 block">
                         <div class="ds-label">Expiring</div>
                         <div class="ds-value-lg mt-1">{{ (int)($listingStats['expiring_soon'] ?? 0) }}</div>
                     </a>
 
-                    <a href="{{ route('admin.listings.stock', ['filter' => 'expired']) }}" class="ds-status-card hover:shadow-md transition block">
+                    <a href="{{ route('admin.listings.stock', ['filter' => 'expired']) }}" class="ds-status-card hover:shadow-md transition-all duration-300 block">
                         <div class="ds-label">Expired</div>
                         <div class="ds-value-lg mt-1">{{ (int)($listingStats['expired'] ?? 0) }}</div>
                     </a>
@@ -239,7 +239,7 @@
                     <div class="ds-label mb-1">Company Value (Actual / Agent-Sum Target)</div>
                     <div class="ds-value-xl">
                         R {{ number_format($companyValueActual, 0) }}
-                        <span style="color:#94a3b8;font-weight:600">/ R {{ number_format($companyValueTarget_agentsum, 0) }}</span>
+                        <span class="font-semibold" style="color: var(--text-muted);">/ R {{ number_format($companyValueTarget_agentsum, 0) }}</span>
                     </div>
                     <div class="ds-progress-track mt-3">
                         <div class="ds-progress-bar {{ $valueBar }}" style="width: {{ min(100, max(0, $valuePct)) }}%"></div>
@@ -251,7 +251,7 @@
                     <div class="ds-label mb-1">Company Deals (Actual / Agent-Sum Target)</div>
                     <div class="ds-value-xl">
                         {{ (int)$companyDealsActual }}
-                        <span style="color:#94a3b8;font-weight:600">/ {{ (int)$companyDealsTarget_agentsum }}</span>
+                        <span class="font-semibold" style="color: var(--text-muted);">/ {{ (int)$companyDealsTarget_agentsum }}</span>
                     </div>
                     <div class="ds-progress-track mt-3">
                         <div class="ds-progress-bar {{ $dealsBar }}" style="width: {{ min(100, max(0, $dealsPct)) }}%"></div>
@@ -288,16 +288,16 @@
                     @endphp
 
                     <a href="{{ route('admin.branch.performance', ['branchId' => $bid, 'period' => ($r['period'] ?? now()->format('Y-m'))]) }}"
-                       class="ds-status-card block hover:shadow-lg transition">
+                       class="ds-status-card block hover:shadow-lg transition-all duration-300">
                         <div class="ds-label">BRANCH</div>
-                        <div class="text-lg font-bold" style="color:#0b2a4a">{{ $bName }}</div>
+                        <div class="text-lg font-bold" style="color: var(--text-primary);">{{ $bName }}</div>
 
                         <div class="mt-4">
                             <div class="ds-label mb-1">Value</div>
                             <div class="ds-progress-track">
                                 <div class="ds-progress-bar {{ $bValueBar }}" style="width: {{ min(100, max(0, $bValuePct)) }}%"></div>
                             </div>
-                            <div class="mt-1 text-xs" style="color:#64748b">
+                            <div class="mt-1 text-xs" style="color: var(--text-secondary);">
                                 R {{ number_format($bValueActual,0) }} / R {{ number_format($bValueTarget,0) }} ({{ number_format($bValuePct,1) }}%)
                             </div>
                         </div>
@@ -307,7 +307,7 @@
                             <div class="ds-progress-track">
                                 <div class="ds-progress-bar {{ $bPointsBar }}" style="width: {{ min(100, max(0, $bPointsPct)) }}%"></div>
                             </div>
-                            <div class="mt-1 text-xs" style="color:#64748b">
+                            <div class="mt-1 text-xs" style="color: var(--text-secondary);">
                                 {{ number_format($bPointsActual,0) }} / {{ number_format($bPointsTarget,0) }} ({{ number_format($bPointsPct,1) }}%)
                             </div>
                         </div>
@@ -335,8 +335,8 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr style="background:#f8fafc">
-                                <td class="px-4 py-3 font-extrabold" style="color:#0b2a4a">COMPANY TOTAL</td>
+                            <tr style="background: var(--surface-2);">
+                                <td class="px-4 py-3 font-extrabold" style="color: var(--text-primary);">COMPANY TOTAL</td>
                                 <td class="px-4 py-3 text-right font-bold ds-value">
                                     {{ (int)($companyDealsActual ?? 0) }} / {{ (int)($r['totals']['targets']['deals'] ?? 0) }}
                                 </td>
@@ -350,11 +350,11 @@
                                 </td>
                                 <td class="px-4 py-3 text-right font-extrabold ds-value">
                                     R {{ number_format((float)($r['totals']['actuals']['team_company_retained'] ?? 0), 0) }}
-                                    <div class="text-[11px]" style="color:#94a3b8;font-weight:600">
+                                    <div class="text-[11px] font-semibold" style="color: var(--text-muted);">
                                         Ledger: R {{ number_format((float)($r['totals']['actuals']['ledger_company_retained'] ?? 0), 0) }}
                                     </div>
                                 </td>
-                                <td class="px-4 py-3 text-right font-bold" style="color:#94a3b8">—</td>
+                                <td class="px-4 py-3 text-right font-bold" style="color: var(--text-muted);">—</td>
                             </tr>
 
                             @foreach(($r['rows'] ?? []) as $row)
@@ -386,7 +386,7 @@
                                                 {{ $row['name'] }}
                                             </a>
                                         </div>
-                                        <div class="text-xs" style="color:#94a3b8">
+                                        <div class="text-xs" style="color: var(--text-muted);">
                                             Per-day needed: {{ number_format((float)($row['progress']['points_per_day_needed'] ?? 0), 1) }}
                                         </div>
                                     </td>
@@ -409,7 +409,7 @@
 
                                     <td class="px-4 py-3 text-right font-extrabold ds-value">
                                         R {{ number_format($retained, 0) }}
-                                        <div class="text-[11px]" style="color:#94a3b8;font-weight:600">
+                                        <div class="text-[11px] font-semibold" style="color: var(--text-muted);">
                                             Agent: R {{ number_format($agentIncome, 0) }}
                                         </div>
                                     </td>
@@ -431,11 +431,11 @@
 
             {{-- Company TV Code --}}
             <div class="ds-status-card p-5">
-                <div class="font-bold text-sm mb-3" style="color:#0b2a4a">Company TV Display</div>
+                <div class="font-bold text-sm mb-3" style="color: var(--text-primary);">Company TV Display</div>
                 @if(isset($companyTvCode) && $companyTvCode)
                     <div class="flex items-center gap-4 mb-3">
-                        <span class="font-mono text-2xl font-black tracking-[0.3em]" style="color:#0b2a4a">{{ $companyTvCode->code }}</span>
-                        <div class="text-xs text-gray-500 leading-snug">
+                        <span class="font-mono text-2xl font-black tracking-[0.3em]" style="color: var(--text-primary);">{{ $companyTvCode->code }}</span>
+                        <div class="text-xs leading-snug" style="color: var(--text-secondary);">
                             <div>Generated {{ $companyTvCode->created_at->diffForHumans() }} by {{ $companyTvCode->creator->name ?? '—' }}</div>
                             @if($companyTvCode->last_used_at)
                                 <div class="text-green-600">Last used {{ $companyTvCode->last_used_at->diffForHumans() }}</div>
@@ -445,30 +445,30 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-2 mb-2">
-                        <div class="text-xs text-gray-400">
-                            URL: <span class="font-mono text-gray-300">{{ route('tv.display', ['code' => $companyTvCode->code]) }}</span>
+                        <div class="text-xs" style="color: var(--text-muted);">
+                            URL: <span class="font-mono" style="color: var(--text-secondary);">{{ route('tv.display', ['code' => $companyTvCode->code]) }}</span>
                         </div>
                     </div>
                     <div class="flex gap-2">
                         <form method="POST" action="{{ route('admin.tv-code.generate-company') }}">
                             @csrf
-                            <button type="submit" class="px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">
+                            <button type="submit" class="px-3 py-1.5 rounded-md text-white text-sm font-semibold transition-all duration-300 shadow-lg" style="background: var(--brand-button, #0ea5e9);">
                                 Regenerate Code
                             </button>
                         </form>
                         <form method="POST" action="{{ route('admin.tv-code.revoke-company') }}">
                             @csrf
-                            <button type="submit" class="px-2 py-1.5 rounded bg-red-700 text-white text-sm font-semibold hover:bg-red-800"
+                            <button type="submit" class="px-2 py-1.5 rounded-md bg-red-700 text-white text-sm font-semibold hover:bg-red-800 transition-all duration-300"
                                     onclick="return confirm('Revoke company TV code?')">
                                 Revoke
                             </button>
                         </form>
                     </div>
                 @else
-                    <div class="text-sm text-gray-400 mb-3">No active company TV code.</div>
+                    <div class="text-sm mb-3" style="color: var(--text-muted);">No active company TV code.</div>
                     <form method="POST" action="{{ route('admin.tv-code.generate-company') }}">
                         @csrf
-                        <button type="submit" class="px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">
+                        <button type="submit" class="px-3 py-1.5 rounded-md text-white text-sm font-semibold transition-all duration-300 shadow-lg" style="background: var(--brand-button, #0ea5e9);">
                             Generate Company TV Code
                         </button>
                     </form>
@@ -492,10 +492,10 @@
                             </thead>
                             <tbody>
                                 @foreach($tvCodes as $tc)
-                                    <tr class="{{ $loop->even ? 'bg-slate-800/30' : '' }}">
-                                        <td class="px-4 py-2 font-semibold" style="color:#0b2a4a">{{ $tc->branch->name ?? 'Unknown' }}</td>
+                                    <tr>
+                                        <td class="px-4 py-2 font-semibold" style="color: var(--text-primary);">{{ $tc->branch->name ?? 'Unknown' }}</td>
                                         <td class="px-4 py-2">
-                                            <span class="font-mono text-lg font-black tracking-widest" style="color:#0b2a4a">{{ $tc->code }}</span>
+                                            <span class="font-mono text-lg font-black tracking-widest" style="color: var(--text-primary);">{{ $tc->code }}</span>
                                         </td>
                                         <td class="px-4 py-2 ds-label">{{ $tc->creator->name ?? '—' }}</td>
                                         <td class="px-4 py-2 ds-label">{{ $tc->created_at->format('d M Y H:i') }}</td>
@@ -510,7 +510,7 @@
                                             <form method="POST" action="{{ route('admin.tv-code.revoke') }}" class="inline">
                                                 @csrf
                                                 <input type="hidden" name="code_id" value="{{ $tc->id }}">
-                                                <button type="submit" class="px-2 py-1 rounded bg-red-700 text-white text-xs font-semibold hover:bg-red-800"
+                                                <button type="submit" class="px-2 py-1 rounded-md bg-red-700 text-white text-xs font-semibold hover:bg-red-800 transition-all duration-300"
                                                         onclick="return confirm('Revoke this code?')">
                                                     Revoke
                                                 </button>
@@ -522,31 +522,31 @@
                         </table>
                     </div>
                 @else
-                    <div class="text-sm text-gray-400">No active TV codes.</div>
+                    <div class="text-sm" style="color: var(--text-muted);">No active TV codes.</div>
                 @endif
 
                 {{-- Generate for any branch --}}
                 <div class="mt-4 flex items-center gap-3">
                     <form method="POST" action="{{ route('admin.tv-code.generate') }}" class="flex items-center gap-2">
                         @csrf
-                        <select name="branch_id" class="border rounded px-3 py-1.5 text-sm">
+                        <select name="branch_id" class="rounded-md px-3 py-1.5 text-sm transition-all duration-300" style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
                             <option value="">Select branch...</option>
                             @foreach($branches ?? [] as $branch)
                                 <option value="{{ $branch->id }}">{{ $branch->name }}</option>
                             @endforeach
                         </select>
-                        <button type="submit" class="px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">
+                        <button type="submit" class="px-3 py-1.5 rounded-md text-white text-sm font-semibold transition-all duration-300 shadow-lg" style="background: var(--brand-button, #0ea5e9);">
                             Generate Code
                         </button>
                     </form>
-                    <div class="text-xs text-gray-400">
+                    <div class="text-xs" style="color: var(--text-muted);">
                         TV entry: <span class="font-mono">{{ url('/tv') }}</span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="text-xs text-gray-500">
+        <div class="text-xs" style="color: var(--text-muted);">
             Privacy: This page shows derived targets + activity + deal actuals. No worksheet net-income fields are exposed.
         </div>
     </div>
