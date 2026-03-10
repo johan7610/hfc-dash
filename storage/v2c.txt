@@ -1,0 +1,223 @@
+
+═══ Verifying: letting-mandatory-disclosure-v7 ═══
+
+  DIFF [1]:
+    SOURCE: >>>IMMOVABLE PROPERTY CONDITION REPORT IN RELATION TO<<< THE LEASE OF ANY IMMOVABLE
+    BLADE:  >>>Mandatory Disclosure — Home Finders Coastal Johan and Elize Properties T/A HFC COASTAL<<< THE LEASE OF ANY IMMOVABLE
+
+  DIFF [2]:
+    SOURCE: REPORT IN RELATION TO THE >>>LEASE OF ANY IMMOVABLE PROPERTY<<< (Property Practitioner Act 22 of
+    BLADE:  REPORT IN RELATION TO THE >>>MANDATE COMPANY Shop 5 The Emporium, cnr King Rd & Marine Drive, Shelly Beach Reg No:2009/228978/23 Vat No:4870264498 FFC No:FFC40/43916/5 FIC No:58538 Fax: 086 233 2395 Email: info@hfcoastal.co.za Cell: 079 495 5994 Immovable Property Condition Report in Relation to the Lease of Any Immovable Property<<< (Property Practitioner Act 22 of
+
+  DIFF [3]:
+    SOURCE: OF ANY IMMOVABLE PROPERTY (Property >>>Practitioner<<< Act 22 of 2019, Section
+    BLADE:  OF ANY IMMOVABLE PROPERTY (Property >>>Practitioners<<< Act 22 of 2019, Section
+
+  DIFF [4]:
+    SOURCE: Section 36 – Mandatory Disclosure) >>>1<<< Disclaimer This condition report concerns
+    BLADE:  Section 36 – Mandatory Disclosure) >>>1.<<< Disclaimer This condition report concerns
+
+  DIFF [5]:
+    SOURCE: the immovable property situated at >>>___________________________________________________________________________________<<< (the "Property"). This report does
+    BLADE:  the immovable property situated at >>><<< (the "Property"). This report does
+
+  DIFF [6]:
+    SOURCE: property situated at ___________________________________________________________________________________ (the >>>"Property").<<< This report does not constitute
+    BLADE:  property situated at ___________________________________________________________________________________ (the >>>“Property”).<<< This report does not constitute
+
+  DIFF [7]:
+    SOURCE: in respect of the Property. >>>2<<< Definitions In this form –
+    BLADE:  in respect of the Property. >>>2.<<< Definitions In this form –
+
+  DIFF [8]:
+    SOURCE: In this form – 2.1 >>>"to<<< be aware" means to have
+    BLADE:  In this form – 2.1 >>>“to<<< be aware" means to have
+
+  DIFF [9]:
+    SOURCE: form – 2.1 "to be >>>aware"<<< means to have actual notice
+    BLADE:  form – 2.1 "to be >>>aware”<<< means to have actual notice
+
+  DIFF [10]:
+    SOURCE: state of affairs; and 2.2 >>>"defect"<<< means any condition, whether latent
+    BLADE:  state of affairs; and 2.2 >>>“defect”<<< means any condition, whether latent
+
+  DIFF [11]:
+    SOURCE: normal lifespan of the Property. >>>3<<< Disclosure of information The lessor
+    BLADE:  normal lifespan of the Property. >>>3.<<< Disclosure of information The lessor
+
+  DIFF [12]:
+    SOURCE: anticipated lease of the Property. >>>4<<< Provision of additional information The
+    BLADE:  anticipated lease of the Property. >>>4.<<< Provision of additional information The
+
+  DIFF [13]:
+    SOURCE: have been accurately noted as >>>"yes", "no"<<< or "not applicable". Should the
+    BLADE:  have been accurately noted as >>>“yes”, “no”<<< or "not applicable". Should the
+
+  DIFF [14]:
+    SOURCE: noted as "yes", "no" or >>>"not applicable".<<< Should the lessor have responded
+    BLADE:  noted as "yes", "no" or >>>“not applicable”.<<< Should the lessor have responded
+
+  DIFF [15]:
+    SOURCE: of the statements with a >>>"yes",<<< the lessor shall be obliged
+    BLADE:  of the statements with a >>>“yes”,<<< the lessor shall be obliged
+
+  DIFF [16]:
+    SOURCE: response to the statement concerned. >>><<< 5 Statements in connection with
+    BLADE:  response to the statement concerned. >>>Version 7 Johan and Elize Properties T/A HFC COASTAL THE MANDATE COMPANY Shop<<< 5 Statements in connection with
+
+  DIFF [17]:
+    SOURCE: to the statement concerned. 5 >>><<< Statements in connection with Property
+    BLADE:  to the statement concerned. 5 >>>The Emporium, cnr King Rd & Marine Drive, Shelly Beach Reg No:2009/228978/23 Vat No:4870264498 FFC No:FFC40/43916/5 FIC No:58538 Fax: 086 233 2395 Email: info@hfcoastal.co.za Cell: 079 495 5994 5.<<< Statements in connection with Property
+
+  DIFF [18]:
+    SOURCE: Statements in connection with Property >>><<< YES NO N/A I am
+    BLADE:  Statements in connection with Property >>>Statement<<< YES NO N/A I am
+
+  DIFF [19]:
+    SOURCE: with Property YES NO N/A >>><<< I am aware of the
+    BLADE:  with Property YES NO N/A >>>1.<<< I am aware of the
+
+  DIFF [20]:
+    SOURCE: the defects in the roof >>><<< I am aware of the
+    BLADE:  the defects in the roof >>>□ □ □ 2.<<< I am aware of the
+
+  DIFF [21]:
+    SOURCE: defects in the electrical systems >>><<< I am aware of the
+    BLADE:  defects in the electrical systems >>>□ □ □ 3.<<< I am aware of the
+
+  DIFF [22]:
+    SOURCE: the swimming pool (if any) >>><<< I am aware of the
+    BLADE:  the swimming pool (if any) >>>□ □ □ 4.<<< I am aware of the
+
+  DIFF [23]:
+    SOURCE: the air filters and humidifiers >>><<< I am aware of the
+    BLADE:  the air filters and humidifiers >>>□ □ □ 5.<<< I am aware of the
+
+  DIFF [24]:
+    SOURCE: or other sanitary disposal systems >>><<< I am aware of any
+    BLADE:  or other sanitary disposal systems >>>□ □ □ 6.<<< I am aware of any
+
+  DIFF [25]:
+    SOURCE: drain tiling or sump pumps >>><<< I am aware of structural
+    BLADE:  drain tiling or sump pumps >>>□ □ □ 7.<<< I am aware of structural
+
+  DIFF [26]:
+    SOURCE: structural defects in the Property >>><<< I am aware of boundary
+    BLADE:  structural defects in the Property >>>□ □ □ 8.<<< I am aware of boundary
+
+  DIFF [27]:
+    SOURCE: in connection with the Property >>><<< I am aware that remodelling
+    BLADE:  in connection with the Property >>>□ □ □ 9.<<< I am aware that remodelling
+
+  DIFF [28]:
+    SOURCE: the structure of the Property >>><<< I am aware that any
+    BLADE:  the structure of the Property >>>□ □ □ 10.<<< I am aware that any
+
+  DIFF [29]:
+    SOURCE: do so were properly obtained. >>><<< I am aware that a
+    BLADE:  do so were properly obtained. >>>□ □ □ 11.<<< I am aware that a
+
+  DIFF [30]:
+    SOURCE: historic structure or heritage site >>>EXTRA INFORMATION<<< Are there registered building plans
+    BLADE:  historic structure or heritage site >>>□ □ □ Extra Information Statement YES NO N/A 1.<<< Are there registered building plans
+
+  DIFF [31]:
+    SOURCE: all improvements and solid roofed >>>structures( e.g.<<< carports, pools, etc.) Are you
+    BLADE:  all improvements and solid roofed >>>structures (e.g.<<< carports, pools, etc.) Are you
+
+  DIFF [32]:
+    SOURCE: structures( e.g. carports, pools, etc.) >>><<< Are you in possession of
+    BLADE:  structures( e.g. carports, pools, etc.) >>>□ □ □ 2.<<< Are you in possession of
+
+  DIFF [33]:
+    SOURCE: of Compliance for the following: >>><<< Electrical Compliance Certificate – If
+    BLADE:  of Compliance for the following: >>>•<<< Electrical Compliance Certificate – If
+
+  DIFF [34]:
+    SOURCE: Yes, when was it issued? >>><<< Electrical Fence Certificate – If
+    BLADE:  Yes, when was it issued? >>>•<<< Electrical Fence Certificate – If
+
+  DIFF [35]:
+    SOURCE: Yes, when was it issued? >>><<< Gas Compliance Certificate – If
+    BLADE:  Yes, when was it issued? >>>•<<< Gas Compliance Certificate – If
+
+  DIFF [36]:
+    SOURCE: Yes, when was it issued? >>><<< Entomology Certificate – If Yes,
+    BLADE:  Yes, when was it issued? >>>•<<< Entomology Certificate – If Yes,
+
+  DIFF [37]:
+    SOURCE: Yes, when was it issued? >>>ADDITIONAL INFORMATION 6<<< Lessor’s certification The lessor hereby
+    BLADE:  Yes, when was it issued? >>>□ □ □ Additional Information Version 7 Johan and Elize Properties T/A HFC COASTAL THE MANDATE COMPANY Shop 5 The Emporium, cnr King Rd & Marine Drive, Shelly Beach Reg No:2009/228978/23 Vat No:4870264498 FFC No:FFC40/43916/5 FIC No:58538 Fax: 086 233 2395 Email: info@hfcoastal.co.za Cell: 079 495 5994 6.<<< Lessor’s certification The lessor hereby
+
+  DIFF [38]:
+    SOURCE: to the best of the >>>lessor's<<< knowledge and belief, true and
+    BLADE:  to the best of the >>>lessor’s<<< knowledge and belief, true and
+
+  DIFF [39]:
+    SOURCE: the lessor signs this report. >>>7<<< Certification by person supplying information
+    BLADE:  the lessor signs this report. >>>7.<<< Certification by person supplying information
+
+  DIFF [40]:
+    SOURCE: to the best of that >>>person's<<< knowledge and belief, true and
+    BLADE:  to the best of that >>>person’s<<< knowledge and belief, true and
+
+  DIFF [41]:
+    SOURCE: that person signs this report. >>>8<<< Notice regarding advice or inspections
+    BLADE:  that person signs this report. >>>8.<<< Notice regarding advice or inspections
+
+  DIFF [42]:
+    SOURCE: the making of required warranties. >>>9<<< Tenant’s acknowledgement The prospective tenant
+    BLADE:  the making of required warranties. >>>9.<<< Tenant’s acknowledgement The prospective tenant
+
+  DIFF [43]:
+    SOURCE: a copy of this statement. >>>10<<< Signatures Lessor Signed at ________________________________
+    BLADE:  a copy of this statement. >>>10.<<< Signatures Lessor Signed at ________________________________
+
+  DIFF [44]:
+    SOURCE: 10 Signatures Lessor Signed at >>>________________________________<<< on _______________________________ Signature of Lessor
+    BLADE:  10 Signatures Lessor Signed at >>><<< on _______________________________ Signature of Lessor
+
+  DIFF [45]:
+    SOURCE: Lessor Signed at ________________________________ on >>>_______________________________<<< Signature of Lessor __________________________ Tenant
+    BLADE:  Lessor Signed at ________________________________ on >>><<< Signature of Lessor __________________________ Tenant
+
+  DIFF [46]:
+    SOURCE: on _______________________________ Signature of Lessor >>>__________________________<<< Tenant Signed at ________________________________ on
+    BLADE:  on _______________________________ Signature of Lessor >>><<< Tenant Signed at ________________________________ on
+
+  DIFF [47]:
+    SOURCE: Lessor __________________________ Tenant Signed at >>>________________________________<<< on _______________________________ Signature of Tenant
+    BLADE:  Lessor __________________________ Tenant Signed at >>><<< on _______________________________ Signature of Tenant
+
+  DIFF [48]:
+    SOURCE: Tenant Signed at ________________________________ on >>>_______________________________<<< Signature of Tenant __________________________ Property
+    BLADE:  Tenant Signed at ________________________________ on >>><<< Signature of Tenant __________________________ Property
+
+  DIFF [49]:
+    SOURCE: on _______________________________ Signature of Tenant >>>__________________________<<< Property Practitioner Signed at ________________________________
+    BLADE:  on _______________________________ Signature of Tenant >>><<< Property Practitioner Signed at ________________________________
+
+  DIFF [50]:
+    SOURCE: __________________________ Property Practitioner Signed at >>>________________________________<<< on _______________________________ Signature of Property
+    BLADE:  __________________________ Property Practitioner Signed at >>><<< on _______________________________ Signature of Property
+
+  DIFF [51]:
+    SOURCE: Practitioner Signed at ________________________________ on >>>_______________________________<<< Signature of Property Practitioner__________________________ Co-signature
+    BLADE:  Practitioner Signed at ________________________________ on >>><<< Signature of Property Practitioner__________________________ Co-signature
+
+  DIFF [52]:
+    SOURCE: on _______________________________ Signature of Property >>>Practitioner__________________________<<< Co-signature (if required) Signature of
+    BLADE:  on _______________________________ Signature of Property >>>Practitioner<<< Co-signature (if required) Signature of
+
+  DIFF [53]:
+    SOURCE: (if required) Signature of Property >>>Practitioner__________________________<<<
+    BLADE:  (if required) Signature of Property >>>Practitioner Version 7<<<
+
+  53 difference(s) found in letting-mandatory-disclosure-v7
+
+═══════════════════════════════════════
+         VERIFICATION SUMMARY
+═══════════════════════════════════════
+  ✗ letting-mandatory-disclosure-v7 — 53 difference(s)
+
+Total differences across all templates: 53

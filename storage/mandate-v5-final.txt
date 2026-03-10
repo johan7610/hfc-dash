@@ -1,0 +1,107 @@
+
+[32m═══ Verifying: letting-mandate-v5 ═══[39m
+
+[33m  DIFF [1]:[39m
+    SOURCE: >>><<< Johan and Elize Properties T/A
+    BLADE:  >>>Letting Mandate — Home Finders Coastal<<< Johan and Elize Properties T/A
+
+[33m  DIFF [2]:[39m
+    SOURCE: Johan and Elize Properties T/A >>><<< Shop 5 The Emporium, cnr
+    BLADE:  Johan and Elize Properties T/A >>>HFC COASTAL THE MANDATE COMPANY<<< Shop 5 The Emporium, cnr
+
+[33m  DIFF [3]:[39m
+    SOURCE: & Marine Drive, Shelly Beach >>>Fax No: 086 514 7632<<< Reg no: 2017/431318/07 FFC: 202615038880000
+    BLADE:  & Marine Drive, Shelly Beach >>><<< Reg no: 2017/431318/07 FFC: 202615038880000
+
+[33m  DIFF [4]:[39m
+    SOURCE: No: 086 514 7632 Reg >>>no: 2017/431318/07 FFC: 202615038880000 Vat: 463087821 Email Address: admin@hfcoastal.co.za<<< FIC AI/180629/0000019 Elize Reichel Cell:
+    BLADE:  No: 086 514 7632 Reg >>>No:2009/228978/23 Vat No:4870264498 FFC No:FFC40/43916/5<<< FIC AI/180629/0000019 Elize Reichel Cell:
+
+[33m  DIFF [5]:[39m
+    SOURCE: 463087821 Email Address: admin@hfcoastal.co.za FIC >>>AI/180629/0000019 Elize Reichel<<< Cell: 071 351 0291 Johan
+    BLADE:  463087821 Email Address: admin@hfcoastal.co.za FIC >>>No:58538 Fax: 086 233 2395 Email: info@hfcoastal.co.za<<< Cell: 071 351 0291 Johan
+
+[33m  DIFF [6]:[39m
+    SOURCE: FIC AI/180629/0000019 Elize Reichel Cell: >>>071 351 0291 Johan Reichel Cell: 076 618 5578<<< Mandate entered into between The
+    BLADE:  FIC AI/180629/0000019 Elize Reichel Cell: >>>079 495 5994<<< Mandate entered into between The
+
+[33m  DIFF [7]:[39m
+    SOURCE: into between The Parties The >>>Owner/s:___________________________________________________________<<< Home Finders Coastal (Agent):_________________________________________________ The
+    BLADE:  into between The Parties The >>>Owner/s:<<< Home Finders Coastal (Agent):_________________________________________________ The
+
+[33m  DIFF [8]:[39m
+    SOURCE: The Owner/s:___________________________________________________________ Home Finders Coastal >>>(Agent):_________________________________________________<<< The owner hereby grants to
+    BLADE:  The Owner/s:___________________________________________________________ Home Finders Coastal >>>(Agent):<<< The owner hereby grants to
+
+[33m  DIFF [9]:[39m
+    SOURCE: let the property known as >>>_______________________________________________________________________________<<< subject to the conditions set
+    BLADE:  let the property known as >>><<< subject to the conditions set
+
+[33m  DIFF [10]:[39m
+    SOURCE: Owner for the property is >>>R__________________<<< which includes the commission as
+    BLADE:  Owner for the property is >>>R<<< which includes the commission as
+
+[33m  DIFF [11]:[39m
+    SOURCE: force until 22h00 on the >>>____________day<<< of _________________________20_________ The Owner will
+    BLADE:  force until 22h00 on the >>>day<<< of _________________________20_________ The Owner will
+
+[33m  DIFF [12]:[39m
+    SOURCE: 22h00 on the ____________day of >>>_________________________20_________<<< The Owner will pay to
+    BLADE:  22h00 on the ____________day of >>>20<<< The Owner will pay to
+
+[33m  DIFF [13]:[39m
+    SOURCE: calculated at a percentage of >>>_________%<<< plus VAT on the letting
+    BLADE:  calculated at a percentage of >>>%<<< plus VAT on the letting
+
+[33m  DIFF [14]:[39m
+    SOURCE: of every month. Account Holder’s >>>Name:____________________________________________<<< Bank Name:____________________________________________ Account Number:____________________________________________ Branch
+    BLADE:  of every month. Account Holder’s >>>Name:<<< Bank Name:____________________________________________ Account Number:____________________________________________ Branch
+
+[33m  DIFF [15]:[39m
+    SOURCE: month. Account Holder’s Name:____________________________________________ Bank >>>Name:____________________________________________<<< Account Number:____________________________________________ Branch Name and
+    BLADE:  month. Account Holder’s Name:____________________________________________ Bank >>>Name:<<< Account Number:____________________________________________ Branch Name and
+
+[33m  DIFF [16]:[39m
+    SOURCE: Holder’s Name:____________________________________________ Bank Name:____________________________________________ Account >>>Number:____________________________________________<<< Branch Name and Code:____________________________________________ Owner’s
+    BLADE:  Holder’s Name:____________________________________________ Bank Name:____________________________________________ Account >>>Number:<<< Branch Name and Code:____________________________________________ Owner’s
+
+[33m  DIFF [17]:[39m
+    SOURCE: Account Number:____________________________________________ Branch Name and >>>Code:____________________________________________<<< Owner’s Contact details:____________________________________________ Owner’s Email
+    BLADE:  Account Number:____________________________________________ Branch Name and >>>Code:<<< Owner’s Contact details:____________________________________________ Owner’s Email
+
+[33m  DIFF [18]:[39m
+    SOURCE: Name and Code:____________________________________________ Owner’s Contact >>>details:____________________________________________<<< Owner’s Email Address:____________________________________________ The Owner
+    BLADE:  Name and Code:____________________________________________ Owner’s Contact >>>details:<<< Owner’s Email Address:____________________________________________ The Owner
+
+[33m  DIFF [19]:[39m
+    SOURCE: Owner’s Contact details:____________________________________________ Owner’s Email >>>Address:____________________________________________<<< The Owner shall supply the
+    BLADE:  Owner’s Contact details:____________________________________________ Owner’s Email >>>Address:<<< The Owner shall supply the
+
+[33m  DIFF [20]:[39m
+    SOURCE: signed by the Owner/s at >>>_________________________<<< on this ________ day of
+    BLADE:  signed by the Owner/s at >>><<< on this ________ day of
+
+[33m  DIFF [21]:[39m
+    SOURCE: Owner/s at _________________________ on this >>>________<<< day of ______________________ at _______________(am
+    BLADE:  Owner/s at _________________________ on this >>><<< day of ______________________ at _______________(am
+
+[33m  DIFF [22]:[39m
+    SOURCE: on this ________ day of >>>______________________<<< at _______________(am / pm) ________________________________________________________________
+    BLADE:  on this ________ day of >>><<< at _______________(am / pm) ________________________________________________________________
+
+[33m  DIFF [23]:[39m
+    SOURCE: ________ day of ______________________ at >>>_______________(am / pm) ________________________________________________________________ OwnerOwnerAgent ________________________________________________________________<<< Print NamePrint NamePrint name
+    BLADE:  ________ day of ______________________ at >>>() Owner<<< Print NamePrint NamePrint name
+
+[33m  DIFF [24]:[39m
+    SOURCE: pm) ________________________________________________________________ OwnerOwnerAgent ________________________________________________________________ Print >>>NamePrint NamePrint name<<<
+    BLADE:  pm) ________________________________________________________________ OwnerOwnerAgent ________________________________________________________________ Print >>>Name Owner Print Name Agent Print Name Version 5<<<
+
+[33m  24 difference(s) found in letting-mandate-v5[39m
+
+[32m═══════════════════════════════════════[39m
+[32m         VERIFICATION SUMMARY[39m
+[32m═══════════════════════════════════════[39m
+[33m  ✗ letting-mandate-v5 — 24 difference(s)[39m
+
+[33mTotal differences across all templates: 24[39m

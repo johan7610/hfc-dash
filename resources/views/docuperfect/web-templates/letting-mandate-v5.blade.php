@@ -21,10 +21,14 @@
 
         body {
             font-family: Arial, Helvetica, sans-serif;
-            font-size: 11pt;
-            line-height: 1.5;
+            font-size: 10pt;
+            line-height: 1.2;
             color: #1a1a1a;
             background: white;
+        }
+
+        p {
+            margin: 0 0 2pt 0;
         }
 
         .page {
@@ -154,12 +158,14 @@
         /* ---- Field values (inline blanks) ---- */
         .field {
             display: inline-block;
-            min-width: 180pt;
+            min-width: 200pt;
             border-bottom: 1pt solid #1a1a1a;
-            padding: 0 4pt;
+            padding: 0 2pt;
             text-align: left;
-            vertical-align: bottom;
-            line-height: 1.6;
+            vertical-align: baseline;
+            line-height: inherit;
+            overflow: visible;
+            position: relative;
         }
 
         .field:empty::after {
@@ -167,19 +173,26 @@
         }
 
         .field-short {
-            min-width: 60pt;
+            min-width: 80pt;
         }
 
         .field-tiny {
-            min-width: 30pt;
+            min-width: 60pt;
         }
 
         .field-medium {
-            min-width: 120pt;
+            min-width: 150pt;
         }
 
         .field-wide {
-            min-width: 100%;
+            display: block;
+            width: 100%;
+            min-height: 18pt;
+            margin-bottom: 4pt;
+        }
+
+        .field-address {
+            min-width: 250pt;
         }
 
         .field-currency::before {
@@ -189,7 +202,7 @@
 
         /* ---- Clauses ---- */
         .clause {
-            margin: 6pt 0;
+            margin: 2pt 0;
             padding-left: 20pt;
             text-indent: -20pt;
         }
@@ -294,62 +307,59 @@
     {{-- The Parties --}}
     <p class="section-label">The Parties</p>
 
-    <p>The Owner/s: <span class="field">{{ $lessor_name ?? '' }}</span>
-        (hereinafter referred to as the &ldquo;Owner&rdquo;)</p>
+    <p>The Owner/s: <span class="field">{{ $lessor_name ?? '' }}</span></p>
 
-    <p style="margin-top: 6pt;">Home Finders Coastal (Agent): <span class="field">{{ $agent_name ?? '' }}</span>
-        (hereinafter referred to as the &ldquo;Agent&rdquo;)</p>
+    <p style="margin-top: 6pt;">Home Finders Coastal (Agent): <span class="field">{{ $agent_name ?? '' }}</span></p>
 
     {{-- Clause 1 --}}
     <div class="clause">
         <span class="clause-number">1.</span>
-        <span class="clause-text">The Owner hereby grants the Agent a sole and exclusive mandate to lease the property
-            described as <span class="field field-wide">{{ $property_address ?? '' }}</span>
-            (hereinafter referred to as the &ldquo;Property&rdquo;).</span>
+        <span class="clause-text">The owner hereby grants to the Agent a Mandate to offer to let the property known
+            as <span class="field field-wide">{{ $property_address ?? '' }}</span>
+            subject to the conditions set out in this agreement.</span>
     </div>
 
     {{-- Clause 2 --}}
     <div class="clause">
         <span class="clause-number">2.</span>
-        <span class="clause-text">The rental amount shall be
-            <span class="field field-medium field-currency">{{ $rental_amount ?? '' }}</span>
-            ({{ $rental_in_words ?? 'amount in words' }})
-            per month, payable in advance on the 1st of each month. Commission as per clause 4.</span>
+        <span class="clause-text">The rental amount required by the Owner for the property is
+            R<span class="field field-medium">{{ $rental_amount ?? '' }}</span>
+            which includes the commission as stated in clause 4. In the event of the Agency not finding a suitable
+            Tenant to rent the property at such rental amount, then, between the Owner and the Agency they will
+            agree to an acceptable rental amount prior to allowing any tenant taking occupation of the said
+            property, which includes commission as stated in clause 4.</span>
     </div>
 
     {{-- Clause 3 --}}
     <div class="clause">
         <span class="clause-number">3.</span>
-        <span class="clause-text">This mandate shall commence on the date of signature and remain in full force
-            until 22h00 on the <span class="field field-short">{{ $mandate_day ?? '' }}</span> day
+        <span class="clause-text">The sole mandate hereby granted shall commence on date of signature hereof and
+            shall remain in force until 22h00 on the
+            <span class="field field-short">{{ $mandate_day ?? '' }}</span> day
             of <span class="field field-medium">{{ $mandate_month ?? '' }}</span>
-            20<span class="field field-tiny">{{ $mandate_year ?? '' }}</span>,
-            whereafter it shall automatically renew for successive periods of 12 months unless cancelled by
-            either party giving 90 (ninety) days written notice.</span>
+            20<span class="field field-tiny">{{ $mandate_year ?? '' }}</span></span>
     </div>
 
     {{-- Clause 4 --}}
     <div class="clause">
         <span class="clause-number">4.</span>
-        <span class="clause-text">The Owner agrees to pay the Agent commission of
+        <span class="clause-text">The Owner will pay to the Agent a commission, calculated at a percentage of
             <span class="field field-short">{{ $commission_percent ?? '' }}</span>% plus VAT
-            of the monthly rental, payable monthly in arrears from rental received.
-            A procurement fee equal to the commission percentage of one month&rsquo;s rental plus VAT is payable
-            upon conclusion of a lease agreement with a tenant procured by the Agent.</span>
+            on the letting price of the property.</span>
     </div>
 
     {{-- Clause 5 --}}
     <div class="clause">
         <span class="clause-number">5.</span>
-        <span class="clause-text">The Agent shall screen all prospective tenants and provide the Owner with
-            relevant information to assist in the selection of a suitable tenant. The final decision on the
-            acceptance of a tenant shall rest with the Owner.</span>
+        <span class="clause-text">The Agency will screen all possible tenants prior to occupation to ensure a
+            hassle free letting of the property.</span>
     </div>
 
     {{-- Clause 6 --}}
     <div class="clause">
         <span class="clause-number">6.</span>
-        <span class="clause-text">The rental deposits and monthly rental shall be paid into the following bank account:</span>
+        <span class="clause-text">The Agent will deposit the monthly rental collections into the following Bank Account
+            supplied by the Owner, by no later than the 7th day of every month.</span>
     </div>
 
     <table class="bank-details">
@@ -380,9 +390,8 @@
     {{-- Clause 7 --}}
     <div class="clause">
         <span class="clause-number">7.</span>
-        <span class="clause-text">The Owner acknowledges that they are responsible for the payment of water
-            and electricity accounts for the Property. In the event that the tenant fails to pay the water
-            and electricity accounts, the Owner shall be liable for such payments.</span>
+        <span class="clause-text">The Owner shall supply the Agency with water and lights service usage charges
+            every month, so the Agency may add this to the statement forwarded to the Tenant.</span>
     </div>
 
     {{-- Signature Block --}}

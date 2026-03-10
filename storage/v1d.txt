@@ -1,0 +1,135 @@
+
+[32m═══ Verifying: rental-application-v8 ═══[39m
+
+[33m  DIFF [1]:[39m
+    SOURCE: Rental Application >>><<< Process and requirements Thank you
+    BLADE:  Rental Application >>>— Home Finders Coastal Johan and Elize Properties T/A HFC COASTAL THE MANDATE COMPANY Shop 5 The Emporium, cnr King Rd & Marine Drive, Shelly Beach Reg No:2009/228978/23 Vat No:4870264498 FFC No:FFC40/43916/5 FIC No:58538 Fax: 086 233 2395 Email: info@hfcoastal.co.za Cell: 079 495 5994 Rental Application<<< Process and requirements Thank you
+
+[33m  DIFF [2]:[39m
+    SOURCE: Rental Application Process and >>>requirements<<< Thank you for downloading the
+    BLADE:  Rental Application Process and >>>Requirements<<< Thank you for downloading the
+
+[33m  DIFF [3]:[39m
+    SOURCE: to letting@hfcoastal.co.za: Permanently employed natural >>>persons<<< Latest payslip 3 months bank
+    BLADE:  to letting@hfcoastal.co.za: Permanently employed natural >>>persons:<<< Latest payslip 3 months bank
+
+[33m  DIFF [4]:[39m
+    SOURCE: operating out of their personal >>>account<<< 6 months bank statements ID
+    BLADE:  operating out of their personal >>>account:<<< 6 months bank statements ID
+
+[33m  DIFF [5]:[39m
+    SOURCE: operating out of a business >>>account<<< Latest financial statements from accountant
+    BLADE:  operating out of a business >>>account:<<< Latest financial statements from accountant
+
+[33m  DIFF [6]:[39m
+    SOURCE: of attorney Proof of company >>>addresss<<< Proof of member address Please
+    BLADE:  of attorney Proof of company >>>address<<< Proof of member address Please
+
+[33m  DIFF [7]:[39m
+    SOURCE: Home Finders Coastal Rental Team >>><<< Application for rental Personal Details
+    BLADE:  Home Finders Coastal Rental Team >>>Version 8 Johan and Elize Properties T/A HFC COASTAL THE MANDATE COMPANY Shop 5 The Emporium, cnr King Rd & Marine Drive, Shelly Beach Reg No:2009/228978/23 Vat No:4870264498 FFC No:FFC40/43916/5 FIC No:58538 Fax: 086 233 2395 Email: info@hfcoastal.co.za Cell: 079 495 5994<<< Application for rental Personal Details
+
+[33m  DIFF [8]:[39m
+    SOURCE: rental Personal Details Address of >>>property:_________________________________________________________<<< Full name and Surname:_________________________________________________________ I.D
+    BLADE:  rental Personal Details Address of >>>property:<<< Full name and Surname:_________________________________________________________ I.D
+
+[33m  DIFF [9]:[39m
+    SOURCE: of property:_________________________________________________________ Full name and >>>Surname:_________________________________________________________<<< I.D Number:______________________Marital Status:_______________________ Spouse Full
+    BLADE:  of property:_________________________________________________________ Full name and >>>Surname:<<< I.D Number:______________________Marital Status:_______________________ Spouse Full
+
+[33m  DIFF [10]:[39m
+    SOURCE: Full name and Surname:_________________________________________________________ I.D >>>Number:______________________Marital Status:_______________________<<< Spouse Full Name:_________________________________________________________ Spouse I.D
+    BLADE:  Full name and Surname:_________________________________________________________ I.D >>>Number: Marital Status:<<< Spouse Full Name:_________________________________________________________ Spouse I.D
+
+[33m  DIFF [11]:[39m
+    SOURCE: I.D Number:______________________Marital Status:_______________________ Spouse Full >>>Name:_________________________________________________________<<< Spouse I.D Number:______________________Citizenship:__________________________ Current Residential
+    BLADE:  I.D Number:______________________Marital Status:_______________________ Spouse Full >>>Name:<<< Spouse I.D Number:______________________Citizenship:__________________________ Current Residential
+
+[33m  DIFF [12]:[39m
+    SOURCE: Spouse Full Name:_________________________________________________________ Spouse I.D >>>Number:______________________Citizenship:__________________________<<< Current Residential Address:_________________________________________________________ _________________________________________________________ Email
+    BLADE:  Spouse Full Name:_________________________________________________________ Spouse I.D >>>Number: Citizenship:<<< Current Residential Address:_________________________________________________________ _________________________________________________________ Email
+
+[33m  DIFF [13]:[39m
+    SOURCE: Spouse I.D Number:______________________Citizenship:__________________________ Current Residential >>>Address:_________________________________________________________ _________________________________________________________<<< Email Address:_________________________________________________________ Contact Numbers:(Cell)______________________(Work):_____________________________ Contact
+    BLADE:  Spouse I.D Number:______________________Citizenship:__________________________ Current Residential >>>Address:<<< Email Address:_________________________________________________________ Contact Numbers:(Cell)______________________(Work):_____________________________ Contact
+
+[33m  DIFF [14]:[39m
+    SOURCE: Current Residential Address:_________________________________________________________ _________________________________________________________ Email >>>Address:_________________________________________________________<<< Contact Numbers:(Cell)______________________(Work):_____________________________ Contact Person not
+    BLADE:  Current Residential Address:_________________________________________________________ _________________________________________________________ Email >>>Address:<<< Contact Numbers:(Cell)______________________(Work):_____________________________ Contact Person not
+
+[33m  DIFF [15]:[39m
+    SOURCE: Address:_________________________________________________________ _________________________________________________________ Email Address:_________________________________________________________ Contact >>>Numbers:(Cell)______________________(Work):_____________________________<<< Contact Person not staying with
+    BLADE:  Address:_________________________________________________________ _________________________________________________________ Email Address:_________________________________________________________ Contact >>>Numbers: (Cell) (Work)<<< Contact Person not staying with
+
+[33m  DIFF [16]:[39m
+    SOURCE: Person not staying with you: >>>Name:_________________________________________________________<<< Contact Numbers:(Cell)______________________(Work):_____________________________ Current Landlord /Agent
+    BLADE:  Person not staying with you: >>>Name:<<< Contact Numbers:(Cell)______________________(Work):_____________________________ Current Landlord /Agent
+
+[33m  DIFF [17]:[39m
+    SOURCE: staying with you: Name:_________________________________________________________ Contact >>>Numbers:(Cell)______________________(Work):_____________________________<<< Current Landlord /Agent / Owner
+    BLADE:  staying with you: Name:_________________________________________________________ Contact >>>Numbers: (Cell) (Work)<<< Current Landlord /Agent / Owner
+
+[33m  DIFF [18]:[39m
+    SOURCE: Name:_________________________________________________________ Contact Numbers:(Cell)______________________(Work):_____________________________ Current Landlord >>>/Agent<<< / Owner details where you
+    BLADE:  Name:_________________________________________________________ Contact Numbers:(Cell)______________________(Work):_____________________________ Current Landlord >>><<< / Owner details where you
+
+[33m  DIFF [19]:[39m
+    SOURCE: Numbers:(Cell)______________________(Work):_____________________________ Current Landlord /Agent / >>><<< Owner details where you are
+    BLADE:  Numbers:(Cell)______________________(Work):_____________________________ Current Landlord /Agent / >>>Agent /<<< Owner details where you are
+
+[33m  DIFF [20]:[39m
+    SOURCE: where you are currently residing: >>>Name:______________________Tell No:_____________________________<<< Current Rental Amount:R_____________________ From:______/______/________To:______/______/________ PLEASE
+    BLADE:  where you are currently residing: >>>Name: Tel No:<<< Current Rental Amount:R_____________________ From:______/______/________To:______/______/________ PLEASE
+
+[33m  DIFF [21]:[39m
+    SOURCE: residing: Name:______________________Tell No:_____________________________ Current Rental >>>Amount:R_____________________ From:______/______/________To:______/______/________<<< PLEASE EMAIL THIS APPLICATION FORMS,
+    BLADE:  residing: Name:______________________Tell No:_____________________________ Current Rental >>>Amount: From: To:<<< PLEASE EMAIL THIS APPLICATION FORMS,
+
+[33m  DIFF [22]:[39m
+    SOURCE: letting@hfcoastal.co.za Employment Details Name of >>>Employer:_________________________________________________________ Position:_________________________________________________________<<< Employer Address:_________________________________________________________ Tel No of
+    BLADE:  letting@hfcoastal.co.za Employment Details Name of >>>Employer: Position:<<< Employer Address:_________________________________________________________ Tel No of
+
+[33m  DIFF [23]:[39m
+    SOURCE: Name of Employer:_________________________________________________________ Position:_________________________________________________________ Employer >>>Address:_________________________________________________________<<< Tel No of Employer:______________________Monthly Salary:______________________
+    BLADE:  Name of Employer:_________________________________________________________ Position:_________________________________________________________ Employer >>>Address:<<< Tel No of Employer:______________________Monthly Salary:______________________
+
+[33m  DIFF [24]:[39m
+    SOURCE: Employer Address:_________________________________________________________ Tel No of >>>Employer:______________________Monthly Salary:______________________<<< Requirement of Lease Effective Date
+    BLADE:  Employer Address:_________________________________________________________ Tel No of >>>Employer: Monthly Salary:<<< Requirement of Lease Effective Date
+
+[33m  DIFF [25]:[39m
+    SOURCE: of Lease Effective Date of >>>Occupation:______________________Rental<<< Terms Required:________________ Special Conditions:_________________________________________________________ _________________________________________________________
+    BLADE:  of Lease Effective Date of >>>Occupation: Rental<<< Terms Required:________________ Special Conditions:_________________________________________________________ _________________________________________________________
+
+[33m  DIFF [26]:[39m
+    SOURCE: Effective Date of Occupation:______________________Rental Terms >>>Required:________________<<< Special Conditions:_________________________________________________________ _________________________________________________________ _________________________________________________________ Number
+    BLADE:  Effective Date of Occupation:______________________Rental Terms >>>Required:<<< Special Conditions:_________________________________________________________ _________________________________________________________ _________________________________________________________ Number
+
+[33m  DIFF [27]:[39m
+    SOURCE: of Occupation:______________________Rental Terms Required:________________ Special >>>Conditions:_________________________________________________________ _________________________________________________________ _________________________________________________________<<< Number of Occupants:Adults:_________________Children:___________________________ I hereby
+    BLADE:  of Occupation:______________________Rental Terms Required:________________ Special >>>Conditions:<<< Number of Occupants:Adults:_________________Children:___________________________ I hereby
+
+[33m  DIFF [28]:[39m
+    SOURCE: Conditions:_________________________________________________________ _________________________________________________________ _________________________________________________________ Number of >>>Occupants:Adults:_________________Children:___________________________<<< I hereby declare that all
+    BLADE:  Conditions:_________________________________________________________ _________________________________________________________ _________________________________________________________ Number of >>>Occupants: Adults: Children:<<< I hereby declare that all
+
+[33m  DIFF [29]:[39m
+    SOURCE: given is true and accurate. >>>_________________________________________________________________ SignatureWitness ________________________________ Date<<< PLEASE EMAIL THIS APPLICATION FORMS,
+    BLADE:  given is true and accurate. >>>Signature Witness Date:<<< PLEASE EMAIL THIS APPLICATION FORMS,
+
+[33m  DIFF [30]:[39m
+    SOURCE: or agent to, at all >>>times:-<<< Contact, request and obtain information
+    BLADE:  or agent to, at all >>>times:<<< Contact, request and obtain information
+
+[33m  DIFF [31]:[39m
+    SOURCE: given is true and accurate. >>>______________________________________________________________ SignatureWitness ______________________________ Date<<<
+    BLADE:  given is true and accurate. >>>Signature Witness Date: Version 8<<<
+
+[33m  31 difference(s) found in rental-application-v8[39m
+
+[32m═══════════════════════════════════════[39m
+[32m         VERIFICATION SUMMARY[39m
+[32m═══════════════════════════════════════[39m
+[33m  ✗ rental-application-v8 — 31 difference(s)[39m
+
+[33mTotal differences across all templates: 31[39m

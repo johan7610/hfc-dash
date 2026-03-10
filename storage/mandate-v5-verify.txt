@@ -1,0 +1,271 @@
+
+[32m═══ Verifying: letting-mandate-v5 ═══[39m
+
+[33m  DIFF [1]:[39m
+    SOURCE: >>><<< Johan and Elize Properties T/A
+    BLADE:  >>>Letting Mandate — Home Finders Coastal<<< Johan and Elize Properties T/A
+
+[33m  DIFF [2]:[39m
+    SOURCE: Johan and Elize Properties T/A >>><<< Shop 5 The Emporium, cnr
+    BLADE:  Johan and Elize Properties T/A >>>HFC COASTAL THE MANDATE COMPANY<<< Shop 5 The Emporium, cnr
+
+[33m  DIFF [3]:[39m
+    SOURCE: & Marine Drive, Shelly Beach >>>Fax No: 086 514 7632<<< Reg no: 2017/431318/07 FFC: 202615038880000
+    BLADE:  & Marine Drive, Shelly Beach >>><<< Reg no: 2017/431318/07 FFC: 202615038880000
+
+[33m  DIFF [4]:[39m
+    SOURCE: No: 086 514 7632 Reg >>>no: 2017/431318/07 FFC: 202615038880000 Vat: 463087821 Email Address: admin@hfcoastal.co.za<<< FIC AI/180629/0000019 Elize Reichel Cell:
+    BLADE:  No: 086 514 7632 Reg >>>No:2009/228978/23 Vat No:4870264498 FFC No:FFC40/43916/5<<< FIC AI/180629/0000019 Elize Reichel Cell:
+
+[33m  DIFF [5]:[39m
+    SOURCE: 463087821 Email Address: admin@hfcoastal.co.za FIC >>>AI/180629/0000019 Elize Reichel<<< Cell: 071 351 0291 Johan
+    BLADE:  463087821 Email Address: admin@hfcoastal.co.za FIC >>>No:58538 Fax: 086 233 2395 Email: info@hfcoastal.co.za<<< Cell: 071 351 0291 Johan
+
+[33m  DIFF [6]:[39m
+    SOURCE: FIC AI/180629/0000019 Elize Reichel Cell: >>>071 351 0291 Johan Reichel Cell: 076 618 5578<<< Mandate entered into between The
+    BLADE:  FIC AI/180629/0000019 Elize Reichel Cell: >>>079 495 5994<<< Mandate entered into between The
+
+[33m  DIFF [7]:[39m
+    SOURCE: into between The Parties The >>>Owner/s:___________________________________________________________<<< Home Finders Coastal (Agent):_________________________________________________ The
+    BLADE:  into between The Parties The >>>Owner/s: (hereinafter referred to as the “Owner”)<<< Home Finders Coastal (Agent):_________________________________________________ The
+
+[33m  DIFF [8]:[39m
+    SOURCE: The Owner/s:___________________________________________________________ Home Finders Coastal >>>(Agent):_________________________________________________<<< The owner hereby grants to
+    BLADE:  The Owner/s:___________________________________________________________ Home Finders Coastal >>>(Agent): (hereinafter referred to as the “Agent”) 1.<<< The owner hereby grants to
+
+[33m  DIFF [9]:[39m
+    SOURCE: Home Finders Coastal (Agent):_________________________________________________ The >>>owner<<< hereby grants to the Agent
+    BLADE:  Home Finders Coastal (Agent):_________________________________________________ The >>>Owner<<< hereby grants to the Agent
+
+[33m  DIFF [10]:[39m
+    SOURCE: (Agent):_________________________________________________ The owner hereby grants >>>to<<< the Agent a Mandate to
+    BLADE:  (Agent):_________________________________________________ The owner hereby grants >>><<< the Agent a Mandate to
+
+[33m  DIFF [11]:[39m
+    SOURCE: grants to the Agent a >>>Mandate<<< to offer to let the
+    BLADE:  grants to the Agent a >>>sole and exclusive mandate<<< to offer to let the
+
+[33m  DIFF [12]:[39m
+    SOURCE: the Agent a Mandate to >>>offer to let<<< the property known as _______________________________________________________________________________
+    BLADE:  the Agent a Mandate to >>>lease<<< the property known as _______________________________________________________________________________
+
+[33m  DIFF [13]:[39m
+    SOURCE: offer to let the property >>>known<<< as _______________________________________________________________________________ subject to the
+    BLADE:  offer to let the property >>>described<<< as _______________________________________________________________________________ subject to the
+
+[33m  DIFF [14]:[39m
+    SOURCE: let the property known as >>>_______________________________________________________________________________ subject<<< to the conditions set out
+    BLADE:  let the property known as >>>(hereinafter referred<<< to the conditions set out
+
+[33m  DIFF [15]:[39m
+    SOURCE: known as _______________________________________________________________________________ subject to >>><<< the conditions set out in
+    BLADE:  known as _______________________________________________________________________________ subject to >>>as<<< the conditions set out in
+
+[33m  DIFF [16]:[39m
+    SOURCE: as _______________________________________________________________________________ subject to the >>>conditions set out in this agreement.<<< The rental amount required by
+    BLADE:  as _______________________________________________________________________________ subject to the >>>“Property”). 2.<<< The rental amount required by
+
+[33m  DIFF [17]:[39m
+    SOURCE: this agreement. The rental amount >>>required by the Owner for the property is R__________________ which includes the commission as stated<<< in clause 4. In the
+    BLADE:  this agreement. The rental amount >>>shall be (amount<<< in clause 4. In the
+
+[33m  DIFF [18]:[39m
+    SOURCE: the commission as stated in >>>clause 4. In<<< the event of the Agency
+    BLADE:  the commission as stated in >>>words) per month, payable in advance on<<< the event of the Agency
+
+[33m  DIFF [19]:[39m
+    SOURCE: in clause 4. In the >>>event<<< of the Agency not finding
+    BLADE:  in clause 4. In the >>>1st<<< of the Agency not finding
+
+[33m  DIFF [20]:[39m
+    SOURCE: 4. In the event of >>>the Agency not finding a suitable Tenant to rent the property at such rental amount, then, between the Owner and the Agency they will agree to an acceptable rental amount prior to allowing any tenant taking occupation of the said property, which includes commission<<< as stated in clause 4.
+    BLADE:  4. In the event of >>>each month. Commission<<< as stated in clause 4.
+
+[33m  DIFF [21]:[39m
+    SOURCE: property, which includes commission as >>>stated in<<< clause 4. The sole mandate
+    BLADE:  property, which includes commission as >>>per<<< clause 4. The sole mandate
+
+[33m  DIFF [22]:[39m
+    SOURCE: as stated in clause 4. >>>The sole<<< mandate hereby granted shall commence
+    BLADE:  as stated in clause 4. >>>3. This<<< mandate hereby granted shall commence
+
+[33m  DIFF [23]:[39m
+    SOURCE: clause 4. The sole mandate >>>hereby granted<<< shall commence on date of
+    BLADE:  clause 4. The sole mandate >>><<< shall commence on date of
+
+[33m  DIFF [24]:[39m
+    SOURCE: hereby granted shall commence on >>><<< date of signature hereof and
+    BLADE:  hereby granted shall commence on >>>the<<< date of signature hereof and
+
+[33m  DIFF [25]:[39m
+    SOURCE: commence on date of signature >>>hereof<<< and shall remain in force
+    BLADE:  commence on date of signature >>><<< and shall remain in force
+
+[33m  DIFF [26]:[39m
+    SOURCE: date of signature hereof and >>>shall<<< remain in force until 22h00
+    BLADE:  date of signature hereof and >>><<< remain in force until 22h00
+
+[33m  DIFF [27]:[39m
+    SOURCE: hereof and shall remain in >>><<< force until 22h00 on the
+    BLADE:  hereof and shall remain in >>>full<<< force until 22h00 on the
+
+[33m  DIFF [28]:[39m
+    SOURCE: force until 22h00 on the >>>____________day<<< of _________________________20_________ The Owner will
+    BLADE:  force until 22h00 on the >>>day<<< of _________________________20_________ The Owner will
+
+[33m  DIFF [29]:[39m
+    SOURCE: 22h00 on the ____________day of >>>_________________________20_________<<< The Owner will pay to
+    BLADE:  22h00 on the ____________day of >>>20, whereafter it shall automatically renew for successive periods of 12 months unless cancelled by either party giving 90 (ninety) days written notice. 4.<<< The Owner will pay to
+
+[33m  DIFF [30]:[39m
+    SOURCE: ____________day of _________________________20_________ The Owner >>>will<<< pay to the Agent a
+    BLADE:  ____________day of _________________________20_________ The Owner >>>agrees to<<< pay to the Agent a
+
+[33m  DIFF [31]:[39m
+    SOURCE: _________________________20_________ The Owner will pay >>><<< to the Agent a commission,
+    BLADE:  _________________________20_________ The Owner will pay >>>the Agent commission of % plus VAT of the monthly rental, payable monthly in arrears from rental received. A procurement fee equal<<< to the Agent a commission,
+
+[33m  DIFF [32]:[39m
+    SOURCE: Owner will pay to the >>>Agent a commission, calculated at a<<< percentage of _________% plus VAT
+    BLADE:  Owner will pay to the >>>commission<<< percentage of _________% plus VAT
+
+[33m  DIFF [33]:[39m
+    SOURCE: calculated at a percentage of >>>_________%<<< plus VAT on the letting
+    BLADE:  calculated at a percentage of >>>one month’s rental<<< plus VAT on the letting
+
+[33m  DIFF [34]:[39m
+    SOURCE: percentage of _________% plus VAT >>>on the letting price<<< of the property. The Agency
+    BLADE:  percentage of _________% plus VAT >>>is payable upon conclusion<<< of the property. The Agency
+
+[33m  DIFF [35]:[39m
+    SOURCE: on the letting price of >>><<< the property. The Agency will
+    BLADE:  on the letting price of >>>a lease agreement with a tenant procured by<<< the property. The Agency will
+
+[33m  DIFF [36]:[39m
+    SOURCE: the letting price of the >>>property.<<< The Agency will screen all
+    BLADE:  the letting price of the >>>Agent. 5.<<< The Agency will screen all
+
+[33m  DIFF [37]:[39m
+    SOURCE: price of the property. The >>>Agency will<<< screen all possible tenants prior
+    BLADE:  price of the property. The >>>Agent shall<<< screen all possible tenants prior
+
+[33m  DIFF [38]:[39m
+    SOURCE: The Agency will screen all >>>possible<<< tenants prior to occupation to
+    BLADE:  The Agency will screen all >>>prospective<<< tenants prior to occupation to
+
+[33m  DIFF [39]:[39m
+    SOURCE: will screen all possible tenants >>>prior<<< to occupation to ensure a
+    BLADE:  will screen all possible tenants >>>and provide the Owner with relevant information<<< to occupation to ensure a
+
+[33m  DIFF [40]:[39m
+    SOURCE: all possible tenants prior to >>>occupation to ensure<<< a hassle free letting of
+    BLADE:  all possible tenants prior to >>>assist in the selection of<<< a hassle free letting of
+
+[33m  DIFF [41]:[39m
+    SOURCE: to occupation to ensure a >>>hassle free letting<<< of the property. The Agent
+    BLADE:  to occupation to ensure a >>>suitable tenant. The final decision on the acceptance<<< of the property. The Agent
+
+[33m  DIFF [42]:[39m
+    SOURCE: a hassle free letting of >>><<< the property. The Agent will
+    BLADE:  a hassle free letting of >>>a tenant shall rest with<<< the property. The Agent will
+
+[33m  DIFF [43]:[39m
+    SOURCE: hassle free letting of the >>>property.<<< The Agent will deposit the
+    BLADE:  hassle free letting of the >>>Owner. 6.<<< The Agent will deposit the
+
+[33m  DIFF [44]:[39m
+    SOURCE: letting of the property. The >>>Agent will deposit the<<< monthly rental collections into the
+    BLADE:  letting of the property. The >>>rental deposits and<<< monthly rental collections into the
+
+[33m  DIFF [45]:[39m
+    SOURCE: will deposit the monthly rental >>>collections<<< into the following Bank Account
+    BLADE:  will deposit the monthly rental >>>shall be paid<<< into the following Bank Account
+
+[33m  DIFF [46]:[39m
+    SOURCE: rental collections into the following >>>Bank<<< Account supplied by the Owner,
+    BLADE:  rental collections into the following >>>bank account:<<< Account supplied by the Owner,
+
+[33m  DIFF [47]:[39m
+    SOURCE: into the following Bank Account >>>supplied by the Owner, by no later than the 7th day of every month. Account<<< Holder’s Name:____________________________________________ Bank Name:____________________________________________ Account
+    BLADE:  into the following Bank Account >>><<< Holder’s Name:____________________________________________ Bank Name:____________________________________________ Account
+
+[33m  DIFF [48]:[39m
+    SOURCE: of every month. Account Holder’s >>>Name:____________________________________________<<< Bank Name:____________________________________________ Account Number:____________________________________________ Branch
+    BLADE:  of every month. Account Holder’s >>>Name:<<< Bank Name:____________________________________________ Account Number:____________________________________________ Branch
+
+[33m  DIFF [49]:[39m
+    SOURCE: month. Account Holder’s Name:____________________________________________ Bank >>>Name:____________________________________________<<< Account Number:____________________________________________ Branch Name and
+    BLADE:  month. Account Holder’s Name:____________________________________________ Bank >>>Name:<<< Account Number:____________________________________________ Branch Name and
+
+[33m  DIFF [50]:[39m
+    SOURCE: Holder’s Name:____________________________________________ Bank Name:____________________________________________ Account >>>Number:____________________________________________<<< Branch Name and Code:____________________________________________ Owner’s
+    BLADE:  Holder’s Name:____________________________________________ Bank Name:____________________________________________ Account >>>Number:<<< Branch Name and Code:____________________________________________ Owner’s
+
+[33m  DIFF [51]:[39m
+    SOURCE: Account Number:____________________________________________ Branch Name and >>>Code:____________________________________________<<< Owner’s Contact details:____________________________________________ Owner’s Email
+    BLADE:  Account Number:____________________________________________ Branch Name and >>>Code:<<< Owner’s Contact details:____________________________________________ Owner’s Email
+
+[33m  DIFF [52]:[39m
+    SOURCE: Name and Code:____________________________________________ Owner’s Contact >>>details:____________________________________________<<< Owner’s Email Address:____________________________________________ The Owner
+    BLADE:  Name and Code:____________________________________________ Owner’s Contact >>>details:<<< Owner’s Email Address:____________________________________________ The Owner
+
+[33m  DIFF [53]:[39m
+    SOURCE: Owner’s Contact details:____________________________________________ Owner’s Email >>>Address:____________________________________________<<< The Owner shall supply the
+    BLADE:  Owner’s Contact details:____________________________________________ Owner’s Email >>>Address: 7.<<< The Owner shall supply the
+
+[33m  DIFF [54]:[39m
+    SOURCE: Owner’s Email Address:____________________________________________ The Owner >>>shall supply<<< the Agency with water and
+    BLADE:  Owner’s Email Address:____________________________________________ The Owner >>>acknowledges that they are responsible for<<< the Agency with water and
+
+[33m  DIFF [55]:[39m
+    SOURCE: The Owner shall supply the >>>Agency with<<< water and lights service usage
+    BLADE:  The Owner shall supply the >>>payment of<<< water and lights service usage
+
+[33m  DIFF [56]:[39m
+    SOURCE: the Agency with water and >>>lights service usage charges every month, so<<< the Agency may add this
+    BLADE:  the Agency with water and >>>electricity accounts for<<< the Agency may add this
+
+[33m  DIFF [57]:[39m
+    SOURCE: charges every month, so the >>>Agency may add this<<< to the statement forwarded to
+    BLADE:  charges every month, so the >>>Property. In the event that the tenant fails<<< to the statement forwarded to
+
+[33m  DIFF [58]:[39m
+    SOURCE: Agency may add this to >>><<< the statement forwarded to the
+    BLADE:  Agency may add this to >>>pay<<< the statement forwarded to the
+
+[33m  DIFF [59]:[39m
+    SOURCE: may add this to the >>>statement forwarded to<<< the Tenant. This Agreement has
+    BLADE:  may add this to the >>>water and electricity accounts,<<< the Tenant. This Agreement has
+
+[33m  DIFF [60]:[39m
+    SOURCE: the statement forwarded to the >>>Tenant.<<< This Agreement has been accepted
+    BLADE:  the statement forwarded to the >>>Owner shall be liable for such payments.<<< This Agreement has been accepted
+
+[33m  DIFF [61]:[39m
+    SOURCE: signed by the Owner/s at >>>_________________________<<< on this ________ day of
+    BLADE:  signed by the Owner/s at >>><<< on this ________ day of
+
+[33m  DIFF [62]:[39m
+    SOURCE: Owner/s at _________________________ on this >>>________<<< day of ______________________ at _______________(am
+    BLADE:  Owner/s at _________________________ on this >>><<< day of ______________________ at _______________(am
+
+[33m  DIFF [63]:[39m
+    SOURCE: on this ________ day of >>>______________________<<< at _______________(am / pm) ________________________________________________________________
+    BLADE:  on this ________ day of >>><<< at _______________(am / pm) ________________________________________________________________
+
+[33m  DIFF [64]:[39m
+    SOURCE: ________ day of ______________________ at >>>_______________(am / pm) ________________________________________________________________ OwnerOwnerAgent ________________________________________________________________<<< Print NamePrint NamePrint name
+    BLADE:  ________ day of ______________________ at >>>() Owner<<< Print NamePrint NamePrint name
+
+[33m  DIFF [65]:[39m
+    SOURCE: pm) ________________________________________________________________ OwnerOwnerAgent ________________________________________________________________ Print >>>NamePrint NamePrint name<<<
+    BLADE:  pm) ________________________________________________________________ OwnerOwnerAgent ________________________________________________________________ Print >>>Name Owner Print Name Agent Print Name Version 5<<<
+
+[33m  65 difference(s) found in letting-mandate-v5[39m
+
+[32m═══════════════════════════════════════[39m
+[32m         VERIFICATION SUMMARY[39m
+[32m═══════════════════════════════════════[39m
+[33m  ✗ letting-mandate-v5 — 65 difference(s)[39m
+
+[33mTotal differences across all templates: 65[39m

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class AgencyController extends Controller
@@ -30,6 +31,18 @@ class AgencyController extends Controller
             'secondary_color'  => 'nullable|string|max:20',
             'tertiary_color'   => 'nullable|string|max:20',
             'is_active'        => 'nullable|boolean',
+            'trading_name'     => 'nullable|string|max:255',
+            'tagline'          => 'nullable|string|max:255',
+            'address'          => 'nullable|string|max:500',
+            'phone'            => 'nullable|string|max:255',
+            'phone_secondary'  => 'nullable|string|max:255',
+            'fax'              => 'nullable|string|max:255',
+            'email'            => 'nullable|string|max:255',
+            'reg_no'           => 'nullable|string|max:255',
+            'vat_no'           => 'nullable|string|max:255',
+            'ffc_no'           => 'nullable|string|max:255',
+            'fic_no'           => 'nullable|string|max:255',
+            'logo'             => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
         $data['slug']            = $data['slug'] ?? Str::slug($data['name']);
@@ -38,7 +51,17 @@ class AgencyController extends Controller
         $data['tertiary_color']  = $data['tertiary_color']  ?? '#1a4a73';
         $data['is_active']       = (bool) ($data['is_active'] ?? true);
 
-        Agency::create($data);
+        unset($data['logo']);
+
+        $agency = Agency::create($data);
+
+        if ($request->hasFile('logo')) {
+            $ext = $request->file('logo')->getClientOriginalExtension();
+            $path = $request->file('logo')->storeAs(
+                "agencies/{$agency->id}", "logo.{$ext}", 'public'
+            );
+            $agency->update(['logo_path' => $path]);
+        }
 
         return redirect()->route('agencies.index')->with('success', "Agency \"{$data['name']}\" created.");
     }
@@ -56,12 +79,43 @@ class AgencyController extends Controller
             'secondary_color' => 'nullable|string|max:20',
             'tertiary_color'  => 'nullable|string|max:20',
             'is_active'       => 'nullable|boolean',
+            'trading_name'    => 'nullable|string|max:255',
+            'tagline'         => 'nullable|string|max:255',
+            'address'         => 'nullable|string|max:500',
+            'phone'           => 'nullable|string|max:255',
+            'fax'             => 'nullable|string|max:255',
+            'email'           => 'nullable|string|max:255',
+            'reg_no'          => 'nullable|string|max:255',
+            'vat_no'          => 'nullable|string|max:255',
+            'ffc_no'          => 'nullable|string|max:255',
+            'fic_no'          => 'nullable|string|max:255',
+            'logo'            => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'remove_logo'     => 'nullable|boolean',
         ]);
 
         $data['primary_color']   = $data['primary_color']   ?? '#0b2a4a';
         $data['secondary_color'] = $data['secondary_color'] ?? '#00b4d8';
         $data['tertiary_color']  = $data['tertiary_color']  ?? '#1a4a73';
         $data['is_active']       = (bool) ($data['is_active'] ?? false);
+
+        $removeLogo = $data['remove_logo'] ?? false;
+        unset($data['logo'], $data['remove_logo']);
+
+        if ($removeLogo) {
+            if ($agency->logo_path) {
+                Storage::disk('public')->delete($agency->logo_path);
+            }
+            $data['logo_path'] = null;
+        } elseif ($request->hasFile('logo')) {
+            if ($agency->logo_path) {
+                Storage::disk('public')->delete($agency->logo_path);
+            }
+            $ext = $request->file('logo')->getClientOriginalExtension();
+            $path = $request->file('logo')->storeAs(
+                "agencies/{$agency->id}", "logo.{$ext}", 'public'
+            );
+            $data['logo_path'] = $path;
+        }
 
         $agency->update($data);
 

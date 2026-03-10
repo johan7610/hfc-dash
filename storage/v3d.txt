@@ -1,0 +1,223 @@
+
+[32m═══ Verifying: letting-marketing-permission-v7 ═══[39m
+
+[33m  DIFF [1]:[39m
+    SOURCE: >>><<< Johan and Elize Properties T/A
+    BLADE:  >>>Marketing Permission — Home Finders Coastal<<< Johan and Elize Properties T/A
+
+[33m  DIFF [2]:[39m
+    SOURCE: Johan and Elize Properties T/A >>><<< The Emporium 5, Corner Kings
+    BLADE:  Johan and Elize Properties T/A >>>HFC COASTAL THE MANDATE COMPANY Shop 5<<< The Emporium 5, Corner Kings
+
+[33m  DIFF [3]:[39m
+    SOURCE: and Elize Properties T/A The >>>Emporium 5, Corner Kings Road<<< & Marine Drive, Shelly Beach
+    BLADE:  and Elize Properties T/A The >>>Emporium, cnr King Rd<<< & Marine Drive, Shelly Beach
+
+[33m  DIFF [4]:[39m
+    SOURCE: & Marine Drive, Shelly Beach >>>Fax No: 086 514 7632<<< Reg no: 2017/431318/07 FFC: 202615038880000
+    BLADE:  & Marine Drive, Shelly Beach >>><<< Reg no: 2017/431318/07 FFC: 202615038880000
+
+[33m  DIFF [5]:[39m
+    SOURCE: No: 086 514 7632 Reg >>>no: 2017/431318/07 FFC: 202615038880000 Email Address: admin@hfcoastal.co.za<<< FIC AI/180629/0000019 Vat: 4630287821 Elize
+    BLADE:  No: 086 514 7632 Reg >>>No:2009/228978/23 Vat No:4870264498 FFC No:FFC40/43916/5<<< FIC AI/180629/0000019 Vat: 4630287821 Elize
+
+[33m  DIFF [6]:[39m
+    SOURCE: 202615038880000 Email Address: admin@hfcoastal.co.za FIC >>>AI/180629/0000019 Vat: 4630287821 Elize Reichel<<< Cell: 071 351 0291 Johan
+    BLADE:  202615038880000 Email Address: admin@hfcoastal.co.za FIC >>>No:58538 Fax: 086 233 2395 Email: info@hfcoastal.co.za<<< Cell: 071 351 0291 Johan
+
+[33m  DIFF [7]:[39m
+    SOURCE: Vat: 4630287821 Elize Reichel Cell: >>>071 351 0291 Johan Reichel Cell: 076 618 5578<<< MARKETING PERMISSION I / We
+    BLADE:  Vat: 4630287821 Elize Reichel Cell: >>>079 495 5994<<< MARKETING PERMISSION I / We
+
+[33m  DIFF [8]:[39m
+    SOURCE: MARKETING PERMISSION I / We >>>___________________________________________________________________________________<<< the undersigned, being the registered
+    BLADE:  MARKETING PERMISSION I / We >>><<< the undersigned, being the registered
+
+[33m  DIFF [9]:[39m
+    SOURCE: Sectional Scheme / Unit no >>>___________in<<< the Complex / Estate known
+    BLADE:  Sectional Scheme / Unit no >>>in<<< the Complex / Estate known
+
+[33m  DIFF [10]:[39m
+    SOURCE: Complex / Estate known as >>>____________________________________<<< in _____________________________________________________ (Street) in ________________________
+    BLADE:  Complex / Estate known as >>><<< in _____________________________________________________ (Street) in ________________________
+
+[33m  DIFF [11]:[39m
+    SOURCE: Estate known as ____________________________________ in >>>_____________________________________________________<<< (Street) in ________________________ (Township) ________________________________________
+    BLADE:  Estate known as ____________________________________ in >>><<< (Street) in ________________________ (Township) ________________________________________
+
+[33m  DIFF [12]:[39m
+    SOURCE: ____________________________________ in _____________________________________________________ (Street) in >>>________________________<<< (Township) ________________________________________ (District) together with
+    BLADE:  ____________________________________ in _____________________________________________________ (Street) in >>><<< (Township) ________________________________________ (District) together with
+
+[33m  DIFF [13]:[39m
+    SOURCE: _____________________________________________________ (Street) in ________________________ (Township) >>>________________________________________<<< (District) together with all fixtures
+    BLADE:  _____________________________________________________ (Street) in ________________________ (Township) >>><<< (District) together with all fixtures
+
+[33m  DIFF [14]:[39m
+    SOURCE: to rent the abovementioned property. >>>DOMICILUM CITANDI ET EXECUTANDI<<< Lessor 1: Physical address ______________________________________________________________________
+    BLADE:  to rent the abovementioned property. >>>Domicilium Citandi et Executandi<<< Lessor 1: Physical address ______________________________________________________________________
+
+[33m  DIFF [15]:[39m
+    SOURCE: EXECUTANDI Lessor 1: Physical address >>>______________________________________________________________________<<< Tel: ____________________ Email: _______________________________________________________ Lessor
+    BLADE:  EXECUTANDI Lessor 1: Physical address >>><<< Tel: ____________________ Email: _______________________________________________________ Lessor
+
+[33m  DIFF [16]:[39m
+    SOURCE: 1: Physical address ______________________________________________________________________ Tel: >>>____________________<<< Email: _______________________________________________________ Lessor 2: Physical
+    BLADE:  1: Physical address ______________________________________________________________________ Tel: >>><<< Email: _______________________________________________________ Lessor 2: Physical
+
+[33m  DIFF [17]:[39m
+    SOURCE: address ______________________________________________________________________ Tel: ____________________ Email: >>>_______________________________________________________<<< Lessor 2: Physical address ______________________________________________________________________
+    BLADE:  address ______________________________________________________________________ Tel: ____________________ Email: >>><<< Lessor 2: Physical address ______________________________________________________________________
+
+[33m  DIFF [18]:[39m
+    SOURCE: _______________________________________________________ Lessor 2: Physical address >>>______________________________________________________________________<<< Tel: ____________________ Email: _______________________________________________________ The
+    BLADE:  _______________________________________________________ Lessor 2: Physical address >>><<< Tel: ____________________ Email: _______________________________________________________ The
+
+[33m  DIFF [19]:[39m
+    SOURCE: 2: Physical address ______________________________________________________________________ Tel: >>>____________________<<< Email: _______________________________________________________ The rental amount
+    BLADE:  2: Physical address ______________________________________________________________________ Tel: >>><<< Email: _______________________________________________________ The rental amount
+
+[33m  DIFF [20]:[39m
+    SOURCE: address ______________________________________________________________________ Tel: ____________________ Email: >>>_______________________________________________________<<< The rental amount required by
+    BLADE:  address ______________________________________________________________________ Tel: ____________________ Email: >>><<< The rental amount required by
+
+[33m  DIFF [21]:[39m
+    SOURCE: owner of the property is >>>R___________________ (_____________________________________________________________________________________)<<< Which includes Agencies commission of
+    BLADE:  owner of the property is >>>( )<<< Which includes Agencies commission of
+
+[33m  DIFF [22]:[39m
+    SOURCE: Which includes Agencies commission of >>>______________<<< ( _________ %) plus VAT
+    BLADE:  Which includes Agencies commission of >>><<< ( _________ %) plus VAT
+
+[33m  DIFF [23]:[39m
+    SOURCE: Agencies commission of ______________ ( >>>_________<<< %) plus VAT The Lessor
+    BLADE:  Agencies commission of ______________ ( >>><<< %) plus VAT The Lessor
+
+[33m  DIFF [24]:[39m
+    SOURCE: board on the Property. Other: >>>_____________________________________________________________________________________ _____________________________________________________________________________________<<< This Marketing Permission was done
+    BLADE:  board on the Property. Other: >>><<< This Marketing Permission was done
+
+[33m  DIFF [25]:[39m
+    SOURCE: signed by the Lessor at >>>_______________________________________<<< on this __________ day of
+    BLADE:  signed by the Lessor at >>><<< on this __________ day of
+
+[33m  DIFF [26]:[39m
+    SOURCE: Lessor at _______________________________________ on this >>>__________<<< day of ____________________________ 20 __________
+    BLADE:  Lessor at _______________________________________ on this >>><<< day of ____________________________ 20 __________
+
+[33m  DIFF [27]:[39m
+    SOURCE: on this __________ day of >>>____________________________<<< 20 __________ at ______________________ am
+    BLADE:  on this __________ day of >>><<< 20 __________ at ______________________ am
+
+[33m  DIFF [28]:[39m
+    SOURCE: __________ day of ____________________________ 20 >>>__________<<< at ______________________ am / pm.
+    BLADE:  __________ day of ____________________________ 20 >>><<< at ______________________ am / pm.
+
+[33m  DIFF [29]:[39m
+    SOURCE: of ____________________________ 20 __________ at >>>______________________<<< am / pm. __________________________ __________________________
+    BLADE:  of ____________________________ 20 __________ at >>><<< am / pm. __________________________ __________________________
+
+[33m  DIFF [30]:[39m
+    SOURCE: at ______________________ am / pm. >>>__________________________ __________________________<<< Lessor Witness (Registered Owner/s or
+    BLADE:  at ______________________ am / pm. >>><<< Lessor Witness (Registered Owner/s or
+
+[33m  DIFF [31]:[39m
+    SOURCE: Owner/s or Duly Authorised Representatives) >>>__________________________<<< Marketing Permission Agent Johan and
+    BLADE:  Owner/s or Duly Authorised Representatives) >>><<< Marketing Permission Agent Johan and
+
+[33m  DIFF [32]:[39m
+    SOURCE: Authorised Representatives) __________________________ Marketing Permission >>>Agent<<< Johan and Elize Properties T/A
+    BLADE:  Authorised Representatives) __________________________ Marketing Permission >>>Agent: Version 7<<< Johan and Elize Properties T/A
+
+[33m  DIFF [33]:[39m
+    SOURCE: Johan and Elize Properties T/A >>><<< The Emporium 5, Corner Kings
+    BLADE:  Johan and Elize Properties T/A >>>HFC COASTAL THE MANDATE COMPANY Shop 5<<< The Emporium 5, Corner Kings
+
+[33m  DIFF [34]:[39m
+    SOURCE: and Elize Properties T/A The >>>Emporium 5, Corner Kings Road<<< & Marine Drive, Shelly Beach
+    BLADE:  and Elize Properties T/A The >>>Emporium, cnr King Rd<<< & Marine Drive, Shelly Beach
+
+[33m  DIFF [35]:[39m
+    SOURCE: & Marine Drive, Shelly Beach >>>Fax No: 086 514 7632<<< Reg no: 2017/431318/07 FFC: 202615038880000
+    BLADE:  & Marine Drive, Shelly Beach >>><<< Reg no: 2017/431318/07 FFC: 202615038880000
+
+[33m  DIFF [36]:[39m
+    SOURCE: No: 086 514 7632 Reg >>>no: 2017/431318/07 FFC: 202615038880000 Email Address: admin@hfcoastal.co.za<<< FIC AI/180629/0000019 Vat: 4630287821 Elize
+    BLADE:  No: 086 514 7632 Reg >>>No:2009/228978/23 Vat No:4870264498 FFC No:FFC40/43916/5<<< FIC AI/180629/0000019 Vat: 4630287821 Elize
+
+[33m  DIFF [37]:[39m
+    SOURCE: 202615038880000 Email Address: admin@hfcoastal.co.za FIC >>>AI/180629/0000019 Vat: 4630287821 Elize Reichel<<< Cell: 071 351 0291 Johan
+    BLADE:  202615038880000 Email Address: admin@hfcoastal.co.za FIC >>>No:58538 Fax: 086 233 2395 Email: info@hfcoastal.co.za<<< Cell: 071 351 0291 Johan
+
+[33m  DIFF [38]:[39m
+    SOURCE: Vat: 4630287821 Elize Reichel Cell: >>>071 351 0291 Johan Reichel Cell: 076 618 5578<<< Addendum A – Service Fee
+    BLADE:  Vat: 4630287821 Elize Reichel Cell: >>>079 495 5994<<< Addendum A – Service Fee
+
+[33m  DIFF [39]:[39m
+    SOURCE: be responsible for the following: >>>1.<<< Source a lessee 2. Negotiate
+    BLADE:  be responsible for the following: >>><<< Source a lessee 2. Negotiate
+
+[33m  DIFF [40]:[39m
+    SOURCE: following: 1. Source a lessee >>>2.<<< Negotiate a rental contract 3.
+    BLADE:  following: 1. Source a lessee >>><<< Negotiate a rental contract 3.
+
+[33m  DIFF [41]:[39m
+    SOURCE: 2. Negotiate a rental contract >>>3.<<< Secure deposit 4. Secure first
+    BLADE:  2. Negotiate a rental contract >>><<< Secure deposit 4. Secure first
+
+[33m  DIFF [42]:[39m
+    SOURCE: rental contract 3. Secure deposit >>>4.<<< Secure first month’s rental 5.
+    BLADE:  rental contract 3. Secure deposit >>><<< Secure first month’s rental 5.
+
+[33m  DIFF [43]:[39m
+    SOURCE: 4. Secure first month’s rental >>>5.<<< Report on defects to the
+    BLADE:  4. Secure first month’s rental >>><<< Report on defects to the
+
+[33m  DIFF [44]:[39m
+    SOURCE: on defects to the lessor >>>6.<<< Collect the monthly rental 7.
+    BLADE:  on defects to the lessor >>><<< Collect the monthly rental 7.
+
+[33m  DIFF [45]:[39m
+    SOURCE: 6. Collect the monthly rental >>>7.<<< Ongoing liaison with the lessee
+    BLADE:  6. Collect the monthly rental >>><<< Ongoing liaison with the lessee
+
+[33m  DIFF [46]:[39m
+    SOURCE: Ongoing liaison with the lessee >>>8.<<< Collect the monthly Municipal/Eskom account
+    BLADE:  Ongoing liaison with the lessee >>><<< Collect the monthly Municipal/Eskom account
+
+[33m  DIFF [47]:[39m
+    SOURCE: ongoing Service Fee equal to >>>10 %( plus vat)<<< of the monthly rental for
+    BLADE:  ongoing Service Fee equal to >>>10% (plus VAT)<<< of the monthly rental for
+
+[33m  DIFF [48]:[39m
+    SOURCE: thereof. Breakdown Total Rental Amount >>>_____________________________________<<< Less Agent’s Service Fee (Including
+    BLADE:  thereof. Breakdown Total Rental Amount >>><<< Less Agent’s Service Fee (Including
+
+[33m  DIFF [49]:[39m
+    SOURCE: Less Agent’s Service Fee (Including >>>VAT)_____________________________________<<< Let’s Assist_____________________________________ Net Amount to
+    BLADE:  Less Agent’s Service Fee (Including >>>VAT)<<< Let’s Assist_____________________________________ Net Amount to
+
+[33m  DIFF [50]:[39m
+    SOURCE: Service Fee (Including VAT)_____________________________________ Let’s >>>Assist_____________________________________<<< Net Amount to Lessor_____________________________________ ____________________________________________________________
+    BLADE:  Service Fee (Including VAT)_____________________________________ Let’s >>>Assist<<< Net Amount to Lessor_____________________________________ ____________________________________________________________
+
+[33m  DIFF [51]:[39m
+    SOURCE: Let’s Assist_____________________________________ Net Amount to >>>Lessor_____________________________________ ____________________________________________________________<<< Lessor Lessee Agent ____________________________________________________________ DateDateDate
+    BLADE:  Let’s Assist_____________________________________ Net Amount to >>><<< Lessor Lessee Agent ____________________________________________________________ DateDateDate
+
+[33m  DIFF [52]:[39m
+    SOURCE: Amount to Lessor_____________________________________ ____________________________________________________________ Lessor >>><<< Lessee Agent ____________________________________________________________ DateDateDate
+    BLADE:  Amount to Lessor_____________________________________ ____________________________________________________________ Lessor >>>Lessor<<< Lessee Agent ____________________________________________________________ DateDateDate
+
+[33m  DIFF [53]:[39m
+    SOURCE: Lessor_____________________________________ ____________________________________________________________ Lessor Lessee Agent >>>____________________________________________________________ DateDateDate<<<
+    BLADE:  Lessor_____________________________________ ____________________________________________________________ Lessor Lessee Agent >>>Date: Date: Version 7<<<
+
+[33m  53 difference(s) found in letting-marketing-permission-v7[39m
+
+[32m═══════════════════════════════════════[39m
+[32m         VERIFICATION SUMMARY[39m
+[32m═══════════════════════════════════════[39m
+[33m  ✗ letting-marketing-permission-v7 — 53 difference(s)[39m
+
+[33mTotal differences across all templates: 53[39m

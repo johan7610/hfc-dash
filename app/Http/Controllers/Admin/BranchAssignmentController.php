@@ -8,6 +8,7 @@ use App\Models\Branch;
 use App\Models\BranchSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class BranchAssignmentController extends Controller
 {
@@ -95,19 +96,43 @@ class BranchAssignmentController extends Controller
         $this->authorizeAdmin();
 
         $data = $request->validate([
-            'company_name' => ['nullable', 'string', 'max:255'],
-            'company_address' => ['nullable', 'string', 'max:255'],
-            'company_tel' => ['nullable', 'string', 'max:100'],
-            'company_ffc' => ['nullable', 'string', 'max:100'],
+            'trading_name' => ['nullable', 'string', 'max:255'],
+            'tagline'      => ['nullable', 'string', 'max:255'],
+            'address'      => ['nullable', 'string', 'max:500'],
+            'phone'            => ['nullable', 'string', 'max:255'],
+            'phone_secondary'  => ['nullable', 'string', 'max:255'],
+            'fax'              => ['nullable', 'string', 'max:255'],
+            'email'        => ['nullable', 'string', 'max:255'],
+            'reg_no'       => ['nullable', 'string', 'max:255'],
+            'vat_no'       => ['nullable', 'string', 'max:255'],
+            'ffc_no'       => ['nullable', 'string', 'max:255'],
+            'fic_no'       => ['nullable', 'string', 'max:255'],
+            'logo'         => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'remove_logo'  => ['nullable', 'boolean'],
         ]);
 
-        foreach ($data as $key => $value) {
-            if ($value !== null) {
-                \App\Models\BranchSetting::setForBranch($branch->id, $key, $value);
+        $removeLogo = $data['remove_logo'] ?? false;
+        unset($data['logo'], $data['remove_logo']);
+
+        if ($removeLogo) {
+            if ($branch->logo_path) {
+                Storage::disk('public')->delete($branch->logo_path);
             }
+            $data['logo_path'] = null;
+        } elseif ($request->hasFile('logo')) {
+            if ($branch->logo_path) {
+                Storage::disk('public')->delete($branch->logo_path);
+            }
+            $ext = $request->file('logo')->getClientOriginalExtension();
+            $path = $request->file('logo')->storeAs(
+                "branches/{$branch->id}", "logo.{$ext}", 'public'
+            );
+            $data['logo_path'] = $path;
         }
 
-        return redirect()->back()->with('success', 'Branch settings updated.');
+        $branch->update($data);
+
+        return redirect()->back()->with('success', 'Branch contact details updated.');
     }
 
     // ── Restore soft-deleted branch ──

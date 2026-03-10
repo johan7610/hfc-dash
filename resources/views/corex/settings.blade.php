@@ -76,38 +76,144 @@
                 </a>
             </div>
 
-            {{-- Company Settings (inline form) --}}
-            @if(isset($companyName))
+            {{-- Company Settings — reads/writes Agency model --}}
+            @if(isset($agency) && $agency)
             <div>
                 <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Company Settings</h3>
-                <form method="POST" action="{{ route('admin.performance-settings.update') }}" enctype="multipart/form-data"
-                      class="space-y-4 p-4 rounded-xl" style="background:var(--surface-2); border:1px solid var(--border);">
+                <form method="POST" action="{{ route('corex.settings.agency.update') }}" enctype="multipart/form-data"
+                      class="space-y-5 p-4 rounded-xl" style="background:var(--surface-2); border:1px solid var(--border);"
+                      x-data="{ removelogo: false }">
                     @csrf
+                    @method('PUT')
+
+                    {{-- Company Identity --}}
+                    <div class="text-xs font-bold uppercase tracking-wider pb-1" style="color:var(--text-muted); border-bottom:1px solid var(--border);">Company Identity</div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Company Name</label>
-                            <input type="text" name="company_name" value="{{ old('company_name', $companyName) }}"
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Trading Name</label>
+                            <input type="text" name="trading_name" value="{{ old('trading_name', $agency->trading_name) }}"
                                    class="w-full rounded-lg px-3 py-2 text-sm"
-                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                                   placeholder="e.g. Johan and Elize Properties T/A">
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">FFC</label>
-                            <input type="text" name="company_ffc" value="{{ old('company_ffc', $companyFfc) }}"
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Tagline</label>
+                            <input type="text" name="tagline" value="{{ old('tagline', $agency->tagline) }}"
                                    class="w-full rounded-lg px-3 py-2 text-sm"
-                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                                   placeholder="e.g. THE MANDATE COMPANY">
                         </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Registration No</label>
+                            <input type="text" name="reg_no" value="{{ old('reg_no', $agency->reg_no) }}"
+                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                                   placeholder="e.g. 2017/431318/07">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">VAT No</label>
+                            <input type="text" name="vat_no" value="{{ old('vat_no', $agency->vat_no) }}"
+                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                                   placeholder="e.g. 4870264498">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">FFC No</label>
+                            <input type="text" name="ffc_no" value="{{ old('ffc_no', $agency->ffc_no) }}"
+                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                                   placeholder="e.g. FFC40/43916/5">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">FIC No</label>
+                            <input type="text" name="fic_no" value="{{ old('fic_no', $agency->fic_no) }}"
+                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                                   placeholder="e.g. 58538">
+                        </div>
+                    </div>
+
+                    {{-- Contact Details --}}
+                    <div class="text-xs font-bold uppercase tracking-wider pb-1" style="color:var(--text-muted); border-bottom:1px solid var(--border);">Contact Details</div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div class="sm:col-span-2">
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Address</label>
-                            <input type="text" name="company_address" value="{{ old('company_address', $companyAddress) }}"
-                                   class="w-full rounded-lg px-3 py-2 text-sm"
-                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                            <textarea name="address" rows="2"
+                                      class="w-full rounded-lg px-3 py-2 text-sm"
+                                      style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                                      placeholder="Physical address">{{ old('address', $agency->address) }}</textarea>
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Telephone</label>
-                            <input type="text" name="company_tel" value="{{ old('company_tel', $companyTel) }}"
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Primary Cell (Elize)</label>
+                            <input type="text" name="phone" value="{{ old('phone', $agency->phone) }}"
                                    class="w-full rounded-lg px-3 py-2 text-sm"
-                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                                   placeholder="e.g. 071 351 0291">
                         </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Secondary Cell (Johan)</label>
+                            <input type="text" name="phone_secondary" value="{{ old('phone_secondary', $agency->phone_secondary) }}"
+                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                                   placeholder="e.g. 079 495 5994">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Fax</label>
+                            <input type="text" name="fax" value="{{ old('fax', $agency->fax) }}"
+                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                                   placeholder="e.g. 086 514 7632">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Email</label>
+                            <input type="text" name="email" value="{{ old('email', $agency->email) }}"
+                                   class="w-full rounded-lg px-3 py-2 text-sm"
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                                   placeholder="e.g. admin@hfcoastal.co.za">
+                        </div>
+                    </div>
+
+                    {{-- Logo --}}
+                    <div class="text-xs font-bold uppercase tracking-wider pb-1" style="color:var(--text-muted); border-bottom:1px solid var(--border);">Company Logo</div>
+                    <div>
+                        @if($agency->logo_path)
+                            <div class="mb-2 flex items-center gap-3">
+                                <img src="{{ asset('storage/' . $agency->logo_path) }}" alt="Company Logo" class="h-10 w-auto rounded border bg-white p-1">
+                                <label class="inline-flex items-center gap-2 text-sm cursor-pointer" style="color:var(--text-secondary);">
+                                    <input type="checkbox" name="remove_logo" value="1" class="rounded" x-model="removelogo">
+                                    Remove logo
+                                </label>
+                            </div>
+                        @endif
+                        <div x-show="!removelogo">
+                            <input type="file" name="logo" accept="image/jpeg,image/png,image/webp"
+                                   class="block w-full text-sm rounded-lg px-3 py-2"
+                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-secondary);">
+                            <p class="text-xs mt-1" style="color:var(--text-muted);">JPG, PNG, or WebP — max 2 MB.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end pt-1">
+                        <button type="submit" class="corex-btn-primary text-sm">Save Company Settings</button>
+                    </div>
+                </form>
+            </div>
+            @endif
+
+            {{-- Performance Settings (VAT, Listings per Sale) --}}
+            @if(isset($vatRate))
+            <div>
+                <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Performance Settings</h3>
+                <form method="POST" action="{{ route('admin.performance-settings.update') }}"
+                      class="space-y-4 p-4 rounded-xl" style="background:var(--surface-2); border:1px solid var(--border);">
+                    @csrf
+                    {{-- Hidden fields to satisfy PerformanceSettingsController validation --}}
+                    <input type="hidden" name="company_name" value="">
+                    <input type="hidden" name="company_address" value="">
+                    <input type="hidden" name="company_tel" value="">
+                    <input type="hidden" name="company_ffc" value="">
+                    <input type="hidden" name="clear_company_logo" value="0">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">VAT Rate (%)</label>
                             <input type="number" step="0.01" min="0" max="100" name="vat_rate" value="{{ old('vat_rate', $vatRate) }}"
@@ -121,28 +227,9 @@
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                             <p class="text-xs mt-1" style="color:var(--text-muted);">Used to calculate how many listings are needed for the target sales.</p>
                         </div>
-                        <div class="sm:col-span-2">
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Company Logo</label>
-                            @if(!empty($companyLogoUrl))
-                                <div class="mb-2 flex items-center gap-3">
-                                    <img src="{{ $companyLogoUrl }}" alt="Company Logo" class="h-10 w-auto rounded border bg-white">
-                                    <label class="inline-flex items-center gap-2 text-sm" style="color:var(--text-secondary);">
-                                        <input type="hidden" name="clear_company_logo" value="0">
-                                        <input type="checkbox" name="clear_company_logo" value="1" class="rounded">
-                                        Clear logo
-                                    </label>
-                                </div>
-                            @else
-                                <input type="hidden" name="clear_company_logo" value="0">
-                            @endif
-                            <input type="file" name="company_logo" accept="image/*"
-                                   class="block w-full text-sm rounded-lg px-3 py-2"
-                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-secondary);">
-                            <p class="text-xs mt-1" style="color:var(--text-muted);">Max 2MB. Upload replaces the current logo.</p>
-                        </div>
                     </div>
                     <div class="flex justify-end pt-1">
-                        <button type="submit" class="corex-btn-primary text-sm">Save Company Settings</button>
+                        <button type="submit" class="corex-btn-primary text-sm">Save Performance Settings</button>
                     </div>
                 </form>
             </div>

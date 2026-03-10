@@ -23,6 +23,7 @@
 
     <form method="POST"
           action="{{ $agency ? route('agencies.update', $agency) : route('agencies.store') }}"
+          enctype="multipart/form-data"
           class="space-y-5">
         @csrf
         @if($agency)
@@ -127,6 +128,123 @@
                        class="w-4 h-4 rounded border-slate-300 cursor-pointer"
                        style="accent-color:var(--brand-secondary, #00b4d8);">
                 <label for="is_active" class="text-sm font-medium cursor-pointer" style="color:var(--brand-primary, #0b2a4a);">Agency is active</label>
+            </div>
+        </div>
+
+        {{-- Company Details --}}
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 space-y-6">
+            <div>
+                <div class="text-sm font-bold uppercase tracking-wider mb-1" style="color:var(--brand-primary, #0b2a4a);">Company Details</div>
+                <p class="text-xs text-slate-400">These details appear on legal documents and letterheads.</p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold mb-1" style="color:var(--brand-primary, #0b2a4a);">Trading Name</label>
+                    <input type="text" name="trading_name" value="{{ old('trading_name', $agency?->trading_name) }}"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none"
+                           placeholder="e.g. Johan and Elize Properties T/A">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1" style="color:var(--brand-primary, #0b2a4a);">Tagline</label>
+                    <input type="text" name="tagline" value="{{ old('tagline', $agency?->tagline) }}"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none"
+                           placeholder="e.g. THE MANDATE COMPANY">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold mb-1" style="color:var(--brand-primary, #0b2a4a);">Address</label>
+                <textarea name="address" rows="2"
+                          class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none"
+                          placeholder="Physical address">{{ old('address', $agency?->address) }}</textarea>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold mb-1" style="color:var(--brand-primary, #0b2a4a);">Phone</label>
+                    <input type="text" name="phone" value="{{ old('phone', $agency?->phone) }}"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none"
+                           placeholder="e.g. 071 351 0291">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1" style="color:var(--brand-primary, #0b2a4a);">Secondary Cell</label>
+                    <input type="text" name="phone_secondary" value="{{ old('phone_secondary', $agency?->phone_secondary) }}"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none"
+                           placeholder="e.g. 079 495 5994">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold mb-1" style="color:var(--brand-primary, #0b2a4a);">Fax</label>
+                    <input type="text" name="fax" value="{{ old('fax', $agency?->fax) }}"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none"
+                           placeholder="e.g. 086 233 2395">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1" style="color:var(--brand-primary, #0b2a4a);">Email</label>
+                    <input type="text" name="email" value="{{ old('email', $agency?->email) }}"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none"
+                           placeholder="e.g. admin@hfcoastal.co.za">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold mb-1" style="color:var(--brand-primary, #0b2a4a);">Registration No</label>
+                    <input type="text" name="reg_no" value="{{ old('reg_no', $agency?->reg_no) }}"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none"
+                           placeholder="e.g. 2009/228978/23">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1" style="color:var(--brand-primary, #0b2a4a);">VAT No</label>
+                    <input type="text" name="vat_no" value="{{ old('vat_no', $agency?->vat_no) }}"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none"
+                           placeholder="e.g. 4870264498">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1" style="color:var(--brand-primary, #0b2a4a);">FFC No</label>
+                    <input type="text" name="ffc_no" value="{{ old('ffc_no', $agency?->ffc_no) }}"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none"
+                           placeholder="e.g. FFC40/43916/5">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1" style="color:var(--brand-primary, #0b2a4a);">FIC No</label>
+                    <input type="text" name="fic_no" value="{{ old('fic_no', $agency?->fic_no) }}"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none"
+                           placeholder="e.g. 58538">
+                </div>
+            </div>
+        </div>
+
+        {{-- Logo --}}
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 space-y-6" x-data="{ removelogo: false }">
+            <div>
+                <div class="text-sm font-bold uppercase tracking-wider mb-1" style="color:var(--brand-primary, #0b2a4a);">Logo</div>
+                <p class="text-xs text-slate-400">Appears on documents and letterheads. JPG, PNG, or WebP — max 2 MB.</p>
+            </div>
+
+            @if($agency?->logo_path)
+                <div class="flex items-center gap-4">
+                    <img src="{{ asset('storage/' . $agency->logo_path) }}" alt="Current logo"
+                         class="h-16 rounded border border-slate-200 bg-slate-50 p-1">
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" name="remove_logo" value="1" id="remove_logo" x-model="removelogo"
+                               class="w-4 h-4 rounded border-slate-300 cursor-pointer"
+                               style="accent-color:var(--brand-secondary, #00b4d8);">
+                        <label for="remove_logo" class="text-sm text-slate-600 cursor-pointer">Remove current logo</label>
+                    </div>
+                </div>
+            @endif
+
+            <div x-show="!removelogo">
+                <label class="block text-sm font-semibold mb-1" style="color:var(--brand-primary, #0b2a4a);">
+                    {{ $agency?->logo_path ? 'Replace Logo' : 'Upload Logo' }}
+                </label>
+                <input type="file" name="logo" accept="image/jpeg,image/png,image/webp"
+                       class="w-full text-sm text-slate-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:text-white file:cursor-pointer"
+                       style="file:background:var(--brand-primary, #0b2a4a);">
             </div>
         </div>
 

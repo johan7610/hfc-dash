@@ -15,7 +15,30 @@ class Branch extends Model
         'name',
         'code',
         'agency_id',
+        'trading_name',
+        'tagline',
+        'address',
+        'phone',
+        'phone_label',
+        'phone_secondary',
+        'phone_secondary_label',
+        'fax',
+        'email',
+        'reg_no',
+        'vat_no',
+        'ffc_no',
+        'fic_no',
+        'logo_path',
     ];
+
+    /**
+     * Returns contact detail value — branch value if set,
+     * otherwise falls back to Agency value.
+     */
+    public function contactDetail(string $field): ?string
+    {
+        return $this->{$field} ?? $this->agency->{$field} ?? null;
+    }
 
     public function agency(): BelongsTo
     {

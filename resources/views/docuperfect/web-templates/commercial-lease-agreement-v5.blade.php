@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Commercial Lease Agreement — Home Finders Coastal</title>
+    <style>
+        /* ============================================================
+           Commercial Lease Agreement V5 — Print-quality A4 document
+           ============================================================ */
+        @page {
+            size: A4;
+            margin: 18mm 20mm 15mm 20mm;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 10pt;
+            line-height: 1.2;
+            color: #1a1a1a;
+            background: white;
+        }
+
+        p {
+            margin: 0 0 2pt 0;
+        }
+
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 0 auto;
+            padding: 18mm 20mm 15mm 20mm;
+            background: white;
+        }
+
+        @media screen {
+            body {
+                background: #e5e7eb;
+            }
+            .page {
+                box-shadow: 0 2px 16px rgba(0,0,0,0.15);
+                margin-top: 20px;
+                margin-bottom: 20px;
+            }
+        }
+
+        @media print {
+            body { background: white; }
+            .page {
+                width: auto;
+                min-height: auto;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+        }
+
+        /* ---- Company Header ---- */
+        .company-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding-bottom: 10pt;
+            border-bottom: 2pt solid #1a1a1a;
+            margin-bottom: 12pt;
+        }
+
+        .header-left {
+            flex: 1;
+        }
+
+        .header-logo {
+            max-height: 60px;
+            width: auto;
+            margin-bottom: 4pt;
+            display: block;
+        }
+
+        .trading-name {
+            font-size: 9pt;
+            color: #555;
+            margin-bottom: 1pt;
+        }
+
+        .company-name {
+            font-size: 16pt;
+            font-weight: bold;
+            letter-spacing: 0.5pt;
+            color: #0b2a4a;
+        }
+
+        .tagline {
+            font-size: 9pt;
+            font-weight: bold;
+            color: #0b2a4a;
+            letter-spacing: 1pt;
+            text-transform: uppercase;
+            margin-top: 2pt;
+        }
+
+        .header-right {
+            text-align: right;
+            font-size: 8.5pt;
+            color: #333;
+            max-width: 52%;
+        }
+
+        .header-address {
+            font-size: 8.5pt;
+            margin-bottom: 3pt;
+        }
+
+        .header-details {
+            margin-left: auto;
+            border-collapse: collapse;
+            font-size: 8.5pt;
+        }
+
+        .header-details td {
+            padding: 0 0 0 8pt;
+            text-align: right;
+        }
+
+        .header-details td:first-child {
+            font-weight: 600;
+            padding-left: 0;
+        }
+
+        .header-contact {
+            margin-top: 3pt;
+            font-size: 8pt;
+            color: #555;
+        }
+
+        .header-contact span {
+            margin-left: 8pt;
+        }
+
+        .header-contact span:first-child {
+            margin-left: 0;
+        }
+
+        /* ---- Document Title ---- */
+        .doc-title {
+            text-align: center;
+            font-size: 13pt;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin: 14pt 0 10pt;
+        }
+
+        /* ---- Field values (inline blanks) ---- */
+        .field {
+            display: inline-block;
+            min-width: 200pt;
+            border-bottom: 1pt solid #1a1a1a;
+            padding: 0 2pt;
+            text-align: left;
+            vertical-align: baseline;
+            line-height: inherit;
+            overflow: visible;
+            position: relative;
+        }
+
+        .field:empty::after {
+            content: '\00a0';
+        }
+
+        .field-short {
+            min-width: 80pt;
+        }
+
+        .field-tiny {
+            min-width: 60pt;
+        }
+
+        .field-medium {
+            min-width: 150pt;
+        }
+
+        .field-wide {
+            display: block;
+            width: 100%;
+            min-height: 18pt;
+            margin-bottom: 4pt;
+        }
+
+        .field-address {
+            min-width: 250pt;
+        }
+
+        .field-currency::before {
+            content: 'R';
+            margin-right: 2pt;
+        }
+
+        /* ---- Section & Clause ---- */
+        .section-heading {
+            font-weight: bold;
+            text-transform: uppercase;
+            margin: 12pt 0 6pt;
+            font-size: 11pt;
+        }
+
+        .clause {
+            margin: 2pt 0;
+            padding-left: 20pt;
+            text-indent: -20pt;
+        }
+
+        .clause p {
+            margin-bottom: 2pt;
+        }
+
+        .sub-clause {
+            padding-left: 20pt;
+            margin: 3pt 0;
+        }
+
+        .sub-sub-clause {
+            padding-left: 40pt;
+            margin: 3pt 0;
+        }
+
+        /* ---- CPA Notice ---- */
+        .cpa-notice {
+            border: 1pt solid #999;
+            padding: 8pt 10pt;
+            margin: 10pt 0;
+            font-size: 9pt;
+            line-height: 1.4;
+        }
+
+        .cpa-notice p {
+            margin-bottom: 4pt;
+        }
+
+        .cpa-notice ul {
+            margin: 4pt 0 4pt 16pt;
+        }
+
+        .cpa-notice ul li {
+            margin-bottom: 3pt;
+        }
+
+        /* ---- Info Line ---- */
+        .info-line {
+            border-bottom: 1pt solid #1a1a1a;
+            height: 24pt;
+            margin-bottom: 2pt;
+        }
+
+        /* ---- Financial Table ---- */
+        .financial-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 8pt 0;
+        }
+
+        .financial-table td {
+            padding: 4pt 4pt;
+            vertical-align: bottom;
+        }
+
+        .financial-table td:first-child {
+            width: 300pt;
+            font-weight: 600;
+        }
+
+        .financial-table td:last-child {
+            border-bottom: 1pt solid #1a1a1a;
+        }
+
+        /* ---- Numbered List ---- */
+        .numbered-list {
+            margin: 6pt 0 6pt 20pt;
+        }
+
+        .numbered-list li {
+            margin-bottom: 3pt;
+        }
+
+        /* ---- Signature Section ---- */
+        .signature-section {
+            margin-top: 14pt;
+        }
+
+        .signature-section p {
+            margin-bottom: 4pt;
+        }
+
+        .signature-grid {
+            display: grid;
+            gap: 16pt;
+            margin-top: 14pt;
+        }
+
+        .signature-col {
+            text-align: center;
+        }
+
+        .signature-line {
+            border-bottom: 1pt solid #1a1a1a;
+            height: 28pt;
+            margin-bottom: 3pt;
+        }
+
+        .signature-label {
+            font-size: 9pt;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        /* ---- Footer ---- */
+        .doc-footer {
+            margin-top: 12pt;
+            text-align: right;
+            font-size: 8pt;
+            color: #999;
+        }
+
+        /* ---- Page break ---- */
+        .page-break {
+            margin-top: 0;
+            padding-top: 18mm;
+        }
+    </style>
+</head>
+<body>
+
+{{-- ============================================================
+     PAGE 1 — Parties & Interpretation
+     ============================================================ --}}
+<div class="page">
+
+    @include('docuperfect.web-templates.components.company-header')
+
+    <div class="doc-title">Lease Agreement - Commercial</div>
+
+    {{-- Section 1: Parties --}}
+    <div class="section-heading">1. Parties</div>
+
+    <div class="clause">
+        <p>1.1 <span class="field">{{ $lessor_name ?? '' }}</span> (Lessor)<br>
+            <span class="field">{{ $lessor_name_2 ?? '' }}</span><br>
+            Of (address) <span class="field">{{ $lessor_address ?? '' }}</span><br>
+            ID/Passport/Registration No: <span class="field">{{ $lessor_id ?? '' }}</span></p>
+
+        <p style="text-align: center; margin: 6pt 0; font-weight: bold;">AND</p>
+
+        <p>1.2 <span class="field">{{ $lessee_name ?? '' }}</span> (Lessee)<br>
+            <span class="field">{{ $lessee_name_2 ?? '' }}</span><br>
+            Of (address) <span class="field">{{ $lessee_address ?? '' }}</span><br>
+            ID/Passport/Registration No: <span class="field">{{ $lessee_id ?? '' }}</span></p>
+
+        <p style="margin-top: 6pt;">It is agreed that, from date of occupation, the DOMICILIUM CITANDI ET
+            EXECUTANDI will be the property address.</p>
+    </div>
+
+    {{-- CPA Notice --}}
+    <div class="cpa-notice">
+        <p><strong>Please note</strong> that according to the Consumer Protection Act 68 of 2008 the
+            following is applicable to the Lessee:</p>
+        <ul>
+            <li>If you are a Juristic Entity (Company / Trust / Closed Corporation) with
+                assets or turnover less than R2 million per annum the CPA is applicable.</li>
+            <li>If you are an individual, private person leasing a property through an
+                estate agency the CPA is applicable.</li>
+            <li>If the Lessor and Lessee are Juristic persons the cancellation provisions
+                of the CPA are not applicable regardless of turnover or assets.</li>
+            <li>Should this lease agreement have been entered into as a result of direct
+                marketing, the Lessee shall have 5 business days cooling off period,
+                therefore the Agent may continue to advertise and market the property
+                until the 5 day period lapsed.</li>
+            <li>Where the CPA is applicable the lessee may give a 20 business day notice,
+                equal to 1 (one) month at any stage during the lease. By signing this
+                Lease Agreement, the Lessee acknowledges that he/she is aware of the
+                cancellation fees stipulated in this Lease Agreement.</li>
+            <li>Please note that the Lease Agreement, signed in a personal capacity may
+                not be for a period longer than 24 (twenty four) months.</li>
+        </ul>
+    </div>
+
+    {{-- Section 2: Interpretation --}}
+    <div class="section-heading">2. Interpretation</div>
+
+    <div class="clause">
+        <div class="sub-clause">2.1 The premises: being<br>
+            Erf no: <span class="field field-short">{{ $erf_no ?? '' }}</span> (street address) <span class="field">{{ $street_address ?? '' }}</span><br>
+            Unit no: <span class="field field-short">{{ $unit_no ?? '' }}</span>, Complex: <span class="field">{{ $complex_name ?? '' }}</span></div>
+
+        <div class="sub-clause">2.2 The Rental: being the amount referred to in 4.1 or, 5.2.2 as escalated
+            in terms of 4.2.</div>
+
+        <div class="sub-clause">2.3 The Estate Agent being: The firm: HOME FINDERS COASTAL</div>
+
+        <div class="sub-clause">2.4 The Deposit: as referred to in clause 6.</div>
+
+        <div class="sub-clause">2.5 HOME FINDERS COASTAL is the Agent, not the LANDLORD, and can only act
+            on the Instructions of the LANDLORD.</div>
+
+        <div class="sub-clause">2.6 The LANDLORD remains the responsible party for any concerns, disputes
+            or claims arising from the LEASE.</div>
+    </div>
+
+    <div class="doc-footer">Version 5</div>
+
+</div>
+
+{{-- ============================================================
+     PAGE 2 — Letting, Rental, Lease Period, Deposit
+     ============================================================ --}}
+<div class="page page-break">
+
+    @include('docuperfect.web-templates.components.company-header')
+
+    {{-- Section 3: Letting and Hiring --}}
+    <div class="section-heading">3. Letting and Hiring</div>
+
+    <div class="clause">
+        <div class="sub-clause">3.1 The Lessor hereby lets to the Lessee, who hereby hires, the Premises
+            subject to the terms and conditions contained in this Agreement.</div>
+
+        <div class="sub-clause">3.2 The Premises shall be used for the Sole purpose of business. The Lessee
+            will operate the following business on the premises:<br>
+            <span class="field field-wide">{{ $business_type ?? '' }}</span></div>
+    </div>
+
+    {{-- Section 4: Rental --}}
+    <div class="section-heading">4. Rental</div>
+    <p style="font-style: italic; font-size: 9pt; margin-bottom: 4pt;">Note: Delete 4.2 if not applicable.</p>
+
+    <div class="clause">
+        <div class="sub-clause">4.1 The Rental shall be <span class="field field-medium field-currency">{{ $rental_amount ?? '' }}</span> (in words)
+            (<span class="field">{{ $rental_in_words ?? '' }}</span> Rand) per month,
+            subject to 4.2 and shall be paid monthly in advance on the 1st day of
+            each month, free of any set-off, by means of bank/internet transfer of
+            cash deposits into the HOME FINDERS COASTAL banking account. The LESSEE
+            must ensure that the AGENT receives in their account, on or before the
+            due date, all payments due. The LESSEE must make allowance for bank
+            transfer delays. HOME FINDERS COASTAL is required to report all cash
+            deposits over R50 000 to FICA. The LESSEE acknowledges that all cash
+            deposit fees charged by the bank will be for the account of the LESSEE.</div>
+
+        <div class="signature-grid" style="grid-template-columns: 1fr 1fr; margin-top: 8pt; margin-bottom: 8pt;">
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">Tenant</div>
+            </div>
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">Agent</div>
+            </div>
+        </div>
+
+        <div class="sub-clause">4.2 The Rental shall be subject to an escalation of <span class="field field-short">{{ $escalation_percent ?? '' }}</span>%
+            (<span class="field field-medium">{{ $escalation_in_words ?? '' }}</span>)
+            per annum from the 1st day of <span class="field field-medium">{{ $escalation_month ?? '' }}</span> each year,
+            and the amount referred to in 4.1, escalated as aforesaid, and shall
+            then with effect from the said date constitute the Rental.</div>
+
+        <div class="sub-clause">4.3 The LANDLORD or his AGENT shall, on written request only provide the
+            LESSEE with written receipt for all payments received.</div>
+    </div>
+
+    {{-- Section 5: Lease Period --}}
+    <div class="section-heading">5. Lease Period</div>
+
+    <div class="clause">
+        <div class="sub-clause">5.1 The lease shall commence on <span class="field field-medium">{{ $lease_start ?? '' }}</span>, and shall
+            continue thereafter until terminated by either party giving the other
+            not more than 80 (eighty) and not less than 40 (forty) business days
+            written notice of termination. Provided that such notice of
+            termination &mdash;
+            <div class="sub-sub-clause">5.1.1 may not be given by either party to expire prior to the <span class="field field-short">{{ $min_term_day ?? '' }}</span>
+                day of <span class="field field-medium">{{ $min_term_month ?? '' }}</span> in the year <span class="field field-short">{{ $min_term_year ?? '' }}</span>; and</div>
+            <div class="sub-sub-clause">5.1.2 Shall be given only on or before the 1st day of any calendar
+                month.</div>
+        </div>
+
+        <div class="sub-clause">5.2 The lease shall expire at midnight on <span class="field field-medium">{{ $lease_end ?? '' }}</span>, (the
+            expiry date). With written consent from the Lessor, the Lessee has
+            the option to renew the lease for a further period of <span class="field field-short">{{ $renewal_months ?? '' }}</span> months
+            (the renewal period), commencing on the first day after the expiry
+            date, on the same terms and conditions contained in this Agreement.
+            Provided that &mdash;
+            <div class="sub-sub-clause">5.2.1 The Lessee shall exercise this option by giving written notice
+                to the Lessor on or before two months prior to expiry date as
+                per clause 5.1.1 and 5.2 above failing which the option shall
+                lapse.</div>
+        </div>
+
+        <div class="sub-clause">5.3 The Lessee agrees that the agent may erect a let by board outside the
+            property for 30 days after occupation of the property by the Lessee.</div>
+    </div>
+
+    {{-- Section 6: Deposit --}}
+    <div class="section-heading">6. Deposit and Electricity Deposit</div>
+
+    <div class="clause">
+        <div class="sub-clause">6.1 The Lessee shall within 48 HRS, after the Lessor has signed this
+            Agreement pay a deposit equal to 1 month&rsquo;s rental and Electricity
+            deposit of <span class="field field-medium">{{ $electricity_deposit ?? '' }}</span> to the Estate Agent to be kept by him
+            in trust until termination of the lease.</div>
+
+        <div class="sub-clause">6.2 As and when the monthly rental payment increase in accordance with
+            this agreement, the amount of the deposit shall automatically increase
+            in the same proportion to the increase in the rental as stipulated in
+            Clause 1.2, which deposit shall be due and payable on or before the
+            first day of the month following the month in which the increase
+            monthly rental amount is payable.</div>
+
+        <div class="sub-clause">6.3 On termination of the lease, the deposit shall be refunded to the
+            Lessee as soon as possible less any amounts which the Lessor in his
+            discretion may deduct for the payment of all amounts for which the
+            Lessee is liable under this Agreement including but without limitation,
+            arrear Rental, unpaid electricity and telephone accounts, the cost of
+            repairing damage to the Premises, and/or replacing lost keys.</div>
+
+        <div class="sub-clause">6.4 The Lessee shall not be entitled to use the deposit as rental for any
+            month or for the last month(s) period of the lease.</div>
+
+        <div class="sub-clause">6.5 Interest earned on the deposit while kept in an Interest bearing
+            account accrues to the Lessee.</div>
+    </div>
+
+    <div class="doc-footer">Version 5</div>
+
+</div>
+
+{{-- ============================================================
+     PAGE 3 — Additional Payments, Lessee Obligations, Lessor Obligations
+     ============================================================ --}}
+<div class="page page-break">
+
+    @include('docuperfect.web-templates.components.company-header')
+
+    {{-- Section 7: Additional Payments --}}
+    <div class="section-heading">7. Additional Payments by Lessee</div>
+
+    <div class="clause">
+        <div class="sub-clause">7.1 The costs of drawing up this Lease Agreement and auxiliary expenses
+            amounting to R1 500.00 (One Thousand Five Hundred Rand only) include
+            VAT thereon, payable together with the deposit as per clause 6.
+            In the event of the Lessee failing to make payment of any of the
+            foregoing, the Lessor shall have the right without prejudice to his
+            other rights in law or under this Agreement to effect payment himself
+            and recover the amount/s so expended from the Lessee.</div>
+
+        <div class="sub-clause">7.2 If rental is received late, as specified in Clause 4 above, more than
+            three times during the Lease Agreement period, the TENANT shall be
+            liable to pay a further 50% (fifty percent) of the existing Monthly
+            Rental as an additional deposit.</div>
+    </div>
+
+    {{-- Section 8: Lessee's Obligations --}}
+    <div class="section-heading">8. Lessee&rsquo;s Obligations</div>
+    <p>The Lessee acknowledges that he shall:</p>
+
+    <div class="clause">
+        <div class="sub-clause">8.1 Maintain the whole interior of the premises and undertakes to deliver
+            the premises to the landlord at termination of this lease in the same
+            good order and condition as received.</div>
+
+        <div class="sub-clause">8.2 Replace at his expense all light bulbs, fluorescent tubes, fluorescent
+            starters, tap washers and water ballasts on the PREMISES as and when
+            necessary. All repairs effected shall be to a level of quality
+            acceptable to the LANDLORD or his AGENT.</div>
+
+        <div class="sub-clause">8.3 Ensure that neither he nor any other person shall mark, paint or drive
+            nails or affix screws or hooks which would, in any way, deface or
+            damage the doors, walls, floors, or any part of the PREMISES, without
+            the express prior written permission of the LANDLORD, which shall not
+            be unreasonably withheld.</div>
+
+        <div class="sub-clause">8.4 Clean all curtains, blinds, carpets and other floor coverings and
+            tiles regularly, it being recorded that these items shall be replaced
+            completely at the expense of the TENANT should they be damaged by the
+            TENANT, or deteriorate in a manner not commensurate with ordinary wear
+            and tear. It is recorded that all curtains, blinds and carpets on the
+            PREMISES are to be professionally steam cleaned by the TENANT prior to
+            his vacation of the PREMISES and proof of such to be handed to HOME
+            FINDERS COASTAL or the LANDLORD.</div>
+
+        <div class="sub-clause">8.5 All goods brought onto the premises by the Lessee shall be at the
+            sole risk of the Lessee.</div>
+
+        <div class="sub-clause">8.6 The Lessor shall not be liable for any loss sustained by the Lessee
+            by reason of any burglary of or fire on the Premises or for any
+            damage suffered by the Lessee as the result of any act or omission on
+            the part of the Lessor and/or his agent or as a result of any defect
+            in the Premises.</div>
+
+        <div class="sub-clause">8.7 The Lessee shall allow the Lessor or his agent to inspect the
+            premises at all reasonable times after giving 24 (twenty four) hours&rsquo;
+            notice to the Lessee.</div>
+
+        <div class="sub-clause">8.8 The Lessee shall be responsible for insuring the contents of the
+            leased premises.</div>
+    </div>
+
+    {{-- Section 9: Lessor's Obligations --}}
+    <div class="section-heading">9. Lessor&rsquo;s Obligations</div>
+
+    <div class="clause">
+        <div class="sub-clause">9.1 The Lessor shall be liable to pay all rates and taxes/levies payable
+            in respect of the Premises to the local authority/body
+            corporate/share block company/home owners&rsquo; association concerned.</div>
+
+        <div class="sub-clause">9.2 The Lessor shall also keep the premises insured against fire and
+            other unusual risks.</div>
+
+        <div class="sub-clause">9.3 The Lessor shall keep all external windows, doors and walls, and
+            roofs in order, but shall not be responsible for any damages to any
+            of the Lessee&rsquo;s possessions as a result of any defect of any nature
+            whatsoever.</div>
+
+        <div class="sub-clause">9.4 The Lessor shall be responsible for all maintenance repairs related
+            to all plumbing installations, including the hot water cylinder(s)
+            on the premises.</div>
+    </div>
+
+    <div class="doc-footer">Version 5</div>
+
+</div>
+
+{{-- ============================================================
+     PAGE 4 — Subletting, Occupation, Defects, Use, Improvements
+     ============================================================ --}}
+<div class="page page-break">
+
+    @include('docuperfect.web-templates.components.company-header')
+
+    {{-- Section 10: Prohibition Against Subletting --}}
+    <div class="section-heading">10. Prohibition Against Subletting and Parting with Possession</div>
+
+    <div class="clause">
+        <p>The Lessee shall not &mdash;</p>
+        <div class="sub-clause">10.1 cede his rights or assign his obligations hereunder; or</div>
+        <div class="sub-clause">10.2 sublet the Premises or any portion thereof; or</div>
+        <div class="sub-clause">10.3 part with possession of the Premises or any portion thereof without
+            the Lessor&rsquo;s prior written consent which, in the case of 10.2 and
+            10.3, shall not be unreasonably withheld.</div>
+    </div>
+
+    {{-- Section 11: Occupation --}}
+    <div class="section-heading">11. Occupation</div>
+
+    <div class="clause">
+        <div class="sub-clause">11.1 Notwithstanding any receipt given for rental or deposit paid in terms
+            of the lease, the Lessee shall have no claim for damages or other
+            right action against the Lessor, nor be entitled to cancel this
+            lease, should the Lessor be unable to give the Lessee occupation of
+            the premises on the date of commencement of the lease for any reason
+            whatsoever not attributable to willful default on the part of the
+            Lessor, and the lessee undertake to accept occupation from whatever
+            date the Premises are available, subject to a remission of rental in
+            respect of the period of non-occupation.</div>
+
+        <div class="sub-clause">11.2 Should the Lessee fail to take occupation of the Premises on the date
+            upon which the Premises are made available to him for occupation; the
+            Lessor may without incurring any liability whatsoever towards the
+            Lessee immediately cancel this Agreement without notice, whereupon
+            the Lessee shall forfeit the Deposit paid by him while remaining
+            liable for any loss of rental or other losses sustained by the
+            Lessor. Provided that this clause shall not apply if the Lessor and
+            Lessee have agreed in writing that the Lessee will not take physical
+            occupation of the Premises on the said date.</div>
+
+        <div class="sub-clause">11.3 In the event of the Lessee not being able to enjoy the beneficial
+            occupation of the Premises as a result of them having been materially
+            damaged by fire, earthquakes, weather storms, riot activity or the
+            like and Lessor &mdash;
+            <div class="sub-sub-clause">11.3.1 Failing within 30 days of the date of the damage to give the
+                Lessee written notice that he intends to keep this lease alive,
+                this lease shall be deemed to have been cancelled on the date
+                that the damage occurred and the Lessor shall refund to the
+                Lessee all rental paid in advance beyond the date of such
+                damage; or</div>
+            <div class="sub-sub-clause">11.3.2 Having given notice to the Lessee as aforesaid, the Lessor
+                shall restore the Premises to a tenantable condition as
+                expeditiously as practicable and the Lessee shall be entitled
+                to a total or partial remission of rental according to the
+                extent to which and the period for which he was deprived of
+                beneficial occupation of the Premises. Save as provided in
+                11.3.1 and 11.3.2 the Lessee shall have no other claims
+                whatsoever against the Lessor.</div>
+        </div>
+
+        <div class="sub-clause">11.4 The Lessee may not without the Lessor&rsquo;s prior written consent which
+            shall not be unreasonably withheld &mdash;<br>
+            (a) Allow the Premises to remain unoccupied for any period exceeding
+                six weeks; or</div>
+    </div>
+
+    {{-- Section 12: Defects and Maintenance --}}
+    <div class="section-heading">12. Defects and Maintenance</div>
+
+    <div class="clause">
+        <div class="sub-clause">12.1 It is hereby recorded that at the time of conclusion of this
+            Agreement the Premises are in a good state of repair and condition.
+            Should the Lessee at the time of taking occupation of the Premises
+            discover any defects in the Premises and/or any of the goods, he
+            shall within 7 (Seven) days of such occupation give written notice of
+            any such defect to the Estate Agent or the Lessor. Failure on the
+            part of the Lessee to give such notice shall be deemed to be an
+            acknowledgement on his part that the whole of the Premises including
+            all the goods are in a good and proper state of repair and condition.
+            It is specifically recorded that any notice given by the Lessee in
+            terms of 12.1 shall not place any obligation on the Lessor to repair
+            the Premises or the goods concerned, the intention being that such
+            notice will serve only to record the state of repair in which the
+            Lessee took occupation of the Premises and the goods.</div>
+
+        <div class="sub-clause">12.2 It is furthermore specifically recorded that the Lessor shall not be
+            obliged to effect repairs to or maintain the Premises or the goods,
+            and the Lessee shall not be entitled to withhold the Rental or to
+            claim any refund in respect of Rental paid, by reason of any defect
+            whatsoever in the Premises or the goods.</div>
+
+        <div class="sub-clause">12.3 On termination of the lease, the Lessee shall restore the whole of
+            the Premises and the goods to the Lessor in the same good order and
+            condition as they are at present, fair wear and tear excluded. The
+            Lessor shall within 7 days after restoration of the Premises to him
+            inspect the Premises and notify the Lessee in writing of all damages
+            to or defects in the Premises for which the Lessee is liable in
+            terms of 11.</div>
+    </div>
+
+    {{-- Section 13: Use of the Premises --}}
+    <div class="section-heading">13. Use of the Premises by the Lessee</div>
+
+    <div class="clause">
+        <div class="sub-clause">13.1 The Lessee shall use the Premises solely for business purposes and
+            hereby specifically undertakes not to contravene any law, bylaw,
+            ordinance or regulation applicable in respect of Premises in
+            particular (if applicable) the rules applicable to the sectional
+            title scheme of which the Premises forms part.</div>
+        <div class="sub-clause">13.2 cause or permit any nuisance upon the Premises; or</div>
+        <div class="sub-clause">13.3 allow pets or other animals to damage the Premises; or</div>
+        <div class="sub-clause">13.4 deface, mark, paint or drive nails, hooks or screws into the doors,
+            walls, ceilings or floors of the Premises, or place or display
+            advertisements or notices of whatever nature on any part of the
+            Premises, without the written consent of the Lessor; or keep any
+            pets in or on the Premises without the Lessors&rsquo; prior written
+            consent.</div>
+    </div>
+
+    {{-- Section 14: Improvements --}}
+    <div class="section-heading">14. Improvements</div>
+
+    <div class="clause">
+        <p>Any improvements made by the Lessee on or to the Premises during the
+            period of the lease shall become the property of the Lessor on termination
+            of the lease and the Lessee shall not be entitled to remove any such
+            improvement or claim from the Lessor any compensation in respect thereof.
+            The Lessor shall be entitled at the termination of the lease to demand in
+            writing that any improvement or addition made by the Lessee be removed by
+            the Lessee at his own cost. The Lessee shall at his own expense and to the
+            satisfaction of the Lessor repair all damage and/or defects caused by such
+            removal.</p>
+    </div>
+
+    <div class="doc-footer">Version 5</div>
+
+</div>
+
+{{-- ============================================================
+     PAGE 5 — Breach, Termination, Domicile, Jurisdiction, Commission, Liability, POPI
+     ============================================================ --}}
+<div class="page page-break">
+
+    @include('docuperfect.web-templates.components.company-header')
+
+    {{-- Section 15: Breach --}}
+    <div class="section-heading">15. Breach</div>
+
+    <div class="clause">
+        <div class="sub-clause">15.1 In the event of either one of the parties (the defaulting party)
+            committing a breach of any of the terms of this Agreement and failing
+            to remedy such breach within a period of 7 (seven) days after receipt
+            of a written notice from the other party (&ldquo;the aggrieved party&rdquo;)
+            calling upon the defaulting party to remedy the breach complained of,
+            then the aggrieved party shall be entitled at his sole discretion and
+            without prejudice to any rights in law and/or in terms of this
+            Agreement, either to claim specific performance of the terms of this
+            Agreement or to cancel this Agreement forthwith and without further
+            notice and claim damages from the defaulting party.</div>
+
+        <div class="sub-clause">15.2 Provided that if the Lessee commits a breach of the provisions of
+            this Agreement three times in any calendar year, then upon the third
+            breach, the Lessor shall be entitled immediately to implement either
+            of the remedies referred to above, without first having to give the
+            Lessee written notice to rectify such breach.</div>
+
+        <div class="sub-clause">15.3 Should this Agreement be cancelled by the Lessor for any reason
+            whatsoever, the Lessee and or any other person occupying the Premises
+            on the Lessee&rsquo;s behalf, shall immediately vacate the Premises and
+            allow the Lessor to take occupation thereof.</div>
+
+        <div class="sub-clause">15.4 In the event of this Lease Agreement being cancelled during the fixed
+            or any Renewal Periods of the Lease by the Lessee, a Lease
+            cancellation fee amounting to 10% (Ten percent) of the monthly
+            rental for the remaining periods of the Lease, payable to Home
+            Finders Coastal, which amount is agreed as a reasonable consideration
+            for the consequent administrative costs incurred by Home Finders
+            Coastal. Payment of a Lease cancellation fee does not constitute a
+            waiver of the LANDLORD&rsquo;s rights to institute a damaged claim in
+            respect of a breach of this Lease Agreement by the TENANT which shall
+            include and not be limited to commission payable by the LANDLORD,
+            which would otherwise have accrued to Home Finders Coastal up to the
+            expiry of the Lease Agreement. It is agreed that this damages claim
+            can be settled against the damage deposit.</div>
+
+        <div class="sub-clause">15.5 In the event of the Lease Agreement being cancelled during the fixed
+            or any Renewal Periods of the Lease by the Lessee, Home Finders
+            Coastal will have a 30 day sole mandate to find a suitable tenant.</div>
+    </div>
+
+    {{-- Section 16: Termination --}}
+    <div class="section-heading">16. Termination of the Lease Agreement</div>
+
+    <div class="clause">
+        <div class="sub-clause">16.1 Once the Lease Agreement has ended, the Lessor and/or Lessee may
+            give the other party 20 business days&rsquo; notice of Termination of the
+            Lease Agreement.</div>
+
+        <div class="sub-clause">16.2 Should the Lessee cancel the Lease Agreement at any stage during the
+            initial lease term as referred to in clause 5, the Lessee will be
+            held liable for the following cancellation costs to procure a new
+            Lessee:<br>
+            The Lessee shall be held liable to pay the lease cancellation fee of
+            R2 500.00 for administration costs.</div>
+    </div>
+
+    <div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top: 8pt; margin-bottom: 8pt;">
+        <div class="signature-col">
+            <div class="signature-line"></div>
+            <div class="signature-label">Lessee</div>
+        </div>
+        <div class="signature-col">
+            <div class="signature-line"></div>
+            <div class="signature-label">Agent</div>
+        </div>
+        <div class="signature-col">
+            <div class="signature-line"></div>
+            <div class="signature-label">Lessor</div>
+        </div>
+    </div>
+
+    {{-- Section 17: Domicile --}}
+    <div class="section-heading">17. Domicile</div>
+
+    <div class="clause">
+        <p>Each party choose domicillium citandi et executandi at his address as set
+            out in 1 above, at which address all notices and legal process in relation
+            to this Agreement or any action arising there from may be effectually
+            delivered and served. Any notice given by one of the parties to the other
+            (&ldquo;the addressee&rdquo;) which &mdash;</p>
+
+        <div class="sub-clause">17.1.1 Is delivered by hand to the addressee&rsquo;s domicilium citandi et
+            executandi shall be presumed until the contrary is proved to have
+            been received by the addressee on the date of delivery; or</div>
+
+        <div class="sub-clause">17.1.2 Is posted by prepaid registered post from an address within the
+            Republic of South Africa to the addressee at the addressee&rsquo;s
+            domicilium executandi shall be presumed until the contrary is
+            proved to have been received by the addressee on the fifth day
+            of the date of posting.</div>
+
+        <div class="sub-clause">17.1.3 Is emailed with a delivery response to the email address as
+            detailed in this agreement shall be presumed until the contrary
+            is proved to have been received by the addressee on the date of
+            the delivery response.</div>
+    </div>
+
+    {{-- Section 18: Jurisdiction --}}
+    <div class="section-heading">18. Jurisdiction</div>
+
+    <div class="clause">
+        <p>The parties agree to the jurisdiction of the magistrate&rsquo;s court in
+            connection with any action or suit arising from this Agreement or the
+            cancellation thereof. Should two or more persons sign this Agreement as
+            Lessors or Lessees, the said person shall be liable in solidum for the
+            performance of their obligations in terms of this agreement. This
+            Agreement constitutes the sole and entire agreement between the parties
+            and no warranties, representations, guarantees or other terms and
+            conditions of whatsoever nature not contained herein shall be of any force
+            or effect.</p>
+    </div>
+
+    {{-- Section 19: Estate Agent's Commission --}}
+    <div class="section-heading">19. Estate Agent&rsquo;s Commission and Payments</div>
+
+    <div class="clause">
+        <p>See addendum A.</p>
+    </div>
+
+    {{-- Section 20: Limitation of Liability --}}
+    <div class="section-heading">20. Limitation of Liability</div>
+
+    <div class="clause">
+        <div class="sub-clause">20.1 The Lessee shall have the use of all Municipal services including but
+            not limited to electricity and refuse removal provided to the
+            Premises but the Lessor shall not be responsible for any failure or
+            non-availability of such services, or for any loss or damage which
+            the Lessee may sustain, either from such failure or from any other
+            cause whatsoever connected with the said services, provided such loss
+            or damage was not caused by the Lessor, its employees or agent&rsquo;s
+            negligence.</div>
+
+        <div class="sub-clause">20.2 The Lessor and/or its agents shall not be responsible for any injury,
+            loss or damage of any description, which the Lessee, any of its
+            employees, customers and/or any other person dealing with the Lessee
+            may sustain directly or indirectly in the Leased Premises.</div>
+
+        <div class="sub-clause">20.3 The Lessor shall not be responsible to the Lessee for any loss or
+            damage which the Lessee may sustain as a result of vis major or casus
+            fortuitis, which events shall include but not be limited to rain,
+            wind, hail, lightning, fire, storm, leakage, water, floods,
+            explosions, earthquakes, civil commotion or any action by enemies of
+            the state, except insofar the loss or damage contemplated in the
+            clause is the result of intentional or negligent conduct by or on
+            behalf of the Lessor.</div>
+    </div>
+
+    {{-- Section 21: POPI --}}
+    <div class="section-heading">21. Protection of Personal Information</div>
+
+    <div class="clause">
+        <p>The Landlord/s and the Tenant/s hereby give their consent to the estate
+            agency/ies involved in the lease, to process our personal information for
+            all purposes related to this lease, in accordance with the provisions of
+            the Protection of Personal Information Act. Such consent specifically
+            includes the consent to work with and disclose our bank account details to
+            facilitate the payment of the deposit and the monthly rent to the
+            Landlord/s, and for the refund of the deposit to the Tenant/s.</p>
+    </div>
+
+    {{-- Section 22: Other Conditions --}}
+    <div class="section-heading">22. Other Conditions</div>
+
+    <div class="info-line"></div>
+    <div class="info-line"></div>
+    <div class="info-line"></div>
+    <div class="info-line"></div>
+    <div class="info-line"></div>
+    <div class="info-line"></div>
+
+    <div class="doc-footer">Version 5</div>
+
+</div>
+
+{{-- ============================================================
+     PAGE 6 — Signatures
+     ============================================================ --}}
+<div class="page page-break">
+
+    @include('docuperfect.web-templates.components.company-header')
+
+    <div class="section-heading">23. Signatures</div>
+
+    {{-- Lessor Signature --}}
+    <div class="signature-section">
+        <p><strong>Lessor</strong></p>
+        <p>Thus done and signed by the Lessor at <span class="field field-medium">{{ $lessor_signed_at ?? '' }}</span> on this
+            <span class="field field-short">{{ $lessor_signed_day ?? '' }}</span> day of <span class="field field-medium">{{ $lessor_signed_month ?? '' }}</span>
+            20<span class="field field-tiny">{{ $lessor_signed_year ?? '' }}</span> at <span class="field field-short">{{ $lessor_signed_time ?? '' }}</span> am / pm.</p>
+
+        <div class="signature-grid" style="grid-template-columns: 1fr 1fr;">
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">Lessor</div>
+            </div>
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">Lessor</div>
+            </div>
+        </div>
+        <div class="signature-grid" style="grid-template-columns: 1fr 1fr; margin-top: 8pt;">
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">As Witness</div>
+            </div>
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">As Witness</div>
+            </div>
+        </div>
+        <div class="signature-grid" style="grid-template-columns: 1fr 1fr; margin-top: 4pt;">
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">Name of Witness</div>
+            </div>
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">Name of Witness</div>
+            </div>
+        </div>
+    </div>
+
+    {{-- Lessee Signature --}}
+    <div class="signature-section">
+        <p><strong>Lessee</strong></p>
+        <p>Thus done and signed by the Lessee at <span class="field field-medium">{{ $lessee_signed_at ?? '' }}</span> on this
+            <span class="field field-short">{{ $lessee_signed_day ?? '' }}</span> day of <span class="field field-medium">{{ $lessee_signed_month ?? '' }}</span>
+            20<span class="field field-tiny">{{ $lessee_signed_year ?? '' }}</span> at <span class="field field-short">{{ $lessee_signed_time ?? '' }}</span> am / pm.</p>
+
+        <div class="signature-grid" style="grid-template-columns: 1fr 1fr;">
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">Lessee</div>
+            </div>
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">Lessee</div>
+            </div>
+        </div>
+        <div class="signature-grid" style="grid-template-columns: 1fr 1fr; margin-top: 8pt;">
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">As Witness</div>
+            </div>
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">As Witness</div>
+            </div>
+        </div>
+        <div class="signature-grid" style="grid-template-columns: 1fr 1fr; margin-top: 4pt;">
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">Name of Witness</div>
+            </div>
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">Name of Witness</div>
+            </div>
+        </div>
+    </div>
+
+    {{-- Agent Signature --}}
+    <div class="signature-section">
+        <p><strong>Agent</strong></p>
+        <p>Thus done and signed by the Agent at <span class="field field-medium">{{ $agent_signed_at ?? '' }}</span> on this
+            <span class="field field-short">{{ $agent_signed_day ?? '' }}</span> day of <span class="field field-medium">{{ $agent_signed_month ?? '' }}</span>
+            20<span class="field field-tiny">{{ $agent_signed_year ?? '' }}</span> at <span class="field field-short">{{ $agent_signed_time ?? '' }}</span> am / pm.</p>
+
+        <div class="signature-grid" style="grid-template-columns: 1fr 1fr;">
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">Agent</div>
+            </div>
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">Co-signature</div>
+            </div>
+        </div>
+        <div class="signature-grid" style="grid-template-columns: 1fr 1fr; margin-top: 4pt;">
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">Name of Agent</div>
+            </div>
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">Name of Co-signature</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="doc-footer">Version 5</div>
+
+</div>
+
+{{-- ============================================================
+     PAGE 7 — Addendum A: Commission and Payments
+     ============================================================ --}}
+<div class="page page-break">
+
+    @include('docuperfect.web-templates.components.company-header')
+
+    <div class="doc-title" style="text-transform: none;">Addendum A &ndash; Commission and Payments</div>
+
+    <div class="clause">
+        <p>The parties hereby agree that the agent will be responsible for the
+            following:</p>
+    </div>
+
+    <ol class="numbered-list">
+        <li>Source a tenant</li>
+        <li>Negotiate a rental contract</li>
+        <li>Secure deposit</li>
+        <li>Secure first month&rsquo;s rental</li>
+        <li>Report on defects to the lessor</li>
+        <li>Collect the monthly rental</li>
+        <li>Ongoing liaison with the lessee</li>
+        <li>Collect the monthly Municipal/Eskom account from owner and pay over to the selected person.</li>
+    </ol>
+
+    <div class="clause">
+        <p>The Agent shall earn an ongoing commission equal to 10% (inclusive of VAT)
+            of the monthly rental for the duration of the lease and any extension
+            thereof.</p>
+    </div>
+
+    {{-- Financial Breakdown --}}
+    <p style="font-weight: bold; margin: 8pt 0 4pt;">Breakdown</p>
+    <table class="financial-table">
+        <tr>
+            <td>Total Rental Amount Including VAT</td>
+            <td>{{ $total_rental ?? '' }}</td>
+        </tr>
+        <tr>
+            <td>Less Agent&rsquo;s Commission</td>
+            <td>{{ $agent_commission ?? '' }}</td>
+        </tr>
+        <tr>
+            <td>Let&rsquo;s Assist</td>
+            <td>{{ $lets_assist ?? '' }}</td>
+        </tr>
+        <tr>
+            <td>Nett Amount Including VAT to Owner</td>
+            <td>{{ $net_to_owner ?? '' }}</td>
+        </tr>
+    </table>
+
+    {{-- Payments --}}
+    <div class="section-heading">Payments</div>
+
+    <div class="clause">
+        <p>The parties hereby agree that all payments due shall be made to the reOS
+            account as herein under explained.</p>
+        <p>Upon lease activation reOS will send an email to the tenant stating lease
+            activating notice.</p>
+        <p>Once invoiced the tenant will receive an email from reOS with tenants
+            invoice/s. The tenant&rsquo;s unique reOS payment reference will be stated on
+            the invoice on the top right hand side.</p>
+        <p>Please use this reOS payment reference for all future payments.</p>
+        <p>Please note: the agent will send a WhatsApp message with this reOS
+            reference number upon activation of the lease.</p>
+    </div>
+
+    {{-- Signature Block --}}
+    <div class="signature-section">
+        <div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">Lessor</div>
+            </div>
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">Lessee</div>
+            </div>
+            <div class="signature-col">
+                <div class="signature-line"></div>
+                <div class="signature-label">Agent</div>
+            </div>
+        </div>
+
+        <div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top: 8pt;">
+            <div>
+                <p>Date: <span class="field field-short">{{ $addendum_lessor_date ?? '' }}</span></p>
+            </div>
+            <div>
+                <p>Date: <span class="field field-short">{{ $addendum_lessee_date ?? '' }}</span></p>
+            </div>
+            <div>
+                <p>Date: <span class="field field-short">{{ $addendum_agent_date ?? '' }}</span></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="doc-footer">Version 5</div>
+
+</div>
+
+</body>
+</html>

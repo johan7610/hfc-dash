@@ -1,0 +1,599 @@
+
+═══ Verifying: commercial-lease-agreement-v5 ═══
+
+  DIFF [1]:
+    SOURCE: >>>LEASE AGREEMENT<<< - COMMERCIAL 1. PARTIES 1.1
+    BLADE:  >>>Commercial Lease Agreement — Home Finders Coastal Johan and Elize Properties T/A HFC COASTAL THE MANDATE COMPANY Shop 5 The Emporium, cnr King Rd & Marine Drive, Shelly Beach Reg No:2009/228978/23 Vat No:4870264498 FFC No:FFC40/43916/5 FIC No:58538 Fax: 086 233 2395 Email: info@hfcoastal.co.za Cell: 079 495 5994 Lease Agreement<<< - COMMERCIAL 1. PARTIES 1.1
+
+  DIFF [2]:
+    SOURCE: LEASE AGREEMENT - >>>COMMERCIAL<<< 1. PARTIES 1.1 ________________________________________ ______________
+    BLADE:  LEASE AGREEMENT - >>>Commercial<<< 1. PARTIES 1.1 ________________________________________ ______________
+
+  DIFF [3]:
+    SOURCE: LEASE AGREEMENT - COMMERCIAL 1. >>>PARTIES<<< 1.1 ________________________________________ ______________ __(Lessor) _______________________________________________________________________________
+    BLADE:  LEASE AGREEMENT - COMMERCIAL 1. >>>Parties<<< 1.1 ________________________________________ ______________ __(Lessor) _______________________________________________________________________________
+
+  DIFF [4]:
+    SOURCE: - COMMERCIAL 1. PARTIES 1.1 >>>________________________________________ ______________ __(Lessor) _______________________________________________________________________________<<< Of (address) _____________________________________________________________________ ID/Passport/Registration No:
+    BLADE:  - COMMERCIAL 1. PARTIES 1.1 >>>(Lessor)<<< Of (address) _____________________________________________________________________ ID/Passport/Registration No:
+
+  DIFF [5]:
+    SOURCE: ______________ __(Lessor) _______________________________________________________________________________ Of (address) >>>_____________________________________________________________________<<< ID/Passport/Registration No: _________________________________________________________ AND 1.2
+    BLADE:  ______________ __(Lessor) _______________________________________________________________________________ Of (address) >>><<< ID/Passport/Registration No: _________________________________________________________ AND 1.2
+
+  DIFF [6]:
+    SOURCE: Of (address) _____________________________________________________________________ ID/Passport/Registration No: >>>_________________________________________________________<<< AND 1.2 _______________________________________________________________________________ (Lessee) _______________________________________________________________________________
+    BLADE:  Of (address) _____________________________________________________________________ ID/Passport/Registration No: >>><<< AND 1.2 _______________________________________________________________________________ (Lessee) _______________________________________________________________________________
+
+  DIFF [7]:
+    SOURCE: ID/Passport/Registration No: _________________________________________________________ AND 1.2 >>>_______________________________________________________________________________<<< (Lessee) _______________________________________________________________________________ Of (address) _____________________________________________________________________
+    BLADE:  ID/Passport/Registration No: _________________________________________________________ AND 1.2 >>><<< (Lessee) _______________________________________________________________________________ Of (address) _____________________________________________________________________
+
+  DIFF [8]:
+    SOURCE: _________________________________________________________ AND 1.2 _______________________________________________________________________________ (Lessee) >>>_______________________________________________________________________________<<< Of (address) _____________________________________________________________________ ID/Passport/Registration No:
+    BLADE:  _________________________________________________________ AND 1.2 _______________________________________________________________________________ (Lessee) >>><<< Of (address) _____________________________________________________________________ ID/Passport/Registration No:
+
+  DIFF [9]:
+    SOURCE: _______________________________________________________________________________ (Lessee) _______________________________________________________________________________ Of (address) >>>_____________________________________________________________________<<< ID/Passport/Registration No: _________________________________________________________ It is
+    BLADE:  _______________________________________________________________________________ (Lessee) _______________________________________________________________________________ Of (address) >>><<< ID/Passport/Registration No: _________________________________________________________ It is
+
+  DIFF [10]:
+    SOURCE: Of (address) _____________________________________________________________________ ID/Passport/Registration No: >>>_________________________________________________________<<< It is agreed that, from
+    BLADE:  Of (address) _____________________________________________________________________ ID/Passport/Registration No: >>><<< It is agreed that, from
+
+  DIFF [11]:
+    SOURCE: period longer than 24 (twenty >>>Four) months<<< 2. INTERPRETATION In this Agreement,
+    BLADE:  period longer than 24 (twenty >>>four) months.<<< 2. INTERPRETATION In this Agreement,
+
+  DIFF [12]:
+    SOURCE: 24 (twenty Four) months 2. >>>INTERPRETATION In this Agreement, unless the context indicates otherwise, the following expressions shall have the meanings assigned to them hereunder.<<< The premises :- being Erf
+    BLADE:  24 (twenty Four) months 2. >>>Interpretation 2.1<<< The premises :- being Erf
+
+  DIFF [13]:
+    SOURCE: assigned to them hereunder. The >>>premises :-<<< being Erf no: _______ (street
+    BLADE:  assigned to them hereunder. The >>>premises:<<< being Erf no: _______ (street
+
+  DIFF [14]:
+    SOURCE: premises :- being Erf no: >>>_______<<< (street address) _____________________________________ Unit no:______
+    BLADE:  premises :- being Erf no: >>><<< (street address) _____________________________________ Unit no:______
+
+  DIFF [15]:
+    SOURCE: Erf no: _______ (street address) >>>_____________________________________<<< Unit no:______ , Complex: _________________________________________
+    BLADE:  Erf no: _______ (street address) >>><<< Unit no:______ , Complex: _________________________________________
+
+  DIFF [16]:
+    SOURCE: _______ (street address) _____________________________________ Unit >>>no:______<<< , Complex: _________________________________________ The Rental:
+    BLADE:  _______ (street address) _____________________________________ Unit >>>no:<<< , Complex: _________________________________________ The Rental:
+
+  DIFF [17]:
+    SOURCE: _____________________________________ Unit no:______ , Complex: >>>_________________________________________<<< The Rental: - being the
+    BLADE:  _____________________________________ Unit no:______ , Complex: >>>2.2<<< The Rental: - being the
+
+  DIFF [18]:
+    SOURCE: , Complex: _________________________________________ The Rental: >>>-<<< being the amount referred to
+    BLADE:  , Complex: _________________________________________ The Rental: >>><<< being the amount referred to
+
+  DIFF [19]:
+    SOURCE: escalated in terms of 4.2. >>>2.3.<<< The Estate Agent being: -
+    BLADE:  escalated in terms of 4.2. >>>2.3<<< The Estate Agent being: -
+
+  DIFF [20]:
+    SOURCE: 2.3. The Estate Agent being: >>>-<<< The firm: - HOME FINDERS
+    BLADE:  2.3. The Estate Agent being: >>><<< The firm: - HOME FINDERS
+
+  DIFF [21]:
+    SOURCE: Agent being: - The firm: >>>-<<< HOME FINDERS COASTAL The Deposit:
+    BLADE:  Agent being: - The firm: >>><<< HOME FINDERS COASTAL The Deposit:
+
+  DIFF [22]:
+    SOURCE: firm: - HOME FINDERS COASTAL >>><<< The Deposit: - as referred
+    BLADE:  firm: - HOME FINDERS COASTAL >>>2.4<<< The Deposit: - as referred
+
+  DIFF [23]:
+    SOURCE: HOME FINDERS COASTAL The Deposit: >>>-<<< as referred to in clause
+    BLADE:  HOME FINDERS COASTAL The Deposit: >>><<< as referred to in clause
+
+  DIFF [24]:
+    SOURCE: referred to in clause 6. >>><<< HOME FINDERS COASTAL is the
+    BLADE:  referred to in clause 6. >>>2.5<<< HOME FINDERS COASTAL is the
+
+  DIFF [25]:
+    SOURCE: the Instructions of the LANDLORD. >>>2.6The<<< LANDLORD remains the responsible party
+    BLADE:  the Instructions of the LANDLORD. >>>2.6 The<<< LANDLORD remains the responsible party
+
+  DIFF [26]:
+    SOURCE: claims arising from the LEASE. >>><<< 3. LETTING AND HIRING 3.1
+    BLADE:  claims arising from the LEASE. >>>Version 5 Johan and Elize Properties T/A HFC COASTAL THE MANDATE COMPANY Shop 5 The Emporium, cnr King Rd & Marine Drive, Shelly Beach Reg No:2009/228978/23 Vat No:4870264498 FFC No:FFC40/43916/5 FIC No:58538 Fax: 086 233 2395 Email: info@hfcoastal.co.za Cell: 079 495 5994<<< 3. LETTING AND HIRING 3.1
+
+  DIFF [27]:
+    SOURCE: arising from the LEASE. 3. >>>LETTING AND HIRING<<< 3.1 The Lessor hereby lets
+    BLADE:  arising from the LEASE. 3. >>>Letting and Hiring<<< 3.1 The Lessor hereby lets
+
+  DIFF [28]:
+    SOURCE: following business on the premises: >>>________________________________________________________________________________<<< 4. RENTAL Delete 4.2 if
+    BLADE:  following business on the premises: >>><<< 4. RENTAL Delete 4.2 if
+
+  DIFF [29]:
+    SOURCE: on the premises: ________________________________________________________________________________ 4. >>>RENTAL<<< Delete 4.2 if not applicable.
+    BLADE:  on the premises: ________________________________________________________________________________ 4. >>>Rental Note:<<< Delete 4.2 if not applicable.
+
+  DIFF [30]:
+    SOURCE: 4.1 The Rental shall be >>>R___________<<< (in words)(________________________________________________Rand) per month, subject
+    BLADE:  4.1 The Rental shall be >>><<< (in words)(________________________________________________Rand) per month, subject
+
+  DIFF [31]:
+    SOURCE: Rental shall be R___________ (in >>>words)(________________________________________________Rand)<<< per month, subject to 4.2
+    BLADE:  Rental shall be R___________ (in >>>words) ( Rand)<<< per month, subject to 4.2
+
+  DIFF [32]:
+    SOURCE: report all cash deposits over >>>R50000<<< to FICA. The LESSEE acknowledges
+    BLADE:  report all cash deposits over >>>R50 000<<< to FICA. The LESSEE acknowledges
+
+  DIFF [33]:
+    SOURCE: the account of the LESSEE. >>>__________________________________ TenantAgent<<< The Rental shall be subject
+    BLADE:  the account of the LESSEE. >>>Tenant Agent 4.2<<< The Rental shall be subject
+
+  DIFF [34]:
+    SOURCE: subject to an escalation of >>>_____% (_______________)<<< per annum from the 1st
+    BLADE:  subject to an escalation of >>>% ()<<< per annum from the 1st
+
+  DIFF [35]:
+    SOURCE: from the 1st day of >>>____________________________<<< each year, and the amount
+    BLADE:  from the 1st day of >>><<< each year, and the amount
+
+  DIFF [36]:
+    SOURCE: said date constitute the Rental. >>><<< The LANDLORD or his AGENT
+    BLADE:  said date constitute the Rental. >>>4.3<<< The LANDLORD or his AGENT
+
+  DIFF [37]:
+    SOURCE: for all payments received. 5. >>>LEASE PERIOD<<< The lease shall commence on
+    BLADE:  for all payments received. 5. >>>Lease Period 5.1<<< The lease shall commence on
+
+  DIFF [38]:
+    SOURCE: The lease shall commence on >>>________________________,<<< and shall continue thereafter until
+    BLADE:  The lease shall commence on >>>,<<< and shall continue thereafter until
+
+  DIFF [39]:
+    SOURCE: Provided that such notice of >>>termination-<<< may not be given by
+    BLADE:  Provided that such notice of >>>termination — 5.1.1<<< may not be given by
+
+  DIFF [40]:
+    SOURCE: to expire prior to the >>>_____day<<< of _____________________ in the year________;
+    BLADE:  to expire prior to the >>>day<<< of _____________________ in the year________;
+
+  DIFF [41]:
+    SOURCE: prior to the _____day of >>>_____________________<<< in the year________; and Shall
+    BLADE:  prior to the _____day of >>><<< in the year________; and Shall
+
+  DIFF [42]:
+    SOURCE: _____day of _____________________ in the >>>year________;<<< and Shall be given only
+    BLADE:  _____day of _____________________ in the >>>year ;<<< and Shall be given only
+
+  DIFF [43]:
+    SOURCE: _____________________ in the year________; and >>><<< Shall be given only on
+    BLADE:  _____________________ in the year________; and >>>5.1.2<<< Shall be given only on
+
+  DIFF [44]:
+    SOURCE: day of any calendar month. >>><<< The lease shall expire at
+    BLADE:  day of any calendar month. >>>5.2<<< The lease shall expire at
+
+  DIFF [45]:
+    SOURCE: shall expire at midnight on >>>______________________,<<< (the expiry date). With written
+    BLADE:  shall expire at midnight on >>>,<<< (the expiry date). With written
+
+  DIFF [46]:
+    SOURCE: for a further period of >>>________months<<< (the renewal period), commencing on
+    BLADE:  for a further period of >>>months<<< (the renewal period), commencing on
+
+  DIFF [47]:
+    SOURCE: in this Agreement. Provided that >>>–<<< The Lessee shall exercise this
+    BLADE:  in this Agreement. Provided that >>>— 5.2.1<<< The Lessee shall exercise this
+
+  DIFF [48]:
+    SOURCE: which the option shall lapse. >>><<< The Lessee agrees that the
+    BLADE:  which the option shall lapse. >>>5.3<<< The Lessee agrees that the
+
+  DIFF [49]:
+    SOURCE: property by the Lessee. 6. >>>DEPOSIT AND ELECTRICITY DEPOSIT<<< The Lessee shall within 48
+    BLADE:  property by the Lessee. 6. >>>Deposit and Electricity Deposit 6.1<<< The Lessee shall within 48
+
+  DIFF [50]:
+    SOURCE: rental and Electricity deposit of >>>_________________<<< to the Estate Agent to
+    BLADE:  rental and Electricity deposit of >>><<< to the Estate Agent to
+
+  DIFF [51]:
+    SOURCE: until termination of the lease. >>><<< As and when the monthly
+    BLADE:  until termination of the lease. >>>6.2<<< As and when the monthly
+
+  DIFF [52]:
+    SOURCE: monthly rental amount is payable. >>><<< On termination of the lease,
+    BLADE:  monthly rental amount is payable. >>>6.3<<< On termination of the lease,
+
+  DIFF [53]:
+    SOURCE: Premises, and/or replacing lost keys. >>><<< The Lessee shall not be
+    BLADE:  Premises, and/or replacing lost keys. >>>6.4<<< The Lessee shall not be
+
+  DIFF [54]:
+    SOURCE: month(s) period of the lease. >>><<< Interest earned on the deposit
+    BLADE:  month(s) period of the lease. >>>6.5<<< Interest earned on the deposit
+
+  DIFF [55]:
+    SOURCE: account accrues to the Lessee. >>><<< 7. ADDITIONAL PAYMENTS BY LESSEE
+    BLADE:  account accrues to the Lessee. >>>Version 5 Johan and Elize Properties T/A HFC COASTAL THE MANDATE COMPANY Shop 5 The Emporium, cnr King Rd & Marine Drive, Shelly Beach Reg No:2009/228978/23 Vat No:4870264498 FFC No:FFC40/43916/5 FIC No:58538 Fax: 086 233 2395 Email: info@hfcoastal.co.za Cell: 079 495 5994<<< 7. ADDITIONAL PAYMENTS BY LESSEE
+
+  DIFF [56]:
+    SOURCE: accrues to the Lessee. 7. >>>ADDITIONAL PAYMENTS BY LESSEE<<< The costs of drawing up
+    BLADE:  accrues to the Lessee. 7. >>>Additional Payments by Lessee 7.1<<< The costs of drawing up
+
+  DIFF [57]:
+    SOURCE: and auxiliary expenses amounting to >>>R1500.00<<< (One Thousand Five Hundred Rand
+    BLADE:  and auxiliary expenses amounting to >>>R1 500.00<<< (One Thousand Five Hundred Rand
+
+  DIFF [58]:
+    SOURCE: Five Hundred Rand only) include >>>vat<<< thereon, payable together with the
+    BLADE:  Five Hundred Rand only) include >>>VAT<<< thereon, payable together with the
+
+  DIFF [59]:
+    SOURCE: deposit as per clause 6. >>>7.1<<< In the event of the
+    BLADE:  deposit as per clause 6. >>><<< In the event of the
+
+  DIFF [60]:
+    SOURCE: payment of any of the >>>a<<< foregoing, the Lessor shall have
+    BLADE:  payment of any of the >>><<< foregoing, the Lessor shall have
+
+  DIFF [61]:
+    SOURCE: so expended from the Lessee. >>>7.2If<<< rental is received late, as
+    BLADE:  so expended from the Lessee. >>>7.2 If<<< rental is received late, as
+
+  DIFF [62]:
+    SOURCE: as an additional deposit. 8. >>>LESSEE’S OBLIGATIONS<<< The Lessee acknowledges that he
+    BLADE:  as an additional deposit. 8. >>>Lessee’s Obligations<<< The Lessee acknowledges that he
+
+  DIFF [63]:
+    SOURCE: Lessee acknowledges that he shall: >>>-<<< Maintain the whole interior of
+    BLADE:  Lessee acknowledges that he shall: >>>8.1<<< Maintain the whole interior of
+
+  DIFF [64]:
+    SOURCE: order and condition as received. >>><<< Replace at his expense all
+    BLADE:  order and condition as received. >>>8.2<<< Replace at his expense all
+
+  DIFF [65]:
+    SOURCE: to the LANDLORD or his >>>AGENT;<<< Ensure that neither he nor
+    BLADE:  to the LANDLORD or his >>>AGENT. 8.3<<< Ensure that neither he nor
+
+  DIFF [66]:
+    SOURCE: shall not be unreasonably withheld. >>><<< Clean all curtains, blinds, carpets
+    BLADE:  shall not be unreasonably withheld. >>>8.4<<< Clean all curtains, blinds, carpets
+
+  DIFF [67]:
+    SOURCE: FINDERS COASTAL or the LANDLORD. >>><<< All goods brought onto the
+    BLADE:  FINDERS COASTAL or the LANDLORD. >>>8.5<<< All goods brought onto the
+
+  DIFF [68]:
+    SOURCE: sole risk of the Lessee. >>>8.5The<<< Lessor shall not be liable
+    BLADE:  sole risk of the Lessee. >>>8.6 The<<< Lessor shall not be liable
+
+  DIFF [69]:
+    SOURCE: any defect in the Premises. >>><<< The Lessee shall allow the
+    BLADE:  any defect in the Premises. >>>8.7<<< The Lessee shall allow the
+
+  DIFF [70]:
+    SOURCE: hours’ notice to the Lessee. >>><<< The Lessee shall be responsible
+    BLADE:  hours’ notice to the Lessee. >>>8.8<<< The Lessee shall be responsible
+
+  DIFF [71]:
+    SOURCE: of the leased premises. 9. >>>LESSORS OBLIGATIONS<<< The Lessor shall be liable
+    BLADE:  of the leased premises. 9. >>>Lessor’s Obligations 9.1<<< The Lessor shall be liable
+
+  DIFF [72]:
+    SOURCE: to pay all rates and >>>taxes/ levies<<< payable in respect of the
+    BLADE:  to pay all rates and >>>taxes/levies<<< payable in respect of the
+
+  DIFF [73]:
+    SOURCE: block company/home owners’ association concerned. >>><<< The Lessor shall also keep
+    BLADE:  block company/home owners’ association concerned. >>>9.2<<< The Lessor shall also keep
+
+  DIFF [74]:
+    SOURCE: fire and other unusual risks. >>><<< The Lessor shall keep all
+    BLADE:  fire and other unusual risks. >>>9.3<<< The Lessor shall keep all
+
+  DIFF [75]:
+    SOURCE: defect of any nature whatsoever. >>><<< The Lessor shall be responsible
+    BLADE:  defect of any nature whatsoever. >>>9.4<<< The Lessor shall be responsible
+
+  DIFF [76]:
+    SOURCE: water cylinder(s) on the premises. >>><<< 10. PROHIBITION AGAINST SUBLETTING AND
+    BLADE:  water cylinder(s) on the premises. >>>Version 5 Johan and Elize Properties T/A HFC COASTAL THE MANDATE COMPANY Shop 5 The Emporium, cnr King Rd & Marine Drive, Shelly Beach Reg No:2009/228978/23 Vat No:4870264498 FFC No:FFC40/43916/5 FIC No:58538 Fax: 086 233 2395 Email: info@hfcoastal.co.za Cell: 079 495 5994<<< 10. PROHIBITION AGAINST SUBLETTING AND
+
+  DIFF [77]:
+    SOURCE: cylinder(s) on the premises. 10. >>>PROHIBITION AGAINST SUBLETTING AND PARTING WITH POSSESSION<<< The Lessee shall not –
+    BLADE:  cylinder(s) on the premises. 10. >>>Prohibition Against Subletting and Parting with Possession<<< The Lessee shall not –
+
+  DIFF [78]:
+    SOURCE: POSSESSION The Lessee shall not >>>–<<< 10.1 cede his rights or
+    BLADE:  POSSESSION The Lessee shall not >>>—<<< 10.1 cede his rights or
+
+  DIFF [79]:
+    SOURCE: assign his obligations hereunder; or >>>10.2sublet<<< the Premises or any portion
+    BLADE:  assign his obligations hereunder; or >>>10.2 sublet<<< the Premises or any portion
+
+  DIFF [80]:
+    SOURCE: or any portion thereof; or >>>10.3part<<< with possession of the Premises
+    BLADE:  or any portion thereof; or >>>10.3 part<<< with possession of the Premises
+
+  DIFF [81]:
+    SOURCE: not be unreasonably withheld. 11. >>>OCCUPATION<<< Notwithstanding any receipt given for
+    BLADE:  not be unreasonably withheld. 11. >>>Occupation 11.1<<< Notwithstanding any receipt given for
+
+  DIFF [82]:
+    SOURCE: of the period of non-occupation. >>><<< Should the Lessee fail to
+    BLADE:  of the period of non-occupation. >>>11.2<<< Should the Lessee fail to
+
+  DIFF [83]:
+    SOURCE: Premises on the said date. >>><<< In the event of the
+    BLADE:  Premises on the said date. >>>11.3<<< In the event of the
+
+  DIFF [84]:
+    SOURCE: or the like and Lessor >>>–<<< 11.3.1 Failing within 30 days
+    BLADE:  or the like and Lessor >>>—<<< 11.3.1 Failing within 30 days
+
+  DIFF [85]:
+    SOURCE: of beneficial occupation of the >>>Premises<<< Save as provided in 11.3.1
+    BLADE:  of beneficial occupation of the >>>Premises.<<< Save as provided in 11.3.1
+
+  DIFF [86]:
+    SOURCE: claims whatsoever against the Lessor. >>><<< The Lessee may not without
+    BLADE:  claims whatsoever against the Lessor. >>>11.4<<< The Lessee may not without
+
+  DIFF [87]:
+    SOURCE: shall not be unreasonably withheld >>>–<<< Allow the Premises to remain
+    BLADE:  shall not be unreasonably withheld >>>— (a)<<< Allow the Premises to remain
+
+  DIFF [88]:
+    SOURCE: exceeding six weeks; or 12. >>>DEFECTS AND MAINTENANCE<<< It is hereby recorded that
+    BLADE:  exceeding six weeks; or 12. >>>Defects and Maintenance 12.1<<< It is hereby recorded that
+
+  DIFF [89]:
+    SOURCE: the Premises and the goods. >>><<< It is furthermore specifically recorded
+    BLADE:  the Premises and the goods. >>>12.2<<< It is furthermore specifically recorded
+
+  DIFF [90]:
+    SOURCE: the Premises or the goods. >>><<< On termination of the lease,
+    BLADE:  the Premises or the goods. >>>12.3<<< On termination of the lease,
+
+  DIFF [91]:
+    SOURCE: in terms of 11. 13. >>>USE OF THE PREMISES BY THE LESSEE<<< 13.1 The Lessee shall use
+    BLADE:  in terms of 11. 13. >>>Use of the Premises by the Lessee<<< 13.1 The Lessee shall use
+
+  DIFF [92]:
+    SOURCE: Lessors’ prior written consent. 14. >>>IMPROVEMENTS<<< Any improvements made by the
+    BLADE:  Lessors’ prior written consent. 14. >>>Improvements<<< Any improvements made by the
+
+  DIFF [93]:
+    SOURCE: defects caused by such removal. >>><<< 15. BREACH 15.1 In the
+    BLADE:  defects caused by such removal. >>>Version 5 Johan and Elize Properties T/A HFC COASTAL THE MANDATE COMPANY Shop 5 The Emporium, cnr King Rd & Marine Drive, Shelly Beach Reg No:2009/228978/23 Vat No:4870264498 FFC No:FFC40/43916/5 FIC No:58538 Fax: 086 233 2395 Email: info@hfcoastal.co.za Cell: 079 495 5994<<< 15. BREACH 15.1 In the
+
+  DIFF [94]:
+    SOURCE: caused by such removal. 15. >>>BREACH<<< 15.1 In the event of
+    BLADE:  caused by such removal. 15. >>>Breach<<< 15.1 In the event of
+
+  DIFF [95]:
+    SOURCE: settled against the damage deposit. >>><<< In the event of the
+    BLADE:  settled against the damage deposit. >>>15.5<<< In the event of the
+
+  DIFF [96]:
+    SOURCE: find a suitable tenant. 16. >>>TERMINATION OF THE LEASE AGREEMENT<<< Once the Lease Agreement has
+    BLADE:  find a suitable tenant. 16. >>>Termination of the Lease Agreement 16.1<<< Once the Lease Agreement has
+
+  DIFF [97]:
+    SOURCE: Agreement has ended, the Lessor >>>and / or<<< Lessee may give the other
+    BLADE:  Agreement has ended, the Lessor >>>and/or<<< Lessee may give the other
+
+  DIFF [98]:
+    SOURCE: Termination of the Lease Agreement. >>><<< Should the Lessee cancel the
+    BLADE:  Termination of the Lease Agreement. >>>16.2<<< Should the Lessee cancel the
+
+  DIFF [99]:
+    SOURCE: the lease cancellation fee of >>>R2500.00<<< for administration costs. ____________________________________________________________ LesseeAgentLessor
+    BLADE:  the lease cancellation fee of >>>R2 500.00<<< for administration costs. ____________________________________________________________ LesseeAgentLessor
+
+  DIFF [100]:
+    SOURCE: of R2500.00 for administration costs. >>>____________________________________________________________ LesseeAgentLessor<<< 17. DOMICILE Each party choose
+    BLADE:  of R2500.00 for administration costs. >>>Lessee Agent Lessor<<< 17. DOMICILE Each party choose
+
+  DIFF [101]:
+    SOURCE: administration costs. ____________________________________________________________ LesseeAgentLessor 17. >>>DOMICILE<<< Each party choose domicillium citandi
+    BLADE:  administration costs. ____________________________________________________________ LesseeAgentLessor 17. >>>Domicile<<< Each party choose domicillium citandi
+
+  DIFF [102]:
+    SOURCE: the other (“the addressee”) which >>>–<<< 17.1.1 Is delivered by hand
+    BLADE:  the other (“the addressee”) which >>>—<<< 17.1.1 Is delivered by hand
+
+  DIFF [103]:
+    SOURCE: of South Africa to the >>>Addressee<<< at the addressee’s domicilium executandi
+    BLADE:  of South Africa to the >>>addressee<<< at the addressee’s domicilium executandi
+
+  DIFF [104]:
+    SOURCE: of the date of posting. >>><<< Is emailed with a delivery
+    BLADE:  of the date of posting. >>>17.1.3<<< Is emailed with a delivery
+
+  DIFF [105]:
+    SOURCE: of the delivery response. 18. >>>JURISDICTION<<< The parties agree to the
+    BLADE:  of the delivery response. 18. >>>Jurisdiction<<< The parties agree to the
+
+  DIFF [106]:
+    SOURCE: any force or effect. 19. >>>ESTATE AGENT’S COMMISSION AND PAYMENTS<<< See addendum A 20. LIMITATION
+    BLADE:  any force or effect. 19. >>>Estate Agent’s Commission and Payments<<< See addendum A 20. LIMITATION
+
+  DIFF [107]:
+    SOURCE: COMMISSION AND PAYMENTS See addendum >>>A<<< 20. LIMITATION OF LIABILITY 20.1
+    BLADE:  COMMISSION AND PAYMENTS See addendum >>>A.<<< 20. LIMITATION OF LIABILITY 20.1
+
+  DIFF [108]:
+    SOURCE: PAYMENTS See addendum A 20. >>>LIMITATION OF LIABILITY<<< 20.1 The Lessee shall have
+    BLADE:  PAYMENTS See addendum A 20. >>>Limitation of Liability<<< 20.1 The Lessee shall have
+
+  DIFF [109]:
+    SOURCE: its employees or agent’s negligence. >>>20.2The<<< Lessor and/or its agents shall
+    BLADE:  its employees or agent’s negligence. >>>20.2 The<<< Lessor and/or its agents shall
+
+  DIFF [110]:
+    SOURCE: indirectly in the Leased Premises. >>>20.3The<<< Lessor shall not be responsible
+    BLADE:  indirectly in the Leased Premises. >>>20.3 The<<< Lessor shall not be responsible
+
+  DIFF [111]:
+    SOURCE: behalf of the Lessor. 21. >>>PROTECTION OF PERSONAL INFORMATION<<< The Landlord/s and the Tenant/s
+    BLADE:  behalf of the Lessor. 21. >>>Protection of Personal Information<<< The Landlord/s and the Tenant/s
+
+  DIFF [112]:
+    SOURCE: deposit to the Tenant/s. 22. >>>OTHER CONDITIONS ________________________________________ ______________ __ ________________________________________ ______________ __ ________________________________________ ______________ __ ________________________________________ ______________ __ ________________________________________ ______________ __ ________________________________________ ______________ __<<< 23. Signatures Lessor Thus done
+    BLADE:  deposit to the Tenant/s. 22. >>>Other Conditions Version 5 Johan and Elize Properties T/A HFC COASTAL THE MANDATE COMPANY Shop 5 The Emporium, cnr King Rd & Marine Drive, Shelly Beach Reg No:2009/228978/23 Vat No:4870264498 FFC No:FFC40/43916/5 FIC No:58538 Fax: 086 233 2395 Email: info@hfcoastal.co.za Cell: 079 495 5994<<< 23. Signatures Lessor Thus done
+
+  DIFF [113]:
+    SOURCE: signed by the Lessor at >>>_______________________________<<< on this _____ day of
+    BLADE:  signed by the Lessor at >>><<< on this _____ day of
+
+  DIFF [114]:
+    SOURCE: Lessor at _______________________________ on this >>>_____<<< day of ________ 20__ at
+    BLADE:  Lessor at _______________________________ on this >>><<< day of ________ 20__ at
+
+  DIFF [115]:
+    SOURCE: on this _____ day of >>>________ 20__<<< at _______ am / pm.
+    BLADE:  on this _____ day of >>>20<<< at _______ am / pm.
+
+  DIFF [116]:
+    SOURCE: day of ________ 20__ at >>>_______<<< am / pm. _________________ _________________
+    BLADE:  day of ________ 20__ at >>><<< am / pm. _________________ _________________
+
+  DIFF [117]:
+    SOURCE: at _______ am / pm. >>>_________________ _________________ _________________ _________________<<< Lessor Lessor As Witness As
+    BLADE:  at _______ am / pm. >>><<< Lessor Lessor As Witness As
+
+  DIFF [118]:
+    SOURCE: Lessor As Witness As Witness >>>_________________ _________________<<< Name of Witness Name of
+    BLADE:  Lessor As Witness As Witness >>><<< Name of Witness Name of
+
+  DIFF [119]:
+    SOURCE: signed by the Lessee at >>>_______________________________<<< on this _____ day of
+    BLADE:  signed by the Lessee at >>><<< on this _____ day of
+
+  DIFF [120]:
+    SOURCE: Lessee at _______________________________ on this >>>_____<<< day of ________ 20__ at
+    BLADE:  Lessee at _______________________________ on this >>><<< day of ________ 20__ at
+
+  DIFF [121]:
+    SOURCE: on this _____ day of >>>________ 20__<<< at _______ am / pm.
+    BLADE:  on this _____ day of >>>20<<< at _______ am / pm.
+
+  DIFF [122]:
+    SOURCE: day of ________ 20__ at >>>_______<<< am / pm. _________________ _________________
+    BLADE:  day of ________ 20__ at >>><<< am / pm. _________________ _________________
+
+  DIFF [123]:
+    SOURCE: at _______ am / pm. >>>_________________ _________________ _________________ _________________<<< Lessee Lessee As Witness As
+    BLADE:  at _______ am / pm. >>><<< Lessee Lessee As Witness As
+
+  DIFF [124]:
+    SOURCE: Lessee As Witness As Witness >>>_________________ _________________<<< Name of Witness Name of
+    BLADE:  Lessee As Witness As Witness >>><<< Name of Witness Name of
+
+  DIFF [125]:
+    SOURCE: signed by the Agent at >>>_______________________________<<< on this _____ day of
+    BLADE:  signed by the Agent at >>><<< on this _____ day of
+
+  DIFF [126]:
+    SOURCE: Agent at _______________________________ on this >>>_____<<< day of ________ 20__ at
+    BLADE:  Agent at _______________________________ on this >>><<< day of ________ 20__ at
+
+  DIFF [127]:
+    SOURCE: on this _____ day of >>>________ 20__<<< at _______ am / pm.
+    BLADE:  on this _____ day of >>>20<<< at _______ am / pm.
+
+  DIFF [128]:
+    SOURCE: day of ________ 20__ at >>>_______<<< am / pm. _________________ _________________
+    BLADE:  day of ________ 20__ at >>><<< am / pm. _________________ _________________
+
+  DIFF [129]:
+    SOURCE: at _______ am / pm. >>>_________________ _________________<<< Agent Co-signature _________________ _________________ Name
+    BLADE:  at _______ am / pm. >>><<< Agent Co-signature _________________ _________________ Name
+
+  DIFF [130]:
+    SOURCE: pm. _________________ _________________ Agent Co-signature >>>_________________ _________________<<< Name of Agent Name of
+    BLADE:  pm. _________________ _________________ Agent Co-signature >>><<< Name of Agent Name of
+
+  DIFF [131]:
+    SOURCE: of Agent Name of Co-signature >>><<< Addendum A – Commission and
+    BLADE:  of Agent Name of Co-signature >>>Version 5 Johan and Elize Properties T/A HFC COASTAL THE MANDATE COMPANY Shop 5 The Emporium, cnr King Rd & Marine Drive, Shelly Beach Reg No:2009/228978/23 Vat No:4870264498 FFC No:FFC40/43916/5 FIC No:58538 Fax: 086 233 2395 Email: info@hfcoastal.co.za Cell: 079 495 5994<<< Addendum A – Commission and
+
+  DIFF [132]:
+    SOURCE: be responsible for the following: >>>1.<<< Source a tenant 2. Negotiate
+    BLADE:  be responsible for the following: >>><<< Source a tenant 2. Negotiate
+
+  DIFF [133]:
+    SOURCE: following: 1. Source a tenant >>>2.<<< Negotiate a rental contract 3.
+    BLADE:  following: 1. Source a tenant >>><<< Negotiate a rental contract 3.
+
+  DIFF [134]:
+    SOURCE: 2. Negotiate a rental contract >>>3.<<< Secure deposit 4. Secure first
+    BLADE:  2. Negotiate a rental contract >>><<< Secure deposit 4. Secure first
+
+  DIFF [135]:
+    SOURCE: rental contract 3. Secure deposit >>>4.<<< Secure first month’s rental 5.
+    BLADE:  rental contract 3. Secure deposit >>><<< Secure first month’s rental 5.
+
+  DIFF [136]:
+    SOURCE: 4. Secure first month’s rental >>>5.<<< Report on defects to the
+    BLADE:  4. Secure first month’s rental >>><<< Report on defects to the
+
+  DIFF [137]:
+    SOURCE: on defects to the lessor >>>6.<<< Collect the monthly rental 7.
+    BLADE:  on defects to the lessor >>><<< Collect the monthly rental 7.
+
+  DIFF [138]:
+    SOURCE: 6. Collect the monthly rental >>>7.<<< Ongoing liaison with the lessee
+    BLADE:  6. Collect the monthly rental >>><<< Ongoing liaison with the lessee
+
+  DIFF [139]:
+    SOURCE: Ongoing liaison with the lessee >>>8.<<< Collect the monthly Municipal/Eskom account
+    BLADE:  Ongoing liaison with the lessee >>><<< Collect the monthly Municipal/Eskom account
+
+  DIFF [140]:
+    SOURCE: an ongoing commission equal to >>>10 %<<< (inclusive of vat) of the
+    BLADE:  an ongoing commission equal to >>>10%<<< (inclusive of vat) of the
+
+  DIFF [141]:
+    SOURCE: to 10 % (inclusive of >>>vat)<<< of the monthly rental for
+    BLADE:  to 10 % (inclusive of >>>VAT)<<< of the monthly rental for
+
+  DIFF [142]:
+    SOURCE: Breakdown Total Rental Amount Including >>>VAT_____________________________________<<< Less Agent’s Commission_____________________________________ Let’s Assist_____________________________________
+    BLADE:  Breakdown Total Rental Amount Including >>>VAT<<< Less Agent’s Commission_____________________________________ Let’s Assist_____________________________________
+
+  DIFF [143]:
+    SOURCE: Amount Including VAT_____________________________________ Less Agent’s >>>Commission_____________________________________<<< Let’s Assist_____________________________________ Nett Amount Including
+    BLADE:  Amount Including VAT_____________________________________ Less Agent’s >>>Commission<<< Let’s Assist_____________________________________ Nett Amount Including
+
+  DIFF [144]:
+    SOURCE: VAT_____________________________________ Less Agent’s Commission_____________________________________ Let’s >>>Assist_____________________________________<<< Nett Amount Including VAT to
+    BLADE:  VAT_____________________________________ Less Agent’s Commission_____________________________________ Let’s >>>Assist<<< Nett Amount Including VAT to
+
+  DIFF [145]:
+    SOURCE: Nett Amount Including VAT to >>>Owner_____________________________________ PAYMENTS<<< The parties hereby agree that
+    BLADE:  Nett Amount Including VAT to >>>Owner Payments<<< The parties hereby agree that
+
+  DIFF [146]:
+    SOURCE: agree that all payments due >>>shell<<< be made to the reOS
+    BLADE:  agree that all payments due >>>shall<<< be made to the reOS
+
+  DIFF [147]:
+    SOURCE: upon activation of the lease. >>>_____________________________________________________ LessorLesseeAgent ____________________________________________________ DateDateDate<<<
+    BLADE:  upon activation of the lease. >>>Lessor Lessee Agent Date: Date: Date: Version 5<<<
+
+  147 difference(s) found in commercial-lease-agreement-v5
+
+═══════════════════════════════════════
+         VERIFICATION SUMMARY
+═══════════════════════════════════════
+  ✗ commercial-lease-agreement-v5 — 147 difference(s)
+
+Total differences across all templates: 147

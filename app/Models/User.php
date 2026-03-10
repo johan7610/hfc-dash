@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Services\PermissionService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -69,6 +70,11 @@ class User extends Authenticatable
     {
         $override = session('view_as_role');
         return $override ?: ($this->role ?? 'agent');
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function effectiveBranchId(): ?int

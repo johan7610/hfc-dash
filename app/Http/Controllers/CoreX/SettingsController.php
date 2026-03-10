@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\CoreX;
 
 use App\Http\Controllers\Controller;
+use App\Models\Agency;
 use App\Models\AgentSocialAccount;
 use App\Models\ContactType;
 use App\Models\Designation;
@@ -13,6 +14,7 @@ use App\Models\PerformanceSetting;
 use App\Models\Rental\RentalDocumentType;
 use App\Models\Rental\RentalReminderSetting;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class SettingsController extends Controller
@@ -68,16 +70,14 @@ class SettingsController extends Controller
         $defaultWaMsg = "Hi {name}! 👋\n\nI've put together a personalised selection of properties that match your search criteria.\n\nView your property matches here:\n{link}\n\nFeel free to reach out if you'd like to arrange viewings or have any questions!";
         $data['matchesWaMessage'] = (string) PerformanceSetting::get('matches_wa_message', $defaultWaMsg);
 
-        // Agency Settings tab: Company / Performance Settings
+        // Agency Settings tab: Agency record + Performance Settings
         if ($user?->hasPermission('manage_performance_settings')) {
             $data['vatRate']         = (float)  PerformanceSetting::get('vat_rate', 15);
             $data['listingsPerSale'] = (float)  PerformanceSetting::get('listings_per_sale', 5);
-            $data['companyName']     = (string) PerformanceSetting::get('company_name', '');
-            $data['companyAddress']  = (string) PerformanceSetting::get('company_address', '');
-            $data['companyTel']      = (string) PerformanceSetting::get('company_tel', '');
-            $data['companyFfc']      = (string) PerformanceSetting::get('company_ffc', '');
-            $data['companyLogoUrl']  = (string) PerformanceSetting::get('company_logo_url', '');
         }
+
+        // Agency Settings tab: Company details from Agency model
+        $data['agency'] = Agency::where('slug', 'hfc-coastal')->first();
 
         return view('corex.settings', $data);
     }
@@ -191,5 +191,53 @@ class SettingsController extends Controller
         ]);
 
         return response()->json(['token' => $plaintext]);
+    }
+
+    // ── Agency Company Settings ───────────────────────────────────────────
+
+    public function updateAgency(Request $request)
+    {
+        abort_unless(auth()->user()?->hasPermission('manage_performance_settings'), 403);
+
+        $agency = Agency::where('slug', 'hfc-coastal')->firstOrFail();
+
+        $data = $request->validate([
+            'trading_name'     => ['nullable', 'string', 'max:255'],
+            'tagline'          => ['nullable', 'string', 'max:255'],
+            'address'          => ['nullable', 'string', 'max:500'],
+            'phone'            => ['nullable', 'string', 'max:255'],
+            'phone_secondary'  => ['nullable', 'string', 'max:255'],
+            'fax'              => ['nullable', 'string', 'max:255'],
+            'email'            => ['nullable', 'string', 'max:255'],
+            'reg_no'           => ['nullable', 'string', 'max:255'],
+            'vat_no'           => ['nullable', 'string', 'max:255'],
+            'ffc_no'           => ['nullable', 'string', 'max:255'],
+            'fic_no'           => ['nullable', 'string', 'max:255'],
+            'logo'             => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'remove_logo'      => ['nullable', 'boolean'],
+        ]);
+
+        $removeLogo = $data['remove_logo'] ?? false;
+        unset($data['logo'], $data['remove_logo']);
+
+        if ($removeLogo) {
+            if ($agency->logo_path) {
+                Storage::disk('public')->delete($agency->logo_path);
+            }
+            $data['logo_path'] = null;
+        } elseif ($request->hasFile('logo')) {
+            if ($agency->logo_path) {
+                Storage::disk('public')->delete($agency->logo_path);
+            }
+            $ext = $request->file('logo')->getClientOriginalExtension();
+            $path = $request->file('logo')->storeAs(
+                "agencies/{$agency->id}", "logo.{$ext}", 'public'
+            );
+            $data['logo_path'] = $path;
+        }
+
+        $agency->update($data);
+
+        return redirect()->back()->with('success', 'Company settings updated.');
     }
 }
