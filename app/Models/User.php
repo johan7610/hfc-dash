@@ -41,6 +41,7 @@ class User extends Authenticatable
         'fax',
         'ffc_number',
         'website',
+        'theme',
     ];
 
     protected $hidden = [

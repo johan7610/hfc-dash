@@ -19,7 +19,7 @@
     </head>
     <body class="font-sans antialiased">
         {{-- Mobile sidebar toggle --}}
-        <div x-data="{ sidebarOpen: false }" class="flex h-screen overflow-hidden bg-gray-100">
+        <div x-data="{ sidebarOpen: false }" class="flex h-screen overflow-hidden" style="background:var(--bg, #f4f6fb)">
 
             {{-- Mobile overlay --}}
             <div x-show="sidebarOpen" x-transition:enter="transition-opacity ease-linear duration-200"
@@ -38,19 +38,17 @@
             {{-- Main area --}}
             <div class="flex-1 flex flex-col overflow-hidden min-w-0">
                 {{-- Header --}}
-                <div class="flex items-center lg:hidden px-4 py-2 bg-white border-b border-gray-200">
-                    <button @click="sidebarOpen = true" type="button" class="text-gray-500 hover:text-gray-700">
+                <div class="flex items-center lg:hidden px-4 py-2" style="background:var(--surface, #fff); border-bottom:1px solid var(--border, rgba(0,0,0,0.07))">
+                    <button @click="sidebarOpen = true" type="button" style="color:var(--text-secondary, #4b5563)">
                         <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
                         </svg>
                     </button>
-                    <span class="ml-3 text-sm font-bold text-gray-900">CoreX <span class="text-[#00b4d8]">Os</span></span>
+                    <span class="ml-3 text-sm font-bold" style="color:var(--text-primary, #111827)">CoreX <span style="color:var(--brand-icon, #0ea5e9)">Os</span></span>
                 </div>
 
-                @include('layouts.corex-header')
-
                 {{-- Content --}}
-                <main class="flex-1 overflow-y-auto bg-gray-100 p-4 lg:p-6">
+                <main class="flex-1 overflow-y-auto p-4 lg:p-6" style="background:var(--bg, #f4f6fb)">
                     @hasSection('corex-content')
                         @yield('corex-content')
                     @else

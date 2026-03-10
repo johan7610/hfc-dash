@@ -2,65 +2,53 @@
 
 @section('corex-content')
 <style>
-/* ── Role Manager: dark-mode colour fixes ── */
-html.dark #rm-root .text-slate-800 { color: #eef0f5 !important; }
-html.dark #rm-root .text-slate-700 { color: #eef0f5 !important; }
-html.dark #rm-root .text-slate-600 { color: #8890a4 !important; }
-html.dark #rm-root .text-slate-500 { color: #8890a4 !important; }
-html.dark #rm-root .text-slate-400 { color: #545b6e !important; }
-html.dark #rm-root [style*="color:#0b2a4a"] { color: #eef0f5 !important; }
-html.dark #rm-root .bg-white { background: #13161d !important; }
-html.dark #rm-root [style*="background:#f8fafc"] { background: #1a1e28 !important; }
-html.dark #rm-root [style*="background:#f1f5f9"] { background: #1a1e28 !important; }
-html.dark #rm-root [style*="background:#fef2f2"] { background: rgba(220,38,38,0.12) !important; }
-html.dark #rm-root .border-slate-200 { border-color: rgba(255,255,255,0.06) !important; }
-html.dark #rm-root .border-slate-100 { border-color: rgba(255,255,255,0.04) !important; }
-html.dark #rm-root .divide-slate-100 > * + * { border-color: rgba(255,255,255,0.04) !important; }
-html.dark #rm-root .hover\:bg-slate-50:hover { background: #1a1e28 !important; }
-html.dark #rm-root .hover\:bg-slate-100:hover { background: #1a1e28 !important; }
-html.dark #rm-root input[type="text"],
-html.dark #rm-root input[type="number"],
-html.dark #rm-root textarea,
-html.dark #rm-root select { background: #1a1e28 !important; color: #eef0f5 !important; border-color: rgba(255,255,255,0.12) !important; }
-html.dark #rm-root option { background: #1a1e28; color: #eef0f5; }
-html.dark #rm-root input::placeholder,
-html.dark #rm-root textarea::placeholder { color: #545b6e !important; }
-html.dark #rm-root input:disabled { background: #0d0f14 !important; color: #545b6e !important; }
-html.dark #rm-root .text-slate-600.border-slate-200,
-html.dark #rm-root .border-slate-200.text-slate-600 { border-color: rgba(255,255,255,0.08) !important; color: #8890a4 !important; }
-html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
+/* ── Role Manager: scoped component styles ── */
+#rm-root .rm-scope-btn { transition: all 300ms; }
+#rm-root .rm-scope-btn[data-active="true"] { color: #fff; font-weight: 600; }
+#rm-root .rm-scope-btn[data-scope="none"][data-active="true"] { background: #475569; }
+#rm-root .rm-scope-btn[data-scope="own"][data-active="true"] { background: #2563eb; }
+#rm-root .rm-scope-btn[data-scope="branch"][data-active="true"] { background: #d97706; }
+#rm-root .rm-scope-btn[data-scope="all"][data-active="true"] { background: #16a34a; }
 </style>
 <div id="rm-root" x-data="roleManager()">
 
-    <div x-cloak class="px-4 lg:px-6 space-y-4 pb-6">
+    <div x-cloak class="px-4 lg:px-6 space-y-5 pb-6">
+
+        {{-- Page header --}}
+        <div class="rounded-md px-6 py-5 flex items-center justify-between" style="background:var(--brand-default,#0b2a4a);">
+            <div>
+                <h2 class="text-xl font-bold text-white tracking-tight">Role Manager</h2>
+                <p class="text-sm mt-0.5" style="color:rgba(255,255,255,0.55);">Manage roles, permissions & user assignments.</p>
+            </div>
+        </div>
 
         {{-- Tabs --}}
-        <div class="flex gap-1 rounded-xl p-1 w-fit" style="background:#f1f5f9;">
+        <div class="flex gap-1 rounded-md p-1 w-fit" style="background:var(--surface-2);">
             <button type="button" @click="activeTab = 'permissions'"
-                    :style="activeTab === 'permissions' ? ('background:' + (dark ? '#4f7cff' : '#0b2a4a') + ';color:#fff;') : ('background:transparent;color:' + (dark ? '#eef0f5' : '#64748b'))"
-                    class="px-4 py-2 rounded-lg text-sm font-medium transition-all">
+                    class="px-4 py-2 rounded-md text-sm font-medium transition-all duration-300"
+                    :style="activeTab === 'permissions' ? 'background:var(--brand-button,#0ea5e9);color:#fff;' : 'background:transparent;color:var(--text-secondary);'">
                 Permissions Matrix
             </button>
             <button type="button" @click="activeTab = 'users'"
-                    :style="activeTab === 'users' ? ('background:' + (dark ? '#4f7cff' : '#0b2a4a') + ';color:#fff;') : ('background:transparent;color:' + (dark ? '#eef0f5' : '#64748b'))"
-                    class="px-4 py-2 rounded-lg text-sm font-medium transition-all">
+                    class="px-4 py-2 rounded-md text-sm font-medium transition-all duration-300"
+                    :style="activeTab === 'users' ? 'background:var(--brand-button,#0ea5e9);color:#fff;' : 'background:transparent;color:var(--text-secondary);'">
                 User Roles
             </button>
             <button type="button" @click="activeTab = 'roles'"
-                    :style="activeTab === 'roles' ? ('background:' + (dark ? '#4f7cff' : '#0b2a4a') + ';color:#fff;') : ('background:transparent;color:' + (dark ? '#eef0f5' : '#64748b'))"
-                    class="px-4 py-2 rounded-lg text-sm font-medium transition-all">
+                    class="px-4 py-2 rounded-md text-sm font-medium transition-all duration-300"
+                    :style="activeTab === 'roles' ? 'background:var(--brand-button,#0ea5e9);color:#fff;' : 'background:transparent;color:var(--text-secondary);'">
                 Roles
             </button>
         </div>
 
         @if(session('success'))
-            <div class="rounded-xl border px-4 py-3 text-sm font-medium" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534;">
+            <div class="rounded-md border px-4 py-3 text-sm font-medium" style="border-color:#bbf7d0; background:#f0fdf4; color:#166534;">
                 {{ session('success') }}
             </div>
         @endif
 
         @if($errors->any())
-            <div class="rounded-xl border px-4 py-3 text-sm font-medium" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;">
+            <div class="rounded-md border px-4 py-3 text-sm font-medium" style="border-color:#fecaca; background:#fef2f2; color:#991b1b;">
                 @foreach($errors->all() as $error)
                     <div>{{ $error }}</div>
                 @endforeach
@@ -76,15 +64,15 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
 
                 {{-- Role switcher --}}
                 <div class="flex items-center gap-3 mb-4 flex-wrap">
-                    <label class="text-xs font-semibold text-slate-600">Editing role:</label>
+                    <label class="text-xs font-semibold" style="color:var(--text-muted);">Editing role:</label>
                     <div class="flex gap-1 flex-wrap">
                         @foreach($roles as $role)
                         <button type="button"
                                 @click="selectedRole = '{{ $role->name }}'"
                                 :style="selectedRole === '{{ $role->name }}'
                                     ? 'background:{{ $role->color }};color:#fff;'
-                                    : ('background:' + (dark ? '#1a1e28' : '#f1f5f9') + ';color:' + (dark ? '#eef0f5' : '#64748b'))"
-                                class="px-3 py-1.5 rounded-full text-xs font-semibold transition-all">
+                                    : 'background:var(--surface-2);color:var(--text-secondary);'"
+                                class="px-3 py-1.5 rounded-md text-xs font-semibold transition-all duration-300">
                             {{ $role->label }}
                             @if($role->is_owner)
                                 <span class="text-[10px] opacity-75">(all)</span>
@@ -93,15 +81,15 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
                         @endforeach
                     </div>
                     <div class="flex items-center gap-2 ml-auto">
-                        <label class="text-xs text-slate-500">Copy from:</label>
+                        <label class="text-xs" style="color:var(--text-muted);">Copy from:</label>
                         <select x-model="copyFromRole"
-                                class="text-xs rounded-lg border border-slate-300 bg-white text-slate-800 py-1.5 px-2 focus:outline-none focus:border-[#00b4d8]">
+                                class="text-xs rounded-md py-1.5 px-2 transition-all duration-300"
+                                style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); outline:none;">
                             <option value="">— select role —</option>
                             @foreach($roles as $role)
                                 @if(!$role->is_owner)
                                 <option value="{{ $role->name }}"
-                                        x-bind:disabled="selectedRole === '{{ $role->name }}'"
-                                        x-bind:class="selectedRole === '{{ $role->name }}' ? 'text-slate-300' : ''">
+                                        x-bind:disabled="selectedRole === '{{ $role->name }}'">
                                     {{ $role->label }}
                                 </option>
                                 @endif
@@ -109,9 +97,7 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
                         </select>
                         <button type="button" @click="copyPermissions()"
                                 :disabled="!copyFromRole"
-                                class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                                style="background:#0b2a4a;"
-                                onmouseover="this.style.background='#00b4d8'" onmouseout="this.style.background='#0b2a4a'">
+                                class="corex-btn-primary px-3 py-1.5 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed">
                             Copy
                         </button>
                     </div>
@@ -121,24 +107,24 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
                 <div class="flex gap-4 items-start">
 
                     {{-- LEFT: Vertical feature tabs --}}
-                    <div class="w-52 flex-shrink-0 rounded-xl border border-slate-200 bg-white overflow-y-auto sticky top-4" style="max-height:calc(100vh - 8rem);">
+                    <div class="w-52 flex-shrink-0 rounded-md overflow-y-auto sticky top-4" style="background:var(--surface); border:1px solid var(--border); max-height:calc(100vh - 8rem);">
                         @foreach($matrixSections as $sectionLabel => $modules)
                             <div class="px-3 pt-3 pb-1">
-                                <p class="text-[10px] font-bold uppercase tracking-wider" style="color:#0b2a4a;">{{ $sectionLabel }}</p>
+                                <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--brand-icon,#0ea5e9);">{{ $sectionLabel }}</p>
                             </div>
                             @foreach($modules as $moduleKey => $moduleData)
                             <div class="px-2 pb-1">
                                 <button type="button"
                                         @click="selectedFeature = '{{ $moduleKey }}'"
-                                        :style="selectedFeature === '{{ $moduleKey }}' ? ('background:' + (dark ? '#4f7cff' : '#0b2a4a') + ';color:#fff;') : ('color:' + (dark ? '#eef0f5' : '#475569'))"
-                                        class="w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-all hover:bg-slate-100"
-                                        :class="selectedFeature === '{{ $moduleKey }}' ? '' : 'hover:bg-slate-100'">
+                                        :style="selectedFeature === '{{ $moduleKey }}' ? 'background:var(--brand-button,#0ea5e9);color:#fff;' : 'color:var(--text-secondary);'"
+                                        class="w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-all duration-300"
+                                        :class="selectedFeature !== '{{ $moduleKey }}' ? 'hover:opacity-80' : ''">
                                     {{ $moduleData['label'] }}
                                 </button>
                             </div>
                             @endforeach
                             @if(!$loop->last)
-                            <div class="mx-3 my-1 border-t border-slate-100"></div>
+                            <div class="mx-3 my-1" style="border-top:1px solid var(--border);"></div>
                             @endif
                         @endforeach
                         <div class="h-2"></div>
@@ -147,8 +133,8 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
                     {{-- RIGHT: Permission detail for selected feature --}}
                     <div class="flex-1 min-w-0 overflow-y-auto sticky top-4" style="max-height:calc(100vh - 8rem);">
                         @if($permissions->isEmpty())
-                            <div class="rounded-xl border border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-400">
-                                No permissions defined. Run: <code class="font-mono bg-slate-100 px-1 rounded">php artisan db:seed --class=NexusPermissionSeeder</code>
+                            <div class="rounded-md px-5 py-12 text-center text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-muted);">
+                                No permissions defined. Run: <code class="font-mono px-1 rounded-md" style="background:var(--surface-2);">php artisan db:seed --class=NexusPermissionSeeder</code>
                             </div>
                         @endif
 
@@ -167,27 +153,25 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
                                 $fViewKey = $fActionMap['view']->key ?? null;
                             @endphp
                             <div x-show="selectedFeature === '{{ $moduleKey }}'">
-                                <div class="rounded-xl border border-slate-200 bg-white overflow-hidden">
-                                    <div class="px-5 py-3 border-b border-slate-200 flex items-center justify-between" style="background:#f8fafc;">
+                                <div class="rounded-md overflow-hidden" style="background:var(--surface); border:1px solid var(--border);">
+                                    <div class="px-5 py-3 flex items-center justify-between" style="background:var(--surface-2); border-bottom:1px solid var(--border);">
                                         <div>
-                                            <h3 class="font-semibold text-sm" style="color:#0b2a4a;">{{ $moduleData['label'] }}</h3>
-                                            <p class="text-xs text-slate-400 mt-0.5">Editing permissions for: <span x-text="selectedRoleLabel()" style="color:#00b4d8;" class="font-medium"></span></p>
+                                            <h3 class="font-semibold text-sm" style="color:var(--text-primary);">{{ $moduleData['label'] }}</h3>
+                                            <p class="text-xs mt-0.5" style="color:var(--text-muted);">Editing permissions for: <span x-text="selectedRoleLabel()" style="color:var(--brand-icon,#0ea5e9);" class="font-medium"></span></p>
                                         </div>
                                         <button type="button" @click="saveMatrix()"
-                                                class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-colors"
-                                                style="background:#0b2a4a;"
-                                                onmouseover="this.style.background='#00b4d8'" onmouseout="this.style.background='#0b2a4a'">
+                                                class="corex-btn-primary px-3 py-1.5 text-xs font-semibold">
                                             Save Changes
                                         </button>
                                     </div>
-                                    <div class="divide-y divide-slate-100">
+                                    <div>
 
                                         {{-- Access permissions (menu / section visibility) --}}
                                         @foreach($moduleData['access'] as $perm)
-                                        <div class="px-5 py-4 flex items-center justify-between gap-4">
+                                        <div class="px-5 py-4 flex items-center justify-between gap-4" style="border-bottom:1px solid var(--border);">
                                             <div>
-                                                <p class="text-sm font-medium text-slate-700">{{ $perm->label }}</p>
-                                                <p class="text-xs text-slate-400 mt-0.5">Menu / section visibility</p>
+                                                <p class="text-sm font-medium" style="color:var(--text-primary);">{{ $perm->label }}</p>
+                                                <p class="text-xs mt-0.5" style="color:var(--text-muted);">Menu / section visibility</p>
                                             </div>
                                             <div class="flex-shrink-0">
                                                 @foreach($roles as $role)
@@ -195,16 +179,16 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
                                                     <label class="inline-flex items-center gap-2 {{ $role->is_owner ? '' : 'cursor-pointer' }}">
                                                         @if($role->is_owner)
                                                             <input type="checkbox" checked disabled
-                                                                   class="w-5 h-5 rounded border-slate-300 opacity-50 cursor-not-allowed"
-                                                                   style="accent-color:#0b2a4a;">
+                                                                   class="w-5 h-5 rounded-md opacity-50 cursor-not-allowed"
+                                                                   style="accent-color:var(--brand-button,#0ea5e9); border-color:var(--border);">
                                                         @else
                                                             <input type="checkbox"
                                                                    x-model="matrix['{{ $perm->key }}']['{{ $role->name }}']"
                                                                    @change="dirty = true"
-                                                                   class="w-5 h-5 rounded border-slate-300 cursor-pointer"
-                                                                   style="accent-color:#00b4d8;">
+                                                                   class="w-5 h-5 rounded-md cursor-pointer"
+                                                                   style="accent-color:var(--brand-button,#0ea5e9); border-color:var(--border);">
                                                         @endif
-                                                        <span class="text-xs text-slate-500" x-text="matrix['{{ $perm->key }}']?.['{{ $role->name }}'] ? 'Enabled' : 'Disabled'"></span>
+                                                        <span class="text-xs" style="color:var(--text-muted);" x-text="matrix['{{ $perm->key }}']?.['{{ $role->name }}'] ? 'Enabled' : 'Disabled'"></span>
                                                     </label>
                                                 </template>
                                                 @endforeach
@@ -217,26 +201,29 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
 
                                             {{-- Data Scope --}}
                                             @if($fViewKey)
-                                            <div class="px-5 py-4 flex items-center justify-between gap-4">
+                                            <div class="px-5 py-4 flex items-center justify-between gap-4" style="border-bottom:1px solid var(--border);">
                                                 <div>
-                                                    <p class="text-sm font-medium text-slate-700">Data Scope</p>
-                                                    <p class="text-xs text-slate-400 mt-0.5">What records can this role see?</p>
+                                                    <p class="text-sm font-medium" style="color:var(--text-primary);">Data Scope</p>
+                                                    <p class="text-xs mt-0.5" style="color:var(--text-muted);">What records can this role see?</p>
                                                 </div>
                                                 <div class="flex-shrink-0">
                                                     @foreach($roles as $role)
                                                     <template x-if="selectedRole === '{{ $role->name }}'">
                                                         <div>
                                                             @if($role->is_owner)
-                                                                <span class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-500 bg-slate-100">All (Owner)</span>
+                                                                <span class="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-semibold" style="background:var(--surface-2); color:var(--text-muted);">All (Owner)</span>
                                                             @elseif($fIsShared)
-                                                                <span class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-600 bg-emerald-50">Shared — all users</span>
+                                                                <span class="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-semibold text-emerald-600 bg-emerald-50">Shared — all users</span>
                                                             @else
-                                                                <div class="inline-flex rounded-lg overflow-hidden border border-slate-200">
+                                                                <div class="inline-flex rounded-md overflow-hidden" style="border:1px solid var(--border);">
                                                                     @foreach(['none','own','branch','all'] as $scopeVal)
-                                                                    <label class="inline-flex items-center cursor-pointer px-3 py-1.5 transition-colors text-xs border-r border-slate-200 last:border-r-0 whitespace-nowrap"
-                                                                           :class="scopeMatrix['{{ $fViewKey }}']?.['{{ $role->name }}'] === '{{ $scopeVal }}'
-                                                                               ? '{{ $scopeVal === 'none' ? 'bg-slate-700 text-white font-semibold' : ($scopeVal === 'own' ? 'bg-blue-600 text-white font-semibold' : ($scopeVal === 'branch' ? 'bg-amber-500 text-white font-semibold' : 'bg-emerald-600 text-white font-semibold')) }}'
-                                                                               : 'bg-white text-slate-500 hover:bg-slate-50'">
+                                                                    <label class="rm-scope-btn inline-flex items-center cursor-pointer px-3 py-1.5 text-xs whitespace-nowrap"
+                                                                           style="border-right:1px solid var(--border);"
+                                                                           :data-active="scopeMatrix['{{ $fViewKey }}']?.['{{ $role->name }}'] === '{{ $scopeVal }}' ? 'true' : 'false'"
+                                                                           data-scope="{{ $scopeVal }}"
+                                                                           :style="scopeMatrix['{{ $fViewKey }}']?.['{{ $role->name }}'] === '{{ $scopeVal }}'
+                                                                               ? ''
+                                                                               : 'background:var(--surface);color:var(--text-muted);'">
                                                                         <input type="radio"
                                                                                name="scope_ui_{{ $fViewKey }}_{{ $role->name }}"
                                                                                value="{{ $scopeVal }}"
@@ -259,10 +246,10 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
                                             @foreach($fStandardActions as $action)
                                             @if(isset($fActionMap[$action]))
                                             @php $fAp = $fActionMap[$action]; @endphp
-                                            <div class="px-5 py-4 flex items-center justify-between gap-4">
+                                            <div class="px-5 py-4 flex items-center justify-between gap-4" style="border-bottom:1px solid var(--border);">
                                                 <div>
-                                                    <p class="text-sm font-medium text-slate-700">{{ ucfirst($action) }}</p>
-                                                    <p class="text-xs text-slate-400 mt-0.5">Can {{ strtolower($action) }} records in this module</p>
+                                                    <p class="text-sm font-medium" style="color:var(--text-primary);">{{ ucfirst($action) }}</p>
+                                                    <p class="text-xs mt-0.5" style="color:var(--text-muted);">Can {{ strtolower($action) }} records in this module</p>
                                                 </div>
                                                 <div class="flex-shrink-0">
                                                     @foreach($roles as $role)
@@ -270,17 +257,17 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
                                                         <label class="inline-flex items-center gap-2 {{ $role->is_owner ? '' : 'cursor-pointer' }}">
                                                             @if($role->is_owner)
                                                                 <input type="checkbox" checked disabled
-                                                                       class="w-5 h-5 rounded border-slate-300 opacity-50 cursor-not-allowed"
-                                                                       style="accent-color:#0b2a4a;">
+                                                                       class="w-5 h-5 rounded-md opacity-50 cursor-not-allowed"
+                                                                       style="accent-color:var(--brand-button,#0ea5e9); border-color:var(--border);">
                                                             @else
                                                                 <input type="checkbox"
                                                                        x-model="matrix['{{ $fAp->key }}']['{{ $role->name }}']"
                                                                        @change="handleActionChange('{{ $moduleKey }}', '{{ $action }}', '{{ $role->name }}')"
-                                                                       class="w-5 h-5 rounded border-slate-300 cursor-pointer"
-                                                                       style="accent-color:#00b4d8;"
+                                                                       class="w-5 h-5 rounded-md cursor-pointer"
+                                                                       style="accent-color:var(--brand-button,#0ea5e9); border-color:var(--border);"
                                                                        :disabled="scopeMatrix['{{ $fViewKey ?? '' }}']?.['{{ $role->name }}'] === 'none'">
                                                             @endif
-                                                            <span class="text-xs text-slate-500" x-text="matrix['{{ $fAp->key }}']?.['{{ $role->name }}'] ? 'Enabled' : 'Disabled'"></span>
+                                                            <span class="text-xs" style="color:var(--text-muted);" x-text="matrix['{{ $fAp->key }}']?.['{{ $role->name }}'] ? 'Enabled' : 'Disabled'"></span>
                                                         </label>
                                                     </template>
                                                     @endforeach
@@ -292,10 +279,10 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
                                             {{-- Other actions (manage, send, etc.) --}}
                                             @foreach($fOtherActions as $otherKey)
                                             @php $fOp = $fActionMap[$otherKey]; @endphp
-                                            <div class="px-5 py-4 flex items-center justify-between gap-4">
+                                            <div class="px-5 py-4 flex items-center justify-between gap-4" style="border-bottom:1px solid var(--border);">
                                                 <div>
-                                                    <p class="text-sm font-medium text-slate-700">{{ ucfirst($otherKey) }}</p>
-                                                    <p class="text-xs text-slate-400 mt-0.5">{{ $fOp->label }}</p>
+                                                    <p class="text-sm font-medium" style="color:var(--text-primary);">{{ ucfirst($otherKey) }}</p>
+                                                    <p class="text-xs mt-0.5" style="color:var(--text-muted);">{{ $fOp->label }}</p>
                                                 </div>
                                                 <div class="flex-shrink-0">
                                                     @foreach($roles as $role)
@@ -303,16 +290,16 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
                                                         <label class="inline-flex items-center gap-2 {{ $role->is_owner ? '' : 'cursor-pointer' }}">
                                                             @if($role->is_owner)
                                                                 <input type="checkbox" checked disabled
-                                                                       class="w-5 h-5 rounded border-slate-300 opacity-50 cursor-not-allowed"
-                                                                       style="accent-color:#0b2a4a;">
+                                                                       class="w-5 h-5 rounded-md opacity-50 cursor-not-allowed"
+                                                                       style="accent-color:var(--brand-button,#0ea5e9); border-color:var(--border);">
                                                             @else
                                                                 <input type="checkbox"
                                                                        x-model="matrix['{{ $fOp->key }}']['{{ $role->name }}']"
                                                                        @change="dirty = true"
-                                                                       class="w-5 h-5 rounded border-slate-300 cursor-pointer"
-                                                                       style="accent-color:#00b4d8;">
+                                                                       class="w-5 h-5 rounded-md cursor-pointer"
+                                                                       style="accent-color:var(--brand-button,#0ea5e9); border-color:var(--border);">
                                                             @endif
-                                                            <span class="text-xs text-slate-500" x-text="matrix['{{ $fOp->key }}']?.['{{ $role->name }}'] ? 'Enabled' : 'Disabled'"></span>
+                                                            <span class="text-xs" style="color:var(--text-muted);" x-text="matrix['{{ $fOp->key }}']?.['{{ $role->name }}'] ? 'Enabled' : 'Disabled'"></span>
                                                         </label>
                                                     </template>
                                                     @endforeach
@@ -323,7 +310,7 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
                                         @endif
 
                                         @if(count($moduleData['access']) === 0 && count($moduleData['actions']) === 0)
-                                        <div class="px-5 py-8 text-center text-sm text-slate-400">
+                                        <div class="px-5 py-8 text-center text-sm" style="color:var(--text-muted);">
                                             No permissions defined for this module.
                                         </div>
                                         @endif
@@ -365,26 +352,26 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
              TAB 2: User Roles
         ───────────────────────────────────────────── --}}
         <div x-show="activeTab === 'users'" x-cloak>
-            <div class="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-                <div class="px-5 py-3 border-b border-slate-200 flex items-center justify-between" style="background:#f8fafc;">
-                    <h3 class="font-semibold text-sm" style="color:#0b2a4a;">User Roles</h3>
-                    <span class="text-xs text-slate-400">{{ $users->count() }} users</span>
+            <div class="rounded-md overflow-hidden" style="background:var(--surface); border:1px solid var(--border);">
+                <div class="px-5 py-3 flex items-center justify-between" style="background:var(--surface-2); border-bottom:1px solid var(--border);">
+                    <h3 class="font-semibold text-sm" style="color:var(--text-primary);">User Roles</h3>
+                    <span class="text-xs" style="color:var(--text-muted);">{{ $users->count() }} users</span>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="min-w-full text-sm">
                         <thead>
-                            <tr class="border-b" style="background:#f8fafc;">
-                                <th class="text-left py-3 px-4 font-semibold text-xs uppercase tracking-wider" style="color:#0b2a4a;">Name</th>
-                                <th class="text-left py-3 px-4 font-semibold text-xs uppercase tracking-wider" style="color:#0b2a4a;">Email</th>
-                                <th class="text-left py-3 px-4 font-semibold text-xs uppercase tracking-wider" style="color:#0b2a4a;">Agency</th>
-                                <th class="text-left py-3 px-4 font-semibold text-xs uppercase tracking-wider" style="color:#0b2a4a;">Branch</th>
-                                <th class="text-left py-3 px-4 font-semibold text-xs uppercase tracking-wider" style="color:#0b2a4a;">Current Role</th>
+                            <tr style="background:var(--surface-2); border-bottom:1px solid var(--border);">
+                                <th class="text-left py-3 px-4 font-semibold text-xs uppercase tracking-wider" style="color:var(--text-muted);">Name</th>
+                                <th class="text-left py-3 px-4 font-semibold text-xs uppercase tracking-wider" style="color:var(--text-muted);">Email</th>
+                                <th class="text-left py-3 px-4 font-semibold text-xs uppercase tracking-wider" style="color:var(--text-muted);">Agency</th>
+                                <th class="text-left py-3 px-4 font-semibold text-xs uppercase tracking-wider" style="color:var(--text-muted);">Branch</th>
+                                <th class="text-left py-3 px-4 font-semibold text-xs uppercase tracking-wider" style="color:var(--text-muted);">Current Role</th>
                                 @if(auth()->user()->hasPermission('change_user_roles'))
-                                    <th class="text-left py-3 px-4 font-semibold text-xs uppercase tracking-wider" style="color:#0b2a4a;">Change Role</th>
+                                    <th class="text-left py-3 px-4 font-semibold text-xs uppercase tracking-wider" style="color:var(--text-muted);">Change Role</th>
                                 @endif
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-slate-100">
+                        <tbody>
                             @foreach($users as $u)
                                 @php
                                     $userRoleModel = $roles->firstWhere('name', $u->role);
@@ -393,13 +380,14 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
                                     $branchName  = $branches->firstWhere('id', $u->branch_id)?->name ?? '—';
                                     $agencyName  = $agencies->firstWhere('id', $u->agency_id)?->name ?? '—';
                                 @endphp
-                                <tr class="hover:bg-slate-50 transition-colors">
-                                    <td class="py-2.5 px-4 font-medium text-slate-800">{{ $u->name }}</td>
-                                    <td class="py-2.5 px-4 text-slate-500">{{ $u->email }}</td>
-                                    <td class="py-2.5 px-4 text-slate-500 text-xs">{{ $agencyName }}</td>
-                                    <td class="py-2.5 px-4 text-slate-500 text-xs">{{ $branchName }}</td>
+                                <tr class="transition-all duration-300" style="border-bottom:1px solid var(--border);"
+                                    onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
+                                    <td class="py-2.5 px-4 font-medium" style="color:var(--text-primary);">{{ $u->name }}</td>
+                                    <td class="py-2.5 px-4" style="color:var(--text-secondary);">{{ $u->email }}</td>
+                                    <td class="py-2.5 px-4 text-xs" style="color:var(--text-secondary);">{{ $agencyName }}</td>
+                                    <td class="py-2.5 px-4 text-xs" style="color:var(--text-secondary);">{{ $branchName }}</td>
                                     <td class="py-2.5 px-4">
-                                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold text-white"
+                                        <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold text-white"
                                               style="background:{{ $badgeBg }};">
                                             {{ $roleLabel }}
                                         </span>
@@ -411,8 +399,8 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
                                                 @csrf
                                                 <input type="hidden" name="user_id" value="{{ $u->id }}">
                                                 <select name="role"
-                                                        class="text-xs rounded-lg border border-slate-300 bg-white text-slate-800 py-1.5 px-2 focus:outline-none focus:border-[#00b4d8]"
-                                                        style="max-width:160px;">
+                                                        class="text-xs rounded-md py-1.5 px-2 transition-all duration-300"
+                                                        style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); outline:none; max-width:160px;">
                                                     @foreach($roles as $role)
                                                         @if($role->is_owner && !auth()->user()->isOwnerRole())
                                                             @continue
@@ -423,9 +411,7 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
                                                     @endforeach
                                                 </select>
                                                 <button type="submit"
-                                                        class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-colors"
-                                                        style="background:#0b2a4a;"
-                                                        onmouseover="this.style.background='#00b4d8'" onmouseout="this.style.background='#0b2a4a'">
+                                                        class="corex-btn-primary px-3 py-1.5 text-xs font-semibold">
                                                     Save
                                                 </button>
                                             </form>
@@ -443,54 +429,55 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
              TAB 3: Roles
         ───────────────────────────────────────────── --}}
         <div x-show="activeTab === 'roles'" x-cloak>
-            <div class="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-                <div class="px-5 py-3 border-b border-slate-200 flex items-center justify-between" style="background:#f8fafc;">
+            <div class="rounded-md overflow-hidden" style="background:var(--surface); border:1px solid var(--border);">
+                <div class="px-5 py-3 flex items-center justify-between" style="background:var(--surface-2); border-bottom:1px solid var(--border);">
                     <div>
-                        <h3 class="font-semibold text-sm" style="color:#0b2a4a;">Roles</h3>
-                        <p class="text-xs text-slate-400 mt-0.5">{{ $roles->count() }} roles defined</p>
+                        <h3 class="font-semibold text-sm" style="color:var(--text-primary);">Roles</h3>
+                        <p class="text-xs mt-0.5" style="color:var(--text-muted);">{{ $roles->count() }} roles defined</p>
                     </div>
                     <button type="button" @click="openAddRole()"
-                            class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-colors"
-                            style="background:#0b2a4a;"
-                            onmouseover="this.style.background='#00b4d8'" onmouseout="this.style.background='#0b2a4a'">
+                            class="corex-btn-primary px-3 py-1.5 text-xs font-semibold">
                         + Add New Role
                     </button>
                 </div>
-                <div class="divide-y divide-slate-100">
+                <div>
                     @foreach($roles as $role)
-                    <div class="px-5 py-4 flex items-center gap-4 hover:bg-slate-50 transition-colors">
-                        <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold text-white min-w-[100px] justify-center"
+                    <div class="px-5 py-4 flex items-center gap-4 transition-all duration-300" style="border-bottom:1px solid var(--border);"
+                         onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
+                        <span class="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-semibold text-white min-w-[100px] justify-center"
                               style="background:{{ $role->color }};">
                             {{ $role->label }}
                         </span>
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center gap-2">
-                                <span class="text-xs font-mono text-slate-400">{{ $role->name }}</span>
+                                <span class="text-xs font-mono" style="color:var(--text-muted);">{{ $role->name }}</span>
                                 @if($role->is_owner)
-                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-100 text-amber-700">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
                                         OWNER
                                     </span>
                                 @endif
                             </div>
                             @if($role->description)
-                                <p class="text-xs text-slate-500 mt-0.5">{{ $role->description }}</p>
+                                <p class="text-xs mt-0.5" style="color:var(--text-secondary);">{{ $role->description }}</p>
                             @endif
                         </div>
                         <div class="text-center px-3">
-                            <div class="text-lg font-bold" style="color:#0b2a4a;">{{ $role->users_count }}</div>
-                            <div class="text-[10px] text-slate-400 uppercase tracking-wider">Users</div>
+                            <div class="text-lg font-bold" style="color:var(--brand-icon,#0ea5e9);">{{ $role->users_count }}</div>
+                            <div class="text-[10px] uppercase tracking-wider" style="color:var(--text-muted);">Users</div>
                         </div>
                         <div class="flex items-center gap-2">
                             <button type="button"
                                     @click="openEditRole({{ $role->id }}, {{ Js::from($role->only('name','label','description','color','sort_order','is_owner','can_be_deleted')) }})"
-                                    class="px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">
+                                    class="px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-300"
+                                    style="border:1px solid var(--border); color:var(--text-secondary);"
+                                    onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
                                 Edit
                             </button>
                             @if(!$role->is_owner && $role->can_be_deleted)
                             <button type="button"
                                     @click="openDeleteRole({{ $role->id }}, {{ Js::from($role->label) }}, {{ $role->users_count }})"
-                                    class="px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50 transition-colors">
+                                    class="px-3 py-1.5 rounded-md text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50 transition-all duration-300">
                                 Delete
                             </button>
                             @endif
@@ -511,9 +498,9 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
          @click.self="showRoleModal = false"
          x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
          x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
-        <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 overflow-hidden" @click.stop>
-            <div class="px-6 py-4 border-b border-slate-200" style="background:#f8fafc;">
-                <h3 class="font-semibold text-sm" style="color:#0b2a4a;" x-text="editRoleId ? 'Edit Role' : 'Add New Role'"></h3>
+        <div class="rounded-md shadow-xl w-full max-w-lg mx-4 overflow-hidden" style="background:var(--surface);" @click.stop>
+            <div class="px-6 py-4" style="background:var(--surface-2); border-bottom:1px solid var(--border);">
+                <h3 class="font-semibold text-sm" style="color:var(--text-primary);" x-text="editRoleId ? 'Edit Role' : 'Add New Role'"></h3>
             </div>
             <form :action="editRoleId ? '{{ url('corex/role-manager/roles') }}/' + editRoleId : '{{ route('corex.role-manager.roles.store') }}'"
                   method="POST" class="p-6 space-y-4">
@@ -524,31 +511,34 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
 
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">Label <span class="text-red-500">*</span></label>
+                        <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Label <span class="text-red-500">*</span></label>
                         <input type="text" name="label" x-model="roleForm.label"
                                @input="if(!editRoleId) roleForm.name = roleForm.label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')"
-                               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-[#00b4d8]"
+                               class="w-full rounded-md px-3 py-2 text-sm transition-all duration-300"
+                               style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); outline:none;"
                                placeholder="Office Admin" required>
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">Slug</label>
+                        <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Slug</label>
                         <input type="text" name="name" x-model="roleForm.name"
                                :disabled="editRoleId !== null"
-                               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-[#00b4d8] disabled:bg-slate-100 disabled:text-slate-400 font-mono"
+                               class="w-full rounded-md px-3 py-2 text-sm font-mono transition-all duration-300 disabled:opacity-50"
+                               style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); outline:none;"
                                placeholder="office_admin">
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1">Description</label>
+                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Description</label>
                     <textarea name="description" x-model="roleForm.description" rows="2"
-                              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-[#00b4d8]"
+                              class="w-full rounded-md px-3 py-2 text-sm transition-all duration-300"
+                              style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); outline:none;"
                               placeholder="Can manage office operations..."></textarea>
                 </div>
 
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">Colour</label>
+                        <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Colour</label>
                         <div class="flex gap-2 flex-wrap">
                             @php
                                 $colorPalette = ['#0d9488','#0b2a4a','#00b4d8','#0891b2','#16a34a','#dc2626','#9333ea','#ea580c','#64748b','#475569'];
@@ -556,37 +546,39 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
                             @foreach($colorPalette as $c)
                             <button type="button"
                                     @click="roleForm.color = '{{ $c }}'"
-                                    :class="roleForm.color === '{{ $c }}' ? 'ring-2 ring-offset-1 ring-slate-800' : ''"
-                                    class="w-7 h-7 rounded-full transition-all"
+                                    :class="roleForm.color === '{{ $c }}' ? 'ring-2 ring-offset-1' : ''"
+                                    class="w-7 h-7 rounded-md transition-all duration-300"
+                                    :style="roleForm.color === '{{ $c }}' ? 'background:{{ $c }};ring-color:var(--text-primary);' : 'background:{{ $c }};'"
                                     style="background:{{ $c }};"></button>
                             @endforeach
                         </div>
                         <input type="hidden" name="color" x-model="roleForm.color">
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">Sort Order</label>
+                        <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Sort Order</label>
                         <input type="number" name="sort_order" x-model="roleForm.sort_order"
-                               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-[#00b4d8]"
+                               class="w-full rounded-md px-3 py-2 text-sm transition-all duration-300"
+                               style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); outline:none;"
                                placeholder="0">
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1">Preview</label>
-                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold text-white"
+                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Preview</label>
+                    <span class="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-semibold text-white"
                           :style="'background:' + roleForm.color"
                           x-text="roleForm.label || 'New Role'"></span>
                 </div>
 
                 <div class="flex justify-end gap-3 pt-2">
                     <button type="button" @click="showRoleModal = false"
-                            class="px-4 py-2 rounded-lg text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">
+                            class="px-4 py-2 rounded-md text-xs font-semibold transition-all duration-300"
+                            style="border:1px solid var(--border); color:var(--text-secondary);"
+                            onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
                         Cancel
                     </button>
                     <button type="submit"
-                            class="px-4 py-2 rounded-lg text-xs font-semibold text-white transition-colors"
-                            style="background:#0b2a4a;"
-                            onmouseover="this.style.background='#00b4d8'" onmouseout="this.style.background='#0b2a4a'">
+                            class="corex-btn-primary px-4 py-2 text-xs font-semibold">
                         <span x-text="editRoleId ? 'Update Role' : 'Create Role'"></span>
                     </button>
                 </div>
@@ -602,8 +594,8 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
          @click.self="showDeleteModal = false"
          x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
          x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
-        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden" @click.stop>
-            <div class="px-6 py-4 border-b border-slate-200" style="background:#fef2f2;">
+        <div class="rounded-md shadow-xl w-full max-w-md mx-4 overflow-hidden" style="background:var(--surface);" @click.stop>
+            <div class="px-6 py-4" style="background:#fef2f2; border-bottom:1px solid var(--border);">
                 <h3 class="font-semibold text-sm text-red-700">Delete Role</h3>
             </div>
             <form :action="'{{ url('corex/role-manager/roles') }}/' + deleteRoleId"
@@ -611,18 +603,19 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
                 @csrf
                 <input type="hidden" name="_method" value="DELETE">
 
-                <p class="text-sm text-slate-700">
+                <p class="text-sm" style="color:var(--text-primary);">
                     Are you sure you want to delete <strong x-text="deleteRoleLabel"></strong>?
                 </p>
 
                 <template x-if="deleteRoleUserCount > 0">
-                    <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                    <div class="rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
                         <p class="text-sm text-amber-800 font-medium">
                             <span x-text="deleteRoleUserCount"></span> active user(s) have this role.
                         </p>
                         <p class="text-xs text-amber-700 mt-1">Reassign them to:</p>
                         <select name="reassign_to"
-                                class="mt-2 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#00b4d8]">
+                                class="mt-2 w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm focus:outline-none"
+                                style="color:var(--text-primary);">
                             @foreach($roles as $role)
                                 @if(!$role->is_owner || auth()->user()->isOwnerRole())
                                 <option value="{{ $role->name }}">{{ $role->label }}</option>
@@ -634,11 +627,13 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
 
                 <div class="flex justify-end gap-3 pt-2">
                     <button type="button" @click="showDeleteModal = false"
-                            class="px-4 py-2 rounded-lg text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">
+                            class="px-4 py-2 rounded-md text-xs font-semibold transition-all duration-300"
+                            style="border:1px solid var(--border); color:var(--text-secondary);"
+                            onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
                         Cancel
                     </button>
                     <button type="submit"
-                            class="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors">
+                            class="px-4 py-2 rounded-md text-xs font-semibold text-white bg-red-600 hover:bg-red-700 transition-all duration-300">
                         Delete Role
                     </button>
                 </div>
@@ -652,8 +647,8 @@ html.dark #rm-root .bg-slate-100 { background: #1a1e28 !important; }
 <div x-show="copyToast" x-cloak
      x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0"
      x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0" x-transition:leave-end="opacity-0 translate-y-2"
-     class="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white"
-     style="background:#0b2a4a;">
+     class="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-md shadow-lg text-sm font-medium text-white"
+     style="background:var(--brand-default,#0b2a4a);">
     <span x-text="copyToastMsg"></span>
 </div>
 

@@ -1,49 +1,52 @@
 <x-app-layout>
 
     @if(isset($paidNotSettledDeals) && $paidNotSettledDeals->count() > 0 && auth()->user()?->hasPermission('settle_deals'))
-        <div x-data="{ openPaidExceptions: false }" class="mb-4">
-            <div class="rounded-xl border border-red-500 bg-red-50 px-4 py-3 text-sm text-red-900 flex items-center justify-between gap-3">
-                <div class="font-semibold">
+        <div x-data="{ openPaidExceptions: false }" class="mb-6">
+            <div class="rounded-md flex items-center justify-between gap-4 px-4 py-3 transition-all duration-300" style="background: color-mix(in srgb, var(--ds-crimson) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--ds-crimson) 20%, transparent); border-left: 3px solid var(--ds-crimson);">
+                <div class="font-semibold text-sm" style="color: var(--ds-crimson);">
                     {{ $paidNotSettledDeals->count() }} deal{{ $paidNotSettledDeals->count() === 1 ? '' : 's' }} marked Paid but Settlement not marked Paid
                 </div>
                 <button type="button"
                         @click="openPaidExceptions = true"
-                        class="rounded-lg bg-red-200/70 px-3 py-1.5 text-xs font-semibold hover:bg-red-200">
+                        class="corex-btn-outline text-xs px-3 py-1.5 transition-all duration-300" style="border-color: var(--ds-crimson); color: var(--ds-crimson);">
                     View exceptions
                 </button>
             </div>
 
-            <div x-show="openPaidExceptions" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div x-show="openPaidExceptions" x-cloak
+                 x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                 x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+                 class="fixed inset-0 z-50 flex items-center justify-center p-4">
                 <div class="absolute inset-0 bg-black/50" @click="openPaidExceptions = false"></div>
 
-                <div class="relative w-full max-w-3xl rounded-2xl bg-white p-5 shadow-xl">
-                    <div class="flex items-center justify-between mb-3">
-                        <div class="text-lg font-extrabold text-gray-900">Paid but not settled</div>
-                        <button type="button" @click="openPaidExceptions = false" class="text-gray-500 hover:text-gray-800">&times;</button>
+                <div class="relative w-full max-w-3xl rounded-md p-6 shadow-xl" style="background: var(--surface); border: 1px solid var(--border);">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="text-lg font-bold" style="color: var(--text-primary);">Paid but not settled</div>
+                        <button type="button" @click="openPaidExceptions = false" class="w-8 h-8 flex items-center justify-center rounded-md transition-all duration-300 text-lg" style="color: var(--text-muted);" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">&times;</button>
                     </div>
 
-                    <div class="text-sm text-gray-600 mb-4">
+                    <div class="text-sm mb-5" style="color: var(--text-secondary);">
                         These deals are marked <b>Paid</b> on the Deal Register, but settlement has not been marked paid yet.
                         Open each settlement and complete the agent payout workflow.
                     </div>
 
-                    <div class="max-h-[60vh] overflow-auto rounded-xl border border-gray-200">
+                    <div class="max-h-[60vh] overflow-auto rounded-md" style="border: 1px solid var(--border);">
                         <table class="min-w-full text-sm ds-table">
                             <thead>
                                 <tr>
-                                    <th class="px-3 py-2 text-left">Deal No</th>
-                                    <th class="px-3 py-2 text-left">Property</th>
-                                    <th class="px-3 py-2 text-left">Period</th>
-                                    <th class="px-3 py-2 text-left">Action</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Deal No</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Property</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Period</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Action</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-gray-100">
+                            <tbody>
                                 @foreach($paidNotSettledDeals as $d)
-                                    <tr class="hover:bg-gray-50">
-                                        <td class="px-3 py-2 font-semibold" style="color:#0b2a4a">{{ $d->deal_no ?? ('#'.$d->id) }}</td>
-                                        <td class="px-3 py-2 text-gray-700">{{ $d->property_address ?? '—' }}</td>
-                                        <td class="px-3 py-2 text-gray-700">{{ $d->period ?? '—' }}</td>
-                                        <td class="px-3 py-2">
+                                    <tr class="transition-all duration-300" style="border-bottom: 1px solid var(--border);" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
+                                        <td class="px-4 py-2.5 font-semibold" style="color: var(--brand-icon, #0ea5e9);">{{ $d->deal_no ?? ('#'.$d->id) }}</td>
+                                        <td class="px-4 py-2.5" style="color: var(--text-secondary);">{{ $d->property_address ?? '—' }}</td>
+                                        <td class="px-4 py-2.5" style="color: var(--text-secondary);">{{ $d->period ?? '—' }}</td>
+                                        <td class="px-4 py-2.5">
                                             <a href="{{ route('admin.deals.settle', $d) }}" class="corex-btn-primary text-xs px-3 py-1.5">
                                                 Open settlement
                                             </a>
@@ -54,7 +57,7 @@
                         </table>
                     </div>
 
-                    <div class="mt-4 flex justify-end">
+                    <div class="mt-5 flex justify-end">
                         <button type="button" @click="openPaidExceptions = false" class="corex-btn-outline text-sm">
                             Close
                         </button>
@@ -110,32 +113,32 @@
         </x-slot:actions>
     </x-list-header>
 
-    <div class="space-y-4">
+    <div class="space-y-6">
 
         @if($errors->any())
-            <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <div class="rounded-md px-4 py-3 text-sm" style="background: color-mix(in srgb, var(--ds-crimson) 10%, transparent); border: 1px solid color-mix(in srgb, var(--ds-crimson) 20%, transparent); color: var(--ds-crimson);">
                 {{ $errors->first() }}
             </div>
         @endif
 
         {{-- Deals Table --}}
-        <div class="ds-status-card overflow-hidden" style="padding:0">
+        <div class="rounded-md overflow-hidden" style="border: 1px solid var(--border); background: var(--surface);">
             <div class="overflow-x-auto">
                 <table class="ds-table min-w-full text-sm">
                     <thead>
-                        <tr>
+                        <tr style="background: var(--surface-2);">
                             <x-sort-header field="deal_no" label="Deal" />
                             <x-sort-header field="property_address" label="Property" />
-                            <th class="text-left px-4 py-3">Branch / Period</th>
+                            <th class="text-left px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Branch / Period</th>
                             <x-sort-header field="property_value" label="Selling Price" align="right" />
-                            <th class="text-right px-4 py-3">Deal Commission</th>
+                            <th class="text-right px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Deal Commission</th>
                             @if(($branchIdContext ?? 0) > 0)
-                                <th class="text-right px-4 py-3">Branch Commission</th>
+                                <th class="text-right px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Branch Commission</th>
                             @endif
                             <x-sort-header field="accepted_status" label="Status" align="center" />
                             <x-sort-header field="commission_status" label="Commission" align="center" />
-                            <th class="text-center px-4 py-3">Quick Update</th>
-                            <th class="text-right px-4 py-3">Actions</th>
+                            <th class="text-center px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Quick Update</th>
+                            <th class="text-right px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -159,33 +162,33 @@
                                 elseif ($csVal === 'Loss') $commBadge = 'ds-badge-loss';
                             @endphp
 
-                            <tr class="hover:bg-gray-50">
+                            <tr class="transition-all duration-300" style="border-bottom: 1px solid var(--border);" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
                                 <td class="px-4 py-3">
                                     <a href="{{ route('admin.deals.edit', $deal) }}" class="ds-agent-link font-bold">{{ $deal->deal_no }}</a>
-                                    <div class="text-xs text-gray-500 mt-0.5">{{ $deal->deal_date ? \Carbon\Carbon::parse($deal->deal_date)->format('d M Y') : '—' }}</div>
+                                    <div class="text-xs mt-0.5" style="color: var(--text-muted);">{{ $deal->deal_date ? \Carbon\Carbon::parse($deal->deal_date)->format('d M Y') : '—' }}</div>
                                 </td>
 
                                 <td class="px-4 py-3">
-                                    <div class="text-sm text-gray-900 font-medium">{{ \Illuminate\Support\Str::limit($deal->property_address, 40) ?: '—' }}</div>
-                                    <div class="text-xs text-gray-500 mt-0.5">{{ $deal->seller_name ?: '—' }} &rarr; {{ $deal->buyer_name ?: '—' }}</div>
+                                    <div class="text-sm font-medium" style="color: var(--text-primary);">{{ \Illuminate\Support\Str::limit($deal->property_address, 40) ?: '—' }}</div>
+                                    <div class="text-xs mt-0.5" style="color: var(--text-muted);">{{ $deal->seller_name ?: '—' }} &rarr; {{ $deal->buyer_name ?: '—' }}</div>
                                 </td>
 
                                 <td class="px-4 py-3">
-                                    <div class="font-medium" style="color:#0b2a4a">{{ $b?->name ?? '—' }}</div>
-                                    <div class="text-xs text-gray-500 mt-0.5">{{ $deal->period ?: '—' }}</div>
+                                    <div class="text-sm font-medium" style="color: var(--text-primary);">{{ $b?->name ?? '—' }}</div>
+                                    <div class="text-xs mt-0.5" style="color: var(--text-muted);">{{ $deal->period ?: '—' }}</div>
                                 </td>
 
                                 <td class="px-4 py-3 text-right">
-                                    <div class="font-semibold ds-value">R {{ number_format((float)$deal->property_value, 0) }}</div>
+                                    <div class="font-semibold" style="color: var(--text-primary);">R {{ number_format((float)$deal->property_value, 0) }}</div>
                                 </td>
 
                                 <td class="px-4 py-3 text-right">
-                                    <div class="font-bold ds-value">R {{ number_format((float)$deal->totalOurCommission(), 0) }}</div>
+                                    <div class="font-bold" style="color: var(--text-primary);">R {{ number_format((float)$deal->totalOurCommission(), 0) }}</div>
                                 </td>
 
                                 @if(($branchIdContext ?? 0) > 0)
                                     <td class="px-4 py-3 text-right">
-                                        <div class="font-bold ds-value">R {{ number_format((float)$deal->branchCommission($branchIdContext), 0) }}</div>
+                                        <div class="font-bold" style="color: var(--text-primary);">R {{ number_format((float)$deal->branchCommission($branchIdContext), 0) }}</div>
                                     </td>
                                 @endif
 
@@ -200,14 +203,14 @@
                                 <td class="px-4 py-3">
                                     <form method="POST" action="{{ route('admin.deals.quickUpdate', $deal) }}" class="flex items-center gap-1.5">
                                         @csrf
-                                        <select name="accepted_status" class="h-7 rounded-lg border-gray-200 text-xs px-1.5 py-0">
+                                        <select name="accepted_status" class="rounded-md text-xs transition-all duration-300" style="height:1.75rem; padding:0 0.375rem; font-size:0.6875rem; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
                                             <option value="">—</option>
                                             <option value="P" {{ $asVal === 'P' ? 'selected' : '' }}>Pend</option>
                                             <option value="G" {{ $asVal === 'G' ? 'selected' : '' }}>Grant</option>
                                             <option value="R" {{ $asVal === 'R' ? 'selected' : '' }}>Reg</option>
                                             <option value="D" {{ $asVal === 'D' ? 'selected' : '' }}>Decl</option>
                                         </select>
-                                        <select name="commission_status" class="h-7 rounded-lg border-gray-200 text-xs px-1.5 py-0">
+                                        <select name="commission_status" class="rounded-md text-xs transition-all duration-300" style="height:1.75rem; padding:0 0.375rem; font-size:0.6875rem; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
                                             <option value="">—</option>
                                             <option value="Not Paid" {{ $csVal === 'Not Paid' ? 'selected' : '' }}>Not Paid</option>
                                             <option value="Paid" {{ $csVal === 'Paid' ? 'selected' : '' }}>Paid</option>
@@ -218,13 +221,13 @@
                                 </td>
 
                                 <td class="px-4 py-3 text-right">
-                                    <div class="flex items-center justify-end gap-1.5">
-                                        <a href="{{ route('admin.deals.log', $deal) }}" class="corex-btn-outline text-xs px-2 py-1">Log</a>
+                                    <div class="flex items-center justify-end gap-2">
+                                        <a href="{{ route('admin.deals.log', $deal) }}" class="corex-btn-outline text-xs px-2.5 py-1">Log</a>
                                         @permission('deals.edit')
-                                        <a href="{{ route('admin.deals.edit', $deal) }}" class="corex-btn-outline text-xs px-2 py-1">Edit</a>
+                                        <a href="{{ route('admin.deals.edit', $deal) }}" class="corex-btn-outline text-xs px-2.5 py-1">Edit</a>
                                         @endpermission
                                         @permission('settle_deals')
-                                            <a href="{{ route('admin.deals.settle', $deal) }}" class="corex-btn-primary text-xs px-2 py-1">Pay</a>
+                                            <a href="{{ route('admin.deals.settle', $deal) }}" class="corex-btn-primary text-xs px-2.5 py-1">Pay</a>
                                         @endpermission
                                     </div>
                                 </td>
@@ -233,7 +236,7 @@
 
                         @if($deals->isEmpty())
                             <tr>
-                                <td colspan="{{ ($branchIdContext ?? 0) > 0 ? 10 : 9 }}" class="px-5 py-10 text-center text-sm text-gray-500">No deals found.</td>
+                                <td colspan="{{ ($branchIdContext ?? 0) > 0 ? 10 : 9 }}" class="px-5 py-12 text-center text-sm" style="color: var(--text-muted);">No deals found.</td>
                             </tr>
                         @endif
                     </tbody>
@@ -241,7 +244,7 @@
             </div>
 
             @if($deals->hasPages())
-            <div class="px-4 py-3 border-t" style="border-color: #e2e8f0;">
+            <div class="px-4 py-3" style="border-top: 1px solid var(--border);">
                 {{ $deals->links() }}
             </div>
             @endif

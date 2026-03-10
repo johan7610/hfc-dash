@@ -3,73 +3,76 @@
 @section('corex-content')
 @php
   $activeTab = ($defaultTab ?? 'calc');
+  if ($activeTab === 'commission') $activeTab = 'calc';
   if (request()->get('section') === 'history') $activeTab = 'history';
   elseif (request()->get('section') === 'cma' || $activeTab === 'cma') $activeTab = 'cma';
 @endphp
 <style>
-/* ===== Tools — Nexus Design System =====
-   Scoped to #hf-tool-root only.
+/* ===== Tools — CoreX Design System =====
+   Scoped to #hf-tool-root only. Theme-aware via CSS variables.
 */
 #hf-tool-root, #hf-tool-root * { box-sizing: border-box; }
 
 #hf-tool-root {
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
 #hf-tool-root .wrap {
   max-width: 980px;
   margin: 0 auto;
+  padding: 0 1.5rem;
 }
 
 /* Tab navigation */
 #hf-tool-root .tab-nav {
   display: flex;
   gap: 0;
-  margin-bottom: 1.5rem;
-  border-bottom: 2px solid #e2e8f0;
+  border-bottom: 2px solid var(--border);
 }
 
 #hf-tool-root .tab-btn {
   padding: 0.625rem 1.25rem;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #64748b;
+  color: var(--text-secondary);
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
   margin-bottom: -2px;
   cursor: pointer;
-  transition: all 150ms ease;
+  transition: all 300ms;
   white-space: nowrap;
 }
 
-#hf-tool-root .tab-btn:hover { color: #0b2a4a; }
+#hf-tool-root .tab-btn:hover { color: var(--text-primary); }
 
 #hf-tool-root .tab-btn.active {
-  color: #0b2a4a;
-  border-bottom-color: #00b4d8;
+  color: var(--text-primary);
+  border-bottom-color: var(--brand-icon, #0ea5e9);
 }
 
 /* Sections show/hide */
-#hf-tool-root .section { display: none; }
-#hf-tool-root .section.active { display: block; }
+#hf-tool-root .section { display: none !important; }
+#hf-tool-root .section.active { display: block !important; }
+#hf-tool-root #historySection.active { display: flex !important; }
 
 /* Layout helpers */
-#hf-tool-root .inlineRow { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
-#hf-tool-root .field { flex: 1; min-width: 240px; }
+#hf-tool-root .inlineRow { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; }
+#hf-tool-root .inlineRow + .inlineRow { margin-top: 1rem; }
+#hf-tool-root .field { flex: 1; min-width: 220px; }
 #hf-tool-root .field.small { flex: 0 0 220px; }
 #hf-tool-root .field.tiny { flex: 0 0 120px; }
 
 #hf-tool-root .divider {
   height: 1px;
-  background: #e2e8f0;
-  margin: 1rem 0;
+  background: var(--border);
+  margin: 1.25rem 0;
 }
 
-/* Labels — matches ds-label */
+/* Labels */
 #hf-tool-root label {
   display: block;
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 0.75rem;
   text-transform: uppercase;
   font-weight: 600;
@@ -84,14 +87,14 @@
 #hf-tool-root select,
 #hf-tool-root textarea {
   width: 100%;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  color: #0f172a;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
   padding: 0.625rem 0.75rem;
-  border-radius: 0.5rem;
+  border-radius: 6px;
   font-size: 0.875rem;
   outline: none;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition: border-color 300ms, box-shadow 300ms;
 }
 
 #hf-tool-root textarea { min-height: 90px; resize: vertical; }
@@ -99,8 +102,8 @@
 #hf-tool-root input:focus,
 #hf-tool-root select:focus,
 #hf-tool-root textarea:focus {
-  border-color: #0b2a4a;
-  box-shadow: 0 0 0 3px rgba(0, 180, 216, 0.1);
+  border-color: var(--brand-button, #0ea5e9);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-button, #0ea5e9) 15%, transparent);
 }
 
 /* Pill tags */
@@ -109,79 +112,95 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border-radius: 0.5rem;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  color: #334155;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2, var(--surface));
+  color: var(--text-primary);
   font-size: 0.75rem;
   font-weight: 600;
   white-space: nowrap;
 }
 
-/* Buttons — matches corex-btn-primary */
+/* Buttons — primary uses --brand-button */
 #hf-tool-root .btn {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
   padding: 0.5rem 1rem;
   border: none;
-  border-radius: 0.5rem;
-  background: #0b2a4a;
+  border-radius: 6px;
+  background: var(--brand-button, #0ea5e9);
   color: #fff;
   font-size: 0.8125rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 150ms;
+  transition: all 300ms;
+  box-shadow: 0 4px 6px -1px color-mix(in srgb, var(--brand-button, #0ea5e9) 20%, transparent);
 }
 
-#hf-tool-root .btn:hover { background: #143d66; }
+#hf-tool-root .btn:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 6px 10px -2px color-mix(in srgb, var(--brand-button, #0ea5e9) 30%, transparent);
+}
 
-/* Secondary — matches corex-btn-outline */
+/* Secondary */
 #hf-tool-root .btn.secondary {
-  background: #fff;
-  color: #374151;
-  border: 1px solid #e2e8f0;
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  box-shadow: none;
 }
 
 #hf-tool-root .btn.secondary:hover {
-  background: #f9fafb;
-  border-color: #d1d5db;
+  background: var(--surface-2, var(--surface));
+  border-color: var(--text-muted);
+  filter: none;
 }
 
 #hf-tool-root .btn.danger {
-  background: #fff;
+  background: transparent;
   color: #dc2626;
   border: 1px solid #fca5a5;
   font-size: 0.6875rem;
   padding: 0.25rem 0.625rem;
-  border-radius: 9999px;
+  border-radius: 6px;
+  box-shadow: none;
 }
 
-/* Results grid — ds-status-card style */
+#hf-tool-root .btn.danger:hover {
+  background: rgba(220, 38, 38, 0.08);
+  filter: none;
+}
+
+/* Results grid */
 #hf-tool-root .results {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
-  gap: 12px;
-  margin-top: 12px;
+  gap: 1rem;
+  margin-top: 1rem;
 }
 
 #hf-tool-root .result {
   grid-column: span 4;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-left: 4px solid #00b4d8;
-  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--brand-icon, #0ea5e9);
+  border-radius: 6px;
   padding: 1rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: all 300ms;
+}
+
+#hf-tool-root .result:hover {
+  border-color: color-mix(in srgb, var(--brand-icon, #0ea5e9) 30%, var(--border));
 }
 
 @media (max-width: 950px) {
   #hf-tool-root .result { grid-column: span 12; }
 }
 
-/* KPI labels/values — matches ds-label / ds-value */
+/* KPI labels/values */
 #hf-tool-root .k {
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 0.75rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -192,60 +211,74 @@
 #hf-tool-root .v {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--text-primary);
   line-height: 1.2;
 }
 
 #hf-tool-root .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.6875rem;
-  color: #475569;
+  color: var(--text-muted);
   margin-top: 0.375rem;
 }
 
-/* History table — matches ds-table */
+/* History table */
 #hf-tool-root .history-table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 12px;
 }
 
 #hf-tool-root .history-table thead th {
-  background: #f8fafc;
+  background: var(--surface-2, var(--surface));
   text-transform: uppercase;
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.05em;
-  color: #64748b;
+  color: var(--text-muted);
   font-weight: 600;
-  padding: 0.75rem;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid var(--border);
   text-align: left;
 }
 
 #hf-tool-root .history-table tbody tr {
-  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 300ms;
 }
 
-#hf-tool-root .history-table tbody tr:nth-child(even) {
-  background: #f8fafc;
+#hf-tool-root .history-table tbody tr:last-child {
+  border-bottom: none;
 }
 
 #hf-tool-root .history-table td {
-  padding: 0.75rem;
+  padding: 0.625rem 1rem;
   font-size: 0.8125rem;
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
-#hf-tool-root .history-table tr:hover td {
-  background: #f1f5f9;
+#hf-tool-root .history-table td.actions-cell {
+  text-align: right;
+  white-space: nowrap;
 }
 
-/* Agent tag — matches ds-badge */
+#hf-tool-root .history-table tbody tr:hover {
+  background: var(--surface-2, var(--surface));
+}
+
+/* Empty state */
+#hf-tool-root .history-empty {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+/* Agent tag */
 #hf-tool-root .agent-tag {
   display: inline-flex;
   align-items: center;
   padding: 0.125rem 0.5rem;
-  border-radius: 9999px;
+  border-radius: 6px;
   font-size: 0.6875rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -254,31 +287,58 @@
 
 /* Sub text */
 #hf-tool-root .sub {
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 0.8125rem;
 }
 
 /* CMA preview */
 #hf-tool-root .cma-preview {
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 34px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2rem;
   background: #ffffff;
   color: #111;
   max-width: 820px;
-  margin: 18px auto;
+  margin: 1.25rem auto 0;
   box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}
+
+/* Section cards */
+#hf-tool-root .tool-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.5rem;
+}
+
+#hf-tool-root .tool-card + .tool-card {
+  margin-top: 1rem;
+}
+
+#hf-tool-root .tool-card-header {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 1.25rem;
+}
+
+/* Pill inline layout fix */
+#hf-tool-root .pill-group {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
 }
 </style>
 
-<div id="hf-tool-root">
-<div class="wrap">
+<div id="hf-tool-root" class="py-6">
+<div class="wrap" style="display:flex; flex-direction:column; gap:1.5rem;">
 
-  {{-- Navy header bar --}}
-  <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-4">
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+  {{-- Page Header --}}
+  <div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
       <div>
-        <h2 class="text-xl font-bold text-white leading-tight">Tools</h2>
+        <h2 class="text-xl font-bold text-white leading-tight tracking-tight">Tools</h2>
         <div class="text-sm text-white/60">Commission Calculator &middot; CMA Certificate &middot; History</div>
       </div>
       <div class="flex items-center gap-3">
@@ -308,10 +368,10 @@
 
   <!-- Calculator Section -->
   <div id="calcSection" class="section active">
-    <div class="ds-status-card" style="border-left-color: var(--ds-cyan);">
-      <h3 class="ds-section-header" style="margin-bottom:1rem;">Commission Calculator</h3>
+    <div class="tool-card">
+      <h3 class="tool-card-header">Commission Calculator</h3>
 
-      <div class="inlineRow" style="margin-bottom: 16px;">
+      <div class="inlineRow">
         <div class="field" style="flex:2">
           <label>Property Address</label>
           <input id="propAddress" type="text" value="" placeholder="e.g. 12 Smith Street, Shelly Beach"/>
@@ -342,7 +402,7 @@
         </div>
         <div class="field small">
           <label>VAT Mode</label>
-          <div style="gap:10px;">
+          <div class="pill-group">
             <label class="pill" style="margin:0;"><input type="checkbox" id="vatIncl" style="margin-right:8px">VAT included in comm</label>
           </div>
         </div>
@@ -353,18 +413,20 @@
       <div class="inlineRow">
         <div class="field small">
           <label>Input Mode</label>
-          <div style="gap:10px;">
+          <div class="pill-group">
             <label class="pill" style="margin:0;"><input type="radio" name="mode" id="modePrice" checked style="margin-right:8px">Price</label>
             <label class="pill" style="margin:0;"><input type="radio" name="mode" id="modePocket" style="margin-right:8px">Owner Pocket</label>
           </div>
         </div>
         <div class="field small">
           <label>Override Commission</label>
-          <label class="pill" style="margin:0;"><input type="checkbox" id="commOverrideOn" style="margin-right:8px">Enable override</label>
+          <div class="pill-group">
+            <label class="pill" style="margin:0;"><input type="checkbox" id="commOverrideOn" style="margin-right:8px">Enable override</label>
+          </div>
         </div>
         <div class="field" id="commOverrideWrap" style="display:none; flex:2">
           <label>Override Amount</label>
-          <div class="inlineRow" style="gap:8px;">
+          <div class="inlineRow">
             <div class="field">
               <input id="commOverrideAmt" type="number" value="60000" min="0" step="100"/>
             </div>
@@ -412,8 +474,7 @@
           <label>Certificate Date</label>
           <input id="certDate" type="date" />
         </div>
-        <div class="field">
-          <label>&nbsp;</label>
+        <div class="field" style="display:flex; align-items:flex-end;">
           <button class="btn action" id="btnPrint">Print Commission Summary</button>
         </div>
       </div>
@@ -422,10 +483,10 @@
 
   <!-- CMA Section -->
   <div id="certSection" class="section">
-    <div class="ds-status-card" style="border-left-color: var(--ds-navy);">
-      <h3 class="ds-section-header" style="margin-bottom:1rem;">CMA Certificate Generator</h3>
+    <div class="tool-card">
+      <h3 class="tool-card-header">CMA Certificate Generator</h3>
 
-      <div class="inlineRow" style="margin-bottom: 10px;">
+      <div class="inlineRow">
         <div class="field" style="flex:2">
           <label>Property Address</label>
           <input id="cmaAddress" type="text" placeholder="e.g. 12 Smith Street, Shelly Beach"/>
@@ -468,7 +529,7 @@
         </div>
       </div>
 
-      <div class="inlineRow" style="margin-top: 12px;">
+      <div class="inlineRow">
         <div class="field">
           <label>Key Features / Notes</label>
           <textarea id="cmaNotes" placeholder="e.g. Sea views, renovated kitchen, walking distance to beach..."></textarea>
@@ -478,8 +539,7 @@
       <div class="divider"></div>
 
       <div class="inlineRow">
-        <div class="field">
-          <label>&nbsp;</label>
+        <div class="field" style="display:flex; align-items:flex-end;">
           <button class="btn action" id="btnPrintCert">Print CMA Certificate</button>
         </div>
       </div>
@@ -489,41 +549,46 @@
   </div>
 
   <!-- History Section -->
-  <div id="historySection" class="section">
-    <div class="ds-status-card" style="border-left-color: var(--ds-amber);">
-      <h3 class="ds-section-header" style="margin-bottom:0.25rem;">History &amp; Logs</h3>
-      <div class="sub" style="margin-bottom:1rem;">Click a row to reload, or delete entries.</div>
+  <div id="historySection" class="section" style="display:flex; flex-direction:column; gap:1rem;">
 
-      <table class="history-table ds-table">
-        <thead>
-          <tr>
-            <th>Ref</th><th>Date</th><th>Type</th><th>Property</th><th>Agent</th><th>Value</th><th></th>
-          </tr>
-        </thead>
-        <tbody id="historyBody"></tbody>
-      </table>
+    {{-- History table card --}}
+    <div class="tool-card">
+      <div style="margin-bottom:1rem;">
+        <h3 class="tool-card-header" style="margin-bottom:0.25rem;">History &amp; Logs</h3>
+        <div class="sub">Click a row to reload, or delete entries.</div>
+      </div>
+
+      <div class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Ref</th><th>Date</th><th>Type</th><th>Property</th><th>Agent</th><th>Value</th><th style="width:1%;"></th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+        <div id="historyEmpty" class="history-empty" style="display:none;">No history entries yet.</div>
+      </div>
     </div>
 
     {{-- Logged-in User --}}
-    <div class="ds-status-card mt-4" style="border-left-color: var(--ds-navy);">
-      <h3 class="ds-section-header" style="margin-bottom:0.25rem;">Logged-in User</h3>
-      <div class="sub" style="margin-bottom:0.75rem;">
-        This tool uses the current logged-in account for printing &amp; history.
-      </div>
+    <div class="tool-card">
+      <h3 class="tool-card-header" style="margin-bottom:0.25rem;">Logged-in User</h3>
+      <div class="sub">This tool uses the current logged-in account for printing &amp; history.</div>
 
-      <div class="pill" style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+      <div class="pill" style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-top:1rem; width:100%;">
         <div>
-          <div style="font-weight:700; color:#0f172a;" id="authUserName">{{ auth()->user()?->name ?? "User" }}</div>
-          <div style="font-size:0.6875rem; color:#64748b;" id="authUserEmail">{{ auth()->user()?->email ?? "" }}</div>
+          <div style="font-weight:700; color:var(--text-primary);" id="authUserName">{{ auth()->user()?->name ?? "User" }}</div>
+          <div style="font-size:0.6875rem; color:var(--text-secondary); margin-top:0.125rem;" id="authUserEmail">{{ auth()->user()?->email ?? "" }}</div>
         </div>
-        <div class="agent-tag" id="authUserRole" style="background:#0b2a4a; color:#fff;">{{ strtolower(trim((string)(auth()->user()?->effectiveRole() ?? (auth()->user()?->role ?? "")))) }}</div>
+        <div class="agent-tag" id="authUserRole" style="background:var(--brand-default, #0b2a4a); color:#fff;">{{ strtolower(trim((string)(auth()->user()?->effectiveRole() ?? (auth()->user()?->role ?? "")))) }}</div>
       </div>
 
       <div class="divider"></div>
 
       <div class="sub">Preview Logo:</div>
-      <div class="pill" style="margin-top:8px;">
-        <span id="prevCompanyName" style="font-weight:700;">Home Finders Coastal</span>
+      <div class="pill" style="margin-top:0.5rem;">
+        <span id="prevCompanyName" style="font-weight:700; color:var(--text-primary);">Home Finders Coastal</span>
         <img id="prevLogo" style="display:none; max-height:30px; margin-left:10px;" />
       </div>
     </div>
@@ -619,6 +684,13 @@ function renderHistory() {
   if (!body) return;
   body.innerHTML = "";
 
+  const emptyEl = document.getElementById("historyEmpty");
+  if (!HISTORY_ITEMS || HISTORY_ITEMS.length === 0) {
+    if (emptyEl) emptyEl.style.display = "block";
+    return;
+  }
+  if (emptyEl) emptyEl.style.display = "none";
+
   (HISTORY_ITEMS || []).forEach(item => {
     const tr = document.createElement("tr");
     tr.onclick = () => window.loadHistoryItem(item.id);
@@ -628,13 +700,13 @@ function renderHistory() {
 
     tr.innerHTML = `
       <td class="mono">${escapeHtml(item.ref || "")}</td>
-      <td>${escapeHtml(dateText)}</td>
-      <td><span class="agent-tag" style="background:#0b2a4a; color:#fff">${escapeHtml(item.type || "")}</span></td>
+      <td style="white-space:nowrap;">${escapeHtml(dateText)}</td>
+      <td><span class="agent-tag" style="background:var(--brand-default, #0b2a4a); color:#fff">${escapeHtml(item.type || "")}</span></td>
       <td>${escapeHtml(item.property || "")}</td>
-      <td>${escapeHtml(item.agent_name || "")}</td>
-      <td style="font-weight:700">${fmtZAR(Number(item.value || 0))}</td>
+      <td style="white-space:nowrap;">${escapeHtml(item.agent_name || "")}</td>
+      <td style="font-weight:700; white-space:nowrap;">${fmtZAR(Number(item.value || 0))}</td>
       <td class="actions-cell">
-        <button class="btn danger" style="padding: 4px 8px; font-size: 11px;" onclick="event.stopPropagation(); window.deleteHistoryItem(${item.id})">Delete</button>
+        <button class="btn danger" onclick="event.stopPropagation(); window.deleteHistoryItem(${item.id})">Delete</button>
       </td>
     `;
     body.appendChild(tr);

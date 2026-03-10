@@ -15,6 +15,9 @@ class ListingStockController extends Controller
         abort_unless($u, 403);
 
         $branchId = (int)($u->effectiveBranchId() ?? ($u->branch_id ?? 0));
+        if ($branchId === 0 && $u->isOwnerRole()) {
+            $branchId = (int) \DB::table('branches')->orderBy('id')->value('id');
+        }
         abort_unless($branchId > 0, 403);
 
         // Existing filters (keep same shape as agent listings)

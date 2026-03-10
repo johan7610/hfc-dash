@@ -46,99 +46,101 @@
 #spr *, #spr { box-sizing: border-box; }
 
 #spr {
-    --navy:   #0b2a4a;
-    --ink:    #0f172a;
-    --muted:  #64748b;
-    --border: #e2e8f0;
-    --sel:    #eff6ff;
-    --sel-border: #3b82f6;
-
-    color: var(--ink);
+    color: var(--text-primary);
     font-size: 0.875rem;
 }
 
-#spr .wrap { max-width: 1160px; margin: 0 auto; }
+#spr .wrap { max-width: 1160px; margin: 0 auto; padding: 0 1.5rem; }
 
 /* Alert */
-#spr .alert { padding:10px 14px; border-radius:7px; font-size:.85rem; margin-bottom:14px; }
-#spr .alert-error { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
+#spr .alert { padding:10px 14px; border-radius:6px; font-size:.85rem; margin-bottom:14px; }
+#spr .alert-error {
+    background: color-mix(in srgb, #ef4444 12%, var(--surface));
+    border:1px solid color-mix(in srgb, #ef4444 25%, var(--border));
+    color:#ef4444;
+}
 
 /* ── Toolbar ─────────────────────────────── */
 #spr .toolbar {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    background: #fff; border: 1px solid var(--border);
-    border-left: 4px solid #00b4d8;
-    border-radius: 12px; padding: 0.75rem 1rem; margin-bottom: 12px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 3px solid var(--brand-icon, #0ea5e9);
+    border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 12px;
 }
 #spr .toolbar .sel-count {
-    font-size:0.78rem; font-weight:700; color: var(--navy);
-    background:#dbeafe; padding:3px 9px; border-radius:20px;
+    font-size:0.78rem; font-weight:700; color: var(--brand-icon, #0ea5e9);
+    background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, var(--surface));
+    padding:3px 9px; border-radius:6px;
     margin-right:4px; white-space:nowrap;
 }
-#spr .tb-label { font-size:.75rem; font-weight:600; color:var(--muted); white-space:nowrap; }
+#spr .tb-label { font-size:.75rem; font-weight:600; color:var(--text-muted); white-space:nowrap; }
 #spr .tb-sep   { width:1px; height:18px; background:var(--border); flex-shrink:0; }
 
 #spr select.tb-select {
     font-size:.82rem; padding:5px 8px; border:1px solid var(--border);
-    border-radius:5px; background:#fff; color:var(--ink); cursor:pointer;
+    border-radius:6px; background:var(--surface); color:var(--text-primary); cursor:pointer;
 }
 #spr button.tb-btn {
     font-size:.78rem; font-weight:600; padding:5px 12px;
-    border-radius:5px; border:1px solid transparent; cursor:pointer;
-    transition:opacity .12s; white-space:nowrap;
+    border-radius:6px; border:1px solid transparent; cursor:pointer;
+    transition: all 300ms; white-space:nowrap;
 }
-#spr button.tb-btn:hover { opacity:.8; }
-#spr .btn-apply  { background:var(--navy); color:#fff; border-color:var(--navy); }
-#spr .btn-reset  { background:#fff; color:#dc2626; border-color:#fca5a5; }
-#spr .btn-other  { background:#f1f5f9; color:#475569; border-color:#cbd5e1; }
-#spr .btn-gen    { background:var(--navy); color:#fff; border:none; border-radius:0.5rem;
-                   padding:0.625rem 1.5rem; font-size:.875rem; font-weight:600; cursor:pointer; }
-#spr .btn-gen:hover { background:#143d66; }
+#spr button.tb-btn:hover { opacity:.85; }
+#spr .btn-apply  { background:var(--brand-button, #0ea5e9); color:#fff; }
+#spr .btn-reset  { background:var(--surface); color:#ef4444; border-color: color-mix(in srgb, #ef4444 40%, var(--border)); }
+#spr .btn-other  { background:var(--surface-2, var(--surface)); color:var(--text-secondary); border-color:var(--border); }
+#spr .btn-gen    { background:var(--brand-button, #0ea5e9); color:#fff; border:none; border-radius:6px;
+                   padding:0.625rem 1.5rem; font-size:.875rem; font-weight:600; cursor:pointer;
+                   transition: all 300ms;
+                   box-shadow: 0 4px 6px -1px color-mix(in srgb, var(--brand-button, #0ea5e9) 20%, transparent); }
+#spr .btn-gen:hover { filter: brightness(1.1);
+                      box-shadow: 0 6px 10px -2px color-mix(in srgb, var(--brand-button, #0ea5e9) 30%, transparent); }
 
 /* ── Shortcut legend ─────────────────────── */
 #spr .legend {
     display:flex; flex-wrap:wrap; gap:5px;
-    background:#fff; border:1px solid var(--border);
-    border-left: 4px solid var(--navy);
-    border-radius:12px; padding:0.75rem 1rem; margin-bottom:12px;
+    background:var(--surface); border:1px solid var(--border);
+    border-left: 3px solid var(--brand-default, #0b2a4a);
+    border-radius:6px; padding:0.75rem 1rem; margin-bottom:12px;
     align-items:center;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
-#spr .legend-title { font-size:.72rem; font-weight:700; color:var(--muted);
+#spr .legend-title { font-size:.72rem; font-weight:700; color:var(--text-muted);
                      text-transform:uppercase; letter-spacing:.05em; margin-right:6px; }
 #spr .key-chip {
     display:inline-flex; align-items:center; gap:4px;
     font-size:.75rem; padding:2px 7px; border-radius:4px;
-    border:1px solid var(--border); background:#f8fafc; color:var(--ink);
+    border:1px solid var(--border); background:var(--surface-2, var(--surface)); color:var(--text-primary);
     user-select:none; cursor:default;
 }
 #spr .key-chip kbd {
-    font-family:monospace; font-weight:700; font-size:.78rem;
-    background:#e2e8f0; border-radius:3px; padding:1px 5px;
-    border:1px solid #cbd5e1;
+    font-family:'JetBrains Mono', monospace; font-weight:700; font-size:.78rem;
+    background:var(--surface-2, var(--surface)); border-radius:3px; padding:1px 5px;
+    border:1px solid var(--border);
 }
 
 /* ── Table ───────────────────────────────── */
 #spr .tbl-wrap {
-    background:#fff; border:1px solid var(--border); border-radius:12px;
-    box-shadow:0 1px 3px rgba(0,0,0,.06); overflow:hidden; margin-bottom:16px;
+    background:var(--surface); border:1px solid var(--border); border-radius:6px;
+    overflow:hidden; margin-bottom:16px;
 }
 #spr table { width:100%; border-collapse:collapse; }
 #spr thead th {
-    background:#f8fafc; color:var(--muted); font-size:.72rem;
+    background:var(--surface-2, var(--surface)); color:var(--text-muted); font-size:.72rem;
     font-weight:600; letter-spacing:.05em; text-transform:uppercase;
     padding:9px 10px; text-align:left; white-space:nowrap;
     border-bottom: 1px solid var(--border);
 }
 #spr tbody tr {
     border-bottom:1px solid var(--border); cursor:pointer;
-    transition:background .08s;
+    transition: background 300ms;
 }
 #spr tbody tr:last-child { border-bottom:none; }
-#spr tbody tr:nth-child(even) { background:#f8fafc; }
-#spr tbody tr:hover { background:#f1f5f9; }
-#spr tbody tr.selected { background:var(--sel) !important; outline:2px solid var(--sel-border); outline-offset:-2px; }
+#spr tbody tr:hover { background:var(--surface-2, var(--surface)); }
+#spr tbody tr.selected {
+    background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 8%, var(--surface)) !important;
+    outline:2px solid var(--brand-icon, #0ea5e9);
+    outline-offset:-2px;
+}
 
 #spr td { padding:6px 10px; vertical-align:middle; }
 
@@ -147,57 +149,62 @@
 #spr .thumb-cell img {
     max-width: none !important;
     width:256px !important; max-width:256px !important; height:auto; border:1px solid var(--border);
-    border-radius:3px; display:block; margin:0 auto;
-    background:#f8fafc;
+    border-radius:6px; display:block; margin:0 auto;
+    background:var(--surface-2, var(--surface));
 }
 #spr .thumb-cell .pg-num {
-    font-weight:700; color:var(--navy); font-size:.8rem;
+    font-weight:700; color:var(--brand-icon, #0ea5e9); font-size:.8rem;
     margin-top:2px; display:block; text-align:center;
 }
 
 /* Auto badge */
 #spr .badge {
     display:inline-block; font-size:.7rem; font-weight:700;
-    padding:2px 7px; border-radius:4px; white-space:nowrap;
+    padding:2px 7px; border-radius:6px; white-space:nowrap;
 }
 
 /* Scores tooltip trigger */
-#spr .score-tip { font-size:.7rem; color:var(--muted); cursor:help;
-                  white-space:nowrap; border-bottom:1px dotted #94a3b8; }
+#spr .score-tip { font-size:.7rem; color:var(--text-muted); cursor:help;
+                  white-space:nowrap; border-bottom:1px dotted var(--text-muted); }
 
 /* Dropdown */
 #spr select.lbl-select {
     font-size:.82rem; padding:5px 7px; border:1px solid var(--border);
-    border-radius:5px; background:#f8fafc; color:var(--ink); cursor:pointer;
-    width:100%; min-width:148px;
+    border-radius:6px; background:var(--surface); color:var(--text-primary); cursor:pointer;
+    width:100%; min-width:148px; transition: border-color 300ms, box-shadow 300ms;
 }
-#spr select.lbl-select:focus { outline:none; border-color:var(--navy); box-shadow: 0 0 0 3px rgba(0, 180, 216, 0.1); }
+#spr select.lbl-select:focus {
+    outline:none;
+    border-color:var(--brand-button, #0ea5e9);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-button, #0ea5e9) 15%, transparent);
+}
 
 /* Snippet */
 #spr .snippet {
-    font-size:.76rem; color:#334155; max-width:360px;
+    font-size:.76rem; color:var(--text-secondary); max-width:360px;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-#spr .snippet.empty { color:var(--muted); font-style:italic; }
+#spr .snippet.empty { color:var(--text-muted); font-style:italic; }
 
 /* Bottom bar */
 #spr .bottom-bar {
     display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-top:4px;
 }
 #spr .btn-back {
-    font-size:.85rem; color:var(--muted); text-decoration:none; padding:4px 0;
+    font-size:.85rem; color:var(--text-muted); text-decoration:none; padding:4px 0;
+    transition: color 300ms;
 }
-#spr .btn-back:hover { color:var(--navy); }
+#spr .btn-back:hover { color:var(--brand-icon, #0ea5e9); }
 </style>
 
 <div id="spr">
 <div class="wrap">
 
-    {{-- Navy header bar --}}
-    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-4">
+    {{-- Header bar --}}
+    <div style="background:var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4 mb-4">
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
             <div>
-                <h2 class="text-xl font-bold text-white leading-tight">PDF Pack Splitter &mdash; Review Labels</h2>
+                <h2 class="text-xl font-bold text-white leading-tight tracking-tight">PDF Pack Splitter &mdash; Review Labels</h2>
                 <div class="text-sm text-white/60">
                     <strong>{{ $base }}</strong> &middot; {{ $pCount }} pages &middot; Click rows to select &middot; Use keyboard shortcuts to label
                 </div>

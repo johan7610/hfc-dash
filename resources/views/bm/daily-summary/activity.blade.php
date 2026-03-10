@@ -3,13 +3,13 @@
 @section('content')
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+    <div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4">
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
             <div>
                 <div class="text-sm text-white/60">
-                    <a class="hover:underline text-white/60" href="{{ route('bm.daily.summary', array_filter(['range'=>$range,'month'=>$month])) }}">&larr; Back to Branch Summary</a>
+                    <a class="hover:underline text-white/60 transition-all duration-300" href="{{ route('bm.daily.summary', array_filter(['range'=>$range,'month'=>$month])) }}">&larr; Back to Branch Summary</a>
                 </div>
-                <h2 class="text-xl font-bold text-white leading-tight mt-1">{{ $def->name }}</h2>
+                <h2 class="text-xl font-bold text-white leading-tight tracking-tight mt-1">{{ $def->name }}</h2>
                 <div class="text-sm text-white/60">
                     {{ $branchName ?? ('Branch #' . (int)$branchId) }} &middot; {{ $start->toFormattedDateString() }} &rarr; {{ $end->toFormattedDateString() }}
                 </div>
@@ -32,41 +32,42 @@
         </div>
     </div>
 
-    <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden">
-        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800">
+    <div class="ds-status-card overflow-hidden" style="padding: 0;">
+        <div class="px-5 py-4" style="border-bottom: 1px solid var(--border);">
             <h3 class="ds-section-header">By Agent</h3>
-            <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">Click the agent name or count to see dates performed.</div>
+            <div class="text-xs mt-1" style="color: var(--text-muted);">Click the agent name or count to see dates performed.</div>
         </div>
 
         <div class="overflow-x-auto">
             <table class="min-w-full text-sm ds-table">
-                <thead class="bg-white">
-                    <tr class="border-b text-slate-600">
-                        <th class="text-left p-3">Agent</th>
-                        <th class="text-right p-3">Count</th>
-                        <th class="text-right p-3">Points</th>
+                <thead>
+                    <tr>
+                        <th class="text-left px-4 py-3">Agent</th>
+                        <th class="text-right px-4 py-3">Count</th>
+                        <th class="text-right px-4 py-3">Points</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse($items as $it)
-                        <tr class="border-b hover:bg-slate-50/70">
-                            <td class="p-3 font-medium text-slate-900">
-                                <a class="hover:underline"
+                        <tr>
+                            <td class="px-4 py-3 font-medium" style="color: var(--text-primary);">
+                                <a class="hover:underline transition-all duration-300" style="color: var(--brand-icon, #0ea5e9);"
                                    href="{{ route('bm.daily.summary.activity.agent', array_filter(['definition'=>$def->id,'user'=>$it['user_id'],'range'=>$range,'month'=>$month])) }}">
                                     {{ $it['name'] }}
                                 </a>
                             </td>
-                            <td class="p-3 text-right">
-                                <a class="inline-flex items-center rounded-lg bg-slate-900/5 px-2 py-1 font-semibold text-slate-900 hover:bg-slate-900/10 hover:underline"
+                            <td class="px-4 py-3 text-right">
+                                <a class="inline-flex items-center rounded-md px-2.5 py-1 font-semibold transition-all duration-300"
+                                   style="background: var(--surface-2); color: var(--text-primary);"
                                    href="{{ route('bm.daily.summary.activity.agent', array_filter(['definition'=>$def->id,'user'=>$it['user_id'],'range'=>$range,'month'=>$month])) }}">
                                     {{ (int)$it['count'] }}
                                 </a>
                             </td>
-                            <td class="p-3 text-right">{{ number_format((float)$it['points'], 0) }}</td>
+                            <td class="px-4 py-3 text-right" style="color: var(--text-primary);">{{ number_format((float)$it['points'], 0) }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="3" class="p-6 text-center text-slate-500">No entries in this range.</td>
+                            <td colspan="3" class="p-6 text-center" style="color: var(--text-muted);">No entries in this range.</td>
                         </tr>
                     @endforelse
                 </tbody>

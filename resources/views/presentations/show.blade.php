@@ -11,30 +11,30 @@
 
 @php
     $statusClasses = match($presentation->status) {
-        'presented' => 'bg-sky-50 text-[#00b4d8]',
+        'presented' => 'pres-badge-brand',
         'locked'    => 'pres-badge-success',
-        default     => 'bg-slate-100 text-slate-500',
+        default     => 'ds-badge-default',
     };
     $lastSummary = $latestSnapshot ? $latestSnapshot->getOutputSummaryArray() : null;
 @endphp
 
 {{-- Sticky action bar — no wrapper, no negative margins, <main> padding zeroed --}}
-<div class="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
+<div class="sticky top-0 z-40 shadow-sm" style="background: var(--surface); border-bottom: 1px solid var(--border);">
     <div class="px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-14">
             <div class="flex items-center gap-3">
-                <a href="{{ route('presentations.index') }}" class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
+                <a href="{{ route('presentations.index') }}" class="inline-flex items-center gap-1 text-sm transition-all duration-300" style="color: var(--text-secondary);">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
                     All Presentations
                 </a>
             </div>
             <div class="flex-1 text-center truncate mx-4">
-                <h2 class="text-sm font-semibold text-gray-700 truncate">{{ $presentation->title }}</h2>
+                <h2 class="text-sm font-semibold truncate" style="color: var(--text-primary);">{{ $presentation->title }}</h2>
             </div>
             <div class="flex items-center gap-2">
-                <a href="{{ route('presentations.edit', $presentation) }}" class="px-3 py-1.5 text-sm font-medium bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">Edit</a>
+                <a href="{{ route('presentations.edit', $presentation) }}" class="px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-300" style="background: var(--surface-2); color: var(--text-primary);">Edit</a>
                 @if($readiness['can_compile'])
-                <a href="{{ route('presentations.analysis', [$presentation, 'refresh' => 1]) }}" class="px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                <a href="{{ route('presentations.analysis', [$presentation, 'refresh' => 1]) }}" class="corex-btn-primary px-3 py-1.5 text-sm font-medium rounded-md">
                     {{ $latestSnapshot ? 'Re-run Analysis' : 'Run Analysis' }}
                 </a>
                 @endif
@@ -46,7 +46,7 @@
 <div class="pres-page p-4 lg:p-6">
 
 {{-- Navy header bar --}}
-<div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-8">
+<div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4 mb-8">
     <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
         <div>
             <div class="flex items-center gap-3 mb-1.5">
@@ -179,14 +179,14 @@
         <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
             {{-- Required --}}
             <div>
-                <p class="text-[11px] font-semibold text-slate-400 mb-2.5 uppercase tracking-widest">Required</p>
+                <p class="text-[11px] font-semibold mb-2.5 uppercase tracking-widest" style="color: var(--text-muted);">Required</p>
                 <ul class="space-y-2">
                     @foreach($readiness['required_items'] as $item)
                         <li class="flex items-start gap-2.5 text-xs">
-                            <span class="mt-0.5 shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] {{ $item['satisfied'] ? 'bg-sky-100 text-[#00b4d8]' : 'bg-slate-100 text-slate-400' }}">
+                            <span class="mt-0.5 shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px]" style="{{ $item['satisfied'] ? 'background: color-mix(in srgb, var(--brand-icon) 15%, transparent); color: var(--brand-icon);' : 'background: var(--surface-2); color: var(--text-muted);' }}">
                                 {{ $item['satisfied'] ? '✓' : '✗' }}
                             </span>
-                            <span class="{{ $item['satisfied'] ? 'text-slate-500' : 'text-slate-700 font-medium' }}">
+                            <span style="color: var({{ $item['satisfied'] ? '--text-secondary' : '--text-primary' }});" class="{{ $item['satisfied'] ? '' : 'font-medium' }}">
                                 {{ $item['label'] }}
                             </span>
                         </li>
@@ -196,14 +196,14 @@
 
             {{-- Optional --}}
             <div>
-                <p class="text-[11px] font-semibold text-slate-400 mb-2.5 uppercase tracking-widest">Optional</p>
+                <p class="text-[11px] font-semibold mb-2.5 uppercase tracking-widest" style="color: var(--text-muted);">Optional</p>
                 <ul class="space-y-2">
                     @foreach($readiness['optional_items'] as $item)
                         <li class="flex items-start gap-2.5 text-xs">
-                            <span class="mt-0.5 shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] {{ $item['satisfied'] ? 'bg-sky-100 text-[#00b4d8]' : 'bg-slate-100 text-slate-300' }}">
+                            <span class="mt-0.5 shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px]" style="{{ $item['satisfied'] ? 'background: color-mix(in srgb, var(--brand-icon) 15%, transparent); color: var(--brand-icon);' : 'background: var(--surface-2); color: var(--text-muted);' }}">
                                 {{ $item['satisfied'] ? '✓' : '○' }}
                             </span>
-                            <span class="text-slate-500">{{ $item['label'] }}</span>
+                            <span style="color: var(--text-secondary);">{{ $item['label'] }}</span>
                         </li>
                     @endforeach
                 </ul>
@@ -211,12 +211,12 @@
         </div>
 
         @if($readiness['can_compile'])
-            <div class="mt-4 px-3 py-2 rounded-lg" style="background: var(--pres-success-bg)">
+            <div class="mt-4 px-3 py-2 rounded-md" style="background: var(--pres-success-bg)">
                 <p class="text-xs font-semibold" style="color: var(--pres-success)">All required items present — ready to compile.</p>
             </div>
         @else
-            <div class="mt-4 px-3 py-2 bg-slate-50 rounded-lg">
-                <p class="text-xs text-slate-600 font-medium">
+            <div class="mt-4 px-3 py-2 rounded-md" style="background: var(--surface-2);">
+                <p class="text-xs font-medium" style="color: var(--text-secondary);">
                     Missing: {{ implode(', ', array_column($readiness['missing_required'], 'label')) }}
                 </p>
             </div>
@@ -229,91 +229,90 @@
 <div class="ds-status-card mb-8">
     <div class="flex items-center justify-between mb-3">
         <h2 class="ds-section-header" style="margin-bottom:0">Power Panel</h2>
-        <span class="text-xs text-slate-400 font-medium">Snapshot {{ $powerPanel['snapshot_at']->format('Y-m-d H:i') }}</span>
+        <span class="text-xs font-medium" style="color: var(--text-muted);">Snapshot {{ $powerPanel['snapshot_at']->format('Y-m-d H:i') }}</span>
     </div>
     <div>
 
     {{-- Row 1: Probability + Confidence + PPI --}}
     <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 mb-5">
         {{-- P30 --}}
-        <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
+        <div class="text-center rounded-md py-3 px-2" style="background: var(--surface-2);">
             <p class="ds-label mb-1">P30</p>
-            <p class="ds-value-lg {{ ($powerPanel['p30'] ?? 0) >= 0.5 ? 'text-[#00b4d8]' : 'text-slate-800' }}">
+            <p class="ds-value-lg" style="color: {{ ($powerPanel['p30'] ?? 0) >= 0.5 ? 'var(--brand-icon, #0ea5e9)' : 'var(--text-primary)' }};">
                 @if($powerPanel['p30'] !== null)
                     {{ number_format($powerPanel['p30'] * 100, 0) }}%
                 @else
-                    <span class="text-slate-300">--</span>
+                    <span style="color: var(--text-muted);">--</span>
                 @endif
             </p>
         </div>
         {{-- P60 --}}
-        <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
+        <div class="text-center rounded-md py-3 px-2" style="background: var(--surface-2);">
             <p class="ds-label mb-1">P60</p>
-            <p class="ds-value-lg {{ ($powerPanel['p60'] ?? 0) >= 0.5 ? 'text-[#00b4d8]' : 'text-slate-800' }}">
+            <p class="ds-value-lg" style="color: {{ ($powerPanel['p60'] ?? 0) >= 0.5 ? 'var(--brand-icon, #0ea5e9)' : 'var(--text-primary)' }};">
                 @if($powerPanel['p60'] !== null)
                     {{ number_format($powerPanel['p60'] * 100, 0) }}%
                 @else
-                    <span class="text-slate-300">--</span>
+                    <span style="color: var(--text-muted);">--</span>
                 @endif
             </p>
         </div>
         {{-- P90 --}}
-        <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
+        <div class="text-center rounded-md py-3 px-2" style="background: var(--surface-2);">
             <p class="ds-label mb-1">P90</p>
-            <p class="ds-value-lg {{ ($powerPanel['p90'] ?? 0) >= 0.65 ? 'text-[#00b4d8]' : 'text-slate-800' }}">
+            <p class="ds-value-lg" style="color: {{ ($powerPanel['p90'] ?? 0) >= 0.65 ? 'var(--brand-icon, #0ea5e9)' : 'var(--text-primary)' }};">
                 @if($powerPanel['p90'] !== null)
                     {{ number_format($powerPanel['p90'] * 100, 0) }}%
                 @else
-                    <span class="text-slate-300">--</span>
+                    <span style="color: var(--text-muted);">--</span>
                 @endif
             </p>
         </div>
         {{-- Expected Days --}}
-        <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
+        <div class="text-center rounded-md py-3 px-2" style="background: var(--surface-2);">
             <p class="ds-label mb-1">Exp. Days</p>
-            <p class="ds-value-lg text-slate-800">
+            <p class="ds-value-lg" style="color: var(--text-primary);">
                 @if($powerPanel['expected_days'] !== null)
                     {{ $powerPanel['expected_days'] }}
                 @else
-                    <span class="text-slate-300">--</span>
+                    <span style="color: var(--text-muted);">--</span>
                 @endif
             </p>
         </div>
         {{-- Confidence --}}
-        <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
+        <div class="text-center rounded-md py-3 px-2" style="background: var(--surface-2);">
             <p class="ds-label mb-1">Confidence</p>
             @if($powerPanel['confidence'])
                 @php
                     $confScore = $powerPanel['confidence']['confidence_score'] ?? 0;
                     $confGrade = $powerPanel['confidence']['confidence_grade'] ?? '-';
-                    $confColor = match($confGrade) {
-                        'A' => 'text-[#00b4d8]',
-                        'B' => 'text-[#00b4d8]',
-                        'C' => 'text-slate-500',
-                        default => 'text-slate-400',
+                    $confStyle = match($confGrade) {
+                        'A', 'B' => 'color: var(--brand-icon, #0ea5e9);',
+                        'C' => 'color: var(--text-secondary);',
+                        default => 'color: var(--text-muted);',
                     };
                 @endphp
-                <p class="ds-value-lg {{ $confColor }}">{{ $confScore }} <span class="text-xs font-medium">({{ $confGrade }})</span></p>
+                <p class="ds-value-lg" style="{{ $confStyle }}">{{ $confScore }} <span class="text-xs font-medium">({{ $confGrade }})</span></p>
             @else
-                <p class="ds-value-lg text-slate-300">--</p>
+                <p class="ds-value-lg" style="color: var(--text-muted);">--</p>
             @endif
         </div>
         {{-- PPI --}}
-        <div class="text-center bg-slate-50 rounded-lg py-3 px-2">
+        <div class="text-center rounded-md py-3 px-2" style="background: var(--surface-2);">
             <p class="ds-label mb-1">PPI</p>
             @if($powerPanel['ppi'])
                 @php
                     $ppiScore = $powerPanel['ppi']['ppi_score'] ?? 0;
                     $ppiLabel = $powerPanel['ppi']['ppi_label'] ?? '-';
-                    $ppiColor = match($ppiLabel) {
-                        'Strong' => 'text-[#00b4d8]',
-                        'Balanced' => 'text-slate-600',
-                        default => 'text-slate-400',
+                    $ppiStyle = match($ppiLabel) {
+                        'Strong' => 'color: var(--brand-icon, #0ea5e9);',
+                        'Balanced' => 'color: var(--text-secondary);',
+                        default => 'color: var(--text-muted);',
                     };
                 @endphp
-                <p class="ds-value-lg {{ $ppiColor }}">{{ $ppiScore }} <span class="text-xs font-medium">({{ $ppiLabel }})</span></p>
+                <p class="ds-value-lg" style="{{ $ppiStyle }}">{{ $ppiScore }} <span class="text-xs font-medium">({{ $ppiLabel }})</span></p>
             @else
-                <p class="ds-value-lg text-slate-300">--</p>
+                <p class="ds-value-lg" style="color: var(--text-muted);">--</p>
             @endif
         </div>
     </div>
@@ -324,25 +323,25 @@
         $holdingCost = $powerPanel['holding_cost'] ?? null;
     @endphp
     @if($compStock || $holdingCost)
-    <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-5 pt-4 border-t border-slate-100">
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-5 pt-4" style="border-top: 1px solid var(--border);">
         @if($compStock)
-            <div class="bg-slate-50 rounded-lg px-3 py-2">
+            <div class="rounded-md px-3 py-2" style="background: var(--surface-2);">
                 <p class="ds-label">Active Stock</p>
-                <p class="text-sm font-bold text-slate-700 mt-0.5">{{ $compStock['total_active_stock'] ?? '--' }}</p>
+                <p class="text-sm font-bold mt-0.5" style="color: var(--text-primary);">{{ $compStock['total_active_stock'] ?? '--' }}</p>
             </div>
-            <div class="bg-slate-50 rounded-lg px-3 py-2">
+            <div class="rounded-md px-3 py-2" style="background: var(--surface-2);">
                 <p class="ds-label">Below Subject</p>
-                <p class="text-sm font-bold text-slate-700 mt-0.5">{{ $compStock['below_subject_count'] ?? '--' }}</p>
+                <p class="text-sm font-bold mt-0.5" style="color: var(--text-primary);">{{ $compStock['below_subject_count'] ?? '--' }}</p>
             </div>
-            <div class="bg-slate-50 rounded-lg px-3 py-2">
+            <div class="rounded-md px-3 py-2" style="background: var(--surface-2);">
                 <p class="ds-label">Above Subject</p>
-                <p class="text-sm font-bold text-slate-700 mt-0.5">{{ $compStock['above_subject_count'] ?? '--' }}</p>
+                <p class="text-sm font-bold mt-0.5" style="color: var(--text-primary);">{{ $compStock['above_subject_count'] ?? '--' }}</p>
             </div>
         @endif
         @if($holdingCost)
-            <div class="bg-slate-50 rounded-lg px-3 py-2">
+            <div class="rounded-md px-3 py-2" style="background: var(--surface-2);">
                 <p class="ds-label">Monthly Hold Cost</p>
-                <p class="text-sm font-bold text-slate-700 mt-0.5">R{{ number_format($holdingCost['monthly_total'] ?? 0, 0) }}</p>
+                <p class="text-sm font-bold mt-0.5" style="color: var(--text-primary);">R{{ number_format($holdingCost['monthly_total'] ?? 0, 0) }}</p>
             </div>
         @endif
     </div>
@@ -351,16 +350,16 @@
     {{-- Row 3: Explainability --}}
     @if($powerPanel['explainability'])
         @php $explain = $powerPanel['explainability']; @endphp
-        <div class="pt-4 border-t border-slate-100">
+        <div class="pt-4" style="border-top: 1px solid var(--border);">
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {{-- Key Drivers --}}
                 @if(!empty($explain['key_drivers']))
-                    <div class="bg-sky-50 rounded-lg p-3">
-                        <p class="text-[11px] font-semibold text-[#0b2a4a] mb-2 uppercase tracking-widest">Key Drivers</p>
+                    <div class="rounded-md p-3" style="background: color-mix(in srgb, var(--brand-icon) 8%, var(--surface));">
+                        <p class="text-[11px] font-semibold mb-2 uppercase tracking-widest" style="color: var(--brand-default, #0b2a4a);">Key Drivers</p>
                         <ul class="space-y-1.5">
                             @foreach($explain['key_drivers'] as $driver)
-                                <li class="text-xs text-slate-600 flex items-start gap-2">
-                                    <span class="text-[#00b4d8] mt-0.5 shrink-0 font-bold">+</span>
+                                <li class="text-xs flex items-start gap-2" style="color: var(--text-secondary);">
+                                    <span class="mt-0.5 shrink-0 font-bold" style="color: var(--brand-icon, #0ea5e9);">+</span>
                                     {{ $driver }}
                                 </li>
                             @endforeach
@@ -369,11 +368,11 @@
                 @endif
                 {{-- Risk Factors --}}
                 @if(!empty($explain['risk_factors']))
-                    <div class="bg-amber-50 rounded-lg p-3">
+                    <div class="bg-amber-50 rounded-md p-3">
                         <p class="text-[11px] font-semibold text-amber-700 mb-2 uppercase tracking-widest">Risk Factors</p>
                         <ul class="space-y-1.5">
                             @foreach($explain['risk_factors'] as $risk)
-                                <li class="text-xs text-slate-600 flex items-start gap-2">
+                                <li class="text-xs flex items-start gap-2" style="color: var(--text-secondary);">
                                     <span class="text-amber-500 mt-0.5 shrink-0 font-bold">!</span>
                                     {{ $risk }}
                                 </li>
@@ -384,7 +383,7 @@
             </div>
             {{-- Position summary --}}
             @if(!empty($explain['position_summary']))
-                <p class="mt-3 text-xs text-slate-500 italic bg-slate-50 rounded-lg px-3 py-2">{{ $explain['position_summary'] }}</p>
+                <p class="mt-3 text-xs italic rounded-md px-3 py-2" style="color: var(--text-secondary); background: var(--surface-2);">{{ $explain['position_summary'] }}</p>
             @endif
         </div>
     @endif
@@ -400,49 +399,49 @@
         <div>
         @if($lastSummary)
             <dl class="space-y-3 text-sm">
-                <div class="flex justify-between items-center py-1.5 border-b border-slate-50">
-                    <dt class="text-slate-400 text-xs font-medium">60-day sale probability</dt>
-                    <dd class="font-bold text-slate-800">
+                <div class="flex justify-between items-center py-1.5" style="border-bottom: 1px solid var(--border);">
+                    <dt class="text-xs font-medium" style="color: var(--text-muted);">60-day sale probability</dt>
+                    <dd class="font-bold" style="color: var(--text-primary);">
                         @if(isset($lastSummary['p60']) && $lastSummary['p60'] !== null)
                             {{ number_format($lastSummary['p60'] * 100, 0) }}%
                         @else
-                            <span class="text-slate-300">—</span>
+                            <span style="color: var(--text-muted);">—</span>
                         @endif
                     </dd>
                 </div>
-                <div class="flex justify-between items-center py-1.5 border-b border-slate-50">
-                    <dt class="text-slate-400 text-xs font-medium">Expected Days to Sell</dt>
-                    <dd class="font-bold text-slate-800">
+                <div class="flex justify-between items-center py-1.5" style="border-bottom: 1px solid var(--border);">
+                    <dt class="text-xs font-medium" style="color: var(--text-muted);">Expected Days to Sell</dt>
+                    <dd class="font-bold" style="color: var(--text-primary);">
                         @if(isset($lastSummary['expected_days']) && $lastSummary['expected_days'] !== null)
                             {{ $lastSummary['expected_days'] }} days
                         @else
-                            <span class="text-slate-300">—</span>
+                            <span style="color: var(--text-muted);">—</span>
                         @endif
                     </dd>
                 </div>
                 <div class="flex justify-between items-center py-1.5">
-                    <dt class="text-slate-400 text-xs font-medium">Months of Inventory</dt>
-                    <dd class="font-bold text-slate-800">
+                    <dt class="text-xs font-medium" style="color: var(--text-muted);">Months of Inventory</dt>
+                    <dd class="font-bold" style="color: var(--text-primary);">
                         @if(isset($lastSummary['months_of_inventory']) && $lastSummary['months_of_inventory'] !== null)
                             {{ number_format($lastSummary['months_of_inventory'], 1) }} mo
                         @else
-                            <span class="text-slate-300">—</span>
+                            <span style="color: var(--text-muted);">—</span>
                         @endif
                     </dd>
                 </div>
             </dl>
-            <p class="mt-4 text-xs text-slate-400 font-medium">
+            <p class="mt-4 text-xs font-medium" style="color: var(--text-muted);">
                 Snapshot saved {{ $latestSnapshot->created_at->format('Y-m-d H:i') }}
             </p>
         @else
-            <p class="text-sm text-slate-400 italic">No analysis run yet.</p>
+            <p class="text-sm italic" style="color: var(--text-muted);">No analysis run yet.</p>
             @if($readiness['can_compile'])
                 <a href="{{ route('presentations.analysis', $presentation) }}"
-                   class="mt-3 inline-block text-xs text-[#00b4d8] hover:underline font-medium">
+                   class="mt-3 inline-block text-xs hover:underline font-medium transition-all duration-300" style="color: var(--brand-icon, #0ea5e9);">
                     Run first analysis →
                 </a>
             @else
-                <p class="mt-2 text-xs text-slate-400">Complete the required evidence items above to unlock analysis.</p>
+                <p class="mt-2 text-xs" style="color: var(--text-muted);">Complete the required evidence items above to unlock analysis.</p>
             @endif
         @endif
         </div>
@@ -452,13 +451,13 @@
     <div class="ds-status-card">
         <h2 class="ds-section-header mb-3">Snapshots</h2>
         <div class="flex flex-col items-start">
-            <p class="ds-value-lg text-slate-800 mb-1">{{ $snapshotCount }}</p>
-            <p class="text-xs text-slate-400 font-medium">
+            <p class="ds-value-lg mb-1" style="color: var(--text-primary);">{{ $snapshotCount }}</p>
+            <p class="text-xs font-medium" style="color: var(--text-muted);">
                 {{ $snapshotCount === 1 ? 'snapshot saved' : 'snapshots saved' }}
             </p>
             @if($latestSnapshot)
                 <a href="{{ route('presentations.snapshots.show', [$presentation, $latestSnapshot]) }}"
-                   class="mt-4 inline-block text-xs text-[#00b4d8] hover:underline font-medium">
+                   class="mt-4 inline-block text-xs hover:underline font-medium transition-all duration-300" style="color: var(--brand-icon, #0ea5e9);">
                     View latest →
                 </a>
             @endif
@@ -587,11 +586,11 @@
                     }
                 }
             @endphp
-            <div class="mb-5 p-4 rounded-xl border-2 border-sky-200 bg-sky-50/50">
+            <div class="mb-5 p-4 rounded-md border-2 border-sky-200 bg-sky-50/50">
                 <div class="flex items-center justify-between gap-4 flex-wrap">
                     <div>
-                        <p class="text-xs font-semibold text-slate-600 mb-1">Quick Search — find competing listings</p>
-                        <p class="text-xs text-slate-500">
+                        <p class="text-xs font-semibold mb-1" style="color: var(--text-secondary);">Quick Search — find competing listings</p>
+                        <p class="text-xs" style="color: var(--text-secondary);">
                             {{ $p24TypeDisplay }},
                             @if($p24Beds) {{ $p24Beds }}+ beds, @endif
                             <strong>R {{ number_format($p24Min, 0, '.', ',') }}</strong> &ndash;
@@ -603,7 +602,7 @@
                             <a href="{{ $p24Url }}"
                                target="_blank"
                                rel="noopener noreferrer"
-                               class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-xs font-bold shadow-sm hover:shadow transition-all"
+                               class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-white text-xs font-bold shadow-sm hover:shadow transition-all"
                                style="background: linear-gradient(135deg, #4f46e5, #6366f1);">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
                                 Search {{ $p24Suburb }}
@@ -612,7 +611,7 @@
                                 <a href="{{ $p24WideUrl }}"
                                    target="_blank"
                                    rel="noopener noreferrer"
-                                   class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[#0b2a4a] text-xs font-bold border border-sky-300 bg-white hover:bg-sky-50 shadow-sm hover:shadow transition-all">
+                                   class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-[#0b2a4a] text-xs font-bold border border-sky-300 bg-white hover:bg-sky-50 shadow-sm hover:shadow transition-all">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
                                     {{ $p24Suburb }} + Surrounding
                                 </a>
@@ -621,7 +620,7 @@
                             <a href="{{ $p24FallbackUrl }}"
                                target="_blank"
                                rel="noopener noreferrer"
-                               class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-xs font-bold shadow-sm hover:shadow transition-all"
+                               class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-white text-xs font-bold shadow-sm hover:shadow transition-all"
                                style="background: linear-gradient(135deg, #4f46e5, #6366f1);">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
                                 Search Property24
@@ -631,13 +630,13 @@
                 </div>
             </div>
         @else
-            <div class="mb-5 p-3 rounded-lg bg-slate-50 border border-slate-200">
-                <p class="text-xs text-slate-400 italic">Enter an asking price to enable the Property24 search button.</p>
+            <div class="mb-5 p-3 rounded-md" style="background: var(--surface-2); border: 1px solid var(--border);">
+                <p class="text-xs italic" style="color: var(--text-muted);">Enter an asking price to enable the Property24 search button.</p>
             </div>
         @endif
 
         @if($links->isEmpty())
-            <p class="text-xs text-slate-400 italic mb-3">No links added yet.</p>
+            <p class="text-xs italic mb-3" style="color: var(--text-muted);">No links added yet.</p>
         @else
             @php
                 $linkTypeLabels = [
@@ -693,7 +692,10 @@
                                           class="inline">
                                         @csrf
                                         <button type="submit"
-                                                class="inline-block px-1 py-0.5 text-xs text-[#00b4d8] hover:text-[#0b2a4a]"
+                                                class="inline-block px-1 py-0.5 text-xs"
+                                                style="color: var(--brand-icon, #0ea5e9);"
+                                                onmouseover="this.style.color='var(--brand-default, #0b2a4a)'"
+                                                onmouseout="this.style.color='var(--brand-icon, #0ea5e9)'"
                                                 title="Re-run extraction">&#x27F3;</button>
                                     </form>
                                 @endunless
@@ -705,11 +707,11 @@
                                 @endif
 
                                 <a href="{{ $link->url }}" target="_blank" rel="noopener noreferrer"
-                                   class="text-[#00b4d8] hover:underline break-all">
+                                   class="hover:underline break-all" style="color: var(--brand-icon, #0ea5e9);">
                                     {{ \Illuminate\Support\Str::limit($link->url, 50) }}
                                 </a>
                                 @if($link->notes)
-                                    <span class="text-gray-400"> — {{ $link->notes }}</span>
+                                    <span style="color: var(--text-muted);"> — {{ $link->notes }}</span>
                                 @endif
                             </div>
                             <div class="flex items-center gap-1.5 shrink-0">
@@ -724,7 +726,10 @@
                                         @endforeach
                                     </select>
                                     <button type="submit"
-                                            class="text-xs text-[#00b4d8] hover:text-[#0b2a4a] font-semibold">Save</button>
+                                            class="text-xs font-semibold"
+                                            style="color: var(--brand-icon, #0ea5e9);"
+                                            onmouseover="this.style.color='var(--brand-default, #0b2a4a)'"
+                                            onmouseout="this.style.color='var(--brand-icon, #0ea5e9)'">Save</button>
                                 </form>
                                 <form method="POST"
                                       action="{{ route('presentations.links.destroy', [$presentation, $link]) }}">
@@ -762,11 +767,11 @@
                                 if (!empty($lVerified['price_median'])) $lParts[] = 'Median: R' . number_format($lVerified['price_median'], 0);
                             @endphp
                             @if(!empty($lParts))
-                                <div class="mt-1.5 text-xs text-slate-600 bg-sky-50 rounded px-2 py-1">
+                                <div class="mt-1.5 text-xs bg-sky-50 rounded px-2 py-1" style="color: var(--text-secondary);">
                                     Search capture | {{ implode(' | ', $lParts) }}
                                 </div>
                             @else
-                                <div class="mt-1.5 text-xs text-slate-600 bg-sky-50 rounded px-2 py-1">
+                                <div class="mt-1.5 text-xs bg-sky-50 rounded px-2 py-1" style="color: var(--text-secondary);">
                                     Search capture
                                 </div>
                             @endif
@@ -784,7 +789,7 @@
                                 if ($lFloor) $lParts[] = $lFloor . 'm²';
                                 if (!empty($lVerified['suburb'])) $lParts[] = $lVerified['suburb'];
                             @endphp
-                            <div class="mt-1.5 text-xs text-slate-600 bg-slate-50 rounded px-2 py-1">
+                            <div class="mt-1.5 text-xs rounded px-2 py-1" style="color: var(--text-secondary); background: var(--surface-2);">
                                 {{ implode(' | ', $lParts) }}
                             </div>
                         @elseif($lVerified)
@@ -792,11 +797,11 @@
                             @php
                                 $lSkipKeys = ['extractor_version', 'link_type', 'url', 'source_domain', 'source_site', 'link_subtype', 'snapshot_id', 'extraction_method', 'snapshot_error', 'top_listings', 'blocked_reason', 'timed_out', 'http_status', 'content_bytes', '_page_type', '_extractor', '_extraction', '_capture_source', '_capture_id', 'search', 'listing_urls_count'];
                             @endphp
-                            <div class="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500">
+                            <div class="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs" style="color: var(--text-secondary);">
                                 @foreach($lVerified as $lKey => $lVal)
                                     @if(!in_array($lKey, $lSkipKeys) && $lVal !== null && $lVal !== '' && !is_array($lVal))
                                         <span>
-                                            <span class="text-gray-400">{{ str_replace('_', ' ', $lKey) }}:</span>
+                                            <span style="color: var(--text-muted);">{{ str_replace('_', ' ', $lKey) }}:</span>
                                             @if(is_numeric($lVal) && $lVal >= 10000)
                                                 R{{ number_format($lVal, 0) }}
                                             @else
@@ -810,7 +815,7 @@
                         @if($lHasCapture)
                             @php $lCapture = $link->portalCapture; @endphp
                             @if($lCapture)
-                                <div class="mt-1.5 bg-sky-50 border border-sky-200 rounded px-2 py-1.5 text-xs text-[#0b2a4a] flex items-center justify-between gap-2">
+                                <div class="mt-1.5 bg-sky-50 border border-sky-200 rounded px-2 py-1.5 text-xs flex items-center justify-between gap-2" style="color: var(--brand-default, #0b2a4a);">
                                     <div class="flex-1">
                                         <span class="font-semibold">Captured via extension</span>
                                         — {{ number_format($lCapture->html_bytes) }} bytes
@@ -829,7 +834,7 @@
                         @if($lExtStatus === 'failed' && !$lHasCapture)
                             @if(config('features.portal_extension_capture_v1') && $link->type === 'property24')
                                 {{-- Portal extension capture mode: no headless retry --}}
-                                <div class="mt-1.5 bg-sky-50 border border-sky-200 rounded px-2 py-1.5 text-xs text-[#0b2a4a] flex items-center justify-between gap-2">
+                                <div class="mt-1.5 bg-sky-50 border border-sky-200 rounded px-2 py-1.5 text-xs flex items-center justify-between gap-2" style="color: var(--brand-default, #0b2a4a);">
                                     <div class="flex-1">
                                         <span class="font-semibold">Capture via Browser Extension</span> — open the portal and use the capture extension
                                     </div>
@@ -879,7 +884,7 @@
 
                         {{-- Override audit info --}}
                         @if($link->isOverridden())
-                            <p class="mt-1 text-xs text-slate-500">
+                            <p class="mt-1 text-xs" style="color: var(--text-secondary);">
                                 Overridden {{ $link->override_at ? $link->override_at->format('Y-m-d H:i') : '' }}
                                 @if($link->override_by_user_id)
                                     by user #{{ $link->override_by_user_id }}
@@ -891,7 +896,7 @@
                         @if(config('features.presentation_link_details_v1') && isset($linkViews[$link->id]))
                             @php $lView = $linkViews[$link->id]; @endphp
                             <details class="mt-1.5">
-                                <summary class="text-xs text-[#00b4d8] cursor-pointer hover:underline">
+                                <summary class="text-xs cursor-pointer hover:underline" style="color: var(--brand-icon, #0ea5e9);">
                                     @if(($lView['capture_page_type'] ?? null) === 'search')
                                         View search summary
                                     @else
@@ -903,36 +908,36 @@
                                     @if(($lView['capture_page_type'] ?? null) === 'search')
                                         {{-- ═══ SEARCH CAPTURE SUMMARY ═══ --}}
                                         <div class="bg-sky-50 border border-sky-200 rounded p-3">
-                                            <p class="text-xs font-semibold text-[#0b2a4a] mb-2 uppercase tracking-wide">Search Capture Summary</p>
+                                            <p class="text-xs font-semibold mb-2 uppercase tracking-wide" style="color: var(--brand-default, #0b2a4a);">Search Capture Summary</p>
                                             @if(!empty($lView['search_summary']))
                                                 <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
                                                     @if(!empty($lView['search_summary']['listings_found']))
-                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Listings found</dt>
-                                                        <dd class="text-[#0b2a4a] font-medium">{{ $lView['search_summary']['listings_found'] }}</dd>
+                                                        <dt class="whitespace-nowrap" style="color: var(--brand-icon, #0ea5e9);">Listings found</dt>
+                                                        <dd class="font-medium" style="color: var(--brand-default, #0b2a4a);">{{ $lView['search_summary']['listings_found'] }}</dd>
                                                     @endif
                                                     @if(!empty($lView['search_summary']['total_results']))
-                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Total results</dt>
-                                                        <dd class="text-[#0b2a4a] font-medium">{{ $lView['search_summary']['total_results'] }}</dd>
+                                                        <dt class="whitespace-nowrap" style="color: var(--brand-icon, #0ea5e9);">Total results</dt>
+                                                        <dd class="font-medium" style="color: var(--brand-default, #0b2a4a);">{{ $lView['search_summary']['total_results'] }}</dd>
                                                     @endif
                                                     @if(!empty($lView['search_summary']['price_change_count']))
-                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Price changes</dt>
+                                                        <dt class="whitespace-nowrap" style="color: var(--brand-icon, #0ea5e9);">Price changes</dt>
                                                         <dd class="text-amber-700 font-semibold">{{ $lView['search_summary']['price_change_count'] }}</dd>
                                                     @endif
                                                     @if(!empty($lView['search_summary']['capture_time']))
-                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Captured</dt>
-                                                        <dd class="text-[#0b2a4a]">{{ $lView['search_summary']['capture_time'] }}</dd>
+                                                        <dt class="whitespace-nowrap" style="color: var(--brand-icon, #0ea5e9);">Captured</dt>
+                                                        <dd style="color: var(--brand-default, #0b2a4a);">{{ $lView['search_summary']['capture_time'] }}</dd>
                                                     @endif
                                                     @if(!empty($lView['search_summary']['html_bytes']))
-                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Page size</dt>
-                                                        <dd class="text-[#0b2a4a]">{{ number_format($lView['search_summary']['html_bytes']) }} bytes</dd>
+                                                        <dt class="whitespace-nowrap" style="color: var(--brand-icon, #0ea5e9);">Page size</dt>
+                                                        <dd style="color: var(--brand-default, #0b2a4a);">{{ number_format($lView['search_summary']['html_bytes']) }} bytes</dd>
                                                     @endif
                                                     @if(!empty($lView['search_summary']['parse_status']))
-                                                        <dt class="text-[#38bfe0] whitespace-nowrap">Status</dt>
-                                                        <dd class="text-[#0b2a4a]">{{ $lView['search_summary']['parse_status'] }}</dd>
+                                                        <dt class="whitespace-nowrap" style="color: var(--brand-icon, #0ea5e9);">Status</dt>
+                                                        <dd style="color: var(--brand-default, #0b2a4a);">{{ $lView['search_summary']['parse_status'] }}</dd>
                                                     @endif
                                                 </dl>
                                             @endif
-                                            <p class="mt-2 text-xs text-[#00b4d8] italic">
+                                            <p class="mt-2 text-xs italic" style="color: var(--brand-icon, #0ea5e9);">
                                                 Search captures monitor competitor changes. To see listing details, open the listing page and capture it.
                                             </p>
                                         </div>
@@ -942,24 +947,24 @@
 
                                         {{-- Imported fields (curated, human-readable) --}}
                                         @if(!empty($lView['imported']))
-                                            <div class="bg-gray-50 rounded p-2">
-                                                <p class="text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Imported data</p>
+                                            <div class="rounded p-2" style="background: var(--surface-2);">
+                                                <p class="text-xs font-medium mb-1.5 uppercase tracking-wide" style="color: var(--text-secondary);">Imported data</p>
                                                 <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
                                                     @foreach($lView['imported'] as $fieldLabel => $fieldVal)
-                                                        <dt class="text-gray-400 whitespace-nowrap">{{ $fieldLabel }}</dt>
-                                                        <dd class="text-gray-700 font-medium">{{ $fieldVal }}</dd>
+                                                        <dt class="whitespace-nowrap" style="color: var(--text-muted);">{{ $fieldLabel }}</dt>
+                                                        <dd class="font-medium" style="color: var(--text-primary);">{{ $fieldVal }}</dd>
                                                     @endforeach
                                                 </dl>
                                             </div>
                                         @else
-                                            <p class="text-xs text-gray-400 italic">No imported data available.</p>
+                                            <p class="text-xs italic" style="color: var(--text-muted);">No imported data available.</p>
                                         @endif
 
                                         {{-- Meta row --}}
                                         @if(!empty($lView['meta']))
-                                            <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-400">
+                                            <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-xs" style="color: var(--text-muted);">
                                                 @foreach($lView['meta'] as $mLabel => $mVal)
-                                                    <span>{{ $mLabel }}: <span class="text-gray-600">{{ $mVal }}</span></span>
+                                                    <span>{{ $mLabel }}: <span style="color: var(--text-secondary);">{{ $mVal }}</span></span>
                                                 @endforeach
                                             </div>
                                         @endif
@@ -968,13 +973,13 @@
                                         @if(!empty($lView['override_fields']))
                                             <form method="POST"
                                                   action="{{ route('presentations.links.override', [$presentation, $link]) }}"
-                                                  class="border border-slate-200 rounded p-2 bg-slate-50">
+                                                  class="rounded p-2" style="border: 1px solid var(--border); background: var(--surface-2);">
                                                 @csrf
                                                 @method('PATCH')
-                                                <p class="text-xs font-medium text-slate-600 mb-1.5">Override values</p>
+                                                <p class="text-xs font-medium mb-1.5" style="color: var(--text-secondary);">Override values</p>
                                                 <table class="w-full text-xs border-collapse">
                                                     <thead>
-                                                        <tr class="text-left text-gray-400 border-b">
+                                                        <tr class="text-left border-b" style="color: var(--text-muted); border-color: var(--border);">
                                                             <th class="py-1 pr-2 font-medium">Field</th>
                                                             <th class="py-1 pr-2 font-medium">Current</th>
                                                             <th class="py-1 pr-2 font-medium">Imported</th>
@@ -983,24 +988,24 @@
                                                     </thead>
                                                     <tbody>
                                                         @foreach($lView['override_fields'] as $oField)
-                                                            <tr class="border-b border-gray-100">
-                                                                <td class="py-1.5 pr-2 text-gray-500 whitespace-nowrap">{{ $oField['label'] }}</td>
-                                                                <td class="py-1.5 pr-2 text-gray-700">{{ $oField['current'] ?? '—' }}</td>
-                                                                <td class="py-1.5 pr-2 {{ $oField['imported'] ? 'text-[#00b4d8]' : 'text-gray-300' }}">
+                                                            <tr style="border-bottom: 1px solid var(--border);">
+                                                                <td class="py-1.5 pr-2 whitespace-nowrap" style="color: var(--text-secondary);">{{ $oField['label'] }}</td>
+                                                                <td class="py-1.5 pr-2" style="color: var(--text-primary);">{{ $oField['current'] ?? '—' }}</td>
+                                                                <td class="py-1.5 pr-2" style="color: {{ $oField['imported'] ? 'var(--brand-icon, #0ea5e9)' : 'var(--text-muted)' }};">
                                                                     {{ $oField['imported'] ?? ($oField['imported_missing_label'] ?? 'No imported value yet') }}
                                                                 </td>
                                                                 <td class="py-1.5">
                                                                     <input type="text" name="override_data[{{ $oField['key'] }}]"
                                                                            placeholder="{{ $oField['label'] }}"
                                                                            value="{{ $oField['current_raw'] ?? '' }}"
-                                                                           class="w-full border border-gray-200 rounded px-1.5 py-0.5 text-xs">
+                                                                           class="w-full rounded px-1.5 py-0.5 text-xs" style="border: 1px solid var(--border);">
                                                                 </td>
                                                             </tr>
                                                         @endforeach
                                                     </tbody>
                                                 </table>
                                                 @if(!empty($lView['meta']['Captured']))
-                                                    <p class="text-xs text-gray-400 mt-1">Last captured: {{ $lView['meta']['Captured'] }}
+                                                    <p class="text-xs mt-1" style="color: var(--text-muted);">Last captured: {{ $lView['meta']['Captured'] }}
                                                         @if(!empty($lView['meta']['Source']))
                                                             ({{ $lView['meta']['Source'] }})
                                                         @endif
@@ -1018,19 +1023,19 @@
                                             @php $lOverride = $link->override_json ?? $link->extracted_json ?? []; @endphp
                                             <form method="POST"
                                                   action="{{ route('presentations.links.override', [$presentation, $link]) }}"
-                                                  class="border border-slate-200 rounded p-2 bg-slate-50">
+                                                  class="rounded p-2" style="border: 1px solid var(--border); background: var(--surface-2);">
                                                 @csrf
                                                 @method('PATCH')
-                                                <p class="text-xs font-medium text-slate-600 mb-1.5">Override values</p>
+                                                <p class="text-xs font-medium mb-1.5" style="color: var(--text-secondary);">Override values</p>
                                                 <div class="grid grid-cols-2 gap-1.5">
                                                     @if($link->type === 'market_article')
                                                         <input type="text" name="override_data[headline]" placeholder="Headline"
                                                                value="{{ $lOverride['headline'] ?? '' }}"
-                                                               class="col-span-2 border border-gray-200 rounded px-2 py-1 text-xs">
+                                                               class="col-span-2 rounded px-2 py-1 text-xs" style="border: 1px solid var(--border);">
                                                     @else
                                                         <input type="text" name="override_data[notes]" placeholder="Notes"
                                                                value="{{ $lOverride['notes'] ?? '' }}"
-                                                               class="col-span-2 border border-gray-200 rounded px-2 py-1 text-xs">
+                                                               class="col-span-2 rounded px-2 py-1 text-xs" style="border: 1px solid var(--border);">
                                                     @endif
                                                 </div>
                                                 <div class="flex gap-2 mt-1.5">
@@ -1049,7 +1054,8 @@
                                                 @csrf
                                                 @method('DELETE')
                                                 <button type="submit"
-                                                        class="px-2 py-1 text-xs text-gray-500 hover:text-red-600"
+                                                        class="px-2 py-1 text-xs" style="color: var(--text-secondary);"
+                                                        onmouseover="this.style.color='#dc2626'" onmouseout="this.style.color='var(--text-secondary)'"
                                                         onclick="return confirm('Clear this override?')">
                                                     Clear Override
                                                 </button>
@@ -1060,13 +1066,13 @@
                                     {{-- Diagnostics (raw) — admin only --}}
                                     @if($isAdmin && $link->extracted_json)
                                         <details class="mt-1">
-                                            <summary class="text-xs text-gray-400 cursor-pointer hover:text-gray-600">Diagnostics (raw)</summary>
-                                            <div class="mt-1 bg-gray-50 rounded p-2 text-xs font-mono text-gray-600 overflow-x-auto max-h-40 overflow-y-auto">
+                                            <summary class="text-xs cursor-pointer" style="color: var(--text-muted);" onmouseover="this.style.color='var(--text-secondary)'" onmouseout="this.style.color='var(--text-muted)'">Diagnostics (raw)</summary>
+                                            <div class="mt-1 rounded p-2 text-xs font-mono overflow-x-auto max-h-40 overflow-y-auto" style="background: var(--surface-2); color: var(--text-secondary);">
                                                 <pre>{{ json_encode($link->extracted_json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
                                             </div>
                                             @if($link->portal_capture_id && $link->portalCapture && $link->portalCapture->extracted_fields_json)
-                                                <p class="text-xs text-gray-400 mt-1">Portal capture fields:</p>
-                                                <div class="mt-0.5 bg-gray-50 rounded p-2 text-xs font-mono text-gray-600 overflow-x-auto max-h-40 overflow-y-auto">
+                                                <p class="text-xs mt-1" style="color: var(--text-muted);">Portal capture fields:</p>
+                                                <div class="mt-0.5 rounded p-2 text-xs font-mono overflow-x-auto max-h-40 overflow-y-auto" style="background: var(--surface-2); color: var(--text-secondary);">
                                                     <pre>{{ json_encode($link->portalCapture->extracted_fields_json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
                                                 </div>
                                             @endif
@@ -1077,50 +1083,50 @@
                         @else
                             {{-- Legacy fallback (feature flag off) --}}
                             <details class="mt-1.5">
-                                <summary class="text-xs text-[#00b4d8] cursor-pointer hover:underline">
+                                <summary class="text-xs cursor-pointer hover:underline" style="color: var(--brand-icon, #0ea5e9);">
                                     {{ $link->isOverridden() ? 'Edit override' : 'View details / Override' }}
                                 </summary>
                                 <div class="mt-2 space-y-2">
                                     @if($link->extracted_json)
-                                        <div class="bg-gray-50 rounded p-2 text-xs font-mono text-gray-600 overflow-x-auto max-h-40 overflow-y-auto">
+                                        <div class="rounded p-2 text-xs font-mono overflow-x-auto max-h-40 overflow-y-auto" style="background: var(--surface-2); color: var(--text-secondary);">
                                             <pre>{{ json_encode($link->extracted_json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
                                         </div>
                                     @endif
                                     @php $lOverride = $link->override_json ?? $link->extracted_json ?? []; @endphp
                                     <form method="POST"
                                           action="{{ route('presentations.links.override', [$presentation, $link]) }}"
-                                          class="border border-slate-200 rounded p-2 bg-slate-50">
+                                          class="rounded p-2" style="border: 1px solid var(--border); background: var(--surface-2);">
                                         @csrf
                                         @method('PATCH')
-                                        <p class="text-xs font-medium text-slate-600 mb-1.5">Override values</p>
+                                        <p class="text-xs font-medium mb-1.5" style="color: var(--text-secondary);">Override values</p>
                                         <div class="grid grid-cols-2 gap-1.5">
                                             @if(in_array($link->type, ['property24', 'active_listing', 'competitor_listing']))
                                                 <input type="number" name="override_data[asking_price]" placeholder="Asking price (R)"
                                                        value="{{ $lOverride['asking_price'] ?? '' }}"
-                                                       class="border border-gray-200 rounded px-2 py-1 text-xs">
+                                                       class="rounded px-2 py-1 text-xs" style="border: 1px solid var(--border);">
                                                 <input type="text" name="override_data[suburb]" placeholder="Suburb"
                                                        value="{{ $lOverride['suburb'] ?? '' }}"
-                                                       class="border border-gray-200 rounded px-2 py-1 text-xs">
+                                                       class="rounded px-2 py-1 text-xs" style="border: 1px solid var(--border);">
                                                 <input type="number" name="override_data[beds]" placeholder="Beds"
                                                        value="{{ $lOverride['beds'] ?? '' }}"
-                                                       class="border border-gray-200 rounded px-2 py-1 text-xs">
+                                                       class="rounded px-2 py-1 text-xs" style="border: 1px solid var(--border);">
                                                 <input type="number" name="override_data[baths]" placeholder="Baths"
                                                        value="{{ $lOverride['baths'] ?? '' }}"
-                                                       class="border border-gray-200 rounded px-2 py-1 text-xs">
+                                                       class="rounded px-2 py-1 text-xs" style="border: 1px solid var(--border);">
                                                 <input type="number" name="override_data[floor_area_m2]" placeholder="Floor m²"
                                                        value="{{ $lOverride['floor_area_m2'] ?? '' }}"
-                                                       class="border border-gray-200 rounded px-2 py-1 text-xs">
+                                                       class="rounded px-2 py-1 text-xs" style="border: 1px solid var(--border);">
                                                 <input type="number" name="override_data[erf_m2]" placeholder="Erf m²"
                                                        value="{{ $lOverride['erf_m2'] ?? '' }}"
-                                                       class="border border-gray-200 rounded px-2 py-1 text-xs">
+                                                       class="rounded px-2 py-1 text-xs" style="border: 1px solid var(--border);">
                                             @elseif($link->type === 'market_article')
                                                 <input type="text" name="override_data[headline]" placeholder="Headline"
                                                        value="{{ $lOverride['headline'] ?? '' }}"
-                                                       class="col-span-2 border border-gray-200 rounded px-2 py-1 text-xs">
+                                                       class="col-span-2 rounded px-2 py-1 text-xs" style="border: 1px solid var(--border);">
                                             @else
                                                 <input type="text" name="override_data[notes]" placeholder="Notes"
                                                        value="{{ $lOverride['notes'] ?? '' }}"
-                                                       class="col-span-2 border border-gray-200 rounded px-2 py-1 text-xs">
+                                                       class="col-span-2 rounded px-2 py-1 text-xs" style="border: 1px solid var(--border);">
                                             @endif
                                         </div>
                                         <div class="flex gap-2 mt-1.5">
@@ -1137,7 +1143,8 @@
                                             @csrf
                                             @method('DELETE')
                                             <button type="submit"
-                                                    class="px-2 py-1 text-xs text-gray-500 hover:text-red-600"
+                                                    class="px-2 py-1 text-xs" style="color: var(--text-secondary);"
+                                                    onmouseover="this.style.color='#dc2626'" onmouseout="this.style.color='var(--text-secondary)'"
                                                     onclick="return confirm('Clear this override?')">
                                                 Clear Override
                                             </button>
@@ -1151,7 +1158,7 @@
             </ul>
         @endif
 
-        <div class="mt-4 pt-4 border-t border-slate-100">
+        <div class="mt-4 pt-4" style="border-top: 1px solid var(--border);">
         <form method="POST" action="{{ route('presentations.links.store', $presentation) }}" id="add-link-form" class="space-y-2.5">
             @csrf
             <div class="flex gap-2">
@@ -1179,7 +1186,7 @@
                 </button>
             </div>
             <p id="add-link-error" class="text-xs text-red-600 hidden"></p>
-            <p id="add-link-success" class="text-xs text-[#00b4d8] hidden"></p>
+            <p id="add-link-success" class="text-xs hidden" style="color: var(--brand-icon, #0ea5e9);"></p>
 
             @error('url')
                 <p class="text-xs text-red-600">{{ $message }}</p>
@@ -1352,42 +1359,42 @@
         {{-- Summary line --}}
         <div id="captures-summary" class="mb-4 hidden">
             <div class="flex items-center gap-4 text-xs">
-                <span id="captures-summary-listings" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-50 text-[#0b2a4a] font-semibold"></span>
-                <span id="captures-summary-searches" class="text-slate-400 font-medium"></span>
+                <span id="captures-summary-listings" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-sky-50 font-semibold" style="color: var(--brand-default, #0b2a4a);"></span>
+                <span id="captures-summary-searches" class="font-medium" style="color: var(--text-muted);"></span>
             </div>
         </div>
 
         {{-- Captured Searches --}}
         <div id="captures-searches" class="hidden mb-5">
-            <p class="text-[11px] font-semibold text-slate-400 mb-2.5 uppercase tracking-widest">Captured Searches</p>
+            <p class="text-[11px] font-semibold mb-2.5 uppercase tracking-widest" style="color: var(--text-muted);">Captured Searches</p>
             <div id="captures-searches-list" class="space-y-2"></div>
         </div>
 
         {{-- Captured Properties --}}
         <div id="captures-properties" class="hidden mb-5">
-            <p class="text-[11px] font-semibold text-slate-400 mb-2.5 uppercase tracking-widest">Captured Properties</p>
+            <p class="text-[11px] font-semibold mb-2.5 uppercase tracking-widest" style="color: var(--text-muted);">Captured Properties</p>
             <div id="captures-properties-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
         </div>
 
         {{-- Unattached captures --}}
         <div id="captures-unattached" class="hidden mb-4">
-            <p class="text-[11px] font-semibold text-slate-400 mb-2.5 uppercase tracking-widest">Unattached (your recent captures)</p>
+            <p class="text-[11px] font-semibold mb-2.5 uppercase tracking-widest" style="color: var(--text-muted);">Unattached (your recent captures)</p>
             <div id="captures-unattached-list" class="space-y-2"></div>
         </div>
 
         {{-- Empty state --}}
         <div id="captures-empty">
-            <p class="text-xs text-slate-400 italic">Loading captures...</p>
+            <p class="text-xs italic" style="color: var(--text-muted);">Loading captures...</p>
         </div>
 
         {{-- Technical details (admin, collapsed) --}}
         @if($isAdmin)
-        <details class="mt-4 border-t border-slate-100 pt-3" id="captures-tech-details">
-            <summary class="text-[11px] font-semibold text-slate-400 cursor-pointer hover:text-slate-600 select-none uppercase tracking-widest">
+        <details class="mt-4 pt-3" style="border-top: 1px solid var(--border);" id="captures-tech-details">
+            <summary class="text-[11px] font-semibold cursor-pointer select-none uppercase tracking-widest" style="color: var(--text-muted);" onmouseover="this.style.color='var(--text-secondary)'" onmouseout="this.style.color='var(--text-muted)'">
                 Technical Details
             </summary>
             <div id="captures-tech-container" class="mt-2">
-                <p class="text-xs text-gray-400 italic">Loading...</p>
+                <p class="text-xs italic" style="color: var(--text-muted);">Loading...</p>
             </div>
         </details>
         @endif
@@ -1544,8 +1551,8 @@
                 var statusClass = c.parse_status === 'parsed' ? 'bg-sky-50 text-[#00b4d8]' : 'bg-slate-100 text-slate-400';
                 var statusLabel = c.parse_status === 'parsed' ? 'Parsed' : (c.parse_status || 'Pending');
 
-                var html = '<div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">';
-                html += '<div class="shrink-0 w-8 h-8 rounded-lg bg-sky-100 flex items-center justify-center">';
+                var html = '<div class="flex items-center gap-3 px-3 py-2.5 rounded-md bg-slate-50 hover:bg-slate-100 transition-colors">';
+                html += '<div class="shrink-0 w-8 h-8 rounded-md bg-sky-100 flex items-center justify-center">';
                 html += '<svg class="w-4 h-4 text-[#00b4d8]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>';
                 html += '</div>';
                 html += '<div class="flex-1 min-w-0">';
@@ -1579,7 +1586,7 @@
                 var title = (f.name || '').replace(/\s*[-|–].*(Property24|PrivateProperty).*$/i, '').trim();
                 if (title.length > 60) title = title.substring(0, 57) + '...';
 
-                var html = '<div class="rounded-lg border border-slate-100 overflow-hidden hover:border-slate-200 transition-colors">';
+                var html = '<div class="rounded-md border border-slate-100 overflow-hidden hover:border-slate-200 transition-colors">';
 
                 // Image + overlay (always show — placeholder if no image)
                 html += '<div class="relative h-28 bg-slate-100 overflow-hidden">';
@@ -1650,7 +1657,7 @@
                     ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600">search</span>'
                     : '<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-600">property</span>';
 
-                var html = '<div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-50">';
+                var html = '<div class="flex items-center gap-3 px-3 py-2 rounded-md bg-slate-50">';
                 html += '<div class="flex-1 min-w-0">';
                 html += '<p class="text-xs text-slate-600 truncate">' + esc(label) + '</p>';
                 html += '<span class="text-[11px] text-slate-400">' + shortDate(c.captured_at) + '</span>';
@@ -1925,13 +1932,13 @@
 
         {{-- Upload status summary --}}
         @if($totalUploads > 0)
-            <div class="mb-4 px-3 py-2 rounded-lg {{ empty($missingTypes) ? 'bg-sky-50' : 'bg-slate-50' }}">
+            <div class="mb-4 px-3 py-2 rounded-md" style="background: {{ empty($missingTypes) ? 'var(--surface-2)' : 'var(--surface-2)' }};">
                 <div class="flex items-center gap-2 text-xs">
                     @if(empty($missingTypes))
-                        <span class="text-[#00b4d8] font-semibold">Documents: {{ count($presentTypes) }}/3 uploaded ✓</span>
+                        <span class="font-semibold" style="color: var(--brand-icon, #0ea5e9);">Documents: {{ count($presentTypes) }}/3 uploaded ✓</span>
                     @else
-                        <span class="text-slate-600 font-semibold">Documents: {{ count($presentTypes) }}/3</span>
-                        <span class="text-slate-400">— missing:
+                        <span class="font-semibold" style="color: var(--text-secondary);">Documents: {{ count($presentTypes) }}/3</span>
+                        <span style="color: var(--text-muted);">— missing:
                             {{ implode(', ', array_map(fn($t) => $docTypeLabels[$t] ?? $t, $missingTypes)) }}
                         </span>
                     @endif
@@ -1940,9 +1947,9 @@
         @endif
 
         @if($presentation->uploads->isEmpty())
-            <p class="text-xs text-slate-400 italic mb-3">No documents uploaded yet.</p>
+            <p class="text-xs italic mb-3" style="color: var(--text-muted);">No documents uploaded yet.</p>
         @else
-            <ul class="space-y-3 mb-4 text-xs text-slate-600">
+            <ul class="space-y-3 mb-4 text-xs" style="color: var(--text-secondary);">
                 @foreach($presentation->uploads as $upload)
                     <li class="pres-doc-row">
                         {{-- Row 1: File header --}}
@@ -1966,8 +1973,8 @@
                             <div class="flex items-center gap-2 min-w-0 flex-wrap">
                                 <span class="text-lg shrink-0 leading-none">{{ $uIcon }}</span>
                                 <div class="min-w-0">
-                                    <span class="font-semibold text-slate-700">{{ $uTypeLabel }}</span>
-                                    <span class="text-slate-400 ml-1 truncate">{{ $upload->original_filename ?? basename($upload->file_path) }}</span>
+                                    <span class="font-semibold" style="color: var(--text-primary);">{{ $uTypeLabel }}</span>
+                                    <span class="ml-1 truncate" style="color: var(--text-muted);">{{ $upload->original_filename ?? basename($upload->file_path) }}</span>
                                 </div>
 
                                 <span class="pres-badge {{ $uExtBadge }}">
@@ -1979,7 +1986,10 @@
                                       class="inline">
                                     @csrf
                                     <button type="submit"
-                                            class="inline-block px-1 py-0.5 text-xs text-[#00b4d8] hover:text-[#0b2a4a]"
+                                            class="inline-block px-1 py-0.5 text-xs"
+                                            style="color: var(--brand-icon, #0ea5e9);"
+                                            onmouseover="this.style.color='var(--brand-default, #0b2a4a)'"
+                                            onmouseout="this.style.color='var(--brand-icon, #0ea5e9)'"
                                             title="Re-run extraction">&#x27F3;</button>
                                 </form>
 
@@ -2016,12 +2026,15 @@
                                         @endforeach
                                     </select>
                                     <button type="submit"
-                                            class="text-xs text-[#00b4d8] hover:text-[#0b2a4a] font-semibold">Save</button>
+                                            class="text-xs font-semibold"
+                                            style="color: var(--brand-icon, #0ea5e9);"
+                                            onmouseover="this.style.color='var(--brand-default, #0b2a4a)'"
+                                            onmouseout="this.style.color='var(--brand-icon, #0ea5e9)'">Save</button>
                                 </form>
                             @else
                                 {{-- Known type: small "Change type" toggle --}}
                                 <details class="shrink-0">
-                                    <summary class="text-[11px] text-slate-400 cursor-pointer hover:text-[#00b4d8]">Change type</summary>
+                                    <summary class="text-[11px] cursor-pointer" style="color: var(--text-muted);" onmouseover="this.style.color='var(--brand-icon, #0ea5e9)'" onmouseout="this.style.color='var(--text-muted)'">Change type</summary>
                                     <form method="POST"
                                           action="{{ route('presentations.uploads.update-type', [$presentation, $upload]) }}"
                                           class="flex items-center gap-1.5 mt-1">
@@ -2033,7 +2046,10 @@
                                             @endforeach
                                         </select>
                                         <button type="submit"
-                                                class="text-xs text-[#00b4d8] hover:text-[#0b2a4a] font-semibold">Save</button>
+                                                class="text-xs font-semibold"
+                                                style="color: var(--brand-icon, #0ea5e9);"
+                                                onmouseover="this.style.color='var(--brand-default, #0b2a4a)'"
+                                                onmouseout="this.style.color='var(--brand-icon, #0ea5e9)'">Save</button>
                                     </form>
                                 </details>
                             @endif
@@ -2050,23 +2066,23 @@
 
                         @if($hasDocExtract && $upload->type === 'cma')
                             {{-- ── CMA Valuation Summary Card ── --}}
-                            <div class="mt-2 bg-sky-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
-                                <div class="font-semibold text-[#0b2a4a]">CMA Valuation Summary</div>
+                            <div class="mt-2 bg-sky-50 rounded-md px-3 py-2 text-xs space-y-1" style="color: var(--text-primary);">
+                                <div class="font-semibold" style="color: var(--brand-default, #0b2a4a);">CMA Valuation Summary</div>
                                 @if(isset($uFields['cma.lower_range']) || isset($uFields['cma.middle_range']) || isset($uFields['cma.upper_range']))
                                     <div>
-                                        <span class="text-gray-500">Price Range:</span>
+                                        <span style="color: var(--text-secondary);">Price Range:</span>
                                         @if(isset($uFields['cma.lower_range'])) R{{ number_format((int)$uFields['cma.lower_range']) }} @endif
                                         @if(isset($uFields['cma.middle_range'])) &ndash; <span class="font-medium">R{{ number_format((int)$uFields['cma.middle_range']) }}</span> @endif
                                         @if(isset($uFields['cma.upper_range'])) &ndash; R{{ number_format((int)$uFields['cma.upper_range']) }} @endif
                                     </div>
-                                    <div class="text-[10px] text-gray-400 -mt-0.5">Lower &ndash; Middle &ndash; Upper</div>
+                                    <div class="text-[10px] -mt-0.5" style="color: var(--text-muted);">Lower &ndash; Middle &ndash; Upper</div>
                                 @endif
                                 @if(isset($uFields['municipal.total_value']))
                                     <div>
-                                        <span class="text-gray-500">Municipal:</span>
+                                        <span style="color: var(--text-secondary);">Municipal:</span>
                                         R{{ number_format((int)$uFields['municipal.total_value']) }}
                                         @if(isset($uFields['municipal.valuation_year']))
-                                            <span class="text-gray-400">({{ $uFields['municipal.valuation_year'] }})</span>
+                                            <span style="color: var(--text-muted);">({{ $uFields['municipal.valuation_year'] }})</span>
                                         @endif
                                     </div>
                                 @endif
@@ -2079,10 +2095,10 @@
                                     if (isset($uFields['subject.extent_m2'])) $subjectParts[] = number_format((int)$uFields['subject.extent_m2']) . ' m²';
                                 @endphp
                                 @if(!empty($subjectParts))
-                                    <div class="text-gray-500">{{ implode(' | ', $subjectParts) }}</div>
+                                    <div style="color: var(--text-secondary);">{{ implode(' | ', $subjectParts) }}</div>
                                 @endif
                                 @if(isset($uFields['subject.purchase_price']))
-                                    <div class="text-gray-500">
+                                    <div style="color: var(--text-secondary);">
                                         Purchased{{ isset($uFields['subject.purchase_date']) ? ': ' . $uFields['subject.purchase_date'] : '' }}
                                         for R{{ number_format((int)$uFields['subject.purchase_price']) }}
                                         @if(isset($uFields['subject.indexed_value']))
@@ -2097,25 +2113,25 @@
 
                         @elseif($hasDocExtract && $upload->type === 'suburb_stats')
                             {{-- ── Suburb Sales Summary Card ── --}}
-                            <div class="mt-2 bg-sky-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
-                                <div class="font-semibold text-[#0b2a4a]">
+                            <div class="mt-2 bg-sky-50 rounded-md px-3 py-2 text-xs space-y-1" style="color: var(--text-primary);">
+                                <div class="font-semibold" style="color: var(--brand-default, #0b2a4a);">
                                     Suburb Sales Summary
                                     @if(isset($uFields['suburb.latest_year']))
-                                        <span class="font-normal text-gray-400">({{ $uFields['suburb.latest_year'] }})</span>
+                                        <span class="font-normal" style="color: var(--text-muted);">({{ $uFields['suburb.latest_year'] }})</span>
                                     @endif
                                 </div>
                                 @if(isset($uFields['suburb.latest_median_price']))
                                     <div>
-                                        <span class="text-gray-500">Median:</span>
+                                        <span style="color: var(--text-secondary);">Median:</span>
                                         <span class="font-medium">R{{ number_format((int)$uFields['suburb.latest_median_price']) }}</span>
                                         @if(isset($uFields['suburb.latest_sales_count']))
-                                            | <span class="text-gray-500">Sales:</span> {{ $uFields['suburb.latest_sales_count'] }}
+                                            | <span style="color: var(--text-secondary);">Sales:</span> {{ $uFields['suburb.latest_sales_count'] }}
                                         @endif
                                     </div>
                                 @endif
                                 @if(isset($uFields['suburb.latest_low']) && isset($uFields['suburb.latest_high']))
                                     <div>
-                                        <span class="text-gray-500">Range:</span>
+                                        <span style="color: var(--text-secondary);">Range:</span>
                                         R{{ number_format((int)$uFields['suburb.latest_low']) }}
                                         &ndash; R{{ number_format((int)$uFields['suburb.latest_high']) }}
                                     </div>
@@ -2124,16 +2140,16 @@
 
                         @elseif($hasDocExtract && $upload->type === 'vicinity_sales')
                             {{-- ── Vicinity Sales Summary Card ── --}}
-                            <div class="mt-2 bg-sky-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
-                                <div class="font-semibold text-[#0b2a4a]">Vicinity Sales Summary</div>
+                            <div class="mt-2 bg-sky-50 rounded-md px-3 py-2 text-xs space-y-1" style="color: var(--text-primary);">
+                                <div class="font-semibold" style="color: var(--brand-default, #0b2a4a);">Vicinity Sales Summary</div>
                                 @if(isset($uFields['vicinity.lower_range']) || isset($uFields['vicinity.middle_range']) || isset($uFields['vicinity.upper_range']))
                                     <div>
-                                        <span class="text-gray-500">Price Range:</span>
+                                        <span style="color: var(--text-secondary);">Price Range:</span>
                                         @if(isset($uFields['vicinity.lower_range'])) R{{ number_format((int)$uFields['vicinity.lower_range']) }} @endif
                                         @if(isset($uFields['vicinity.middle_range'])) &ndash; <span class="font-medium">R{{ number_format((int)$uFields['vicinity.middle_range']) }}</span> @endif
                                         @if(isset($uFields['vicinity.upper_range'])) &ndash; R{{ number_format((int)$uFields['vicinity.upper_range']) }} @endif
                                     </div>
-                                    <div class="text-[10px] text-gray-400 -mt-0.5">Lower &ndash; Middle &ndash; Upper</div>
+                                    <div class="text-[10px] -mt-0.5" style="color: var(--text-muted);">Lower &ndash; Middle &ndash; Upper</div>
                                 @endif
                                 @php
                                     $vicParts = [];
@@ -2157,7 +2173,7 @@
                                 if (!empty($uAgg['months_of_inventory'])) $uParts[] = 'MOI: ' . $uAgg['months_of_inventory'];
                                 if (!empty($uCounts['active_listings'])) $uParts[] = 'Rows: ' . $uCounts['active_listings'];
                             @endphp
-                            <div class="mt-1.5 text-xs text-slate-600 bg-slate-50 rounded px-2 py-1">
+                            <div class="mt-1.5 text-xs rounded px-2 py-1" style="color: var(--text-secondary); background: var(--surface-2);">
                                 {{ implode(' | ', $uParts) }}
                             </div>
                         @elseif($uVerified && ($upload->type === 'vicinity_sales') && !empty($uAgg))
@@ -2173,7 +2189,7 @@
                                 }
                                 if (!empty($uCounts['sold_comps'])) $uParts[] = 'Rows: ' . $uCounts['sold_comps'];
                             @endphp
-                            <div class="mt-1.5 text-xs text-slate-600 bg-slate-50 rounded px-2 py-1">
+                            <div class="mt-1.5 text-xs rounded px-2 py-1" style="color: var(--text-secondary); background: var(--surface-2);">
                                 {{ implode(' | ', $uParts) }}
                             </div>
                         @elseif($uVerified && ($upload->type === 'cma') && !empty($uVerified['suggested_band']))
@@ -2181,7 +2197,7 @@
                             @php
                                 $band = $uVerified['suggested_band'];
                             @endphp
-                            <div class="mt-1.5 text-xs text-slate-600 bg-slate-50 rounded px-2 py-1">
+                            <div class="mt-1.5 text-xs rounded px-2 py-1" style="color: var(--text-secondary); background: var(--surface-2);">
                                 Band: R{{ number_format($band['low'], 0) }} – R{{ number_format($band['high'], 0) }}
                                 @if(!empty($uVerified['notes']))
                                     @foreach($uVerified['notes'] as $note)
@@ -2191,10 +2207,10 @@
                             </div>
                         @elseif($uVerified && !empty($uCounts))
                             {{-- Fallback: show parsed counts --}}
-                            <div class="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500">
+                            <div class="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs" style="color: var(--text-secondary);">
                                 @foreach($uCounts as $pcKey => $pcVal)
                                     <span>
-                                        <span class="text-gray-400">{{ str_replace('_', ' ', $pcKey) }}:</span>
+                                        <span style="color: var(--text-muted);">{{ str_replace('_', ' ', $pcKey) }}:</span>
                                         {{ $pcVal }}
                                     </span>
                                 @endforeach
@@ -2208,7 +2224,7 @@
 
                         {{-- Override audit info --}}
                         @if($upload->isOverridden())
-                            <p class="mt-1 text-xs text-slate-500">
+                            <p class="mt-1 text-xs" style="color: var(--text-secondary);">
                                 Overridden {{ $upload->override_at ? $upload->override_at->format('Y-m-d H:i') : '' }}
                                 @if($upload->override_by_user_id)
                                     by user #{{ $upload->override_by_user_id }}
@@ -2218,19 +2234,19 @@
 
                         {{-- Expand: details + diagnostics + override form --}}
                             <details class="mt-1.5">
-                                <summary class="text-xs text-[#00b4d8] cursor-pointer hover:underline">
+                                <summary class="text-xs cursor-pointer hover:underline" style="color: var(--brand-icon, #0ea5e9);">
                                     {{ $upload->isOverridden() ? 'Edit override' : 'Details' }}
                                 </summary>
                                 <div class="mt-2 space-y-2">
 
                                     {{-- Extracted fields table (agent-friendly, no JSON) --}}
                                     @if($hasDocExtract)
-                                        <div class="bg-white border border-gray-100 rounded p-2">
-                                            <p class="text-xs font-medium text-gray-500 mb-1">Extracted Fields <span class="text-gray-300">({{ $uVerified['extracted_version'] ?? '' }})</span></p>
+                                        <div class="rounded p-2" style="background: var(--surface-1); border: 1px solid var(--border);">
+                                            <p class="text-xs font-medium mb-1" style="color: var(--text-secondary);">Extracted Fields <span style="color: var(--text-muted);">({{ $uVerified['extracted_version'] ?? '' }})</span></p>
                                             <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
                                                 @foreach($uFields as $fk => $fv)
-                                                    <span class="text-gray-400">{{ $fk }}</span>
-                                                    <span class="text-gray-700">
+                                                    <span style="color: var(--text-muted);">{{ $fk }}</span>
+                                                    <span style="color: var(--text-primary);">
                                                         @if(is_numeric($fv) && (int)$fv >= 10000)
                                                             R{{ number_format((int)$fv) }}
                                                         @else
@@ -2244,15 +2260,15 @@
 
                                     {{-- Diagnostics (admin, collapsed) --}}
                                     <details class="text-xs">
-                                        <summary class="text-gray-400 cursor-pointer hover:underline">Diagnostics</summary>
+                                        <summary class="cursor-pointer hover:underline" style="color: var(--text-muted);">Diagnostics</summary>
                                         <div class="mt-1 space-y-1">
                                             @if($upload->extraction_json)
-                                                <div class="bg-gray-50 rounded p-2 font-mono text-gray-600 overflow-x-auto max-h-40 overflow-y-auto">
+                                                <div class="rounded p-2 font-mono overflow-x-auto max-h-40 overflow-y-auto" style="background: var(--surface-2); color: var(--text-secondary);">
                                                     <pre>{{ json_encode($upload->extraction_json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
                                                 </div>
                                             @endif
                                             @if($upload->text_extracted)
-                                                <div class="bg-gray-50 rounded p-2 font-mono text-gray-500 overflow-x-auto max-h-24 overflow-y-auto">
+                                                <div class="rounded p-2 font-mono overflow-x-auto max-h-24 overflow-y-auto" style="background: var(--surface-2); color: var(--text-secondary);">
                                                     <pre>{{ Illuminate\Support\Str::limit($upload->text_extracted, 500) }}</pre>
                                                 </div>
                                             @endif
@@ -2262,10 +2278,10 @@
                                     {{-- Override form --}}
                                     <form method="POST"
                                           action="{{ route('presentations.uploads.override', [$presentation, $upload]) }}"
-                                          class="border border-slate-200 rounded p-2 bg-slate-50">
+                                          class="rounded p-2" style="border: 1px solid var(--border); background: var(--surface-2);">
                                         @csrf
                                         @method('PATCH')
-                                        <p class="text-xs font-medium text-slate-600 mb-1.5">Override values</p>
+                                        <p class="text-xs font-medium mb-1.5" style="color: var(--text-secondary);">Override values</p>
                                         @php
                                             $uOverrideSource = $upload->override_json ?? [];
                                             $uAggPrefill = $uVerified['aggregates'] ?? [];
@@ -2297,11 +2313,11 @@
                                         <div class="grid grid-cols-2 gap-1.5">
                                             @foreach($uFieldDefs as $fKey => $fLabel)
                                                 <div>
-                                                    <label class="block text-xs text-gray-400">{{ $fLabel }}</label>
+                                                    <label class="block text-xs" style="color: var(--text-muted);">{{ $fLabel }}</label>
                                                     <input type="text" name="override_data[{{ $fKey }}]"
                                                            placeholder="{{ $fLabel }}"
                                                            value="{{ $uOverride[$fKey] ?? '' }}"
-                                                           class="w-full border border-gray-200 rounded px-2 py-1 text-xs">
+                                                           class="pres-input w-full text-xs">
                                                 </div>
                                             @endforeach
                                         </div>
@@ -2319,7 +2335,8 @@
                                             @csrf
                                             @method('DELETE')
                                             <button type="submit"
-                                                    class="px-2 py-1 text-xs text-gray-500 hover:text-red-600"
+                                                    class="px-2 py-1 text-xs" style="color: var(--text-secondary);"
+                                                    onmouseover="this.style.color='#dc2626'" onmouseout="this.style.color='var(--text-secondary)'"
                                                     onclick="return confirm('Clear this override?')">
                                                 Clear Override
                                             </button>
@@ -2332,7 +2349,7 @@
             </ul>
         @endif
 
-        <div class="mt-4 pt-4 border-t border-slate-100">
+        <div class="mt-4 pt-4 border-t" style="border-color: var(--border);">
         <form method="POST" action="{{ route('presentations.upload', $presentation) }}"
               enctype="multipart/form-data" class="space-y-2.5">
             @csrf
@@ -2350,7 +2367,7 @@
                     Upload
                 </button>
             </div>
-            <p class="text-[11px] text-slate-400">CMA Info PDFs are auto-detected by filename. Drop all 3 files at once — type is detected automatically.</p>
+            <p class="text-[11px]" style="color: var(--text-muted);">CMA Info PDFs are auto-detected by filename. Drop all 3 files at once — type is detected automatically.</p>
             @error('doc_type')
                 <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
             @enderror
@@ -2366,7 +2383,7 @@
 
         {{-- Document Library button (feature-flagged) --}}
         @if(config('features.document_library_v1'))
-            <div class="mt-4 pt-4 border-t border-slate-100">
+            <div class="mt-4 pt-4 border-t" style="border-color: var(--border);">
                 <a href="{{ route('documents.library.index', ['presentation_id' => $presentation->id, 'return' => url()->current() . '#documents']) }}"
                    class="corex-btn-primary text-xs">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -2381,22 +2398,23 @@
                 $libraryDocs = $presentation->documentLibraryItems()->with('uploader')->get();
             @endphp
             @if($libraryDocs->isNotEmpty())
-                <div class="mt-4 pt-4 border-t border-slate-100">
-                    <h3 class="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2.5">Attached from Library</h3>
-                    <ul class="space-y-2 text-xs text-slate-600">
+                <div class="mt-4 pt-4 border-t" style="border-color: var(--border);">
+                    <h3 class="text-[11px] font-semibold uppercase tracking-widest mb-2.5" style="color: var(--text-muted);">Attached from Library</h3>
+                    <ul class="space-y-2 text-xs" style="color: var(--text-secondary);">
                         @foreach($libraryDocs as $libDoc)
                             <li class="pres-doc-row flex items-center justify-between">
                                 <div class="flex items-center gap-2 min-w-0">
-                                    <span class="text-slate-400 shrink-0">&#128206;</span>
+                                    <span class="shrink-0" style="color: var(--text-muted);">&#128206;</span>
                                     <span class="truncate font-medium">{{ $libDoc->title ?? $libDoc->original_name }}</span>
                                     <span class="pres-badge bg-sky-50 text-[#00b4d8]">
                                         {{ $libDoc->doc_type }}
                                     </span>
-                                    <span class="text-slate-400">{{ $libDoc->uploader->name ?? '' }}</span>
-                                    <span class="text-slate-400">{{ $libDoc->pivot->created_at ? \Carbon\Carbon::parse($libDoc->pivot->created_at)->format('d M Y') : '' }}</span>
+                                    <span style="color: var(--text-muted);">{{ $libDoc->uploader->name ?? '' }}</span>
+                                    <span style="color: var(--text-muted);">{{ $libDoc->pivot->created_at ? \Carbon\Carbon::parse($libDoc->pivot->created_at)->format('d M Y') : '' }}</span>
                                 </div>
                                 <a href="{{ route('documents.library.download', $libDoc) }}"
-                                   class="text-[#00b4d8] hover:text-[#0b2a4a] font-semibold shrink-0 ml-2">
+                                   class="font-semibold shrink-0 ml-2" style="color: var(--brand-icon, #0ea5e9);"
+                                   onmouseover="this.style.color='var(--brand-default, #0b2a4a)'" onmouseout="this.style.color='var(--brand-icon, #0ea5e9)'">
                                     Download
                                 </a>
                             </li>
@@ -2417,24 +2435,25 @@
         {{-- Part A — Added Articles --}}
         @if($addedArticles->isNotEmpty())
             <div class="mb-4">
-                <h3 class="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2.5">Added to Presentation</h3>
+                <h3 class="text-[11px] font-semibold uppercase tracking-widest mb-2.5" style="color: var(--text-muted);">Added to Presentation</h3>
                 <ul class="space-y-3">
                     @foreach($addedArticles as $article)
-                        <li class="bg-slate-50 rounded-lg p-3">
+                        <li class="rounded-md p-3" style="background: var(--surface-2);">
                             <div class="flex items-start justify-between gap-2">
                                 <div class="min-w-0 flex-1">
                                     <a href="{{ $article->url }}" target="_blank"
-                                       class="text-sm font-semibold text-[#0b2a4a] hover:text-[#00b4d8] leading-tight">
+                                       class="text-sm font-semibold leading-tight" style="color: var(--brand-default, #0b2a4a);"
+                                       onmouseover="this.style.color='var(--brand-icon, #0ea5e9)'" onmouseout="this.style.color='var(--brand-default, #0b2a4a)'">
                                         {{ $article->tags_json['title'] ?? Str::limit($article->url, 60) }}
                                     </a>
-                                    <div class="text-[11px] text-slate-400 mt-0.5">
+                                    <div class="text-[11px] mt-0.5" style="color: var(--text-muted);">
                                         {{ $article->tags_json['source'] ?? 'Unknown source' }}
                                         @if(!empty($article->tags_json['published_at']))
                                             &middot; {{ \Carbon\Carbon::parse($article->tags_json['published_at'])->format('d M Y') }}
                                         @endif
                                     </div>
                                     @if($article->ai_summary_text)
-                                        <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                                        <p class="text-xs mt-1.5 leading-relaxed" style="color: var(--text-secondary);">
                                             {{ Str::limit($article->ai_summary_text, 250) }}
                                         </p>
                                     @endif
@@ -2459,8 +2478,8 @@
 
         {{-- Part B — Suggested Articles --}}
         @if($suggestedArticles->isNotEmpty())
-            <div class="@if($addedArticles->isNotEmpty()) pt-3 border-t border-slate-100 @endif">
-                <h3 class="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-2.5">
+            <div class="@if($addedArticles->isNotEmpty()) pt-3 border-t @endif" @if($addedArticles->isNotEmpty()) style="border-color: var(--border);" @endif>
+                <h3 class="text-[11px] font-semibold uppercase tracking-widest mb-2.5" style="color: var(--text-muted);">
                     Suggested Articles
                     @if($presentation->suburb)
                         <span class="font-normal">&mdash; based on {{ $presentation->suburb }}{{ $presentation->property_type ? ', ' . $presentation->property_type : '' }}</span>
@@ -2468,20 +2487,21 @@
                 </h3>
                 <ul class="space-y-2">
                     @foreach($suggestedArticles as $poolArticle)
-                        <li class="flex items-start justify-between gap-2 py-2 {{ !$loop->last ? 'border-b border-slate-50' : '' }}">
+                        <li class="flex items-start justify-between gap-2 py-2 {{ !$loop->last ? 'border-b' : '' }}" @if(!$loop->last) style="border-color: var(--border);" @endif>
                             <div class="min-w-0 flex-1">
                                 <a href="{{ $poolArticle->url }}" target="_blank"
-                                   class="text-sm font-medium text-[#0b2a4a] hover:text-[#00b4d8] leading-tight">
+                                   class="text-sm font-medium leading-tight" style="color: var(--brand-default, #0b2a4a);"
+                                   onmouseover="this.style.color='var(--brand-icon, #0ea5e9)'" onmouseout="this.style.color='var(--brand-default, #0b2a4a)'">
                                     {{ $poolArticle->title }}
                                 </a>
-                                <div class="text-[11px] text-slate-400 mt-0.5">
+                                <div class="text-[11px] mt-0.5" style="color: var(--text-muted);">
                                     {{ $poolArticle->source }}
                                     @if($poolArticle->published_at)
                                         &middot; {{ $poolArticle->published_at->format('d M Y') }}
                                     @endif
                                 </div>
                                 @if($poolArticle->snippet)
-                                    <p class="text-xs text-slate-500 mt-1 leading-relaxed">
+                                    <p class="text-xs mt-1 leading-relaxed" style="color: var(--text-secondary);">
                                         {{ Str::limit($poolArticle->snippet, 150) }}
                                     </p>
                                 @endif
@@ -2501,9 +2521,9 @@
                 </ul>
             </div>
         @elseif($addedArticles->isEmpty())
-            <p class="text-xs text-slate-400">
+            <p class="text-xs" style="color: var(--text-muted);">
                 No matching articles found. Articles are updated daily from SA property news sources.
-                Run <code class="bg-slate-100 px-1 rounded">php artisan articles:scrape</code> to populate.
+                Run <code class="px-1 rounded" style="background: var(--surface-2);">php artisan articles:scrape</code> to populate.
             </p>
         @endif
     </div>
@@ -2520,12 +2540,12 @@
             @method('PATCH')
             <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1.5 font-medium">Asking Price (R)</label>
+                    <label class="block text-xs mb-1.5 font-medium" style="color: var(--text-secondary);">Asking Price (R)</label>
                     <input type="number" name="asking_price_inc" min="0" step="1"
                            value="{{ $presentation->asking_price_inc ?? '' }}"
                            placeholder="e.g. 2500000"
                            class="pres-input w-full">
-                    <p class="mt-1 text-xs text-slate-400">Whole rands, no cents. Used by analysis and pack compilation.</p>
+                    <p class="mt-1 text-xs" style="color: var(--text-muted);">Whole rands, no cents. Used by analysis and pack compilation.</p>
                 </div>
             </div>
             <div class="flex items-center gap-3 pt-2">
@@ -2534,7 +2554,7 @@
                     Save Asking Price
                 </button>
                 @if($presentation->asking_price_inc)
-                    <span class="text-xs text-slate-500 font-medium bg-slate-50 px-2.5 py-1 rounded-lg">
+                    <span class="text-xs font-medium px-2.5 py-1 rounded-md" style="color: var(--text-secondary); background: var(--surface-2);">
                         Current: R {{ number_format($presentation->asking_price_inc) }}
                     </span>
                 @endif
@@ -2555,42 +2575,42 @@
 
             <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1.5 font-medium">Bond payment</label>
+                    <label class="block text-xs mb-1.5 font-medium" style="color: var(--text-secondary);">Bond payment</label>
                     <input type="number" name="monthly_bond" min="0" step="0.01"
                            value="{{ $presentation->monthly_bond ?? '' }}"
                            placeholder="0"
                            class="pres-input w-full">
                 </div>
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1.5 font-medium">Rates</label>
+                    <label class="block text-xs mb-1.5 font-medium" style="color: var(--text-secondary);">Rates</label>
                     <input type="number" name="monthly_rates" min="0" step="0.01"
                            value="{{ $presentation->monthly_rates ?? '' }}"
                            placeholder="0"
                            class="pres-input w-full">
                 </div>
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1.5 font-medium">Levies</label>
+                    <label class="block text-xs mb-1.5 font-medium" style="color: var(--text-secondary);">Levies</label>
                     <input type="number" name="monthly_levies" min="0" step="0.01"
                            value="{{ $presentation->monthly_levies ?? '' }}"
                            placeholder="0"
                            class="pres-input w-full">
                 </div>
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1.5 font-medium">Insurance</label>
+                    <label class="block text-xs mb-1.5 font-medium" style="color: var(--text-secondary);">Insurance</label>
                     <input type="number" name="monthly_insurance" min="0" step="0.01"
                            value="{{ $presentation->monthly_insurance ?? '' }}"
                            placeholder="0"
                            class="pres-input w-full">
                 </div>
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1.5 font-medium">Utilities</label>
+                    <label class="block text-xs mb-1.5 font-medium" style="color: var(--text-secondary);">Utilities</label>
                     <input type="number" name="monthly_utilities" min="0" step="0.01"
                            value="{{ $presentation->monthly_utilities ?? '' }}"
                            placeholder="0"
                            class="pres-input w-full">
                 </div>
                 <div>
-                    <label class="block text-xs text-slate-500 mb-1.5 font-medium">Opportunity cost</label>
+                    <label class="block text-xs mb-1.5 font-medium" style="color: var(--text-secondary);">Opportunity cost</label>
                     <input type="number" name="monthly_opportunity_cost" min="0" step="0.01"
                            value="{{ $presentation->monthly_opportunity_cost ?? '' }}"
                            placeholder="0"
@@ -2614,7 +2634,7 @@
                     ])->sum();
                 @endphp
                 @if($hcTotal > 0)
-                    <span class="text-xs text-slate-500 font-medium bg-slate-50 px-2.5 py-1 rounded-lg">
+                    <span class="text-xs font-medium px-2.5 py-1 rounded-md" style="color: var(--text-secondary); background: var(--surface-2);">
                         Monthly total: R{{ number_format($hcTotal, 0) }}
                     </span>
                 @endif
@@ -2627,13 +2647,13 @@
 {{-- ── LIVE UPDATES POLLING (B1) ────────────────────────────────────────── --}}
 @if(config('features.presentation_live_updates_v1') && config('features.portal_extension_capture_v1'))
 {{-- New captures banner (fixed at top of captures section) --}}
-<div id="live-new-captures-banner" class="hidden fixed bottom-4 right-4 z-50 px-4 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded-lg shadow-lg cursor-pointer hover:bg-[#081f36] transition-colors"
+<div id="live-new-captures-banner" class="hidden fixed bottom-4 right-4 z-50 px-4 py-2 bg-[#0b2a4a] text-white text-sm font-medium rounded-md shadow-lg cursor-pointer hover:bg-[#081f36] transition-colors"
      onclick="window.__liveUpdates && window.__liveUpdates.scrollToCaptures()">
     <span id="live-banner-text">0 new captures</span>
 </div>
 
 {{-- Live debug indicator (visible when window.PRESENTATIONS_LIVE_DEBUG = true) --}}
-<div id="live-debug-indicator" class="hidden fixed top-2 right-2 z-50 bg-gray-900 text-green-400 text-xs font-mono rounded-lg shadow-lg px-3 py-2 max-w-xs opacity-90">
+<div id="live-debug-indicator" class="hidden fixed top-2 right-2 z-50 bg-gray-900 text-green-400 text-xs font-mono rounded-md shadow-lg px-3 py-2 max-w-xs opacity-90">
     <div>Live: <span id="ldi-status">OFF</span></div>
     <div>Last poll: <span id="ldi-poll-time">-</span></div>
     <div>HTTP: <span id="ldi-http-status">-</span></div>

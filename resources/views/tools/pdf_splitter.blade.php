@@ -8,39 +8,115 @@
 #pdf-splitter-root, #pdf-splitter-root * { box-sizing: border-box; }
 
 #pdf-splitter-root {
-    color: #0f172a;
+    color: var(--text-primary);
 }
 
 #pdf-splitter-root .wrap {
     max-width: 680px;
     margin: 0 auto;
+    padding: 0 1.5rem;
 }
 
-#pdf-splitter-root .field { margin-bottom: 20px; }
+#pdf-splitter-root .field { margin-bottom: 1.25rem; }
 
+/* Labels */
+#pdf-splitter-root label {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+}
+
+/* Inputs */
 #pdf-splitter-root input[type="text"],
 #pdf-splitter-root input[type="file"] {
     width: 100%;
     padding: 0.625rem 0.75rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
     font-size: 0.875rem;
-    color: #0f172a;
-    background: #f8fafc;
+    color: var(--text-primary);
+    background: var(--surface);
     outline: none;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: border-color 300ms, box-shadow 300ms;
 }
 
-#pdf-splitter-root input[type="text"]:focus {
-    border-color: #0b2a4a;
-    background: #fff;
-    box-shadow: 0 0 0 3px rgba(0, 180, 216, 0.1);
+#pdf-splitter-root input[type="text"]:focus,
+#pdf-splitter-root input[type="file"]:focus {
+    border-color: var(--brand-button, #0ea5e9);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-button, #0ea5e9) 15%, transparent);
 }
 
 #pdf-splitter-root .field-error {
     font-size: 0.8rem;
-    color: #b91c1c;
-    margin-top: 4px;
+    color: #ef4444;
+    margin-top: 6px;
+}
+
+/* Card */
+#pdf-splitter-root .upload-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+    border-left: 3px solid var(--brand-icon, #0ea5e9);
+    transition: box-shadow 300ms;
+}
+
+#pdf-splitter-root .upload-card:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+#pdf-splitter-root .upload-card h3 {
+    font-size: 1.0625rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 0.5rem 0;
+}
+
+#pdf-splitter-root .upload-card .subtitle {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    margin-bottom: 1.25rem;
+}
+
+/* Alert boxes */
+#pdf-splitter-root .alert-success {
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    background: color-mix(in srgb, #10b981 12%, var(--surface));
+    border: 1px solid color-mix(in srgb, #10b981 25%, var(--border));
+    color: #10b981;
+    margin-bottom: 1.25rem;
+}
+
+#pdf-splitter-root .alert-error {
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    background: color-mix(in srgb, #ef4444 12%, var(--surface));
+    border: 1px solid color-mix(in srgb, #ef4444 25%, var(--border));
+    color: #ef4444;
+    margin-bottom: 1.25rem;
+}
+
+#pdf-splitter-root .alert-error ul {
+    margin: 0;
+    padding-left: 18px;
+}
+
+/* File input hint */
+#pdf-splitter-root .label-hint {
+    font-weight: 400;
+    color: var(--text-muted);
+    text-transform: none;
+    letter-spacing: normal;
+    font-size: 0.6875rem;
 }
 </style>
 
@@ -59,15 +135,15 @@
 
         {{-- Status message --}}
         @if(session('status'))
-            <div class="mb-4 px-4 py-3 bg-green-50 border border-green-200 text-green-800 rounded-lg text-sm font-medium">
+            <div class="alert-success">
                 {{ session('status') }}
             </div>
         @endif
 
         {{-- Validation errors --}}
         @if($errors->any())
-            <div class="mb-4 px-4 py-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-sm">
-                <ul style="margin:0;padding-left:18px;">
+            <div class="alert-error">
+                <ul>
                     @foreach($errors->all() as $error)
                         <li>{{ $error }}</li>
                     @endforeach
@@ -75,9 +151,9 @@
             </div>
         @endif
 
-        <div class="ds-status-card" style="border-left-color: var(--ds-cyan);">
-            <h3 class="ds-section-header" style="margin-bottom:1rem;">Upload PDF</h3>
-            <p class="text-sm text-gray-500 mb-4">OCR runs automatically &mdash; you'll review and correct labels before the ZIP is generated.</p>
+        <div class="upload-card">
+            <h3>Upload PDF</h3>
+            <p class="subtitle">OCR runs automatically &mdash; you'll review and correct labels before the ZIP is generated.</p>
 
             <form id="pdf-upload-form"
                   method="POST"
@@ -86,7 +162,7 @@
                 @csrf
 
                 <div class="field">
-                    <label class="ds-label block mb-1">Base Name</label>
+                    <label for="base_name">Base Name</label>
                     <input type="text"
                            id="base_name"
                            name="base_name"
@@ -99,7 +175,7 @@
                 </div>
 
                 <div class="field">
-                    <label class="ds-label block mb-1">PDF File <span style="font-weight:400;color:#64748b;">(max 50 MB)</span></label>
+                    <label for="pdf">PDF File <span class="label-hint">(max 50 MB)</span></label>
                     <input type="file"
                            id="pdf"
                            name="pdf"

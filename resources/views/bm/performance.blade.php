@@ -54,10 +54,10 @@
 
 <x-app-layout>
     <x-slot name="header">
-        <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4">
+        <div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                 <div>
-                    <h2 class="text-xl font-bold text-white leading-tight">
+                    <h2 class="text-xl font-bold text-white leading-tight tracking-tight">
                         Branch Dashboard — {{ $branchName ?? 'Branch' }}
                     </h2>
                     <div class="text-sm text-white/60">Branch Manager view (TV-ready)</div>
@@ -65,8 +65,8 @@
                 <div class="flex items-center gap-3">
                     <span class="text-sm text-white/80 font-semibold hidden md:inline">{{ \Carbon\Carbon::createFromFormat('Y-m', $r['period'])->format('F Y') }}</span>
                     <form method="GET" action="{{ route('bm.performance') }}" class="flex items-center gap-2">
-                        <input type="month" name="period" value="{{ $r['period'] }}" class="h-8 text-sm rounded border border-white/20 bg-white/10 text-white px-2" />
-                        <button type="submit" class="px-3 py-1.5 text-sm font-semibold rounded bg-white/20 text-white hover:bg-white/30">Go</button>
+                        <input type="month" name="period" value="{{ $r['period'] }}" class="h-8 text-sm rounded-md border border-white/20 bg-white/10 text-white px-2 transition-all duration-300" />
+                        <button type="submit" class="px-3 py-1.5 text-sm font-semibold rounded-md bg-white/20 text-white hover:bg-white/30 transition-all duration-300">Go</button>
                     </form>
                 </div>
             </div>
@@ -76,11 +76,11 @@
                     <span class="font-mono text-lg font-black tracking-[0.3em] text-white select-all">{{ $tvCode->code }}</span>
                     <form method="POST" action="{{ route('bm.tv-code.generate') }}" class="inline">
                         @csrf
-                        <button type="submit" class="px-2 py-1 text-xs font-semibold rounded border border-white/30 text-white hover:bg-white/10">New Code</button>
+                        <button type="submit" class="px-2 py-1 text-xs font-semibold rounded-md border border-white/30 text-white hover:bg-white/10 transition-all duration-300">New Code</button>
                     </form>
                     <form method="POST" action="{{ route('bm.tv-code.revoke') }}" class="inline">
                         @csrf
-                        <button type="submit" class="px-2 py-1 text-xs font-semibold rounded border border-white/30 text-white hover:bg-white/10"
+                        <button type="submit" class="px-2 py-1 text-xs font-semibold rounded-md border border-white/30 text-white hover:bg-white/10 transition-all duration-300"
                                 onclick="return confirm('Revoke this code? TVs using it will stop working.')">Revoke</button>
                     </form>
                 </div>
@@ -90,7 +90,7 @@
                     <span class="text-sm text-white/40">No active code</span>
                     <form method="POST" action="{{ route('bm.tv-code.generate') }}" class="inline">
                         @csrf
-                        <button type="submit" class="px-2 py-1 text-xs font-semibold rounded border border-white/30 text-white hover:bg-white/10">Generate</button>
+                        <button type="submit" class="px-2 py-1 text-xs font-semibold rounded-md border border-white/30 text-white hover:bg-white/10 transition-all duration-300">Generate</button>
                     </form>
                 </div>
             @endif
@@ -105,11 +105,11 @@
             ->expiringSoon(30)->count();
     @endphp
     @if($bmExpiringCount > 0)
-    <div class="ds-status-card" style="border-left-color: var(--ds-amber); background: #fffbeb;">
+    <div class="ds-status-card" style="border-left-color: var(--ds-amber);">
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5" style="color: var(--ds-amber);"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
-                <span class="text-sm font-semibold" style="color: #92400e;">{{ $bmExpiringCount }} mandate{{ $bmExpiringCount === 1 ? '' : 's' }} expiring across your branch in the next 30 days</span>
+                <span class="text-sm font-semibold" style="color: var(--ds-amber);">{{ $bmExpiringCount }} mandate{{ $bmExpiringCount === 1 ? '' : 's' }} expiring across your branch in the next 30 days</span>
             </div>
             <a href="{{ route('filing-register.index', ['status' => 'Expiring']) }}" class="text-xs font-semibold underline" style="color: var(--ds-amber);">View</a>
         </div>
@@ -123,7 +123,7 @@
     {{-- Set 1: Period (counts) --}}
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
 
-          <a href="/admin/deals?status=Declined&period={{ $r['period'] }}&branch_id={{ (int)($r['branch_id'] ?? 0) }}" class="block">
+          <a href="/admin/deals?status=Declined&period={{ $r['period'] }}&branch_id={{ (int)($r['branch_id'] ?? 0) }}" class="block transition-all duration-300">
               <div class="ds-status-card ds-status-declined">
                   <div class="ds-label mb-2">Declined</div>
                   <div class="grid grid-cols-2 gap-3">
@@ -139,7 +139,7 @@
               </div>
           </a>
 
-          <a href="/admin/deals?status=Pending&period={{ $r['period'] }}&branch_id={{ (int)($r['branch_id'] ?? 0) }}" class="block">
+          <a href="/admin/deals?status=Pending&period={{ $r['period'] }}&branch_id={{ (int)($r['branch_id'] ?? 0) }}" class="block transition-all duration-300">
               <div class="ds-status-card ds-status-pending">
                   <div class="ds-label mb-2">Pending</div>
                   <div class="grid grid-cols-2 gap-3">
@@ -155,7 +155,7 @@
               </div>
           </a>
 
-          <a href="/admin/deals?status=Granted&period={{ $r['period'] }}&branch_id={{ (int)($r['branch_id'] ?? 0) }}" class="block">
+          <a href="/admin/deals?status=Granted&period={{ $r['period'] }}&branch_id={{ (int)($r['branch_id'] ?? 0) }}" class="block transition-all duration-300">
               <div class="ds-status-card ds-status-granted">
                   <div class="ds-label mb-2">Granted</div>
                   <div class="grid grid-cols-2 gap-3">
@@ -171,7 +171,7 @@
               </div>
           </a>
 
-          <a href="/admin/deals?status=Registered&period={{ $r['period'] }}&branch_id={{ (int)($r['branch_id'] ?? 0) }}" class="block">
+          <a href="/admin/deals?status=Registered&period={{ $r['period'] }}&branch_id={{ (int)($r['branch_id'] ?? 0) }}" class="block transition-all duration-300">
               <div class="ds-status-card ds-status-registered">
                   <div class="ds-label mb-2">Registered</div>
                   <div class="grid grid-cols-2 gap-3">
@@ -192,19 +192,19 @@
     <h2 class="ds-section-header">Outstanding Commission</h2>
     {{-- Set 2: Outstanding (Not Paid) — Company ex VAT --}}
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <a href="/admin/deals?status=Pending&commission_status=Not%20Paid&branch_id={{ (int)($r['branch_id'] ?? 0) }}" class="block">
+        <a href="/admin/deals?status=Pending&commission_status=Not%20Paid&branch_id={{ (int)($r['branch_id'] ?? 0) }}" class="block transition-all duration-300">
             <div class="ds-status-card ds-money-pending">
                 <div class="ds-label">Pending (Not Paid) — Company ex VAT</div>
-                <div class="ds-value-xl" style="color:#0b2a4a">
+                <div class="ds-value-xl">
                     R {{ number_format((float)($statusSummary['pending_unpaid_company_ex_vat'] ?? 0), 0) }}
                 </div>
             </div>
         </a>
 
-        <a href="/admin/deals?status=Granted&commission_status=Not%20Paid&branch_id={{ (int)($r['branch_id'] ?? 0) }}" class="block">
+        <a href="/admin/deals?status=Granted&commission_status=Not%20Paid&branch_id={{ (int)($r['branch_id'] ?? 0) }}" class="block transition-all duration-300">
             <div class="ds-status-card ds-money-granted">
                 <div class="ds-label">Granted (Not Paid) — Company ex VAT</div>
-                <div class="ds-value-xl" style="color:#0b2a4a">
+                <div class="ds-value-xl">
                     R {{ number_format((float)($statusSummary['granted_unpaid_company_ex_vat'] ?? 0), 0) }}
                 </div>
                 <div class="ds-label mt-1">
@@ -213,10 +213,10 @@
             </div>
         </a>
 
-        <a href="/admin/deals?status=Registered&commission_status=Not%20Paid&branch_id={{ (int)($r['branch_id'] ?? 0) }}" class="block">
+        <a href="/admin/deals?status=Registered&commission_status=Not%20Paid&branch_id={{ (int)($r['branch_id'] ?? 0) }}" class="block transition-all duration-300">
             <div class="ds-status-card ds-money-registered">
                 <div class="ds-label">Registered (Not Paid) — Company ex VAT</div>
-                <div class="ds-value-xl" style="color:#0b2a4a">
+                <div class="ds-value-xl">
                     R {{ number_format((float)($statusSummary['registered_unpaid_company_ex_vat'] ?? 0), 0) }}
                 </div>
                 <div class="ds-label mt-1">
@@ -229,34 +229,33 @@
 
 
 
-
   {{-- Branch Listing Stock (Propcon) --}}
   <div class="ds-section-header">Listing Stock (Branch)</div>
   <div class="ds-section-sub mb-3">Active Propcon listings for this branch. Click a metric to drill in.</div>
 
   <div class="ds-status-card">
       <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <a href="{{ route('bm.listings', ['filter' => 'active']) }}" class="ds-status-card hover:shadow-md transition block">
+          <a href="{{ route('bm.listings', ['filter' => 'active']) }}" class="ds-status-card hover:shadow-md transition-all duration-300 block">
               <div class="ds-label">Active</div>
               <div class="ds-value-lg">{{ (int)($listingStats['total'] ?? 0) }}</div>
           </a>
 
-          <a href="{{ route('bm.listings', ['filter' => 'dom']) }}" class="ds-status-card hover:shadow-md transition block">
+          <a href="{{ route('bm.listings', ['filter' => 'dom']) }}" class="ds-status-card hover:shadow-md transition-all duration-300 block">
               <div class="ds-label">Avg DOM</div>
               <div class="ds-value-lg">{{ (int)($listingStats['avg_days_on_market'] ?? 0) }}</div>
           </a>
 
-          <a href="{{ route('bm.listings', ['filter' => 'stale']) }}" class="ds-status-card hover:shadow-md transition block">
+          <a href="{{ route('bm.listings', ['filter' => 'stale']) }}" class="ds-status-card hover:shadow-md transition-all duration-300 block">
               <div class="ds-label">Stale (14d)</div>
               <div class="ds-value-lg">{{ (int)($listingStats['stale'] ?? 0) }}</div>
           </a>
 
-          <a href="{{ route('bm.listings', ['filter' => 'expiring']) }}" class="ds-status-card hover:shadow-md transition block">
+          <a href="{{ route('bm.listings', ['filter' => 'expiring']) }}" class="ds-status-card hover:shadow-md transition-all duration-300 block">
               <div class="ds-label">Expiring (14d)</div>
               <div class="ds-value-lg">{{ (int)($listingStats['expiring_soon'] ?? 0) }}</div>
           </a>
 
-          <a href="{{ route('bm.listings', ['filter' => 'expired']) }}" class="ds-status-card hover:shadow-md transition block">
+          <a href="{{ route('bm.listings', ['filter' => 'expired']) }}" class="ds-status-card hover:shadow-md transition-all duration-300 block">
               <div class="ds-label">Expired</div>
               <div class="ds-value-lg">{{ (int)($listingStats['expired'] ?? 0) }}</div>
           </a>
@@ -305,7 +304,7 @@
 
                 <div class="ds-status-card">
                     <div class="ds-label">Filter</div>
-                    <div class="text-sm text-gray-800 mt-1">
+                    <div class="text-sm mt-1" style="color: var(--text-secondary);">
                         Pending: <span class="font-bold">{{ ($stageFilter['pending'] ?? true) ? 'Yes' : 'No' }}</span> •
                         Granted: <span class="font-bold">{{ ($stageFilter['granted'] ?? true) ? 'Yes' : 'No' }}</span> •
                         Registered: <span class="font-bold">{{ ($stageFilter['registered'] ?? true) ? 'Yes' : 'No' }}</span>
@@ -319,15 +318,14 @@
 
 
 
-
         @if(session("status"))
-            <div class="bg-green-500/10 border border-green-500/20 text-green-200 rounded-xl p-3 text-sm">
+            <div class="rounded-md p-3 text-sm" style="background: color-mix(in srgb, var(--ds-green) 10%, transparent); border: 1px solid color-mix(in srgb, var(--ds-green) 20%, transparent); color: var(--ds-green);">
                 {{ session("status") }}
             </div>
         @endif
 
         @if($errors->any())
-            <div class="bg-red-500/10 border border-red-500/20 text-red-200 rounded-xl p-3 text-sm">
+            <div class="rounded-md p-3 text-sm" style="background: color-mix(in srgb, var(--ds-crimson) 10%, transparent); border: 1px solid color-mix(in srgb, var(--ds-crimson) 20%, transparent); color: var(--ds-crimson);">
                 {{ implode(", ", $errors->all()) }}
             </div>
         @endif
@@ -361,9 +359,9 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div class="ds-status-card">
                     <div class="ds-label">Branch Value (Actual / Agent-Sum Target)</div>
-                    <div class="ds-value-xl leading-tight" style="color:#0b2a4a">
+                    <div class="ds-value-xl leading-tight">
                         R {{ number_format($branchValueActual, 0) }}
-                        <span class="text-gray-400 font-bold">/ R {{ number_format($branchValueTarget_agentsum, 0) }}</span>
+                        <span class="font-bold" style="color: var(--text-muted);">/ R {{ number_format($branchValueTarget_agentsum, 0) }}</span>
                     </div>
                     <div class="mt-2 ds-progress-track">
                         <div class="ds-progress-bar {{ $valueBar }}" style="width: {{ min(100, max(0, $valuePct)) }}%"></div>
@@ -371,7 +369,14 @@
                     <div class="mt-2 ds-label">Progress {{ number_format($valuePct, 1) }}%</div>
                 </div>
 
-
+                <div class="ds-status-card">
+                    <div class="ds-label">Branch Deals (Actual / Agent-Sum Target)</div>
+                    <div class="ds-value-xl leading-tight">
+                        {{ $branchDealsActual }}
+                        <span class="font-bold" style="color: var(--text-muted);">/ {{ $branchDealsTarget_agentsum }}</span>
+                    </div>
+                    <div class="mt-2 ds-progress-track">
+                        <div class="ds-progress-bar {{ $dealsBar }}" style="width: {{ min(100, max(0, $dealsPct)) }}%"></div>
                     </div>
                     <div class="mt-2 ds-label">Progress {{ number_format($dealsPct, 1) }}%</div>
                 </div>
@@ -381,7 +386,6 @@
         {{-- Branch Budget (BM input) --}}
         @php
             /* BM_BUDGET_TARGETS_READINESS */
-            // Magic alignment is only safe when every active branch user has a non-zero VALUE target for this period.
             $missingValueTargets = array_values(array_filter(($r['rows'] ?? []), function ($row) {
                 $vt = (float)($row['targets']['value'] ?? 0);
                 return $vt <= 0;
@@ -393,7 +397,7 @@
         <div class="ds-section-header">Branch Budget (income target)</div>
         <div class="ds-section-sub mb-3">
             Agents set budgets → system derives their targets. This dashboard checks whether the branch budget is achievable based on agent targets.
-            <span class="text-gray-500">(Income projection = Agent Value Target Sum × commission rate × company share)</span>
+            <span style="color: var(--text-muted);">(Income projection = Agent Value Target Sum × commission rate × company share)</span>
         </div>
 
         <div class="ds-status-card">
@@ -405,108 +409,81 @@
                     <input type="hidden" name="period" value="{{ $r['period'] }}">
                     <div>
                         <div class="ds-label mb-1">Branch budget (R)</div>
-                        <input type="number" step="0.01" name="branch_budget" value="{{ $branchBudget }}" class="w-48" min="0">
+                        <input type="number" step="0.01" name="branch_budget" value="{{ $branchBudget }}"
+                               class="w-48 rounded-md text-sm px-3 py-2 transition-all duration-300"
+                               style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);"
+                               min="0">
                     </div>
-                    <button class="btn-primary px-5 py-2">Save Budget</button>
+                    <button class="corex-btn-primary px-5 py-2">Save Budget</button>
                 </form>
             </div>
 
             <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div class="ds-status-card">
                     <div class="ds-label">Branch Budget</div>
-                    <div class="ds-value-xl" style="color:#0b2a4a">R {{ number_format($branchBudget, 0) }}</div>
+                    <div class="ds-value-xl">R {{ number_format($branchBudget, 0) }}</div>
                 </div>
 
                 <div class="ds-status-card">
                     <div class="ds-label">Projected Income (from agent targets)</div>
-                    <div class="ds-value-xl" style="color:#0b2a4a">R {{ number_format($projectedIncome, 0) }}</div>
+                    <div class="ds-value-xl">R {{ number_format($projectedIncome, 0) }}</div>
                     <div class="ds-label mt-1">
                         rate {{ number_format(($b['commission_rate'] ?? 0.075) * 100, 2) }}% × share {{ number_format(($b['company_share'] ?? 0.5) * 100, 0) }}%
                     </div>
                 </div>
 
-                <div class="p-4 rounded-2xl border border-black/10 {{ $shortAmount > 0 ? 'bg-red-50' : 'bg-green-50' }}">
+                <div class="ds-status-card {{ $shortAmount > 0 ? 'ds-status-declined' : 'ds-status-granted' }}">
                     <div class="ds-label">Status</div>
                     @if($branchBudget > 0 && $shortAmount <= 0)
-                        <div class="ds-value-lg text-green-700">On track</div>
-                        <div class="text-sm text-gray-700 mt-1">No increases needed.</div>
+                        <div class="ds-value-lg" style="color: var(--ds-green);">On track</div>
+                        <div class="text-sm mt-1" style="color: var(--text-secondary);">No increases needed.</div>
                     @elseif($branchBudget > 0 && $shortAmount > 0)
-                        <div class="ds-value-lg text-red-700">Short by {{ number_format($shortPct, 1) }}%</div>
-                        <div class="text-sm text-gray-700 mt-1">
+                        <div class="ds-value-lg" style="color: var(--ds-crimson);">Short by {{ number_format($shortPct, 1) }}%</div>
+                        <div class="text-sm mt-1" style="color: var(--text-secondary);">
                             Shortfall: <span class="font-bold">R {{ number_format($shortAmount, 0) }}</span>
                         </div>
 
-                        @if(($missingValueTargetsCount ?? 0) > 0)
-                            <div class="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3">
-                                <div class="text-sm font-extrabold text-amber-900">Targets incomplete — set missing agent targets</div>
-                                <div class="text-xs text-amber-800 mt-1">
+                        @if($missingValueTargetsCount > 0)
+                            <div class="mt-3 rounded-md p-3" style="border: 1px solid var(--ds-amber); background: color-mix(in srgb, var(--ds-amber) 8%, transparent);">
+                                <div class="text-sm font-extrabold" style="color: var(--ds-amber);">Targets incomplete — set missing agent targets</div>
+                                <div class="text-xs mt-1" style="color: var(--text-secondary);">
                                     Some users still have <span class="font-bold">Value target = 0</span> for this period.
                                     Projected Income is not reliable until these are set.
                                 </div>
 
                                 <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     @foreach($missingValueTargets as $u)
-                                        <div class="rounded-lg border border-amber-200 bg-white p-3 flex items-center justify-between gap-3">
+                                        <div class="rounded-md p-3 flex items-center justify-between gap-3" style="border: 1px solid var(--border); background: var(--surface);">
                                             <div>
-                                                <div class="text-sm font-bold text-amber-950">{{ $u['name'] }}</div>
-                                                <div class="text-xs text-amber-800">Value target currently: <span class="font-bold">0</span></div>
+                                                <div class="text-sm font-bold" style="color: var(--text-primary);">{{ $u['name'] }}</div>
+                                                <div class="text-xs" style="color: var(--text-muted);">Value target currently: <span class="font-bold">0</span></div>
                                             </div>
 
                                             <form method="POST" action="{{ route('bm.performance.alignAgentToCompany') }}">
                                                 @csrf
                                                 <input type="hidden" name="period" value="{{ $r['period'] }}">
                                                 <input type="hidden" name="user_id" value="{{ (int)($u['user_id'] ?? 0) }}">
-                                                <button class="btn-primary px-4 py-2 whitespace-nowrap">Auto align</button>
+                                                <button class="corex-btn-primary px-4 py-2 whitespace-nowrap">Auto align</button>
                                             </form>
                                         </div>
                                     @endforeach
                                 </div>
 
-                                <div class="text-[11px] text-amber-900 mt-2">
+                                <div class="text-[11px] mt-2" style="color: var(--text-muted);">
                                     "Set targets" will copy the agent's most recent non-zero targets into this period (safe default), then Projected Income updates immediately.
                                 </div>
                             </div>
                         @endif
-@elseif($branchBudget > 0 && $shortAmount > 0)
-                        <div class="ds-value-lg text-red-700">Short by {{ number_format($shortPct, 1) }}%</div>
-                        <div class="text-sm text-gray-700 mt-1">Shortfall: <span class="font-bold">R {{ number_format($shortAmount, 0) }}</span></div>                        @if(($missingValueTargetsCount ?? 0) === 0)
-@else
-                            <div class="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3">
-                                <div class="text-sm font-extrabold text-amber-900">Targets incomplete — Magic disabled</div>
-                                <div class="text-xs text-amber-800 mt-1">
-                                    One or more users still have <span class="font-bold">Value target = 0</span> for this period.
-                                    Set their budgets/targets first so Projected Income is real.
-                                </div>
-                                <div class="mt-2 text-xs text-amber-900 font-semibold">Missing Value targets:</div>
-                                <ul class="mt-1 text-xs text-amber-900">
-                                    @foreach($missingValueTargets as $u)
-                                        <li>• {{ $u['name'] }}</li>
-                                    @endforeach
-                                </ul>
-                            </div>
-                        @endif
-<div class="ds-label mt-2">
+
+                        <div class="ds-label mt-2">
                             This scales agent targets (listings/deals/value/points) for the period to align with budget.
                         </div>
                     @else
-                        <div class="ds-value-lg text-gray-700">Set budget</div>
-                        <div class="text-sm text-gray-600 mt-1">Enter branch budget to activate alignment.</div>
+                        <div class="ds-value-lg" style="color: var(--text-secondary);">Set budget</div>
+                        <div class="text-sm mt-1" style="color: var(--text-muted);">Enter branch budget to activate alignment.</div>
                     @endif
                 </div>
             </div>
-        </div>
-
-
-                </div>
-                    </div>
-
-                </div>
-                    </div>
-
-                </div>
-            </div>
-        </div>
-
         </div>
 
         {{-- Excel-style Agents table --}}
@@ -517,7 +494,6 @@
             <div class="overflow-x-auto">
                 @php
     // BRANCH TOTAL Sales Value must match the agent rows (split-correct).
-    // This avoids counting full deal values when cross-branch deals exist.
     $branchTotalSalesValueActual = 0.0;
     foreach (($r['rows'] ?? []) as $__row) {
         $branchTotalSalesValueActual += (float)($__row['actuals']['value'] ?? $__row['actuals']['sales_value'] ?? 0);
@@ -537,8 +513,8 @@
                     </thead>
                     <tbody>
                         {{-- Branch totals row (ties to the top tiles) --}}
-                        <tr class="border-t border-black/10 bg-gray-50">
-                            <td class="px-4 py-3 font-extrabold">BRANCH TOTAL</td>
+                        <tr style="background: var(--surface-2); border-top: 1px solid var(--border);">
+                            <td class="px-4 py-3 font-extrabold" style="color: var(--text-primary);">BRANCH TOTAL</td>
                             <td class="px-4 py-3 text-right font-bold">
                                 {{ (int)($r['totals']['actuals']['deals'] ?? 0) }} / {{ (int)($r['totals']['targets']['deals'] ?? 0) }}
                             </td>
@@ -552,7 +528,7 @@
                             </td>
                             <td class="px-4 py-3 text-right font-extrabold">
                                 R {{ number_format((float)($r['totals']['actuals']['team_company_retained'] ?? 0), 0) }}
-                                <div class="text-[11px] text-gray-500 font-semibold">
+                                <div class="text-[11px] font-semibold" style="color: var(--text-muted);">
                                     Ledger: R {{ number_format((float)($r['totals']['actuals']['ledger_company_retained'] ?? 0), 0) }}
                                 </div>
                             </td>
@@ -613,7 +589,7 @@
 
                                 <td class="px-4 py-3 text-right font-extrabold">
                                     R {{ number_format($retained, 0) }}
-                                    <div class="text-[11px] text-gray-500 font-semibold">
+                                    <div class="text-[11px] font-semibold" style="color: var(--text-muted);">
                                         Agent: R {{ number_format($agentIncome, 0) }}
                                     </div>
                                 </td>
@@ -628,7 +604,7 @@
             </div>
         </div>
 
-        <div class="text-xs text-gray-500">
+        <div class="text-xs" style="color: var(--text-muted);">
             Privacy: This page shows derived targets + activity + deal actuals. No worksheet net-income fields are exposed.
         </div>
     </div>
