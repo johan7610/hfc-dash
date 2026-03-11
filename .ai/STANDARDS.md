@@ -1,3 +1,15 @@
+# CoreX OS — Prime Directive
+
+CoreX OS will become the best and biggest real estate operating system in South Africa.
+
+**Technology Choices:** When multiple options exist, always choose the best one. If there is a superior library, API, approach or architecture — use it. Never choose mediocre when world class is available. Cost is a consideration but never a reason to choose inferior technology when better options exist at the same or similar cost.
+
+**Quality Standard:** Every feature built must work seamlessly. A feature that half-works is not acceptable. Debug it until it works properly or do not ship it.
+
+**Vision:** Johan Reichel brings deep real estate industry knowledge spanning operations, compliance, accounting, and agency management. Claude's role is to convert that knowledge into a flawless operating system — one that sets the industry standard.
+
+---
+
 # CoreX OS — Standards
 
 These are the non-negotiable rules for building CoreX. Every developer, every prompt, every feature must comply.

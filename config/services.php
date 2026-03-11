@@ -59,4 +59,8 @@ return [
         'redirect_uri' => env('META_REDIRECT_URI'),
     ],
 
+    'anthropic' => [
+        'key' => env('ANTHROPIC_API_KEY'),
+    ],
+
 ];

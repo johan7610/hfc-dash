@@ -920,6 +920,7 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
     // ===== DOCUMENT IMPORTER =====
     Route::get('/import', [\App\Http\Controllers\Docuperfect\DocumentImporterController::class, 'index'])->name('docuperfect.import.index');
     Route::post('/import/parse', [\App\Http\Controllers\Docuperfect\DocumentImporterController::class, 'parse'])->name('docuperfect.import.parse');
+    Route::get('/import/review', [\App\Http\Controllers\Docuperfect\DocumentImporterController::class, 'review'])->name('docuperfect.import.review');
     Route::post('/import/generate', [\App\Http\Controllers\Docuperfect\DocumentImporterController::class, 'generate'])->name('docuperfect.import.generate');
 
     // ===== WEB TEMPLATE PREVIEWS =====

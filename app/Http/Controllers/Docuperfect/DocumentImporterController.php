@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Docuperfect;
 
 use App\Http\Controllers\Controller;
-use App\Services\Docuperfect\DocxParserService;
 use App\Services\Docuperfect\DocumentTemplateGenerator;
 use Illuminate\Http\Request;
 
@@ -23,47 +22,164 @@ class DocumentImporterController extends Controller
     }
 
     /**
-     * Parse an uploaded .docx file and return results to the review screen.
+     * Accept uploaded .docx file and parse synchronously.
+     * Returns JSON with redirect URL on success.
      */
-    public function parse(Request $request, DocxParserService $parser)
+    public function parse(Request $request): \Illuminate\Http\JsonResponse
     {
-        \Log::info('DocxParser controller: parse() called');
+        \Log::info('[DocumentImporter] parse() called', [
+            'has_file_document' => $request->hasFile('document'),
+            'has_file_docx_file' => $request->hasFile('docx_file'),
+            'all_files' => array_keys($request->allFiles()),
+            'content_type' => $request->header('Content-Type'),
+        ]);
+
+        $user = $request->user();
+        if (!$user->hasPermission('manage_templates')) {
+            \Log::warning('[DocumentImporter] 403 — no manage_templates permission');
+            abort(403);
+        }
+
+        // Validate — check both field names for safety
+        $file = $request->file('document') ?? $request->file('docx_file');
+        if (!$file) {
+            \Log::error('[DocumentImporter] No file found in request');
+            return response()->json([
+                'error' => 'No file uploaded. Expected field name: document'
+            ], 422);
+        }
+
+        if (!$file->isValid()) {
+            \Log::error('[DocumentImporter] File upload invalid', [
+                'error' => $file->getErrorMessage(),
+            ]);
+            return response()->json([
+                'error' => 'Upload failed: ' . $file->getErrorMessage()
+            ], 422);
+        }
+
+        $ext = strtolower($file->getClientOriginalExtension());
+        \Log::info('[DocumentImporter] File received', [
+            'original_name' => $file->getClientOriginalName(),
+            'extension' => $ext,
+            'size' => $file->getSize(),
+        ]);
+
+        if ($ext !== 'docx') {
+            return response()->json([
+                'error' => 'Only .docx files are supported.'
+            ], 422);
+        }
+
+        // Store file
+        \Log::info('[DocumentImporter] Saving temp file...');
+        $filename = uniqid('import_') . '.docx';
+        $dir = storage_path('app/public/imports/temp');
+
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        $fullPath = $dir . DIRECTORY_SEPARATOR . $filename;
+        $file->move($dir, $filename);
+
+        if (!file_exists($fullPath)) {
+            \Log::error('[DocumentImporter] File save failed', ['path' => $fullPath]);
+            return response()->json([
+                'error' => 'Failed to save uploaded file.'
+            ], 500);
+        }
+
+        \Log::info('[DocumentImporter] File saved', [
+            'path' => $fullPath,
+            'size' => filesize($fullPath),
+        ]);
+
+        // Parse synchronously
+        try {
+            \Log::info('[DocumentImporter] Calling DocxParserService...');
+            $parser = new \App\Services\Docuperfect\DocxParserService();
+            $result = $parser->parse($fullPath);
+
+            \Log::info('[DocumentImporter] Parse returned', [
+                'html_length' => strlen($result['html'] ?? ''),
+                'field_count' => count($result['fields'] ?? []),
+                'warnings' => $result['warnings'] ?? [],
+            ]);
+
+            // Store in session for review() and generate()
+            \Log::info('[DocumentImporter] Storing in session...');
+            session([
+                'import_html'     => $result['html'],
+                'import_fields'   => $result['fields'],
+                'import_filename' => $file->getClientOriginalName(),
+            ]);
+
+            // Clean up temp file
+            @unlink($fullPath);
+
+            $redirect = route('docuperfect.import.review');
+            \Log::info('[DocumentImporter] SUCCESS — returning redirect', [
+                'redirect' => $redirect,
+            ]);
+
+            return response()->json([
+                'success'  => true,
+                'redirect' => $redirect,
+                'warnings' => $result['warnings'] ?? [],
+            ]);
+
+        } catch (\Throwable $e) {
+            @unlink($fullPath);
+
+            \Log::error('[DocumentImporter] EXCEPTION in parse', [
+                'class' => get_class($e),
+                'message' => $e->getMessage(),
+                'file' => $e->getFile() . ':' . $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Render the review view from session data.
+     */
+    public function review(Request $request)
+    {
         $user = $request->user();
         if (!$user->hasPermission('manage_templates')) {
             abort(403);
         }
 
-        $request->validate([
-            'docx_file' => ['required', 'file', 'max:10240'],
-            'template_name' => ['required', 'string', 'max:255'],
-        ]);
+        $html     = session('import_html');
+        $fields   = session('import_fields', []);
+        $filename = session('import_filename', 'Document');
 
-        $file = $request->file('docx_file');
-        $extension = strtolower($file->getClientOriginalExtension());
-        if (!in_array($extension, ['docx'])) {
-            return back()->withErrors(['docx_file' => 'Please upload a .docx file.']);
+        if (empty($html)) {
+            return redirect()
+                ->route('docuperfect.import.index')
+                ->with('error',
+                    'No parsed document found. ' .
+                    'Please upload again.');
         }
-
-        try {
-            set_time_limit(60);
-            $parsed = $parser->parse($file->getRealPath());
-        } catch (\Exception $e) {
-            return back()->withErrors([
-                'docx_file' => 'Failed to parse document: ' . $e->getMessage(),
-            ]);
-        }
-
-        // Store parsed data in session for the generate step
-        session()->put('docx_import', [
-            'parsed' => $parsed,
-            'template_name' => $request->input('template_name'),
-            'original_filename' => $file->getClientOriginalName(),
-        ]);
 
         return view('docuperfect.importer.review', [
-            'parsed' => $parsed,
-            'templateName' => $request->input('template_name'),
-            'fields' => $parsed['fields'],
+            'parsed' => [
+                'html'              => $html,
+                'fields'            => $fields,
+                'template_name'     => pathinfo(
+                    $filename,
+                    PATHINFO_FILENAME
+                ),
+                'original_filename' => $filename,
+            ],
+            'templateName' => pathinfo($filename, PATHINFO_FILENAME),
+            'fields' => $fields,
         ]);
     }
 
@@ -77,8 +193,12 @@ class DocumentImporterController extends Controller
             abort(403);
         }
 
-        $importData = session('docx_import');
-        if (!$importData) {
+        $importData = [
+            'html' => session('import_html'),
+            'template_name' => session('import_filename', 'Document'),
+        ];
+
+        if (empty($importData['html'])) {
             return redirect()->route('docuperfect.import.index')
                 ->with('error', 'No import data found. Please upload a document first.');
         }
@@ -91,20 +211,28 @@ class DocumentImporterController extends Controller
             'fields.*.pillar' => ['required', 'string'],
             'fields.*.assigned_to' => ['required', 'string', 'in:agent,lessor,lessee,buyer,seller'],
             'fields.*.field_type' => ['nullable', 'string', 'in:text,date,number'],
+            'edited_html' => ['nullable', 'string'],
         ]);
 
         $fieldMappings = $request->input('fields');
         $templateName = $request->input('template_name', $importData['template_name']);
 
+        // Use edited HTML from the editor if provided, otherwise fall back to session HTML
+        $parsedData = [
+            'html' => $request->filled('edited_html')
+                ? $request->input('edited_html')
+                : ($importData['html'] ?? ''),
+        ];
+
         $template = $generator->generate(
-            $importData['parsed'],
+            $parsedData,
             $fieldMappings,
             $templateName,
             $user->id
         );
 
         // Clear session data
-        session()->forget('docx_import');
+        session()->forget(['import_html', 'import_fields', 'import_filename']);
 
         return redirect()->route('docuperfect.templates.index')
             ->with('success', 'Template "' . $template->name . '" imported successfully.');
