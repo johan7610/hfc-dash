@@ -199,7 +199,55 @@ class ESignWizardController extends Controller
         // with any values filled during wizard steps merged in
         $fields = $stepData['fields'] ?? ($template->fields_json ?? []);
 
+        // Backfill named_field_name from database for any field missing it
+        $namedFieldIds = collect($fields)->pluck('named_field_id')->filter()->unique()->values();
+        $namedFieldRecords = [];
+        if ($namedFieldIds->isNotEmpty()) {
+            $namedFieldRecords = NamedField::whereIn('id', $namedFieldIds)->get()->keyBy('id');
+            $namedFieldMap = $namedFieldRecords->pluck('name', 'id');
+            foreach ($fields as &$field) {
+                $defaultLabels = ['Placeholder', 'placeholder', 'Text Field', 'Date', 'Signature', 'Initial', 'Selection', 'Tick'];
+
+                // Find the best label from all possible keys
+                $agentLabel = $field['label'] ?? '';
+                $fieldName = $field['field_name'] ?? '';
+                $fieldLabel = $field['field_label'] ?? '';
+
+                // Priority 1: agent-set label from template editor (only if meaningful, not a default)
+                if (!empty($agentLabel) && !in_array($agentLabel, $defaultLabels)) {
+                    $field['named_field_name'] = $agentLabel;
+                }
+                // Priority 2: field_name key (used by signature date fields)
+                elseif (!empty($fieldName) && !in_array($fieldName, $defaultLabels)) {
+                    $field['named_field_name'] = $fieldName;
+                }
+                // Priority 3: field_label key
+                elseif (!empty($fieldLabel) && !in_array($fieldLabel, $defaultLabels)) {
+                    $field['named_field_name'] = $fieldLabel;
+                }
+                // Priority 4: DB named field name
+                elseif (empty($field['named_field_name']) && !empty($field['named_field_id'])) {
+                    $field['named_field_name'] = $namedFieldMap[$field['named_field_id']] ?? null;
+                }
+            }
+            unset($field);
+        }
+
+        // Final fallback: ensure NO field ever shows a raw ID as its label
+        foreach ($fields as &$field) {
+            if (empty($field['named_field_name'])) {
+                // Check field_name/field_label before falling back to type
+                $field['named_field_name'] = $field['field_name']
+                    ?? $field['field_label']
+                    ?? $field['label']
+                    ?? ucfirst($field['type'] ?? 'Field');
+            }
+        }
+        unset($field);
+
         // Auto-fill fields from wizard step data (property, recipients, details)
+        // Contact fields with multiple contacts of the same role (e.g., 2 lessors)
+        // are concatenated with ' & ' (e.g., "Koos Kombuis & Lienkie Kombuis")
         $fields = $this->autoFillFields($fields, $stepData);
 
         // Pre-fill field values from WebTemplateDataService (resolved from step_data)
@@ -285,9 +333,15 @@ class ESignWizardController extends Controller
             $stepData['details'] = $propDefaults;
         }
 
-        // Recipients from step data — auto-populate linked contacts from property if empty
-        $recipients = $stepData['recipients']['recipients'] ?? [];
-        if (empty($recipients) && $step >= 3) {
+        // Recipients from step data — handle double-nested structure
+        $recipientsData = $stepData['recipients'] ?? [];
+        $recipients = isset($recipientsData['recipients']) && is_array($recipientsData['recipients'])
+            ? $recipientsData['recipients']
+            : (is_array($recipientsData) && !empty($recipientsData) && isset($recipientsData[0]) ? $recipientsData : []);
+
+        // Auto-populate linked contacts from property if no non-agent recipients exist
+        $hasNonAgent = collect($recipients)->contains(fn($r) => ($r['role'] ?? '') !== 'agent');
+        if (!$hasNonAgent && $step >= 3) {
             $propertyId = $stepData['property']['property_id'] ?? null;
             $propertySource = $stepData['property']['_property_source'] ?? null;
             if ($propertyId && $propertySource === 'properties') {
@@ -329,6 +383,21 @@ class ESignWizardController extends Controller
 
         $documentTypes = DocumentType::orderBy('sort_order')->get();
 
+        // Get manual named fields for this template (shown as dynamic inputs on step 4)
+        $manualFields = [];
+        $fieldNamedIds = collect($fields)->pluck('named_field_id')->filter()->unique()->values();
+        if ($fieldNamedIds->isNotEmpty()) {
+            $manualFields = DB::table('docuperfect_named_fields')
+                ->whereIn('id', $fieldNamedIds)
+                ->where('source_type', 'manual')
+                ->get()
+                ->map(fn($mf) => ['id' => $mf->id, 'name' => $mf->name])
+                ->values()
+                ->toArray();
+        }
+
+        \Illuminate\Support\Facades\Log::debug('VIEW recipients', ['r' => $recipients]);
+
         return view('docuperfect.esign.wizard', [
             'flow'           => $flow,
             'step'           => $step,
@@ -347,6 +416,7 @@ class ESignWizardController extends Controller
             'isWebTemplate'  => ($template->render_type ?? 'pdf') === 'web',
             'templateId'     => $flow->template_id,
             'flowId'         => $flow->id,
+            'manualFields'   => $manualFields,
         ]);
     }
 
@@ -925,7 +995,28 @@ class ESignWizardController extends Controller
 
         $packInstanceId = $isPackFlow ? (int) round(microtime(true) * 1000) : null;
 
-        $result = DB::transaction(function () use ($user, $flow, $template, $fields, $recipients, $signingSetup, $docName, $propertyAddress, $signatureService, $webTemplateData, $packInstanceId) {
+        // Resolve document_type: map template's DocumentType to a RentalDocumentType slug
+        $resolvedDocType = $template->template_type; // fallback
+        if ($template->document_type_id) {
+            $template->loadMissing('documentType');
+            $dtName = $template->documentType->name ?? '';
+            // Map DocuPerfect DocumentType names to RentalDocumentType slugs
+            $dtNameMap = [
+                'Mandates' => 'mandate', 'OTPs' => 'other', 'Addendums' => 'addendum',
+                'Condition Reports' => 'inspection_report', 'FICA' => 'disclosure',
+                'Rental Agreements' => 'lease_agreement', 'Other' => 'other',
+            ];
+            $resolvedDocType = $dtNameMap[$dtName] ?? strtolower(str_replace(' ', '_', $dtName));
+        }
+
+        // Resolve property_id: use flow->property_id (pillar) or step_data rental_property_id
+        $resolvedPropertyId = $flow->property_id;
+        $propSource = $stepData['property']['_property_source'] ?? 'properties';
+        if (!$resolvedPropertyId && $propSource === 'rental_properties' && !empty($stepData['property']['property_id'])) {
+            $resolvedPropertyId = $stepData['property']['property_id'];
+        }
+
+        $result = DB::transaction(function () use ($user, $flow, $template, $fields, $recipients, $signingSetup, $docName, $propertyAddress, $signatureService, $webTemplateData, $packInstanceId, $resolvedDocType, $resolvedPropertyId) {
             // 1. Create Document
             $document = Document::create([
                 'name'             => $docName,
@@ -934,8 +1025,8 @@ class ESignWizardController extends Controller
                 'owner_id'         => $user->id,
                 'branch_id'        => $user->effectiveBranchId(),
                 'property_address' => $propertyAddress,
-                'property_id'      => $flow->property_id,
-                'document_type'    => $template->template_type,
+                'property_id'      => $resolvedPropertyId,
+                'document_type'    => $resolvedDocType,
                 'web_template_data' => $webTemplateData,
                 'pack_instance_id' => $packInstanceId,
             ]);
@@ -1042,7 +1133,11 @@ class ESignWizardController extends Controller
                 );
             }
 
-            // 4. Convert template signature zones to markers
+            // 4a. Set required flags on sign/initial fields based on contact count per role
+            $fields = $this->setSignatureRequiredFlags($fields, $recipients);
+            $document->update(['fields_json' => $fields]);
+
+            // 4b. Convert template signature zones to markers
             $markerCount = $signatureService->convertZonesToMarkers($sigTemplate);
 
             // Fallback: create markers from fields_json sign/initial fields
@@ -1136,10 +1231,16 @@ class ESignWizardController extends Controller
      */
     private function autoFillFields(array $fields, array $stepData): array
     {
-        // Load named field source mappings
+        // Load named field source mappings (non-manual for auto-resolve)
         $namedFieldMappings = DB::table('docuperfect_named_fields')
             ->whereNotNull('source_type')
             ->where('source_type', '!=', 'manual')
+            ->get()
+            ->keyBy('id');
+
+        // Load manual-type named fields (resolved from details step data)
+        $manualFieldMappings = DB::table('docuperfect_named_fields')
+            ->where('source_type', 'manual')
             ->get()
             ->keyBy('id');
 
@@ -1149,12 +1250,12 @@ class ESignWizardController extends Controller
         $details    = $stepData['details'] ?? [];
         $agent      = auth()->user();
 
-        // Build contact lookup by role (ucfirst to match source_contact_type)
+        // Build contact lookup by role as arrays (supports multiple contacts per role)
         // If recipient has _contact_id, enrich with full DB data (bank details etc.)
         $contactsByRole = [];
         foreach ($recipients as $r) {
             $role = ucfirst($r['role'] ?? '');
-            if (!$role || isset($contactsByRole[$role])) continue;
+            if (!$role) continue;
 
             // Enrich from DB if linked to a Contact record
             $contactId = $r['_contact_id'] ?? null;
@@ -1170,7 +1271,10 @@ class ESignWizardController extends Controller
                 }
             }
 
-            $contactsByRole[$role] = $r;
+            if (!isset($contactsByRole[$role])) {
+                $contactsByRole[$role] = [];
+            }
+            $contactsByRole[$role][] = $r;
         }
 
         // Role aliases: wizard uses "landlord"/"tenant", DB uses "Lessor"/"Lessee"
@@ -1202,6 +1306,11 @@ class ESignWizardController extends Controller
             $sourceColumn = $mapping->source_column;
             $contactType  = $mapping->source_contact_type;
 
+            // Strip numeric suffix from contact type (e.g., "Lessor 2" → "Lessor")
+            if ($contactType && preg_match('/^(.+?)\s+\d+$/', $contactType, $m)) {
+                $contactType = $m[1];
+            }
+
             $value = $this->resolveFieldValue($sourceType, $sourceColumn, $contactType, $property, $contactsByRole, $details, $agent);
 
             if ($value !== null && $value !== '') {
@@ -1209,6 +1318,88 @@ class ESignWizardController extends Controller
             }
         }
         unset($field);
+
+        // Resolve manual-type fields from the details step data
+        foreach ($fields as &$field) {
+            if (!empty($field['value'])) {
+                continue; // Don't overwrite existing values
+            }
+
+            $namedFieldId = $field['named_field_id'] ?? null;
+            if (!$namedFieldId || !isset($manualFieldMappings[$namedFieldId])) {
+                continue;
+            }
+
+            $mapping = $manualFieldMappings[$namedFieldId];
+
+            // Map known manual field names to their detail-step keys
+            $manualKeyMap = [
+                'Lease Comm %'   => 'commission',
+                'Commission'     => 'commission',
+                'Deposit'        => 'deposit',
+                'Marketing Fee'  => 'marketing_fee',
+                'Monthly Rental' => 'monthly_rental',
+                'Lease Start'    => 'lease_start',
+                'Lease End'      => 'lease_end',
+            ];
+
+            $key = $manualKeyMap[$mapping->name] ?? $mapping->source_column ?? 'named_field_' . $namedFieldId;
+
+            // Manual fields resolve from details step data using the resolved key
+            if (isset($details[$key]) && $details[$key] !== '') {
+                $field['value'] = (string) $details[$key];
+            }
+        }
+        unset($field);
+
+        return $fields;
+    }
+
+    /**
+     * Set the 'required' flag on sign/initial fields based on contact count per role.
+     *
+     * For each role (landlord, tenant, etc.), the Nth signature block is required
+     * only if there are ≥N contacts assigned to that role. The first block is
+     * always required; the second only if ≥2 contacts, etc.
+     * Agent signature blocks are always required.
+     */
+    private function setSignatureRequiredFlags(array $fields, array $recipients): array
+    {
+        // Count contacts per role (lowercase)
+        $contactCountByRole = [];
+        foreach ($recipients as $r) {
+            $role = strtolower($r['role'] ?? '');
+            if (!$role || $role === 'agent') continue;
+            $contactCountByRole[$role] = ($contactCountByRole[$role] ?? 0) + 1;
+        }
+
+        // Group sign/initial field indices by assignedTo
+        $signFieldsByParty = [];
+        foreach ($fields as $idx => $field) {
+            $type = strtolower($field['type'] ?? '');
+            if (!in_array($type, ['sign', 'initial'])) continue;
+
+            $party = strtolower($field['assignedTo'] ?? $field['assigned_to'] ?? 'agent');
+            $signFieldsByParty[$party][] = $idx;
+        }
+
+        // For each party, mark fields required based on contact count
+        foreach ($signFieldsByParty as $party => $indices) {
+            if ($party === 'agent') {
+                // Agent blocks are always required
+                foreach ($indices as $idx) {
+                    $fields[$idx]['required'] = true;
+                }
+                continue;
+            }
+
+            $contactCount = $contactCountByRole[$party] ?? 1;
+
+            foreach ($indices as $position => $idx) {
+                // Position is 0-based: first block → position 0, needs ≥1 contact
+                $fields[$idx]['required'] = ($position + 1) <= $contactCount;
+            }
+        }
 
         return $fields;
     }
@@ -1227,9 +1418,18 @@ class ESignWizardController extends Controller
                 return $this->resolvePropertyValue($sourceColumn, $property, $details);
 
             case 'contact':
-                $contact = $contactsByRole[$contactType] ?? null;
-                if (!$contact) return null;
-                return $this->resolveContactValue($sourceColumn, $contact);
+                $contacts = $contactsByRole[$contactType] ?? [];
+                if (empty($contacts)) return null;
+
+                // Loop all contacts of this role, concatenate with ' & '
+                $values = [];
+                foreach ($contacts as $contact) {
+                    $val = $this->resolveContactValue($sourceColumn, $contact);
+                    if ($val !== null && $val !== '') {
+                        $values[] = $val;
+                    }
+                }
+                return !empty($values) ? implode(' & ', $values) : null;
 
             case 'agent':
                 if ($sourceColumn === 'name') return $agent->name ?? '';

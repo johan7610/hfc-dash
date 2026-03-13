@@ -12,6 +12,7 @@ use App\Models\Docuperfect\SignatureTemplate;
 use App\Models\Docuperfect\WetInkInspection;
 use App\Services\Docuperfect\DocumentFlattener;
 use App\Services\Docuperfect\SignaturePdfService;
+use App\Models\Docuperfect\NamedField;
 use App\Services\Docuperfect\SignatureService;
 use App\Services\PermissionService;
 use App\Services\WebTemplateFieldPartyMap;
@@ -633,6 +634,13 @@ class SignatureController extends Controller
             $pageImages = [];
             $webTemplateData = $document->web_template_data ?? [];
 
+            // Merge filled field values from fields_json into web template data
+            // so blade variables reflect values entered during the wizard fill step
+            $webTemplateData = $this->mergeFieldsIntoWebTemplateData(
+                $webTemplateData,
+                $document->fields_json ?? []
+            );
+
             if (!empty($webTemplateData['merged_html'])) {
                 // Pack document — use pre-rendered merged HTML
                 $webTemplateHtml = $webTemplateData['merged_html'];
@@ -958,9 +966,21 @@ class SignatureController extends Controller
         // Determine next party label for the success message
         $nextPartyLabel = $nextPartyRole ? ucfirst($nextPartyRole) : 'the next party';
 
-        // If signing was initiated from the e-sign wizard, redirect to wizard success page
+        // If signing was initiated from the e-sign wizard, auto-send to the next party
+        // (wizard flow bypasses the manual sendConfirmation page)
         $wizardFlowId = session()->pull('esign_wizard_flow_id');
         if ($wizardFlowId) {
+            if ($nextPartyRole) {
+                $nextRequest = $template->requests()
+                    ->where('party_role', $nextPartyRole)
+                    ->where('status', SignatureRequest::STATUS_WAITING)
+                    ->first();
+
+                if ($nextRequest) {
+                    $this->signatureService->sendSigningRequest($nextRequest);
+                }
+            }
+
             return redirect()->route('docuperfect.esign.signingComplete', ['flow' => $wizardFlowId]);
         }
 
@@ -1055,6 +1075,14 @@ class SignatureController extends Controller
         if (!$validation['valid']) {
             return redirect()->back()->withErrors([
                 'fields' => 'Missing required fields: ' . implode(', ', $validation['missing']),
+            ]);
+        }
+
+        // Validate every non-agent party has at least one signature marker
+        $markerValidation = $this->validatePartyMarkers($template);
+        if (!$markerValidation['valid']) {
+            return redirect()->back()->withErrors([
+                'markers' => $markerValidation['message'],
             ]);
         }
 
@@ -1514,6 +1542,42 @@ class SignatureController extends Controller
     // Authorization helper
     // ──────────────────────────────────────────────
 
+    /**
+     * Validate that every non-agent party in the signing order has at least
+     * one signature or initial marker assigned to them.
+     */
+    private function validatePartyMarkers(SignatureTemplate $template): array
+    {
+        $signingOrder = $template->signing_order_json ?? [];
+        $parties = $template->parties_json ?? [];
+        $markers = $template->markers()->get();
+
+        $missing = [];
+
+        foreach ($signingOrder as $role) {
+            if ($role === 'agent') continue;
+
+            $partyHasMarker = $markers->contains(function ($marker) use ($role) {
+                return strtolower($marker->assigned_party) === strtolower($role)
+                    && in_array($marker->type, ['signature', 'initial']);
+            });
+
+            if (!$partyHasMarker) {
+                $partyName = collect($parties)->firstWhere('role', $role)['name'] ?? ucfirst($role);
+                $missing[] = $partyName . ' (' . ucfirst($role) . ')';
+            }
+        }
+
+        if (!empty($missing)) {
+            return [
+                'valid'   => false,
+                'message' => 'The following parties have no signature markers assigned: ' . implode(', ', $missing) . '. Please go back and add signature fields for each party.',
+            ];
+        }
+
+        return ['valid' => true, 'message' => ''];
+    }
+
     private function authorizeDocument($user, Document $document): void
     {
         $scope = PermissionService::getDataScope($user, 'documents');
@@ -1621,5 +1685,83 @@ class SignatureController extends Controller
         // The new document starts fresh for signing
 
         return $new;
+    }
+
+    /**
+     * Merge filled field values from fields_json into web template data.
+     *
+     * Maps NamedField source metadata to blade variable names so that
+     * values entered during the wizard fill step appear in web template rendering.
+     */
+    private function mergeFieldsIntoWebTemplateData(array $webTemplateData, array $fieldsJson): array
+    {
+        // Collect named_field_ids to batch-load
+        $namedFieldIds = collect($fieldsJson)
+            ->pluck('named_field_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $namedFields = $namedFieldIds->isNotEmpty()
+            ? NamedField::whereIn('id', $namedFieldIds)->get()->keyBy('id')
+            : collect();
+
+        foreach ($fieldsJson as $field) {
+            $value = $field['value'] ?? null;
+            if ($value === null || $value === '') continue;
+
+            // Map via NamedField source metadata
+            if (!empty($field['named_field_id']) && $namedFields->has($field['named_field_id'])) {
+                $nf = $namedFields->get($field['named_field_id']);
+                $bladeKey = $this->namedFieldToBladeKey($nf);
+                if ($bladeKey && !isset($webTemplateData[$bladeKey])) {
+                    $webTemplateData[$bladeKey] = $value;
+                }
+            }
+
+            // Map via field_name (some fields use blade-compatible names directly)
+            if (!empty($field['field_name'])) {
+                $key = str_replace(' ', '_', strtolower($field['field_name']));
+                if (!isset($webTemplateData[$key])) {
+                    $webTemplateData[$key] = $value;
+                }
+            }
+        }
+
+        return $webTemplateData;
+    }
+
+    /**
+     * Convert a NamedField's source metadata to its blade variable key.
+     */
+    private function namedFieldToBladeKey(NamedField $nf): ?string
+    {
+        $col = $nf->source_column;
+        $type = $nf->source_type;
+        $contactType = strtolower($nf->source_contact_type ?? '');
+
+        if ($type === 'contact' && $contactType) {
+            // Map composite column names to blade key suffixes
+            if ($col === 'first_name+last_name') {
+                $col = 'name';
+            }
+            return $contactType . '_' . $col;
+        }
+
+        if ($type === 'property') {
+            // Property columns map directly (rental_amount, complex_name, etc.)
+            return $col;
+        }
+
+        if ($type === 'agent') {
+            return 'agent_' . $col;
+        }
+
+        if ($type === 'manual') {
+            // Manual fields — snake_case the display name
+            return str_replace(' ', '_', strtolower($nf->name));
+        }
+
+        return null;
     }
 }

@@ -875,6 +875,13 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
     Route::post('/settings/named-fields/{field}/restore', [\App\Http\Controllers\Docuperfect\NamedFieldController::class, 'restore'])->name('docuperfect.settings.namedFields.restore')->withTrashed();
     Route::post('/settings/named-fields/reorder', [\App\Http\Controllers\Docuperfect\NamedFieldController::class, 'reorder'])->name('docuperfect.settings.namedFields.reorder');
 
+    // Field Groups
+    Route::get('/field-groups', [\App\Http\Controllers\Docuperfect\FieldGroupController::class, 'index'])->name('docuperfect.field-groups.index');
+    Route::post('/field-groups', [\App\Http\Controllers\Docuperfect\FieldGroupController::class, 'store'])->name('docuperfect.field-groups.store');
+    Route::put('/field-groups/{group}', [\App\Http\Controllers\Docuperfect\FieldGroupController::class, 'update'])->name('docuperfect.field-groups.update');
+    Route::delete('/field-groups/{group}', [\App\Http\Controllers\Docuperfect\FieldGroupController::class, 'destroy'])->name('docuperfect.field-groups.destroy');
+    Route::get('/field-groups/json', [\App\Http\Controllers\Docuperfect\FieldGroupController::class, 'json'])->name('docuperfect.field-groups.json');
+
     // Document Packs
     Route::get('/packs', [\App\Http\Controllers\Docuperfect\PackController::class, 'index'])->name('docuperfect.packs.index');
     Route::get('/packs/create', [\App\Http\Controllers\Docuperfect\PackController::class, 'create'])->name('docuperfect.packs.create');

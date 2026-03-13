@@ -105,7 +105,7 @@
                             {{ $tpl->branches->pluck('name')->join(', ') ?: 'No branches' }}
                         @endif
                     </div>
-                    <div class="text-[11px] mb-3" style="color: var(--text-muted);">{{ $tpl->page_count }} page{{ $tpl->page_count !== 1 ? 's' : '' }} &middot; {{ $tpl->owner->name ?? '—' }} &middot; {{ $tpl->created_at->format('d M Y') }}</div>
+                    <div class="text-[11px] mb-3" style="color: var(--text-muted);">{{ $tpl->page_count }} page{{ $tpl->page_count !== 1 ? 's' : '' }} &middot; {{ $tpl->owner->name ?? '—' }} &middot; {{ $tpl->created_at?->format('d M Y') ?? '—' }}</div>
 
                     @if($tpl->page_count > 0)
                     <div class="flex-1 flex items-center justify-center mb-3">
@@ -188,7 +188,7 @@
                                 </td>
                                 <td class="px-4 py-2 text-xs" style="color: var(--text-secondary);">{{ $tpl->owner->name ?? '—' }}</td>
                                 <td class="px-4 py-2 text-center" style="color: var(--text-secondary);">{{ $tpl->page_count }}</td>
-                                <td class="px-4 py-2 text-right text-xs" style="color: var(--text-secondary);">{{ $tpl->created_at->format('d M Y') }}</td>
+                                <td class="px-4 py-2 text-right text-xs" style="color: var(--text-secondary);">{{ $tpl->created_at?->format('d M Y') ?? '—' }}</td>
                                 <td class="px-4 py-2 text-right">
                                     <div class="flex items-center justify-end gap-1">
                                         @if($showArchived)

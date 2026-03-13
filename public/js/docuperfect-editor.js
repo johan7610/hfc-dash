@@ -39,6 +39,10 @@
     // System field placement state (template mode)
     var pendingSystemField = null; // { id, name, sourceType, sourceContactType }
 
+    // Field group placement state (template mode)
+    var pendingFieldGroup = null; // { id, name, layout, fields: [{named_field_id, label, pillar}] }
+    var fieldGroupsCache = null;  // loaded from /docuperfect/field-groups/json
+
     // DOM refs (set in init)
     var editorEl, sidebarEl, canvasEl;
 
@@ -75,6 +79,11 @@
             editorEl.style.minHeight = '';
             renderUploadZone();
             return;
+        }
+
+        // Fetch field groups for template mode
+        if (C.mode === 'template') {
+            fetchFieldGroups();
         }
 
         buildLayout();
@@ -774,6 +783,15 @@
         bar.className = 'dp-inline-toolbar';
         bar.addEventListener('mousedown', stopProp);
 
+        // Dynamic positioning: show below field if too close to top, above otherwise
+        if (field.position && field.position.y < 12) {
+            bar.style.top = 'auto';
+            bar.style.bottom = '-46px';
+        } else {
+            bar.style.top = '-42px';
+            bar.style.bottom = 'auto';
+        }
+
         var style = field.style || {};
 
         // Font/style controls (text-capable types only)
@@ -1065,6 +1083,7 @@
         placementStrikeType = null;
         placementZoneType = null;
         pendingSystemField = null;
+        pendingFieldGroup = null;
         editorEl.classList.remove('dp-placement-active');
         if (sidebarEl) sidebarEl.querySelectorAll('.dp-toolbar-btn').forEach(function (b) { b.classList.remove('active'); });
         // Deactivate system fields panel items
@@ -1173,6 +1192,37 @@
             return;
         }
 
+        // Field Group placement — draw bounding box, split into rows on mouseup
+        if (placementMode === 'group' && pendingFieldGroup) {
+            // Create a temporary preview element
+            var preview = document.createElement('div');
+            preview.className = 'dp-group-preview';
+            preview.style.position = 'absolute';
+            preview.style.left = xP + '%';
+            preview.style.top = yP + '%';
+            preview.style.width = '0%';
+            preview.style.height = '0%';
+            preview.style.border = '2px dashed #14b8a6';
+            preview.style.background = 'rgba(20,184,166,0.08)';
+            preview.style.pointerEvents = 'none';
+            preview.style.zIndex = '9999';
+            preview.style.borderRadius = '4px';
+            container.appendChild(preview);
+
+            dragState = {
+                type: 'place-group',
+                group: pendingFieldGroup,
+                startX: e.clientX,
+                startY: e.clientY,
+                container: container,
+                pageIndex: pageIndex,
+                originX: xP,
+                originY: yP,
+                previewEl: preview
+            };
+            return;
+        }
+
         var nf = {
             id: genId(),
             type: placementMode,
@@ -1249,6 +1299,21 @@
         var dxP = ((e.clientX - dragState.startX) / rect.width) * 100;
         var dyP = ((e.clientY - dragState.startY) / rect.height) * 100;
 
+        // Field Group placement preview
+        if (dragState.type === 'place-group') {
+            var gnx = Math.min(dragState.originX, dragState.originX + dxP);
+            var gny = Math.min(dragState.originY, dragState.originY + dyP);
+            var gw = Math.abs(dxP);
+            var gh = Math.abs(dyP);
+            if (dragState.previewEl) {
+                dragState.previewEl.style.left   = clamp(gnx, 0, 100) + '%';
+                dragState.previewEl.style.top    = clamp(gny, 0, 100) + '%';
+                dragState.previewEl.style.width  = clamp(gw, 0, 100 - gnx) + '%';
+                dragState.previewEl.style.height = clamp(gh, 0, 100 - gny) + '%';
+            }
+            return;
+        }
+
         // Zone drag types
         if (dragState.type === 'move-zone' || dragState.type === 'resize-zone' || dragState.type === 'place-zone') {
             var zone = findZone(dragState.zoneId);
@@ -1314,6 +1379,95 @@
 
     function onMouseUp() {
         if (!dragState) return;
+
+        // Field Group placement — split bounding box into rows and create fields
+        if (dragState.type === 'place-group') {
+            var rect = dragState.container.getBoundingClientRect();
+            var dxP = ((event.clientX - dragState.startX) / rect.width) * 100;
+            var dyP = ((event.clientY - dragState.startY) / rect.height) * 100;
+
+            var boxX = clamp(Math.min(dragState.originX, dragState.originX + dxP), 0, 100);
+            var boxY = clamp(Math.min(dragState.originY, dragState.originY + dyP), 0, 100);
+            var boxW = clamp(Math.abs(dxP), 0, 100 - boxX);
+            var boxH = clamp(Math.abs(dyP), 0, 100 - boxY);
+
+            // Remove preview element
+            if (dragState.previewEl && dragState.previewEl.parentNode) {
+                dragState.previewEl.parentNode.removeChild(dragState.previewEl);
+            }
+
+            var grp = dragState.group;
+            var fieldCount = grp.fields.length;
+
+            // Enforce minimum size based on layout direction
+            if (grp.layout === 'horizontal') {
+                if (boxW < (fieldCount * 5)) boxW = fieldCount * 5;
+                if (boxH < 2.5) boxH = 2.5;
+            } else {
+                if (boxW < 5) boxW = 15;
+                if (boxH < (fieldCount * 1.5)) boxH = fieldCount * 2.5;
+            }
+
+            var firstCreated = null;
+
+            // Determine assignedTo based on pillar
+            var pillarAssignMap = {
+                property: 'creator',
+                contact_lessor: 'lessor',
+                contact_lessee: 'lessee',
+                contact_seller: 'seller',
+                contact_buyer: 'buyer',
+                agent: 'creator',
+                computed: 'creator',
+                static: 'creator',
+                manual: 'creator'
+            };
+
+            if (grp.layout === 'horizontal') {
+                // Divide the drawn box into equal columns
+                var colWidth = boxW / fieldCount;
+                for (var i = 0; i < fieldCount; i++) {
+                    var gf = grp.fields[i];
+                    var created = createFieldAtPosition({
+                        type: 'placeholder',
+                        pageIndex: dragState.pageIndex,
+                        x: boxX + (i * colWidth),
+                        y: boxY,
+                        width: colWidth,
+                        height: boxH,
+                        named_field_id: gf.named_field_id,
+                        named_field_name: gf.label || '',
+                        assignedTo: pillarAssignMap[gf.source_group] || 'creator'
+                    });
+                    if (i === 0) firstCreated = created;
+                }
+            } else {
+                // Vertical — existing logic (default)
+                var rowHeight = boxH / fieldCount;
+                for (var i = 0; i < fieldCount; i++) {
+                    var gf = grp.fields[i];
+                    var created = createFieldAtPosition({
+                        type: 'placeholder',
+                        pageIndex: dragState.pageIndex,
+                        x: boxX,
+                        y: boxY + (i * rowHeight),
+                        width: boxW,
+                        height: rowHeight,
+                        named_field_id: gf.named_field_id,
+                        named_field_name: gf.label || '',
+                        assignedTo: pillarAssignMap[gf.source_group] || 'creator'
+                    });
+                    if (i === 0) firstCreated = created;
+                }
+            }
+
+            cancelPlacement();
+            pendingFieldGroup = null;
+            if (firstCreated) selectedFieldId = firstCreated.id;
+            dragState = null;
+            renderAllFields();
+            return;
+        }
 
         // Zone drag types
         if (dragState.type === 'place-zone' || dragState.type === 'move-zone' || dragState.type === 'resize-zone') {
@@ -2194,6 +2348,27 @@
         var content = document.createElement('div');
         content.className = 'dp-sf-content';
 
+        // ── Field Groups section (above System Fields) ──
+        var fgLabel = document.createElement('div');
+        fgLabel.className = 'dp-sf-section-label';
+        fgLabel.textContent = 'Field Groups';
+        content.appendChild(fgLabel);
+
+        var fgContainer = document.createElement('div');
+        fgContainer.className = 'dp-fg-container';
+        fgContainer.id = 'dp-field-groups-list';
+        var fgLoading = document.createElement('div');
+        fgLoading.className = 'dp-sf-item';
+        fgLoading.style.opacity = '0.5';
+        fgLoading.style.fontStyle = 'italic';
+        fgLoading.textContent = 'Loading groups...';
+        fgContainer.appendChild(fgLoading);
+        content.appendChild(fgContainer);
+
+        var fgDivider = document.createElement('div');
+        fgDivider.className = 'dp-sf-divider';
+        content.appendChild(fgDivider);
+
         // Group display config
         var groupConfig = {
             property:        { label: 'Property',  icon: '\uD83C\uDFE0' },
@@ -2635,6 +2810,87 @@
         if (sidebar && window.ResizeObserver) {
             new ResizeObserver(recalc).observe(sidebar);
         }
+    }
+
+    // ======================================================================
+    // ======================================================================
+    // FIELD GROUPS (template mode)
+    // ======================================================================
+
+    function fetchFieldGroups() {
+        fetch('/docuperfect/field-groups/json', {
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': C.csrfToken }
+        })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+            fieldGroupsCache = data || [];
+            renderFieldGroupsList();
+        })
+        .catch(function () {
+            fieldGroupsCache = [];
+            renderFieldGroupsList();
+        });
+    }
+
+    function renderFieldGroupsList() {
+        var container = document.getElementById('dp-field-groups-list');
+        if (!container) return;
+        container.innerHTML = '';
+
+        if (!fieldGroupsCache || fieldGroupsCache.length === 0) {
+            var empty = document.createElement('div');
+            empty.className = 'dp-sf-item';
+            empty.style.opacity = '0.5';
+            empty.style.fontStyle = 'italic';
+            empty.textContent = 'No field groups defined.';
+            container.appendChild(empty);
+            return;
+        }
+
+        // Pillar-based dot colors
+        var pillarColors = {
+            property: '#10b981',
+            contact_lessor: '#3b82f6',
+            contact_lessee: '#8b5cf6',
+            contact_seller: '#f59e0b',
+            contact_buyer: '#ef4444',
+            agent: '#06b6d4',
+            computed: '#64748b',
+            static: '#94a3b8',
+            manual: '#94a3b8'
+        };
+
+        fieldGroupsCache.forEach(function (fg) {
+            var item = document.createElement('div');
+            item.className = 'dp-sf-item dp-fg-chip';
+            item.dataset.groupId = fg.id;
+            item.innerHTML = '<span class="dp-sf-item-dot" style="background:#14b8a6"></span>' +
+                escHtml(fg.name) +
+                ' <span style="opacity:0.5;font-size:10px">(' + fg.fields.length + ')</span>';
+            item.title = 'Click to place: ' + fg.name + ' (' + fg.fields.length + ' fields)';
+
+            // Click-to-place: enter group placement mode
+            item.addEventListener('click', function () {
+                var wasActive = item.classList.contains('active');
+
+                // Deactivate all items
+                document.querySelectorAll('.dp-sf-item.active').forEach(function (el) {
+                    el.classList.remove('active');
+                });
+
+                if (wasActive) {
+                    pendingFieldGroup = null;
+                    cancelPlacement();
+                } else {
+                    item.classList.add('active');
+                    pendingFieldGroup = fg;
+                    pendingSystemField = null;
+                    startPlacement('group');
+                }
+            });
+
+            container.appendChild(item);
+        });
     }
 
     // ======================================================================

@@ -10,7 +10,7 @@
     // parties from explicit @include parameter (display names like ['Lessor','Agent'])
     // Fall back to all three if neither provided
     if (isset($signing_parties) && is_array($signing_parties)) {
-        $parties = array_map('ucfirst', $signing_parties);
+        $parties = array_values(array_unique(array_map('ucfirst', $signing_parties)));
     }
     $parties = $parties ?? ['Lessor', 'Lessee', 'Agent'];
 @endphp

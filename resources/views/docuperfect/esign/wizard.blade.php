@@ -480,6 +480,24 @@
                             <input type="text" x-model="details.marketing_fee" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 2500">
                         </div>
                     </div>
+
+                    {{-- Dynamic manual fields from template --}}
+                    <template x-if="manualFields.length > 0">
+                        <div class="mt-4 pt-4 border-t border-gray-200">
+                            <p class="text-xs text-gray-500 mb-3">Additional template fields</p>
+                            <div class="grid grid-cols-2 gap-4">
+                                <template x-for="mf in manualFields" :key="mf.id">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1" x-text="mf.name"></label>
+                                        <input type="text"
+                                               x-model="details['named_field_' + mf.id]"
+                                               class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm"
+                                               :placeholder="mf.name">
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
                 </div>
             </div>
 
@@ -705,10 +723,10 @@
                     <div style="margin-bottom:24px;">
                         <div style="font-size:0.75rem; color:#6b7280; margin-bottom:4px;" x-text="'Page ' + (pi+1)"></div>
                         {{-- Container: matches editor .dp-page-container exactly --}}
-                        <div style="position:relative; width:100%; max-width:800px; overflow:visible;">
+                        <div style="position:relative; width:100%; max-width:800px; overflow:visible; padding:0; margin:0;">
                             {{-- Image: matches editor .dp-page-img exactly --}}
                             <img :src="pageUrl" :alt="'Page ' + (pi+1)"
-                                 style="width:100%; display:block; user-select:none;" draggable="false">
+                                 style="width:100%; display:block; user-select:none; padding:0; margin:0;" draggable="false">
                             {{-- Fields: matches editor .dp-field positioning --}}
                             {{-- NOTE: ALL styles must be in :style (not split across style + :style) --}}
                             {{-- because Alpine.js string :style REPLACES static style, not merges --}}
@@ -799,6 +817,7 @@ function esignWizard() {
     const serverPageImages = @json($pageImages ?? []);
     const serverRecipients = @json($recipients ?? []);
     const serverStepData = @json($stepData ?? []);
+    const serverManualFields = @json($manualFields ?? []);
     const serverCurrentStep = {{ $safeStep }};
     const serverIsWebTemplate = @json($isWebTemplate ?? false);
     const serverTemplateId = @json($templateId ?? null);
@@ -951,10 +970,18 @@ function esignWizard() {
                 _duration: det._duration ?? 12,
                 _autoFilled: false,
             };
+            // Restore saved manual field values (named_field_{id} keys)
+            (serverManualFields || []).forEach(mf => {
+                const key = 'named_field_' + mf.id;
+                if (det[key]) d[key] = det[key];
+            });
             // Auto-set deposit = rental when deposit is empty
             if (!d.deposit && d.monthly_rental) d.deposit = d.monthly_rental;
             return d;
         })(),
+
+        // Manual named fields (for dynamic inputs on step 4)
+        manualFields: serverManualFields || [],
 
         // Step 5: Fields
         creatorFields: serverCreatorFields || [],
@@ -991,6 +1018,11 @@ function esignWizard() {
             Object.keys(savedOverrides).forEach(k => {
                 if (savedOverrides[k]) this.fieldPartyOverrides[k] = savedOverrides[k];
             });
+
+            // Sync previewFields with allWizardFields so overlay uses same IDs as fieldValues
+            if (this.allWizardFields.length > 0 && this.previewRenderType === 'pdf') {
+                this.previewFields = this.allWizardFields;
+            }
 
             // Initialize contact search state on existing recipients
             this.recipients.forEach((r, i) => {
@@ -1110,12 +1142,23 @@ function esignWizard() {
 
         get partyOptions() {
             const opts = [{ value: 'agent', label: 'Agent (You)' }];
-            const seen = { agent: true };
+            const roleCounts = {};
             (this.recipients || []).forEach(r => {
-                if (r.role === 'agent' || seen[r.role]) return;
-                seen[r.role] = true;
-                const name = r.name || getRoleLabel(r.role);
-                opts.push({ value: r.role, label: name + ' (' + getRoleLabel(r.role) + ')' });
+                if (r.role === 'agent') return;
+                if (!roleCounts[r.role]) roleCounts[r.role] = 0;
+                roleCounts[r.role]++;
+            });
+            const roleIndex = {};
+            (this.recipients || []).forEach((r, ri) => {
+                if (r.role === 'agent') return;
+                if (!roleIndex[r.role]) roleIndex[r.role] = 0;
+                roleIndex[r.role]++;
+                const roleLabel = getRoleLabel(r.role);
+                // Show "Landlord: Koos Kombuis" when name available, else just "Landlord"
+                const label = r.name
+                    ? (roleLabel + ': ' + r.name)
+                    : roleLabel;
+                opts.push({ value: r.role + (roleIndex[r.role] > 1 ? '_' + ri : ''), label: label });
             });
             return opts;
         },
@@ -1387,15 +1430,23 @@ function esignWizard() {
                         bank_branch_name: r.bank_branch_name || '',
                     })),
                 };
-                case 4: return {
-                    monthly_rental: this.details.monthly_rental,
-                    deposit: this.details.deposit,
-                    lease_start: this.details.lease_start,
-                    lease_end: this.details.lease_end,
-                    commission: this.details.commission,
-                    marketing_fee: this.details.marketing_fee,
-                    _duration: this.details._duration,
-                };
+                case 4: {
+                    const detailsData = {
+                        monthly_rental: this.details.monthly_rental,
+                        deposit: this.details.deposit,
+                        lease_start: this.details.lease_start,
+                        lease_end: this.details.lease_end,
+                        commission: this.details.commission,
+                        marketing_fee: this.details.marketing_fee,
+                        _duration: this.details._duration,
+                    };
+                    // Include manual field values under named_field_{id} keys
+                    (this.manualFields || []).forEach(mf => {
+                        const key = 'named_field_' + mf.id;
+                        if (this.details[key]) detailsData[key] = this.details[key];
+                    });
+                    return detailsData;
+                }
                 case 5: return { fieldValues: { ...this.fieldValues }, partyOverrides: { ...this.fieldPartyOverrides } };
                 case 6: return this.signingActions.map((action, i) => ({
                     signing_order: i + 1,

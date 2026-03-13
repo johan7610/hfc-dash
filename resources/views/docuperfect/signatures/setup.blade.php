@@ -456,21 +456,16 @@
                     <div class="mb-4">
                         <label class="block text-xs font-medium text-slate-600 mb-2">Assign To</label>
                         <div class="space-y-1.5">
-                            @foreach($parties as $party)
-                            <label class="flex items-center gap-2 cursor-pointer text-sm rounded-lg px-3 py-1.5 transition-colors"
-                                   :class="selectedParty === '{{ $party['role'] }}' ? 'bg-slate-100 font-medium' : 'hover:bg-slate-50'">
-                                <input type="radio" name="assign_party" value="{{ $party['role'] }}"
-                                       x-model="selectedParty"
-                                       class="text-cyan-600 focus:ring-cyan-500">
-                                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0
-                                    @if($party['role'] === 'agent') bg-blue-500
-                                    @elseif($party['role'] === 'tenant') bg-green-500
-                                    @elseif($party['role'] === 'landlord') bg-orange-500
-                                    @else bg-purple-500
-                                    @endif"></span>
-                                {{ ucfirst(str_replace('_', ' ', $party['role'])) }}
-                            </label>
-                            @endforeach
+                            <template x-for="opt in partyOptions" :key="opt.value">
+                                <label class="flex items-center gap-2 cursor-pointer text-sm rounded-lg px-3 py-1.5 transition-colors"
+                                       :class="selectedParty === opt.value ? 'bg-slate-100 font-medium' : 'hover:bg-slate-50'">
+                                    <input type="radio" name="assign_party" :value="opt.value"
+                                           x-model="selectedParty"
+                                           class="text-cyan-600 focus:ring-cyan-500">
+                                    <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :class="opt.dotClass"></span>
+                                    <span x-text="opt.label"></span>
+                                </label>
+                            </template>
                         </div>
                     </div>
 
@@ -616,6 +611,24 @@
             pageLoaded: false,
             _nextId: 1,
             _dragState: null,
+            parties: @json($parties),
+
+            get partyOptions() {
+                const grouped = {};
+                (this.parties || []).forEach(p => {
+                    if (!grouped[p.role]) {
+                        grouped[p.role] = { role: p.role, names: [] };
+                    }
+                    if (p.name) grouped[p.role].names.push(p.name);
+                });
+                return Object.values(grouped).map(g => {
+                    const roleLabel = g.role.charAt(0).toUpperCase() + g.role.slice(1).replace('_', ' ');
+                    const label = g.names.length > 0
+                        ? roleLabel + ': ' + g.names.join(' & ')
+                        : roleLabel;
+                    return { value: g.role, label, dotClass: this.partyDotClass(g.role) };
+                });
+            },
 
             init() {
                 // Global mouse handlers for drag

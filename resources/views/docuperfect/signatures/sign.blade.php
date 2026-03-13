@@ -19,55 +19,39 @@
 }
 </style>
 
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4"
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-4"
      x-data="signDocument()" x-init="init()">
 
-    <x-sticky-action-bar>
-        <x-slot name="left">
-            <a href="{{ route('docuperfect.rental') }}" class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-                Back
-            </a>
-        </x-slot>
-        <x-slot name="center">
-            <h2 class="text-sm font-semibold text-gray-700 truncate">Sign: {{ $document->name }}</h2>
-        </x-slot>
-        <x-slot name="right">
-            <span class="text-xs text-gray-500" x-text="`${signedCount}/${totalAgent} completed`"></span>
+    {{-- Header (sticky) --}}
+    <div style="background:var(--corex-navy, #0b2a4a); position:sticky; top:0; z-index:50;" class="rounded-md px-6 py-4 flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold text-white leading-tight">
+                Sign Document — {{ $document->name }}
+            </h2>
+            <div class="text-sm text-white/60 mt-0.5">
+                <span x-text="signedCount"></span> of <span x-text="totalAgent"></span> markers completed
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <a href="{{ route('docuperfect.signatures.setup', $document) }}"
+               class="text-sm text-white/60 hover:text-white transition-colors">Back to Setup</a>
+            <a href="{{ route('docuperfect.rental') }}"
+               class="text-sm text-white/60 hover:text-white transition-colors">Back to Rental</a>
             <button @click="handleComplete()"
                     :disabled="completingForm || signedCount < totalAgent || totalAgent === 0"
-                    class="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors"
+                    class="px-4 py-2 text-sm font-semibold rounded-md transition-colors"
                     :class="signedCount >= totalAgent && totalAgent > 0 && !completingForm
-                        ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                        : 'bg-slate-100 text-slate-400 cursor-not-allowed'">
+                        ? 'text-white hover:brightness-110'
+                        : 'bg-white/10 text-white/40 cursor-not-allowed'"
+                    :style="signedCount >= totalAgent && totalAgent > 0 && !completingForm ? 'background:var(--brand-button, #0ea5e9);' : ''">
                 <span x-show="!completingForm">Complete & Send</span>
                 <span x-show="completingForm" x-cloak>Completing...</span>
             </button>
-        </x-slot>
-    </x-sticky-action-bar>
-
-    {{-- Header --}}
-    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 flex items-center justify-between">
-        <div>
-            <h2 class="text-xl font-bold text-white leading-tight">
-                Sign Document &mdash; {{ $document->name }}
-            </h2>
-            <div class="text-sm text-white/60">
-                Your markers to sign: <span x-text="signedCount"></span> of <span x-text="totalAgent"></span> completed
-            </div>
-        </div>
-        <div class="flex items-center gap-3">
-            <a href="{{ route('docuperfect.signatures.setup', $document) }}"
-               class="text-sm text-white/70 hover:text-white">Back to Setup</a>
-            <a href="{{ route('docuperfect.rental') }}"
-               class="text-sm text-white/70 hover:text-white">Back to Rental</a>
         </div>
     </div>
 
-    {{-- Flash messages handled by global toast system --}}
-
     {{-- Progress bar --}}
-    <div class="ds-status-card p-4">
+    <div class="bg-white border border-gray-200 rounded-md p-4" style="border-left:4px solid var(--brand-button, #0ea5e9);">
         <div class="flex items-center justify-between mb-2">
             <span class="text-sm font-medium text-slate-700">
                 Agent Signing Progress
@@ -76,29 +60,30 @@
                 <span x-text="signedCount"></span> / <span x-text="totalAgent"></span> markers completed
             </span>
         </div>
-        <div class="w-full bg-slate-200 rounded-full h-2.5">
-            <div class="bg-emerald-500 h-2.5 rounded-full transition-all duration-500"
-                 :style="'width:' + (totalAgent > 0 ? Math.round((signedCount / totalAgent) * 100) : 0) + '%'"></div>
+        <div class="w-full bg-slate-200 rounded h-2">
+            <div class="h-2 rounded transition-all duration-500"
+                 style="background:var(--brand-button, #0ea5e9);"
+                 :style="'width:' + (totalAgent > 0 ? Math.round((signedCount / totalAgent) * 100) : 0) + '%;background:var(--brand-button, #0ea5e9);'"></div>
         </div>
     </div>
 
     {{-- Main content: Document viewer --}}
-    <div class="ds-status-card p-4 overflow-hidden flex flex-col" style="min-height:600px;">
+    <div class="bg-white border border-gray-200 rounded-md p-4 overflow-hidden flex flex-col" style="min-height:600px;">
 
         {{-- Page navigation --}}
         <div class="flex items-center justify-between mb-3 flex-shrink-0">
             <button @click="prevPage()" :disabled="currentPage <= 1"
-                    class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                    class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
                     :class="currentPage <= 1 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'">
-                &larr; Previous
+                Previous
             </button>
             <span class="text-sm text-slate-600 font-medium">
                 Page <span x-text="currentPage"></span> of <span x-text="totalPages"></span>
             </span>
             <button @click="nextPage()" :disabled="currentPage >= totalPages"
-                    class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                    class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
                     :class="currentPage >= totalPages ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'">
-                Next &rarr;
+                Next
             </button>
         </div>
 
@@ -207,12 +192,43 @@
                             </div>
                         </template>
 
-                        {{-- Other signer's field: locked with label --}}
+                        {{-- Other signer's field: show value if pre-filled, else "X will complete" --}}
                         <template x-if="field.assignedTo && field.assignedTo !== 'creator' && field.assignedTo !== 'agent'">
-                            <div class="w-full h-full flex items-center justify-center pointer-events-none"
-                                 style="background:rgba(148,163,184,0.15);border:1px dashed rgba(148,163,184,0.5);">
-                                <span class="text-[10px] text-slate-500 italic text-center leading-tight px-1"
-                                      x-text="signerLabel(field.assignedTo) + ' will complete'"></span>
+                            <div class="w-full h-full pointer-events-none">
+                                {{-- Has value: render as read-only text --}}
+                                <template x-if="field.value || field.selectedValue || field.text">
+                                    <div class="w-full h-full">
+                                        <template x-if="(field.type === 'placeholder' || field.type === 'date') && field.value">
+                                            <div class="w-full h-full flex items-start px-0.5 overflow-hidden"
+                                                 :style="fieldStyle(field)"
+                                                 x-text="field.value"></div>
+                                        </template>
+                                        <template x-if="field.type === 'selection' && field.selectedValue">
+                                            <div class="w-full h-full flex items-center px-0.5 overflow-hidden"
+                                                 :style="fieldStyle(field)"
+                                                 x-text="field.selectedValue"></div>
+                                        </template>
+                                        <template x-if="field.type === 'tick' && field.selectedValue">
+                                            <div class="w-full h-full flex items-center justify-center"
+                                                 :style="fieldStyle(field)">
+                                                <span class="font-bold text-black" style="font-size:1.2em;">X</span>
+                                            </div>
+                                        </template>
+                                        <template x-if="field.type === 'condition' && field.text">
+                                            <div class="w-full h-full overflow-hidden px-0.5"
+                                                 :style="fieldStyle(field)"
+                                                 x-text="field.text"></div>
+                                        </template>
+                                    </div>
+                                </template>
+                                {{-- No value: placeholder label --}}
+                                <template x-if="!field.value && !field.selectedValue && !field.text">
+                                    <div class="w-full h-full flex items-center justify-center"
+                                         style="background:rgba(148,163,184,0.15);border:1px dashed rgba(148,163,184,0.5);">
+                                        <span class="text-[10px] text-slate-500 italic text-center leading-tight px-1"
+                                              x-text="signerLabel(field.assignedTo) + ' will complete'"></span>
+                                    </div>
+                                </template>
                             </div>
                         </template>
 
@@ -319,39 +335,42 @@
     </div>
 
     {{-- Complete Signing button --}}
-    <div class="ds-status-card p-4 flex items-center justify-between">
+    <div class="bg-white border border-gray-200 rounded-md p-4 flex items-center justify-between">
         <div class="text-sm text-slate-600">
             <template x-if="signedCount < totalAgent">
                 <span>Sign all <span x-text="totalAgent - signedCount"></span> remaining marker<span x-show="(totalAgent - signedCount) !== 1">s</span> to continue.</span>
             </template>
             <template x-if="signedCount >= totalAgent && totalAgent > 0">
-                <span class="text-emerald-600 font-medium">All markers signed! Ready to send to the tenant.</span>
+                <span class="font-medium" style="color:var(--brand-button, #0ea5e9);">All markers signed. Ready to send.</span>
             </template>
         </div>
         <button @click="handleComplete()"
                 :disabled="completingForm"
-                class="rounded-lg px-6 py-2.5 text-sm font-medium transition-colors"
+                class="rounded-md px-6 py-2.5 text-sm font-semibold transition-colors"
                 :class="signedCount >= totalAgent && totalAgent > 0 && !completingForm
-                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'">
-            <span x-show="!completingForm">Complete Signing & Send to Tenant &rarr;</span>
+                    ? 'text-white hover:brightness-110'
+                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'"
+                :style="signedCount >= totalAgent && totalAgent > 0 && !completingForm ? 'background:var(--brand-button, #0ea5e9);' : ''">
+            <span x-show="!completingForm">Complete Signing & Send</span>
             <span x-show="completingForm" x-cloak>Completing...</span>
         </button>
     </div>
 
     {{-- Floating progress bar for unsigned markers --}}
     <div x-show="signedCount < totalAgent && totalAgent > 0" x-cloak x-transition
-         class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-full px-6 py-3 flex items-center gap-3 z-40 border border-slate-200">
+         class="fixed bottom-4 left-1/2 transform -translate-x-1/2 shadow-lg rounded-md px-6 py-3 flex items-center gap-3 z-40 border border-gray-700"
+         style="background:var(--corex-navy, #0b2a4a);">
         <div class="flex items-center gap-2">
-            <span class="text-sm font-medium text-slate-700" x-text="`${signedCount} of ${totalAgent} completed`"></span>
-            <div class="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
-                <div class="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                     :style="`width: ${totalAgent > 0 ? (signedCount / totalAgent) * 100 : 0}%`"></div>
+            <span class="text-sm font-medium text-white" x-text="`${signedCount} of ${totalAgent} completed`"></span>
+            <div class="w-24 h-2 bg-white/20 rounded overflow-hidden">
+                <div class="h-full rounded transition-all duration-500"
+                     style="background:var(--brand-button, #0ea5e9);"
+                     :style="`width: ${totalAgent > 0 ? (signedCount / totalAgent) * 100 : 0}%;background:var(--brand-button, #0ea5e9);`"></div>
             </div>
         </div>
         <button @click="goToNextUnsigned()"
-                class="text-sm text-blue-600 font-medium hover:text-blue-800">
-            Next &rarr;
+                class="text-sm font-medium text-white/80 hover:text-white transition-colors">
+            Next
         </button>
     </div>
 
