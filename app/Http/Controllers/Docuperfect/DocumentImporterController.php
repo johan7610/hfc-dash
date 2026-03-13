@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Docuperfect;
 
 use App\Http\Controllers\Controller;
+use App\Models\Docuperfect\FieldCorrection;
+use App\Models\Docuperfect\ImportDraft;
 use App\Services\Docuperfect\DocumentTemplateGenerator;
 use Illuminate\Http\Request;
 
@@ -107,19 +109,38 @@ class DocumentImporterController extends Controller
                 'warnings' => $result['warnings'] ?? [],
             ]);
 
-            // Store in session for review() and generate()
-            \Log::info('[DocumentImporter] Storing in session...');
-            session([
-                'import_html'     => $result['html'],
-                'import_fields'   => $result['fields'],
-                'import_filename' => $file->getClientOriginalName(),
+            // Auto-cleanup: delete drafts older than 24 hours for this user
+            ImportDraft::where('user_id', $user->id)
+                ->where('created_at', '<', now()->subHours(24))
+                ->delete();
+
+            // Store in database instead of session — survives session expiry
+            $claudeOriginals = collect($result['fields'])->map(fn($f, $i) => [
+                'index' => $i,
+                'context' => $f['context'] ?? '',
+                'suggested_key' => $f['suggested_key'] ?? '',
+                'suggested_label' => $f['suggested_label'] ?? '',
+            ])->toArray();
+
+            $draft = ImportDraft::create([
+                'user_id'     => $user->id,
+                'filename'    => $file->getClientOriginalName(),
+                'html'        => $result['html'],
+                'fields_json' => json_encode([
+                    'fields'           => $result['fields'],
+                    'claude_originals' => $claudeOriginals,
+                ]),
             ]);
+
+            // Store only the draft ID in session (tiny — won't expire easily)
+            session(['import_draft_id' => $draft->id]);
 
             // Clean up temp file
             @unlink($fullPath);
 
             $redirect = route('docuperfect.import.review');
-            \Log::info('[DocumentImporter] SUCCESS — returning redirect', [
+            \Log::info('[DocumentImporter] SUCCESS — draft saved to DB', [
+                'draft_id' => $draft->id,
                 'redirect' => $redirect,
             ]);
 
@@ -147,7 +168,7 @@ class DocumentImporterController extends Controller
     }
 
     /**
-     * Render the review view from session data.
+     * Render the review view from database draft.
      */
     public function review(Request $request)
     {
@@ -156,11 +177,9 @@ class DocumentImporterController extends Controller
             abort(403);
         }
 
-        $html     = session('import_html');
-        $fields   = session('import_fields', []);
-        $filename = session('import_filename', 'Document');
+        $draft = $this->loadDraft($user->id);
 
-        if (empty($html)) {
+        if (!$draft) {
             return redirect()
                 ->route('docuperfect.import.index')
                 ->with('error',
@@ -168,18 +187,20 @@ class DocumentImporterController extends Controller
                     'Please upload again.');
         }
 
+        $fieldsData = json_decode($draft->fields_json, true) ?? [];
+        $fields = $fieldsData['fields'] ?? [];
+        $filename = $draft->filename;
+
         return view('docuperfect.importer.review', [
             'parsed' => [
-                'html'              => $html,
+                'html'              => $draft->html,
                 'fields'            => $fields,
-                'template_name'     => pathinfo(
-                    $filename,
-                    PATHINFO_FILENAME
-                ),
+                'template_name'     => pathinfo($filename, PATHINFO_FILENAME),
                 'original_filename' => $filename,
             ],
             'templateName' => pathinfo($filename, PATHINFO_FILENAME),
             'fields' => $fields,
+            'draftId' => $draft->id,
         ]);
     }
 
@@ -188,40 +209,65 @@ class DocumentImporterController extends Controller
      */
     public function generate(Request $request, DocumentTemplateGenerator $generator)
     {
+        \Log::info('DocumentImporter: generate() called', ['request_all' => $request->keys()]);
+
         $user = $request->user();
         if (!$user->hasPermission('manage_templates')) {
             abort(403);
         }
 
-        $importData = [
-            'html' => session('import_html'),
-            'template_name' => session('import_filename', 'Document'),
-        ];
+        // Load draft from database — survives session expiry
+        $draftId = $request->input('draft_id') ?? session('import_draft_id');
+        $draft = $draftId
+            ? ImportDraft::where('id', $draftId)->where('user_id', $user->id)->first()
+            : null;
 
-        if (empty($importData['html'])) {
+        if (!$draft) {
+            \Log::warning('DocumentImporter: no draft found', ['draft_id' => $draftId]);
             return redirect()->route('docuperfect.import.index')
                 ->with('error', 'No import data found. Please upload a document first.');
         }
 
-        $request->validate([
-            'template_name' => ['required', 'string', 'max:255'],
-            'fields' => ['required', 'array'],
-            'fields.*.key' => ['required', 'string'],
-            'fields.*.label' => ['required', 'string'],
-            'fields.*.pillar' => ['required', 'string'],
-            'fields.*.assigned_to' => ['required', 'string', 'in:agent,lessor,lessee,buyer,seller'],
-            'fields.*.field_type' => ['nullable', 'string', 'in:text,date,number'],
-            'edited_html' => ['nullable', 'string'],
+        \Log::info('DocumentImporter: draft loaded from DB', [
+            'draft_id' => $draft->id,
+            'html_length' => strlen($draft->html),
         ]);
 
-        $fieldMappings = $request->input('fields');
-        $templateName = $request->input('template_name', $importData['template_name']);
+        try {
+            $validated = $request->validate([
+                'template_name' => ['required', 'string', 'max:255'],
+                'fields' => ['nullable', 'array'],
+                'fields.*.key' => ['required', 'string'],
+                'fields.*.label' => ['required', 'string'],
+                'fields.*.pillar' => ['required', 'string'],
+                'fields.*.assigned_to' => ['required', 'string', 'in:agent,lessor,lessee,buyer,seller,property,skip,manual'],
+                'fields.*.field_type' => ['nullable', 'string', 'in:text,date,number'],
+                'fields.*.correction_reason' => ['nullable', 'string', 'max:500'],
+                'edited_html' => ['nullable', 'string'],
+                'draft_id' => ['nullable', 'integer'],
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('DocumentImporter: validation FAILED', [
+                'errors' => $e->errors(),
+                'fields_sample' => array_slice($request->input('fields', []), 0, 3),
+            ]);
+            throw $e;
+        }
 
-        // Use edited HTML from the editor if provided, otherwise fall back to session HTML
+        \Log::info('DocumentImporter: validation passed', [
+            'fields_count' => count($validated['fields']),
+            'first_field' => $validated['fields'][0] ?? 'EMPTY',
+            'template_name' => $validated['template_name'] ?? 'EMPTY',
+        ]);
+
+        $fieldMappings = $validated['fields'];
+        $templateName = $request->input('template_name', $draft->filename);
+
+        // Use edited HTML from the editor if provided, otherwise fall back to draft HTML
         $parsedData = [
             'html' => $request->filled('edited_html')
                 ? $request->input('edited_html')
-                : ($importData['html'] ?? ''),
+                : $draft->html,
         ];
 
         $template = $generator->generate(
@@ -231,10 +277,87 @@ class DocumentImporterController extends Controller
             $user->id
         );
 
-        // Clear session data
-        session()->forget(['import_html', 'import_fields', 'import_filename']);
+        // Save signing parties selection
+        $signingParties = $request->input('signing_parties', ['lessor', 'lessee', 'agent']);
+        $template->update(['signing_parties' => $signingParties]);
 
-        return redirect()->route('docuperfect.templates.index')
-            ->with('success', 'Template "' . $template->name . '" imported successfully.');
+        // Log field corrections — compare user's final assignments against Claude's originals
+        $fieldsData = json_decode($draft->fields_json, true) ?? [];
+        $claudeOriginals = $fieldsData['claude_originals'] ?? [];
+
+        $this->logFieldCorrections(
+            $fieldMappings,
+            $claudeOriginals,
+            $templateName,
+            $user->id
+        );
+
+        // Soft-delete the draft — no longer needed
+        $draft->delete();
+
+        // Clear session draft reference
+        session()->forget('import_draft_id');
+
+        return redirect()->route('docuperfect.import.index')
+            ->with('success', 'Template "' . $template->name . '" created successfully.');
+    }
+
+    /**
+     * Load the current user's import draft from the database.
+     */
+    protected function loadDraft(int $userId): ?ImportDraft
+    {
+        $draftId = session('import_draft_id');
+
+        if ($draftId) {
+            $draft = ImportDraft::where('id', $draftId)
+                ->where('user_id', $userId)
+                ->first();
+            if ($draft) return $draft;
+        }
+
+        // Fallback: find the user's most recent draft
+        return ImportDraft::where('user_id', $userId)
+            ->orderByDesc('created_at')
+            ->first();
+    }
+
+    /**
+     * Compare user's final field assignments against Claude's original suggestions.
+     * Store corrections so future imports learn from them.
+     */
+    protected function logFieldCorrections(array $fieldMappings, array $claudeOriginals, string $documentType, int $userId): void
+    {
+        foreach ($fieldMappings as $idx => $userField) {
+            $original = $claudeOriginals[$idx] ?? null;
+            if (!$original) continue;
+
+            $claudeKey = $original['suggested_key'] ?? '';
+            $claudeLabel = $original['suggested_label'] ?? '';
+            $userKey = $userField['key'] ?? '';
+            $userLabel = $userField['label'] ?? '';
+            $context = $original['context'] ?? '';
+
+            // Skip if Claude had no suggestion or user didn't change it
+            if (empty($claudeKey) || $claudeKey === $userKey) continue;
+
+            \Log::info('DocxParser: Field correction', [
+                'context' => $context,
+                'claude_suggested' => $claudeLabel . ' (' . $claudeKey . ')',
+                'user_corrected_to' => $userLabel . ' (' . $userKey . ')',
+                'document_type' => $documentType,
+            ]);
+
+            FieldCorrection::create([
+                'context' => mb_substr($context, 0, 500),
+                'claude_suggested_key' => $claudeKey,
+                'claude_suggested_label' => $claudeLabel,
+                'user_corrected_key' => $userKey,
+                'user_corrected_label' => $userLabel,
+                'correction_reason' => $userField['correction_reason'] ?? null,
+                'document_type' => $documentType,
+                'user_id' => $userId,
+            ]);
+        }
     }
 }

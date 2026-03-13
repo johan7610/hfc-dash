@@ -697,6 +697,9 @@ class ESignWizardController extends Controller
                         }
                     }
 
+                    if (!empty($tpl->signing_parties)) {
+                        $tplData['signing_parties'] = $tpl->signing_parties;
+                    }
                     $html = view($tpl->blade_view, $tplData)->render();
                     $styles = '';
                     preg_match_all('/<style[^>]*>.*?<\/style>/si', $html, $sm);
@@ -741,6 +744,9 @@ class ESignWizardController extends Controller
 
             // Web templates render full HTML documents (DOCTYPE/html/head/body).
             // Strip to inner body content so it can be injected via x-html.
+            if (!empty($template->signing_parties)) {
+                $viewData['signing_parties'] = $template->signing_parties;
+            }
             $fullHtml = view($template->blade_view, $viewData)->render();
             $bodyHtml = $fullHtml;
             if (preg_match('/<body[^>]*>(.*)<\/body>/si', $fullHtml, $m)) {
@@ -883,6 +889,9 @@ class ESignWizardController extends Controller
                 if (!$tpl || !$tpl->blade_view) continue;
 
                 $tplData = $webTemplateDataService->resolve($tplId, $stepData, $user);
+                if (!empty($tpl->signing_parties)) {
+                    $tplData['signing_parties'] = $tpl->signing_parties;
+                }
 
                 // Render the template and extract styles + body
                 $fullHtml = view($tpl->blade_view, $tplData)->render();

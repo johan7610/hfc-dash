@@ -24,6 +24,7 @@ class Template extends Model
         'wizard_config',
         'render_type',
         'blade_view',
+        'signing_parties',
         'owner_id',
         'archived_at',
     ];
@@ -31,6 +32,7 @@ class Template extends Model
     protected $casts = [
         'fields_json' => 'array',
         'wizard_config' => 'array',
+        'signing_parties' => 'array',
         'is_global' => 'boolean',
         'is_esign' => 'boolean',
         'archived_at' => 'datetime',

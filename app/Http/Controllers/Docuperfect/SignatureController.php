@@ -254,6 +254,9 @@ class SignatureController extends Controller
             } else {
                 // Single template — render blade view normally
                 $viewData = $webTemplateData;
+                if (!empty($docTemplate->signing_parties)) {
+                    $viewData['signing_parties'] = $docTemplate->signing_parties;
+                }
                 $fullHtml = view($docTemplate->blade_view, $viewData)->render();
                 $bodyHtml = $fullHtml;
                 if (preg_match('/<body[^>]*>(.*)<\/body>/si', $fullHtml, $m)) {
@@ -638,6 +641,9 @@ class SignatureController extends Controller
                 // Single template — render blade view normally
                 $pageCount = 1;
                 try {
+                    if (!empty($docTemplate->signing_parties)) {
+                        $webTemplateData['signing_parties'] = $docTemplate->signing_parties;
+                    }
                     $fullHtml = view($docTemplate->blade_view, $webTemplateData)->render();
                     $styles = '';
                     preg_match_all('/<style[^>]*>.*?<\/style>/si', $fullHtml, $styleMatches);

@@ -44,6 +44,20 @@ CoreX is used in the field. Agents use phones. Every new page must be usable on 
 
 ## Execution Rules
 
+### Listen To The User — Non-Negotiable
+- When the user describes a specific behaviour they want, build exactly that. Do not build an approximation or a "better" alternative.
+- When the user says something is not working, believe them. Do not suggest it might be a different problem.
+- When the user asks for shift-all-down, build shift-all-down. Not insert. Not swap. Not popover.
+- Read the user's request twice before writing any code. If unclear, ask ONE question. Then build.
+- Do not tell the user to test something that has not been verified to address their exact request.
+
+### Document Importer — Lessons Learned
+- Blank positions in the HTML are FIXED. They cannot be inserted or removed. Only assignments shift.
+- When AI misses one blank, all subsequent fields shift wrong. The fix is shift-assignments, not insert-blank.
+- Always send BOTH context_before AND context_after to AI — SA lease documents have blanks BEFORE their labels.
+- Claude API errors: always run php artisan config:clear before assuming the key is wrong.
+- Right tool for right job: Mammoth for HTML, Claude/OpenAI for field detection only.
+
 ### Investigation Before Prompt
 Before writing any implementation prompt for Andre, always investigate:
 - Exact file paths involved

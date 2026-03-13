@@ -51,10 +51,10 @@
     </x-list-header>
 
     {{-- Presentations table --}}
-    <div class="ds-status-card mt-6" style="border-left-color: var(--ds-cyan); padding: 0; overflow: hidden;">
+    <div class="ds-status-card" style="border-left-color: var(--ds-cyan); padding: 0; overflow: hidden;">
         @if($presentations->isEmpty())
             <div class="px-6 py-12 text-center">
-                <p class="text-sm mb-4" style="color: var(--text-muted);">No presentations found.</p>
+                <p class="text-gray-400 text-sm mb-4">No presentations found.</p>
                 <a href="{{ route('presentations.create') }}" class="corex-btn-primary">
                     Create your first presentation
                 </a>
@@ -77,22 +77,22 @@
                     </thead>
                     <tbody>
                         @foreach($presentations as $pres)
-                            <tr class="transition-all duration-300" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
+                            <tr class="hover:bg-gray-50">
                                 <td class="px-4 py-3">
-                                    <div class="font-semibold" style="color: var(--brand-default, #0b2a4a);">{{ $pres->title }}</div>
-                                    <div class="text-xs mt-0.5" style="color: var(--text-secondary);">{{ $pres->property_address ?? '—' }}</div>
+                                    <div class="font-semibold" style="color:#0f172a;">{{ $pres->title }}</div>
+                                    <div class="text-xs text-gray-500 mt-0.5">{{ $pres->property_address ?? '—' }}</div>
                                 </td>
                                 <td class="px-4 py-3 text-xs">
                                     @if($pres->suburb || $pres->property_type)
-                                        <span style="color: var(--text-primary);">{{ $pres->suburb ?? '—' }}</span>
+                                        <span class="text-gray-700">{{ $pres->suburb ?? '—' }}</span>
                                         @if($pres->property_type)
-                                            <span style="color: var(--text-muted);"> · {{ ucfirst($pres->property_type) }}</span>
+                                            <span class="text-gray-400"> · {{ ucfirst($pres->property_type) }}</span>
                                         @endif
                                     @else
-                                        <span style="color: var(--text-muted);">—</span>
+                                        <span class="text-gray-300">—</span>
                                     @endif
                                 </td>
-                                <td class="px-4 py-3 text-xs" style="color: var(--text-secondary);">
+                                <td class="px-4 py-3 text-gray-600 text-xs">
                                     {{ $pres->seller_name ?? '—' }}
                                 </td>
                                 <td class="px-4 py-3">
@@ -112,22 +112,22 @@
                                     @endif
                                 </td>
                                 @if($agents->isNotEmpty())
-                                <td class="px-4 py-3 text-xs" style="color: var(--text-secondary);">
+                                <td class="px-4 py-3 text-gray-600 text-xs">
                                     {{ $pres->creator?->name ?? '—' }}
                                 </td>
                                 @endif
-                                <td class="px-4 py-3 text-xs" style="color: var(--text-muted);">
+                                <td class="px-4 py-3 text-gray-400 text-xs">
                                     {{ $pres->created_at->format('d M Y') }}
                                 </td>
                                 <td class="px-4 py-3">
                                     @if($showArchived)
                                         <form method="POST" action="{{ route('presentations.restore', $pres->id) }}" class="inline">
                                             @csrf
-                                            <button type="submit" class="text-xs font-medium text-emerald-600 hover:text-emerald-800 transition-all duration-300">Restore</button>
+                                            <button type="submit" class="text-xs font-medium text-emerald-600 hover:text-emerald-800">Restore</button>
                                         </form>
                                     @else
                                         <a href="{{ route('presentations.show', $pres) }}"
-                                           class="ds-agent-link text-xs font-medium transition-all duration-300">
+                                           class="ds-agent-link text-xs font-medium">
                                             Open &rarr;
                                         </a>
                                     @endif
@@ -138,7 +138,7 @@
                 </table>
             </div>
 
-            <div class="px-4 py-3 border-t" style="border-color: var(--border);">
+            <div class="px-4 py-3 border-t" style="border-color: #e2e8f0;">
                 {{ $presentations->links() }}
             </div>
         @endif

@@ -2,194 +2,386 @@
 
 namespace App\Services\Docuperfect;
 
+use App\Models\Docuperfect\FieldCorrection;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use ZipArchive;
 
 class DocxParserService
 {
     /**
-     * Auto-label rules: context pattern => [suggested_label, suggested_key, pillar, assigned_to]
-     * Order matters — first match wins.
-     */
-    protected array $labelRules = [
-        // Contact — Lessor/Landlord
-        ['pattern' => '/\b(owner|lessor|landlord)\b.*\b(surname|last\s*name)\b/i', 'label' => 'Lessor Surname', 'key' => 'contact.lessor_surname', 'pillar' => 'contact', 'party' => 'lessor', 'confidence' => 'high'],
-        ['pattern' => '/\b(owner|lessor|landlord)\b.*\bname\b/i', 'label' => 'Lessor Name', 'key' => 'contact.lessor_name', 'pillar' => 'contact', 'party' => 'lessor', 'confidence' => 'high'],
-        ['pattern' => '/\b(lessee|tenant|occupant)\b.*\b(surname|last\s*name)\b/i', 'label' => 'Lessee Surname', 'key' => 'contact.lessee_surname', 'pillar' => 'contact', 'party' => 'lessee', 'confidence' => 'high'],
-        ['pattern' => '/\b(lessee|tenant|occupant)\b.*\bname\b/i', 'label' => 'Lessee Name', 'key' => 'contact.lessee_name', 'pillar' => 'contact', 'party' => 'lessee', 'confidence' => 'high'],
-
-        // ID / Passport
-        ['pattern' => '/\b(id|identity|passport|registration)\s*(no|number)\b/i', 'label' => 'ID Number', 'key' => 'contact.id_number', 'pillar' => 'contact', 'party' => 'lessor', 'confidence' => 'high'],
-
-        // Contact details
-        ['pattern' => '/\b(telephone|cell|phone|tel)\b/i', 'label' => 'Telephone', 'key' => 'contact.telephone', 'pillar' => 'contact', 'party' => 'lessor', 'confidence' => 'high'],
-        ['pattern' => '/\bemail\b/i', 'label' => 'Email', 'key' => 'contact.email', 'pillar' => 'contact', 'party' => 'lessor', 'confidence' => 'high'],
-
-        // Property
-        ['pattern' => '/\b(property\s*(known\s*as|described|situated)|premises)\b/i', 'label' => 'Property Address', 'key' => 'property.address', 'pillar' => 'property', 'party' => 'agent', 'confidence' => 'high'],
-        ['pattern' => '/\b(erf|stand)\s*(no|number)?\b/i', 'label' => 'Erf Number', 'key' => 'property.erf_number', 'pillar' => 'property', 'party' => 'agent', 'confidence' => 'high'],
-        ['pattern' => '/\bunit\s*(no|number)?\b/i', 'label' => 'Unit Number', 'key' => 'property.unit_number', 'pillar' => 'property', 'party' => 'agent', 'confidence' => 'high'],
-        ['pattern' => '/\bcomplex\b/i', 'label' => 'Complex Name', 'key' => 'property.complex_name', 'pillar' => 'property', 'party' => 'agent', 'confidence' => 'high'],
-        ['pattern' => '/\bsuburb\b/i', 'label' => 'Suburb', 'key' => 'property.suburb', 'pillar' => 'property', 'party' => 'agent', 'confidence' => 'high'],
-        ['pattern' => '/\baddress\b/i', 'label' => 'Address', 'key' => 'property.address', 'pillar' => 'property', 'party' => 'agent', 'confidence' => 'medium'],
-
-        // Deal — financial
-        ['pattern' => '/\b(rental|monthly\s*rental|rent)\b/i', 'label' => 'Monthly Rental', 'key' => 'deal.monthly_rental', 'pillar' => 'deal', 'party' => 'lessor', 'confidence' => 'high'],
-        ['pattern' => '/\bdeposit\b/i', 'label' => 'Deposit', 'key' => 'deal.deposit', 'pillar' => 'deal', 'party' => 'lessor', 'confidence' => 'high'],
-        ['pattern' => '/\bcommission\b/i', 'label' => 'Commission', 'key' => 'deal.commission', 'pillar' => 'deal', 'party' => 'agent', 'confidence' => 'high'],
-        ['pattern' => '/\bvat\b/i', 'label' => 'VAT Amount', 'key' => 'deal.vat_amount', 'pillar' => 'deal', 'party' => 'agent', 'confidence' => 'high'],
-
-        // Deal — dates
-        ['pattern' => '/\b(commence|start\s*date|commencement)\b/i', 'label' => 'Lease Start Date', 'key' => 'deal.lease_start', 'pillar' => 'deal', 'party' => 'agent', 'confidence' => 'high'],
-        ['pattern' => '/\b(expir|end\s*date|termination)\b/i', 'label' => 'Lease End Date', 'key' => 'deal.lease_end', 'pillar' => 'deal', 'party' => 'agent', 'confidence' => 'high'],
-        ['pattern' => '/\bday\s*of\b/i', 'label' => 'Signed Day', 'key' => 'deal.signed_day', 'pillar' => 'deal', 'party' => 'agent', 'confidence' => 'high'],
-        ['pattern' => '/\bdate\b/i', 'label' => 'Date', 'key' => 'deal.date', 'pillar' => 'deal', 'party' => 'agent', 'confidence' => 'medium'],
-
-        // Banking
-        ['pattern' => '/\baccount\s*holder\b/i', 'label' => 'Account Holder', 'key' => 'deal.account_holder', 'pillar' => 'deal', 'party' => 'lessor', 'confidence' => 'high'],
-        ['pattern' => '/\bbank\s*name\b/i', 'label' => 'Bank Name', 'key' => 'deal.bank_name', 'pillar' => 'deal', 'party' => 'lessor', 'confidence' => 'high'],
-        ['pattern' => '/\baccount\s*(no|number)\b/i', 'label' => 'Account Number', 'key' => 'deal.account_number', 'pillar' => 'deal', 'party' => 'lessor', 'confidence' => 'high'],
-        ['pattern' => '/\bbranch\s*code\b/i', 'label' => 'Branch Code', 'key' => 'deal.branch_code', 'pillar' => 'deal', 'party' => 'lessor', 'confidence' => 'high'],
-
-        // Agent
-        ['pattern' => '/\bagent\b/i', 'label' => 'Agent Name', 'key' => 'agent.agent_name', 'pillar' => 'agent', 'party' => 'agent', 'confidence' => 'high'],
-    ];
-
-    /**
-     * Parse a .docx file and return structured data.
-     * Synchronous pipeline: Mammoth HTML → field detection → CoreX renderer.
+     * Parse a .docx file.
+     * Pipeline: Mammoth (HTML) + Claude AI (field detection on plain text).
+     * Falls back to regex field detection if Claude fails.
      */
     public function parse(string $filePath): array
     {
-        // 1. Verify file exists
+        Log::info('DocxParser: parse() called', [
+            'file_path' => $filePath,
+            'file_exists' => file_exists($filePath),
+            'file_size' => file_exists($filePath) ? filesize($filePath) : 0,
+            'session_id' => session()->getId(),
+            'temp_dir_exists' => is_dir(storage_path('app/public/imports/temp')),
+        ]);
+
         if (!file_exists($filePath)) {
-            throw new \RuntimeException(
-                'Upload file not found: ' . $filePath
-            );
+            throw new \RuntimeException('Upload file not found: ' . $filePath);
         }
 
-        // 2. Prepare paths
-        $outputPath = str_replace(
-            '\\', '/',
-            storage_path('app/imports/temp/' .
-                uniqid('mammoth_') . '.json')
-        );
+        // Ensure temp directories exist
+        $tempDir = storage_path('app/public/imports/temp');
+        if (!is_dir($tempDir)) {
+            mkdir($tempDir, 0755, true);
+            Log::info('DocxParser: Created temp directory', ['path' => $tempDir]);
+        }
 
-        $scriptPath = str_replace(
-            '\\', '/',
-            base_path('resources/js/mammoth-convert.mjs')
-        );
+        // Step 1: Mammoth → HTML (fast, reliable, ~2 seconds)
+        $mammothResult = $this->generateHtmlWithMammoth($filePath);
+        $html = $mammothResult['html'];
+        $warnings = $mammothResult['warnings'];
+
+        Log::info('DocxParser: Mammoth HTML generated', [
+            'html_length' => strlen($html),
+        ]);
+
+        // Step 1b: Strip original document header and signature from mammoth HTML
+        $lengthBefore = strlen($html);
+        $html = $this->stripDocumentHeader($html);
+        Log::info('DocxParser: stripped header', [
+            'html_length_before' => $lengthBefore,
+            'html_length_after' => strlen($html),
+        ]);
+
+        $lengthBefore = strlen($html);
+        $html = $this->stripDocumentSignature($html);
+        Log::info('DocxParser: stripped signature', [
+            'html_length_before' => $lengthBefore,
+            'html_length_after' => strlen($html),
+        ]);
+
+        // Step 2: Extract plain text from docx for Claude
+        $plainText = $this->extractPlainText($filePath);
+
+        Log::info('DocxParser: Plain text extracted', [
+            'text_length' => strlen($plainText),
+        ]);
+
+        // Step 3: Detect fields — Claude AI on plain text, regex fallback
+        $regexFields = $this->detectFieldsFromHtml($html);
+
+        Log::info('DocxParser: Regex detected ' . count($regexFields) . ' blanks');
+
+        $fields = $regexFields; // default to regex
+
+        if (!empty($plainText)) {
+            try {
+                $aiFields = $this->parseFieldsWithAi($plainText, $regexFields);
+
+                if ($aiFields && count($aiFields) > 0) {
+                    $fields = $aiFields;
+                    Log::info('DocxParser: Using AI fields', [
+                        'count' => count($fields),
+                    ]);
+                } else {
+                    Log::info('DocxParser: AI returned no fields, using regex fallback');
+                    Log::info('ImporterAI: Engine used', [
+                        'engine' => 'regex_fallback',
+                        'reason' => 'both_failed',
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                Log::error('DocxParser: AI field detection failed, using regex fallback', [
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        } else {
+            Log::info('DocxParser: Empty text, using regex fields');
+        }
+
+        // Step 4: Inject field-blank spans into Mammoth HTML
+        $html = $this->injectFieldSpans($html, $fields);
+
+        // Step 5: Apply CoreX document renderer
+        try {
+            $renderer = new CorexDocumentRenderer();
+            $html = $renderer->render($html);
+        } catch (\Throwable $e) {
+            Log::error('DocxParser: renderer failed', ['error' => $e->getMessage()]);
+        }
+
+        Log::info('DocxParser: Parse complete', [
+            'html_length' => strlen($html),
+            'field_count' => count($fields),
+        ]);
+
+        return [
+            'html' => $html,
+            'fields' => $fields,
+            'warnings' => $warnings,
+        ];
+    }
+
+    /**
+     * Extract plain text from docx using ZipArchive.
+     * Strips all XML tags, keeps text content and underscore runs.
+     */
+    protected function extractPlainText(string $filePath): string
+    {
+        $zip = new ZipArchive();
+        $result = $zip->open($filePath);
+
+        if ($result !== true) {
+            Log::warning('DocxParser: Could not open docx for plain text extraction');
+            return '';
+        }
+
+        $xml = $zip->getFromName('word/document.xml');
+        $zip->close();
+
+        if ($xml === false) {
+            return '';
+        }
+
+        // Insert newlines at paragraph boundaries before stripping tags
+        $xml = str_replace('</w:p>', "\n", $xml);
+        // Insert space at run boundaries to prevent word concatenation
+        $xml = str_replace('</w:r>', ' ', $xml);
+        // Insert tab for table cells
+        $xml = str_replace('</w:tc>', "\t", $xml);
+        $xml = str_replace('</w:tr>', "\n", $xml);
+
+        // Strip all XML tags
+        $text = strip_tags($xml);
+
+        // Normalize whitespace (but preserve newlines and underscores)
+        $text = preg_replace('/[^\S\n]+/', ' ', $text);
+        // Collapse multiple blank lines
+        $text = preg_replace('/\n{3,}/', "\n\n", $text);
+
+        $text = trim($text);
+
+        // Truncate at 25,000 chars — more than enough for any document
+        if (strlen($text) > 25000) {
+            Log::warning('DocxParser: Plain text truncated from ' . strlen($text) . ' to 25000 chars');
+            $text = mb_substr($text, 0, 25000);
+        }
+
+        return $text;
+    }
+
+    /**
+     * Send numbered blank list to AI for field assignment.
+     * Uses ImporterAiService dual-engine: Claude → OpenAI → empty.
+     * Merge is a direct lookup — no similarity matching, no index shifting possible.
+     */
+    protected function parseFieldsWithAi(string $plainText, array $regexFields): ?array
+    {
+        set_time_limit(120);
+
+        // Step 1: Build numbered blank list with before/after context
+        $numberedBlanks = [];
+        foreach ($regexFields as $i => $field) {
+            $n = $i + 1;
+            $before = $field['context_before'] ?? '';
+            $after = $field['context_after'] ?? '';
+            $numberedBlanks[] = "Blank [{$n}]: ...{$before} [___] {$after}...";
+        }
+        $blankList = implode("\n", $numberedBlanks);
+
+        $userMessage = "Document plain text:\n---\n{$plainText}\n---\n\n";
+        $userMessage .= "Numbered blanks (" . count($regexFields) . " total):\n{$blankList}";
+
+        // Inject learned corrections from previous imports
+        $corrections = $this->getLearnedCorrections($regexFields);
+        if (!empty($corrections)) {
+            $userMessage .= "\n\nLEARNED CORRECTIONS from previous imports (apply these):\n" . $corrections;
+        }
+
+        Log::info('DocxParser: Sending numbered blanks to AI', [
+            'text_length' => strlen($plainText),
+            'blank_count' => count($regexFields),
+        ]);
+
+        $aiService = new ImporterAiService();
+        $parsed = $aiService->detectFields($userMessage, 4000);
+
+        if (empty($parsed)) {
+            return null;
+        }
+
+        Log::info('DocxParser: AI returned assignments', [
+            'keys' => array_keys($parsed),
+        ]);
+
+        // Step 2: Direct lookup merge — blank [N] gets assignment for key "N"
+        $assigned = 0;
+        foreach ($regexFields as $i => &$field) {
+            $n = (string) ($i + 1);
+
+            if (isset($parsed[$n]) && is_array($parsed[$n])) {
+                $cf = $parsed[$n];
+                $field['suggested_label'] = $cf['label'] ?? 'Field ' . $n;
+                $field['suggested_key'] = $cf['key'] ?? 'custom.field_' . $n;
+                $field['pillar'] = $cf['pillar'] ?? 'custom';
+                $field['assigned_to'] = $cf['assigned_to'] ?? 'agent';
+                $field['confidence'] = $cf['confidence'] ?? 'low';
+                $assigned++;
+            } else {
+                // AI didn't return this blank — mark unassigned
+                $field['suggested_label'] = 'Unassigned [' . $n . ']';
+                $field['suggested_key'] = 'custom.field_' . $n;
+                $field['pillar'] = 'custom';
+                $field['assigned_to'] = 'agent';
+                $field['confidence'] = 'low';
+            }
+        }
+        unset($field);
+
+        Log::info('DocxParser: Direct merge complete', [
+            'total_blanks' => count($regexFields),
+            'assigned' => $assigned,
+            'unassigned' => count($regexFields) - $assigned,
+        ]);
+
+        return $regexFields;
+    }
+
+    /**
+     * Query stored corrections that match any of the current blanks' context.
+     * Returns a formatted string to inject into the Claude prompt.
+     */
+    protected function getLearnedCorrections(array $regexFields): string
+    {
+        try {
+            $corrections = FieldCorrection::orderByDesc('created_at')
+                ->limit(200)
+                ->get();
+        } catch (\Throwable $e) {
+            // Table may not exist yet — silently skip
+            Log::debug('DocxParser: Could not query corrections', ['error' => $e->getMessage()]);
+            return '';
+        }
+
+        if ($corrections->isEmpty()) {
+            return '';
+        }
+
+        $lines = [];
+        foreach ($regexFields as $i => $field) {
+            $blankCtx = mb_strtolower($field['context'] ?? '');
+            if (empty($blankCtx)) continue;
+
+            foreach ($corrections as $correction) {
+                $corrCtx = mb_strtolower($correction->context);
+                similar_text($blankCtx, $corrCtx, $pct);
+
+                if ($pct > 60 || str_contains($blankCtx, $corrCtx) || str_contains($corrCtx, $blankCtx)) {
+                    $n = $i + 1;
+                    $line = "- Blank [{$n}] context '{$field['context']}' → correct answer is {$correction->user_corrected_label} ({$correction->user_corrected_key}), NOT {$correction->claude_suggested_label} ({$correction->claude_suggested_key})";
+                    if (!empty($correction->correction_reason)) {
+                        $line .= " (reason: {$correction->correction_reason})";
+                    }
+                    $lines[] = $line;
+                    break; // one correction per blank is enough
+                }
+            }
+        }
+
+        if (empty($lines)) {
+            return '';
+        }
+
+        Log::info('DocxParser: Injecting ' . count($lines) . ' learned corrections into prompt');
+        return implode("\n", $lines);
+    }
+
+    // =========================================================
+    // MAMMOTH HTML GENERATION
+    // =========================================================
+
+    /**
+     * Generate HTML using Mammoth (Node.js).
+     * Returns raw HTML and warnings — no field spans injected yet.
+     */
+    protected function generateHtmlWithMammoth(string $filePath): array
+    {
+        $outputPath = str_replace('\\', '/',
+            storage_path('app/imports/temp/' . uniqid('mammoth_') . '.json'));
+
+        $scriptPath = str_replace('\\', '/',
+            base_path('resources/js/mammoth-convert.mjs'));
 
         $filePath = str_replace('\\', '/', $filePath);
 
-        // Ensure output dir exists
         $outputDir = dirname($outputPath);
         if (!is_dir($outputDir)) {
             mkdir($outputDir, 0755, true);
         }
 
-        // 3. Run Mammoth via Node.js
-        $cmd = sprintf(
-            'node %s %s %s 2>&1',
+        $cmd = sprintf('node %s %s %s 2>&1',
             escapeshellarg($scriptPath),
             escapeshellarg($filePath),
-            escapeshellarg($outputPath)
-        );
+            escapeshellarg($outputPath));
 
-        \Log::info('DocxParser: running Mammoth', [
-            'cmd' => $cmd
-        ]);
+        Log::info('DocxParser: Running Mammoth', ['cmd' => $cmd]);
 
         exec($cmd, $output, $exitCode);
 
         if ($exitCode !== 0) {
             $error = implode("\n", $output);
-            \Log::error('DocxParser: Mammoth failed', [
+            Log::error('DocxParser: Mammoth failed', [
                 'exit_code' => $exitCode,
-                'output'    => $error,
-                'cmd'       => $cmd,
+                'output' => $error,
             ]);
-            throw new \RuntimeException(
-                'Mammoth conversion failed: ' . $error
-            );
+            throw new \RuntimeException('Mammoth conversion failed: ' . $error);
         }
 
         if (!file_exists($outputPath)) {
-            throw new \RuntimeException(
-                'Mammoth produced no output file. ' .
-                'Command: ' . $cmd
-            );
+            throw new \RuntimeException('Mammoth produced no output file.');
         }
 
-        // 4. Read Mammoth output
         $json = file_get_contents($outputPath);
         @unlink($outputPath);
 
         $data = json_decode($json, true);
-
         if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new \RuntimeException(
-                'Mammoth output is invalid JSON: ' .
-                json_last_error_msg()
-            );
+            throw new \RuntimeException('Mammoth output is invalid JSON: ' . json_last_error_msg());
         }
 
         if (isset($data['error'])) {
-            throw new \RuntimeException(
-                'Mammoth error: ' . $data['error']
-            );
+            throw new \RuntimeException('Mammoth error: ' . $data['error']);
         }
 
         $html = $data['html'] ?? '';
-
         if (empty(trim($html))) {
-            throw new \RuntimeException(
-                'Mammoth returned empty HTML. ' .
-                'Is the docx valid and not empty?'
-            );
-        }
-
-        \Log::info('DocxParser: Mammoth success', [
-            'html_length' => strlen($html),
-            'warnings'    => $data['messages'] ?? [],
-        ]);
-
-        // 5. Detect fields from text
-        $fields = $this->detectFieldsFromHtml($html);
-
-        \Log::info('DocxParser: fields detected', [
-            'count' => count($fields),
-        ]);
-
-        // 6. Inject field spans into HTML
-        $html = $this->injectFieldSpans($html, $fields);
-
-        // 7. Apply CoreX document renderer
-        try {
-            $renderer = new \App\Services\Docuperfect\CorexDocumentRenderer();
-            $html = $renderer->render($html);
-        } catch (\Throwable $e) {
-            // Renderer failure must NOT kill the import
-            // Log it and continue with un-rendered HTML
-            \Log::error('DocxParser: renderer failed', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
+            throw new \RuntimeException('Mammoth returned empty HTML.');
         }
 
         return [
-            'html'     => $html,
-            'fields'   => $fields,
+            'html' => $html,
             'warnings' => $data['messages'] ?? [],
         ];
     }
 
+    // =========================================================
+    // REGEX FIELD DETECTION (fallback)
+    // =========================================================
+
     /**
-     * Detect field blanks from Mammoth HTML text and auto-label them.
-     * Works on raw HTML string — extracts plain text per paragraph for context matching.
+     * Detect field blanks from Mammoth HTML.
+     *
+     * Three detection sources:
+     *   1. Underscore runs: _{2,} patterns in <p> text content
+     *   2. Yellow highlights: spans with class "highlight" or elements with
+     *      yellow background styles (from <w:highlight w:val="yellow"/>)
+     *   3. Square brackets: [Text Inside Brackets] — label is explicit,
+     *      these skip AI assignment entirely
+     *
+     * All sources produce the same context array structure and are merged
+     * by document position so injectFieldSpans() handles them uniformly.
      */
     protected function detectFieldsFromHtml(string $html): array
     {
-        // Split HTML into paragraph-level chunks
         preg_match_all('/<p[^>]*>(.*?)<\/p>/si', $html, $pMatches);
 
         $fields = [];
@@ -198,525 +390,274 @@ class DocxParserService
         foreach ($pMatches[1] as $pInner) {
             $lineText = strip_tags($pInner);
 
-            // Find underscore blanks in this paragraph's text
+            // --- Source 1: Underscore runs ---
             preg_match_all('/_{2,}%?/', $lineText, $blankMatches, PREG_OFFSET_CAPTURE);
 
             foreach ($blankMatches[0] as $match) {
                 $raw = $match[0];
                 $offset = $match[1];
-
-                $contextBefore = mb_substr($lineText, 0, $offset);
-                $contextBefore = mb_substr($contextBefore, -150);
+                $contextBefore = mb_substr($lineText, max(0, $offset - 40), min($offset, 40));
                 $afterPos = $offset + mb_strlen($raw);
-                $contextAfter = mb_substr($lineText, $afterPos, 150);
+                $contextAfter = mb_substr($lineText, $afterPos, 40);
                 $context = trim($contextBefore . ' [___] ' . $contextAfter);
-
-                $label = $this->autoLabel($contextBefore, $contextAfter);
 
                 $fields[] = [
                     'raw' => $raw,
                     'context' => $context,
-                    'suggested_label' => $label['label'],
-                    'suggested_key' => $label['key'],
-                    'pillar' => $label['pillar'],
-                    'assigned_to' => $label['party'],
-                    'confidence' => $label['confidence'],
+                    'context_before' => trim($contextBefore),
+                    'context_after' => trim($contextAfter),
                     'position' => $position + $offset,
+                    'source' => 'underscore',
+                ];
+            }
+
+            // --- Source 3: Square bracket fields [Label Text] ---
+            preg_match_all('/\[([^\]]{1,80})\]/', $lineText, $bracketMatches, PREG_OFFSET_CAPTURE);
+
+            foreach ($bracketMatches[0] as $bi => $match) {
+                $raw = $match[0];
+                $label = $bracketMatches[1][$bi][0];
+                $offset = $match[1];
+
+                // Skip numeric-only brackets like [1] — those are injected field-blank spans
+                if (preg_match('/^\d+$/', $label)) {
+                    continue;
+                }
+
+                $contextBefore = mb_substr($lineText, max(0, $offset - 40), min($offset, 40));
+                $afterPos = $offset + mb_strlen($raw);
+                $contextAfter = mb_substr($lineText, $afterPos, 40);
+                $context = trim($contextBefore . ' [___] ' . $contextAfter);
+
+                // Generate a snake_case key from the label
+                $key = 'custom.' . preg_replace('/[^a-z0-9]+/', '_', strtolower(trim($label)));
+                $key = rtrim($key, '_');
+
+                $fields[] = [
+                    'raw' => $raw,
+                    'context' => $context,
+                    'context_before' => trim($contextBefore),
+                    'context_after' => trim($contextAfter),
+                    'position' => $position + $offset,
+                    'source' => 'bracket',
+                    'suggested_label' => $label,
+                    'suggested_key' => $key,
+                    'pillar' => 'custom',
+                    'assigned_to' => 'agent',
+                    'confidence' => 'high',
                 ];
             }
 
             $position += mb_strlen($lineText) + 1;
         }
 
-        // Merge adjacent blanks
+        // --- Source 2: Yellow highlights (DOM-based) ---
+        $fields = array_merge($fields, $this->detectHighlightFields($html));
+
+        // Sort all fields by document position
+        usort($fields, fn($a, $b) => $a['position'] <=> $b['position']);
+
+        // Merge adjacent underscore blanks and recalculate context with both sides
         $merged = [];
         foreach ($fields as $field) {
-            if (!empty($merged)) {
+            if (!empty($merged) && $field['source'] === 'underscore') {
                 $prev = &$merged[count($merged) - 1];
-                $gap = $field['position'] - ($prev['position'] + mb_strlen($prev['raw']));
-                if ($gap >= 0 && $gap <= 10) {
-                    $prev['raw'] .= str_repeat(' ', max(0, $gap)) . $field['raw'];
-                    $confidenceRank = ['high' => 3, 'medium' => 2, 'low' => 1];
-                    if (($confidenceRank[$field['confidence']] ?? 0) > ($confidenceRank[$prev['confidence']] ?? 0)) {
-                        $prev['confidence'] = $field['confidence'];
+                if ($prev['source'] === 'underscore') {
+                    $gap = $field['position'] - ($prev['position'] + mb_strlen($prev['raw']));
+                    if ($gap >= 0 && $gap <= 10) {
+                        $prev['raw'] .= str_repeat(' ', max(0, $gap)) . $field['raw'];
+                        $prev['context_after'] = $field['context_after'] ?? '';
+                        $prev['context'] = trim(($prev['context_before'] ?? '') . ' [___] ' . ($prev['context_after'] ?? ''));
+                        continue;
                     }
-                    continue;
                 }
                 unset($prev);
             }
             $merged[] = $field;
         }
-        $fields = $merged;
 
-        // Deduplicate keys
-        $keyCounts = [];
-        foreach ($fields as &$field) {
-            $key = $field['suggested_key'];
-            if (!isset($keyCounts[$key])) {
-                $keyCounts[$key] = 0;
-            }
-            $keyCounts[$key]++;
-            if ($keyCounts[$key] > 1) {
-                $field['suggested_key'] = $key . '_' . $keyCounts[$key];
-                $field['suggested_label'] = $field['suggested_label'] . ' ' . $keyCounts[$key];
-            }
-        }
-        unset($field);
-
-        return $fields;
+        return $merged;
     }
 
     /**
-     * Inject <span class="field-blank"> tags into Mammoth HTML using context-based matching.
-     * Each underscore run is matched to its best-fit Vision field by surrounding text similarity.
-     * Unmatched blanks get grey "unassigned" pills. Fields with no matching blank are right-pane only.
+     * Detect yellow-highlighted spans from Mammoth HTML.
+     *
+     * Matches: class containing "highlight", or inline styles with
+     * background:yellow / background:#ffff00 / background-color:yellow.
+     * These come from Mammoth converting <w:highlight w:val="yellow"/>.
      */
-    private function injectFieldSpans(string $html, array $fields): string
+    private function detectHighlightFields(string $html): array
     {
-        // Step 1: Find all underscore blanks in the HTML (including <u>___</u> and ___%  patterns)
-        $blanks = [];
-        // Normalize <u>___</u> to plain ___ first for uniform matching
-        $normalizedHtml = preg_replace('/<u>([_\s]+)<\/u>/u', '$1', $html);
+        $dom = new \DOMDocument();
+        libxml_use_internal_errors(true);
+        $dom->loadHTML('<?xml encoding="UTF-8"><div id="hl-root">' . $html . '</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        libxml_clear_errors();
 
-        preg_match_all(
-            '/_{2,}%?/',
-            $normalizedHtml,
-            $matches,
-            PREG_OFFSET_CAPTURE
+        $xpath = new \DOMXPath($dom);
+        $fields = [];
+
+        // Query: any element with class containing "highlight"
+        // OR style containing yellow background variations
+        $nodes = $xpath->query(
+            '//*[contains(@class, "highlight")]'
+            . ' | //*[contains(@style, "background:yellow")]'
+            . ' | //*[contains(@style, "background:#ffff00")]'
+            . ' | //*[contains(@style, "background-color:yellow")]'
+            . ' | //*[contains(@style, "background:#FFFF00")]'
+            . ' | //*[contains(@style, "background-color:#ffff00")]'
+            . ' | //*[contains(@style, "background-color:#FFFF00")]'
         );
 
-        foreach ($matches[0] as $match) {
-            $offset = $match[1];
-            $rawMatch = $match[0];
-
-            // Extract surrounding plain text (strip HTML tags) for context comparison
-            $beforeRaw = substr($normalizedHtml, max(0, $offset - 120), min($offset, 120));
-            $afterRaw = substr($normalizedHtml, $offset + strlen($rawMatch), 120);
-            $beforeText = strtolower(trim(strip_tags($beforeRaw)));
-            $afterText = strtolower(trim(strip_tags($afterRaw)));
-
-            $blanks[] = [
-                'offset' => $offset,
-                'length' => strlen($rawMatch),
-                'raw' => $rawMatch,
-                'context' => $beforeText . ' ' . $afterText,
-            ];
+        if (!$nodes || $nodes->length === 0) {
+            return [];
         }
 
-        \Log::info('injectFieldSpans: found ' . count($blanks) . ' underscore blanks in HTML');
+        // Build a plain-text position map to locate highlights by document offset
+        $fullText = strip_tags($html);
 
-        // Step 2: Match each Vision field to its best underscore blank by context similarity
-        $assignments = []; // blankIdx => fieldIdx
-        $usedBlanks = [];
-
-        foreach ($fields as $fieldIdx => $field) {
-            $fieldContext = strtolower($field['context'] ?? '');
-            $fieldLabel = strtolower($field['suggested_label'] ?? '');
-            $searchText = $fieldContext . ' ' . $fieldLabel;
-
-            // Extract meaningful words (4+ chars) from field context
-            $words = array_filter(
-                preg_split('/[\s\[\]_,.:;()\-]+/', $searchText),
-                fn($w) => mb_strlen($w) >= 4
-            );
-
-            if (empty($words)) {
+        foreach ($nodes as $node) {
+            $highlightText = trim($node->textContent ?? '');
+            if (mb_strlen($highlightText) < 1 || mb_strlen($highlightText) > 200) {
                 continue;
             }
 
-            $bestScore = 0;
-            $bestBlank = -1;
-
-            foreach ($blanks as $blankIdx => $blank) {
-                if (isset($usedBlanks[$blankIdx])) {
-                    continue;
-                }
-
-                $blankContext = $blank['context'];
-                $score = 0;
-
-                foreach ($words as $word) {
-                    if (str_contains($blankContext, $word)) {
-                        $score++;
-                    }
-                }
-
-                if ($score > $bestScore) {
-                    $bestScore = $score;
-                    $bestBlank = $blankIdx;
-                }
+            // Find position in full document text
+            $offset = mb_strpos($fullText, $highlightText);
+            if ($offset === false) {
+                $offset = 0; // fallback — still add the field
             }
 
-            if ($bestBlank >= 0 && $bestScore > 0) {
-                $assignments[$bestBlank] = $fieldIdx;
-                $usedBlanks[$bestBlank] = true;
-            }
-        }
+            $contextBefore = mb_substr($fullText, max(0, $offset - 40), min($offset, 40));
+            $afterPos = $offset + mb_strlen($highlightText);
+            $contextAfter = mb_substr($fullText, $afterPos, 40);
+            $context = trim($contextBefore . ' [___] ' . $contextAfter);
 
-        \Log::info('injectFieldSpans: matched ' . count($assignments) . ' of ' . count($fields) . ' fields to blanks');
-
-        // Step 3: Build replacement spans — process in reverse offset order so positions stay valid
-        // Sort blanks by offset descending
-        $sortedIndices = array_keys($blanks);
-        usort($sortedIndices, fn($a, $b) => $blanks[$b]['offset'] - $blanks[$a]['offset']);
-
-        foreach ($sortedIndices as $blankIdx) {
-            $blank = $blanks[$blankIdx];
-
-            if (isset($assignments[$blankIdx])) {
-                // Matched field — coloured pill with field data
-                $fieldIdx = $assignments[$blankIdx];
-                $field = $fields[$fieldIdx];
-                $label = htmlspecialchars($field['suggested_label'] ?? 'Field', ENT_QUOTES, 'UTF-8');
-                $rawEsc = htmlspecialchars($blank['raw'], ENT_QUOTES, 'UTF-8');
-
-                $span = '<span class="field-blank"'
-                    . ' data-field-index="' . $fieldIdx . '"'
-                    . ' data-raw="' . $rawEsc . '"'
-                    . ' data-confidence="' . ($field['confidence'] ?? 'medium') . '"'
-                    . ' contenteditable="false">'
-                    . $label
-                    . '</span>';
-            } else {
-                // Unmatched blank — grey "unassigned" pill
-                $rawEsc = htmlspecialchars($blank['raw'], ENT_QUOTES, 'UTF-8');
-
-                $span = '<span class="field-blank field-unassigned"'
-                    . ' data-field-index="-1"'
-                    . ' data-raw="' . $rawEsc . '"'
-                    . ' data-confidence="unassigned"'
-                    . ' contenteditable="false">'
-                    . '?'
-                    . '</span>';
-            }
-
-            $normalizedHtml = substr_replace(
-                $normalizedHtml,
-                $span,
-                $blank['offset'],
-                $blank['length']
-            );
-        }
-
-        $assignedCount = count($assignments);
-        $unassignedCount = count($blanks) - $assignedCount;
-        $unmatchedFields = count($fields) - $assignedCount;
-
-        \Log::info('Span injection complete', [
-            'blanks_total' => count($blanks),
-            'fields_total' => count($fields),
-            'assigned' => $assignedCount,
-            'unassigned_blanks' => $unassignedCount,
-            'unmatched_fields' => $unmatchedFields,
-        ]);
-
-        return $normalizedHtml;
-    }
-
-    /**
-     * Extract paragraphs with their runs from the XML DOM.
-     */
-    protected function extractParagraphs(\DOMDocument $dom): array
-    {
-        $paragraphs = [];
-        $xpath = new \DOMXPath($dom);
-        $xpath->registerNamespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main');
-
-        $pNodes = $xpath->query('//w:p');
-
-        foreach ($pNodes as $pNode) {
-            $runs = [];
-            $alignment = 'left';
-
-            // Check paragraph alignment
-            $jcNodes = $xpath->query('w:pPr/w:jc', $pNode);
-            if ($jcNodes->length > 0) {
-                $alignment = $jcNodes->item(0)->getAttribute('w:val') ?: 'left';
-            }
-
-            // Get font size from paragraph properties
-            $pFontSize = null;
-            $pSzNodes = $xpath->query('w:pPr/w:rPr/w:sz', $pNode);
-            if ($pSzNodes->length > 0) {
-                $halfPt = (int) $pSzNodes->item(0)->getAttribute('w:val');
-                if ($halfPt > 0) {
-                    $pFontSize = $halfPt / 2; // Convert half-points to points
-                }
-            }
-
-            $rNodes = $xpath->query('w:r', $pNode);
-
-            foreach ($rNodes as $rNode) {
-                $text = '';
-                $tNodes = $xpath->query('w:t', $rNode);
-                foreach ($tNodes as $tNode) {
-                    $text .= $tNode->textContent;
-                }
-
-                // Check bold
-                $isBold = false;
-                $bNodes = $xpath->query('w:rPr/w:b', $rNode);
-                if ($bNodes->length > 0) {
-                    $val = $bNodes->item(0)->getAttribute('w:val');
-                    $isBold = ($val === '' || $val === '1' || $val === 'true');
-                }
-
-                // Check italic
-                $isItalic = false;
-                $iNodes = $xpath->query('w:rPr/w:i', $rNode);
-                if ($iNodes->length > 0) {
-                    $val = $iNodes->item(0)->getAttribute('w:val');
-                    $isItalic = ($val === '' || $val === '1' || $val === 'true');
-                }
-
-                // Check underline
-                $isUnderline = false;
-                $uNodes = $xpath->query('w:rPr/w:u', $rNode);
-                if ($uNodes->length > 0) {
-                    $val = $uNodes->item(0)->getAttribute('w:val');
-                    $isUnderline = ($val !== '' && $val !== 'none');
-                }
-
-                // Font size per run
-                $fontSize = $pFontSize;
-                $szNodes = $xpath->query('w:rPr/w:sz', $rNode);
-                if ($szNodes->length > 0) {
-                    $halfPt = (int) $szNodes->item(0)->getAttribute('w:val');
-                    if ($halfPt > 0) {
-                        $fontSize = $halfPt / 2;
-                    }
-                }
-
-                // Font family per run
-                $fontFamily = null;
-                $fontNodes = $xpath->query('w:rPr/w:rFonts', $rNode);
-                if ($fontNodes->length > 0) {
-                    $fontFamily = $fontNodes->item(0)->getAttribute('w:ascii')
-                        ?: $fontNodes->item(0)->getAttribute('w:hAnsi');
-                }
-
-                if ($text !== '') {
-                    $runs[] = [
-                        'text' => $text,
-                        'bold' => $isBold,
-                        'italic' => $isItalic,
-                        'underline' => $isUnderline,
-                        'fontSize' => $fontSize,
-                        'fontFamily' => $fontFamily,
-                    ];
-                }
-            }
-
-            $paragraphs[] = [
-                'runs' => $runs,
-                'alignment' => $alignment,
+            $fields[] = [
+                'raw' => $highlightText,
+                'context' => $context,
+                'context_before' => trim($contextBefore),
+                'context_after' => trim($contextAfter),
+                'position' => $offset,
+                'source' => 'highlight',
             ];
         }
-
-        return $paragraphs;
-    }
-
-    /**
-     * Build HTML from parsed paragraphs.
-     */
-    protected function buildHtml(array $paragraphs): string
-    {
-        $html = '';
-
-        foreach ($paragraphs as $para) {
-            $style = '';
-            if ($para['alignment'] !== 'left') {
-                $align = $para['alignment'] === 'both' ? 'justify' : $para['alignment'];
-                $style .= "text-align:{$align};";
-            }
-
-            $pAttr = $style ? " style=\"{$style}\"" : '';
-            $inner = '';
-
-            foreach ($para['runs'] as $run) {
-                $text = htmlspecialchars($run['text'], ENT_QUOTES, 'UTF-8');
-
-                // Check if this is a field blank (3+ underscores)
-                if (preg_match('/^_{3,}$/', trim($run['text']))) {
-                    $text = '<span class="field-blank" data-raw="' . htmlspecialchars($run['text'], ENT_QUOTES) . '">' . $text . '</span>';
-                } else {
-                    $runStyle = '';
-                    if ($run['fontSize']) {
-                        $runStyle .= "font-size:{$run['fontSize']}pt;";
-                    }
-                    if ($run['fontFamily']) {
-                        $runStyle .= "font-family:'{$run['fontFamily']}',sans-serif;";
-                    }
-
-                    $spanAttr = $runStyle ? " style=\"{$runStyle}\"" : '';
-
-                    if ($run['bold']) {
-                        $text = "<strong>{$text}</strong>";
-                    }
-                    if ($run['italic']) {
-                        $text = "<em>{$text}</em>";
-                    }
-                    if ($run['underline']) {
-                        $text = "<u>{$text}</u>";
-                    }
-                    if ($spanAttr) {
-                        $text = "<span{$spanAttr}>{$text}</span>";
-                    }
-                }
-
-                $inner .= $text;
-            }
-
-            // Skip completely empty paragraphs (but keep ones with just a space for spacing)
-            if ($inner === '' && count($para['runs']) === 0) {
-                $html .= "<p{$pAttr}>&nbsp;</p>\n";
-            } else {
-                $html .= "<p{$pAttr}>{$inner}</p>\n";
-            }
-        }
-
-        return $html;
-    }
-
-    /**
-     * Build plain text from paragraphs.
-     */
-    protected function buildPlainText(array $paragraphs): string
-    {
-        $lines = [];
-        foreach ($paragraphs as $para) {
-            $line = '';
-            foreach ($para['runs'] as $run) {
-                $line .= $run['text'];
-            }
-            $lines[] = $line;
-        }
-        return implode("\n", $lines);
-    }
-
-    /**
-     * Detect field blanks from paragraphs and auto-label them.
-     */
-    protected function detectFields(array $paragraphs): array
-    {
-        $fields = [];
-        $position = 0;
-        $customIndex = 1;
-
-        foreach ($paragraphs as $para) {
-            $lineText = '';
-            foreach ($para['runs'] as $run) {
-                $lineText .= $run['text'];
-            }
-
-            // Track character offset within the full document
-            $runOffset = $position;
-
-            foreach ($para['runs'] as $run) {
-                $text = $run['text'];
-                $isBlank = preg_match('/_{2,}/', $text);
-
-                if ($isBlank) {
-                    // Gather context: 150 chars before and after from the line
-                    $beforeText = mb_substr($lineText, 0, max(0, mb_strpos($lineText, $text)));
-                    $contextBefore = mb_substr($beforeText, -150);
-                    $afterPos = mb_strpos($lineText, $text) + mb_strlen($text);
-                    $contextAfter = mb_substr($lineText, $afterPos, 150);
-                    $context = trim($contextBefore . ' [___] ' . $contextAfter);
-
-                    // Auto-label
-                    $match = $this->autoLabel($contextBefore, $contextAfter);
-
-                    $fields[] = [
-                        'raw' => $text,
-                        'context' => $context,
-                        'suggested_label' => $match['label'],
-                        'suggested_key' => $match['key'],
-                        'pillar' => $match['pillar'],
-                        'assigned_to' => $match['party'],
-                        'confidence' => $match['confidence'],
-                        'position' => $runOffset,
-                    ];
-
-                    if ($match['pillar'] === 'custom') {
-                        $customIndex++;
-                    }
-                }
-
-                $runOffset += mb_strlen($text);
-            }
-
-            $position += mb_strlen($lineText) + 1; // +1 for newline
-        }
-
-        // Merge adjacent blanks on the same line (e.g. "___ ___" → one field)
-        $merged = [];
-        foreach ($fields as $field) {
-            if (!empty($merged)) {
-                $prev = &$merged[count($merged) - 1];
-                $gap = $field['position'] - ($prev['position'] + mb_strlen($prev['raw']));
-                if ($gap >= 0 && $gap <= 10) {
-                    // Merge into previous field
-                    $prev['raw'] .= str_repeat(' ', max(0, $gap)) . $field['raw'];
-                    $confidenceRank = ['high' => 3, 'medium' => 2, 'low' => 1];
-                    if (($confidenceRank[$field['confidence']] ?? 0) > ($confidenceRank[$prev['confidence']] ?? 0)) {
-                        $prev['confidence'] = $field['confidence'];
-                    }
-                    continue;
-                }
-                unset($prev);
-            }
-            $merged[] = $field;
-        }
-        $fields = $merged;
-
-        // Deduplicate keys — append numeric suffix for repeated keys
-        $keyCounts = [];
-        foreach ($fields as &$field) {
-            $key = $field['suggested_key'];
-            if (!isset($keyCounts[$key])) {
-                $keyCounts[$key] = 0;
-            }
-            $keyCounts[$key]++;
-            if ($keyCounts[$key] > 1) {
-                $field['suggested_key'] = $key . '_' . $keyCounts[$key];
-                $field['suggested_label'] = $field['suggested_label'] . ' ' . $keyCounts[$key];
-            }
-        }
-        unset($field);
 
         return $fields;
     }
 
-    /**
-     * Auto-label a field based on surrounding context.
-     */
-    protected function autoLabel(string $contextBefore, string $contextAfter): array
-    {
-        $fullContext = $contextBefore . ' ' . $contextAfter;
+    // =========================================================
+    // HEADER & SIGNATURE STRIPPING
+    // =========================================================
 
-        foreach ($this->labelRules as $rule) {
-            if (preg_match($rule['pattern'], $fullContext)) {
-                return [
-                    'label' => $rule['label'],
-                    'key' => $rule['key'],
-                    'pillar' => $rule['pillar'],
-                    'party' => $rule['party'],
-                    'confidence' => $rule['confidence'],
-                ];
-            }
+    /**
+     * Strip the original document header from mammoth HTML.
+     *
+     * Single precise rule: if the first block-level element is a <table>
+     * containing a base64 image OR company registration details (Reg + FFC/VAT),
+     * remove it and any trailing short address paragraphs.
+     */
+    private function stripDocumentHeader(string $html): string
+    {
+        $trimmed = ltrim($html);
+
+        // Only attempt stripping if document starts with a table element
+        if (stripos($trimmed, '<table') !== 0) {
+            Log::debug('stripHeader: no leading table, skipping');
+            return $html;
         }
 
-        // No match — custom field
-        static $customCounter = 0;
-        $customCounter++;
+        // Find the closing </table> tag
+        $tableEnd = stripos($trimmed, '</table>');
+        if ($tableEnd === false) {
+            return $html;
+        }
 
-        return [
-            'label' => 'Custom Field ' . $customCounter,
-            'key' => 'custom.field_' . $customCounter,
-            'pillar' => 'custom',
-            'party' => 'agent',
-            'confidence' => 'low',
-        ];
+        $tableHtml = substr($trimmed, 0, $tableEnd + 8);
+        $tableText = strtolower(strip_tags($tableHtml));
+
+        $hasBase64 = strpos($tableHtml, 'data:image') !== false;
+        $hasReg    = strpos($tableText, 'reg') !== false;
+        $hasFfc    = strpos($tableText, 'ffc') !== false
+                  || strpos($tableText, 'vat') !== false;
+
+        Log::debug('stripHeader: table check', [
+            'hasBase64' => $hasBase64,
+            'hasReg'    => $hasReg,
+            'hasFfc'    => $hasFfc,
+            'tableLen'  => strlen($tableHtml),
+        ]);
+
+        if (!$hasBase64 && !($hasReg && $hasFfc)) {
+            Log::debug('stripHeader: table is not agency header');
+            return $html;
+        }
+
+        // Strip the header table
+        $remainder = ltrim(substr($trimmed, $tableEnd + 8));
+
+        Log::debug('stripHeader: stripped agency header', [
+            'removed_bytes' => strlen($html) - strlen($remainder),
+        ]);
+
+        return $remainder;
+    }
+
+    /**
+     * Signature stripping is handled in DocumentTemplateGenerator::detectSignatureBoundary().
+     * This method is kept as a no-op for pipeline compatibility.
+     */
+    private function stripDocumentSignature(string $html): string
+    {
+        return $html; // handled in generator
+    }
+
+    /**
+     * Inject <span class="field-blank"> markers into Mammoth HTML.
+     */
+    private function injectFieldSpans(string $html, array $fields): string
+    {
+        // Normalize <u>___</u> to plain ___ for uniform matching
+        $normalizedHtml = preg_replace('/<u>([_\s]+)<\/u>/u', '$1', $html);
+
+        preg_match_all('/_{2,}%?/', $normalizedHtml, $matches, PREG_OFFSET_CAPTURE);
+
+        $blanks = [];
+        foreach ($matches[0] as $match) {
+            $blanks[] = [
+                'offset' => $match[1],
+                'length' => strlen($match[0]),
+            ];
+        }
+
+        // Merge adjacent blanks
+        $merged = [];
+        foreach ($blanks as $blank) {
+            if (!empty($merged)) {
+                $prev = &$merged[count($merged) - 1];
+                $gap = $blank['offset'] - ($prev['offset'] + $prev['length']);
+                if ($gap >= 0 && $gap <= 10) {
+                    $prev['length'] = ($blank['offset'] + $blank['length']) - $prev['offset'];
+                    continue;
+                }
+                unset($prev);
+            }
+            $merged[] = $blank;
+        }
+        $blanks = $merged;
+
+        Log::info('DocxParser: Injecting field spans', [
+            'blanks_in_html' => count($blanks),
+            'fields_detected' => count($fields),
+        ]);
+
+        // Replace in reverse order so offsets stay valid
+        for ($i = count($blanks) - 1; $i >= 0; $i--) {
+            $blank = $blanks[$i];
+            $num = $i + 1;
+            $span = '<span class="field-blank" data-index="' . $i . '" contenteditable="false">[' . $num . ']</span>';
+            $normalizedHtml = substr_replace($normalizedHtml, $span, $blank['offset'], $blank['length']);
+        }
+
+        return $normalizedHtml;
     }
 }

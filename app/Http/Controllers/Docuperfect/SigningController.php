@@ -119,6 +119,9 @@ class SigningController extends Controller
             } else {
                 // Single template — render blade view normally
                 $viewData = $webTemplateData;
+                if (!empty($docTemplate->signing_parties)) {
+                    $viewData['signing_parties'] = $docTemplate->signing_parties;
+                }
                 $fullHtml = view($docTemplate->blade_view, $viewData)->render();
                 $styles = '';
                 preg_match_all('/<style[^>]*>.*?<\/style>/si', $fullHtml, $styleMatches);

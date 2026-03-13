@@ -9,6 +9,7 @@ use App\Models\Docuperfect\Template;
 use App\Models\Docuperfect\TemplateSignatureZone;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class TemplateController extends Controller
@@ -107,6 +108,11 @@ class TemplateController extends Controller
         }
 
         $template = Template::with(['branches', 'documentType'])->findOrFail($id);
+
+        if ($template->render_type === 'web') {
+            return $this->editWeb($template);
+        }
+
         $branches = \App\Models\Branch::orderBy('name')->get();
         $documentTypes = DocumentType::orderBy('sort_order')->get();
         $namedFields = NamedField::orderBy('sort_order')->get();
@@ -155,7 +161,15 @@ class TemplateController extends Controller
     public function saveFields(Request $request, $id)
     {
         $user = $request->user();
-        if (!$user->hasPermission('manage_templates')) {
+        Log::info('TemplateController: saveFields called', [
+            'template_id' => $id,
+            'user_id' => $user->id ?? null,
+        ]);
+
+        $canManage = $user->hasPermission('manage_templates');
+        Log::info('TemplateController: permission check', ['can_manage' => $canManage]);
+
+        if (!$canManage) {
             abort(403);
         }
 
@@ -308,6 +322,45 @@ class TemplateController extends Controller
 
         return redirect()->route('docuperfect.templates.edit', $copy->id)
             ->with('status', "Template duplicated as \"{$copy->name}\".");
+    }
+
+    private function editWeb(Template $template)
+    {
+        $branches = \App\Models\Branch::orderBy('name')->get();
+        $documentTypes = DocumentType::orderBy('sort_order')->get();
+        $namedFields = NamedField::orderBy('sort_order')->get();
+
+        return view('docuperfect.templates.edit-web', compact('template', 'branches', 'documentTypes', 'namedFields'));
+    }
+
+    public function webPreview(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user->hasPermission('manage_templates')) {
+            abort(403);
+        }
+
+        $template = Template::findOrFail($id);
+
+        if (!$template->blade_view) {
+            abort(404, 'No blade view configured for this template.');
+        }
+
+        // Build placeholder values from fields_json
+        $viewData = [];
+        foreach ($template->fields_json ?? [] as $field) {
+            $varName = $field['field_name'] ?? str_replace('.', '_', $field['id'] ?? '');
+            $viewData[$varName] = '[' . ($field['label'] ?? $varName) . ']';
+        }
+
+        // Pass signing_parties so the signature-block component renders correct parties
+        if (!empty($template->signing_parties)) {
+            $viewData['signing_parties'] = $template->signing_parties;
+        }
+
+        $html = view($template->blade_view, $viewData)->render();
+
+        return response($html)->header('Content-Type', 'text/html');
     }
 
     public function destroy(Request $request, $id)

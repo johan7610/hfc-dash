@@ -1,34 +1,118 @@
 {{--
-    Signature Block — reusable across all web document templates
+    Signature Block — legal standard layout (SA property documents)
 
     Usage: @include('docuperfect.web-templates.components.signature-block', [
-        'parties' => ['Owner', 'Owner', 'Agent'],
-        'party_names' => [$lessor_name ?? '', $lessor_name_2 ?? '', $agent_name ?? ''],
-        'signed_at_location' => $signed_at_location ?? null,
-        'signed_day' => $signed_day ?? null,
-        'signed_month' => $signed_month ?? null,
-        'signed_time' => $signed_time ?? null,
-        'signed_ampm' => $signed_ampm ?? null,
+        'parties' => ['Lessor', 'Lessee', 'Agent'],
     ])
 --}}
-<div class="signature-section">
-    <p>This Agreement has been accepted and signed by the Owner/s at
-        <span class="field" data-field="signed_at_location">{{ $signed_at_location ?? '' }}</span>
-    </p>
-    <p>on this <span class="field field-short" data-field="signed_day">{{ $signed_day ?? '' }}</span> day of
-        <span class="field" data-field="signed_month">{{ $signed_month ?? '' }}</span>
-        at <span class="field field-short" data-field="signed_time">{{ $signed_time ?? '' }}</span>
-        (<span class="field field-tiny" data-field="signed_ampm">{{ $signed_ampm ?? '' }}</span>)
-    </p>
+@php
+    // signing_parties from template DB (lowercase keys like ['lessor','agent'])
+    // parties from explicit @include parameter (display names like ['Lessor','Agent'])
+    // Fall back to all three if neither provided
+    if (isset($signing_parties) && is_array($signing_parties)) {
+        $parties = array_map('ucfirst', $signing_parties);
+    }
+    $parties = $parties ?? ['Lessor', 'Lessee', 'Agent'];
+@endphp
 
-    <div class="signature-grid" style="grid-template-columns: repeat({{ count($parties ?? ['Owner','Owner','Agent']) }}, 1fr);">
-        @foreach(($parties ?? ['Owner', 'Owner', 'Agent']) as $i => $party)
-            <div class="signature-col" data-party="{{ strtolower($party) }}" data-name="{{ $party_names[$i] ?? '' }}" data-marker-party="{{ strtolower($party) }}" data-marker-index="{{ $i }}">
-                <div class="signature-line"></div>
-                <div class="signature-label">{{ $party }}</div>
-                <div class="print-line"></div>
-                <div class="print-label">{{ ($party_names[$i] ?? '') ?: 'Print Name' }}</div>
+<style>
+    .sig-section { margin-top: 16pt; }
+    .sig-section .corex-section-heading { margin-bottom: 10pt; }
+    .sig-party-block { margin-bottom: 20pt; }
+    .sig-party-block:last-child { margin-bottom: 0; }
+    .sig-text { font-size: 10pt; line-height: 1.6; margin: 0 0 2pt 0; }
+    .sig-field {
+        display: inline-block;
+        min-width: 100pt;
+        border-bottom: 1px solid #333;
+        padding: 1pt 4pt;
+        min-height: 14pt;
+    }
+    .sig-field-short { min-width: 40pt; }
+    .sig-field-medium { min-width: 70pt; }
+    .sig-field-year { min-width: 36pt; }
+    .sig-row-4 {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr 1fr;
+        gap: 12pt;
+        margin-top: 14pt;
+    }
+    .sig-cell { text-align: center; }
+    .sig-cell-line {
+        border-bottom: 1px solid #333;
+        min-height: 28pt;
+    }
+    .sig-cell-label {
+        font-size: 9pt;
+        padding-top: 2pt;
+    }
+    .sig-row-right {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr 1fr;
+        gap: 12pt;
+        margin-top: 10pt;
+    }
+    .sig-cell-empty { visibility: hidden; }
+</style>
+
+<div class="sig-section">
+    <p class="corex-section-heading"><strong>Signatures</strong></p>
+
+    @foreach($parties as $i => $party)
+        @php $partyKey = strtolower($party); @endphp
+        <div class="sig-party-block">
+            <p class="sig-text">
+                Thus done and signed by the {{ $party }} at
+                <span class="sig-field" data-marker-party="{{ $partyKey }}" data-marker-type="location"></span>
+                on this
+                <span class="sig-field sig-field-short" data-marker-party="{{ $partyKey }}" data-marker-type="day"></span>
+                day of
+                <span class="sig-field sig-field-medium" data-marker-party="{{ $partyKey }}" data-marker-type="month"></span>
+                20<span class="sig-field sig-field-year" data-marker-party="{{ $partyKey }}" data-marker-type="year"></span>
+                at
+                <span class="sig-field sig-field-short" data-marker-party="{{ $partyKey }}" data-marker-type="time"></span>
+                am / pm.
+            </p>
+
+            {{-- Signature row: Party, Party, Witness, Witness --}}
+            <div class="sig-row-4">
+                <div class="sig-cell">
+                    <div class="sig-cell-line" data-marker-party="{{ $partyKey }}" data-marker-type="signature" data-marker-index="{{ $i }}"></div>
+                    <div class="sig-cell-label">{{ $party }}</div>
+                </div>
+                <div class="sig-cell">
+                    <div class="sig-cell-line" data-marker-party="{{ $partyKey }}" data-marker-type="signature" data-marker-index="{{ $i }}-2"></div>
+                    <div class="sig-cell-label">{{ $party }}</div>
+                </div>
+                <div class="sig-cell">
+                    <div class="sig-cell-line" data-marker-party="{{ $partyKey }}" data-marker-type="witness" data-marker-index="{{ $i }}-w1"></div>
+                    <div class="sig-cell-label">As Witness</div>
+                </div>
+                <div class="sig-cell">
+                    <div class="sig-cell-line" data-marker-party="{{ $partyKey }}" data-marker-type="witness" data-marker-index="{{ $i }}-w2"></div>
+                    <div class="sig-cell-label">As Witness</div>
+                </div>
             </div>
-        @endforeach
-    </div>
+
+            {{-- Witness name row: empty, empty, Name of Witness, Name of Witness --}}
+            <div class="sig-row-right">
+                <div class="sig-cell sig-cell-empty">
+                    <div class="sig-cell-line"></div>
+                    <div class="sig-cell-label">&nbsp;</div>
+                </div>
+                <div class="sig-cell sig-cell-empty">
+                    <div class="sig-cell-line"></div>
+                    <div class="sig-cell-label">&nbsp;</div>
+                </div>
+                <div class="sig-cell">
+                    <div class="sig-cell-line" data-marker-party="{{ $partyKey }}" data-marker-type="witness-name" data-marker-index="{{ $i }}-wn1"></div>
+                    <div class="sig-cell-label">Name of Witness</div>
+                </div>
+                <div class="sig-cell">
+                    <div class="sig-cell-line" data-marker-party="{{ $partyKey }}" data-marker-type="witness-name" data-marker-index="{{ $i }}-wn2"></div>
+                    <div class="sig-cell-label">Name of Witness</div>
+                </div>
+            </div>
+        </div>
+    @endforeach
 </div>

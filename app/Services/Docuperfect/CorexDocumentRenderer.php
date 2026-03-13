@@ -63,8 +63,9 @@ class CorexDocumentRenderer
         // 4. Detect and render input rows
         $html = $this->processInputRows($html);
 
-        // 5. Replace signature sections
-        $html = $this->replaceSignatureSections($html);
+        // 5. Signature sections — handled by DocumentTemplateGenerator
+        // via @include('signature-block') component, not here.
+        // $html = $this->replaceSignatureSections($html);
 
         return $html;
     }

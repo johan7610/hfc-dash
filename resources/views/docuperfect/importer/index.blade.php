@@ -8,6 +8,12 @@
             Upload a Word document (.docx). CoreX will detect fillable fields and convert it to a web template automatically.
         </p>
 
+        @if(session('success'))
+            <div class="bg-teal-900/40 border border-teal-500 text-teal-200 rounded px-4 py-3 mb-4 text-sm">
+                {{ session('success') }}
+            </div>
+        @endif
+
         @if(session('error'))
             <div class="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
                 {{ session('error') }}
