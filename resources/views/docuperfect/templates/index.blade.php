@@ -45,14 +45,14 @@
     </x-list-header>
 
     @if(session('status'))
-        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-900 px-4 py-3 text-sm mt-4">
+        <div class="rounded-md px-4 py-3 text-sm mt-4" style="border: 1px solid var(--ds-green, #10b981); background: rgba(16,185,129,0.1); color: var(--text-primary);">
             {{ session('status') }}
         </div>
     @endif
 
     @if($templates->isEmpty())
-        <div class="ds-status-card p-6 text-center mt-4">
-            <div class="text-sm text-slate-500">
+        <div class="rounded-md p-6 text-center mt-4" style="background: var(--surface); border: 1px solid var(--border);">
+            <div class="text-sm" style="color: var(--text-muted);">
                 @if(request('search') || request('document_type') || request('visibility'))
                     No templates match your search.
                 @elseif($showArchived)
@@ -66,17 +66,17 @@
         <div x-data="{ viewMode: localStorage.getItem('docuperfect_tpl_view') || 'grid' }" class="mt-4">
             {{-- View toggle --}}
             <div class="flex items-center justify-end gap-2 mb-4">
-                <div class="flex items-center border border-slate-300 rounded-lg overflow-hidden">
+                <div class="flex items-center rounded-md overflow-hidden" style="border: 1px solid var(--border);">
                     <button @click="viewMode = 'grid'; localStorage.setItem('docuperfect_tpl_view', 'grid')"
-                            :class="viewMode === 'grid' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:text-slate-700'"
-                            class="px-2 py-1.5 transition-colors" title="Grid view">
+                            :style="viewMode === 'grid' ? 'background: var(--brand-button, #0ea5e9); color: #fff;' : 'background: var(--surface); color: var(--text-muted);'"
+                            class="px-2.5 py-1.5 transition-all duration-300" title="Grid view">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path d="M4 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5ZM14 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V5ZM4 15a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-4ZM14 15a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-4Z"/>
                         </svg>
                     </button>
                     <button @click="viewMode = 'list'; localStorage.setItem('docuperfect_tpl_view', 'list')"
-                            :class="viewMode === 'list' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:text-slate-700'"
-                            class="px-2 py-1.5 transition-colors" title="List view">
+                            :style="viewMode === 'list' ? 'background: var(--brand-button, #0ea5e9); color: #fff;' : 'background: var(--surface); color: var(--text-muted);'"
+                            class="px-2.5 py-1.5 transition-all duration-300" title="List view">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
                         </svg>
@@ -87,23 +87,25 @@
             {{-- Grid View --}}
             <div x-show="viewMode === 'grid'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 @foreach($templates as $tpl)
-                <div class="ds-status-card p-4 flex flex-col">
+                <div class="rounded-md p-4 flex flex-col transition-all duration-300 hover:shadow-lg"
+                     style="background: var(--surface); border: 1px solid var(--border);"
+                     onmouseover="this.style.borderColor='var(--brand-icon)'" onmouseout="this.style.borderColor='var(--border)'">
                     <div class="flex items-start justify-between mb-1">
-                        <div class="font-semibold text-slate-900 text-sm leading-tight">{{ $tpl->name }}</div>
+                        <div class="font-semibold text-sm leading-tight" style="color: var(--text-primary);">{{ $tpl->name }}</div>
                         @if($tpl->documentType)
                         <span class="ds-badge ds-badge-info text-[10px] ml-2 flex-shrink-0">{{ $tpl->documentType->name }}</span>
                         @elseif($tpl->template_type)
                         <span class="ds-badge ds-badge-info text-[10px] ml-2 flex-shrink-0">{{ $tpl->template_type }}</span>
                         @endif
                     </div>
-                    <div class="text-xs text-slate-500 mb-1">
+                    <div class="text-xs mb-1" style="color: var(--text-muted);">
                         @if($tpl->is_global)
                             <span class="ds-badge ds-badge-success text-[10px]">Global</span>
                         @else
                             {{ $tpl->branches->pluck('name')->join(', ') ?: 'No branches' }}
                         @endif
                     </div>
-                    <div class="text-[11px] text-slate-400 mb-3">{{ $tpl->page_count }} page{{ $tpl->page_count !== 1 ? 's' : '' }} &middot; {{ $tpl->owner->name ?? '—' }} &middot; {{ $tpl->created_at->format('d M Y') }}</div>
+                    <div class="text-[11px] mb-3" style="color: var(--text-muted);">{{ $tpl->page_count }} page{{ $tpl->page_count !== 1 ? 's' : '' }} &middot; {{ $tpl->owner->name ?? '—' }} &middot; {{ $tpl->created_at->format('d M Y') }}</div>
 
                     @if($tpl->page_count > 0)
                     <div class="flex-1 flex items-center justify-center mb-3">
@@ -111,11 +113,11 @@
                              alt="{{ $tpl->name }}"
                              style="max-height: 200px; width: auto;"
                              loading="lazy"
-                             class="rounded shadow-sm mx-auto block" />
+                             class="rounded-md shadow-sm mx-auto block" />
                     </div>
                     @endif
 
-                    <div class="flex flex-wrap items-center gap-2 mt-auto pt-3 border-t border-slate-100">
+                    <div class="flex flex-wrap items-center gap-2 mt-auto pt-3" style="border-top: 1px solid var(--border);">
                         @if($showArchived)
                             <form method="POST" action="{{ route('docuperfect.templates.restore', $tpl->id) }}" class="inline">
                                 @csrf
@@ -129,13 +131,13 @@
                             </form>
                             <form method="POST" action="{{ route('docuperfect.templates.archive', $tpl->id) }}" class="inline" onsubmit="return confirm('Archive this template?');">
                                 @csrf
-                                <button class="text-xs px-2 py-1.5 text-slate-400 hover:text-amber-600">Archive</button>
+                                <button class="text-xs px-2 py-1.5 transition-all duration-300 hover:opacity-80" style="color: var(--text-muted);">Archive</button>
                             </form>
                         @endif
                         <form method="POST" action="{{ route('docuperfect.templates.destroy', $tpl->id) }}" class="inline ml-auto" onsubmit="return confirm('Permanently delete this template? This cannot be undone.');">
                             @csrf
                             @method('DELETE')
-                            <button class="text-xs text-red-400 hover:text-red-600">Delete</button>
+                            <button class="text-xs transition-all duration-300 hover:opacity-80" style="color: #ef4444;">Delete</button>
                         </form>
                     </div>
                 </div>
@@ -144,7 +146,7 @@
 
             {{-- List View --}}
             <div x-show="viewMode === 'list'" x-cloak>
-                <div class="rounded-2xl border border-slate-200 bg-white overflow-x-auto">
+                <div class="rounded-md overflow-x-auto" style="background: var(--surface); border: 1px solid var(--border);">
                     <table class="w-full text-sm ds-table">
                         <thead>
                             <tr>
@@ -160,33 +162,33 @@
                         </thead>
                         <tbody>
                             @foreach($templates as $tpl)
-                            <tr>
+                            <tr class="transition-all duration-300">
                                 <td class="px-4 py-2">
                                     @if($tpl->page_count > 0)
                                     <img src="{{ route('docuperfect.page.image', ['id' => $tpl->id, 'page' => 0]) }}"
                                          alt="{{ $tpl->name }}"
-                                         class="w-10 h-14 object-cover rounded shadow-sm"
+                                         class="w-10 h-14 object-cover rounded-md shadow-sm"
                                          loading="lazy" />
                                     @endif
                                 </td>
-                                <td class="px-4 py-2 font-medium text-slate-900">{{ $tpl->name }}</td>
+                                <td class="px-4 py-2 font-medium" style="color: var(--text-primary);">{{ $tpl->name }}</td>
                                 <td class="px-4 py-2">
                                     @if($tpl->documentType)
                                     <span class="ds-badge ds-badge-info text-[10px]">{{ $tpl->documentType->name }}</span>
                                     @elseif($tpl->template_type)
-                                    <span class="text-xs text-slate-500">{{ $tpl->template_type }}</span>
+                                    <span class="text-xs" style="color: var(--text-muted);">{{ $tpl->template_type }}</span>
                                     @endif
                                 </td>
-                                <td class="px-4 py-2 text-xs text-slate-500">
+                                <td class="px-4 py-2 text-xs" style="color: var(--text-secondary);">
                                     @if($tpl->is_global)
                                         <span class="ds-badge ds-badge-success text-[10px]">Global</span>
                                     @else
                                         {{ $tpl->branches->pluck('name')->join(', ') ?: '—' }}
                                     @endif
                                 </td>
-                                <td class="px-4 py-2 text-xs text-slate-500">{{ $tpl->owner->name ?? '—' }}</td>
-                                <td class="px-4 py-2 text-center text-slate-500">{{ $tpl->page_count }}</td>
-                                <td class="px-4 py-2 text-right text-xs text-slate-500">{{ $tpl->created_at->format('d M Y') }}</td>
+                                <td class="px-4 py-2 text-xs" style="color: var(--text-secondary);">{{ $tpl->owner->name ?? '—' }}</td>
+                                <td class="px-4 py-2 text-center" style="color: var(--text-secondary);">{{ $tpl->page_count }}</td>
+                                <td class="px-4 py-2 text-right text-xs" style="color: var(--text-secondary);">{{ $tpl->created_at->format('d M Y') }}</td>
                                 <td class="px-4 py-2 text-right">
                                     <div class="flex items-center justify-end gap-1">
                                         @if($showArchived)
@@ -204,7 +206,7 @@
                                         <form method="POST" action="{{ route('docuperfect.templates.destroy', $tpl->id) }}" class="inline" onsubmit="return confirm('Permanently delete?');">
                                             @csrf
                                             @method('DELETE')
-                                            <button class="text-xs text-red-400 hover:text-red-600 px-1">Del</button>
+                                            <button class="text-xs px-1 transition-all duration-300 hover:opacity-80" style="color: #ef4444;">Del</button>
                                         </form>
                                     </div>
                                 </td>

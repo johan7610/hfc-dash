@@ -3,17 +3,17 @@
 @section('corex-content')
 <div class="max-w-6xl mx-auto px-4 py-6" x-data="calculatorsApp()">
 
-    {{-- Navy Header --}}
-    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-6">
-        <h2 class="text-xl font-bold text-white leading-tight">Calculators</h2>
-        <div class="text-sm text-white/60">Commission, bond repayments, transfer costs & overpayment savings</div>
+    {{-- Page Header --}}
+    <div class="rounded-md px-6 py-4 mb-6" style="background: var(--brand-default, #0b2a4a);">
+        <h2 class="text-xl font-bold text-white leading-tight tracking-tight">Calculators</h2>
+        <div class="text-sm text-white/60 mt-0.5">Commission, bond repayments, transfer costs & overpayment savings</div>
     </div>
 
     {{-- Admin: Fee Scale Management --}}
     @permission('calculators.manage')
     <div class="ds-status-card mb-6">
         <div class="ds-section-header" style="margin-bottom:0.5rem;">Fee Scale Management (Admin)</div>
-        <p class="text-sm text-slate-500 mb-3">
+        <p class="text-sm mb-3" style="color: var(--text-secondary);">
             Upload the annual attorney cost sheet to update all calculator fees.
             Current fees effective: <strong>{{ $feeEffectiveDate ?? 'Default' }}</strong>
             | Source: <strong>{{ $feeSourceDocument ?? 'Built-in defaults' }}</strong>
@@ -24,15 +24,15 @@
             <div>
                 <label class="ds-label block mb-1">Cost Sheet PDF</label>
                 <input type="file" name="fee_sheet" accept=".pdf" required
-                       class="border border-slate-300 rounded px-3 py-2 text-sm">
+                       class="rounded-md px-3 py-2 text-sm" style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
             </div>
             <div>
                 <label class="ds-label block mb-1">Effective Date</label>
                 <input type="date" name="effective_date"
                        value="{{ date('Y-01-01') }}"
-                       class="border border-slate-300 rounded px-3 py-2 text-sm">
+                       class="rounded-md px-3 py-2 text-sm" style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
             </div>
-            <button type="submit" class="corex-btn-primary px-4 py-2 text-sm font-semibold rounded-lg">
+            <button type="submit" class="corex-btn-primary px-4 py-2 text-sm font-semibold rounded-md">
                 Upload & Update Fees
             </button>
         </form>
@@ -56,41 +56,41 @@
                 <div>
                     <label class="ds-label block mb-1">Sale Price</label>
                     <div class="flex items-center gap-2">
-                        <span class="text-sm font-semibold text-gray-500">R</span>
+                        <span class="text-sm font-semibold" style="color: var(--text-muted);">R</span>
                         <input type="text" x-model="comm.salePrice" @input="formatInput($event)" placeholder="e.g. 2,500,000"
-                               class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-cyan-500 focus:outline-none" />
+                               class="calc-input w-full" />
                     </div>
                 </div>
 
                 <div>
-                    <label class="ds-label block mb-1">Commission Rate <span class="text-xs text-gray-400 font-normal">(excl. VAT)</span></label>
+                    <label class="ds-label block mb-1">Commission Rate <span class="text-xs font-normal" style="color: var(--text-muted);">(excl. VAT)</span></label>
                     <div class="flex items-center gap-2 flex-wrap">
                         <button type="button" @click="comm.rate = 7.5; comm.customRate = ''"
-                                :class="comm.rate == 7.5 && comm.customRate === '' ? 'bg-[#0b2a4a] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                                class="px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors">
+                                :class="comm.rate == 7.5 && comm.customRate === '' ? 'calc-rate-active' : 'calc-rate'"
+                                class="px-4 py-1.5 rounded-md text-sm font-semibold transition-all duration-300">
                             7.5% — Residential
                         </button>
                         <button type="button" @click="comm.rate = 10; comm.customRate = ''"
-                                :class="comm.rate == 10 && comm.customRate === '' ? 'bg-[#0b2a4a] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                                class="px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors">
+                                :class="comm.rate == 10 && comm.customRate === '' ? 'calc-rate-active' : 'calc-rate'"
+                                class="px-4 py-1.5 rounded-md text-sm font-semibold transition-all duration-300">
                             10% — Commercial / Vacant Land
                         </button>
                         <input type="text" x-model="comm.customRate" @input="comm.rate = parseFloat(comm.customRate) || 0" placeholder="Custom %"
-                               class="w-24 border border-slate-300 rounded-lg p-1.5 text-sm focus:border-cyan-500 focus:outline-none" />
+                               class="calc-input w-24" />
                     </div>
                 </div>
 
-                <button type="button" @click="calcCommission()" class="corex-btn-primary px-6 py-2 text-sm font-semibold rounded-lg">
+                <button type="button" @click="calcCommission()" class="corex-btn-primary px-6 py-2 text-sm font-semibold rounded-md">
                     Calculate
                 </button>
             </div>
 
             {{-- Results --}}
-            <div x-show="comm.result" x-transition class="mt-4 pt-4 border-t border-slate-200 space-y-2">
+            <div x-show="comm.result" x-transition class="mt-4 pt-4 space-y-2" style="border-top: 1px solid var(--border);">
                 <div class="flex justify-between"><span class="ds-label">Commission exc VAT</span><span class="ds-value" x-text="'R ' + fmt(comm.result?.commission_exc_vat)"></span></div>
                 <div class="flex justify-between"><span class="ds-label">VAT (15%)</span><span class="ds-value" x-text="'R ' + fmt(comm.result?.vat)"></span></div>
                 <div class="flex justify-between"><span class="ds-label">Commission inc VAT</span><span class="ds-value font-bold" x-text="'R ' + fmt(comm.result?.commission_inc_vat)"></span></div>
-                <div class="border-t border-slate-100 pt-2 mt-2 space-y-1">
+                <div class="pt-2 mt-2 space-y-1" style="border-top: 1px solid var(--border);">
                     <div class="flex justify-between"><span class="ds-label">Agent split at 50%</span><span class="ds-value" x-text="'R ' + fmt(comm.result?.agent_split_50)"></span></div>
                     <div class="flex justify-between"><span class="ds-label">Agent split at 60%</span><span class="ds-value" x-text="'R ' + fmt(comm.result?.agent_split_60)"></span></div>
                     <div class="flex justify-between"><span class="ds-label">Agent split at 70%</span><span class="ds-value" x-text="'R ' + fmt(comm.result?.agent_split_70)"></span></div>
@@ -106,43 +106,43 @@
                 <div>
                     <label class="ds-label block mb-1">Loan Amount</label>
                     <div class="flex items-center gap-2">
-                        <span class="text-sm font-semibold text-gray-500">R</span>
+                        <span class="text-sm font-semibold" style="color: var(--text-muted);">R</span>
                         <input type="text" x-model="bond.loanAmount" @input="formatInput($event)" placeholder="e.g. 1,500,000"
-                               class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-cyan-500 focus:outline-none" />
+                               class="calc-input w-full" />
                     </div>
                 </div>
 
                 <div>
                     <label class="ds-label block mb-1">Interest Rate (%)</label>
                     <input type="text" x-model="bond.interestRate" placeholder="e.g. 11.75"
-                           class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-cyan-500 focus:outline-none" />
-                    <div class="text-xs text-gray-500 mt-1">Current prime: {{ $primeRate }}%</div>
+                           class="calc-input w-full" />
+                    <div class="text-xs mt-1" style="color: var(--text-muted);">Current prime: {{ $primeRate }}%</div>
                 </div>
 
                 <div>
                     <label class="ds-label block mb-1">Loan Term</label>
-                    <select x-model="bond.termYears" class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-cyan-500 focus:outline-none">
+                    <select x-model="bond.termYears" class="calc-input w-full">
                         <template x-for="y in [10, 15, 20, 25, 30]" :key="y">
                             <option :value="y" x-text="y + ' years'" :selected="y === 20"></option>
                         </template>
                     </select>
                 </div>
 
-                <button type="button" @click="calcBond()" class="corex-btn-primary px-6 py-2 text-sm font-semibold rounded-lg">
+                <button type="button" @click="calcBond()" class="corex-btn-primary px-6 py-2 text-sm font-semibold rounded-md">
                     Calculate
                 </button>
             </div>
 
             {{-- Results --}}
-            <div x-show="bond.result" x-transition class="mt-4 pt-4 border-t border-slate-200 space-y-2">
+            <div x-show="bond.result" x-transition class="mt-4 pt-4 space-y-2" style="border-top: 1px solid var(--border);">
                 <div class="flex justify-between items-baseline">
                     <span class="ds-label">Monthly repayment</span>
                     <span class="ds-value-lg" x-text="'R ' + fmt(bond.result?.monthly_repayment)"></span>
                 </div>
                 <div class="flex justify-between"><span class="ds-label">Total repaid over term</span><span class="ds-value" x-text="'R ' + fmt(bond.result?.total_repaid)"></span></div>
                 <div class="flex justify-between"><span class="ds-label">Total interest</span><span class="ds-value" x-text="'R ' + fmt(bond.result?.total_interest)"></span></div>
-                <div class="border-t border-slate-100 pt-2 mt-2 space-y-1">
-                    <div class="text-xs text-gray-500 mb-1">Comparison at higher rates:</div>
+                <div class="pt-2 mt-2 space-y-1" style="border-top: 1px solid var(--border);">
+                    <div class="text-xs mb-1" style="color: var(--text-muted);">Comparison at higher rates:</div>
                     <div class="flex justify-between"><span class="ds-label" x-text="'At ' + (parseFloat(bond.interestRate) + 1).toFixed(2) + '%'"></span><span class="ds-value" x-text="'R ' + fmt(bond.result?.monthly_plus_1) + '/mo'"></span></div>
                     <div class="flex justify-between"><span class="ds-label" x-text="'At ' + (parseFloat(bond.interestRate) + 2).toFixed(2) + '%'"></span><span class="ds-value" x-text="'R ' + fmt(bond.result?.monthly_plus_2) + '/mo'"></span></div>
                 </div>
@@ -157,59 +157,59 @@
                 <div>
                     <label class="ds-label block mb-1">Purchase Price</label>
                     <div class="flex items-center gap-2">
-                        <span class="text-sm font-semibold text-gray-500">R</span>
+                        <span class="text-sm font-semibold" style="color: var(--text-muted);">R</span>
                         <input type="text" x-model="costs.purchasePrice" @input="formatInput($event)" placeholder="e.g. 2,500,000"
-                               class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-cyan-500 focus:outline-none" />
+                               class="calc-input w-full" />
                     </div>
                 </div>
 
                 <div>
                     <label class="ds-label block mb-1">Buyer needs bond?</label>
                     <label class="inline-flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" x-model="costs.needsBond" class="rounded" />
-                        <span class="text-sm text-gray-700" x-text="costs.needsBond ? 'Yes' : 'No'"></span>
+                        <input type="checkbox" x-model="costs.needsBond" class="rounded-md" style="accent-color: var(--brand-button, #0ea5e9);" />
+                        <span class="text-sm" style="color: var(--text-secondary);" x-text="costs.needsBond ? 'Yes' : 'No'"></span>
                     </label>
                 </div>
 
                 <div x-show="costs.needsBond" x-transition>
                     <label class="ds-label block mb-1">Bond Amount</label>
                     <div class="flex items-center gap-2">
-                        <span class="text-sm font-semibold text-gray-500">R</span>
+                        <span class="text-sm font-semibold" style="color: var(--text-muted);">R</span>
                         <input type="text" x-model="costs.bondAmount" @input="formatInput($event)" placeholder="Default = purchase price"
-                               class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-cyan-500 focus:outline-none" />
+                               class="calc-input w-full" />
                     </div>
                 </div>
 
-                <button type="button" @click="calcTransferCosts()" class="corex-btn-primary px-6 py-2 text-sm font-semibold rounded-lg">
+                <button type="button" @click="calcTransferCosts()" class="corex-btn-primary px-6 py-2 text-sm font-semibold rounded-md">
                     Calculate
                 </button>
             </div>
 
             {{-- Results --}}
-            <div x-show="costs.result" x-transition class="mt-4 pt-4 border-t border-slate-200 space-y-1">
+            <div x-show="costs.result" x-transition class="mt-4 pt-4 space-y-1" style="border-top: 1px solid var(--border);">
                 {{-- Transfer section --}}
-                <div class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Transfer Costs</div>
+                <div class="text-xs font-bold uppercase tracking-wide mb-1" style="color: var(--text-muted);">Transfer Costs</div>
                 <div class="flex justify-between"><span class="ds-label">Conveyancing fee</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.transfer?.conveyancing_fee)"></span></div>
                 <div class="flex justify-between"><span class="ds-label">Posts & petties</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.transfer?.posts_petties)"></span></div>
                 <div class="flex justify-between"><span class="ds-label">VAT (15%)</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.transfer?.vat)"></span></div>
                 <div class="flex justify-between"><span class="ds-label">Deeds office</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.transfer?.deeds_office)"></span></div>
                 <div class="flex justify-between"><span class="ds-label">Transfer duty</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.transfer?.transfer_duty)"></span></div>
-                <div class="flex justify-between border-t border-slate-100 pt-1 mt-1"><span class="ds-label font-semibold">Total Transfer</span><span class="ds-value font-semibold" x-text="'R ' + fmt(costs.result?.transfer?.total)"></span></div>
+                <div class="flex justify-between pt-1 mt-1" style="border-top: 1px solid var(--border);"><span class="ds-label font-semibold">Total Transfer</span><span class="ds-value font-semibold" x-text="'R ' + fmt(costs.result?.transfer?.total)"></span></div>
 
                 {{-- Bond section --}}
                 <template x-if="costs.needsBond && costs.result?.bond">
                     <div class="mt-3 space-y-1">
-                        <div class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Bond Registration</div>
+                        <div class="text-xs font-bold uppercase tracking-wide mb-1" style="color: var(--text-muted);">Bond Registration</div>
                         <div class="flex justify-between"><span class="ds-label">Conveyancing fee</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.bond?.conveyancing_fee)"></span></div>
                         <div class="flex justify-between"><span class="ds-label">Posts & petties</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.bond?.posts_petties)"></span></div>
                         <div class="flex justify-between"><span class="ds-label">VAT (15%)</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.bond?.vat)"></span></div>
                         <div class="flex justify-between"><span class="ds-label">Deeds office</span><span class="ds-value" x-text="'R ' + fmt(costs.result?.bond?.deeds_office)"></span></div>
-                        <div class="flex justify-between border-t border-slate-100 pt-1 mt-1"><span class="ds-label font-semibold">Total Bond</span><span class="ds-value font-semibold" x-text="'R ' + fmt(costs.result?.bond?.total)"></span></div>
+                        <div class="flex justify-between pt-1 mt-1" style="border-top: 1px solid var(--border);"><span class="ds-label font-semibold">Total Bond</span><span class="ds-value font-semibold" x-text="'R ' + fmt(costs.result?.bond?.total)"></span></div>
                     </div>
                 </template>
 
                 {{-- Grand total --}}
-                <div class="flex justify-between border-t border-slate-200 pt-2 mt-3">
+                <div class="flex justify-between pt-2 mt-3" style="border-top: 1px solid var(--border);">
                     <span class="ds-label font-bold">GRAND TOTAL</span>
                     <span class="ds-value-lg" x-text="'R ' + fmt(costs.result?.grand_total)"></span>
                 </div>
@@ -217,10 +217,10 @@
                 {{-- Additional costs toggle --}}
                 <div class="mt-3" x-data="{ showAdditional: false }">
                     <button type="button" @click="showAdditional = !showAdditional"
-                            class="text-xs font-semibold text-cyan-700 hover:text-cyan-900 transition-colors">
+                            class="text-xs font-semibold transition-all duration-300" style="color: var(--brand-icon, #0ea5e9);">
                         <span x-text="showAdditional ? '▼ Hide' : '▶ Show'"></span> additional costs
                     </button>
-                    <div x-show="showAdditional" x-transition class="mt-2 bg-gray-50 rounded-lg p-3 space-y-1 text-xs text-gray-600">
+                    <div x-show="showAdditional" x-transition class="mt-2 rounded-md p-3 space-y-1 text-xs" style="background: var(--surface-2); color: var(--text-secondary);">
                         <div class="flex justify-between"><span>Bank admin & initiation fees</span><span>~R 6,037.50</span></div>
                         <div class="flex justify-between"><span>FICA fees (per person)</span><span>R 1,100 + VAT</span></div>
                         <div class="flex justify-between"><span>Clearance certificate</span><span>R 950.00</span></div>
@@ -230,7 +230,7 @@
                     </div>
                 </div>
 
-                <div class="text-xs text-amber-700 bg-amber-50 rounded p-2 mt-3">These are ESTIMATES based on guideline tariffs. Actual costs vary by attorney. Always request a formal quotation from your conveyancer. Fees based on Van Dyk & Swart Inc. — Guideline Tariff 2025.</div>
+                <div class="text-xs rounded-md p-2 mt-3" style="background: color-mix(in srgb, #f59e0b 10%, transparent); color: #b45309; border: 1px solid color-mix(in srgb, #f59e0b 25%, transparent);">These are ESTIMATES based on guideline tariffs. Actual costs vary by attorney. Always request a formal quotation from your conveyancer. Fees based on Van Dyk & Swart Inc. — Guideline Tariff 2025.</div>
             </div>
         </div>
 
@@ -238,28 +238,28 @@
 
     {{-- CARD 5: Bond Overpayment Savings (full width) --}}
     <div class="ds-status-card mt-6">
-        <h3 class="ds-section-header" style="margin-bottom:0.75rem;">🚀 Bond Overpayment Savings</h3>
+        <h3 class="ds-section-header" style="margin-bottom:0.75rem;">Bond Overpayment Savings</h3>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
                 <label class="ds-label block mb-1">Loan Amount</label>
                 <div class="flex items-center gap-2">
-                    <span class="text-sm font-semibold text-gray-500">R</span>
+                    <span class="text-sm font-semibold" style="color: var(--text-muted);">R</span>
                     <input type="text" x-model="overpay.loanAmount" @input="formatInput($event)" placeholder="e.g. 1,500,000"
-                           class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-cyan-500 focus:outline-none" />
+                           class="calc-input w-full" />
                 </div>
             </div>
 
             <div>
                 <label class="ds-label block mb-1">Interest Rate (%)</label>
                 <input type="text" x-model="overpay.interestRate" placeholder="e.g. 11.75"
-                       class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-cyan-500 focus:outline-none" />
-                <div class="text-xs text-gray-500 mt-1">Current prime: {{ $primeRate }}%</div>
+                       class="calc-input w-full" />
+                <div class="text-xs mt-1" style="color: var(--text-muted);">Current prime: {{ $primeRate }}%</div>
             </div>
 
             <div>
                 <label class="ds-label block mb-1">Loan Term</label>
-                <select x-model="overpay.termYears" class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-cyan-500 focus:outline-none">
+                <select x-model="overpay.termYears" class="calc-input w-full">
                     <template x-for="y in [10, 15, 20, 25, 30]" :key="y">
                         <option :value="y" x-text="y + ' years'" :selected="y === 20"></option>
                     </template>
@@ -269,14 +269,14 @@
             <div>
                 <label class="ds-label block mb-1">Extra Monthly Payment</label>
                 <div class="flex items-center gap-2">
-                    <span class="text-sm font-semibold text-gray-500">R</span>
+                    <span class="text-sm font-semibold" style="color: var(--text-muted);">R</span>
                     <input type="text" x-model="overpay.extraPayment" @input="formatInput($event)" placeholder="e.g. 500"
-                           class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:border-cyan-500 focus:outline-none" />
+                           class="calc-input w-full" />
                 </div>
                 <div class="flex flex-wrap gap-1.5 mt-2">
                     <template x-for="amt in [250, 500, 1000, 2000, 5000]" :key="amt">
                         <button type="button" @click="overpay.extraPayment = amt.toLocaleString('en-ZA')"
-                                class="px-2.5 py-1 rounded text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                                class="calc-rate px-2.5 py-1 rounded-md text-xs font-semibold transition-all duration-300"
                                 x-text="'R ' + amt.toLocaleString('en-ZA')">
                         </button>
                     </template>
@@ -285,7 +285,7 @@
         </div>
 
         <div class="mt-4">
-            <button type="button" @click="calcOverpayment()" class="corex-btn-primary px-6 py-2 text-sm font-semibold rounded-lg">
+            <button type="button" @click="calcOverpayment()" class="corex-btn-primary px-6 py-2 text-sm font-semibold rounded-md">
                 Calculate Savings
             </button>
         </div>
@@ -295,8 +295,8 @@
             {{-- Two-column comparison --}}
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {{-- LEFT: Normal Bond --}}
-                <div class="bg-gray-50 rounded-xl p-4 space-y-2">
-                    <h4 class="text-sm font-bold text-gray-700 mb-3">Normal Bond</h4>
+                <div class="rounded-md p-4 space-y-2" style="background: var(--surface-2); border: 1px solid var(--border);">
+                    <h4 class="text-sm font-bold mb-3" style="color: var(--text-secondary);">Normal Bond</h4>
                     <div class="flex justify-between"><span class="ds-label">Monthly payment</span><span class="ds-value" x-text="'R ' + fmt(overpay.result?.normal?.monthly_payment)"></span></div>
                     <div class="flex justify-between"><span class="ds-label">Term</span><span class="ds-value" x-text="overpay.result?.normal?.term_years + ' years (' + overpay.result?.normal?.term_months + ' months)'"></span></div>
                     <div class="flex justify-between"><span class="ds-label">Total repaid</span><span class="ds-value" x-text="'R ' + fmt(overpay.result?.normal?.total_repaid)"></span></div>
@@ -304,8 +304,8 @@
                 </div>
 
                 {{-- RIGHT: Accelerated --}}
-                <div class="bg-white rounded-xl p-4 space-y-2 border-l-4" style="border-left-color: #06b6d4;">
-                    <h4 class="text-sm font-bold text-cyan-700 mb-3" x-text="'With Extra R ' + fmt(parseAmount(overpay.extraPayment)) + '/month'"></h4>
+                <div class="rounded-md p-4 space-y-2" style="background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--brand-icon, #0ea5e9);">
+                    <h4 class="text-sm font-bold mb-3" style="color: var(--brand-icon, #0ea5e9);" x-text="'With Extra R ' + fmt(parseAmount(overpay.extraPayment)) + '/month'"></h4>
                     <div class="flex justify-between"><span class="ds-label">Monthly payment</span><span class="ds-value" x-text="'R ' + fmt(overpay.result?.accelerated?.monthly_payment)"></span></div>
                     <div class="flex justify-between"><span class="ds-label">Paid off in</span><span class="ds-value" x-text="overpay.result?.accelerated?.term_years + ' years ' + overpay.result?.accelerated?.term_remaining_months + ' months'"></span></div>
                     <div class="flex justify-between"><span class="ds-label">Total repaid</span><span class="ds-value" x-text="'R ' + fmt(overpay.result?.accelerated?.total_repaid)"></span></div>
@@ -314,19 +314,19 @@
             </div>
 
             {{-- Savings Summary --}}
-            <div class="mt-4 rounded-xl p-5" style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 1px solid #6ee7b7;">
+            <div class="mt-4 rounded-md p-5" style="background: color-mix(in srgb, #059669 10%, var(--surface)); border: 1px solid color-mix(in srgb, #059669 25%, transparent);">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
                     <div>
-                        <div class="text-2xl font-bold text-green-800" x-text="'⏱️ ' + overpay.result?.savings?.years_saved + ' years ' + overpay.result?.savings?.months_saved_remainder + ' months'"></div>
-                        <div class="text-sm text-green-700 mt-1">Time saved</div>
+                        <div class="text-2xl font-bold" style="color: #059669;" x-text="overpay.result?.savings?.years_saved + ' years ' + overpay.result?.savings?.months_saved_remainder + ' months'"></div>
+                        <div class="text-sm mt-1" style="color: var(--text-secondary);">Time saved</div>
                     </div>
                     <div>
-                        <div class="text-2xl font-bold text-green-800" x-text="'💰 R ' + fmt(overpay.result?.savings?.interest_saved)"></div>
-                        <div class="text-sm text-green-700 mt-1">Interest saved</div>
+                        <div class="text-2xl font-bold" style="color: #059669;" x-text="'R ' + fmt(overpay.result?.savings?.interest_saved)"></div>
+                        <div class="text-sm mt-1" style="color: var(--text-secondary);">Interest saved</div>
                     </div>
                     <div>
-                        <div class="text-2xl font-bold text-green-800" x-text="'📊 ' + overpay.result?.savings?.interest_saved_pct + '%'"></div>
-                        <div class="text-sm text-green-700 mt-1">Less interest paid!</div>
+                        <div class="text-2xl font-bold" style="color: #059669;" x-text="overpay.result?.savings?.interest_saved_pct + '%'"></div>
+                        <div class="text-sm mt-1" style="color: var(--text-secondary);">Less interest paid</div>
                     </div>
                 </div>
             </div>
@@ -334,7 +334,7 @@
             {{-- Comparison Table Toggle --}}
             <div class="mt-4">
                 <button type="button" @click="overpay.showTable = !overpay.showTable"
-                        class="text-sm font-semibold text-cyan-700 hover:text-cyan-900 transition-colors">
+                        class="text-sm font-semibold transition-all duration-300" style="color: var(--brand-icon, #0ea5e9);">
                     <span x-text="overpay.showTable ? '▼ Hide' : '▶ Show'"></span> year-by-year comparison table
                 </button>
 
@@ -350,11 +350,11 @@
                         </thead>
                         <tbody>
                             <template x-for="(nb, i) in overpay.result?.yearly_comparison?.normal || []" :key="i">
-                                <tr class="border-t border-slate-100">
+                                <tr>
                                     <td class="px-3 py-1.5 font-medium" x-text="i + 1"></td>
                                     <td class="px-3 py-1.5 text-right" x-text="'R ' + fmt(nb)"></td>
                                     <td class="px-3 py-1.5 text-right" x-text="'R ' + fmt(overpay.result?.yearly_comparison?.accelerated[i])"></td>
-                                    <td class="px-3 py-1.5 text-right font-semibold text-green-700" x-text="'R ' + fmt(nb - (overpay.result?.yearly_comparison?.accelerated[i] || 0))"></td>
+                                    <td class="px-3 py-1.5 text-right font-semibold" style="color: #059669;" x-text="'R ' + fmt(nb - (overpay.result?.yearly_comparison?.accelerated[i] || 0))"></td>
                                 </tr>
                             </template>
                         </tbody>
@@ -365,6 +365,40 @@
     </div>
 
 </div>
+
+<style>
+/* Calculator inputs — theme-aware */
+.calc-input {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    transition: all 300ms;
+    outline: none;
+}
+.calc-input:focus {
+    border-color: var(--brand-button, #0ea5e9);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-button, #0ea5e9) 20%, transparent);
+}
+/* Rate toggle buttons — theme-aware */
+.calc-rate {
+    background: var(--surface-2);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+.calc-rate:hover {
+    background: var(--surface);
+    color: var(--text-primary);
+    border-color: var(--brand-icon, #0ea5e9);
+}
+.calc-rate-active {
+    background: var(--brand-default, #0b2a4a);
+    color: #fff;
+    border: 1px solid var(--brand-default, #0b2a4a);
+}
+</style>
 
 <script>
 function calculatorsApp() {

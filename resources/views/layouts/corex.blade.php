@@ -15,9 +15,13 @@
         <!-- Theme init: apply dark class before paint to prevent flash -->
         <script>
             (function(){
-                if(localStorage.getItem('corex-theme')==='dark'){
+                var dbTheme = '{{ auth()->check() ? (auth()->user()->theme ?? 'dark') : 'dark' }}';
+                var stored = localStorage.getItem('corex-theme');
+                var theme = stored || dbTheme;
+                if(theme === 'dark'){
                     document.documentElement.classList.add('dark');
                 }
+                localStorage.setItem('corex-theme', theme);
             })();
         </script>
 
@@ -77,8 +81,6 @@
                     </button>
                     <span class="ml-3 text-sm font-bold" style="color:var(--text-primary)">CoreX <span style="color:var(--accent)">Os</span></span>
                 </div>
-
-                @include('layouts.corex-header')
 
                 {{-- Content --}}
                 <main id="appScroll" class="flex-1 overflow-y-auto p-4 lg:p-6" style="background:var(--bg)">

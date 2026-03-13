@@ -46,6 +46,10 @@ class DailyActivitySummaryController extends Controller
         [$range, $start, $end, $month] = $this->rangeFromRequest($request);
 
         $branchId = (int)($u->effectiveBranchId() ?? ($u->branch_id ?? 0));
+        // Owner without a branch: fall back to first available branch
+        if ($branchId === 0 && $u->isOwnerRole()) {
+            $branchId = (int) DB::table('branches')->orderBy('id')->value('id');
+        }
         abort_unless($branchId > 0, 403);
 
         // Definitions visible to this branch: global + branch definitions for this branch, enabled
@@ -171,6 +175,9 @@ class DailyActivitySummaryController extends Controller
         [$range, $start, $end, $month] = $this->rangeFromRequest($request);
 
         $branchId = (int)($u->effectiveBranchId() ?? ($u->branch_id ?? 0));
+        if ($branchId === 0 && $u->isOwnerRole()) {
+            $branchId = (int) DB::table('branches')->orderBy('id')->value('id');
+        }
         abort_unless($branchId > 0, 403);
 
         $def = DB::table('activity_definitions')

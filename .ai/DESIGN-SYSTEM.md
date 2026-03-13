@@ -26,10 +26,6 @@ authenticated user's agency record (`agencies` table: `sidebar_color`, `icon_col
 - **Border radius:** Strictly `6px` (`rounded-md`) for all containers, cards, buttons, and inputs.
 - No `rounded-2xl`, `rounded-xl`, `rounded-lg` — everything is `rounded-md`.
 
-### Typography
-- **Primary:** Inter (Sans-serif). `font-medium` for UI, `font-bold` with `tracking-tight` for headings.
-- **Technical:** JetBrains Mono (Monospace). Use for all numbers, prices, IDs, and metadata.
-
 ### Primary Accent
 - **Brand Blue:** `#0ea5e9` — active states, primary buttons, key highlights.
 - Linked to `--brand-button` and `--brand-icon` via agency colour management.
@@ -172,20 +168,19 @@ Use this prompt when going through each page to apply the design system:
 Restyle this page to match the CoreX Design System (.ai/DESIGN-SYSTEM.md):
 
 1. GEOMETRY: All border-radius must be rounded-md (6px). Replace any rounded-2xl, rounded-xl, rounded-lg with rounded-md.
-2. TYPOGRAPHY: Headings use Inter font-bold tracking-tight. Numbers/prices/IDs use JetBrains Mono (font-mono).
-3. COLOURS — use agency brand CSS variables:
+2. COLOURS — use agency brand CSS variables:
    - Page header banner background: var(--brand-default, #0b2a4a)
    - Primary buttons/CTAs: var(--brand-button, #0ea5e9) with shadow-lg
    - Icons/accents/links: var(--brand-icon, #0ea5e9)
    - Default avatars/profile circles: var(--brand-default, #0b2a4a)
    - NO hardcoded brand colours — always use the CSS variables with fallbacks.
-4. GLASSMORPHISM: Cards should use theme-aware backgrounds (var(--surface) bg, var(--border) border).
-5. TRANSITIONS: All hover states and interactive elements: transition-all duration-300.
-6. DARK MODE: Ensure all colours flow through CSS variables (var(--text-primary), var(--surface), etc). No hardcoded light-only colours.
-7. BUTTONS: Primary = solid --brand-button with shadow-lg shadow-brand-500/20. Secondary = glass bg with subtle border.
-8. INPUTS: theme-aware background, focus ring in --brand-button colour.
-9. SCROLLBARS: 6px thin, thumb matches secondary text colour.
-10. ENTRANCE: Add motion for view changes where appropriate (scale 0.95->1.0, opacity fade).
+3. GLASSMORPHISM: Cards should use theme-aware backgrounds (var(--surface) bg, var(--border) border).
+4. TRANSITIONS: All hover states and interactive elements: transition-all duration-300.
+5. DARK MODE: Ensure all colours flow through CSS variables (var(--text-primary), var(--surface), etc). No hardcoded light-only colours.
+6. BUTTONS: Primary = solid --brand-button with shadow-lg shadow-brand-500/20. Secondary = glass bg with subtle border.
+7. INPUTS: theme-aware background, focus ring in --brand-button colour.
+8. SCROLLBARS: 6px thin, thumb matches secondary text colour.
+9. ENTRANCE: Add motion for view changes where appropriate (scale 0.95->1.0, opacity fade).
 
 Read the full page first, then make targeted edits. Keep the same structure/layout, just update the styling to match the system.
 ```
@@ -210,11 +205,10 @@ Load the page in the browser and verify:
 | 2 | **Layout intact** | Sidebar, header, content area all present and correctly positioned. |
 | 3 | **Data displays** | Real data from DB shows (not 0/blank/missing). Tables populated, counts correct. |
 | 4 | **Geometry** | All corners are `rounded-md` (6px). No rounded-2xl/xl/lg/full remnants. |
-| 5 | **Typography** | Headings use Inter bold tracking-tight. Numbers/prices/IDs use font-mono. |
-| 6 | **Colours** | Page header uses `--brand-default`. Buttons use `--brand-button`. Icons use `--brand-icon`. No hardcoded brand colours. |
-| 7 | **Theme** | All text/bg/border uses CSS variables. No hardcoded `slate-*`/`gray-*` Tailwind colours (except status badges). |
-| 8 | **Interactions** | Buttons clickable. Links navigate correctly. Forms submit. Dropdowns open/close. |
-| 9 | **Transitions** | Hover states animate smoothly (300ms). No jarring snaps. |
-| 10 | **Spacing** | Consistent gaps between sections. No cramped or overly loose areas. |
-| 11 | **Responsive** | Page doesn't break at common widths (resize browser). No horizontal overflow. |
-| 12 | **Dark mode** | Toggle theme — all elements remain readable. No white-on-white or black-on-black. |
+| 5 | **Colours** | Page header uses `--brand-default`. Buttons use `--brand-button`. Icons use `--brand-icon`. No hardcoded brand colours. |
+| 6 | **Theme** | All text/bg/border uses CSS variables. No hardcoded `slate-*`/`gray-*` Tailwind colours (except status badges). |
+| 7 | **Interactions** | Buttons clickable. Links navigate correctly. Forms submit. Dropdowns open/close. |
+| 8 | **Transitions** | Hover states animate smoothly (300ms). No jarring snaps. |
+| 9 | **Spacing** | Consistent gaps between sections. No cramped or overly loose areas. |
+| 10 | **Responsive** | Page doesn't break at common widths (resize browser). No horizontal overflow. |
+| 11 | **Dark mode** | Toggle theme — all elements remain readable. No white-on-white or black-on-black. |

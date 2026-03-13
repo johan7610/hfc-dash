@@ -5,7 +5,7 @@
 <div class="max-w-3xl mx-auto">
 
     {{-- Navy header bar --}}
-    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 mb-6">
+    <div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4 mb-6">
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
             <div>
                 <h2 class="text-xl font-bold text-white leading-tight">New Presentation</h2>
@@ -31,7 +31,7 @@
                     Presentation Title <span class="text-red-500">*</span>
                 </label>
                 <input type="text" name="title" value="{{ old('title') }}" required
-                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none"
+                       class="pres-input w-full px-3 py-2 text-sm"
                        placeholder="e.g. 21 Dee Road — Seller Presentation">
                 @error('title')
                     <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
@@ -44,7 +44,7 @@
                     Property Address <span class="text-red-500">*</span>
                 </label>
                 <input type="text" name="property_address" value="{{ old('property_address') }}" required
-                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none"
+                       class="pres-input w-full px-3 py-2 text-sm"
                        placeholder="e.g. 21 Dee Road">
                 @error('property_address')
                     <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
@@ -58,7 +58,7 @@
                         Suburb <span class="text-red-500">*</span>
                     </label>
                     <input type="text" name="suburb" value="{{ old('suburb') }}" required
-                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none"
+                           class="pres-input w-full px-3 py-2 text-sm"
                            placeholder="e.g. Uvongo">
                     @error('suburb')
                         <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
@@ -68,7 +68,7 @@
                     <label class="ds-label block mb-1">
                         Property Type <span class="text-red-500">*</span>
                     </label>
-                    <select name="property_type" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                    <select name="property_type" required class="pres-select w-full px-3 py-2 text-sm">
                         <option value="">— Select type —</option>
                         @foreach([
                             'house'       => 'House',
@@ -98,7 +98,7 @@
                     </label>
                     <input type="number" name="bedrooms" value="{{ old('bedrooms') }}" required
                            min="0" max="20"
-                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none"
+                           class="pres-input w-full px-3 py-2 text-sm"
                            placeholder="e.g. 3">
                     @error('bedrooms')
                         <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
@@ -107,11 +107,11 @@
                 <div>
                     <label class="ds-label block mb-1">
                         Bathrooms
-                        <span class="text-gray-400 font-normal">(optional)</span>
+                        <span class="font-normal" style="color: var(--text-muted);">(optional)</span>
                     </label>
                     <input type="number" name="bathrooms" value="{{ old('bathrooms') }}"
                            min="0" max="20"
-                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none"
+                           class="pres-input w-full px-3 py-2 text-sm"
                            placeholder="e.g. 2">
                     @error('bathrooms')
                         <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
@@ -125,13 +125,13 @@
                     Asking Price (ZAR) <span class="text-red-500">*</span>
                 </label>
                 <div class="relative">
-                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 text-sm pointer-events-none">R</span>
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-sm pointer-events-none" style="color: var(--text-muted);">R</span>
                     <input type="number" name="asking_price_inc" value="{{ old('asking_price_inc') }}" required
                            min="0" step="1"
-                           class="w-full border border-gray-300 rounded-lg pl-8 pr-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none"
+                           class="pres-input w-full pl-8 pr-3 py-2 text-sm"
                            placeholder="e.g. 2500000">
                 </div>
-                <p class="mt-0.5 text-xs text-gray-400">Whole rands, no decimals. e.g. 2500000 for R 2,500,000</p>
+                <p class="mt-0.5 text-xs" style="color: var(--text-muted);">Whole rands, no decimals. e.g. 2500000 for R 2,500,000</p>
                 @error('asking_price_inc')
                     <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
                 @enderror
@@ -142,11 +142,11 @@
                 <div>
                     <label class="ds-label block mb-1">
                         Erf Size m&sup2;
-                        <span class="text-gray-400 font-normal">(optional)</span>
+                        <span class="font-normal" style="color: var(--text-muted);">(optional)</span>
                     </label>
                     <input type="number" name="erf_size_m2" value="{{ old('erf_size_m2') }}"
                            min="0"
-                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none"
+                           class="pres-input w-full px-3 py-2 text-sm"
                            placeholder="e.g. 1523">
                     @error('erf_size_m2')
                         <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
@@ -155,11 +155,11 @@
                 <div>
                     <label class="ds-label block mb-1">
                         Floor Area m&sup2;
-                        <span class="text-gray-400 font-normal">(optional)</span>
+                        <span class="font-normal" style="color: var(--text-muted);">(optional)</span>
                     </label>
                     <input type="number" name="floor_area_m2" value="{{ old('floor_area_m2') }}"
                            min="0"
-                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none"
+                           class="pres-input w-full px-3 py-2 text-sm"
                            placeholder="e.g. 180">
                     @error('floor_area_m2')
                         <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
@@ -168,11 +168,11 @@
                 <div>
                     <label class="ds-label block mb-1">
                         Garages / Parking
-                        <span class="text-gray-400 font-normal">(optional)</span>
+                        <span class="font-normal" style="color: var(--text-muted);">(optional)</span>
                     </label>
                     <input type="number" name="garages_parking" value="{{ old('garages_parking') }}"
                            min="0" max="10"
-                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none"
+                           class="pres-input w-full px-3 py-2 text-sm"
                            placeholder="e.g. 2">
                     @error('garages_parking')
                         <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
@@ -183,10 +183,10 @@
             {{-- Seller name --}}
             <div>
                 <label class="ds-label block mb-1">Seller Name
-                    <span class="text-gray-400 font-normal">(optional)</span>
+                    <span class="font-normal" style="color: var(--text-muted);">(optional)</span>
                 </label>
                 <input type="text" name="seller_name" value="{{ old('seller_name') }}"
-                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none"
+                       class="pres-input w-full px-3 py-2 text-sm"
                        placeholder="e.g. John Smith">
                 @error('seller_name')
                     <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
@@ -202,7 +202,7 @@
                 @if($branches->isEmpty())
                     <p class="text-xs text-red-600">No branches configured. Contact an admin.</p>
                 @else
-                    <select name="branch_id" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-[#00b4d8] focus:ring-1 focus:ring-[#00b4d8] outline-none">
+                    <select name="branch_id" required class="pres-select w-full px-3 py-2 text-sm">
                         <option value="">— Select branch —</option>
                         @foreach($branches as $branch)
                             <option value="{{ $branch->id }}" {{ old('branch_id') == $branch->id ? 'selected' : '' }}>
@@ -224,7 +224,7 @@
                 Create Presentation &rarr;
             </button>
             <a href="{{ route('presentations.index') }}"
-               class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
+               class="px-4 py-2 text-sm transition-all duration-300" style="color: var(--text-secondary);">
                 Cancel
             </a>
         </div>
