@@ -38,6 +38,10 @@ class User extends Authenticatable
         'agent_photo_path',
         'ffc_certificate_path',
 
+        // Flags
+        'can_capture_rentals',
+        'counts_for_branch_split',
+
         // Contact fields (email signatures, profile, presentations)
         'phone',
         'cell',
@@ -92,6 +96,12 @@ class User extends Authenticatable
 
     public function effectiveAgencyId(): ?int
     {
+        // Owner-level agency switcher override
+        $override = session('active_agency_id');
+        if ($override !== null && $override !== '') {
+            return (int) $override;
+        }
+
         $branchId = $this->effectiveBranchId();
         if (!$branchId) {
             return null;

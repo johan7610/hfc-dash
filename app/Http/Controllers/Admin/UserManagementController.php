@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\Branch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
@@ -17,15 +18,231 @@ class UserManagementController extends Controller
     {
         abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
 
-        $users = User::orderBy('name')->get();
-        $branches = Branch::orderBy('name')->get(['id','name']);
+        $agencyId = auth()->user()->effectiveAgencyId();
+
+        $users = User::when($agencyId, function ($q) use ($agencyId) {
+                $q->whereHas('branch', fn ($b) => $b->where('agency_id', $agencyId));
+            })
+            ->orderBy('name')
+            ->get();
+
+        $branches = Branch::when($agencyId, fn ($q) => $q->where('agency_id', $agencyId))
+            ->orderBy('name')
+            ->get(['id','name']);
         $designations = DB::table('designations')
             ->where('is_enabled', 1)
             ->orderBy('sort_order')
             ->orderBy('name')
             ->get(['id','name']);
 
-        return view('admin.users.index', compact('users','branches','designations'));}
+        return view('admin.users.index', compact('users','branches','designations'));
+    }
+
+    public function create()
+    {
+        abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
+
+        $agencyId = auth()->user()->effectiveAgencyId();
+
+        $branches = Branch::when($agencyId, fn ($q) => $q->where('agency_id', $agencyId))
+            ->orderBy('name')->get(['id','name']);
+        $designations = DB::table('designations')
+            ->where('is_enabled', 1)->orderBy('sort_order')->orderBy('name')->get(['id','name']);
+        $roles = Role::orderBy('sort_order')->get();
+
+        return view('admin.users.create-edit', [
+            'user'         => null,
+            'branches'     => $branches,
+            'designations' => $designations,
+            'roles'        => $roles,
+        ]);
+    }
+
+    public function store(Request $request)
+    {
+        abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
+
+        $data = $request->validate([
+            'name'          => ['required', 'string', 'max:255'],
+            'surname'       => ['required', 'string', 'max:255'],
+            'email'         => ['required', 'email', 'max:255', 'unique:users,email'],
+            'phone'         => ['nullable', 'string', 'max:50'],
+            'cell'          => ['nullable', 'string', 'max:50'],
+            'fax'           => ['nullable', 'string', 'max:50'],
+            'ffc_number'    => ['nullable', 'string', 'max:100'],
+            'website'       => ['nullable', 'string', 'max:255'],
+            'role'          => ['required', Rule::in(Role::roleNames())],
+            'branch_id'     => ['nullable', 'integer', 'exists:branches,id'],
+            'designation'   => ['nullable', 'string', 'max:100'],
+            'agent_cut_percent'           => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'paye_method'                 => ['nullable', 'in:percentage,fixed'],
+            'paye_value'                  => ['nullable', 'numeric', 'min:0'],
+            'sliding_enabled'             => ['nullable', 'in:0,1'],
+            'sliding_tier1_cut_percent'   => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'sliding_tier2_cut_percent'   => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'sliding_tier3_cut_percent'   => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'can_capture_rentals'         => ['nullable', 'in:0,1'],
+            'counts_for_branch_split'     => ['nullable', 'in:0,1'],
+            'agent_photo'     => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'ffc_certificate' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'password'        => ['nullable', 'string', 'min:8'],
+        ]);
+
+        $fullName = trim($data['name'] . ' ' . $data['surname']);
+
+        $user = User::create([
+            'name'                        => $fullName,
+            'email'                       => $data['email'],
+            'password'                    => Hash::make($data['password'] ?? 'Welcome123!'),
+            'role'                        => $data['role'],
+            'branch_id'                   => $data['branch_id'] ?: null,
+            'designation'                 => $data['designation'] ?: null,
+            'is_active'                   => true,
+            'is_admin'                    => in_array($data['role'], ['admin', 'super_admin']) ? 1 : 0,
+            'email_verified_at'           => now(),
+            'agent_cut_percent'           => $data['agent_cut_percent'] ?? 50,
+            'paye_method'                 => $data['paye_method'] ?? 'percentage',
+            'paye_value'                  => $data['paye_value'] ?? 0,
+            'sliding_enabled'             => isset($data['sliding_enabled']) && $data['sliding_enabled'] == '1' ? 1 : 0,
+            'sliding_tier1_cut_percent'   => $data['sliding_tier1_cut_percent'] ?? null,
+            'sliding_tier2_cut_percent'   => $data['sliding_tier2_cut_percent'] ?? null,
+            'sliding_tier3_cut_percent'   => $data['sliding_tier3_cut_percent'] ?? null,
+            'can_capture_rentals'         => isset($data['can_capture_rentals']) && $data['can_capture_rentals'] == '1' ? 1 : 0,
+            'counts_for_branch_split'     => isset($data['counts_for_branch_split']) && $data['counts_for_branch_split'] == '1' ? 1 : 0,
+            'phone'                       => $data['phone'] ?? null,
+            'cell'                        => $data['cell'] ?? null,
+            'fax'                         => $data['fax'] ?? null,
+            'ffc_number'                  => $data['ffc_number'] ?? null,
+            'website'                     => $data['website'] ?? null,
+        ]);
+
+        // Sync branch_assignments
+        if ($user->branch_id) {
+            DB::table('branch_assignments')->updateOrInsert(
+                ['user_id' => $user->id],
+                ['branch_id' => (int) $user->branch_id, 'updated_at' => now(), 'created_at' => now()]
+            );
+        }
+
+        // File uploads
+        if ($request->hasFile('agent_photo')) {
+            $ext = $request->file('agent_photo')->getClientOriginalExtension();
+            $path = $request->file('agent_photo')->storeAs("agents/{$user->id}", "photo.{$ext}", 'public');
+            $user->update(['agent_photo_path' => $path]);
+        }
+        if ($request->hasFile('ffc_certificate')) {
+            $ext = $request->file('ffc_certificate')->getClientOriginalExtension();
+            $path = $request->file('ffc_certificate')->storeAs("agents/{$user->id}", "ffc.{$ext}", 'public');
+            $user->update(['ffc_certificate_path' => $path]);
+        }
+
+        return redirect()->route('admin.users')->with('status', "User \"{$fullName}\" created successfully.");
+    }
+
+    public function edit(User $user)
+    {
+        abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
+
+        $agencyId = auth()->user()->effectiveAgencyId();
+
+        $branches = Branch::when($agencyId, fn ($q) => $q->where('agency_id', $agencyId))
+            ->orderBy('name')->get(['id','name']);
+        $designations = DB::table('designations')
+            ->where('is_enabled', 1)->orderBy('sort_order')->orderBy('name')->get(['id','name']);
+        $roles = Role::orderBy('sort_order')->get();
+
+        return view('admin.users.create-edit', compact('user', 'branches', 'designations', 'roles'));
+    }
+
+    public function update(Request $request, User $user)
+    {
+        abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
+
+        $data = $request->validate([
+            'name'          => ['required', 'string', 'max:255'],
+            'surname'       => ['required', 'string', 'max:255'],
+            'email'         => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'phone'         => ['nullable', 'string', 'max:50'],
+            'cell'          => ['nullable', 'string', 'max:50'],
+            'fax'           => ['nullable', 'string', 'max:50'],
+            'ffc_number'    => ['nullable', 'string', 'max:100'],
+            'website'       => ['nullable', 'string', 'max:255'],
+            'role'          => ['required', Rule::in(Role::roleNames())],
+            'branch_id'     => ['nullable', 'integer', 'exists:branches,id'],
+            'designation'   => ['nullable', 'string', 'max:100'],
+            'agent_cut_percent'           => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'paye_method'                 => ['nullable', 'in:percentage,fixed'],
+            'paye_value'                  => ['nullable', 'numeric', 'min:0'],
+            'sliding_enabled'             => ['nullable', 'in:0,1'],
+            'sliding_tier1_cut_percent'   => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'sliding_tier2_cut_percent'   => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'sliding_tier3_cut_percent'   => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'can_capture_rentals'         => ['nullable', 'in:0,1'],
+            'counts_for_branch_split'     => ['nullable', 'in:0,1'],
+            'agent_photo'     => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'ffc_certificate' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'password'        => ['nullable', 'string', 'min:8'],
+        ]);
+
+        $fullName = trim($data['name'] . ' ' . $data['surname']);
+
+        $user->name       = $fullName;
+        $user->email      = $data['email'];
+        $user->role       = $data['role'];
+        $user->is_admin   = in_array($data['role'], ['admin', 'super_admin']) ? 1 : 0;
+        $user->branch_id  = $data['branch_id'] ?: null;
+        $user->designation = $data['designation'] ?: null;
+
+        $user->agent_cut_percent         = $data['agent_cut_percent'] ?? $user->agent_cut_percent;
+        $user->paye_method               = $data['paye_method'] ?? $user->paye_method;
+        $user->paye_value                = $data['paye_value'] ?? $user->paye_value;
+        $user->sliding_enabled           = isset($data['sliding_enabled']) && $data['sliding_enabled'] == '1' ? 1 : 0;
+        $user->sliding_tier1_cut_percent = $data['sliding_tier1_cut_percent'] ?? null;
+        $user->sliding_tier2_cut_percent = $data['sliding_tier2_cut_percent'] ?? null;
+        $user->sliding_tier3_cut_percent = $data['sliding_tier3_cut_percent'] ?? null;
+        $user->can_capture_rentals       = isset($data['can_capture_rentals']) && $data['can_capture_rentals'] == '1' ? 1 : 0;
+        $user->counts_for_branch_split   = isset($data['counts_for_branch_split']) && $data['counts_for_branch_split'] == '1' ? 1 : 0;
+
+        $user->phone      = $data['phone'] ?? null;
+        $user->cell        = $data['cell'] ?? null;
+        $user->fax         = $data['fax'] ?? null;
+        $user->ffc_number  = $data['ffc_number'] ?? null;
+        $user->website     = $data['website'] ?? null;
+
+        if (!empty($data['password'])) {
+            $user->password = Hash::make($data['password']);
+        }
+
+        $user->save();
+
+        // Sync branch_assignments
+        if ($user->branch_id) {
+            DB::table('branch_assignments')->updateOrInsert(
+                ['user_id' => $user->id],
+                ['branch_id' => (int) $user->branch_id, 'updated_at' => now(), 'created_at' => now()]
+            );
+        }
+
+        // File uploads
+        if ($request->hasFile('agent_photo')) {
+            if ($user->agent_photo_path) {
+                Storage::disk('public')->delete($user->agent_photo_path);
+            }
+            $ext = $request->file('agent_photo')->getClientOriginalExtension();
+            $path = $request->file('agent_photo')->storeAs("agents/{$user->id}", "photo.{$ext}", 'public');
+            $user->update(['agent_photo_path' => $path]);
+        }
+        if ($request->hasFile('ffc_certificate')) {
+            if ($user->ffc_certificate_path) {
+                Storage::disk('public')->delete($user->ffc_certificate_path);
+            }
+            $ext = $request->file('ffc_certificate')->getClientOriginalExtension();
+            $path = $request->file('ffc_certificate')->storeAs("agents/{$user->id}", "ffc.{$ext}", 'public');
+            $user->update(['ffc_certificate_path' => $path]);
+        }
+
+        return redirect()->route('admin.users.edit', $user)->with('status', "User \"{$fullName}\" updated.");
+    }
 
     public function updateDefaults(Request $request, User $user)
     {

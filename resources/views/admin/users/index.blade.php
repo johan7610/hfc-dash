@@ -12,12 +12,18 @@
      x-data="{ search: '', roleFilter: '', branchFilter: '', activeFilter: '' }">
 
     {{-- Page header --}}
-    <div style="background:#0b2a4a; border-radius:16px; padding:20px 24px;">
+    <div style="background:var(--brand-default, #0b2a4a); border-radius:16px; padding:20px 24px;">
         <div class="flex items-center justify-between gap-4">
             <div>
                 <h2 style="font-size:1.25rem; font-weight:800; color:#fff; margin:0 0 4px;">User Management</h2>
                 <div style="font-size:0.875rem; color:rgba(255,255,255,0.55);">{{ $totalUsers }} users</div>
             </div>
+            <a href="{{ route('admin.users.create') }}"
+               class="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors"
+               style="background:var(--brand-button, #0ea5e9);"
+               onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+                + Add User
+            </a>
         </div>
     </div>
 
@@ -116,6 +122,15 @@
                         @endif
                     </div>
                 </div>
+
+                {{-- Edit link --}}
+                <a href="{{ route('admin.users.edit', $u) }}"
+                   class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors flex-shrink-0"
+                   style="color:var(--brand-icon, #0ea5e9);"
+                   onclick="event.stopPropagation();"
+                   onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
+                    Edit
+                </a>
 
                 {{-- Chevron --}}
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"

@@ -13,10 +13,13 @@ return new class extends Migration
             $table->string('share_token', 64)->nullable()->unique()->after('id');
         });
 
-        // Backfill existing rows
-        \App\Models\ContactMatch::whereNull('share_token')->each(function ($m) {
-            $m->updateQuietly(['share_token' => Str::random(48)]);
-        });
+        // Backfill existing rows (use DB query to avoid model SoftDeletes scope)
+        $rows = \Illuminate\Support\Facades\DB::table('contact_matches')->whereNull('share_token')->pluck('id');
+        foreach ($rows as $id) {
+            \Illuminate\Support\Facades\DB::table('contact_matches')
+                ->where('id', $id)
+                ->update(['share_token' => Str::random(48)]);
+        }
     }
 
     public function down(): void

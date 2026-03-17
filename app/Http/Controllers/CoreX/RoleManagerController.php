@@ -36,13 +36,21 @@ class RoleManagerController extends Controller
             ->groupBy('permission_key')
             ->map(fn($group) => $group->pluck('scope', 'role'));
 
-        $roles = Role::withCount(['users' => function ($q) {
+        $agencyId = auth()->user()->effectiveAgencyId();
+
+        $roles = Role::withCount(['users' => function ($q) use ($agencyId) {
             $q->where('is_active', 1);
+            if ($agencyId) {
+                $q->whereHas('branch', fn ($b) => $b->where('agency_id', $agencyId));
+            }
         }])->orderBy('sort_order')->get();
 
-        $users    = User::where('is_active', 1)->orderBy('name')
+        $users = User::where('is_active', 1)
+            ->when($agencyId, fn ($q) => $q->whereHas('branch', fn ($b) => $b->where('agency_id', $agencyId)))
+            ->orderBy('name')
             ->get(['id', 'name', 'email', 'role', 'branch_id', 'agency_id', 'designation']);
-        $branches = Branch::orderBy('name')->get(['id', 'name']);
+        $branches = Branch::when($agencyId, fn ($q) => $q->where('agency_id', $agencyId))
+            ->orderBy('name')->get(['id', 'name']);
         $agencies = Agency::orderBy('name')->get(['id', 'name']);
 
         // ── Build grouped matrix for action-level UI ──

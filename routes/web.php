@@ -99,6 +99,14 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/admin/users', [App\Http\Controllers\Admin\UserManagementController::class, 'index'])
         ->middleware('permission:manage_users')->name('admin.users');
+    Route::get('/admin/users/create', [App\Http\Controllers\Admin\UserManagementController::class, 'create'])
+        ->middleware('permission:manage_users')->name('admin.users.create');
+    Route::post('/admin/users', [App\Http\Controllers\Admin\UserManagementController::class, 'store'])
+        ->middleware('permission:manage_users')->name('admin.users.store');
+    Route::get('/admin/users/{user}/edit', [App\Http\Controllers\Admin\UserManagementController::class, 'edit'])
+        ->middleware('permission:manage_users')->name('admin.users.edit');
+    Route::put('/admin/users/{user}', [App\Http\Controllers\Admin\UserManagementController::class, 'update'])
+        ->middleware('permission:manage_users')->name('admin.users.update');
 
     Route::post('/admin/users/{user}/toggle', [App\Http\Controllers\Admin\UserManagementController::class, 'toggle'])
         ->middleware('permission:manage_users')->name('admin.users.toggle');

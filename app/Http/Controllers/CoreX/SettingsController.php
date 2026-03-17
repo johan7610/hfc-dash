@@ -77,7 +77,8 @@ class SettingsController extends Controller
         }
 
         // Agency Settings tab: Company details from Agency model
-        $data['agency'] = Agency::where('slug', 'hfc-coastal')->first();
+        $agencyId = $user?->effectiveAgencyId();
+        $data['agency'] = $agencyId ? Agency::find($agencyId) : Agency::first();
 
         return view('corex.settings', $data);
     }
@@ -202,7 +203,8 @@ class SettingsController extends Controller
     {
         abort_unless(auth()->user()?->hasPermission('manage_performance_settings'), 403);
 
-        $agency = Agency::where('slug', 'hfc-coastal')->firstOrFail();
+        $agencyId = auth()->user()->effectiveAgencyId();
+        $agency = $agencyId ? Agency::findOrFail($agencyId) : Agency::firstOrFail();
 
         $data = $request->validate([
             'trading_name'     => ['nullable', 'string', 'max:255'],
