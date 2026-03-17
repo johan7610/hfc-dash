@@ -39,11 +39,14 @@
             $_agencyId = auth()->user()?->effectiveAgencyId();
             $_agency   = $_agencyId ? \App\Models\Agency::find($_agencyId) : \App\Models\Agency::first();
         @endphp
+        <!-- DEBUG: agencyId={{ $_agencyId ?? 'NULL' }} agencyName={{ $_agency->name ?? 'NONE' }} sidebar={{ $_agency->sidebar_color ?? 'NULL' }} icon={{ $_agency->icon_color ?? 'NULL' }} default={{ $_agency->default_color ?? 'NULL' }} button={{ $_agency->button_color ?? 'NULL' }} -->
         @if($_agency)
         <style id="agency-brand">
             :root,
             :root[data-theme="dark"],
-            :root[data-theme="light"] {
+            :root[data-theme="light"],
+            html,
+            html.dark {
                 --brand-sidebar: {{ $_agency->sidebar_color ?? '#0ea5e9' }} !important;
                 --brand-icon:    {{ $_agency->icon_color    ?? '#0ea5e9' }} !important;
                 --brand-default: {{ $_agency->default_color ?? '#0b2a4a' }} !important;
