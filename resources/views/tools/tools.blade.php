@@ -54,7 +54,7 @@
 /* Sections show/hide */
 #hf-tool-root .section { display: none !important; }
 #hf-tool-root .section.active { display: block !important; }
-#hf-tool-root #historySection.active { display: flex !important; }
+#hf-tool-root #historySection.active { display: flex !important; flex-direction: column; gap: 1rem; }
 
 /* Layout helpers */
 #hf-tool-root .inlineRow { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; }
@@ -353,21 +353,21 @@
   {{-- Tab navigation --}}
   <div class="tab-nav" id="toolTabs">
     <button class="tab-btn {{ $activeTab === 'calc' ? 'active' : '' }}"
-            onclick="activateSection('calcSection'); document.querySelectorAll('#hf-tool-root .tab-btn').forEach(function(b){b.classList.remove('active')}); this.classList.add('active')">
+            onclick="activateSection('calcSection')">
       Commission Calculator
     </button>
     <button class="tab-btn {{ $activeTab === 'cma' ? 'active' : '' }}"
-            onclick="activateSection('certSection'); document.querySelectorAll('#hf-tool-root .tab-btn').forEach(function(b){b.classList.remove('active')}); this.classList.add('active')">
+            onclick="activateSection('certSection')">
       CMA Certificate
     </button>
     <button class="tab-btn {{ $activeTab === 'history' ? 'active' : '' }}"
-            onclick="activateSection('historySection'); document.querySelectorAll('#hf-tool-root .tab-btn').forEach(function(b){b.classList.remove('active')}); this.classList.add('active')">
+            onclick="activateSection('historySection')">
       History &amp; Logs
     </button>
   </div>
 
   <!-- Calculator Section -->
-  <div id="calcSection" class="section active">
+  <div id="calcSection" class="section {{ $activeTab === 'calc' ? 'active' : '' }}">
     <div class="tool-card">
       <h3 class="tool-card-header">Commission Calculator</h3>
 
@@ -482,7 +482,7 @@
   </div>
 
   <!-- CMA Section -->
-  <div id="certSection" class="section">
+  <div id="certSection" class="section {{ $activeTab === 'cma' ? 'active' : '' }}">
     <div class="tool-card">
       <h3 class="tool-card-header">CMA Certificate Generator</h3>
 
@@ -549,7 +549,7 @@
   </div>
 
   <!-- History Section -->
-  <div id="historySection" class="section" style="display:flex; flex-direction:column; gap:1rem;">
+  <div id="historySection" class="section {{ $activeTab === 'history' ? 'active' : '' }}">
 
     {{-- History table card --}}
     <div class="tool-card">
@@ -966,7 +966,7 @@ function generateCalculatorPrintHtml() {    const user = (window.AUTH_USER || {}
           <div class="company">${escapeHtml(SETTINGS.companyName)}</div>
           <div class="muted">${escapeHtml(SETTINGS.address)}<br>${escapeHtml(SETTINGS.tel)}<br>FFC: ${escapeHtml(SETTINGS.ffc)}</div>
         </div>
-        <div>${SETTINGS.logoUrl ? \`<img src="\${SETTINGS.logoUrl}" style="max-height:70px;">\` : ""}</div>
+        <div>${SETTINGS.logoUrl ? `<img src="${SETTINGS.logoUrl}" style="max-height:70px;">` : ""}</div>
       </div>
 
       <div class="title">Commission Summary</div>
@@ -1013,7 +1013,7 @@ function generateCalculatorPrintHtml() {    const user = (window.AUTH_USER || {}
             <div class="muted">${escapeHtml(user.designation || "Property Practitioner")}</div>
           </div>
         </div>
-        ${isCandidatePP ? \`
+        ${isCandidatePP ? `
         <div class="sigbox">
           <div style="height:55px"></div>
           <div class="sigline"></div>
@@ -1022,7 +1022,7 @@ function generateCalculatorPrintHtml() {    const user = (window.AUTH_USER || {}
             <div class="muted">&nbsp;</div>
           </div>
         </div>
-        \` : \`\`}
+        ` : ``}
       </div>
 <div class="ppra-footer">Registered with the PPRA.</div>
     </body>
@@ -1159,7 +1159,7 @@ function generateCmaPrintHtml() {    const user = (window.AUTH_USER || {});
             <div class="company" style="font-weight:600;color:#333">${escapeHtml(SETTINGS.address)} • ${escapeHtml(SETTINGS.tel)} • FFC ${escapeHtml(SETTINGS.ffc)}</div>
           </div>
           <div>
-            ${SETTINGS.logoUrl ? \`<img class="logo" src="\${SETTINGS.logoUrl}">\` : \`\`}
+            ${SETTINGS.logoUrl ? `<img class="logo" src="${SETTINGS.logoUrl}">` : ``}
           </div>
         </div>
 
@@ -1184,12 +1184,12 @@ function generateCmaPrintHtml() {    const user = (window.AUTH_USER || {});
               <div style="height:75px"></div><div class="sig-line"></div>
               <span style="font-weight:bold; font-size:11pt;">${escapeHtml(user.name || "User")}</span><br><span style="font-size:9pt; color:#666">${escapeHtml(user.designation || "Property Practitioner")}</span>
             </div>
-            ${isCandidatePP ? \`
+            ${isCandidatePP ? `
             <div class="sig-box">
               <div style="height:75px"></div><div class="sig-line"></div>
               <span style="font-weight:bold; font-size:11pt;">Property Practitioner</span><br><span style="font-size:9pt; color:#666">&nbsp;</span>
             </div>
-            \` : \`\`}
+            ` : ``}
           </div>
         </div>
         <div class="ppra-footer">Registered with the PPRA.</div>
@@ -1201,40 +1201,48 @@ function generateCmaPrintHtml() {    const user = (window.AUTH_USER || {});
 
 // --- INITIALIZATION ---
 
-window.addEventListener("DOMContentLoaded", () => {
-  function activateSection(targetId) {
-    document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
-    const t = el(targetId);
-    if (t) t.classList.add("active");
-    calcAll();
+// Global — available immediately for inline onclick handlers
+function activateSection(targetId) {
+  // Remove .active from ALL section panels
+  var sections = document.querySelectorAll('#hf-tool-root .section');
+  for (var i = 0; i < sections.length; i++) {
+    sections[i].classList.remove('active');
   }
-
-  window.activateSection = activateSection;
-
-    // URL section routing (?section=history|cma|calc)
-    try {
-      const section = new URLSearchParams(window.location.search).get("section");
-      const map = {
-        history: "historySection",
-        cma: "certSection",
-        calc: "calcSection",
-      };
-
-      if (section && map[section]) {
-        activateSection(map[section]);
-      } else if (window.DEFAULT_TAB === "cma") {
-        activateSection("certSection");
-      } else {
-        activateSection("calcSection");
-      }
-    } catch (e) {
-      // fallback
-      if (window.DEFAULT_TAB === "cma") activateSection("certSection");
-      else activateSection("calcSection");
+  // Add .active to the target section panel
+  var target = document.getElementById(targetId);
+  if (target) {
+    target.classList.add('active');
+  }
+  // Sync tab button highlights
+  var m = {calcSection:0, certSection:1, historySection:2};
+  var tabs = document.querySelectorAll('#hf-tool-root .tab-btn');
+  for (var j = 0; j < tabs.length; j++) {
+    if (j === (m[targetId] !== undefined ? m[targetId] : 0)) {
+      tabs[j].classList.add('active');
+    } else {
+      tabs[j].classList.remove('active');
     }
-    // (handled above by URL section routing)
-  // Settings are admin-controlled now (read-only in tools)
-  // Logo upload removed from tools (admin-controlled)
+  }
+  calcAll();
+}
+window.activateSection = activateSection;
+
+window.addEventListener("DOMContentLoaded", () => {
+    // Activate correct tab based on DEFAULT_TAB and URL params
+    const urlParams = new URLSearchParams(window.location.search);
+    const sectionParam = urlParams.get('section');
+
+    let tabToActivate = 'calcSection'; // default
+
+    if (sectionParam === 'cma' || window.DEFAULT_TAB === 'cma') {
+        tabToActivate = 'certSection';
+    } else if (sectionParam === 'history') {
+        tabToActivate = 'historySection';
+    } else if (window.DEFAULT_TAB === 'commission' || window.DEFAULT_TAB === 'calc') {
+        tabToActivate = 'calcSection';
+    }
+
+    activateSection(tabToActivate);
 
 const calcInputs = ["price", "ownerPocket", "commPct", "vatRate", "vatIncl", "commOverrideOn", "commOverrideAmt", "commOverrideMode", "propType", "propAddress", "certDate"];
   calcInputs.forEach(id => {
@@ -1245,15 +1253,15 @@ const calcInputs = ["price", "ownerPocket", "commPct", "vatRate", "vatIncl", "co
     }
   });
 
-  el("commOverrideOn").onchange = (e) => {
+  if (el("commOverrideOn")) el("commOverrideOn").onchange = (e) => {
     el("commOverrideWrap").style.display = e.target.checked ? "block" : "none";
     calcAll();
   };
-  el("modePrice").onchange = () => { el("price").style.display = "block"; el("priceLabel").textContent = "Advertised Price (R)"; el("ownerPocket").style.display = "none"; calcAll(); };
-  el("modePocket").onchange = () => { el("price").style.display = "none"; el("priceLabel").textContent = "Net Pocket Target (R)"; el("ownerPocket").style.display = "block"; calcAll(); };
-  el("propType").onchange = () => { el("commPct").value = el("propType").value === "res" ? "7.5" : "10"; calcAll(); };
+  if (el("modePrice")) el("modePrice").onchange = () => { el("price").style.display = "block"; el("priceLabel").textContent = "Advertised Price (R)"; el("ownerPocket").style.display = "none"; calcAll(); };
+  if (el("modePocket")) el("modePocket").onchange = () => { el("price").style.display = "none"; el("priceLabel").textContent = "Net Pocket Target (R)"; el("ownerPocket").style.display = "block"; calcAll(); };
+  if (el("propType")) el("propType").onchange = () => { el("commPct").value = el("propType").value === "res" ? "7.5" : "10"; calcAll(); };
 
-  el("btnReset").onclick = () => {
+  if (el("btnReset")) el("btnReset").onclick = () => {
     if(confirm("Reset current form inputs?")) {
         el("propAddress").value = "";
         el("propType").value = "res";
@@ -1277,7 +1285,7 @@ const calcInputs = ["price", "ownerPocket", "commPct", "vatRate", "vatIncl", "co
         calcAll();
     }
   };
-  el("btnPrint").onclick = async () => {
+  if (el("btnPrint")) el("btnPrint").onclick = async () => {
     // snapshot payload for reload
     const payload = {
       propAddress: el("propAddress").value,
@@ -1299,7 +1307,7 @@ const calcInputs = ["price", "ownerPocket", "commPct", "vatRate", "vatIncl", "co
 
     handlePrint(generateCalculatorPrintHtml());
   };
-el("btnPrintCert").onclick = async () => {
+if (el("btnPrintCert")) el("btnPrintCert").onclick = async () => {
     const payload = {
       cmaAddress: el("cmaAddress").value || "—",
       cmaType: el("cmaType").value || "—",
@@ -1321,18 +1329,4 @@ updateUIFromSettings();
 });
 </script>
 
-{{-- Tab sync: update tab highlights when activateSection is called from JS (e.g. history reload) --}}
-<script>
-window.addEventListener('load', function() {
-  var _orig = window.activateSection;
-  if (!_orig) return;
-  window.activateSection = function(id) {
-    _orig(id);
-    var m = {calcSection:0, certSection:1, historySection:2};
-    document.querySelectorAll('#hf-tool-root .tab-btn').forEach(function(b,i){
-      b.classList.toggle('active', i===(m[id]||0));
-    });
-  };
-});
-</script>
 @endsection
