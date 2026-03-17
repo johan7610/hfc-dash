@@ -38,19 +38,33 @@ class SyncNamedFields extends Command
     ];
 
     /**
-     * Composite/computed fields to ensure exist.
-     * Format: source_type => [ source_column => label ]
+     * Contact types — each contact column gets one named field per type.
      */
-    private const COMPOSITE_FIELDS = [
-        'contact' => [
-            'first_name+last_name' => 'Full Name',
-        ],
+    private const CONTACT_TYPES = ['Lessor', 'Lessee', 'Seller', 'Buyer'];
+
+    /**
+     * Composite/computed fields to ensure exist per contact type.
+     * Format: source_column => base label
+     */
+    private const CONTACT_COMPOSITE_FIELDS = [
+        'first_name+last_name' => 'Full Name',
     ];
 
     public function handle(): int
     {
         $added = 0;
         $existed = 0;
+        $deleted = 0;
+
+        // Clean up generic contact fields with null source_contact_type
+        $deleted = DB::table('docuperfect_named_fields')
+            ->where('source_type', 'contact')
+            ->whereNull('source_contact_type')
+            ->delete();
+
+        if ($deleted > 0) {
+            $this->warn("Removed {$deleted} generic contact fields (null source_contact_type).");
+        }
 
         foreach (self::SOURCE_MAP as $table => $sourceType) {
             if (!Schema::hasTable($table)) {
@@ -59,70 +73,115 @@ class SyncNamedFields extends Command
             }
 
             $columns = Schema::getColumnListing($table);
-            $maxSort = (int) DB::table('docuperfect_named_fields')
-                ->where('source_type', $sourceType)
-                ->max('sort_order') ?? 0;
 
-            foreach ($columns as $column) {
-                if (in_array($column, self::SKIP_COLUMNS, true)) {
-                    continue;
+            if ($sourceType === 'contact') {
+                // Contact fields: one entry per contact type per column
+                foreach (self::CONTACT_TYPES as $contactType) {
+                    $maxSort = (int) (DB::table('docuperfect_named_fields')
+                        ->where('source_type', 'contact')
+                        ->where('source_contact_type', $contactType)
+                        ->max('sort_order') ?? 0);
+
+                    foreach ($columns as $column) {
+                        if (in_array($column, self::SKIP_COLUMNS, true)) {
+                            continue;
+                        }
+
+                        $exists = DB::table('docuperfect_named_fields')
+                            ->where('source_type', 'contact')
+                            ->where('source_column', $column)
+                            ->where('source_contact_type', $contactType)
+                            ->exists();
+
+                        if ($exists) {
+                            $existed++;
+                            continue;
+                        }
+
+                        $maxSort++;
+                        $label = "{$contactType} " . $this->humanLabel($column);
+
+                        DB::table('docuperfect_named_fields')->insert([
+                            'name'                => $label,
+                            'field_type'          => $this->inferFieldType($table, $column),
+                            'source_type'         => 'contact',
+                            'source_column'       => $column,
+                            'source_contact_type' => $contactType,
+                            'sort_order'          => $maxSort,
+                            'created_at'          => now(),
+                            'updated_at'          => now(),
+                        ]);
+
+                        $this->line("  + [contact/{$contactType}] {$column} → {$label}");
+                        $added++;
+                    }
+
+                    // Composite fields per contact type
+                    foreach (self::CONTACT_COMPOSITE_FIELDS as $sourceColumn => $baseLabel) {
+                        $exists = DB::table('docuperfect_named_fields')
+                            ->where('source_type', 'contact')
+                            ->where('source_column', $sourceColumn)
+                            ->where('source_contact_type', $contactType)
+                            ->exists();
+
+                        if ($exists) {
+                            $existed++;
+                            continue;
+                        }
+
+                        $maxSort++;
+                        $label = "{$contactType} {$baseLabel}";
+
+                        DB::table('docuperfect_named_fields')->insert([
+                            'name'                => $label,
+                            'field_type'          => 'text',
+                            'source_type'         => 'contact',
+                            'source_column'       => $sourceColumn,
+                            'source_contact_type' => $contactType,
+                            'sort_order'          => $maxSort,
+                            'created_at'          => now(),
+                            'updated_at'          => now(),
+                        ]);
+
+                        $this->line("  + [contact/{$contactType}] {$sourceColumn} → {$label} (composite)");
+                        $added++;
+                    }
                 }
-
-                $exists = DB::table('docuperfect_named_fields')
+            } else {
+                // Property, agent, deal — no contact type
+                $maxSort = (int) (DB::table('docuperfect_named_fields')
                     ->where('source_type', $sourceType)
-                    ->where('source_column', $column)
-                    ->exists();
+                    ->max('sort_order') ?? 0);
 
-                if ($exists) {
-                    $existed++;
-                    continue;
+                foreach ($columns as $column) {
+                    if (in_array($column, self::SKIP_COLUMNS, true)) {
+                        continue;
+                    }
+
+                    $exists = DB::table('docuperfect_named_fields')
+                        ->where('source_type', $sourceType)
+                        ->where('source_column', $column)
+                        ->exists();
+
+                    if ($exists) {
+                        $existed++;
+                        continue;
+                    }
+
+                    $maxSort++;
+                    DB::table('docuperfect_named_fields')->insert([
+                        'name'          => $this->humanLabel($column),
+                        'field_type'    => $this->inferFieldType($table, $column),
+                        'source_type'   => $sourceType,
+                        'source_column' => $column,
+                        'sort_order'    => $maxSort,
+                        'created_at'    => now(),
+                        'updated_at'    => now(),
+                    ]);
+
+                    $this->line("  + [{$sourceType}] {$column} → " . $this->humanLabel($column));
+                    $added++;
                 }
-
-                $maxSort++;
-                DB::table('docuperfect_named_fields')->insert([
-                    'name'          => $this->humanLabel($column),
-                    'field_type'    => $this->inferFieldType($table, $column),
-                    'source_type'   => $sourceType,
-                    'source_column' => $column,
-                    'sort_order'    => $maxSort,
-                    'created_at'    => now(),
-                    'updated_at'    => now(),
-                ]);
-
-                $this->line("  + [{$sourceType}] {$column} → " . $this->humanLabel($column));
-                $added++;
-            }
-        }
-
-        // Ensure composite fields exist
-        foreach (self::COMPOSITE_FIELDS as $sourceType => $fields) {
-            foreach ($fields as $sourceColumn => $label) {
-                $exists = DB::table('docuperfect_named_fields')
-                    ->where('source_type', $sourceType)
-                    ->where('source_column', $sourceColumn)
-                    ->exists();
-
-                if ($exists) {
-                    $existed++;
-                    continue;
-                }
-
-                $maxSort = (int) DB::table('docuperfect_named_fields')
-                    ->where('source_type', $sourceType)
-                    ->max('sort_order') ?? 0;
-
-                DB::table('docuperfect_named_fields')->insert([
-                    'name'          => $label,
-                    'field_type'    => 'text',
-                    'source_type'   => $sourceType,
-                    'source_column' => $sourceColumn,
-                    'sort_order'    => $maxSort + 1,
-                    'created_at'    => now(),
-                    'updated_at'    => now(),
-                ]);
-
-                $this->line("  + [{$sourceType}] {$sourceColumn} → {$label} (composite)");
-                $added++;
             }
         }
 
