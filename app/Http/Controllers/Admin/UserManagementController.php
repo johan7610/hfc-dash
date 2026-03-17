@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Mail\UserInviteMail;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\Branch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
@@ -21,7 +23,10 @@ class UserManagementController extends Controller
         $agencyId = auth()->user()->effectiveAgencyId();
 
         $users = User::when($agencyId, function ($q) use ($agencyId) {
-                $q->whereHas('branch', fn ($b) => $b->where('agency_id', $agencyId));
+                $q->where(function ($q2) use ($agencyId) {
+                    $q2->where('agency_id', $agencyId)
+                        ->orWhereHas('branch', fn ($b) => $b->where('agency_id', $agencyId));
+                });
             })
             ->orderBy('name')
             ->get();
@@ -65,7 +70,7 @@ class UserManagementController extends Controller
         $data = $request->validate([
             'name'          => ['required', 'string', 'max:255'],
             'surname'       => ['required', 'string', 'max:255'],
-            'email'         => ['required', 'email', 'max:255', 'unique:users,email'],
+            'email'         => ['required', 'email', 'max:255', Rule::unique('users', 'email')->whereNull('deleted_at')],
             'phone'         => ['nullable', 'string', 'max:50'],
             'cell'          => ['nullable', 'string', 'max:50'],
             'fax'           => ['nullable', 'string', 'max:50'],
@@ -85,21 +90,24 @@ class UserManagementController extends Controller
             'counts_for_branch_split'     => ['nullable', 'in:0,1'],
             'agent_photo'     => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'ffc_certificate' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
-            'password'        => ['nullable', 'string', 'min:8'],
         ]);
 
         $fullName = trim($data['name'] . ' ' . $data['surname']);
 
+        // Permanently remove any previously soft-deleted user with this email
+        User::onlyTrashed()->where('email', $data['email'])->forceDelete();
+
         $user = User::create([
             'name'                        => $fullName,
             'email'                       => $data['email'],
-            'password'                    => Hash::make($data['password'] ?? 'Welcome123!'),
+            'password'                    => 'INVITE_PENDING',
             'role'                        => $data['role'],
             'branch_id'                   => $data['branch_id'] ?: null,
+            'agency_id'                   => auth()->user()->effectiveAgencyId(),
             'designation'                 => $data['designation'] ?: null,
             'is_active'                   => true,
             'is_admin'                    => in_array($data['role'], ['admin', 'super_admin']) ? 1 : 0,
-            'email_verified_at'           => now(),
+            'email_verified_at'           => null,
             'agent_cut_percent'           => $data['agent_cut_percent'] ?? 50,
             'paye_method'                 => $data['paye_method'] ?? 'percentage',
             'paye_value'                  => $data['paye_value'] ?? 0,
@@ -136,7 +144,10 @@ class UserManagementController extends Controller
             $user->update(['ffc_certificate_path' => $path]);
         }
 
-        return redirect()->route('admin.users')->with('status', "User \"{$fullName}\" created successfully.");
+        // Send invitation email
+        Mail::to($user->email)->send(new UserInviteMail($user));
+
+        return redirect()->route('admin.users')->with('status', "User \"{$fullName}\" created. An invitation email has been sent to {$user->email}.");
     }
 
     public function edit(User $user)
@@ -427,6 +438,19 @@ class UserManagementController extends Controller
         return back()->with('status', "Updated role/branch for {$user->name}.");
     }
 
+    public function resendInvite(User $user)
+    {
+        abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
+
+        if ($user->email_verified_at) {
+            return back()->withErrors('This user has already set up their account.');
+        }
+
+        Mail::to($user->email)->send(new UserInviteMail($user));
+
+        return back()->with('status', "Invitation email resent to {$user->email}.");
+    }
+
     /**
      * Remove an agent file (photo or FFC certificate).
      */
@@ -474,13 +498,13 @@ class UserManagementController extends Controller
             return back()->withErrors('You cannot delete yourself.');
         }
 
-        $hasDeals = DB::table('deal_user')->where('user_id', $user->id)->exists();
-        if ($hasDeals) return back()->withErrors('User has deals and cannot be deleted.');
+        $name = $user->name;
 
         DB::table('branch_assignments')->where('user_id', $user->id)->delete();
 
         $user->update(['is_active' => false]);
+        $user->delete(); // soft delete (sets deleted_at)
 
-        return back()->with('success', 'User deactivated.');
+        return redirect()->route('admin.users')->with('status', "User \"{$name}\" has been deleted.");
     }
 }

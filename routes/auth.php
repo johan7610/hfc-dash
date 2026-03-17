@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\AccountSetupController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\ConfirmablePasswordController;
 use App\Http\Controllers\Auth\EmailVerificationNotificationController;
@@ -10,6 +11,13 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use Illuminate\Support\Facades\Route;
+
+// Account setup (invitation link — signed URL, no auth required)
+Route::get('account-setup/{user}', [AccountSetupController::class, 'show'])
+    ->middleware('signed')
+    ->name('account.setup');
+Route::post('account-setup/{user}', [AccountSetupController::class, 'store'])
+    ->name('account.setup.store');
 
 Route::middleware('guest')->group(function () {
     Route::get('register', [RegisteredUserController::class, 'create'])

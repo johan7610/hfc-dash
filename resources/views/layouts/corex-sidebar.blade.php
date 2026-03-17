@@ -13,6 +13,10 @@
     $agencies = $isOwner ? \App\Models\Agency::orderBy('name')->get() : collect();
     $activeAgency = ($isOwner && $activeAgencyId) ? $agencies->find($activeAgencyId) : null;
 
+    // Current user's agency (for all users)
+    $_userAgencyId = $user?->effectiveAgencyId();
+    $_userAgency = $_userAgencyId ? \App\Models\Agency::find($_userAgencyId) : null;
+
     // Impersonation state
     $impersonatorId  = (int) session('impersonator_id', 0);
     $isImpersonating = $impersonatorId > 0;
@@ -58,6 +62,13 @@
     <div class="corex-sidebar-logo">
         CoreX <span>Os</span>
     </div>
+    @if($_userAgency)
+    <div class="px-4 -mt-1 pb-2">
+        <div class="text-[10px] font-semibold uppercase tracking-widest text-center truncate" style="color:var(--text-muted); opacity:0.6;">
+            {{ $_userAgency->name }}
+        </div>
+    </div>
+    @endif
 
     {{-- Agency Switcher (owner role only) --}}
     @if($isOwner)

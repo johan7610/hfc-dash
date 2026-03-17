@@ -30,7 +30,14 @@
             <div>
                 <h2 class="text-xl font-bold text-white">{{ $pageTitle }}</h2>
                 <div class="text-sm mt-0.5" style="color:rgba(255,255,255,0.55);">
-                    @if($isEdit) {{ $user->email }} &middot; {{ ucwords(str_replace('_',' ',$user->role ?? 'agent')) }} @else Complete all required fields to create a new user account. @endif
+                    @if($isEdit)
+                        {{ $user->email }} &middot; {{ ucwords(str_replace('_',' ',$user->role ?? 'agent')) }}
+                        @if($user->is_active && !$user->email_verified_at)
+                            <span class="inline-block ml-1 px-2 py-0.5 rounded-full text-[11px] font-semibold" style="background:rgba(245,158,11,0.2); color:#fbbf24; vertical-align:middle;">Pending Setup</span>
+                        @endif
+                    @else
+                        Complete all required fields to create a new user account.
+                    @endif
                 </div>
             </div>
         </div>
@@ -105,19 +112,24 @@
                                    style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);"
                                    onfocus="this.style.borderColor='var(--brand-icon, #0ea5e9)'" onblur="this.style.borderColor='var(--border)'">
                         </div>
+                        @if($isEdit)
                         <div>
                             <label class="block text-xs font-medium mb-1.5" style="color:var(--text-secondary);">
-                                Password
-                                @if(!$isEdit)<span class="text-red-500">*</span>@endif
-                                @if($isEdit)<span style="color:var(--text-muted); font-weight:400;">(leave blank to keep)</span>@endif
+                                Password <span style="color:var(--text-muted); font-weight:400;">(leave blank to keep)</span>
                             </label>
                             <input type="password" name="password"
-                                   autocomplete="new-password" placeholder="{{ $isEdit ? '********' : 'Min 8 characters' }}"
-                                   {{ $isEdit ? '' : 'required' }}
+                                   autocomplete="new-password" placeholder="********"
                                    class="w-full rounded-md px-3 py-2.5 text-sm outline-none transition-colors"
                                    style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);"
                                    onfocus="this.style.borderColor='var(--brand-icon, #0ea5e9)'" onblur="this.style.borderColor='var(--border)'">
                         </div>
+                        @else
+                        <div class="flex items-end">
+                            <div class="rounded-md px-3 py-2.5 text-xs w-full" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-muted);">
+                                An invitation email will be sent so the user can set their own password.
+                            </div>
+                        </div>
+                        @endif
                     </div>
                 </div>
 
@@ -332,6 +344,25 @@
                         </div>
                     </div>
                 </div>
+
+                {{-- Card: Pending Invite (only for users who haven't set up yet) --}}
+                @if($isEdit && $user->is_active && !$user->email_verified_at)
+                <div class="rounded-xl p-6" style="background:var(--surface); border:1px solid rgba(245,158,11,0.25);">
+                    <div class="flex items-center gap-2 mb-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="color:#d97706;"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" /></svg>
+                        <h3 class="text-sm font-bold uppercase tracking-wider" style="color:var(--text-primary);">Invitation Pending</h3>
+                    </div>
+                    <p class="text-xs mb-3" style="color:var(--text-muted);">This user has not yet set up their password. You can resend the invitation email.</p>
+                    <form method="POST" action="{{ route('admin.users.resend-invite', $user) }}">
+                        @csrf
+                        <button type="submit"
+                                class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                                style="background:rgba(245,158,11,0.12); color:#d97706; border:1px solid rgba(245,158,11,0.3);">
+                            Resend Invitation Email
+                        </button>
+                    </form>
+                </div>
+                @endif
 
                 {{-- Card: Actions (edit only) --}}
                 @if($isEdit)

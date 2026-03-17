@@ -21,6 +21,7 @@ class User extends Authenticatable
         'role',
         'designation',
         'branch_id',
+        'agency_id',
         'is_active',
 
         // Admin-controlled commission defaults
@@ -102,12 +103,17 @@ class User extends Authenticatable
             return (int) $override;
         }
 
+        // Derive from branch
         $branchId = $this->effectiveBranchId();
-        if (!$branchId) {
-            return null;
+        if ($branchId) {
+            $branch = Branch::find($branchId);
+            if ($branch?->agency_id) {
+                return (int) $branch->agency_id;
+            }
         }
-        $branch = Branch::find($branchId);
-        return $branch?->agency_id ? (int) $branch->agency_id : null;
+
+        // Fallback to direct agency_id on user
+        return $this->agency_id ? (int) $this->agency_id : null;
     }
 
     // ── Owner role checks (the ONLY hardcoded concept) ──

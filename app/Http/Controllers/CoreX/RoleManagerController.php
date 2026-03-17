@@ -41,12 +41,12 @@ class RoleManagerController extends Controller
         $roles = Role::withCount(['users' => function ($q) use ($agencyId) {
             $q->where('is_active', 1);
             if ($agencyId) {
-                $q->whereHas('branch', fn ($b) => $b->where('agency_id', $agencyId));
+                $q->where(fn ($q2) => $q2->where('agency_id', $agencyId)->orWhereHas('branch', fn ($b) => $b->where('agency_id', $agencyId)));
             }
         }])->orderBy('sort_order')->get();
 
         $users = User::where('is_active', 1)
-            ->when($agencyId, fn ($q) => $q->whereHas('branch', fn ($b) => $b->where('agency_id', $agencyId)))
+            ->when($agencyId, fn ($q) => $q->where(fn ($q2) => $q2->where('agency_id', $agencyId)->orWhereHas('branch', fn ($b) => $b->where('agency_id', $agencyId))))
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'role', 'branch_id', 'agency_id', 'designation']);
         $branches = Branch::when($agencyId, fn ($q) => $q->where('agency_id', $agencyId))

@@ -101,8 +101,11 @@
                               style="background:var(--surface-2); color:var(--text-secondary); border:1px solid var(--border);">
                             {{ str_replace('_',' ',$u->role) }}
                         </span>
-                        {{-- Active badge --}}
-                        @if($u->is_active)
+                        {{-- Status badge --}}
+                        @if($u->is_active && !$u->email_verified_at)
+                        <span class="px-2 py-0.5 rounded-full text-xs font-medium"
+                              style="background:rgba(245,158,11,0.15); color:#d97706; border:1px solid rgba(245,158,11,0.3);">Pending</span>
+                        @elseif($u->is_active)
                         <span class="px-2 py-0.5 rounded-full text-xs font-medium"
                               style="background:#dcfce7; color:#166534; border:1px solid #bbf7d0;">Active</span>
                         @else
