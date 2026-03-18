@@ -68,8 +68,20 @@
           <div class="progress-bar-fill" id="progressBar"></div>
         </div>
         <div class="progress-text" id="progressText">Preparing capture...</div>
+        <div class="progress-eta" id="progressEta"></div>
+        <div class="progress-batch" id="progressBatch"></div>
       </div>
       <button class="btn btn-danger" id="cancelBtn">Cancel</button>
+    </div>
+
+    <!-- State 6: Resume previous capture -->
+    <div class="state" id="stateResume">
+      <div class="resume-info">
+        <div class="resume-icon">&#9888;</div>
+        <div class="resume-text" id="resumeText">Previous capture incomplete</div>
+      </div>
+      <button class="btn btn-primary" id="resumeBtn">Resume Capture</button>
+      <button class="btn btn-secondary" id="startFreshBtn">Start Fresh</button>
     </div>
 
     <!-- State 5: Complete -->
@@ -83,8 +95,22 @@
       <button class="btn btn-secondary" id="captureAnother">Capture Another Search</button>
     </div>
 
+    <!-- Duplicate capture warning -->
+    <div class="duplicate-warning" id="duplicateWarning" style="display:none;">
+      <div class="duplicate-text" id="duplicateText"></div>
+      <div class="duplicate-actions">
+        <button class="btn btn-primary btn-sm" id="duplicateConfirm">Capture Again</button>
+        <button class="btn btn-secondary btn-sm" id="duplicateCancel">Cancel</button>
+      </div>
+    </div>
+
     <!-- Error display -->
     <div class="error-msg" id="errorMsg" style="display:none;"></div>
+
+    <!-- Last capture status bar -->
+    <div class="last-capture-bar" id="lastCaptureBar" style="display:none;">
+      <span id="lastCaptureText"></span>
+    </div>
 
     <!-- Connection status footer -->
     <div class="connection-status" id="connectionStatus">

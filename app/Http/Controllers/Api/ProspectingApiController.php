@@ -24,8 +24,8 @@ class ProspectingApiController extends Controller
             'listings'                     => 'required|array|min:1',
             'listings.*.portal_ref' => 'nullable|string',
             'listings.*.address'           => 'nullable|string',
-            'listings.*.price'             => 'required|integer',
-            'listings.*.portal_url'        => 'required|string',
+            'listings.*.price'             => 'nullable|integer',
+            'listings.*.portal_url'        => 'nullable|string',
             'listings.*.suburb'            => 'nullable|string',
             'listings.*.district'          => 'nullable|string',
             'listings.*.bedrooms'          => 'nullable|integer',
@@ -45,17 +45,31 @@ class ProspectingApiController extends Controller
         $context = $validated['search_context'];
         $now = Carbon::now();
 
-        $search = ProspectingSearch::create([
-            'agency_id'          => $agencyId,
-            'user_id'            => $user->id,
-            'portal_source'      => $portalSource,
-            'search_url'         => $context['url'],
-            'search_description' => $context['search_term'],
-            'total_results'      => $context['total_results'],
-            'pages_captured'     => $context['pages_captured'],
-            'listing_count'      => 0,
-            'captured_at'        => $now,
-        ]);
+        // Upsert: if same search_url exists for today, update it instead of creating a duplicate
+        $search = ProspectingSearch::where('agency_id', $agencyId)
+            ->where('search_url', $context['url'])
+            ->whereDate('captured_at', $now->toDateString())
+            ->first();
+
+        if ($search) {
+            $search->update([
+                'total_results'      => $context['total_results'],
+                'pages_captured'     => max($search->pages_captured, $context['pages_captured']),
+                'search_description' => $context['search_term'],
+            ]);
+        } else {
+            $search = ProspectingSearch::create([
+                'agency_id'          => $agencyId,
+                'user_id'            => $user->id,
+                'portal_source'      => $portalSource,
+                'search_url'         => $context['url'],
+                'search_description' => $context['search_term'],
+                'total_results'      => $context['total_results'],
+                'pages_captured'     => $context['pages_captured'],
+                'listing_count'      => 0,
+                'captured_at'        => $now,
+            ]);
+        }
 
         $imported = 0;
         $updated = 0;
@@ -142,7 +156,9 @@ class ProspectingApiController extends Controller
             }
         }
 
-        $search->update(['listing_count' => $imported + $updated]);
+        $search->update([
+            'listing_count' => $search->listing_count + $imported + $updated,
+        ]);
 
         return response()->json([
             'success'  => true,
@@ -150,5 +166,37 @@ class ProspectingApiController extends Controller
             'updated'  => $updated,
             'total'    => $imported + $updated,
         ]);
+    }
+
+    /**
+     * Check if a search URL was already captured today.
+     * Used by the Chrome extension for duplicate capture protection.
+     */
+    public function checkSearch(Request $request)
+    {
+        $request->validate([
+            'search_url' => 'required|string',
+        ]);
+
+        $user = $request->user();
+        $agencyId = $user->effectiveAgencyId() ?? $user->agency_id ?? 1;
+
+        $existing = ProspectingSearch::where('agency_id', $agencyId)
+            ->where('search_url', $request->search_url)
+            ->whereDate('captured_at', Carbon::today())
+            ->latest('captured_at')
+            ->first();
+
+        if ($existing) {
+            $ago = $existing->captured_at->diffForHumans();
+            return response()->json([
+                'duplicate'     => true,
+                'captured_ago'  => $ago,
+                'listing_count' => $existing->listing_count,
+                'search_id'     => $existing->id,
+            ]);
+        }
+
+        return response()->json(['duplicate' => false]);
     }
 }

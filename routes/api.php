@@ -55,4 +55,5 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::post('/prospecting/import', [ProspectingApiController::class, 'import']);
+    Route::get('/prospecting/check-search', [ProspectingApiController::class, 'checkSearch']);
 });

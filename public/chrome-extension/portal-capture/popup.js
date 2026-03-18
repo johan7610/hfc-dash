@@ -1,12 +1,17 @@
 /**
  * CoreX Portal Capture — Popup Controller
  *
- * Manages popup UI states and orchestrates the capture flow:
+ * Manages popup UI states and delegates capture to background service worker.
+ * Polls background for status updates so the popup can be closed/reopened
+ * without interrupting capture.
+ *
+ * States:
  *   1. Not on portal → informational message
  *   2. Settings needed → API URL + token form
  *   3. Ready → portal detected, show search info
- *   4. Capturing → progress bar + page-by-page scrape
+ *   4. Capturing → progress bar + ETA + batch status
  *   5. Complete → results summary
+ *   6. Resume → incomplete capture detected
  */
 
 (function () {
@@ -19,36 +24,48 @@
     ready:       document.getElementById('stateReady'),
     capturing:   document.getElementById('stateCapturing'),
     complete:    document.getElementById('stateComplete'),
+    resume:      document.getElementById('stateResume'),
   };
 
   const els = {
-    settingsToggle:  document.getElementById('settingsToggle'),
-    backFromSettings: document.getElementById('backFromSettings'),
-    apiUrl:          document.getElementById('apiUrl'),
-    apiToken:        document.getElementById('apiToken'),
-    saveSettings:    document.getElementById('saveSettings'),
-    settingsMsg:     document.getElementById('settingsMsg'),
-    portalName:      document.getElementById('portalName'),
-    searchTerm:      document.getElementById('searchTerm'),
-    resultCount:     document.getElementById('resultCount'),
-    captureBtn:      document.getElementById('captureBtn'),
-    progressBar:     document.getElementById('progressBar'),
-    progressText:    document.getElementById('progressText'),
-    cancelBtn:       document.getElementById('cancelBtn'),
-    completeTotal:   document.getElementById('completeTotal'),
+    settingsToggle:    document.getElementById('settingsToggle'),
+    backFromSettings:  document.getElementById('backFromSettings'),
+    apiUrl:            document.getElementById('apiUrl'),
+    apiToken:          document.getElementById('apiToken'),
+    saveSettings:      document.getElementById('saveSettings'),
+    settingsMsg:       document.getElementById('settingsMsg'),
+    portalName:        document.getElementById('portalName'),
+    searchTerm:        document.getElementById('searchTerm'),
+    resultCount:       document.getElementById('resultCount'),
+    captureBtn:        document.getElementById('captureBtn'),
+    progressBar:       document.getElementById('progressBar'),
+    progressText:      document.getElementById('progressText'),
+    progressEta:       document.getElementById('progressEta'),
+    progressBatch:     document.getElementById('progressBatch'),
+    cancelBtn:         document.getElementById('cancelBtn'),
+    completeTotal:     document.getElementById('completeTotal'),
     completeBreakdown: document.getElementById('completeBreakdown'),
-    viewInCorex:     document.getElementById('viewInCorex'),
-    captureAnother:  document.getElementById('captureAnother'),
-    errorMsg:        document.getElementById('errorMsg'),
-    connectionDot:   document.getElementById('connectionDot'),
-    connectionText:  document.getElementById('connectionText'),
+    viewInCorex:       document.getElementById('viewInCorex'),
+    captureAnother:    document.getElementById('captureAnother'),
+    errorMsg:          document.getElementById('errorMsg'),
+    connectionDot:     document.getElementById('connectionDot'),
+    connectionText:    document.getElementById('connectionText'),
+    resumeText:        document.getElementById('resumeText'),
+    resumeBtn:         document.getElementById('resumeBtn'),
+    startFreshBtn:     document.getElementById('startFreshBtn'),
+    lastCaptureBar:    document.getElementById('lastCaptureBar'),
+    lastCaptureText:   document.getElementById('lastCaptureText'),
+    duplicateWarning:  document.getElementById('duplicateWarning'),
+    duplicateText:     document.getElementById('duplicateText'),
+    duplicateConfirm:  document.getElementById('duplicateConfirm'),
+    duplicateCancel:   document.getElementById('duplicateCancel'),
   };
 
   // ── State ──────────────────────────────────────────────────
   let currentState  = null;
   let previousState = null;
-  let cancelled     = false;
-  let pageInfo      = null;   // from content script
+  let statusPoller  = null;
+  let pageInfo      = null;
   let tabId         = null;
   let settings      = { apiUrl: '', apiToken: '' };
 
@@ -63,7 +80,7 @@
   function showError(msg) {
     els.errorMsg.textContent = msg;
     els.errorMsg.style.display = 'block';
-    setTimeout(() => { els.errorMsg.style.display = 'none'; }, 6000);
+    setTimeout(() => { els.errorMsg.style.display = 'none'; }, 8000);
   }
 
   function hideError() {
@@ -75,6 +92,27 @@
     els.connectionText.textContent = connected
       ? 'Connected to CoreX'
       : 'Not connected';
+  }
+
+  function formatTime(ms) {
+    const secs = Math.round(ms / 1000);
+    if (secs < 60) return secs + 's';
+    const mins = Math.floor(secs / 60);
+    const rem = secs % 60;
+    if (mins < 60) return '~' + mins + 'm ' + rem + 's';
+    const hrs = Math.floor(mins / 60);
+    return '~' + hrs + 'h ' + (mins % 60) + 'm';
+  }
+
+  function formatTimeAgo(timestamp) {
+    const diff = Date.now() - timestamp;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return mins + 'm ago';
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + 'h ago';
+    const days = Math.floor(hrs / 24);
+    return days + 'd ago';
   }
 
   // ── Settings ───────────────────────────────────────────────
@@ -110,6 +148,29 @@
     });
   }
 
+  // ── Last capture status bar ────────────────────────────────
+  async function showLastCapture() {
+    return new Promise(resolve => {
+      chrome.storage.local.get('lastCapture', data => {
+        const info = data.lastCapture;
+        if (info && info.timestamp) {
+          const date = new Date(info.timestamp);
+          const dateStr = date.toLocaleDateString('en-ZA', {
+            day: 'numeric', month: 'short', year: 'numeric',
+          });
+          const timeStr = date.toLocaleTimeString('en-ZA', {
+            hour: '2-digit', minute: '2-digit',
+          });
+          els.lastCaptureText.textContent =
+            'Last capture: ' + dateStr + ' ' + timeStr +
+            ' — ' + (info.count || 0).toLocaleString() + ' listings from ' + (info.portal || '?');
+          els.lastCaptureBar.style.display = 'block';
+        }
+        resolve();
+      });
+    });
+  }
+
   // ── Portal detection via active tab ────────────────────────
   function detectPortal(url) {
     if (!url) return null;
@@ -135,128 +196,144 @@
     });
   }
 
-  // ── Request listings from content script ───────────────────
-  function requestListings(tid) {
-    return new Promise((resolve, reject) => {
-      chrome.tabs.sendMessage(tid, { action: 'getListings' }, response => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        resolve(response);
+  // ── Duplicate search check ─────────────────────────────────
+  async function checkDuplicate(searchUrl) {
+    return new Promise(resolve => {
+      chrome.runtime.sendMessage({
+        action: 'checkDuplicateSearch',
+        apiUrl: settings.apiUrl,
+        apiToken: settings.apiToken,
+        searchUrl: searchUrl,
+      }, response => {
+        resolve(response || { duplicate: false });
       });
     });
   }
 
-  // ── Capture flow ───────────────────────────────────────────
+  // ── Start capture (delegates to background) ────────────────
   async function startCapture() {
     hideError();
-    cancelled = false;
+    els.duplicateWarning.style.display = 'none';
     showState('capturing');
+    startStatusPolling();
 
-    const allListings = [];
-    const totalPages  = pageInfo.totalPages || 1;
-    const portal      = pageInfo.portal;
-    const baseUrl     = pageInfo.currentUrl;
-
+    // Flush any local queue first
     try {
-      // Page 1: get from content script (already on this page)
-      updateProgress(1, totalPages, 0, pageInfo.totalResults || 0);
-      const page1 = await requestListings(tabId);
-      if (page1 && page1.listings) {
-        allListings.push(...page1.listings);
-      }
-      updateProgress(1, totalPages, allListings.length, pageInfo.totalResults || 0);
-
-      // Pages 2..N: fetch via background service worker
-      for (let p = 2; p <= totalPages; p++) {
-        if (cancelled) { showState('ready'); return; }
-
-        const pageUrl = buildPageUrl(baseUrl, p, portal);
-        updateProgress(p, totalPages, allListings.length, pageInfo.totalResults || 0);
-
-        const result = await chrome.runtime.sendMessage({
-          action: 'fetchPage',
-          url: pageUrl,
-          portal: portal,
-        });
-
-        if (result && result.listings) {
-          allListings.push(...result.listings);
-        }
-
-        updateProgress(p, totalPages, allListings.length, pageInfo.totalResults || 0);
-      }
-
-      if (cancelled) { showState('ready'); return; }
-
-      // Send to CoreX
-      els.progressText.textContent = 'Sending to CoreX...';
-
-      const payload = {
-        source: portal,
-        search_context: {
-          url:            baseUrl,
-          search_term:    pageInfo.searchTerm || '',
-          total_results:  pageInfo.totalResults || allListings.length,
-          pages_captured: totalPages,
-          captured_at:    new Date().toISOString(),
-        },
-        listings: allListings,
-      };
-
-      const apiResult = await chrome.runtime.sendMessage({
-        action: 'sendToCorex',
-        apiUrl:  settings.apiUrl,
+      await chrome.runtime.sendMessage({
+        action: 'flushLocalQueue',
+        apiUrl: settings.apiUrl,
         apiToken: settings.apiToken,
-        payload: payload,
       });
+    } catch (e) { /* ignore */ }
 
-      if (apiResult && apiResult.error) {
-        showError(apiResult.error);
+    chrome.runtime.sendMessage({
+      action:       'startCapture',
+      portal:       pageInfo.portal,
+      baseUrl:      pageInfo.currentUrl,
+      searchTerm:   pageInfo.searchTerm || '',
+      totalPages:   pageInfo.totalPages || 1,
+      totalResults: pageInfo.totalResults || 0,
+      apiUrl:       settings.apiUrl,
+      apiToken:     settings.apiToken,
+      tabId:        tabId,
+    });
+  }
+
+  // ── Status polling ─────────────────────────────────────────
+  function startStatusPolling() {
+    stopStatusPolling();
+    statusPoller = setInterval(pollStatus, 800);
+  }
+
+  function stopStatusPolling() {
+    if (statusPoller) {
+      clearInterval(statusPoller);
+      statusPoller = null;
+    }
+  }
+
+  async function pollStatus() {
+    try {
+      const status = await chrome.runtime.sendMessage({ action: 'getCaptureStatus' });
+      if (!status) return;
+
+      if (status.active) {
+        showState('capturing');
+        updateProgress(status);
+      } else if (status.complete) {
+        stopStatusPolling();
+        showComplete(status);
+      } else if (status.error && !status.active) {
+        stopStatusPolling();
+        showError(status.error);
         showState('ready');
-        return;
       }
-
-      // Show complete state
-      const imported = apiResult ? (apiResult.imported || 0) : 0;
-      const updated  = apiResult ? (apiResult.updated  || 0) : 0;
-      const total    = apiResult ? (apiResult.total    || allListings.length) : allListings.length;
-
-      els.completeTotal.textContent     = total + ' listings captured!';
-      els.completeBreakdown.textContent = 'New: ' + imported + ' | Updated: ' + updated;
-      els.viewInCorex.href              = settings.apiUrl + '/prospecting';
-
-      showState('complete');
-
-    } catch (err) {
-      showError('Capture failed: ' + err.message);
-      showState('ready');
+    } catch (e) {
+      // Background may have been terminated
+      stopStatusPolling();
     }
   }
 
-  function updateProgress(page, totalPages, captured, totalResults) {
-    const pct = Math.round((page / totalPages) * 100);
+  function updateProgress(status) {
+    const pct = status.totalPages > 0
+      ? Math.round((status.currentPage / status.totalPages) * 100)
+      : 0;
     els.progressBar.style.width = pct + '%';
+
     els.progressText.textContent =
-      'Capturing page ' + page + ' of ' + totalPages + '... ' +
-      captured + ' of ' + totalResults + ' listings';
+      'Capturing page ' + status.currentPage + ' of ' + status.totalPages +
+      '... (' + status.capturedListings.toLocaleString() + ' listings)';
+
+    // Time estimate
+    if (status.avgTimePerPage > 0 && status.currentPage > 1) {
+      const remainingPages = status.totalPages - status.currentPage;
+      // Add avg delay (~2.75s normal + occasional 6.5s break every 20 pages)
+      const avgDelay = 2750 + (6500 / 20); // ~3075ms avg delay per page
+      const remainingMs = remainingPages * (status.avgTimePerPage + avgDelay);
+      els.progressEta.textContent = 'Estimated time remaining: ' + formatTime(remainingMs);
+    } else {
+      els.progressEta.textContent = '';
+    }
+
+    // Batch info
+    if (status.batchesSent > 0) {
+      els.progressBatch.textContent =
+        status.sentListings.toLocaleString() + ' sent to CoreX (' +
+        status.batchesSent + ' batches)';
+    } else {
+      els.progressBatch.textContent = '';
+    }
+
+    // Show transient errors (rate limit pauses, etc.)
+    if (status.error) {
+      els.progressEta.textContent = status.error;
+    }
   }
 
-  function buildPageUrl(baseUrl, page, portal) {
-    const url = new URL(baseUrl);
-    if (portal === 'p24') {
-      url.searchParams.set('Page', page);
-    } else {
-      // Private Property uses page param — adjust if needed
-      url.searchParams.set('page', page);
+  function showComplete(status) {
+    const total = (status.importedCount || 0) + (status.updatedCount || 0);
+    const captured = status.capturedListings || 0;
+    const displayed = total || captured;
+
+    els.completeTotal.textContent = displayed.toLocaleString() + ' listings captured!';
+    els.completeBreakdown.textContent =
+      'New: ' + (status.importedCount || 0) +
+      ' | Updated: ' + (status.updatedCount || 0);
+
+    if (status.parseWarnings > 0) {
+      els.completeBreakdown.textContent +=
+        ' | ' + status.parseWarnings + ' pages had parsing issues';
     }
-    return url.toString();
+
+    els.viewInCorex.href = settings.apiUrl + '/prospecting';
+    showState('complete');
+    showLastCapture();
   }
 
   // ── Initialise ─────────────────────────────────────────────
   async function init() {
     await loadSettings();
+    await showLastCapture();
 
     // Pre-fill settings fields
     els.apiUrl.value   = settings.apiUrl;
@@ -270,6 +347,44 @@
     }
 
     setConnection(true);
+
+    // Check if a capture is already running
+    try {
+      const status = await chrome.runtime.sendMessage({ action: 'getCaptureStatus' });
+      if (status && status.active) {
+        showState('capturing');
+        startStatusPolling();
+        return;
+      }
+    } catch (e) { /* ignore */ }
+
+    // Check for incomplete capture from a previous session
+    try {
+      const incomplete = await chrome.runtime.sendMessage({ action: 'getIncompleteCapture' });
+      if (incomplete) {
+        els.resumeText.textContent =
+          'Previous capture incomplete (page ' + incomplete.currentPage +
+          ' of ' + incomplete.totalPages + ', ' +
+          (incomplete.capturedListings || 0).toLocaleString() + ' listings captured). Resume or start fresh?';
+        showState('resume');
+        return;
+      }
+    } catch (e) { /* ignore */ }
+
+    // Check for queued local data
+    try {
+      const queueResult = await chrome.runtime.sendMessage({
+        action: 'flushLocalQueue',
+        apiUrl: settings.apiUrl,
+        apiToken: settings.apiToken,
+      });
+      if (queueResult && queueResult.flushed > 0) {
+        showError(queueResult.flushed + ' queued batches sent to CoreX successfully.');
+      }
+      if (queueResult && queueResult.remaining > 0) {
+        showError(queueResult.remaining + ' batches still queued (CoreX offline).');
+      }
+    } catch (e) { /* ignore */ }
 
     // Get active tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -307,7 +422,6 @@
       showState('ready');
 
     } catch (err) {
-      // Content script may not be injected yet
       showState('notOnPortal');
     }
   }
@@ -327,12 +441,53 @@
     await saveSettingsToStorage();
   });
 
-  els.captureBtn.addEventListener('click', () => {
+  els.captureBtn.addEventListener('click', async () => {
+    // Check for duplicate search
+    if (pageInfo && pageInfo.currentUrl) {
+      try {
+        const dupCheck = await checkDuplicate(pageInfo.currentUrl);
+        if (dupCheck && dupCheck.duplicate) {
+          const ago = dupCheck.captured_ago || 'earlier today';
+          const count = dupCheck.listing_count || 0;
+          els.duplicateText.textContent =
+            'This search was captured ' + ago + ' (' + count + ' listings). ' +
+            'Capture again to check for new/changed listings?';
+          els.duplicateWarning.style.display = 'block';
+          return; // wait for confirm/cancel
+        }
+      } catch (e) { /* proceed anyway */ }
+    }
     startCapture();
   });
 
+  els.duplicateConfirm.addEventListener('click', () => {
+    els.duplicateWarning.style.display = 'none';
+    startCapture();
+  });
+
+  els.duplicateCancel.addEventListener('click', () => {
+    els.duplicateWarning.style.display = 'none';
+  });
+
   els.cancelBtn.addEventListener('click', () => {
-    cancelled = true;
+    chrome.runtime.sendMessage({ action: 'cancelCapture' });
+    stopStatusPolling();
+    showState('ready');
+  });
+
+  els.resumeBtn.addEventListener('click', () => {
+    showState('capturing');
+    startStatusPolling();
+    chrome.runtime.sendMessage({
+      action:   'resumeCapture',
+      apiUrl:   settings.apiUrl,
+      apiToken: settings.apiToken,
+    });
+  });
+
+  els.startFreshBtn.addEventListener('click', () => {
+    chrome.runtime.sendMessage({ action: 'clearIncompleteCapture' });
+    init();
   });
 
   els.captureAnother.addEventListener('click', () => {

@@ -2,10 +2,44 @@
  * CoreX Portal Capture — Background Service Worker
  *
  * Handles:
- * 1. Fetching additional search result pages for auto-pagination
- * 2. Parsing listing HTML from fetched pages
- * 3. Sending captured data to the CoreX API
+ * 1. Capture orchestration — runs the page-by-page scrape loop
+ * 2. Rate-limited fetching with human-like random delays
+ * 3. Batch API sends (every 5 pages / 100 listings)
+ * 4. State persistence for resume after popup close / Chrome restart
+ * 5. Chrome notifications on capture complete
+ * 6. Error handling: rate limits, network issues, API failures, local queue
  */
+
+// ── Capture state (in-memory, persisted to chrome.storage) ───
+let capture = defaultCaptureState();
+
+function defaultCaptureState() {
+  return {
+    active:           false,
+    cancelled:        false,
+    portal:           null,
+    baseUrl:          null,
+    searchTerm:       null,
+    totalPages:       0,
+    totalResults:     0,
+    currentPage:      0,
+    capturedListings: 0,
+    sentListings:     0,
+    importedCount:    0,
+    updatedCount:     0,
+    startTime:        null,
+    avgTimePerPage:   0,
+    error:            null,
+    complete:         false,
+    parseWarnings:    0,   // pages that had parsing issues
+    rateLimitPauses:  0,
+    pendingListings:  [],  // listings not yet sent to API
+    batchesSent:      0,
+    apiUrl:           null,
+    apiToken:         null,
+    tabId:            null,
+  };
+}
 
 // ── Message router ─────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -13,7 +47,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     handleFetchPage(msg.url, msg.portal)
       .then(result => sendResponse(result))
       .catch(err => sendResponse({ listings: [], error: err.message }));
-    return true; // keep channel open for async
+    return true;
   }
 
   if (msg.action === 'sendToCorex') {
@@ -23,8 +57,514 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.action === 'startCapture') {
+    startCapture(msg)
+      .then(() => sendResponse({ ok: true }))
+      .catch(err => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  if (msg.action === 'cancelCapture') {
+    capture.cancelled = true;
+    sendResponse({ ok: true });
+    return true;
+  }
+
+  if (msg.action === 'getCaptureStatus') {
+    sendResponse(getCaptureStatus());
+    return true;
+  }
+
+  if (msg.action === 'getIncompleteCapture') {
+    getIncompleteCapture().then(s => sendResponse(s));
+    return true;
+  }
+
+  if (msg.action === 'clearIncompleteCapture') {
+    chrome.storage.local.remove('captureState', () => sendResponse({ ok: true }));
+    return true;
+  }
+
+  if (msg.action === 'resumeCapture') {
+    resumeCapture(msg.apiUrl, msg.apiToken)
+      .then(() => sendResponse({ ok: true }))
+      .catch(err => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  if (msg.action === 'flushLocalQueue') {
+    flushLocalQueue(msg.apiUrl, msg.apiToken)
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  if (msg.action === 'checkDuplicateSearch') {
+    checkDuplicateSearch(msg.apiUrl, msg.apiToken, msg.searchUrl)
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ duplicate: false }));
+    return true;
+  }
+
   return false;
 });
+
+// ── Capture status snapshot for popup ──────────────────────
+function getCaptureStatus() {
+  return {
+    active:           capture.active,
+    cancelled:        capture.cancelled,
+    complete:         capture.complete,
+    currentPage:      capture.currentPage,
+    totalPages:       capture.totalPages,
+    capturedListings: capture.capturedListings,
+    sentListings:     capture.sentListings,
+    importedCount:    capture.importedCount,
+    updatedCount:     capture.updatedCount,
+    totalResults:     capture.totalResults,
+    startTime:        capture.startTime,
+    avgTimePerPage:   capture.avgTimePerPage,
+    error:            capture.error,
+    parseWarnings:    capture.parseWarnings,
+    rateLimitPauses:  capture.rateLimitPauses,
+    batchesSent:      capture.batchesSent,
+  };
+}
+
+// ── Random delay helpers ───────────────────────────────────
+function randomDelay(minMs, maxMs) {
+  const ms = minMs + Math.random() * (maxMs - minMs);
+  return new Promise(resolve => setTimeout(resolve, Math.round(ms)));
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ── Build page URL ─────────────────────────────────────────
+function buildPageUrl(baseUrl, page, portal) {
+  const url = new URL(baseUrl);
+  if (portal === 'p24') {
+    url.searchParams.set('Page', page);
+  } else {
+    url.searchParams.set('page', page);
+  }
+  return url.toString();
+}
+
+// ── Persist capture state for resume ───────────────────────
+async function persistCaptureState() {
+  const stateToSave = {
+    portal:           capture.portal,
+    baseUrl:          capture.baseUrl,
+    searchTerm:       capture.searchTerm,
+    totalPages:       capture.totalPages,
+    totalResults:     capture.totalResults,
+    currentPage:      capture.currentPage,
+    capturedListings: capture.capturedListings,
+    sentListings:     capture.sentListings,
+    importedCount:    capture.importedCount,
+    updatedCount:     capture.updatedCount,
+    startTime:        capture.startTime,
+    pendingListings:  capture.pendingListings,
+    batchesSent:      capture.batchesSent,
+    parseWarnings:    capture.parseWarnings,
+    savedAt:          Date.now(),
+  };
+  return new Promise(resolve => {
+    chrome.storage.local.set({ captureState: stateToSave }, resolve);
+  });
+}
+
+async function clearCaptureState() {
+  return new Promise(resolve => {
+    chrome.storage.local.remove('captureState', resolve);
+  });
+}
+
+async function getIncompleteCapture() {
+  return new Promise(resolve => {
+    chrome.storage.local.get('captureState', data => {
+      const state = data.captureState || null;
+      if (state && state.currentPage < state.totalPages) {
+        resolve(state);
+      } else {
+        resolve(null);
+      }
+    });
+  });
+}
+
+// ── Save last capture info for status bar ──────────────────
+async function saveLastCapture(count, portal) {
+  const info = {
+    count:     count,
+    portal:    portal === 'p24' ? 'P24' : 'PP',
+    timestamp: Date.now(),
+  };
+  return new Promise(resolve => {
+    chrome.storage.local.set({ lastCapture: info }, resolve);
+  });
+}
+
+// ── Local queue for when API is unreachable ────────────────
+async function queueLocally(payload) {
+  return new Promise(resolve => {
+    chrome.storage.local.get('localQueue', data => {
+      const queue = data.localQueue || [];
+      queue.push(payload);
+      chrome.storage.local.set({ localQueue: queue }, resolve);
+    });
+  });
+}
+
+async function getLocalQueue() {
+  return new Promise(resolve => {
+    chrome.storage.local.get('localQueue', data => {
+      resolve(data.localQueue || []);
+    });
+  });
+}
+
+async function clearLocalQueue() {
+  return new Promise(resolve => {
+    chrome.storage.local.remove('localQueue', resolve);
+  });
+}
+
+async function flushLocalQueue(apiUrl, apiToken) {
+  const queue = await getLocalQueue();
+  if (queue.length === 0) return { flushed: 0 };
+
+  let flushed = 0;
+  const remaining = [];
+
+  for (const payload of queue) {
+    try {
+      await handleSendToCorex(apiUrl, apiToken, payload);
+      flushed++;
+    } catch (e) {
+      remaining.push(payload);
+    }
+  }
+
+  if (remaining.length > 0) {
+    await new Promise(resolve => {
+      chrome.storage.local.set({ localQueue: remaining }, resolve);
+    });
+  } else {
+    await clearLocalQueue();
+  }
+
+  return { flushed, remaining: remaining.length };
+}
+
+// ── Check for duplicate search today ───────────────────────
+async function checkDuplicateSearch(apiUrl, apiToken, searchUrl) {
+  try {
+    const url = apiUrl.replace(/\/+$/, '') + '/api/prospecting/check-search?search_url=' + encodeURIComponent(searchUrl);
+    const response = await fetch(url, {
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': 'Bearer ' + apiToken,
+      },
+    });
+    if (response.ok) {
+      return await response.json();
+    }
+  } catch (e) { /* ignore */ }
+  return { duplicate: false };
+}
+
+// ── Fetch page with retry + rate-limit handling ────────────
+async function fetchPageWithRetry(url, portal, maxRetries) {
+  let consecutive403 = 0;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml',
+        },
+      });
+
+      if (response.status === 403 || response.status === 429) {
+        consecutive403++;
+        capture.rateLimitPauses++;
+        if (consecutive403 >= 3) {
+          return { listings: [], rateLimited: true };
+        }
+        // Pause 30 seconds
+        capture.error = 'Rate limit hit — pausing 30s, will resume';
+        await sleep(30000);
+        continue;
+      }
+
+      if (!response.ok) {
+        throw new Error('HTTP ' + response.status);
+      }
+
+      const html = await response.text();
+      const listings = parseListingsFromHtml(html, portal);
+
+      if (listings.length === 0) {
+        capture.parseWarnings++;
+      }
+
+      return { listings: listings, rateLimited: false };
+
+    } catch (err) {
+      if (attempt < maxRetries) {
+        capture.error = 'Network issue — retrying in 5s';
+        await sleep(5000);
+      } else {
+        capture.error = 'Network issue — retrying in 10s';
+        await sleep(10000);
+        // One more attempt after longer wait
+        try {
+          const resp = await fetch(url, {
+            headers: { 'Accept': 'text/html,application/xhtml+xml' },
+          });
+          if (resp.ok) {
+            const html = await resp.text();
+            return { listings: parseListingsFromHtml(html, portal), rateLimited: false };
+          }
+        } catch (e) { /* give up */ }
+        return { listings: [], networkError: true };
+      }
+    }
+  }
+
+  return { listings: [], networkError: true };
+}
+
+// ── Send batch to API with queue fallback ──────────────────
+async function sendBatchToApi(listings, context) {
+  const payload = {
+    source: capture.portal,
+    search_context: context,
+    listings: listings,
+  };
+
+  try {
+    const result = await handleSendToCorex(capture.apiUrl, capture.apiToken, payload);
+
+    if (result && !result.error) {
+      capture.sentListings += listings.length;
+      capture.importedCount += (result.imported || 0);
+      capture.updatedCount += (result.updated || 0);
+      capture.batchesSent++;
+      return true;
+    }
+  } catch (err) {
+    // API unreachable — queue locally
+    await queueLocally(payload);
+    capture.error = 'CoreX offline — ' + listings.length + ' listings queued locally';
+    return false;
+  }
+
+  return false;
+}
+
+// ── Main capture loop ──────────────────────────────────────
+async function startCapture(msg) {
+  capture = defaultCaptureState();
+  capture.active      = true;
+  capture.portal      = msg.portal;
+  capture.baseUrl     = msg.baseUrl;
+  capture.searchTerm  = msg.searchTerm;
+  capture.totalPages  = msg.totalPages;
+  capture.totalResults = msg.totalResults;
+  capture.apiUrl      = msg.apiUrl;
+  capture.apiToken    = msg.apiToken;
+  capture.tabId       = msg.tabId;
+  capture.startTime   = Date.now();
+
+  await runCaptureLoop(1);
+}
+
+async function resumeCapture(apiUrl, apiToken) {
+  const saved = await getIncompleteCapture();
+  if (!saved) throw new Error('No incomplete capture found');
+
+  capture = defaultCaptureState();
+  capture.active           = true;
+  capture.portal           = saved.portal;
+  capture.baseUrl          = saved.baseUrl;
+  capture.searchTerm       = saved.searchTerm;
+  capture.totalPages       = saved.totalPages;
+  capture.totalResults     = saved.totalResults;
+  capture.capturedListings = saved.capturedListings;
+  capture.sentListings     = saved.sentListings;
+  capture.importedCount    = saved.importedCount;
+  capture.updatedCount     = saved.updatedCount;
+  capture.pendingListings  = saved.pendingListings || [];
+  capture.batchesSent      = saved.batchesSent;
+  capture.parseWarnings    = saved.parseWarnings;
+  capture.apiUrl           = apiUrl;
+  capture.apiToken         = apiToken;
+  capture.startTime        = Date.now();
+
+  const startPage = saved.currentPage + 1;
+  await runCaptureLoop(startPage);
+}
+
+async function runCaptureLoop(startPage) {
+  const context = {
+    url:            capture.baseUrl,
+    search_term:    capture.searchTerm || '',
+    total_results:  capture.totalResults || 0,
+    pages_captured: 0,
+    captured_at:    new Date().toISOString(),
+  };
+
+  try {
+    // Page 1: get from content script if starting fresh
+    if (startPage === 1 && capture.tabId) {
+      capture.currentPage = 1;
+      capture.error = null;
+
+      try {
+        const page1 = await new Promise((resolve, reject) => {
+          chrome.tabs.sendMessage(capture.tabId, { action: 'getListings' }, response => {
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message));
+            } else {
+              resolve(response);
+            }
+          });
+        });
+
+        if (page1 && page1.listings) {
+          capture.pendingListings.push(...page1.listings);
+          capture.capturedListings += page1.listings.length;
+        }
+      } catch (e) {
+        // Content script unavailable — fetch page 1 via background
+        const result = await fetchPageWithRetry(capture.baseUrl, capture.portal, 3);
+        if (result.listings) {
+          capture.pendingListings.push(...result.listings);
+          capture.capturedListings += result.listings.length;
+        }
+      }
+
+      context.pages_captured = 1;
+      await persistCaptureState();
+      startPage = 2;
+    }
+
+    // Pages 2..N: fetch via background
+    const pageTimes = [];
+
+    for (let p = startPage; p <= capture.totalPages; p++) {
+      if (capture.cancelled) break;
+
+      const pageStart = Date.now();
+      capture.currentPage = p;
+      capture.error = null;
+
+      const pageUrl = buildPageUrl(capture.baseUrl, p, capture.portal);
+      const result = await fetchPageWithRetry(pageUrl, capture.portal, 3);
+
+      if (result.rateLimited) {
+        // 3 consecutive rate limits — stop and save what we have
+        capture.error = 'Portal blocked further requests. ' +
+          capture.capturedListings + ' listings saved. Try again in 10 minutes.';
+        break;
+      }
+
+      if (result.listings && result.listings.length > 0) {
+        capture.pendingListings.push(...result.listings);
+        capture.capturedListings += result.listings.length;
+      }
+
+      context.pages_captured = p;
+
+      // Track avg time per page
+      const elapsed = Date.now() - pageStart;
+      pageTimes.push(elapsed);
+      if (pageTimes.length > 10) pageTimes.shift(); // rolling window
+      capture.avgTimePerPage = Math.round(
+        pageTimes.reduce((a, b) => a + b, 0) / pageTimes.length
+      );
+
+      // Batch send every 5 pages (≈100 listings)
+      if (capture.pendingListings.length >= 100 || p === capture.totalPages) {
+        const batch = capture.pendingListings.splice(0, capture.pendingListings.length);
+        if (batch.length > 0) {
+          await sendBatchToApi(batch, context);
+        }
+      }
+
+      // Persist state for resume
+      await persistCaptureState();
+
+      // Rate limiting: random delay between pages
+      if (p < capture.totalPages && !capture.cancelled) {
+        // Every 20 pages, take a longer break (5-8s)
+        if (p % 20 === 0) {
+          await randomDelay(5000, 8000);
+        } else {
+          await randomDelay(1500, 4000);
+        }
+      }
+    }
+
+    // Send any remaining pending listings
+    if (capture.pendingListings.length > 0 && !capture.cancelled) {
+      const batch = capture.pendingListings.splice(0, capture.pendingListings.length);
+      await sendBatchToApi(batch, context);
+    }
+
+    // Mark complete
+    capture.active = false;
+    capture.complete = !capture.cancelled;
+    await clearCaptureState();
+
+    // Save last capture info
+    const totalProcessed = capture.importedCount + capture.updatedCount;
+    await saveLastCapture(totalProcessed || capture.capturedListings, capture.portal);
+
+    // Chrome notification
+    if (capture.complete && !capture.cancelled) {
+      const portalName = capture.portal === 'p24' ? 'Property24' : 'Private Property';
+      const count = totalProcessed || capture.capturedListings;
+      try {
+        chrome.notifications.create('capture-complete', {
+          type: 'basic',
+          iconUrl: 'icons/icon-128.png',
+          title: 'CoreX: Capture Complete',
+          message: count.toLocaleString() + ' listings captured from ' + portalName,
+          priority: 2,
+        });
+      } catch (e) { /* notifications may not be available */ }
+    }
+
+  } catch (err) {
+    capture.error = 'Capture failed: ' + err.message;
+    capture.active = false;
+
+    // Save state so we can resume
+    await persistCaptureState();
+
+    // Save whatever we captured
+    if (capture.pendingListings.length > 0) {
+      const context = {
+        url: capture.baseUrl,
+        search_term: capture.searchTerm || '',
+        total_results: capture.totalResults || 0,
+        pages_captured: capture.currentPage,
+        captured_at: new Date().toISOString(),
+      };
+      await queueLocally({
+        source: capture.portal,
+        search_context: context,
+        listings: capture.pendingListings.splice(0),
+      });
+    }
+  }
+}
 
 // ── Fetch a search results page and extract listings ───────
 async function handleFetchPage(url, portal) {
@@ -133,9 +673,6 @@ function isBadgeText(text) {
 }
 
 // ── P24 listing extraction (mirrors content-p24.js) ─────────
-// NOTE: P24 is React-rendered. Background fetch gets raw HTML which
-// may not contain rendered listing tiles. This extraction works as
-// a best-effort fallback for any server-rendered content.
 function extractP24Listing(tile) {
   const listing = baseListing('p24');
 
@@ -171,10 +708,8 @@ function extractP24Listing(tile) {
     if (listing.portal_ref) listing.portal_ref = 'P24-' + listing.portal_ref.replace(/^P24-/, '');
   } catch (e) { /* */ }
 
-  // Address — from listing link text, then heading, then URL
-  // CRITICAL: Filter out badge overlays like "Reduced", "NO TRANSFER DUTY", etc.
+  // Address — filter badges
   try {
-    // Strategy 1: find all detail page links — pick first non-badge text
     const detailLinks = tile.querySelectorAll('a[href*="/for-sale/"], a[href*="/to-rent/"]');
     for (const link of detailLinks) {
       const linkText = link.textContent.trim();
@@ -184,7 +719,6 @@ function extractP24Listing(tile) {
       }
     }
 
-    // Strategy 2: headings (filter badges)
     if (!listing.address) {
       const headings = tile.querySelectorAll('h2, h3, h4');
       for (const heading of headings) {
@@ -196,7 +730,6 @@ function extractP24Listing(tile) {
       }
     }
 
-    // Strategy 3: construct from URL path
     if (!listing.address && listing.portal_url) {
       const segs = listing.portal_url.split('/').filter(Boolean);
       if (segs.length >= 2) {
@@ -205,7 +738,6 @@ function extractP24Listing(tile) {
       }
     }
 
-    // Strategy 4: build descriptive title from URL parts
     if (!listing.address && listing.portal_url) {
       try {
         const urlPath = listing.portal_url.toLowerCase();
@@ -242,7 +774,7 @@ function extractP24Listing(tile) {
       if (inMatch) listing.suburb = inMatch[1].trim();
     }
 
-    // Complex/estate name extraction for sectional title listings
+    // Complex/estate name extraction
     if (listing.address && listing.suburb) {
       const complexMatch = listing.address.match(
         /\bin\s+(.+?\b(?:estate|village|complex|lodge|manor|park|place|gardens|court|villas|heights|towers|ridge|mews|close)\b[^,]*)/i
@@ -256,7 +788,7 @@ function extractP24Listing(tile) {
     }
   } catch (e) { /* */ }
 
-  // Price — match "R X,XXX,XXX" pattern carefully
+  // Price
   try {
     const allEls = tile.querySelectorAll('*');
     for (const el of allEls) {
@@ -392,7 +924,6 @@ function extractSizes(tile, listing) {
 }
 
 function extractMeta(tile, listing, portal) {
-  // Property type
   try {
     const typeSelectors = portal === 'p24'
       ? '.p24_propertyType, [class*="property-type"], [class*="propertyType"]'
@@ -401,7 +932,6 @@ function extractMeta(tile, listing, portal) {
     if (el) listing.property_type = el.textContent.trim();
   } catch (e) { /* */ }
 
-  // Agent name
   try {
     const agentSelectors = portal === 'p24'
       ? '.p24_agentName, [class*="agent-name"], [class*="agentName"]'
@@ -413,7 +943,6 @@ function extractMeta(tile, listing, portal) {
     }
   } catch (e) { /* */ }
 
-  // Agency name
   try {
     const agencySelectors = portal === 'p24'
       ? '.p24_branchName, [class*="agency"], [class*="branch"]'
@@ -425,7 +954,6 @@ function extractMeta(tile, listing, portal) {
     }
   } catch (e) { /* */ }
 
-  // Thumbnail
   try {
     const img = tile.querySelector('img[src], img[data-src]');
     if (img) listing.thumbnail_url = img.src || img.dataset?.src || null;

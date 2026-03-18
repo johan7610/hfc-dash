@@ -3,7 +3,7 @@
   "name": "CoreX Portal Capture",
   "version": "2.0.0",
   "description": "Capture P24 and Private Property listings for CoreX OS",
-  "permissions": ["activeTab", "storage"],
+  "permissions": ["activeTab", "storage", "notifications"],
   "host_permissions": [
     "https://www.property24.com/*",
     "https://www.privateproperty.co.za/*"
