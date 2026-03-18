@@ -311,7 +311,10 @@
       } catch (e) { /* skip broken card */ }
     });
 
-    return listings;
+    // Only return listings that have a real address
+    return listings.filter(l =>
+      l.address && l.address !== 'Address not available' && l.address.trim().length > 0
+    );
   }
 
   // ── Message handler ────────────────────────────────────────

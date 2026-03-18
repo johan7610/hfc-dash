@@ -603,6 +603,13 @@ function parseListingsFromHtml(html, portal) {
     });
   }
 
+  // For P24: only keep listings with a real address
+  if (portal === 'p24') {
+    return listings.filter(l =>
+      l.address && l.address !== 'Address not available' && l.address.trim().length > 0
+    );
+  }
+
   return listings.filter(l => l.portal_ref || l.address || l.portal_url);
 }
 
