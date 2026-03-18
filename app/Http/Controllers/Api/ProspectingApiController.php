@@ -123,6 +123,7 @@ class ProspectingApiController extends Controller
                 $existing->portal_url       = $data['portal_url'];
 
                 $existing->save();
+                $this->assignPropertyGroup($existing, $agencyId);
                 $updated++;
             } else {
                 $listing = ProspectingListing::create([
@@ -148,6 +149,8 @@ class ProspectingApiController extends Controller
                     'is_active'           => true,
                 ]);
 
+                $this->assignPropertyGroup($listing, $agencyId);
+
                 if (!empty($data['thumbnail_url'])) {
                     DownloadListingThumbnail::dispatch($listing, $data['thumbnail_url']);
                 }
@@ -166,6 +169,42 @@ class ProspectingApiController extends Controller
             'updated'  => $updated,
             'total'    => $imported + $updated,
         ]);
+    }
+
+    /**
+     * Assign a property_group_id to link the same property across portals.
+     */
+    private function assignPropertyGroup(ProspectingListing $listing, int $agencyId): void
+    {
+        $normalized = ProspectingListing::normalizeAddress($listing->address, $listing->suburb);
+        $listing->normalized_address = $normalized;
+
+        if ($normalized) {
+            // Find existing match from another portal
+            $match = ProspectingListing::where('agency_id', $agencyId)
+                ->where('normalized_address', $normalized)
+                ->where('portal_source', '!=', $listing->portal_source)
+                ->whereNotNull('property_group_id')
+                ->first();
+
+            if ($match) {
+                $listing->property_group_id = $match->property_group_id;
+            } else {
+                $listing->property_group_id = $listing->id;
+            }
+        } else {
+            $listing->property_group_id = $listing->id;
+        }
+
+        $listing->save();
+
+        // Update any unmatched listings that now match
+        if ($normalized) {
+            ProspectingListing::where('agency_id', $agencyId)
+                ->where('normalized_address', $normalized)
+                ->whereNull('property_group_id')
+                ->update(['property_group_id' => $listing->property_group_id]);
+        }
     }
 
     /**

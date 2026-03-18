@@ -17,7 +17,7 @@
     </div>
 
     {{-- Stats cards --}}
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div class="rounded-xl px-4 py-3" style="background:var(--surface); border:1px solid var(--border);">
             <div class="text-xs font-medium mb-1" style="color:var(--text-muted);">Total Active Listings</div>
             <div class="text-xl font-bold" style="color:var(--text-primary);">{{ number_format($stats['total']) }}</div>
@@ -33,6 +33,10 @@
         <div class="rounded-xl px-4 py-3" style="background:var(--surface); border:1px solid var(--border);">
             <div class="text-xs font-medium mb-1" style="color:var(--text-muted);">Price Reductions</div>
             <div class="text-xl font-bold" style="color:#22c55e;">{{ number_format($stats['price_reductions']) }}</div>
+        </div>
+        <div class="rounded-xl px-4 py-3" style="background:var(--surface); border:1px solid var(--border);">
+            <div class="text-xs font-medium mb-1" style="color:var(--text-muted);">Cross-Listed</div>
+            <div class="text-xl font-bold" style="color:#a855f7;">{{ number_format($stats['cross_listed']) }}</div>
         </div>
     </div>
 
@@ -241,18 +245,36 @@
                         {{-- Agency --}}
                         <td class="px-3 py-2 text-sm" style="color:var(--text-secondary);">{{ Str::limit($listing->agency_name, 20) ?? '-' }}</td>
 
-                        {{-- Portal badge --}}
+                        {{-- Portal badges --}}
                         <td class="px-3 py-2 text-center">
-                            @if($listing->portal_source === 'p24')
-                            <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#0d9488; color:#fff;">P24</span>
+                            @if(!empty($listing->portals))
+                                @foreach($listing->portals as $portal)
+                                <a href="{{ $portal['url'] }}" target="_blank" rel="noopener"
+                                   class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold me-0.5"
+                                   style="background:{{ $portal['source'] === 'p24' ? '#0d9488' : '#7c3aed' }}; color:#fff; text-decoration:none;"
+                                   title="{{ $portal['ref'] }}">
+                                    {{ $portal['source'] === 'p24' ? 'P24' : 'PP' }}
+                                </a>
+                                @endforeach
                             @else
-                            <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#0b2a4a; color:#fff;">PP</span>
+                                @if($listing->portal_source === 'p24')
+                                <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#0d9488; color:#fff;">P24</span>
+                                @else
+                                <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#7c3aed; color:#fff;">PP</span>
+                                @endif
                             @endif
                         </td>
 
                         {{-- Portal Ref --}}
                         <td class="px-3 py-2">
-                            @if($listing->portal_ref)
+                            @if(!empty($listing->portals))
+                                @foreach($listing->portals as $portal)
+                                <a href="{{ $portal['url'] }}" target="_blank" rel="noopener"
+                                   style="font-family:ui-monospace,SFMono-Regular,monospace; font-size:0.75rem; color:{{ $portal['source'] === 'p24' ? '#0d9488' : '#7c3aed' }}; text-decoration:none;"
+                                   class="hover:underline">{{ $portal['ref'] }}</a>
+                                @if(!$loop->last) <br> @endif
+                                @endforeach
+                            @elseif($listing->portal_ref)
                             <a href="{{ $listing->portal_url }}" target="_blank" rel="noopener"
                                style="font-family:ui-monospace,SFMono-Regular,monospace; font-size:0.75rem; color:#0d9488; text-decoration:none;"
                                class="hover:underline">{{ $listing->portal_ref }}</a>

@@ -6,6 +6,8 @@ use App\Models\ProspectingListing;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class ProspectingController extends Controller
@@ -74,11 +76,52 @@ class ProspectingController extends Controller
             $query->orderBy('last_seen_at', 'desc');
         }
 
-        $listings = $query->paginate(50);
+        // Get all filtered listings
+        $allListings = $query->get();
+
+        // Group by property_group_id — one row per property
+        $grouped = $allListings->groupBy(function ($item) {
+            return $item->property_group_id ?? 'single_' . $item->id;
+        });
+
+        // Build display rows — one per group, with portals array
+        $rows = $grouped->map(function ($group) {
+            $primary = $group->first();
+            $primary->portals = $group->map(function ($l) {
+                return [
+                    'source' => $l->portal_source,
+                    'ref'    => $l->portal_ref,
+                    'url'    => $l->portal_url,
+                ];
+            })->values()->toArray();
+            return $primary;
+        })->values();
+
+        // Manual pagination
+        $page = $request->get('page', 1);
+        $perPage = 50;
+        $listings = new LengthAwarePaginator(
+            $rows->forPage($page, $perPage),
+            $rows->count(),
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
 
         // Stats
         $statsBase = ProspectingListing::where('agency_id', $agencyId)->where('is_active', true);
         $weekAgo = Carbon::now()->subDays(7);
+
+        $crossListed = DB::table('prospecting_listings')
+            ->where('agency_id', $agencyId)
+            ->whereNull('deleted_at')
+            ->where('is_active', true)
+            ->whereNotNull('property_group_id')
+            ->select('property_group_id')
+            ->groupBy('property_group_id')
+            ->havingRaw('COUNT(DISTINCT portal_source) > 1')
+            ->get()
+            ->count();
 
         $stats = [
             'total'            => (clone $statsBase)->count(),
@@ -86,6 +129,7 @@ class ProspectingController extends Controller
             'new_this_week'    => (clone $statsBase)->where('first_seen_at', '>=', $weekAgo)->count(),
             'price_reductions' => ProspectingListing::where('agency_id', $agencyId)
                                     ->where('price_changed_at', '>=', $weekAgo)->count(),
+            'cross_listed'     => $crossListed,
         ];
 
         // Filter dropdown options

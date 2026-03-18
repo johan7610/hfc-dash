@@ -16,6 +16,8 @@ class ProspectingListing extends Model
         'portal_ref',
         'portal_url',
         'address',
+        'normalized_address',
+        'property_group_id',
         'suburb',
         'district',
         'price',
@@ -55,5 +57,28 @@ class ProspectingListing extends Model
     public function priceHistory()
     {
         return $this->hasMany(ProspectingPriceHistory::class);
+    }
+
+    /**
+     * Normalize an address for cross-portal matching.
+     * Strips punctuation, lowercases, collapses whitespace, appends suburb.
+     */
+    public static function normalizeAddress(?string $address, string $suburb = ''): ?string
+    {
+        if (!$address || $address === 'Address not available') {
+            return null;
+        }
+
+        $addr = strtolower(trim($address));
+        $addr = preg_replace('/[^a-z0-9\s]/', '', $addr);
+        $addr = preg_replace('/\s+/', ' ', $addr);
+
+        if ($suburb) {
+            $suburb = strtolower(trim($suburb));
+            $suburb = preg_replace('/[^a-z0-9\s]/', '', $suburb);
+            $addr .= ' ' . $suburb;
+        }
+
+        return $addr;
     }
 }
