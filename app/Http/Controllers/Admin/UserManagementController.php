@@ -134,6 +134,11 @@ class UserManagementController extends Controller
             return back()->withErrors('For safety, you cannot change your own role/branch here.');
         }
 
+        // Guard 1: Non-owners cannot modify owner accounts at all
+        if ($user->isOwnerRole() && !auth()->user()->isOwnerRole()) {
+            abort(403, 'You do not have permission to modify an owner account.');
+        }
+
         $data = $request->validate([
             'role' => ['required', Rule::in(Role::roleNames())],
             'designation' => ['nullable', 'string', 'max:100'],
@@ -141,6 +146,17 @@ class UserManagementController extends Controller
         ]);
 
         $role = (string)$data['role'];
+
+        // Guard 2: Cannot downgrade an owner to a non-owner role
+        $submittedRole = Role::allRoles()->firstWhere('name', $role);
+        if ($user->isOwnerRole() && (!$submittedRole || !$submittedRole->is_owner)) {
+            return back()->withErrors("Cannot change an owner's role.");
+        }
+
+        // Guard 3: Only owners can assign owner roles
+        if ($submittedRole && $submittedRole->is_owner && !auth()->user()->isOwnerRole()) {
+            abort(403, 'Only the System Owner can assign the owner role.');
+        }
         $branchId = $data['branch_id'] ?? null;
 
         if ($branchId !== null && (int)$branchId <= 0) {
