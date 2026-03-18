@@ -192,13 +192,19 @@ class SettingsController extends Controller
 
     public function generateApiToken(Request $request)
     {
-        $plaintext = Str::random(64);
+        $user = $request->user();
 
-        $request->user()->update([
-            'api_token' => hash('sha256', $plaintext),
-        ]);
+        // Revoke all existing Sanctum tokens
+        $user->tokens()->delete();
 
-        return response()->json(['token' => $plaintext]);
+        // Create new Sanctum token
+        $token = $user->createToken('corex-extension');
+
+        // Store hash in api_token column for backwards compatibility
+        $user->api_token = hash('sha256', explode('|', $token->plainTextToken)[1]);
+        $user->save();
+
+        return response()->json(['token' => $token->plainTextToken]);
     }
 
     // ── Agency Company Settings ───────────────────────────────────────────
