@@ -94,49 +94,126 @@ function findTiles(doc, selectors) {
   return [];
 }
 
-// ── P24 listing extraction (mirrors content-p24.js) ────────
+// ── Helper: get only direct/own text of an element ──────────
+function ownText(el) {
+  let text = '';
+  for (const node of el.childNodes) {
+    if (node.nodeType === 3) { // TEXT_NODE
+      text += node.textContent;
+    }
+  }
+  return text.trim();
+}
+
+// ── P24 known property types ────────────────────────────────
+const P24_TYPES = [
+  'house', 'apartment', 'townhouse', 'flat', 'duplex', 'simplex',
+  'cluster', 'cottage', 'farm', 'smallholding', 'vacant land',
+  'land', 'commercial', 'industrial', 'office', 'retail',
+  'penthouse', 'studio',
+];
+
+// ── P24 listing extraction (mirrors content-p24.js) ─────────
+// NOTE: P24 is React-rendered. Background fetch gets raw HTML which
+// may not contain rendered listing tiles. This extraction works as
+// a best-effort fallback for any server-rendered content.
 function extractP24Listing(tile) {
   const listing = baseListing('p24');
 
+  // Portal URL first
+  try {
+    const link = tile.querySelector('a[href*="/for-sale/"], a[href*="/to-rent/"]') ||
+                 tile.querySelector('a[href]');
+    if (link) listing.portal_url = link.href || link.getAttribute('href');
+  } catch (e) { /* */ }
+
+  // Portal ref — from data attributes then URL
   try {
     listing.portal_ref = tile.getAttribute('data-listing-id') ||
                          tile.getAttribute('data-listingid') ||
                          tile.dataset?.listingId || null;
+    if (!listing.portal_ref && listing.portal_url) {
+      const segments = listing.portal_url.split('/').filter(Boolean);
+      for (let i = segments.length - 1; i >= 0; i--) {
+        if (/^\d{6,}$/.test(segments[i])) {
+          listing.portal_ref = segments[i];
+          break;
+        }
+      }
+    }
     if (!listing.portal_ref) {
-      const link = tile.querySelector('a[href*="/for-sale/"], a[href*="/to-rent/"], a[href*="/property/"]');
-      if (link) {
-        const m = link.href.match(/\/(\d{6,})/);
-        if (m) listing.portal_ref = m[1];
+      const links = tile.querySelectorAll('a[href]');
+      for (const link of links) {
+        const href = link.href || link.getAttribute('href') || '';
+        const m = href.match(/\/(\d{6,})(?:[/?#]|$)/);
+        if (m) { listing.portal_ref = m[1]; break; }
       }
     }
     if (listing.portal_ref) listing.portal_ref = 'P24-' + listing.portal_ref.replace(/^P24-/, '');
   } catch (e) { /* */ }
 
+  // Address — from listing link text, then heading, then URL
   try {
-    const link = tile.querySelector('a[href*="/for-sale/"], a[href*="/to-rent/"], a[href*="/property/"]') ||
-                 tile.querySelector('a[href]');
-    if (link) listing.portal_url = link.href;
-  } catch (e) { /* */ }
+    const link = tile.querySelector('a[href*="/for-sale/"], a[href*="/to-rent/"]');
+    if (link) {
+      const linkText = link.textContent.trim();
+      if (linkText.length > 5 && !/^\d+$/.test(linkText)) listing.address = linkText;
+    }
+    if (!listing.address) {
+      const heading = tile.querySelector('h2, h3, h4');
+      if (heading) {
+        const ht = heading.textContent.trim();
+        if (ht.length > 5) listing.address = ht;
+      }
+    }
+    if (!listing.address && listing.portal_url) {
+      const segs = listing.portal_url.split('/').filter(Boolean);
+      if (segs.length >= 2) {
+        listing.address = segs[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      }
+    }
+    if (!listing.address) listing.address = 'Address not available';
+  } catch (e) { if (!listing.address) listing.address = 'Address not available'; }
 
+  // Suburb from URL path
   try {
-    const el = tile.querySelector('.p24_address, [class*="address"], .p24_title, [class*="listing-title"]');
-    if (el) listing.address = el.textContent.trim();
-  } catch (e) { /* */ }
-
-  try {
-    const el = tile.querySelector('.p24_location, [class*="location"], [class*="suburb"]');
-    if (el) listing.suburb = el.textContent.trim();
-    else if (listing.address) {
-      const parts = listing.address.split(',').map(s => s.trim());
-      if (parts.length > 1) listing.suburb = parts[parts.length - 1];
+    if (listing.portal_url) {
+      const segs = listing.portal_url.split('/').filter(Boolean);
+      if (segs.length >= 2) {
+        const seg = segs[1];
+        const inMatch = seg.match(/in-(.+)$/);
+        if (inMatch) listing.suburb = inMatch[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        else if (!/^\d+$/.test(seg)) listing.suburb = seg.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      }
+    }
+    if (!listing.suburb && listing.address) {
+      const inMatch = listing.address.match(/\bin\s+([A-Z][a-zA-Z\s]+?)(?:\s*$|\s*,)/);
+      if (inMatch) listing.suburb = inMatch[1].trim();
     }
   } catch (e) { /* */ }
 
+  // Price — match "R X,XXX,XXX" pattern carefully
   try {
-    const el = tile.querySelector('.p24_price, [class*="price"]');
-    if (el) {
-      const cleaned = el.textContent.replace(/[^\d]/g, '');
-      if (cleaned) listing.price = parseInt(cleaned, 10);
+    const allEls = tile.querySelectorAll('*');
+    for (const el of allEls) {
+      const t = ownText(el);
+      const match = t.match(/R\s*([\d\s,]+)/);
+      if (match) {
+        const cleaned = match[1].replace(/[\s,]/g, '');
+        const num = parseInt(cleaned, 10);
+        if (num >= 10000) { listing.price = num; break; }
+      }
+    }
+  } catch (e) { /* */ }
+
+  // Property type from title/URL
+  try {
+    const src = (listing.address + ' ' + (listing.portal_url || '')).toLowerCase();
+    for (const type of P24_TYPES) {
+      if (src.includes(type)) {
+        listing.property_type = type.charAt(0).toUpperCase() + type.slice(1);
+        break;
+      }
     }
   } catch (e) { /* */ }
 

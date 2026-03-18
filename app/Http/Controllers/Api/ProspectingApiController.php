@@ -22,7 +22,7 @@ class ProspectingApiController extends Controller
             'search_context.total_results' => 'required|integer',
             'search_context.pages_captured'=> 'required|integer',
             'listings'                     => 'required|array|min:1',
-            'listings.*.portal_ref'        => 'required|string',
+            'listings.*.portal_ref' => 'nullable|string',
             'listings.*.address'           => 'nullable|string',
             'listings.*.price'             => 'required|integer',
             'listings.*.portal_url'        => 'required|string',
