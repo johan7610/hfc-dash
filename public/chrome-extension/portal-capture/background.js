@@ -159,6 +159,41 @@ function buildPageUrl(baseUrl, page, portal) {
   }
 }
 
+// ── Navigate tab and extract listings via content script ────
+async function getListingsFromTab(tabId, pageUrl) {
+  // Navigate tab to the page
+  await new Promise((resolve, reject) => {
+    const onUpdated = (updatedTabId, changeInfo) => {
+      if (updatedTabId === tabId && changeInfo.status === 'complete') {
+        chrome.tabs.onUpdated.removeListener(onUpdated);
+        resolve();
+      }
+    };
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    chrome.tabs.update(tabId, { url: pageUrl });
+
+    // Timeout after 15 seconds
+    setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      reject(new Error('Page load timeout'));
+    }, 15000);
+  });
+
+  // Wait for DOM to settle
+  await sleep(500);
+
+  // Get listings from content script
+  return new Promise((resolve, reject) => {
+    chrome.tabs.sendMessage(tabId, { action: 'getListings' }, response => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+      } else {
+        resolve(response?.listings || []);
+      }
+    });
+  });
+}
+
 // ── Persist capture state for resume ───────────────────────
 async function persistCaptureState() {
   const stateToSave = {
@@ -460,41 +495,51 @@ async function runCaptureLoop(startPage) {
       startPage = 2;
     }
 
-    // Pages 2..N: fetch via background
-    const pageTimes = [];
-
+    // Pages 2..N
     for (let p = startPage; p <= capture.totalPages; p++) {
       if (capture.cancelled) break;
 
-      const pageStart = Date.now();
       capture.currentPage = p;
       capture.error = null;
 
       const pageUrl = buildPageUrl(capture.baseUrl, p, capture.portal);
-      const result = await fetchPageWithRetry(pageUrl, capture.portal);
 
-      if (result.listings && result.listings.length > 0) {
-        capture.pendingListings.push(...result.listings);
-        capture.capturedListings += result.listings.length;
+      if (capture.portal === 'p24') {
+        // P24: navigate tab to page, extract from live DOM via content script
+        try {
+          const listings = await getListingsFromTab(capture.tabId, pageUrl);
+          if (listings && listings.length > 0) {
+            capture.pendingListings.push(...listings);
+            capture.capturedListings += listings.length;
+          } else {
+            capture.parseWarnings++;
+          }
+        } catch (e) {
+          capture.parseWarnings++;
+          // Continue to next page on error
+        }
+      } else {
+        // PP: fetch via background HTTP
+        const result = await fetchPageWithRetry(pageUrl, capture.portal);
+        if (result.listings && result.listings.length > 0) {
+          capture.pendingListings.push(...result.listings);
+          capture.capturedListings += result.listings.length;
+        }
       }
 
       context.pages_captured = p;
 
-      // Batch send every 100 listings (fire-and-forget, don't block loop)
+      // Batch send every 100 listings
       if (capture.pendingListings.length >= 100) {
         const batch = capture.pendingListings.splice(0, capture.pendingListings.length);
         if (batch.length > 0) {
-          sendBatchToApi(batch, context); // no await — fire and continue
+          sendBatchToApi(batch, context);
         }
       }
 
-      // Persist state for resume (lightweight, runs fast)
       await persistCaptureState();
 
-      // Clear transient error on successful page
-      if (result.listings) capture.error = null;
-
-      // Fixed 1.5s delay between pages — only between pages, not after last
+      // 1.5s delay between pages — only between pages, not after last
       if (p < capture.totalPages && !capture.cancelled) {
         await sleep(1500);
       }
@@ -575,53 +620,13 @@ async function handleFetchPage(url, portal) {
   return { listings: listings };
 }
 
-// ── Parse listings from raw HTML string ────────────────────
+// ── Parse listings from raw HTML string (PP only) ──────────
 function parseListingsFromHtml(html, portal) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
   const listings = [];
 
-  if (portal === 'p24') {
-    // P24 has multiple card types (regularTile, proTile, groupedResultTile, etc.)
-    // ALL have data-listing-number. Deduplicate to avoid nested wrappers.
-    const allTiles = doc.querySelectorAll('[data-listing-number]');
-    const seen = new Set();
-    const cards = [];
-
-    allTiles.forEach(tile => {
-      const num = tile.getAttribute('data-listing-number');
-      if (num && !seen.has(num)) {
-        seen.add(num);
-        cards.push(tile);
-      }
-    });
-
-    // Diagnostic logging — what does the parsed HTML actually contain?
-    const addrEls = doc.querySelectorAll('.p24_address');
-    const firstCard = cards[0];
-    console.log('[CoreX P24] Page parse:', {
-      totalTiles: allTiles.length,
-      uniqueTiles: cards.length,
-      withAddress: cards.filter(c => c.querySelector('.p24_address')).length,
-      globalAddressEls: addrEls.length,
-      firstTileClasses: firstCard ? firstCard.className : 'none',
-      firstTileHTML: firstCard ? (firstCard.innerHTML || '').substring(0, 300) : 'empty',
-    });
-
-    cards.forEach(card => {
-      try {
-        listings.push(extractP24Listing(card));
-      } catch (e) { /* skip */ }
-    });
-
-    // Log extraction results
-    const withAddr = listings.filter(l => l.address && l.address !== 'Address not available');
-    console.log('[CoreX P24] Extracted:', listings.length, 'total,', withAddr.length, 'with address');
-    if (listings.length > 0 && withAddr.length === 0) {
-      // Log first listing for debugging
-      console.log('[CoreX P24] First listing sample:', JSON.stringify(listings[0], null, 2));
-    }
-  } else if (portal === 'pp') {
+  if (portal === 'pp') {
     const tiles = findTiles(doc, [
       '[class*="listing-result"]',
       '[class*="listingResult"]',
@@ -638,13 +643,6 @@ function parseListingsFromHtml(html, portal) {
     });
   }
 
-  // For P24: only keep listings with a real address
-  if (portal === 'p24') {
-    return listings.filter(l =>
-      l.address && l.address !== 'Address not available' && l.address.trim().length > 0
-    );
-  }
-
   return listings.filter(l => l.portal_ref || l.address || l.portal_url);
 }
 
@@ -655,163 +653,6 @@ function findTiles(doc, selectors) {
     if (tiles.length > 0) return Array.from(tiles);
   }
   return [];
-}
-
-// ── P24 known property types ────────────────────────────────
-const P24_TYPES = [
-  'house', 'apartment', 'townhouse', 'flat', 'duplex', 'simplex',
-  'cluster', 'cottage', 'farm', 'smallholding', 'vacant land',
-  'land', 'commercial', 'industrial', 'office', 'retail',
-  'penthouse', 'studio', 'garden cottage', 'granny flat',
-];
-
-// ── P24 listing extraction — CSS class selectors (mirrors content-p24.js) ──
-function extractP24Listing(card) {
-  const listing = baseListing('p24');
-
-  // Portal ref — data-listing-number attribute
-  try {
-    const ref = card.getAttribute('data-listing-number');
-    if (ref) listing.portal_ref = 'P24-' + ref;
-  } catch (e) { /* */ }
-
-  // Portal URL — from the main content link
-  try {
-    const content = card.querySelector('a.p24_content');
-    if (content) {
-      const href = content.getAttribute('href') || '';
-      if (href) {
-        listing.portal_url = href.startsWith('http')
-          ? href
-          : 'https://www.property24.com' + href;
-      }
-    }
-  } catch (e) { /* */ }
-
-  // Fallback portal ref from URL
-  if (!listing.portal_ref && listing.portal_url) {
-    try {
-      const segments = listing.portal_url.split('/').filter(Boolean);
-      for (let i = segments.length - 1; i >= 0; i--) {
-        if (/^\d{6,}$/.test(segments[i])) {
-          listing.portal_ref = 'P24-' + segments[i];
-          break;
-        }
-      }
-    } catch (e) { /* */ }
-  }
-
-  // Price — from .p24_price content attribute or text
-  try {
-    const priceEl = card.querySelector('.p24_price');
-    if (priceEl) {
-      const contentAttr = priceEl.getAttribute('content');
-      if (contentAttr) {
-        listing.price = parseInt(contentAttr, 10);
-      } else {
-        const cleaned = priceEl.textContent.replace(/[^\d]/g, '');
-        if (cleaned && cleaned.length >= 4) listing.price = parseInt(cleaned, 10);
-      }
-    }
-  } catch (e) { /* */ }
-
-  // Title — from .p24_title ("8 Bedroom House")
-  try {
-    const titleEl = card.querySelector('.p24_title');
-    if (titleEl) {
-      const titleText = titleEl.textContent.trim();
-      const bedMatch = titleText.match(/^(\d+)\s+Bedroom/i);
-      if (bedMatch) listing.bedrooms = parseInt(bedMatch[1], 10);
-      const titleLower = titleText.toLowerCase();
-      for (const pt of P24_TYPES) {
-        if (titleLower.includes(pt)) {
-          listing.property_type = pt.charAt(0).toUpperCase() + pt.slice(1);
-          break;
-        }
-      }
-    }
-  } catch (e) { /* */ }
-
-  // Suburb — from .p24_location
-  try {
-    const locEl = card.querySelector('.p24_location');
-    if (locEl) listing.suburb = locEl.textContent.trim();
-  } catch (e) { /* */ }
-
-  // Address — from .p24_address (optional)
-  try {
-    const addrEl = card.querySelector('.p24_address');
-    if (addrEl) {
-      const addr = addrEl.textContent.trim();
-      if (addr) listing.address = addr;
-    }
-  } catch (e) { /* */ }
-  if (!listing.address) listing.address = 'Address not available';
-
-  // Suburb fallback from URL
-  if (!listing.suburb && listing.portal_url) {
-    try {
-      const segments = listing.portal_url.split('/').filter(Boolean);
-      if (segments.length >= 2 && !/^\d+$/.test(segments[1])) {
-        listing.suburb = segments[1].replace(/-/g, ' ')
-          .replace(/\b\w/g, c => c.toUpperCase());
-      }
-    } catch (e) { /* */ }
-  }
-
-  // Features — from .p24_featureDetails with title attributes
-  try {
-    const bedEl = card.querySelector('.p24_featureDetails[title="Bedrooms"] span');
-    if (bedEl) {
-      const val = parseInt(bedEl.textContent.trim(), 10);
-      if (!isNaN(val)) listing.bedrooms = val;
-    }
-    const bathEl = card.querySelector('.p24_featureDetails[title="Bathrooms"] span');
-    if (bathEl) {
-      const val = parseInt(bathEl.textContent.trim(), 10);
-      if (!isNaN(val)) listing.bathrooms = val;
-    }
-    const parkEl = card.querySelector('.p24_featureDetails[title="Parking Spaces"] span');
-    if (parkEl) {
-      const val = parseInt(parkEl.textContent.trim(), 10);
-      if (!isNaN(val)) listing.garages = val;
-    }
-  } catch (e) { /* */ }
-
-  // Size — from .p24_size span
-  try {
-    const sizeEl = card.querySelector('.p24_size span');
-    if (sizeEl) {
-      const sizeText = sizeEl.textContent.trim();
-      const m = sizeText.match(/([\d\s,.]+)\s*m[²2]/i);
-      if (m) listing.erf_size_m2 = parseFloat(m[1].replace(/[\s,]/g, ''));
-    }
-  } catch (e) { /* */ }
-
-  // Agency — from .p24_branding img alt
-  try {
-    const agencyImg = card.querySelector('.p24_branding img[alt]');
-    if (agencyImg) {
-      const alt = agencyImg.getAttribute('alt').trim();
-      if (alt) listing.agency_name = alt;
-    }
-  } catch (e) { /* */ }
-
-  // Thumbnail — from listing image
-  try {
-    const thumb = card.querySelector('img.js_P24_listingImage');
-    if (thumb) {
-      listing.thumbnail_url = thumb.getAttribute('src') ||
-        thumb.getAttribute('data-original') ||
-        thumb.getAttribute('lazy-src') || null;
-    }
-    if (!listing.thumbnail_url) {
-      const imgEl = card.querySelector('.p24_image img[src]');
-      if (imgEl) listing.thumbnail_url = imgEl.getAttribute('src');
-    }
-  } catch (e) { /* */ }
-
-  return listing;
 }
 
 // ── PP listing extraction (mirrors content-pp.js) ──────────
@@ -859,9 +700,9 @@ function extractPPListing(tile) {
     }
   } catch (e) { /* */ }
 
-  extractFeatures(tile, listing, 'pp');
+  extractFeatures(tile, listing);
   extractSizes(tile, listing);
-  extractMeta(tile, listing, 'pp');
+  extractMeta(tile, listing);
 
   return listing;
 }
@@ -877,13 +718,9 @@ function baseListing(source) {
   };
 }
 
-function extractFeatures(tile, listing, portal) {
+function extractFeatures(tile, listing) {
   try {
-    const selectors = portal === 'p24'
-      ? '.p24_featureDetails span, [class*="feature"] span, .js_iconRow span'
-      : '[class*="feature"] span, [class*="Feature"] span, li[class*="feature"]';
-
-    const features = tile.querySelectorAll(selectors);
+    const features = tile.querySelectorAll('[class*="feature"] span, [class*="Feature"] span, li[class*="feature"]');
     features.forEach(feat => {
       const text  = feat.textContent.trim().toLowerCase();
       const title = (feat.getAttribute('title') || '').toLowerCase();
@@ -917,20 +754,14 @@ function extractSizes(tile, listing) {
   } catch (e) { /* */ }
 }
 
-function extractMeta(tile, listing, portal) {
+function extractMeta(tile, listing) {
   try {
-    const typeSelectors = portal === 'p24'
-      ? '.p24_propertyType, [class*="property-type"], [class*="propertyType"]'
-      : '[class*="property-type"], [class*="propertyType"], [class*="badge"]';
-    const el = tile.querySelector(typeSelectors);
+    const el = tile.querySelector('[class*="property-type"], [class*="propertyType"], [class*="badge"]');
     if (el) listing.property_type = el.textContent.trim();
   } catch (e) { /* */ }
 
   try {
-    const agentSelectors = portal === 'p24'
-      ? '.p24_agentName, [class*="agent-name"], [class*="agentName"]'
-      : '[class*="agent-name"], [class*="agentName"], [class*="consultant"]';
-    const el = tile.querySelector(agentSelectors);
+    const el = tile.querySelector('[class*="agent-name"], [class*="agentName"], [class*="consultant"]');
     if (el) {
       const name = el.textContent.trim();
       if (name.length <= 100) listing.agent_name = name;
@@ -938,10 +769,7 @@ function extractMeta(tile, listing, portal) {
   } catch (e) { /* */ }
 
   try {
-    const agencySelectors = portal === 'p24'
-      ? '.p24_branchName, [class*="agency"], [class*="branch"]'
-      : '[class*="agency"], [class*="Agency"], [class*="brand"]';
-    const el = tile.querySelector(agencySelectors);
+    const el = tile.querySelector('[class*="agency"], [class*="Agency"], [class*="brand"]');
     if (el) {
       const name = el.textContent.trim();
       if (name.length <= 100) listing.agency_name = name;
