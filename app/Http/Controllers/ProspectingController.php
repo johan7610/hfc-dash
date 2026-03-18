@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ProspectingClaim;
 use App\Models\ProspectingListing;
 use App\Models\User;
 use Carbon\Carbon;
@@ -17,7 +18,8 @@ class ProspectingController extends Controller
         $user = $request->user();
         $agencyId = $user->effectiveAgencyId() ?? $user->agency_id ?? 1;
 
-        $query = ProspectingListing::where('agency_id', $agencyId);
+        $query = ProspectingListing::where('agency_id', $agencyId)
+            ->with('activeClaim.user');
 
         // Filters
         if ($request->filled('portal_source') && $request->portal_source !== 'all') {
@@ -64,6 +66,17 @@ class ProspectingController extends Controller
                   ->orWhere('agent_name', 'like', "%{$search}%")
                   ->orWhere('agency_name', 'like', "%{$search}%");
             });
+        }
+
+        // Claim filters
+        if ($request->filled('claim_filter')) {
+            if ($request->claim_filter === 'my_claims') {
+                $query->whereHas('activeClaim', function ($q) use ($user) {
+                    $q->where('user_id', $user->id);
+                });
+            } elseif ($request->claim_filter === 'unclaimed') {
+                $query->whereDoesntHave('activeClaim');
+            }
         }
 
         // Sorting
@@ -146,9 +159,98 @@ class ProspectingController extends Controller
                 ->distinct()->pluck('captured_by_user_id')
         )->orderBy('name')->get(['id', 'name']);
 
+        $claimStats = [
+            'my_claims'     => ProspectingClaim::where('user_id', $user->id)->active()->count(),
+            'total_claimed' => ProspectingClaim::where('agency_id', $agencyId)->active()->count(),
+            'expiring_soon' => ProspectingClaim::where('agency_id', $agencyId)
+                                ->active()
+                                ->whereNull('feedback_at')
+                                ->where('claimed_at', '<', now()->subHours(24))
+                                ->count(),
+        ];
+
         return view('prospecting.index', compact(
-            'listings', 'stats', 'suburbs', 'propertyTypes', 'users'
+            'listings', 'stats', 'suburbs', 'propertyTypes', 'users', 'claimStats'
         ));
+    }
+
+    public function claim(ProspectingListing $listing)
+    {
+        $user = auth()->user();
+        $agencyId = $user->agency_id ?? $user->effectiveAgencyId() ?? 1;
+
+        $existing = ProspectingClaim::where('prospecting_listing_id', $listing->id)
+            ->active()->first();
+
+        if ($existing) {
+            if ($existing->isExpired()) {
+                $existing->update([
+                    'is_active'   => false,
+                    'released_at' => now(),
+                ]);
+            } else {
+                return back()->with('error', 'Already claimed by ' . $existing->user->name);
+            }
+        }
+
+        ProspectingClaim::create([
+            'agency_id'              => $agencyId,
+            'prospecting_listing_id' => $listing->id,
+            'user_id'                => $user->id,
+            'status'                 => 'claimed',
+            'claimed_at'             => now(),
+            'last_updated_at'        => now(),
+        ]);
+
+        return back()->with('success', 'Listing claimed');
+    }
+
+    public function feedback(Request $request, ProspectingListing $listing)
+    {
+        $user = auth()->user();
+
+        $claim = ProspectingClaim::where('prospecting_listing_id', $listing->id)
+            ->where('user_id', $user->id)
+            ->active()->firstOrFail();
+
+        $request->validate([
+            'status' => 'required|in:contacted,meeting_set,listing,not_interested,lost',
+            'notes'  => 'nullable|string|max:1000',
+        ]);
+
+        $newStatus = $request->status;
+
+        $claim->update([
+            'status'          => $newStatus,
+            'notes'           => $request->notes,
+            'feedback_at'     => $claim->feedback_at ?? now(),
+            'last_updated_at' => now(),
+        ]);
+
+        if (in_array($newStatus, ['not_interested', 'lost'])) {
+            $claim->update([
+                'is_active'   => false,
+                'released_at' => now(),
+            ]);
+        }
+
+        return back()->with('success', 'Feedback saved');
+    }
+
+    public function release(ProspectingListing $listing)
+    {
+        $user = auth()->user();
+
+        $claim = ProspectingClaim::where('prospecting_listing_id', $listing->id)
+            ->where('user_id', $user->id)
+            ->active()->firstOrFail();
+
+        $claim->update([
+            'is_active'   => false,
+            'released_at' => now(),
+        ]);
+
+        return back()->with('success', 'Claim released');
     }
 
     public function show(ProspectingListing $listing)

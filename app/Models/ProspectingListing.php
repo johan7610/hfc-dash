@@ -34,6 +34,7 @@ class ProspectingListing extends Model
         'last_seen_at',
         'price_changed_at',
         'is_active',
+        'first_seen_email_date',
     ];
 
     protected $casts = [
@@ -41,7 +42,8 @@ class ProspectingListing extends Model
         'is_active'        => 'boolean',
         'first_seen_at'    => 'datetime',
         'last_seen_at'     => 'datetime',
-        'price_changed_at' => 'datetime',
+        'price_changed_at'      => 'datetime',
+        'first_seen_email_date' => 'datetime',
     ];
 
     public function agency()
@@ -57,6 +59,21 @@ class ProspectingListing extends Model
     public function priceHistory()
     {
         return $this->hasMany(ProspectingPriceHistory::class);
+    }
+
+    public function claims()
+    {
+        return $this->hasMany(ProspectingClaim::class);
+    }
+
+    public function activeClaim()
+    {
+        return $this->hasOne(ProspectingClaim::class)->where('is_active', true);
+    }
+
+    public function claimedBy()
+    {
+        return $this->activeClaim?->user;
     }
 
     /**

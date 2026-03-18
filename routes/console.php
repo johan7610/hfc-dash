@@ -49,3 +49,6 @@ Schedule::command('sales-documents:send-reminders')->dailyAt('09:00');
 
 // Marketing insights sync — runs daily at 04:00
 Schedule::job(new \App\Jobs\SyncMarketingInsightsJob())->dailyAt('04:00');
+
+// Prospecting claim maintenance — runs hourly
+Schedule::command('prospecting:maintain-claims')->hourly();

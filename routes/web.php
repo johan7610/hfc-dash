@@ -1115,6 +1115,9 @@ Route::middleware(['auth', 'permission:access_document_library'])->prefix('docum
 Route::middleware(['auth'])->prefix('prospecting')->name('prospecting.')->group(function () {
     Route::get('/', [\App\Http\Controllers\ProspectingController::class, 'index'])->name('index');
     Route::get('/thumbnail/{listing}', [\App\Http\Controllers\ProspectingController::class, 'thumbnail'])->name('thumbnail');
+    Route::post('/{listing}/claim', [\App\Http\Controllers\ProspectingController::class, 'claim'])->name('claim');
+    Route::post('/{listing}/feedback', [\App\Http\Controllers\ProspectingController::class, 'feedback'])->name('feedback');
+    Route::post('/{listing}/release', [\App\Http\Controllers\ProspectingController::class, 'release'])->name('release');
     Route::get('/{listing}', [\App\Http\Controllers\ProspectingController::class, 'show'])->name('show');
 });
 

@@ -157,6 +157,32 @@
         </div>
     </form>
 
+    {{-- Claim filter buttons + stats --}}
+    <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3" style="background:var(--surface); border:1px solid var(--border);">
+        <div class="flex items-center gap-2">
+            <a href="{{ request()->fullUrlWithQuery(['claim_filter' => null]) }}"
+               class="px-3 py-1.5 rounded text-xs font-semibold"
+               style="{{ !request('claim_filter') ? 'background:#00d4aa; color:#0b2a4a;' : 'background:#0b2a4a; color:#00d4aa; border:1px solid #00d4aa;' }}">
+                All
+            </a>
+            <a href="{{ request()->fullUrlWithQuery(['claim_filter' => 'unclaimed']) }}"
+               class="px-3 py-1.5 rounded text-xs font-semibold"
+               style="{{ request('claim_filter') === 'unclaimed' ? 'background:#00d4aa; color:#0b2a4a;' : 'background:#0b2a4a; color:#00d4aa; border:1px solid #00d4aa;' }}">
+                Unclaimed
+            </a>
+            <a href="{{ request()->fullUrlWithQuery(['claim_filter' => 'my_claims']) }}"
+               class="px-3 py-1.5 rounded text-xs font-semibold"
+               style="{{ request('claim_filter') === 'my_claims' ? 'background:#00d4aa; color:#0b2a4a;' : 'background:#0b2a4a; color:#00d4aa; border:1px solid #00d4aa;' }}">
+                My Claims
+            </a>
+        </div>
+        <div class="flex items-center gap-4 text-xs" style="color:var(--text-secondary);">
+            <span>My Claims: <strong style="color:#00d4aa;">{{ $claimStats['my_claims'] }}</strong></span>
+            <span>Total Claimed: <strong style="color:var(--text-primary);">{{ $claimStats['total_claimed'] }}</strong></span>
+            <span>Expiring: <strong style="color:#f59e0b;">{{ $claimStats['expiring_soon'] }}</strong></span>
+        </div>
+    </div>
+
     {{-- Results table --}}
     @if($listings->count())
     <div class="rounded-xl overflow-hidden" style="background:var(--surface); border:1px solid var(--border);">
@@ -180,6 +206,7 @@
                         <th class="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style="color:var(--text-muted);">Agency</th>
                         <th class="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style="color:var(--text-muted);">Portal</th>
                         <th class="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style="color:var(--text-muted);">Ref</th>
+                        <th class="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style="color:var(--text-muted);">Claim</th>
                         <th class="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style="color:var(--text-muted);">
                             <a href="{{ request()->fullUrlWithQuery(['sort' => 'first_seen_at', 'dir' => request('sort') === 'first_seen_at' && request('dir', 'desc') === 'asc' ? 'desc' : 'asc']) }}"
                                style="color:var(--text-muted); text-decoration:none;">First Seen {{ request('sort') === 'first_seen_at' ? (request('dir') === 'asc' ? '&#9650;' : '&#9660;') : '' }}</a>
@@ -283,6 +310,50 @@
                             @endif
                         </td>
 
+                        {{-- Claim --}}
+                        <td class="px-3 py-2 text-center">
+                            @if($listing->activeClaim)
+                                @php $claim = $listing->activeClaim; @endphp
+                                <div class="flex flex-col items-center gap-0.5">
+                                    <span class="text-xs font-medium" style="color:#00d4aa;">
+                                        {{ $claim->user->name }}
+                                    </span>
+                                    <span class="text-xs font-semibold" style="color:
+                                        {{ $claim->status === 'claimed' ? '#f59e0b' :
+                                           ($claim->status === 'contacted' ? '#3b82f6' :
+                                           ($claim->status === 'meeting_set' ? '#8b5cf6' :
+                                           ($claim->status === 'listing' ? '#10b981' : '#6b7280'))) }};">
+                                        {{ ucfirst(str_replace('_', ' ', $claim->status)) }}
+                                    </span>
+                                    @if(!$claim->feedback_at)
+                                        @php $hoursLeft = 48 - $claim->claimed_at->diffInHours(now()); @endphp
+                                        <span class="text-xs" style="color:var(--text-muted);">
+                                            {{ max(0, $hoursLeft) }}h left
+                                        </span>
+                                    @endif
+                                    @if($claim->flagged_at)
+                                        <span class="text-xs font-bold" style="color:#ef4444;">BM Review</span>
+                                    @endif
+                                    @if($claim->user_id === auth()->id() && $claim->is_active)
+                                        <button type="button"
+                                            onclick="openFeedbackModal({{ $listing->id }}, '{{ $claim->status }}')"
+                                            class="text-xs underline" style="color:#00d4aa;">
+                                            Update
+                                        </button>
+                                    @endif
+                                </div>
+                            @else
+                                <form method="POST" action="{{ route('prospecting.claim', $listing) }}">
+                                    @csrf
+                                    <button type="submit"
+                                        class="px-2 py-1 text-xs rounded font-medium"
+                                        style="background:#0b2a4a; color:#00d4aa; border:1px solid #00d4aa;">
+                                        Claim
+                                    </button>
+                                </form>
+                            @endif
+                        </td>
+
                         {{-- First Seen --}}
                         <td class="px-3 py-2 text-sm" style="color:var(--text-secondary);">{{ $listing->first_seen_at->format('d M Y') }}</td>
 
@@ -318,5 +389,86 @@
     </div>
     @endif
 
+    {{-- Feedback Modal --}}
+    <div x-data="feedbackModal()" x-show="open" x-cloak
+         style="position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.6);"
+         @keydown.escape.window="open = false">
+        <div @click.outside="open = false"
+             style="background:#0b2a4a; border:1px solid #1e3a5f; border-radius:12px; padding:24px; width:100%; max-width:440px;">
+            <h3 class="text-lg font-bold mb-4" style="color:#fff;">Update Claim Status</h3>
+
+            <form :action="'/prospecting/' + listingId + '/feedback'" method="POST">
+                @csrf
+                <div class="mb-4">
+                    <label class="block text-xs font-medium mb-1" style="color:rgba(255,255,255,0.7);">Status</label>
+                    <select name="status" x-model="status"
+                            class="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                            style="background:#132f4c; border:1px solid #1e3a5f; color:#fff;">
+                        <option value="contacted">Contacted</option>
+                        <option value="meeting_set">Meeting Set</option>
+                        <option value="listing">Listing</option>
+                        <option value="not_interested">Not Interested</option>
+                        <option value="lost">Lost</option>
+                    </select>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-xs font-medium mb-1" style="color:rgba(255,255,255,0.7);">Notes (optional)</label>
+                    <textarea name="notes" rows="3"
+                              class="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                              style="background:#132f4c; border:1px solid #1e3a5f; color:#fff;"
+                              placeholder="Any notes about this contact..."></textarea>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <button type="submit" class="px-4 py-2 rounded-lg text-sm font-semibold"
+                            style="background:#00d4aa; color:#0b2a4a;">
+                        Save Feedback
+                    </button>
+                    <button type="button" @click="open = false"
+                            class="px-4 py-2 rounded-lg text-sm font-medium"
+                            style="background:transparent; color:rgba(255,255,255,0.6); border:1px solid #1e3a5f;">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+
+            {{-- Release claim (separate action) --}}
+            <div class="mt-4 pt-4" style="border-top:1px solid #1e3a5f;">
+                <form :action="'/prospecting/' + listingId + '/release'" method="POST"
+                      onsubmit="return confirm('Release this claim? Another agent will be able to claim it.')">
+                    @csrf
+                    <button type="submit" class="text-xs underline" style="color:#ef4444;">
+                        Release Claim
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
 </div>
+
+<script>
+function feedbackModal() {
+    return {
+        open: false,
+        listingId: null,
+        status: 'contacted',
+        openModal(id, currentStatus) {
+            this.listingId = id;
+            this.status = currentStatus;
+            this.open = true;
+        }
+    };
+}
+
+function openFeedbackModal(listingId, currentStatus) {
+    const modal = document.querySelector('[x-data="feedbackModal()"]');
+    if (modal && modal.__x) {
+        modal.__x.$data.listingId = listingId;
+        modal.__x.$data.status = currentStatus;
+        modal.__x.$data.open = true;
+    }
+}
+</script>
 @endsection
