@@ -138,13 +138,25 @@ function sleep(ms) {
 
 // ── Build page URL ─────────────────────────────────────────
 function buildPageUrl(baseUrl, page, portal) {
-  const url = new URL(baseUrl);
   if (portal === 'p24') {
-    url.searchParams.set('Page', page);
+    // P24 uses path-based pagination: /p2, /p3, etc.
+    // Insert /pN before the query string
+    const url = new URL(baseUrl);
+    let path = url.pathname;
+    // Remove any existing /pN from path
+    path = path.replace(/\/p\d+$/, '');
+    // Add new page number (skip /p1 — page 1 has no suffix)
+    if (page > 1) {
+      path = path + '/p' + page;
+    }
+    url.pathname = path;
+    return url.toString();
   } else {
+    // PP uses query-based pagination
+    const url = new URL(baseUrl);
     url.searchParams.set('page', page);
+    return url.toString();
   }
-  return url.toString();
 }
 
 // ── Persist capture state for resume ───────────────────────
