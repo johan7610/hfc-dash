@@ -205,7 +205,7 @@ class RoleManagerController extends Controller
         // Delete only this role's permissions, then rebuild — preserves all other roles.
         // (Replacing truncate-all so form only needs to submit one role's data,
         //  keeping the POST payload under PHP's max_input_vars limit.)
-        RolePermission::where('role', $role)->delete();
+        RolePermission::where('role', $role)->forceDelete();
 
         $matrix = $request->input('permissions', []);
         $scopes  = $request->input('scopes', []);
