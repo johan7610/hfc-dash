@@ -31,7 +31,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/evaluation', function () {
         return view('evaluation.index');
-    })->name('evaluation.index');
+    })->middleware('permission:access_evaluation')->name('evaluation.index');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -679,13 +679,13 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     });
 
     // Marketing: post insights sync + social account disconnect
-    Route::post('/marketing/posts/{post}/sync-insights', [\App\Http\Controllers\PropertyMarketingController::class, 'syncInsights'])->name('corex.marketing.sync-insights');
-    Route::post('/marketing/social/disconnect', [\App\Http\Controllers\PropertyMarketingController::class, 'disconnectAccount'])->name('corex.marketing.social.disconnect');
-    Route::post('/marketing/upload-template-image', [\App\Http\Controllers\PropertyMarketingController::class, 'uploadTemplateImage'])->name('corex.marketing.upload-template-image');
+    Route::post('/marketing/posts/{post}/sync-insights', [\App\Http\Controllers\PropertyMarketingController::class, 'syncInsights'])->middleware('permission:access_properties')->name('corex.marketing.sync-insights');
+    Route::post('/marketing/social/disconnect', [\App\Http\Controllers\PropertyMarketingController::class, 'disconnectAccount'])->middleware('permission:access_properties')->name('corex.marketing.social.disconnect');
+    Route::post('/marketing/upload-template-image', [\App\Http\Controllers\PropertyMarketingController::class, 'uploadTemplateImage'])->middleware('permission:access_properties')->name('corex.marketing.upload-template-image');
 
     // Social OAuth
-    Route::get('/social/oauth/redirect', [\App\Http\Controllers\PropertyMarketingController::class, 'oauthRedirect'])->name('corex.social.oauth.redirect');
-    Route::get('/social/oauth/callback', [\App\Http\Controllers\PropertyMarketingController::class, 'oauthCallback'])->name('corex.social.oauth.callback');
+    Route::get('/social/oauth/redirect', [\App\Http\Controllers\PropertyMarketingController::class, 'oauthRedirect'])->middleware('permission:access_properties')->name('corex.social.oauth.redirect');
+    Route::get('/social/oauth/callback', [\App\Http\Controllers\PropertyMarketingController::class, 'oauthCallback'])->middleware('permission:access_properties')->name('corex.social.oauth.callback');
 });
 
 
@@ -1141,7 +1141,7 @@ Route::middleware(['auth', 'permission:access_document_library'])->prefix('docum
 });
 
 // ===== PROSPECTING =====
-Route::middleware(['auth'])->prefix('prospecting')->name('prospecting.')->group(function () {
+Route::middleware(['auth', 'permission:access_prospecting'])->prefix('prospecting')->name('prospecting.')->group(function () {
     Route::get('/', [\App\Http\Controllers\ProspectingController::class, 'index'])->name('index');
     Route::get('/thumbnail/{listing}', [\App\Http\Controllers\ProspectingController::class, 'thumbnail'])->name('thumbnail');
     Route::post('/{listing}/claim', [\App\Http\Controllers\ProspectingController::class, 'claim'])->name('claim');

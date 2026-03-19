@@ -11,6 +11,7 @@ use App\Models\RolePermission;
 use App\Models\User;
 use App\Services\PermissionService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -85,6 +86,8 @@ class RoleManagerController extends Controller
             'calculators'      => 'Calculators & Tools',
             'ellie'            => 'Ellie AI',
             'p24'              => 'P24 Market Intel',
+            'prospecting'      => 'Prospecting',
+            'evaluation'       => 'Evaluation',
             'pdf_splitter'     => 'PDF Splitter',
             'knowledge'        => 'Knowledge Base',
             'finance'          => 'Finance Engine',
@@ -114,6 +117,8 @@ class RoleManagerController extends Controller
             'core-matches'           => 'Core Matches',
             'calculators'            => 'Tools',
             'ellie'                  => 'Tools',
+            'prospecting'            => 'Tools',
+            'evaluation'             => 'Tools',
             'pdf-splitter'           => 'Tools',
             'p24'                    => 'P24 Market Intel',
             'knowledge-base'         => 'Knowledge Base',
@@ -148,7 +153,7 @@ class RoleManagerController extends Controller
         }
 
         // Shared modules — scope radios not shown, always visible to all
-        $sharedModules = ['p24', 'knowledge', 'calculators', 'ellie', 'pdf_splitter'];
+        $sharedModules = ['p24', 'knowledge', 'calculators', 'ellie', 'pdf_splitter', 'prospecting', 'evaluation'];
 
         // Pre-compute JSON-safe values (no closures in Blade @json)
         $rolesJson = $roles->map(fn($r) => [
@@ -202,10 +207,8 @@ class RoleManagerController extends Controller
 
         $role = $request->input('role');
 
-        // Delete only this role's permissions, then rebuild — preserves all other roles.
-        // (Replacing truncate-all so form only needs to submit one role's data,
-        //  keeping the POST payload under PHP's max_input_vars limit.)
-        RolePermission::where('role', $role)->forceDelete();
+        // Only accept permission keys that actually exist in the DB
+        $validKeys = CoreXPermission::pluck('key')->flip();
 
         $matrix = $request->input('permissions', []);
         $scopes  = $request->input('scopes', []);
@@ -213,7 +216,7 @@ class RoleManagerController extends Controller
         $now     = now();
 
         foreach ($matrix as $permKey => $on) {
-            if ($on && $on !== '0') {
+            if ($on && $on !== '0' && $validKeys->has($permKey)) {
                 $scope = null;
                 if (str_ends_with($permKey, '.view') && isset($scopes[$permKey])) {
                     $scopeVal = $scopes[$permKey];
@@ -232,9 +235,17 @@ class RoleManagerController extends Controller
             }
         }
 
-        if (count($rows)) {
-            RolePermission::insert($rows);
-        }
+        // Wrap delete+insert in a transaction so permissions are never lost
+        DB::transaction(function () use ($role, $rows) {
+            RolePermission::where('role', $role)->forceDelete();
+
+            if (count($rows)) {
+                // Insert in chunks to stay within DB limits
+                foreach (array_chunk($rows, 500) as $chunk) {
+                    RolePermission::insert($chunk);
+                }
+            }
+        });
 
         PermissionService::clearCache();
 

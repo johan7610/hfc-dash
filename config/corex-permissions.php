@@ -245,6 +245,12 @@ return [
         ['key' => 'p24.view',                    'label' => 'View',                        'section' => 'p24',              'type' => 'action',  'module' => 'p24',              'sort_order' => 10],
         ['key' => 'p24.manage',                  'label' => 'Manage',                      'section' => 'p24',              'type' => 'action',  'module' => 'p24',              'sort_order' => 11],
 
+        // ── Prospecting ──
+        ['key' => 'access_prospecting',          'label' => 'Access Prospecting',          'section' => 'prospecting',      'type' => 'access',  'module' => 'prospecting',      'sort_order' => 1],
+
+        // ── Evaluation (Property/Suburb/Town Reports) ──
+        ['key' => 'access_evaluation',           'label' => 'Access Evaluation Reports',   'section' => 'evaluation',       'type' => 'access',  'module' => 'evaluation',       'sort_order' => 1],
+
         // ── PDF Splitter ──
         ['key' => 'access_pdf_splitter',         'label' => 'Access PDF Splitter',         'section' => 'pdf-splitter',     'type' => 'access',  'module' => 'pdf_splitter',     'sort_order' => 1],
 
@@ -344,6 +350,7 @@ return [
                 'sales_docs.view', 'sales_docs.create', 'sales_docs.edit',
                 'access_calculators', 'access_ellie',
                 'access_pdf_splitter',
+                'access_prospecting', 'access_evaluation',
                 'access_properties', 'create_properties', 'publish_properties', 'delete_properties',
                 'properties.view', 'properties.create', 'properties.edit',
                 'access_contacts',
@@ -391,6 +398,7 @@ return [
                 'sales_docs.view', 'sales_docs.create',
                 'access_calculators', 'access_ellie',
                 'access_pdf_splitter',
+                'access_prospecting', 'access_evaluation',
                 'access_properties', 'create_properties',
                 'properties.view', 'properties.create', 'properties.edit',
                 'access_contacts',
@@ -421,6 +429,7 @@ return [
                 'access_commercial_evaluations', 'commercial_evals.view',
                 'access_sales_documents', 'sales_docs.view',
                 'access_calculators', 'access_ellie',
+                'access_prospecting', 'access_evaluation',
                 'access_properties', 'properties.view',
                 'access_contacts', 'contacts.view',
                 'access_core_matches', 'core_matches.view',
