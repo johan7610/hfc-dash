@@ -558,6 +558,8 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         ->middleware('permission:edit_permissions')->name('corex.role-manager.roles.update');
     Route::delete('/role-manager/roles/{role}', [CoreXRoleManagerController::class, 'destroyRole'])
         ->middleware('permission:edit_permissions')->name('corex.role-manager.roles.destroy');
+    Route::post('/role-manager/copy-permissions', [CoreXRoleManagerController::class, 'copyPermissions'])
+        ->middleware('permission:edit_permissions')->name('corex.role-manager.copy');
 
     // Agency Management (super_admin only)
     Route::middleware('permission:access_agencies')->prefix('settings/agencies')->name('agencies.')->group(function () {

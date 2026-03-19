@@ -274,6 +274,61 @@ class RoleManagerController extends Controller
         return back()->with('success', "Role updated for {$user->name}.");
     }
 
+    /**
+     * Copy all permissions (and scopes) from one role to one or more target roles.
+     */
+    public function copyPermissions(Request $request)
+    {
+        $nonOwnerRoles = Role::where('is_owner', false)->pluck('name')->all();
+
+        $request->validate([
+            'source_role'   => ['required', Rule::in($nonOwnerRoles)],
+            'target_roles'  => 'required|array|min:1',
+            'target_roles.*'=> [Rule::in($nonOwnerRoles)],
+        ]);
+
+        $source  = $request->input('source_role');
+        $targets = collect($request->input('target_roles'))->reject(fn($r) => $r === $source)->unique()->values();
+
+        if ($targets->isEmpty()) {
+            return back()->withErrors(['target_roles' => 'Select at least one target role that is different from the source.']);
+        }
+
+        $sourcePerms = RolePermission::where('role', $source)->get(['permission_key', 'scope']);
+
+        $now   = now();
+        $count = 0;
+
+        DB::transaction(function () use ($targets, $sourcePerms, $now, &$count) {
+            foreach ($targets as $target) {
+                RolePermission::where('role', $target)->forceDelete();
+
+                $rows = $sourcePerms->map(fn($p) => [
+                    'role'           => $target,
+                    'permission_key' => $p->permission_key,
+                    'scope'          => $p->scope,
+                    'created_at'     => $now,
+                    'updated_at'     => $now,
+                ])->all();
+
+                if (count($rows)) {
+                    foreach (array_chunk($rows, 500) as $chunk) {
+                        RolePermission::insert($chunk);
+                    }
+                }
+
+                $count++;
+            }
+        });
+
+        PermissionService::clearCache();
+
+        $targetLabels = Role::whereIn('name', $targets)->pluck('label')->implode(', ');
+        $sourceLabel  = Role::where('name', $source)->value('label');
+
+        return back()->with('success', "Copied {$sourcePerms->count()} permissions from {$sourceLabel} to {$targetLabels}.");
+    }
+
     // ── Role CRUD ──
 
     public function storeRole(Request $request)
