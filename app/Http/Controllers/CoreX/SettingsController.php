@@ -13,6 +13,8 @@ use App\Models\Docuperfect\NamedField;
 use App\Models\PerformanceSetting;
 use App\Models\Rental\RentalDocumentType;
 use App\Models\Rental\RentalReminderSetting;
+use App\Models\Branch;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -79,6 +81,9 @@ class SettingsController extends Controller
         // Agency Settings tab: Company details from Agency model
         $agencyId = $user?->effectiveAgencyId();
         $data['agency'] = $agencyId ? Agency::find($agencyId) : Agency::first();
+
+        // Agents list for email signature preview selector
+        $data['agents'] = User::where('is_active', true)->orderBy('name')->get(['id', 'name']);
 
         return view('corex.settings', $data);
     }
@@ -210,14 +215,18 @@ class SettingsController extends Controller
             'trading_name'     => ['nullable', 'string', 'max:255'],
             'tagline'          => ['nullable', 'string', 'max:255'],
             'address'          => ['nullable', 'string', 'max:500'],
-            'phone'            => ['nullable', 'string', 'max:255'],
-            'phone_secondary'  => ['nullable', 'string', 'max:255'],
+            'phone'                  => ['nullable', 'string', 'max:255'],
+            'phone_label'            => ['nullable', 'string', 'max:100'],
+            'phone_secondary'        => ['nullable', 'string', 'max:255'],
+            'phone_secondary_label'  => ['nullable', 'string', 'max:100'],
             'fax'              => ['nullable', 'string', 'max:255'],
             'email'            => ['nullable', 'string', 'max:255'],
             'reg_no'           => ['nullable', 'string', 'max:255'],
             'vat_no'           => ['nullable', 'string', 'max:255'],
             'ffc_no'           => ['nullable', 'string', 'max:255'],
             'fic_no'           => ['nullable', 'string', 'max:255'],
+            'email_disclaimer' => ['nullable', 'string', 'max:2000'],
+            'popi_url'         => ['nullable', 'string', 'max:500'],
             'logo'             => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'remove_logo'      => ['nullable', 'boolean'],
         ]);
@@ -244,5 +253,90 @@ class SettingsController extends Controller
         $agency->update($data);
 
         return redirect()->back()->with('success', 'Company settings updated.');
+    }
+
+    // ── Live Previews ─────────────────────────────────────────────────
+
+    /**
+     * Render document header preview with query param overrides.
+     */
+    public function previewHeader(Request $request)
+    {
+        abort_unless(auth()->user()?->hasPermission('manage_performance_settings'), 403);
+
+        $agency = Agency::where('slug', 'hfc-coastal')->first();
+
+        // Build a temporary agency-like object with query param overrides
+        $overrides = $request->only([
+            'trading_name', 'tagline', 'address', 'phone', 'phone_label',
+            'phone_secondary', 'phone_secondary_label', 'fax', 'email',
+            'reg_no', 'vat_no', 'ffc_no', 'fic_no', 'name',
+        ]);
+
+        // Create a clone with overrides applied
+        $previewAgency = clone $agency;
+        foreach ($overrides as $key => $value) {
+            if ($value !== null && $value !== '') {
+                $previewAgency->{$key} = $value;
+            }
+        }
+
+        // Build a minimal branch (null — will use agency fallback)
+        $branch = null;
+
+        // Determine logo URL
+        $logoUrl = $previewAgency->logo_path
+            ? asset('storage/' . $previewAgency->logo_path)
+            : null;
+
+        $html = view('docuperfect.web-templates.components.company-header', [
+            'previewAgency'  => $previewAgency,
+            'header_display' => 'all_pages',
+            'logo_url'       => $logoUrl,
+        ])->render();
+
+        // Wrap in a minimal HTML shell so the iframe renders cleanly
+        $shell = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'
+            . 'body { font-family: Arial, sans-serif; margin: 8px; }'
+            . '</style></head><body>' . $html . '</body></html>';
+
+        return response($shell)->header('Content-Type', 'text/html');
+    }
+
+    /**
+     * Render email signature preview for a given user.
+     */
+    public function previewSignature(Request $request)
+    {
+        abort_unless(auth()->user()?->hasPermission('manage_performance_settings'), 403);
+
+        $userId = $request->input('user_id');
+        $agent = $userId ? User::find($userId) : auth()->user();
+
+        $agency = Agency::where('slug', 'hfc-coastal')->first();
+
+        $agentFooter = [
+            'name'             => $agent->name ?? 'Agent Name',
+            'email'            => $agent->email ?? '',
+            'phone'            => $agent->phone ?? null,
+            'designation'      => $agent->designation ?? null,
+            'cell'             => $agent->cell ?? null,
+            'fax'              => $agent->fax ?? null,
+            'ffc_number'       => $agent->ffc_number ?? null,
+            'website'          => $agent->website ?? null,
+            'agent_photo_url'  => $agent->agent_photo_path ? asset('storage/' . $agent->agent_photo_path) : null,
+            'logo_url'         => $agency && $agency->logo_path ? asset('storage/' . $agency->logo_path) : null,
+            'email_disclaimer' => $request->input('email_disclaimer', $agency->email_disclaimer ?? null),
+            'popi_url'         => $request->input('popi_url', $agency->popi_url ?? null),
+            'agency_name'      => $agency->name ?? 'Home Finders Coastal',
+        ];
+
+        $html = view('emails.signatures.partials.agent-footer', compact('agentFooter'))->render();
+
+        $shell = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'
+            . 'body { font-family: Arial, Helvetica, sans-serif; margin: 8px; font-size: 13px; color: #333; }'
+            . '</style></head><body>' . $html . '</body></html>';
+
+        return response($shell)->header('Content-Type', 'text/html');
     }
 }

@@ -192,6 +192,11 @@ class TemplateController extends Controller
         if ($request->has('is_global')) {
             $data['is_global'] = $request->boolean('is_global');
         }
+        if ($request->has('header_display')) {
+            $allowed = ['first_page', 'all_pages', 'none'];
+            $val = $request->input('header_display');
+            $data['header_display'] = in_array($val, $allowed) ? $val : 'first_page';
+        }
 
         if (!empty($data)) {
             $template->update($data);
@@ -349,14 +354,27 @@ class TemplateController extends Controller
         // Build placeholder values from fields_json
         $viewData = [];
         foreach ($template->fields_json ?? [] as $field) {
-            $varName = $field['field_name'] ?? str_replace('.', '_', $field['id'] ?? '');
-            $viewData[$varName] = '[' . ($field['label'] ?? $varName) . ']';
+            $varName = $field['field_name'] ?? '';
+            if (empty($varName)) {
+                $varName = str_replace('.', '_', $field['id'] ?? '');
+            }
+            if (empty($varName)) {
+                continue;
+            }
+            $label = $field['label'] ?? '';
+            if (empty($label)) {
+                $label = $varName;
+            }
+            $viewData[$varName] = '[' . $label . ']';
         }
 
         // Pass signing_parties so the signature-block component renders correct parties
         if (!empty($template->signing_parties)) {
             $viewData['signing_parties'] = $template->signing_parties;
         }
+
+        // Pass header_display so company-header component respects template setting
+        $viewData['header_display'] = $template->header_display ?? 'first_page';
 
         $html = view($template->blade_view, $viewData)->render();
 

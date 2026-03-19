@@ -32,6 +32,18 @@
                class="text-xs px-3 py-1.5 border border-white/30 text-white/70 hover:bg-white/10 hover:text-white transition-colors">
                 Back
             </a>
+            <div x-data="{ submitting: false }">
+                <form method="POST" action="{{ route('docuperfect.import.template.edit', $template->id) }}" class="inline" @submit="submitting = true">
+                    @csrf
+                    <button type="submit"
+                            :disabled="submitting"
+                            :class="submitting ? 'opacity-50 cursor-not-allowed' : 'hover:bg-amber-500/20 hover:text-amber-100'"
+                            class="text-xs px-3 py-1.5 border border-amber-400/60 text-amber-300 transition-colors">
+                        <span x-show="!submitting">Edit Document</span>
+                        <span x-show="submitting">Opening...</span>
+                    </button>
+                </form>
+            </div>
             <button type="button" @click="save()" :disabled="saving"
                     class="text-xs px-4 py-1.5 font-medium transition-colors"
                     :class="saving ? 'opacity-60 cursor-wait' : 'hover:opacity-90'"
@@ -93,8 +105,11 @@
                                     <select class="text-[10px] rounded border border-gray-200 bg-white text-slate-600 px-1.5 py-0.5 ml-auto flex-shrink-0"
                                             :value="field.assignedTo"
                                             @change="reassignField(field.id, $event.target.value)">
+                                        <option value="auto">Auto-fill</option>
                                         <option value="lessor">Lessor</option>
                                         <option value="lessee">Lessee</option>
+                                        <option value="seller">Seller</option>
+                                        <option value="buyer">Buyer</option>
                                         <option value="property">Property</option>
                                         <option value="agent">Agent</option>
                                         <option value="skip">Skip</option>
@@ -141,6 +156,16 @@
                     </select>
                 </div>
 
+                <div>
+                    <label class="text-[10px] font-medium text-slate-500 block mb-1">Company Header</label>
+                    <select x-model="headerDisplay"
+                            class="w-full rounded border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
+                        <option value="first_page">First page only</option>
+                        <option value="all_pages">All pages</option>
+                        <option value="none">None</option>
+                    </select>
+                </div>
+
                 <div class="flex items-center gap-2">
                     <input type="checkbox" x-model="isGlobal" class="rounded border-slate-300">
                     <span class="text-sm text-slate-700">Global (all branches)</span>
@@ -176,6 +201,7 @@ function webTemplateEditor() {
         templateType: @json($template->template_type),
         documentTypeId: @json($template->document_type_id ? (string) $template->document_type_id : ''),
         isGlobal: @json((bool) $template->is_global),
+        headerDisplay: @json($template->header_display ?? 'first_page'),
         allowedBranches: @json($template->branches->pluck('id')->map(fn($id) => (int) $id)),
         saving: false,
 
@@ -210,7 +236,7 @@ function webTemplateEditor() {
         },
 
         get groupedFields() {
-            const order = ['lessor', 'lessee', 'property', 'agent', 'skip'];
+            const order = ['auto', 'lessor', 'lessee', 'seller', 'buyer', 'property', 'agent', 'skip'];
             const groups = {};
             this.fields.forEach(f => {
                 const party = f.assignedTo || 'agent';
@@ -223,14 +249,17 @@ function webTemplateEditor() {
         },
 
         partyLabel(party) {
-            const labels = { lessor: 'Lessor / Landlord', lessee: 'Lessee / Tenant', property: 'Property / Deal', agent: 'Agent', skip: 'Skipped' };
+            const labels = { auto: 'Auto-fill', lessor: 'Lessor / Landlord', lessee: 'Lessee / Tenant', seller: 'Seller', buyer: 'Buyer', property: 'Property / Deal', agent: 'Agent', skip: 'Skipped' };
             return labels[party] || party;
         },
 
         partyColor(party) {
             const colors = {
+                auto: 'text-teal-600',
                 lessor: 'text-blue-900',
                 lessee: 'text-teal-700',
+                seller: 'text-purple-600',
+                buyer: 'text-indigo-600',
                 property: 'text-slate-600',
                 agent: 'text-orange-600',
                 skip: 'text-slate-400'
@@ -240,8 +269,11 @@ function webTemplateEditor() {
 
         partyBadge(party) {
             const badges = {
+                auto: 'bg-teal-50 text-teal-700',
                 lessor: 'bg-blue-100 text-blue-800',
                 lessee: 'bg-teal-100 text-teal-800',
+                seller: 'bg-purple-50 text-purple-700',
+                buyer: 'bg-indigo-50 text-indigo-700',
                 property: 'bg-slate-100 text-slate-700',
                 agent: 'bg-orange-100 text-orange-800',
                 skip: 'bg-slate-100 text-slate-400'
@@ -271,6 +303,7 @@ function webTemplateEditor() {
                     template_type: this.templateType,
                     document_type_id: this.documentTypeId || null,
                     is_global: this.isGlobal,
+                    header_display: this.headerDisplay,
                     allowed_branches: this.isGlobal ? [] : this.allowedBranches,
                 };
 

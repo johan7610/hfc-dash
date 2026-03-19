@@ -164,7 +164,7 @@
                                 <select name="role" class="w-full rounded-lg px-3 py-2 text-sm outline-none"
                                         style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                     @foreach(\App\Models\Role::orderBy('sort_order')->get() as $role)
-                                        @if(!$role->is_owner)
+                                        @if(!$role->is_owner || Auth::user()->isOwnerRole())
                                         <option value="{{ $role->name }}" {{ $u->role===$role->name?'selected':'' }}>{{ $role->label }}</option>
                                         @endif
                                     @endforeach

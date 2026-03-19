@@ -13,11 +13,11 @@ return new class extends Migration
             $table->string('share_token', 64)->nullable()->unique()->after('id');
         });
 
-        // Backfill existing rows (use DB query to avoid model SoftDeletes scope)
-        $rows = \Illuminate\Support\Facades\DB::table('contact_matches')->whereNull('share_token')->pluck('id');
-        foreach ($rows as $id) {
+        // Backfill existing rows (use DB query, not Eloquent, to avoid SoftDeletes scope issue during migration)
+        $rows = \Illuminate\Support\Facades\DB::table('contact_matches')->whereNull('share_token')->get();
+        foreach ($rows as $row) {
             \Illuminate\Support\Facades\DB::table('contact_matches')
-                ->where('id', $id)
+                ->where('id', $row->id)
                 ->update(['share_token' => Str::random(48)]);
         }
     }
