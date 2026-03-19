@@ -44,7 +44,7 @@ return new class extends Migration
 
             $table->timestamps();
 
-            $table->index(['sales_document_send_id', 'signing_order']);
+            $table->index(['sales_document_send_id', 'signing_order'], 'sdr_send_id_signing_order_idx');
             $table->index(['status']);
         });
     }

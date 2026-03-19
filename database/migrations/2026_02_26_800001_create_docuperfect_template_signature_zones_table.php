@@ -23,7 +23,7 @@ return new class extends Migration
             $table->integer('sort_order')->default(0);
             $table->timestamps();
 
-            $table->index(['template_id', 'page_index']);
+            $table->index(['template_id', 'page_index'], 'dtsz_template_page_idx');
         });
     }
 
