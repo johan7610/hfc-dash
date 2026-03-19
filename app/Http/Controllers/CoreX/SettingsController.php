@@ -5,6 +5,8 @@ namespace App\Http\Controllers\CoreX;
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
 use App\Models\AgentSocialAccount;
+use App\Models\ContactSource;
+use App\Models\ContactTag;
 use App\Models\ContactType;
 use App\Models\Designation;
 use App\Models\PropertySettingItem;
@@ -55,7 +57,9 @@ class SettingsController extends Controller
         $data['rentalReminderSettings'] = RentalReminderSetting::current();
 
         // Feature Settings tab: Contacts
-        $data['contactTypes'] = ContactType::orderBy('sort_order')->orderBy('name')->get();
+        $data['contactTypes']   = ContactType::orderBy('sort_order')->orderBy('name')->get();
+        $data['contactSources'] = ContactSource::orderBy('sort_order')->orderBy('name')->get();
+        $data['contactTags']    = ContactTag::orderBy('sort_order')->orderBy('name')->get();
 
         // Feature Settings tab: Properties
         $data['propCategories']   = PropertySettingItem::group('category')->get();

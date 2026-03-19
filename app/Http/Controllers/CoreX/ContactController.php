@@ -4,6 +4,7 @@ namespace App\Http\Controllers\CoreX;
 
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
+use App\Models\ContactTag;
 use App\Models\ContactType;
 use App\Models\PropertySettingItem;
 use App\Models\User;
@@ -81,12 +82,13 @@ class ContactController extends Controller
 
     public function show(Contact $contact)
     {
-        $contact->load(['type', 'createdBy', 'contactNotes.user', 'documents.uploadedBy', 'properties', 'matches.createdBy']);
+        $contact->load(['type', 'createdBy', 'contactNotes.user', 'documents.uploadedBy', 'properties', 'matches.createdBy', 'tags']);
         $contactTypes     = ContactType::where('is_active', true)->orderBy('sort_order')->orderBy('name')->get();
+        $contactTags      = ContactTag::where('is_active', true)->orderBy('sort_order')->orderBy('name')->get();
         $matchCategories  = PropertySettingItem::group('category')->get();
         $matchTypes       = PropertySettingItem::group('property_type')->where('active', true)->get();
 
-        return view('corex.contacts.show', compact('contact', 'contactTypes', 'matchCategories', 'matchTypes'));
+        return view('corex.contacts.show', compact('contact', 'contactTypes', 'contactTags', 'matchCategories', 'matchTypes'));
     }
 
     public function store(Request $request)
@@ -137,6 +139,10 @@ class ContactController extends Controller
             'birthday'        => 'nullable|date',
             'id_number'       => 'nullable|string|max:20',
             'address'         => 'nullable|string|max:500',
+            'loaded_at'       => 'nullable|date',
+            'modified_at'     => 'nullable|date',
+            'tag_ids'         => 'nullable|array',
+            'tag_ids.*'       => 'integer|exists:contact_tags,id',
             'bank_name'           => 'nullable|string|max:255',
             'bank_account_name'   => 'nullable|string|max:255',
             'bank_account_number' => 'nullable|string|max:100',
@@ -145,7 +151,11 @@ class ContactController extends Controller
             'bank_account_type'   => 'nullable|string|max:50',
         ]);
 
+        $tagIds = $data['tag_ids'] ?? [];
+        unset($data['tag_ids']);
+
         $contact->update($data);
+        $contact->tags()->sync($tagIds);
 
         // Redirect to show page if coming from there, otherwise index
         if ($request->has('_from_show')) {
@@ -155,11 +165,62 @@ class ContactController extends Controller
         return redirect()->route('corex.contacts.index')->with('success', 'Contact updated.');
     }
 
+    public function touch(Request $request, Contact $contact)
+    {
+        $data = $request->validate([
+            'last_contacted_at' => 'required|date',
+        ]);
+
+        $contact->update(['last_contacted_at' => $data['last_contacted_at']]);
+
+        return redirect()->route('corex.contacts.show', $contact)->with('success', 'Last contacted date updated.');
+    }
+
+    public function incrementChannel(Request $request, Contact $contact)
+    {
+        $data = $request->validate([
+            'channel' => 'required|in:whatsapp,email',
+        ]);
+
+        $field = $data['channel'] . '_count';
+        $contact->increment($field);
+        $contact->update(['last_contacted_at' => now()]);
+
+        return response()->json([
+            'count'            => $contact->fresh()->$field,
+            'last_contacted'   => now()->format('d M Y H:i'),
+            'last_contacted_relative' => now()->diffForHumans(),
+        ]);
+    }
+
     public function destroy(Contact $contact)
     {
         $contact->delete();
 
         return redirect()->route('corex.contacts.index')->with('success', 'Contact deleted.');
+    }
+
+    public function destroyAll()
+    {
+        $count = Contact::withTrashed()->count();
+        // Hard-delete related records, then hard-delete all contacts (including soft-deleted)
+        \DB::table('contact_tag')->delete();
+        \DB::table('contact_notes')->delete();
+        Contact::withTrashed()->forceDelete();
+
+        return redirect()->route('corex.contacts.index')->with('success', "{$count} contacts permanently deleted.");
+    }
+
+    public function syncTags(Request $request, Contact $contact)
+    {
+        $data = $request->validate([
+            'tag_ids'   => 'nullable|array',
+            'tag_ids.*' => 'integer|exists:contact_tags,id',
+        ]);
+
+        $contact->tags()->sync($data['tag_ids'] ?? []);
+
+        return redirect()->route('corex.contacts.show', $contact)->with('success', 'Tags updated.');
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────

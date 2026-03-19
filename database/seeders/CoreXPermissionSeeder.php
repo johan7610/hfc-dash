@@ -215,6 +215,10 @@ class CoreXPermissionSeeder extends Seeder
             ['key' => 'contacts.create',             'label' => 'Create',                      'section' => 'contacts',         'type' => 'action',  'module' => 'contacts',         'sort_order' => 11],
             ['key' => 'contacts.edit',               'label' => 'Edit',                        'section' => 'contacts',         'type' => 'action',  'module' => 'contacts',         'sort_order' => 12],
             ['key' => 'contacts.archive',            'label' => 'Archive',                     'section' => 'contacts',         'type' => 'action',  'module' => 'contacts',         'sort_order' => 13],
+            ['key' => 'contacts.import',             'label' => 'Import',                      'section' => 'contacts',         'type' => 'action',  'module' => 'contacts',         'sort_order' => 14],
+            ['key' => 'contacts.delete',             'label' => 'Delete',                      'section' => 'contacts',         'type' => 'action',  'module' => 'contacts',         'sort_order' => 15],
+            ['key' => 'contacts.whatsapp',           'label' => 'WhatsApp',                    'section' => 'contacts',         'type' => 'action',  'module' => 'contacts',         'sort_order' => 16],
+            ['key' => 'contacts.email',              'label' => 'Email',                       'section' => 'contacts',         'type' => 'action',  'module' => 'contacts',         'sort_order' => 17],
 
             // ── Core Matches ──
             ['key' => 'access_core_matches',         'label' => 'Access Core Matches',         'section' => 'core-matches',     'type' => 'access',  'module' => 'core_matches',     'sort_order' => 1],
@@ -364,6 +368,7 @@ class CoreXPermissionSeeder extends Seeder
                 // Contacts
                 'access_contacts',
                 'contacts.view', 'contacts.create', 'contacts.edit', 'contacts.archive',
+                'contacts.delete', 'contacts.whatsapp', 'contacts.email',
                 // Core Matches
                 'access_core_matches',
                 'core_matches.view', 'core_matches.create', 'core_matches.delete',
@@ -435,6 +440,7 @@ class CoreXPermissionSeeder extends Seeder
                 // Contacts
                 'access_contacts',
                 'contacts.view', 'contacts.create', 'contacts.edit',
+                'contacts.whatsapp', 'contacts.email',
                 // Core Matches
                 'access_core_matches',
                 'core_matches.view', 'core_matches.create', 'core_matches.delete',

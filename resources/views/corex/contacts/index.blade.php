@@ -2,7 +2,7 @@
 
 @section('corex-content')
 <div class="w-full space-y-5"
-     x-data="{ showAdd: false, editId: null }">
+     x-data="{ showAdd: false, showImport: false, editId: null, importLoading: false }">
 
     {{-- Page header --}}
     <div class="rounded-md px-6 py-5 flex items-center justify-between" style="background:var(--brand-default,#0b2a4a);">
@@ -10,12 +10,31 @@
             <h2 class="text-xl font-bold text-white tracking-tight">Contacts</h2>
             <p class="text-sm mt-0.5" style="color:rgba(255,255,255,0.55);">Manage your contacts and leads.</p>
         </div>
-        <button type="button" @click="showAdd = !showAdd" class="corex-btn-primary text-sm">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
-            </svg>
-            Add Contact
-        </button>
+        <div class="flex items-center gap-2">
+            @if(auth()->user()->effectiveRole() === 'super_admin')
+            <form method="POST" action="{{ route('corex.contacts.destroy-all') }}"
+                  onsubmit="return confirm('DELETE ALL CONTACTS? This will permanently delete every contact in the system. Are you sure?');">
+                @csrf @method('DELETE')
+                <button type="submit" class="text-sm font-medium px-3 py-2 rounded-md transition-all duration-300"
+                        style="color:#ef4444; border:1px solid rgba(239,68,68,0.3);"
+                        onmouseover="this.style.background='rgba(239,68,68,0.08)'" onmouseout="this.style.background=''">
+                    Delete All
+                </button>
+            </form>
+            <button type="button" @click="showImport = !showImport" class="corex-btn-outline text-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/>
+                </svg>
+                Import
+            </button>
+            @endif
+            <button type="button" @click="showAdd = !showAdd" class="corex-btn-primary text-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                </svg>
+                Add Contact
+            </button>
+        </div>
     </div>
 
     @if(session('success'))
@@ -96,6 +115,58 @@
             <div class="flex items-center gap-3 pt-2">
                 <button type="submit" class="corex-btn-primary text-sm">Save Contact</button>
                 <button type="button" @click="showAdd = false" class="text-sm transition-all duration-300" style="color:var(--text-muted);">Cancel</button>
+            </div>
+        </form>
+    </div>
+
+    {{-- Import Contacts Panel (collapsible) --}}
+    <div x-show="showImport" x-cloak
+         x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0 -translate-y-2" x-transition:enter-end="opacity-100 translate-y-0"
+         class="rounded-md" style="background:var(--surface); border:1px solid var(--border); padding:24px;">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <div class="text-sm font-bold" style="color:var(--text-primary);">Import Contacts from Excel</div>
+                <p class="text-xs mt-1" style="color:var(--text-muted);">Upload an .xlsx file. Contacts will be matched to agents by name, and new types/sources/tags will be created automatically if they don't exist.</p>
+            </div>
+        </div>
+        <form method="POST" action="{{ route('corex.contacts.import') }}" enctype="multipart/form-data"
+              @submit="importLoading = true" class="space-y-4">
+            @csrf
+            <div class="flex flex-wrap items-end gap-4">
+                <div class="flex-1 min-w-[250px]">
+                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Excel File (.xlsx)</label>
+                    <input type="file" name="file" accept=".xlsx,.xls,.csv" required
+                           class="w-full rounded-md px-3 py-2 text-sm transition-all duration-300"
+                           style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                </div>
+                <div class="flex items-center gap-3">
+                    <button type="submit" class="corex-btn-primary text-sm" :disabled="importLoading">
+                        <template x-if="!importLoading">
+                            <span class="flex items-center gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/>
+                                </svg>
+                                Import
+                            </span>
+                        </template>
+                        <template x-if="importLoading">
+                            <span class="flex items-center gap-1.5">
+                                <svg class="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                </svg>
+                                Importing…
+                            </span>
+                        </template>
+                    </button>
+                    <button type="button" @click="showImport = false" class="text-sm transition-all duration-300" style="color:var(--text-muted);">Cancel</button>
+                </div>
+            </div>
+
+            <div class="rounded-md p-3 text-xs" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-muted);">
+                <div class="font-semibold mb-1" style="color:var(--text-secondary);">Expected columns:</div>
+                <div>Name, Surname, Email, Cell, Phone, Type, *ID Number, BirthDay, Tags, Source, Address, Agents, Notes</div>
+                <div class="mt-1">Additional columns (Category, WhatsApp, Web, Work, Org, Loaded, Modified, Last Contacted) will be saved to the contact's notes.</div>
             </div>
         </form>
     </div>
@@ -291,6 +362,7 @@
                 <div class="flex items-center gap-1 flex-shrink-0">
                     <a href="{{ route('corex.contacts.show', $contact) }}"
                        class="corex-btn-outline text-[10px] px-2 py-1">View</a>
+                    @if(auth()->user()->hasPermission('contacts.delete'))
                     <form method="POST" action="{{ route('corex.contacts.destroy', $contact) }}"
                           onsubmit="return confirm('Delete {{ addslashes($contact->full_name) }}?');">
                         @csrf @method('DELETE')
@@ -300,6 +372,7 @@
                                 onmouseover="this.style.color='#ef4444';this.style.background='rgba(239,68,68,0.08)'"
                                 onmouseout="this.style.color='var(--text-muted)';this.style.background=''">Delete</button>
                     </form>
+                    @endif
                 </div>
             </div>
 

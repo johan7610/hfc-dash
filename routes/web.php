@@ -618,9 +618,14 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::prefix('contacts')->middleware('permission:access_contacts')->name('corex.contacts.')->group(function () {
         Route::get('/',                   [\App\Http\Controllers\CoreX\ContactController::class, 'index'])->name('index');
         Route::post('/',                  [\App\Http\Controllers\CoreX\ContactController::class, 'store'])->name('store');
+        Route::post('/import',            [\App\Http\Controllers\CoreX\ContactImportController::class, 'import'])->name('import');
+        Route::delete('/destroy-all',     [\App\Http\Controllers\CoreX\ContactController::class, 'destroyAll'])->name('destroy-all');
         Route::get('/{contact}',          [\App\Http\Controllers\CoreX\ContactController::class, 'show'])->name('show');
         Route::put('/{contact}',          [\App\Http\Controllers\CoreX\ContactController::class, 'update'])->name('update');
         Route::delete('/{contact}',       [\App\Http\Controllers\CoreX\ContactController::class, 'destroy'])->name('destroy');
+        Route::post('/{contact}/tags',    [\App\Http\Controllers\CoreX\ContactController::class, 'syncTags'])->name('tags.sync');
+        Route::post('/{contact}/touch',   [\App\Http\Controllers\CoreX\ContactController::class, 'touch'])->name('touch');
+        Route::post('/{contact}/increment', [\App\Http\Controllers\CoreX\ContactController::class, 'incrementChannel'])->name('increment');
 
         // Notes
         Route::post('/{contact}/notes',          [\App\Http\Controllers\CoreX\ContactNoteController::class, 'store'])->name('notes.store');
@@ -646,6 +651,20 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/',              [\App\Http\Controllers\CoreX\ContactTypeController::class, 'store'])->name('store');
         Route::put('/{contactType}',  [\App\Http\Controllers\CoreX\ContactTypeController::class, 'update'])->name('update');
         Route::delete('/{contactType}', [\App\Http\Controllers\CoreX\ContactTypeController::class, 'destroy'])->name('destroy');
+    });
+
+    // Contact Sources (settings)
+    Route::prefix('settings/contact-sources')->middleware('permission:access_settings')->name('corex.settings.contact-sources.')->group(function () {
+        Route::post('/',                  [\App\Http\Controllers\CoreX\ContactSourceController::class, 'store'])->name('store');
+        Route::put('/{contactSource}',    [\App\Http\Controllers\CoreX\ContactSourceController::class, 'update'])->name('update');
+        Route::delete('/{contactSource}', [\App\Http\Controllers\CoreX\ContactSourceController::class, 'destroy'])->name('destroy');
+    });
+
+    // Contact Tags (settings)
+    Route::prefix('settings/contact-tags')->middleware('permission:access_settings')->name('corex.settings.contact-tags.')->group(function () {
+        Route::post('/',              [\App\Http\Controllers\CoreX\ContactTagController::class, 'store'])->name('store');
+        Route::put('/{contactTag}',   [\App\Http\Controllers\CoreX\ContactTagController::class, 'update'])->name('update');
+        Route::delete('/{contactTag}', [\App\Http\Controllers\CoreX\ContactTagController::class, 'destroy'])->name('destroy');
     });
 
     // Property Setting Items (settings)
