@@ -12,12 +12,18 @@
      x-data="{ search: '', roleFilter: '', branchFilter: '', activeFilter: '' }">
 
     {{-- Page header --}}
-    <div style="background:#0b2a4a; border-radius:16px; padding:20px 24px;">
+    <div style="background:var(--brand-default, #0b2a4a); border-radius:16px; padding:20px 24px;">
         <div class="flex items-center justify-between gap-4">
             <div>
                 <h2 style="font-size:1.25rem; font-weight:800; color:#fff; margin:0 0 4px;">User Management</h2>
                 <div style="font-size:0.875rem; color:rgba(255,255,255,0.55);">{{ $totalUsers }} users</div>
             </div>
+            <a href="{{ route('admin.users.create') }}"
+               class="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors"
+               style="background:var(--brand-button, #0ea5e9);"
+               onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+                + Add User
+            </a>
         </div>
     </div>
 
@@ -95,8 +101,11 @@
                               style="background:var(--surface-2); color:var(--text-secondary); border:1px solid var(--border);">
                             {{ str_replace('_',' ',$u->role) }}
                         </span>
-                        {{-- Active badge --}}
-                        @if($u->is_active)
+                        {{-- Status badge --}}
+                        @if($u->is_active && !$u->email_verified_at)
+                        <span class="px-2 py-0.5 rounded-full text-xs font-medium"
+                              style="background:rgba(245,158,11,0.15); color:#d97706; border:1px solid rgba(245,158,11,0.3);">Pending</span>
+                        @elseif($u->is_active)
                         <span class="px-2 py-0.5 rounded-full text-xs font-medium"
                               style="background:#dcfce7; color:#166534; border:1px solid #bbf7d0;">Active</span>
                         @else
@@ -116,6 +125,15 @@
                         @endif
                     </div>
                 </div>
+
+                {{-- Edit link --}}
+                <a href="{{ route('admin.users.edit', $u) }}"
+                   class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors flex-shrink-0"
+                   style="color:var(--brand-icon, #0ea5e9);"
+                   onclick="event.stopPropagation();"
+                   onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
+                    Edit
+                </a>
 
                 {{-- Chevron --}}
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"

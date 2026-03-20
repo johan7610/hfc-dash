@@ -5,6 +5,8 @@ namespace App\Http\Controllers\CoreX;
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
 use App\Models\AgentSocialAccount;
+use App\Models\ContactSource;
+use App\Models\ContactTag;
 use App\Models\ContactType;
 use App\Models\Designation;
 use App\Models\PropertySettingItem;
@@ -55,7 +57,9 @@ class SettingsController extends Controller
         $data['rentalReminderSettings'] = RentalReminderSetting::current();
 
         // Feature Settings tab: Contacts
-        $data['contactTypes'] = ContactType::orderBy('sort_order')->orderBy('name')->get();
+        $data['contactTypes']   = ContactType::orderBy('sort_order')->orderBy('name')->get();
+        $data['contactSources'] = ContactSource::orderBy('sort_order')->orderBy('name')->get();
+        $data['contactTags']    = ContactTag::orderBy('sort_order')->orderBy('name')->get();
 
         // Feature Settings tab: Properties
         $data['propCategories']   = PropertySettingItem::group('category')->get();
@@ -79,7 +83,8 @@ class SettingsController extends Controller
         }
 
         // Agency Settings tab: Company details from Agency model
-        $data['agency'] = Agency::where('slug', 'hfc-coastal')->first();
+        $agencyId = $user?->effectiveAgencyId();
+        $data['agency'] = $agencyId ? Agency::find($agencyId) : Agency::first();
 
         // Agents list for email signature preview selector
         $data['agents'] = User::where('is_active', true)->orderBy('name')->get(['id', 'name']);
@@ -213,7 +218,8 @@ class SettingsController extends Controller
     {
         abort_unless(auth()->user()?->hasPermission('manage_performance_settings'), 403);
 
-        $agency = Agency::where('slug', 'hfc-coastal')->firstOrFail();
+        $agencyId = auth()->user()->effectiveAgencyId();
+        $agency = $agencyId ? Agency::findOrFail($agencyId) : Agency::firstOrFail();
 
         $data = $request->validate([
             'trading_name'     => ['nullable', 'string', 'max:255'],

@@ -21,6 +21,7 @@ class User extends Authenticatable
         'role',
         'designation',
         'branch_id',
+        'agency_id',
         'is_active',
 
         // Admin-controlled commission defaults
@@ -37,6 +38,10 @@ class User extends Authenticatable
         // Agent document uploads
         'agent_photo_path',
         'ffc_certificate_path',
+
+        // Flags
+        'can_capture_rentals',
+        'counts_for_branch_split',
 
         // Contact fields (email signatures, profile, presentations)
         'phone',
@@ -92,12 +97,23 @@ class User extends Authenticatable
 
     public function effectiveAgencyId(): ?int
     {
-        $branchId = $this->effectiveBranchId();
-        if (!$branchId) {
-            return null;
+        // Owner-level agency switcher override
+        $override = session('active_agency_id');
+        if ($override !== null && $override !== '') {
+            return (int) $override;
         }
-        $branch = Branch::find($branchId);
-        return $branch?->agency_id ? (int) $branch->agency_id : null;
+
+        // Derive from branch
+        $branchId = $this->effectiveBranchId();
+        if ($branchId) {
+            $branch = Branch::find($branchId);
+            if ($branch?->agency_id) {
+                return (int) $branch->agency_id;
+            }
+        }
+
+        // Fallback to direct agency_id on user
+        return $this->agency_id ? (int) $this->agency_id : null;
     }
 
     // ── Owner role checks (the ONLY hardcoded concept) ──

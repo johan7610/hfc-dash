@@ -1132,6 +1132,214 @@
                     </div>
                 </div>
 
+                {{-- ── Contact Sources ── --}}
+                <div>
+                    <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Contact Sources</h3>
+                    <p class="text-xs mb-4" style="color:var(--text-muted);">Sources track where contacts come from (e.g. Property24, Walk-in, Referral). New sources are auto-created during imports.</p>
+
+                    {{-- Add Source --}}
+                    <div class="p-4 rounded-md mb-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                        <div class="text-xs font-semibold mb-3" style="color:var(--text-secondary);">Add Contact Source</div>
+                        <form method="POST" action="{{ route('corex.settings.contact-sources.store') }}"
+                              class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                            @csrf
+                            <div class="md:col-span-6">
+                                <label class="block text-xs mb-1" style="color:var(--text-muted);">Name</label>
+                                <input name="name" required placeholder="e.g. Property24, Referral, Walk-in"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-xs mb-1" style="color:var(--text-muted);">Color</label>
+                                <input type="color" name="color" value="#6366f1"
+                                       class="w-full h-9 rounded-md cursor-pointer border"
+                                       style="border-color:var(--border); background:var(--surface);">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-xs mb-1" style="color:var(--text-muted);">Sort order</label>
+                                <input name="sort_order" type="number" step="1" min="0" placeholder="0"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                            </div>
+                            <div class="md:col-span-2">
+                                <button class="w-full corex-btn-primary text-sm">Add</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    {{-- Sources list --}}
+                    <div class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
+                        <div class="px-4 py-3 flex items-center justify-between" style="border-bottom:1px solid var(--border); background:var(--surface-2);">
+                            <div class="text-sm font-semibold" style="color:var(--text-primary);">Current Sources</div>
+                            <div class="text-xs" style="color:var(--text-muted);">{{ count($contactSources) }} total</div>
+                        </div>
+                        <div x-data="{ editCSId: null }">
+                            @forelse($contactSources as $cSource)
+                            <div style="border-bottom:1px solid var(--border);">
+                                <div x-show="editCSId !== {{ $cSource->id }}"
+                                     class="p-4 flex items-center justify-between gap-4">
+                                    <div class="flex items-center gap-3">
+                                        <span class="w-4 h-4 rounded-full flex-shrink-0"
+                                              style="background-color: {{ $cSource->color }}"></span>
+                                        <span class="text-sm font-medium" style="color:var(--text-primary);">{{ $cSource->name }}</span>
+                                        <span class="text-xs" style="color:var(--text-muted);">{{ $cSource->contacts()->count() }} contact{{ $cSource->contacts()->count() !== 1 ? 's' : '' }}</span>
+                                    </div>
+                                    <div class="flex items-center gap-3">
+                                        <button @click="editCSId = {{ $cSource->id }}"
+                                                class="text-xs font-semibold text-[#00b4d8] hover:text-[#0091ae]">Edit</button>
+                                        <form method="POST" action="{{ route('corex.settings.contact-sources.destroy', $cSource) }}"
+                                              onsubmit="return confirm('Delete this contact source?');">
+                                            @csrf @method('DELETE')
+                                            <button class="text-xs font-semibold text-red-600 hover:text-red-700"
+                                                    {{ $cSource->contacts()->count() > 0 ? 'disabled title=Cannot delete — contacts assigned' : '' }}>
+                                                Delete
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                                <div x-show="editCSId === {{ $cSource->id }}" x-cloak
+                                     class="p-4" style="background:rgba(0,180,216,0.05); border-top:1px solid rgba(0,180,216,0.15);">
+                                    <form method="POST" action="{{ route('corex.settings.contact-sources.update', $cSource) }}"
+                                          class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                                        @csrf @method('PUT')
+                                        <div class="md:col-span-6">
+                                            <label class="block text-xs mb-1" style="color:var(--text-muted);">Name</label>
+                                            <input name="name" value="{{ $cSource->name }}" required
+                                                   class="w-full rounded-md px-3 py-2 text-sm"
+                                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                        <div class="md:col-span-2">
+                                            <label class="block text-xs mb-1" style="color:var(--text-muted);">Color</label>
+                                            <input type="color" name="color" value="{{ $cSource->color }}"
+                                                   class="w-full h-9 rounded-md cursor-pointer border"
+                                                   style="border-color:var(--border); background:var(--surface);">
+                                        </div>
+                                        <div class="md:col-span-2">
+                                            <label class="block text-xs mb-1" style="color:var(--text-muted);">Sort order</label>
+                                            <input name="sort_order" type="number" step="1" min="0" value="{{ (int)$cSource->sort_order }}"
+                                                   class="w-full rounded-md px-3 py-2 text-sm"
+                                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                        <div class="md:col-span-2 flex gap-2">
+                                            <button type="submit" class="flex-1 corex-btn-primary text-sm">Save</button>
+                                            <button type="button" @click="editCSId = null"
+                                                    class="flex-1 text-sm rounded-md"
+                                                    style="border:1px solid var(--border); color:var(--text-secondary);">Cancel</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                            @empty
+                            <div class="p-5 text-sm" style="color:var(--text-muted);">No contact sources yet. Add one above or import contacts to auto-create them.</div>
+                            @endforelse
+                        </div>
+                    </div>
+                </div>
+
+                {{-- ── Contact Tags ── --}}
+                <div>
+                    <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Contact Tags</h3>
+                    <p class="text-xs mb-4" style="color:var(--text-muted);">Tags help categorise contacts (e.g. VIP, Hot Lead, Investor). Tags can be assigned to multiple contacts and are auto-created during imports.</p>
+
+                    {{-- Add Tag --}}
+                    <div class="p-4 rounded-md mb-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                        <div class="text-xs font-semibold mb-3" style="color:var(--text-secondary);">Add Contact Tag</div>
+                        <form method="POST" action="{{ route('corex.settings.contact-tags.store') }}"
+                              class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                            @csrf
+                            <div class="md:col-span-6">
+                                <label class="block text-xs mb-1" style="color:var(--text-muted);">Name</label>
+                                <input name="name" required placeholder="e.g. VIP, Hot Lead, Investor"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-xs mb-1" style="color:var(--text-muted);">Color</label>
+                                <input type="color" name="color" value="#6366f1"
+                                       class="w-full h-9 rounded-md cursor-pointer border"
+                                       style="border-color:var(--border); background:var(--surface);">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-xs mb-1" style="color:var(--text-muted);">Sort order</label>
+                                <input name="sort_order" type="number" step="1" min="0" placeholder="0"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                            </div>
+                            <div class="md:col-span-2">
+                                <button class="w-full corex-btn-primary text-sm">Add</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    {{-- Tags list --}}
+                    <div class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
+                        <div class="px-4 py-3 flex items-center justify-between" style="border-bottom:1px solid var(--border); background:var(--surface-2);">
+                            <div class="text-sm font-semibold" style="color:var(--text-primary);">Current Tags</div>
+                            <div class="text-xs" style="color:var(--text-muted);">{{ count($contactTags) }} total</div>
+                        </div>
+                        <div x-data="{ editTagId: null }">
+                            @forelse($contactTags as $cTag)
+                            <div style="border-bottom:1px solid var(--border);">
+                                <div x-show="editTagId !== {{ $cTag->id }}"
+                                     class="p-4 flex items-center justify-between gap-4">
+                                    <div class="flex items-center gap-3">
+                                        <span class="w-4 h-4 rounded-full flex-shrink-0"
+                                              style="background-color: {{ $cTag->color }}"></span>
+                                        <span class="text-sm font-medium" style="color:var(--text-primary);">{{ $cTag->name }}</span>
+                                        <span class="text-xs" style="color:var(--text-muted);">{{ $cTag->contacts()->count() }} contact{{ $cTag->contacts()->count() !== 1 ? 's' : '' }}</span>
+                                    </div>
+                                    <div class="flex items-center gap-3">
+                                        <button @click="editTagId = {{ $cTag->id }}"
+                                                class="text-xs font-semibold text-[#00b4d8] hover:text-[#0091ae]">Edit</button>
+                                        <form method="POST" action="{{ route('corex.settings.contact-tags.destroy', $cTag) }}"
+                                              onsubmit="return confirm('Delete this contact tag?');">
+                                            @csrf @method('DELETE')
+                                            <button class="text-xs font-semibold text-red-600 hover:text-red-700"
+                                                    {{ $cTag->contacts()->count() > 0 ? 'disabled title=Cannot delete — contacts assigned' : '' }}>
+                                                Delete
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                                <div x-show="editTagId === {{ $cTag->id }}" x-cloak
+                                     class="p-4" style="background:rgba(0,180,216,0.05); border-top:1px solid rgba(0,180,216,0.15);">
+                                    <form method="POST" action="{{ route('corex.settings.contact-tags.update', $cTag) }}"
+                                          class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                                        @csrf @method('PUT')
+                                        <div class="md:col-span-6">
+                                            <label class="block text-xs mb-1" style="color:var(--text-muted);">Name</label>
+                                            <input name="name" value="{{ $cTag->name }}" required
+                                                   class="w-full rounded-md px-3 py-2 text-sm"
+                                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                        <div class="md:col-span-2">
+                                            <label class="block text-xs mb-1" style="color:var(--text-muted);">Color</label>
+                                            <input type="color" name="color" value="{{ $cTag->color }}"
+                                                   class="w-full h-9 rounded-md cursor-pointer border"
+                                                   style="border-color:var(--border); background:var(--surface);">
+                                        </div>
+                                        <div class="md:col-span-2">
+                                            <label class="block text-xs mb-1" style="color:var(--text-muted);">Sort order</label>
+                                            <input name="sort_order" type="number" step="1" min="0" value="{{ (int)$cTag->sort_order }}"
+                                                   class="w-full rounded-md px-3 py-2 text-sm"
+                                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                        <div class="md:col-span-2 flex gap-2">
+                                            <button type="submit" class="flex-1 corex-btn-primary text-sm">Save</button>
+                                            <button type="button" @click="editTagId = null"
+                                                    class="flex-1 text-sm rounded-md"
+                                                    style="border:1px solid var(--border); color:var(--text-secondary);">Cancel</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                            @empty
+                            <div class="p-5 text-sm" style="color:var(--text-muted);">No contact tags yet. Add one above or import contacts to auto-create them.</div>
+                            @endforelse
+                        </div>
+                    </div>
+                </div>
+
             </div>{{-- /contacts --}}
 
             {{-- PROPERTIES section --}}

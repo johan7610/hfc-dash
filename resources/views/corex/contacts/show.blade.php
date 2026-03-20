@@ -90,6 +90,7 @@
             </div>
 
             {{-- Delete button --}}
+            @if(auth()->user()->hasPermission('contacts.delete'))
             <form method="POST" action="{{ route('corex.contacts.destroy', $contact) }}"
                   onsubmit="return confirm('Permanently delete {{ addslashes($contact->full_name) }}?');"
                   class="flex-shrink-0">
@@ -98,6 +99,7 @@
                     Delete Contact
                 </button>
             </form>
+            @endif
         </div>
     </div>
 
@@ -128,7 +130,210 @@
         {{-- ════════════════════════════
              INFO TAB
              ════════════════════════════ --}}
-        <div x-show="activeTab === 'info'" class="p-6">
+        <div x-show="activeTab === 'info'" class="p-6 space-y-6">
+
+            {{-- ── Action Boxes: Last Contacted | WhatsApp | Email ── --}}
+            <div x-data="{
+                    editing: false,
+                    showWa: false,
+                    showEmail: false,
+                    waCount: {{ (int) $contact->whatsapp_count }},
+                    emailCount: {{ (int) $contact->email_count }},
+                    lastContactedLabel: '{{ $contact->last_contacted_at ? $contact->last_contacted_at->format('d M Y H:i') : 'Never' }}',
+                    lastContactedRelative: '{{ $contact->last_contacted_at ? $contact->last_contacted_at->diffForHumans() : '' }}',
+                    waMessage: 'Hi {{ addslashes($contact->first_name) }}',
+                    emailSubject: 'Hi {{ addslashes($contact->first_name) }}',
+                    emailBody: 'Hi {{ addslashes($contact->first_name) }}',
+                    async increment(channel) {
+                        const res = await fetch('{{ route('corex.contacts.increment', $contact) }}', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'X-Requested-With': 'XMLHttpRequest' },
+                            body: JSON.stringify({ channel })
+                        });
+                        const data = await res.json();
+                        if (channel === 'whatsapp') this.waCount = data.count;
+                        else this.emailCount = data.count;
+                        this.lastContactedLabel = data.last_contacted;
+                        this.lastContactedRelative = data.last_contacted_relative;
+                    },
+                    sendWa() {
+                        let phone = '{{ preg_replace('/[^0-9]/', '', $contact->phone ?? '') }}';
+                        if (phone.startsWith('0')) phone = '27' + phone.substring(1);
+                        window.location.href = 'whatsapp://send?phone=' + phone + '&text=' + encodeURIComponent(this.waMessage);
+                        this.increment('whatsapp');
+                        this.showWa = false;
+                    },
+                    sendEmail() {
+                        window.location.href = 'mailto:{{ $contact->email }}?subject=' + encodeURIComponent(this.emailSubject) + '&body=' + encodeURIComponent(this.emailBody);
+                        this.increment('email');
+                        this.showEmail = false;
+                    }
+                 }" class="space-y-3">
+
+                {{-- 3 boxes in a row --}}
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+                    {{-- Box 1: Last Contacted --}}
+                    <div class="rounded-md px-5 py-4" style="background:var(--surface-2); border:1px solid var(--border);">
+                        <div class="flex items-center gap-2 mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5" style="color:var(--brand-icon, #0ea5e9);">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                            </svg>
+                            <div class="text-xs font-bold uppercase tracking-widest" style="color:var(--text-muted);">Last Contacted</div>
+                        </div>
+                        <div class="text-sm font-semibold" style="color:var(--text-primary);" x-text="lastContactedLabel"></div>
+                        <div class="text-xs mt-0.5" style="color:var(--text-muted);" x-text="lastContactedRelative"></div>
+                        <div class="mt-3 flex items-center gap-2">
+                            <template x-if="!editing">
+                                <div class="flex items-center gap-2">
+                                    <form method="POST" action="{{ route('corex.contacts.touch', $contact) }}">
+                                        @csrf
+                                        <input type="hidden" name="last_contacted_at" value="{{ now()->format('Y-m-d\TH:i') }}">
+                                        <button type="submit" class="text-[10px] font-semibold px-2.5 py-1 rounded-md transition-all duration-300"
+                                                style="color:var(--brand-icon, #0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon, #0ea5e9) 30%, transparent);">
+                                            Mark as Now
+                                        </button>
+                                    </form>
+                                    <button type="button" @click="editing = true"
+                                            class="text-[10px] font-semibold px-2.5 py-1 rounded-md"
+                                            style="color:var(--text-muted); border:1px solid var(--border);">
+                                        Pick Date
+                                    </button>
+                                </div>
+                            </template>
+                            <template x-if="editing">
+                                <form method="POST" action="{{ route('corex.contacts.touch', $contact) }}" class="flex flex-col gap-2 w-full">
+                                    @csrf
+                                    <input type="datetime-local" name="last_contacted_at"
+                                           value="{{ $contact->last_contacted_at?->format('Y-m-d\TH:i') ?? now()->format('Y-m-d\TH:i') }}"
+                                           class="rounded-md px-2.5 py-1 text-xs w-full"
+                                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                    <div class="flex gap-2">
+                                        <button type="submit" class="corex-btn-primary text-[10px] px-2.5 py-1">Save</button>
+                                        <button type="button" @click="editing = false" class="text-[10px]" style="color:var(--text-muted);">Cancel</button>
+                                    </div>
+                                </form>
+                            </template>
+                        </div>
+                    </div>
+
+                    {{-- Box 2: WhatsApp --}}
+                    @if(auth()->user()->hasPermission('contacts.whatsapp'))
+                    <div class="rounded-md px-5 py-4 cursor-pointer transition-all duration-300 group"
+                         style="background:var(--surface-2); border:2px solid rgba(37,211,102,0.25);"
+                         @click="showWa = !showWa; showEmail = false"
+                         onmouseover="this.style.borderColor='#25d366'; this.style.background='rgba(37,211,102,0.06)'" onmouseout="this.style.borderColor='rgba(37,211,102,0.25)'; this.style.background='var(--surface-2)'">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-2">
+                                <svg class="w-5 h-5" style="color:#25d366;" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                                <div class="text-xs font-bold uppercase tracking-widest" style="color:#25d366;">WhatsApp</div>
+                            </div>
+                            <span class="text-[10px] font-semibold px-2 py-0.5 rounded-md" style="background:rgba(37,211,102,0.12); color:#25d366;">Click to send</span>
+                        </div>
+                        <div class="text-2xl font-extrabold" style="color:var(--text-primary);" x-text="waCount"></div>
+                        <div class="text-xs mt-0.5" style="color:var(--text-muted);">messages sent</div>
+                    </div>
+                    @endif
+
+                    {{-- Box 3: Email --}}
+                    @if(auth()->user()->hasPermission('contacts.email'))
+                    <div class="rounded-md px-5 py-4 cursor-pointer transition-all duration-300 group"
+                         style="background:var(--surface-2); border:2px solid color-mix(in srgb, var(--brand-icon, #0ea5e9) 25%, transparent);"
+                         @click="showEmail = !showEmail; showWa = false"
+                         onmouseover="this.style.borderColor='var(--brand-icon, #0ea5e9)'; this.style.background='color-mix(in srgb, var(--brand-icon, #0ea5e9) 4%, transparent)'" onmouseout="this.style.borderColor='color-mix(in srgb, var(--brand-icon, #0ea5e9) 25%, transparent)'; this.style.background='var(--surface-2)'">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5" style="color:var(--brand-icon, #0ea5e9);"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" /></svg>
+                                <div class="text-xs font-bold uppercase tracking-widest" style="color:var(--brand-icon, #0ea5e9);">Email</div>
+                            </div>
+                            <span class="text-[10px] font-semibold px-2 py-0.5 rounded-md" style="background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent); color:var(--brand-icon, #0ea5e9);">Click to send</span>
+                        </div>
+                        <div class="text-2xl font-extrabold" style="color:var(--text-primary);" x-text="emailCount"></div>
+                        <div class="text-xs mt-0.5" style="color:var(--text-muted);">emails sent</div>
+                    </div>
+                    @endif
+                </div>
+
+                {{-- WhatsApp template popup --}}
+                @if(auth()->user()->hasPermission('contacts.whatsapp'))
+                <div x-show="showWa" x-cloak
+                     x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0 -translate-y-2" x-transition:enter-end="opacity-100 translate-y-0"
+                     class="rounded-md p-4" style="background:var(--surface); border:1px solid #25d366; border-left:3px solid #25d366;">
+                    <div class="flex items-center gap-2 mb-3">
+                        <svg class="w-4 h-4" style="color:#25d366;" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                        <div class="text-xs font-bold" style="color:#25d366;">WhatsApp Message</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Template</label>
+                        <select @change="waMessage = $el.value"
+                                class="w-full rounded-md px-3 py-2 text-sm"
+                                style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                            <option value="Hi {{ $contact->first_name }}">Hi {{ $contact->first_name }}</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Message</label>
+                        <textarea x-model="waMessage" rows="3"
+                                  class="w-full rounded-md px-3 py-2 text-sm resize-none"
+                                  style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);"></textarea>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" @click="sendWa()"
+                                class="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-md text-white transition-all duration-300"
+                                style="background:#25d366;"
+                                onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                            Send WhatsApp
+                        </button>
+                        <button type="button" @click="showWa = false" class="text-sm" style="color:var(--text-muted);">Cancel</button>
+                    </div>
+                </div>
+
+                @endif
+
+                {{-- Email template popup --}}
+                @if(auth()->user()->hasPermission('contacts.email'))
+                <div x-show="showEmail" x-cloak
+                     x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0 -translate-y-2" x-transition:enter-end="opacity-100 translate-y-0"
+                     class="rounded-md p-4" style="background:var(--surface); border:1px solid var(--brand-icon, #0ea5e9); border-left:3px solid var(--brand-icon, #0ea5e9);">
+                    <div class="flex items-center gap-2 mb-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4" style="color:var(--brand-icon, #0ea5e9);"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" /></svg>
+                        <div class="text-xs font-bold" style="color:var(--brand-icon, #0ea5e9);">Email Message</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Template</label>
+                        <select @change="emailSubject = 'Hi {{ addslashes($contact->first_name) }}'; emailBody = $el.value"
+                                class="w-full rounded-md px-3 py-2 text-sm"
+                                style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                            <option value="Hi {{ $contact->first_name }}">Hi {{ $contact->first_name }}</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Subject</label>
+                        <input type="text" x-model="emailSubject"
+                               class="w-full rounded-md px-3 py-2 text-sm"
+                               style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                    </div>
+                    <div class="mb-3">
+                        <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Body</label>
+                        <textarea x-model="emailBody" rows="3"
+                                  class="w-full rounded-md px-3 py-2 text-sm resize-none"
+                                  style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);"></textarea>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" @click="sendEmail()"
+                                class="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-md text-white transition-all duration-300"
+                                style="background:var(--brand-icon, #0ea5e9);"
+                                onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" /></svg>
+                            Send Email
+                        </button>
+                        <button type="button" @click="showEmail = false" class="text-sm" style="color:var(--text-muted);">Cancel</button>
+                    </div>
+                </div>
+                @endif
+            </div>
+
             <form method="POST" action="{{ route('corex.contacts.update', $contact) }}" class="space-y-6">
                 @csrf @method('PUT')
                 <input type="hidden" name="_from_show" value="1">
@@ -185,11 +390,54 @@
                                    class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
                         </div>
-                        <div class="sm:col-span-2">
+                        <div>
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Address <span style="color:var(--text-muted); font-weight:400;">(optional)</span></label>
-                            <textarea name="address" rows="2"
-                                      class="w-full rounded-md px-3 py-2 text-sm resize-none"
-                                      style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">{{ old('address', $contact->address) }}</textarea>
+                            <input type="text" name="address" value="{{ old('address', $contact->address) }}"
+                                   placeholder="e.g. 21 Dee Road, Uvongo"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
+                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                        </div>
+
+                        {{-- Tags --}}
+                        <div class="sm:col-span-2 lg:col-span-3">
+                            <label class="block text-xs font-semibold mb-2" style="color:var(--text-muted);">Tags</label>
+                            @php $contactTagIds = $contact->tags->pluck('id')->toArray(); @endphp
+                            @if($contactTags->isNotEmpty())
+                            <div class="flex flex-wrap gap-2">
+                                @foreach($contactTags as $tag)
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-medium px-3 py-1.5 rounded-md transition-all duration-300"
+                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-secondary);"
+                                       x-data="{ checked: {{ in_array($tag->id, $contactTagIds) ? 'true' : 'false' }} }"
+                                       :style="checked ? 'background:color-mix(in srgb, {{ $tag->color }} 12%, transparent); border-color:color-mix(in srgb, {{ $tag->color }} 40%, transparent); color:{{ $tag->color }};' : ''">
+                                    <input type="checkbox" name="tag_ids[]" value="{{ $tag->id }}"
+                                           {{ in_array($tag->id, $contactTagIds) ? 'checked' : '' }}
+                                           @change="checked = $el.checked"
+                                           class="sr-only">
+                                    <span class="w-2.5 h-2.5 rounded-full flex-shrink-0 transition-all duration-300"
+                                          :style="checked ? 'background:{{ $tag->color }};' : 'background:var(--text-muted); opacity:0.3;'"></span>
+                                    {{ $tag->name }}
+                                </label>
+                                @endforeach
+                            </div>
+                            @else
+                            <p class="text-xs" style="color:var(--text-muted);">No tags configured — add them in
+                                <a href="{{ route('corex.settings', ['tab'=>'feature','fsec'=>'contacts']) }}" class="underline" style="color:var(--brand-icon, #0ea5e9);">Settings → Contacts</a>.
+                            </p>
+                            @endif
+                        </div>
+
+                        {{-- Loaded / Modified dates --}}
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Loaded Date</label>
+                            <input type="datetime-local" name="loaded_at" value="{{ old('loaded_at', $contact->loaded_at?->format('Y-m-d\TH:i')) }}"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
+                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Modified Date</label>
+                            <input type="datetime-local" name="modified_at" value="{{ old('modified_at', $contact->modified_at?->format('Y-m-d\TH:i')) }}"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
+                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
                         </div>
                     </div>
                 </div>
@@ -250,15 +498,6 @@
                             </div>
                         </div>
                     </div>
-                </div>
-
-                {{-- General Notes --}}
-                <div>
-                    <h3 class="text-xs font-bold uppercase tracking-widest mb-4" style="color:var(--text-muted);">General Notes</h3>
-                    <textarea name="notes" rows="3"
-                              placeholder="Any general notes about this contact…"
-                              class="w-full rounded-md px-3 py-2 text-sm resize-none"
-                              style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">{{ old('notes', $contact->notes) }}</textarea>
                 </div>
 
                 <div class="flex items-center gap-3 pt-2">

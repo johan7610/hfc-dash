@@ -13,6 +13,10 @@
     $agencies = $isOwner ? \App\Models\Agency::orderBy('name')->get() : collect();
     $activeAgency = ($isOwner && $activeAgencyId) ? $agencies->find($activeAgencyId) : null;
 
+    // Current user's agency (for all users)
+    $_userAgencyId = $user?->effectiveAgencyId();
+    $_userAgency = $_userAgencyId ? \App\Models\Agency::find($_userAgencyId) : null;
+
     // Impersonation state
     $impersonatorId  = (int) session('impersonator_id', 0);
     $isImpersonating = $impersonatorId > 0;
@@ -58,6 +62,13 @@
     <div class="corex-sidebar-logo">
         CoreX <span>Os</span>
     </div>
+    @if($_userAgency)
+    <div class="px-4 -mt-1 pb-2">
+        <div class="text-[10px] font-semibold uppercase tracking-widest text-center truncate" style="color:var(--text-muted); opacity:0.6;">
+            {{ $_userAgency->name }}
+        </div>
+    </div>
+    @endif
 
     {{-- Agency Switcher (owner role only) --}}
     @if($isOwner)
@@ -241,6 +252,7 @@
         {{-- ═══════════════════════════════════════════
              PROSPECTING
              ═══════════════════════════════════════════ --}}
+        @permission('access_prospecting')
         @if(\Illuminate\Support\Facades\Route::has('prospecting.index'))
         <a href="{{ route('prospecting.index') }}"
            class="corex-nav-item {{ request()->routeIs('prospecting.*') ? 'active' : '' }}">
@@ -250,6 +262,7 @@
             <span>Prospecting</span>
         </a>
         @endif
+        @endpermission
 
         {{-- ═══════════════════════════════════════════
              DOCUMENTS (DocuPerfect — expandable group)
@@ -274,7 +287,9 @@
                 <a href="{{ route('docuperfect.create') }}" class="corex-nav-subitem {{ request()->routeIs('docuperfect.create') ? 'active' : '' }}">Create Document</a>
                 <a href="{{ route('docuperfect.esign.create') }}" class="corex-nav-subitem {{ request()->routeIs('docuperfect.esign.*') ? 'active' : '' }}">E-Sign Document</a>
                 @endpermission
+                @permission('access_docuperfect')
                 <a href="{{ route('docuperfect.dashboard') }}" class="corex-nav-subitem {{ request()->routeIs('docuperfect.dashboard') ? 'active' : '' }}">My Documents</a>
+                @endpermission
                 @permission('access_docuperfect_packs')
                 <a href="{{ route('docuperfect.packs.index') }}" class="corex-nav-subitem {{ request()->routeIs('docuperfect.packs.*') ? 'active' : '' }}">Packs</a>
                 <a href="{{ route('docuperfect.web-packs.index') }}" class="corex-nav-subitem {{ request()->routeIs('docuperfect.web-packs.*') ? 'active' : '' }}">Web Packs</a>
@@ -310,12 +325,16 @@
                  x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
                  x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
                  class="corex-nav-children">
+                @permission('view_rentals')
                 <a href="{{ route('rental.dashboard') }}" class="corex-nav-subitem {{ request()->routeIs('rental.dashboard') ? 'active' : '' }}">Dashboard</a>
+                @endpermission
                 @permission('access_rental_signatures')
                 <a href="{{ route('rental.signatures') }}" class="corex-nav-subitem {{ request()->routeIs('rental.signatures*') ? 'active' : '' }}">Electronic Signatures</a>
                 @endpermission
+                @permission('view_rentals')
                 <a href="{{ route('rental.active-leases') }}" class="corex-nav-subitem {{ request()->routeIs('rental.active-leases') ? 'active' : '' }}">Active Leases</a>
                 <a href="{{ route('rental.expired-leases') }}" class="corex-nav-subitem {{ request()->routeIs('rental.expired-leases') ? 'active' : '' }}">Expired Leases</a>
+                @endpermission
             </div>
         </div>
         @endpermission
@@ -425,6 +444,7 @@
         @endpermission
 
         {{-- Evaluation --}}
+        @permission('access_evaluation')
         <div>
             <button type="button" @click="toggle('evaluation')"
                     class="corex-nav-item corex-nav-group-toggle {{ $activeGroup === 'evaluation' ? 'active' : '' }}">
@@ -447,6 +467,7 @@
                 <a href="{{ route('evaluation.index') }}#tab=prospecting" class="corex-nav-subitem">Prospecting</a>
             </div>
         </div>
+        @endpermission
 
         {{-- Properties --}}
         @permission('access_properties')
@@ -692,3 +713,4 @@
     </div>
     @endauth
 </div>
+

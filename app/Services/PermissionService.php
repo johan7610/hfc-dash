@@ -50,16 +50,6 @@ class PermissionService
     }
 
     /**
-     * Return true if this role has no permissions configured at all.
-     * Used to give newly-created roles full access until explicitly restricted.
-     */
-    protected static function roleIsUnconfigured(string $role): bool
-    {
-        return empty(static::getPermissionsForRole($role))
-            && empty(static::getScopesForRole($role));
-    }
-
-    /**
      * Get the data scope for a user on a specific module.
      *
      * Looks up role_permissions where permission_key = '{module}.view'
@@ -93,12 +83,6 @@ class PermissionService
             };
         }
 
-        // If this specific role has no permissions configured yet, give full scope
-        // (matches the userHasPermission fallback for newly created roles)
-        if (static::roleIsUnconfigured($role)) {
-            return 'all';
-        }
-
         $scopes  = static::getScopesForRole($role);
         $viewKey = $module . '.view';
 
@@ -110,6 +94,9 @@ class PermissionService
      * Owner role bypasses all permission checks.
      * If role_permissions table is empty (unseeded DB / tests), allow all.
      * For {module}.view keys, having any scope value = has permission.
+     *
+     * A role with 0 permissions = 0 access (no silent fallback).
+     * New roles are seeded with agent defaults on creation.
      */
     public static function userHasPermission(User $user, string $permissionKey): bool
     {
@@ -131,13 +118,6 @@ class PermissionService
             static::$seeded = RolePermission::exists();
         }
         if (!static::$seeded) {
-            return true;
-        }
-
-        // If this specific role has no permissions configured yet (e.g. newly created via
-        // the Role Manager before any permissions are saved), allow full access so the
-        // role isn't silently broken. Admins can then lock it down in the Role Manager.
-        if (static::roleIsUnconfigured($role)) {
             return true;
         }
 

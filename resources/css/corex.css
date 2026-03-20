@@ -3,16 +3,14 @@
    ======================================== */
 
 :root {
-    /* Brand colour vars — 4 semantic roles, injected per-agency via corex.blade.php <style> tag */
-    --brand-sidebar: #0ea5e9;
-    --brand-icon:    #0ea5e9;
-    --brand-default: #0b2a4a;
-    --brand-button:  #0ea5e9;
+    /* Brand colour vars are injected per-agency via corex.blade.php <style> tag.
+       Do NOT define defaults here — Vite dev mode loads this AFTER the inline style,
+       which would override agency values. Fallbacks are in the semantic aliases below. */
 
-    /* Semantic aliases */
-    --corex-sidebar-hover: var(--brand-sidebar);
-    --corex-accent:        var(--brand-icon);
-    --corex-mid:           var(--brand-default);
+    /* Semantic aliases (with fallbacks for unauthenticated pages) */
+    --corex-sidebar-hover: var(--brand-sidebar, #0ea5e9);
+    --corex-accent:        var(--brand-icon, #0ea5e9);
+    --corex-mid:           var(--brand-default, #0b2a4a);
 
     /* Everything else is fixed regardless of agency */
     --corex-sidebar-width: 240px;

@@ -100,6 +100,13 @@
                                 class="corex-btn-primary px-3 py-1.5 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed">
                             Copy
                         </button>
+                        <div class="mx-1" style="width:1px;height:20px;background:var(--border);"></div>
+                        <button type="button" @click="showCopyModal = true"
+                                class="px-3 py-1.5 rounded-md text-xs font-semibold transition-all duration-300"
+                                style="border:1px solid var(--border); color:var(--text-secondary);"
+                                onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
+                            Bulk Copy & Save
+                        </button>
                     </div>
                 </div>
 
@@ -134,7 +141,7 @@
                     <div class="flex-1 min-w-0 overflow-y-auto sticky top-4" style="max-height:calc(100vh - 8rem);">
                         @if($permissions->isEmpty())
                             <div class="rounded-md px-5 py-12 text-center text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-muted);">
-                                No permissions defined. Run: <code class="font-mono px-1 rounded-md" style="background:var(--surface-2);">php artisan db:seed --class=CoreXPermissionSeeder</code>
+                                No permissions defined. Run: <code class="font-mono px-1 rounded-md" style="background:var(--surface-2);">php artisan corex:sync-permissions --seed-defaults</code>
                             </div>
                         @endif
 
@@ -641,6 +648,78 @@
         </div>
     </div>
 
+    {{-- ─────────────────────────────────────────────
+         MODAL: Bulk Copy Permissions
+    ───────────────────────────────────────────── --}}
+    <div x-show="showCopyModal" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+         @click.self="showCopyModal = false"
+         x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
+        <div class="rounded-md shadow-xl w-full max-w-lg mx-4 overflow-hidden" style="background:var(--surface);" @click.stop>
+            <div class="px-6 py-4" style="background:var(--surface-2); border-bottom:1px solid var(--border);">
+                <h3 class="font-semibold text-sm" style="color:var(--text-primary);">Bulk Copy Permissions</h3>
+                <p class="text-xs mt-0.5" style="color:var(--text-muted);">Copy all permissions from one role to one or more target roles. This saves immediately.</p>
+            </div>
+            <form method="POST" action="{{ route('corex.role-manager.copy') }}" class="p-6 space-y-4">
+                @csrf
+
+                <div>
+                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Copy from (source)</label>
+                    <select name="source_role" x-model="copySource"
+                            class="w-full rounded-md px-3 py-2 text-sm transition-all duration-300"
+                            style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); outline:none;">
+                        <option value="">— select source role —</option>
+                        @foreach($roles as $role)
+                            @if(!$role->is_owner)
+                            <option value="{{ $role->name }}">{{ $role->label }}</option>
+                            @endif
+                        @endforeach
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold mb-2" style="color:var(--text-muted);">Copy to (targets)</label>
+                    <div class="space-y-2 rounded-md p-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                        @foreach($roles as $role)
+                            @if(!$role->is_owner)
+                            <label class="flex items-center gap-3 cursor-pointer py-1"
+                                   :class="copySource === '{{ $role->name }}' ? 'opacity-30 pointer-events-none' : ''">
+                                <input type="checkbox" name="target_roles[]" value="{{ $role->name }}"
+                                       :disabled="copySource === '{{ $role->name }}'"
+                                       class="w-4 h-4 rounded-md cursor-pointer"
+                                       style="accent-color:var(--brand-button,#0ea5e9);">
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold text-white"
+                                      style="background:{{ $role->color }};">
+                                    {{ $role->label }}
+                                </span>
+                                <span class="text-xs" style="color:var(--text-muted);">{{ $role->users_count }} user(s)</span>
+                            </label>
+                            @endif
+                        @endforeach
+                    </div>
+                </div>
+
+                <div class="rounded-md border px-4 py-3" style="border-color:#fde68a; background:#fffbeb;">
+                    <p class="text-xs font-medium" style="color:#92400e;">This will overwrite all existing permissions on the target role(s). This action cannot be undone.</p>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="button" @click="showCopyModal = false"
+                            class="px-4 py-2 rounded-md text-xs font-semibold transition-all duration-300"
+                            style="border:1px solid var(--border); color:var(--text-secondary);"
+                            onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
+                        Cancel
+                    </button>
+                    <button type="submit" :disabled="!copySource"
+                            class="corex-btn-primary px-4 py-2 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed">
+                        Copy & Save
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
 </div>
 
 {{-- Toast notification --}}
@@ -706,6 +785,10 @@ function roleManager() {
         copyFromRole: '',
         copyToast: false,
         copyToastMsg: '',
+
+        // Bulk copy modal
+        showCopyModal: false,
+        copySource: '',
 
         // Role modals
         showRoleModal: false,
