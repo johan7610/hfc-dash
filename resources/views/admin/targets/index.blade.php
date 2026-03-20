@@ -43,6 +43,13 @@
                         <a href="{{ route('admin.targets.activity.setup') }}" class="corex-btn-outline text-sm">Activity Setup</a>
                     @endif
 
+                    @if($canEditTargets)
+                        <form method="POST" action="{{ route('admin.targets.carry-forward') }}" class="inline" onsubmit="return confirm('Copy last month\'s targets to this month? Existing entries will not be overwritten.')">
+                            @csrf
+                            <button type="submit" class="corex-btn-outline text-sm">Copy Previous Month</button>
+                        </form>
+                    @endif
+
                     @if(!$isAgent)
                         <form method="GET" action="{{ route('admin.targets') }}" class="flex items-center gap-2">
                             <select name="period" class="rounded-md border border-white/20 bg-white/10 text-white text-sm px-3 py-1.5 transition-all duration-300 [&>option]:text-black">

@@ -291,6 +291,13 @@ Route::middleware(['auth'])->group(function () {
 
     Route::post('/admin/targets/daily', [TargetController::class, 'saveDaily'])->middleware('permission:manage_targets')->name('admin.targets.daily.save');
 
+    // Carry forward targets from previous month (manual trigger)
+    Route::post('/admin/targets/carry-forward', function () {
+        \Illuminate\Support\Facades\Artisan::call('targets:carry-forward');
+        $output = \Illuminate\Support\Facades\Artisan::output();
+        return back()->with('status', 'Targets carried forward from previous month. ' . strip_tags(trim($output)));
+    })->middleware('permission:manage_targets')->name('admin.targets.carry-forward');
+
     Route::get('/admin/performance', [\App\Http\Controllers\Admin\PerformanceController::class, 'index'])->middleware('permission:view_performance')->name('admin.performance');
     Route::get('/admin/branch/{branchId}/performance', [\App\Http\Controllers\Admin\BranchPerformanceController::class, 'index'])->middleware('permission:view_performance')->name('admin.branch.performance');
           Route::get('/bm/worksheet-market', [\App\Http\Controllers\BM\WorksheetMarketController::class, 'index'])
