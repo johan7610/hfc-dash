@@ -38,19 +38,24 @@
                 @if($pack->description)
                 <div class="text-xs mb-2" style="color: var(--text-muted);">{{ $pack->description }}</div>
                 @endif
-                <div class="text-xs mb-3" style="color: var(--text-muted);">
+                <div class="text-xs mb-3 flex flex-wrap items-center gap-1" style="color: var(--text-muted);">
                     @if($pack->usesSlots())
-                        {{ $pack->slots->count() }} slot{{ $pack->slots->count() !== 1 ? 's' : '' }}
-                        &middot;
+                        <span>{{ $pack->slots->count() }} slot{{ $pack->slots->count() !== 1 ? 's' : '' }}</span>
+                        <span>&middot;</span>
                         <span class="text-[10px]" style="color: {{ $pack->creation_mode === 'linked' ? 'var(--brand-icon)' : 'var(--text-muted)' }};">{{ ucfirst($pack->creation_mode) }}</span>
                     @else
-                        {{ $pack->templates->count() }} template{{ $pack->templates->count() !== 1 ? 's' : '' }}
+                        <span>{{ $pack->templates->count() }} template{{ $pack->templates->count() !== 1 ? 's' : '' }}</span>
                     @endif
-                    &middot;
+                    <span>&middot;</span>
                     @if($pack->is_global)
                         <span class="ds-badge ds-badge-success text-[10px]">Global</span>
                     @else
-                        {{ $pack->branches->pluck('name')->join(', ') ?: 'No branches' }}
+                        <span>{{ $pack->branches->pluck('name')->join(', ') ?: 'No branches' }}</span>
+                    @endif
+                    @if($pack->esign_eligible)
+                        <span class="ds-badge text-[10px]" style="background: rgba(20,184,166,0.15); color: #14b8a6;">E-Sign Eligible</span>
+                    @else
+                        <span class="ds-badge text-[10px]" style="background: rgba(148,163,184,0.15); color: #94a3b8;">Not E-Sign Eligible</span>
                     @endif
                 </div>
 

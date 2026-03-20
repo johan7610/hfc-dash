@@ -55,6 +55,22 @@
                         <input type="checkbox" id="dpGlobal" {{ $template->is_global ? 'checked' : '' }} class="rounded border-slate-300">
                         <span class="text-sm text-slate-700">Global (all branches)</span>
                     </div>
+                    <div class="flex items-center gap-2 mt-2">
+                        <input type="checkbox" id="dpEsign" {{ $template->is_esign ? 'checked' : '' }} class="rounded border-slate-300"
+                               onchange="document.getElementById('dpPartyModeGroup').style.display = this.checked ? 'block' : 'none';">
+                        <span class="text-sm text-slate-700">Eligible for E-Signature</span>
+                    </div>
+                    <div id="dpPartyModeGroup" class="mt-2 ml-5 space-y-1" style="{{ $template->is_esign ? '' : 'display:none;' }}">
+                        <label class="ds-label text-xs block mb-1">Signing Mode</label>
+                        <label class="flex items-center gap-2 text-sm text-slate-700">
+                            <input type="radio" name="party_mode" id="dpPartyModeShared" value="shared" {{ ($template->party_mode ?? 'shared') === 'shared' ? 'checked' : '' }} class="border-slate-300">
+                            Shared Document — all parties sign the same document
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-slate-700">
+                            <input type="radio" name="party_mode" id="dpPartyModePerParty" value="per_party" {{ ($template->party_mode ?? 'shared') === 'per_party' ? 'checked' : '' }} class="border-slate-300">
+                            Per Party — one copy per signing party (e.g. FICA)
+                        </label>
+                    </div>
                 </div>
             </div>
             <div>
@@ -92,6 +108,8 @@
         pageImages: @json($pageImageUrls),
         fields: @json($template->fields_json ?? []),
         isGlobal: @json($template->is_global),
+        isEsign: @json($template->is_esign),
+        partyMode: @json($template->party_mode ?? 'shared'),
         allowedBranches: @json($template->branches->pluck('id')),
         saveUrl: @json(route('docuperfect.templates.saveFields', $template->id)),
         uploadPagesUrl: @json(route('docuperfect.templates.uploadPages', $template->id)),

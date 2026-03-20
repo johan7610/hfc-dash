@@ -42,6 +42,13 @@ class WebTemplateDataService
      */
     public function resolve(int $templateId, array $stepData, ?User $agent = null): array
     {
+        $template = Template::find($templateId);
+
+        // CDS templates: resolve fields from field_mappings, then merge with base data
+        if ($template && $template->template_type === 'cds') {
+            return $this->resolveCdsTemplate($template, $stepData, $agent);
+        }
+
         $property   = $stepData['property'] ?? [];
         $recipients = $stepData['recipients']['recipients'] ?? [];
         $details    = $stepData['details'] ?? [];
@@ -344,6 +351,198 @@ class WebTemplateDataService
 
             // Initials parties — used for initials on every non-signature page
             'initialsParties'       => $initialsParties,
+        ];
+    }
+
+    /**
+     * Resolve CDS template fields from field_mappings + step data.
+     * CDS blade views use underscore-separated variable names (e.g. property_address).
+     * We resolve each field from the wizard step data based on its source type,
+     * then also include the full base resolve() data for maximum compatibility.
+     */
+    private function resolveCdsTemplate(Template $template, array $stepData, ?User $agent): array
+    {
+        $agent = $agent ?? auth()->user();
+        $property = $stepData['property'] ?? [];
+        $recipients = $stepData['recipients']['recipients'] ?? [];
+        $details = $stepData['details'] ?? [];
+
+        // Build contact lookup by role
+        $contactsByRole = [];
+        foreach ($recipients as $r) {
+            $role = strtolower($r['role'] ?? '');
+            if ($role && !isset($contactsByRole[$role])) {
+                $contactsByRole[$role] = $r;
+            }
+        }
+
+        $lessor = $contactsByRole['landlord'] ?? $contactsByRole['lessor'] ?? [];
+        $lessee = $contactsByRole['tenant'] ?? $contactsByRole['lessee'] ?? [];
+        $seller = $contactsByRole['seller'] ?? [];
+        $buyer = $contactsByRole['buyer'] ?? [];
+
+        $data = [];
+
+        // Resolve each field from field_mappings
+        foreach ($template->field_mappings ?? [] as $field) {
+            $fieldName = $field['field_name'] ?? '';
+            if (empty($fieldName)) continue;
+
+            // Variable name in blade = dots replaced with underscores
+            $varName = str_replace('.', '_', $fieldName);
+            $varName = preg_replace('/[^a-zA-Z0-9_]/', '_', $varName);
+
+            $source = $field['source'] ?? 'manual';
+            $value = '';
+
+            if ($source === 'property') {
+                $key = last(explode('.', $fieldName));
+                $value = $property[$key] ?? $property[str_replace('_', '', $key)] ?? '';
+                // Try common aliases
+                if (empty($value) && in_array($key, ['address', 'full_address'])) {
+                    $value = trim(($property['address'] ?? '') . ', ' . ($property['suburb'] ?? ''), ', ');
+                }
+            } elseif ($source === 'contact') {
+                $contact = $this->inferContactFromFieldName($fieldName, $lessor, $lessee, $seller, $buyer);
+                $key = last(explode('.', $fieldName));
+                if ($contact) {
+                    $value = $contact[$key] ?? '';
+                    if (empty($value) && in_array($key, ['full_name', 'name'])) {
+                        $value = trim(($contact['first_name'] ?? '') . ' ' . ($contact['last_name'] ?? '')) ?: ($contact['name'] ?? '');
+                    }
+                }
+            } elseif ($source === 'deal') {
+                $key = last(explode('.', $fieldName));
+                $value = $details[$key] ?? '';
+            } elseif ($source === 'agent' || ($field['filled_by'] ?? '') === 'agent') {
+                if ($agent) {
+                    $key = last(explode('.', $fieldName));
+                    $value = match ($key) {
+                        'name', 'full_name' => $agent->name ?? '',
+                        'email' => $agent->email ?? '',
+                        'cell', 'phone' => $agent->cell ?? $agent->phone ?? '',
+                        default => '',
+                    };
+                }
+            }
+
+            $data[$varName] = $value;
+        }
+
+        // Also include the full standard data set for maximum blade compatibility
+        // (signature blocks, initials, etc. reference standard variable names)
+        $baseData = $this->resolveBase($stepData, $agent);
+
+        // CDS-specific fields override base where they exist
+        return array_merge($baseData, $data);
+    }
+
+    /**
+     * Infer which contact to use based on the field name.
+     */
+    private function inferContactFromFieldName(string $fieldName, array $lessor, array $lessee, array $seller, array $buyer): array
+    {
+        $lower = strtolower($fieldName);
+        if (str_contains($lower, 'landlord') || str_contains($lower, 'lessor') || str_contains($lower, 'owner')) return $lessor;
+        if (str_contains($lower, 'tenant') || str_contains($lower, 'lessee')) return $lessee;
+        if (str_contains($lower, 'seller')) return $seller;
+        if (str_contains($lower, 'buyer') || str_contains($lower, 'purchaser')) return $buyer;
+        // Default: first non-empty contact (lessor for rental, seller for sale)
+        return $lessor ?: $seller ?: $lessee ?: $buyer;
+    }
+
+    /**
+     * Base resolve — the standard flat variable set used by all web templates.
+     * Extracted from resolve() so CDS templates can merge on top.
+     */
+    private function resolveBase(array $stepData, ?User $agent): array
+    {
+        $property   = $stepData['property'] ?? [];
+        $recipients = $stepData['recipients']['recipients'] ?? [];
+        $details    = $stepData['details'] ?? [];
+        $agent      = $agent ?? auth()->user();
+
+        $contactsByRole = [];
+        $secondContactByRole = [];
+        foreach ($recipients as $r) {
+            $role = strtolower($r['role'] ?? '');
+            if (!$role) continue;
+            if (!isset($contactsByRole[$role])) {
+                $contactsByRole[$role] = $r;
+            } elseif (!isset($secondContactByRole[$role])) {
+                $secondContactByRole[$role] = $r;
+            }
+        }
+
+        $lessor = $contactsByRole['landlord'] ?? $contactsByRole['lessor'] ?? [];
+        $lessor2 = $secondContactByRole['landlord'] ?? $secondContactByRole['lessor'] ?? [];
+        $lessee = $contactsByRole['tenant'] ?? $contactsByRole['lessee'] ?? [];
+        $lessee2 = $secondContactByRole['tenant'] ?? $secondContactByRole['lessee'] ?? [];
+        $seller = $contactsByRole['seller'] ?? [];
+        $buyer  = $contactsByRole['buyer'] ?? [];
+
+        $lessorName  = trim(($lessor['first_name'] ?? '') . ' ' . ($lessor['last_name'] ?? '')) ?: ($lessor['name'] ?? '');
+        $lessor2Name = trim(($lessor2['first_name'] ?? '') . ' ' . ($lessor2['last_name'] ?? '')) ?: ($lessor2['name'] ?? '');
+        $lesseeName  = trim(($lessee['first_name'] ?? '') . ' ' . ($lessee['last_name'] ?? '')) ?: ($lessee['name'] ?? '');
+        $lessee2Name = trim(($lessee2['first_name'] ?? '') . ' ' . ($lessee2['last_name'] ?? '')) ?: ($lessee2['name'] ?? '');
+        $sellerName  = trim(($seller['first_name'] ?? '') . ' ' . ($seller['last_name'] ?? '')) ?: ($seller['name'] ?? '');
+        $buyerName   = trim(($buyer['first_name'] ?? '') . ' ' . ($buyer['last_name'] ?? '')) ?: ($buyer['name'] ?? '');
+
+        $address    = $property['address'] ?? $property['title'] ?? '';
+        $suburb     = $property['suburb'] ?? '';
+        $leaseStart = $details['lease_start'] ?? '';
+        $leaseEnd   = $details['lease_end'] ?? '';
+        $rental     = $details['monthly_rental'] ?? $property['rental_amount'] ?? '';
+        $deposit    = $details['deposit'] ?? $property['deposit_amount'] ?? '';
+
+        $commission = $details['commission'] ?? $details['commission_percent'] ?? '';
+        $commissionAmount = ($rental && $commission) ? round((float) $rental * (float) $commission / 100, 2) : '';
+        $vatAmount = $commissionAmount ? round((float) $commissionAmount * 0.15, 2) : '';
+        $serviceFee = $commissionAmount ? round((float) $commissionAmount + $vatAmount, 2) : '';
+        $letsAssist = $details['lets_assist'] ?? '';
+        $netToOwner = $rental ? round((float) $rental - ($serviceFee ?: 0) - ($letsAssist ?: 0), 2) : '';
+
+        $leaseStartFormatted = $leaseStart ? date('j F Y', strtotime($leaseStart)) : '';
+        $leaseEndFormatted = $leaseEnd ? date('j F Y', strtotime($leaseEnd)) : '';
+
+        $initialsParties = [];
+        if (!empty($lessor['name'] ?? '')) $initialsParties[] = 'Owner';
+        if (!empty($lessee['name'] ?? '')) $initialsParties[] = 'Tenant';
+        if ($agent) $initialsParties[] = 'Agent';
+
+        return [
+            'lessor_name' => $lessorName, 'lessor_id_number' => $lessor['id_number'] ?? '',
+            'lessor_email' => $lessor['email'] ?? '', 'lessor_cell' => $lessor['cell'] ?? $lessor['phone'] ?? '',
+            'lessor_address' => $lessor['address'] ?? '',
+            'lessor_bank_name' => $lessor['bank_name'] ?? '',
+            'lessor_bank_account_name' => $lessor['bank_account_name'] ?? '',
+            'lessor_bank_account_number' => $lessor['bank_account_number'] ?? '',
+            'lessor_bank_branch_name' => $lessor['bank_branch_name'] ?? '',
+            'owner_names' => $lessor2Name ? ($lessorName . ' & ' . $lessor2Name) : $lessorName,
+            'lessee_name' => $lesseeName, 'lessee_id_number' => $lessee['id_number'] ?? '',
+            'lessee_email' => $lessee['email'] ?? '', 'lessee_cell' => $lessee['cell'] ?? $lessee['phone'] ?? '',
+            'lessee_address' => $lessee['address'] ?? '',
+            'seller_name' => $sellerName, 'seller_id_number' => $seller['id_number'] ?? '',
+            'buyer_name' => $buyerName, 'buyer_id_number' => $buyer['id_number'] ?? '',
+            'property_address' => trim("{$address}, {$suburb}", ', '),
+            'property_suburb' => $suburb,
+            'erf_no' => $property['erf'] ?? $property['erf_number'] ?? '',
+            'unit_no' => $property['unit_number'] ?? '',
+            'complex_name' => $property['complex_name'] ?? '',
+            'district' => $property['district'] ?? 'Ray Nkonyeni',
+            'monthly_rental' => $rental, 'deposit_amount' => $deposit,
+            'commission_percent' => $commission, 'commission_amount' => $commissionAmount,
+            'vat_amount' => $vatAmount, 'service_fee' => $serviceFee,
+            'net_to_owner' => $netToOwner, 'net_to_lessor' => $netToOwner,
+            'lease_start' => $leaseStart, 'lease_end' => $leaseEnd,
+            'lease_start_formatted' => $leaseStartFormatted, 'lease_end_formatted' => $leaseEndFormatted,
+            'agent_name' => $agent->name ?? '', 'agent_email' => $agent->email ?? '',
+            'agent_cell' => $agent->cell ?? $agent->phone ?? '',
+            'lessor_signature_name' => $lessorName, 'lessee_signature_name' => $lesseeName,
+            'seller_signature_name' => $sellerName, 'buyer_signature_name' => $buyerName,
+            'agent_signature_name' => $agent->name ?? '',
+            'signed_at_location' => '', 'signed_day' => '', 'signed_month' => '', 'signed_year' => '',
+            'initialsParties' => $initialsParties,
         ];
     }
 

@@ -821,6 +821,12 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
     // Templates (admin/BM)
     Route::get('/templates', [\App\Http\Controllers\Docuperfect\TemplateController::class, 'index'])->name('docuperfect.templates.index');
     Route::post('/templates/upload', [\App\Http\Controllers\Docuperfect\TemplateController::class, 'upload'])->name('docuperfect.templates.upload');
+    // CDS Document Engine (DB-backed drafts)
+    Route::get('/templates/cds/builder/{draft}', [\App\Http\Controllers\Docuperfect\TemplateController::class, 'cdsBuilder'])->name('docuperfect.cds.builder');
+    Route::post('/templates/cds/mappings', [\App\Http\Controllers\Docuperfect\TemplateController::class, 'cdsSaveMappings'])->name('docuperfect.cds.mappings');
+    Route::post('/templates/cds/draft/save', [\App\Http\Controllers\Docuperfect\TemplateController::class, 'cdsSaveDraft'])->name('docuperfect.cds.draft.save');
+    Route::post('/templates/cds/generate', [\App\Http\Controllers\Docuperfect\TemplateController::class, 'cdsGenerate'])->name('docuperfect.cds.generate');
+    Route::delete('/templates/cds/draft/{draft}', [\App\Http\Controllers\Docuperfect\TemplateController::class, 'cdsDestroyDraft'])->name('docuperfect.cds.draft.destroy');
     Route::get('/templates/{id}/edit', [\App\Http\Controllers\Docuperfect\TemplateController::class, 'edit'])->name('docuperfect.templates.edit');
     Route::get('/templates/{id}/web-preview', [\App\Http\Controllers\Docuperfect\TemplateController::class, 'webPreview'])->name('docuperfect.templates.webPreview');
     Route::post('/templates/{id}/fields', [\App\Http\Controllers\Docuperfect\TemplateController::class, 'saveFields'])->name('docuperfect.templates.saveFields');
@@ -929,6 +935,7 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
     // ===== DOCUMENT IMPORTER =====
     Route::get('/import', [\App\Http\Controllers\Docuperfect\DocumentImporterController::class, 'index'])->name('docuperfect.import.index');
     Route::post('/import/parse', [\App\Http\Controllers\Docuperfect\DocumentImporterController::class, 'parse'])->name('docuperfect.import.parse');
+    Route::post('/import/cds', [\App\Http\Controllers\Docuperfect\DocumentImporterController::class, 'generateCdsTemplate'])->name('docuperfect.import.cds');
     Route::get('/import/review', [\App\Http\Controllers\Docuperfect\DocumentImporterController::class, 'review'])->name('docuperfect.import.review');
     Route::post('/import/generate', [\App\Http\Controllers\Docuperfect\DocumentImporterController::class, 'generate'])->name('docuperfect.import.generate');
     Route::post('/import/review/mappings', [\App\Http\Controllers\Docuperfect\DocumentImporterController::class, 'saveMappings'])->name('docuperfect.import.review.mappings');
@@ -942,6 +949,36 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
     Route::delete('/import/parties/{id}', [\App\Http\Controllers\Docuperfect\DocumentImporterController::class, 'destroyParty'])->name('docuperfect.import.parties.destroy');
     Route::post('/import/parties/reorder', [\App\Http\Controllers\Docuperfect\DocumentImporterController::class, 'reorderParties'])->name('docuperfect.import.parties.reorder');
     Route::post('/import/template/{id}/edit', [\App\Http\Controllers\Docuperfect\DocumentImporterController::class, 'editFromTemplate'])->name('docuperfect.import.template.edit');
+
+    // ===== RENDERER TEST =====
+    Route::get('/renderer-test', function () {
+        return view('docuperfect.renderer-test');
+    })->name('docuperfect.renderer-test');
+
+    // ===== CDS PARSER TEST =====
+    Route::get('/parser-test', function () {
+        return view('docuperfect.parser-test');
+    })->name('docuperfect.parser-test');
+
+    Route::post('/parser-test', function (\Illuminate\Http\Request $request) {
+        $request->validate(['document' => 'required|file|mimes:docx']);
+
+        $file = $request->file('document');
+        $fullPath = $file->getPathname();
+
+        $parser = new \App\Services\Docuperfect\CdsParserService();
+        $cds = $parser->parse($fullPath);
+
+        $renderer = new \App\Services\Docuperfect\CdsRendererService();
+        $html = $renderer->render($cds);
+
+        return view('docuperfect.parser-test-result', [
+            'cds' => $cds,
+            'html' => $html,
+            'sectionCount' => count($cds['sections'] ?? []),
+            'title' => $cds['title'] ?? 'Unknown',
+        ]);
+    })->name('docuperfect.parser-test.upload');
 
     // ===== WEB TEMPLATE PREVIEWS =====
     Route::get('/web-preview/letting-mandate-v5', [\App\Http\Controllers\Docuperfect\WebTemplateController::class, 'lettingMandateV5'])->name('docuperfect.webPreview.lettingMandateV5');

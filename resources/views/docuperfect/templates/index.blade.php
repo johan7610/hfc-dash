@@ -98,11 +98,14 @@
                         <span class="ds-badge ds-badge-info text-[10px] ml-2 flex-shrink-0">{{ $tpl->template_type }}</span>
                         @endif
                     </div>
-                    <div class="text-xs mb-1" style="color: var(--text-muted);">
+                    <div class="text-xs mb-1 flex flex-wrap items-center gap-1" style="color: var(--text-muted);">
                         @if($tpl->is_global)
                             <span class="ds-badge ds-badge-success text-[10px]">Global</span>
                         @else
                             {{ $tpl->branches->pluck('name')->join(', ') ?: 'No branches' }}
+                        @endif
+                        @if($tpl->is_esign)
+                            <span class="ds-badge text-[10px]" style="background: rgba(20,184,166,0.15); color: #14b8a6;">E-Sign</span>
                         @endif
                     </div>
                     <div class="text-[11px] mb-3" style="color: var(--text-muted);">{{ $tpl->page_count }} page{{ $tpl->page_count !== 1 ? 's' : '' }} &middot; {{ $tpl->owner->name ?? '—' }} &middot; {{ $tpl->created_at?->format('d M Y') ?? '—' }}</div>
@@ -184,7 +187,12 @@
                                          loading="lazy" />
                                     @endif
                                 </td>
-                                <td class="px-4 py-2 font-medium" style="color: var(--text-primary);">{{ $tpl->name }}</td>
+                                <td class="px-4 py-2 font-medium" style="color: var(--text-primary);">
+                                    {{ $tpl->name }}
+                                    @if($tpl->is_esign)
+                                        <span class="ds-badge text-[10px] ml-1" style="background: rgba(20,184,166,0.15); color: #14b8a6;">E-Sign</span>
+                                    @endif
+                                </td>
                                 <td class="px-4 py-2">
                                     @if($tpl->documentType)
                                     <span class="ds-badge ds-badge-info text-[10px]">{{ $tpl->documentType->name }}</span>

@@ -1,7 +1,7 @@
 # Claude Chat Starter Prompt — HF Coastal CoreX OS Development
 
 > **Usage:** Copy this into a new Claude chat to set the working context.
-> **Last updated:** 2026-03-04
+> **Last updated:** 2026-03-19
 
 ---
 
@@ -88,7 +88,23 @@ For NEW features, use the structured spec format:
 - Flattening system burns entries into page images at each signing stage
 - Sequential signing: agent → tenant → landlord (legally required)
 - ID verification on completion download
+- Web template Puppeteer flattening service (WebTemplatePdfService.php + web-template-flatten.mjs)
+- Named fields auto-sync command (docuperfect:sync-fields, fires on MigrationsEnded)
+- 163 named fields across contacts, properties, users, deals
+- Agency header + email signature components (dynamic with branch→agency fallback)
+- Owner role protection on user management
 - Spec: `.ai/CLAUDE_DOCUPERFECT_ESIGN.md`
+
+### Prospecting Module — ✅ LIVE
+- Chrome Extension (Portal Capture v2.0.0) scrapes P24 and Private Property
+- P24: tab-navigation approach, CSS class selectors (.p24_price, .p24_address, etc.)
+- PP: URL-based address extraction from listing paths
+- Cross-portal matching by normalized address (same property grouped, both badges shown)
+- Agent claim system: 48h auto-expiry without feedback, status workflow (claimed→contacted→meeting_set→listing→not_interested/lost)
+- BM flagging after 14 days on "listing" status
+- P24 email cross-reference (matches portal_ref to p24_listings table, shows first_seen_date)
+- Scheduled: prospecting:maintain-claims (hourly)
+- Spec: `.ai/specs/SPEC_Portal_Scraping_Prospecting.md`
 
 ### Ellie AI Assistant — ✅ LIVE
 - Python service at `/opt/hf-ai/app.py` on port 3100, managed by `hf-ai.service`
@@ -104,8 +120,7 @@ For NEW features, use the structured spec format:
 - Automatic IMAP import from P24 alert emails (hourly cron)
 - Parses: listing number, price, property type, suburb, bedrooms
 - Price change tracking with history
-- 1,274 listings imported, 984 with suburb data
-- Multi-listing "New Properties" alert emails don't contain suburb in subject — body HTML parsing needed for remaining 290
+- 1,545+ listings imported with suburb data
 - Chrome Extension imports individual listing detail pages with full data
 
 ### Other Modules
@@ -125,6 +140,9 @@ For NEW features, use the structured spec format:
 - **Spec files** live in `.ai/` folder
 - **Dev check:** `scripts/dev-check.ps1` — 894 tests, 2234 assertions
 - **Puppeteer PDF:** Uses `/hfc/scripts/html-to-pdf.mjs` with Chromium on ARM64 server
+- **Chrome Extension:** `public/chrome-extension/portal-capture/` — manifest V3, content scripts for P24 + PP, background service worker with tab navigation
+- **Sanctum tokens:** Generated from user profile page, used by Chrome extension for API auth
+- **Git merge note:** `bootstrap/cache/` files cause conflicts — stash or `checkout --theirs` to resolve
 
 ## South African Context
 
@@ -150,13 +168,17 @@ php artisan docuperfect:reset-signing {document_id} --to=agent-signed
 php artisan docuperfect:reset-signing {document_id} --to=tenant-signed
 ```
 
-## Current Next Items (as of 2026-03-04)
-- **Tenant pre-approval system** — upload docs, AI analysis for rental applications
-- **P24 image scraping** — pull main listing photo for all imported stock
-- **Presentation listing photo** — show P24 imported photo on presentation screen
-- **P24 price changes clickable** — make P24 ref links clickable like recent listings already are
-- **Multi-agent listing import** — fix on HFC2402, tested, ready to merge to main
-- **P24 HTML body parsing** — extract suburb from multi-listing alert emails (290 listings without suburb)
+## Current Next Items (as of 2026-03-19)
+- **E-sign expansion** — sales documents entering the e-sign pipeline (spec needed from idle chat)
+- **419 redirect fix** — auto-redirect to dashboard on page expired instead of error page
+- **PP scraper refinements** — if any data quality issues emerge
+- **Portal syndication** — PP docs received, Agency Feed Service doc pending. April testing target, 1 June hard backstop
+- **CMA certificate logo** — proper fix queued (ToolsController read from agency model, tinker hotfix on server)
+- **Tools page logo** — VS Code prompt written, not yet executed
+- **Calendar module**
+- **Email template system** (branded HTML)
+- **Tenant pre-approval system**
+- **Statistics tile builder** ("See every number the way you want to see it")
 
 ## How To Start Each Session
 

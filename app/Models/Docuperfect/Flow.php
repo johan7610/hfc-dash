@@ -6,6 +6,7 @@ use App\Models\Contact;
 use App\Models\Property;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Flow extends Model
@@ -49,6 +50,12 @@ class Flow extends Model
     public function contact()
     {
         return $this->belongsTo(Contact::class, 'contact_id');
+    }
+
+    public function signingParties(): HasMany
+    {
+        return $this->hasMany(ESignSigningParty::class, 'flow_id')
+            ->orderBy('signing_order');
     }
 
     public function scopeActive($query)

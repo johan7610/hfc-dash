@@ -1809,6 +1809,10 @@
             if (nameEl) body.name = nameEl.value;
             if (typeEl) body.template_type = typeEl.value;
             if (globEl) body.is_global = globEl.checked;
+            var esignEl = document.getElementById('dpEsign');
+            if (esignEl) body.is_esign = esignEl.checked;
+            var partyModeEl = document.querySelector('input[name="party_mode"]:checked');
+            if (partyModeEl) body.party_mode = partyModeEl.value;
             if (docTypeEl) body.document_type_id = docTypeEl.value || null;
 
             var brCbs = document.querySelectorAll('.dp-branch-cb:checked');

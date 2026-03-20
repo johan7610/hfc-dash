@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Docuperfect;
 
 use App\Http\Controllers\Controller;
 use App\Models\Docuperfect\AgencySigningParty;
+use App\Models\Docuperfect\CdsDraft;
 use App\Models\Docuperfect\FieldCorrection;
 use App\Models\Docuperfect\FieldGroup;
 use App\Models\Docuperfect\ImportDraft;
 use App\Models\Docuperfect\NamedField;
 use App\Models\Docuperfect\Template;
+use App\Services\Docuperfect\CdsParserService;
 use App\Services\Docuperfect\DocumentTemplateGenerator;
 use Illuminate\Http\Request;
 
@@ -62,6 +64,33 @@ class DocumentImporterController extends Controller
         return view('docuperfect.importer.index', [
             'drafts' => $drafts,
         ]);
+    }
+
+    /**
+     * Upload a .docx, parse via CDS engine, and redirect to the CDS template builder.
+     */
+    public function generateCdsTemplate(Request $request)
+    {
+        $user = $request->user();
+        if (!$user->hasPermission('manage_templates')) {
+            abort(403);
+        }
+
+        $request->validate(['document' => 'required|file|mimes:docx']);
+
+        $parser = app(CdsParserService::class);
+        $cds = $parser->parse($request->file('document')->getPathname());
+
+        // Create a CDS draft (DB-backed, no session)
+        $draft = CdsDraft::create([
+            'user_id' => auth()->id(),
+            'agency_id' => auth()->user()->agency_id ?? null,
+            'template_name' => $cds['title'] ?? 'Untitled',
+            'cds_json' => $cds,
+            'status' => 'draft',
+        ]);
+
+        return redirect()->route('docuperfect.cds.builder', $draft);
     }
 
     /**

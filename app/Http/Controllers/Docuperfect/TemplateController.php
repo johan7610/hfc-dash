@@ -3,11 +3,15 @@
 namespace App\Http\Controllers\Docuperfect;
 
 use App\Http\Controllers\Controller;
+use App\Models\Docuperfect\AgencySigningParty;
+use App\Models\Docuperfect\CdsDraft;
 use App\Models\Docuperfect\DocumentType;
+use App\Models\Docuperfect\FieldGroup;
 use App\Models\Docuperfect\NamedField;
 use App\Models\Docuperfect\Template;
 use App\Models\Docuperfect\TemplateSignatureZone;
 use Illuminate\Http\Request;
+use App\Services\Docuperfect\CdsRendererService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -109,6 +113,28 @@ class TemplateController extends Controller
 
         $template = Template::with(['branches', 'documentType'])->findOrFail($id);
 
+        // CDS templates route to the CDS builder (DB-backed draft)
+        if ($template->template_type === 'cds') {
+            $draft = CdsDraft::create([
+                'user_id' => auth()->id(),
+                'agency_id' => auth()->user()->agency_id ?? null,
+                'template_name' => $template->name,
+                'cds_json' => $template->cds_json,
+                'tags' => $template->editor_state['tags'] ?? null,
+                'mappings' => $template->editor_state['mappings'] ?? null,
+                'tagged_html' => $template->editor_state['tagged_html'] ?? null,
+                'settings' => [
+                    'is_esign' => $template->is_esign,
+                    'party_mode' => $template->party_mode,
+                    'allowed_delivery_modes' => $template->allowed_delivery_modes,
+                    'security_tier' => $template->security_tier,
+                ],
+                'source_template_id' => $template->id,
+                'status' => 'draft',
+            ]);
+            return redirect()->route('docuperfect.cds.builder', $draft);
+        }
+
         if ($template->render_type === 'web') {
             return $this->editWeb($template);
         }
@@ -191,6 +217,14 @@ class TemplateController extends Controller
         }
         if ($request->has('is_global')) {
             $data['is_global'] = $request->boolean('is_global');
+        }
+        if ($request->has('is_esign')) {
+            $data['is_esign'] = $request->boolean('is_esign');
+        }
+        if ($request->has('party_mode')) {
+            $allowed = ['shared', 'per_party'];
+            $val = $request->input('party_mode');
+            $data['party_mode'] = in_array($val, $allowed) ? $val : 'shared';
         }
         if ($request->has('header_display')) {
             $allowed = ['first_page', 'all_pages', 'none'];
@@ -329,6 +363,372 @@ class TemplateController extends Controller
             ->with('status', "Template duplicated as \"{$copy->name}\".");
     }
 
+    // ===== CDS Document Engine — DB-backed draft pipeline =====
+
+    public function cdsBuilder(CdsDraft $draft)
+    {
+        $user = auth()->user();
+        if (!$user->hasPermission('manage_templates')) {
+            abort(403);
+        }
+        abort_if($draft->user_id !== $user->id, 403);
+
+        $renderer = app(CdsRendererService::class);
+        $html = $renderer->render($draft->cds_json);
+
+        // Determine if this is a restore (has saved tags/mappings)
+        $hasSavedState = !empty($draft->tags) && !empty($draft->mappings);
+
+        // Extract field summary from CDS for the right panel
+        $fields = $this->extractFieldsFromCds($draft->cds_json);
+
+        // Load named fields grouped by source_type + contact_type
+        $namedFields = NamedField::whereNull('deleted_at')
+            ->orderBy('source_type')
+            ->orderBy('source_contact_type')
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get(['id', 'name', 'source_type', 'source_column', 'source_contact_type', 'field_type']);
+
+        $groupedFields = [];
+        foreach ($namedFields as $nf) {
+            if ($nf->source_type === 'contact' && $nf->source_contact_type) {
+                $key = 'contact_' . strtolower($nf->source_contact_type);
+            } else {
+                $key = $nf->source_type ?? 'manual';
+            }
+            $groupedFields[$key][] = [
+                'id' => $nf->id,
+                'name' => $nf->name,
+                'source_type' => $nf->source_type,
+                'source_column' => $nf->source_column,
+                'source_contact_type' => $nf->source_contact_type,
+                'field_type' => $nf->field_type,
+            ];
+        }
+
+        // Load field groups
+        $agencyId = $user->effectiveAgencyId() ?? null;
+        $namedFieldMap = $namedFields->keyBy('id');
+
+        $fieldGroups = FieldGroup::whereNull('deleted_at')
+            ->where(function ($q) use ($agencyId) {
+                $q->where('is_global', true);
+                if ($agencyId) {
+                    $q->orWhere('agency_id', $agencyId);
+                }
+            })
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get(['id', 'name', 'description', 'layout', 'fields', 'is_global'])
+            ->map(function ($g) use ($namedFieldMap) {
+                $resolvedFields = collect($g->fields ?? [])->map(function ($f) use ($namedFieldMap) {
+                    $nf = $namedFieldMap->get($f['named_field_id'] ?? null);
+                    return [
+                        'named_field_id' => $f['named_field_id'] ?? null,
+                        'label' => $f['label_override'] ?? ($nf ? $nf->name : 'Unknown'),
+                        'source_type' => $nf ? $nf->source_type : 'manual',
+                        'source_contact_type' => $nf ? $nf->source_contact_type : '',
+                    ];
+                })->values()->all();
+
+                return [
+                    'id' => $g->id,
+                    'name' => $g->name,
+                    'description' => $g->description,
+                    'layout' => $g->layout,
+                    'is_global' => $g->is_global,
+                    'fields' => $resolvedFields,
+                ];
+            })->values()->all();
+
+        // Load signing parties for agency
+        $agencyParties = $this->loadAgencyParties($user);
+
+        return view('docuperfect.templates.cds-builder', [
+            'draftId' => $draft->id,
+            'cds' => $draft->cds_json,
+            'html' => $html,
+            'fields' => $fields,
+            'title' => $draft->template_name,
+            'templateName' => $draft->template_name,
+            'sourceTemplateId' => $draft->source_template_id,
+            'groupedFields' => $groupedFields,
+            'fieldGroups' => $fieldGroups,
+            'namedFieldsAll' => $namedFields->map(fn($nf) => [
+                'id' => $nf->id,
+                'name' => $nf->name,
+                'source_type' => $nf->source_type,
+                'source_contact_type' => $nf->source_contact_type,
+            ])->values()->all(),
+            'signingParties' => $agencyParties,
+            'hasSavedState' => $hasSavedState,
+            'savedTags' => $draft->tags ?? [],
+            'savedMappings' => $draft->mappings ?? (object)[],
+            'savedTaggedHtml' => $draft->tagged_html ?? '',
+            'savedSettings' => $draft->settings ?? [],
+        ]);
+    }
+
+    public function cdsSaveMappings(Request $request)
+    {
+        $draft = CdsDraft::findOrFail($request->input('draft_id'));
+        abort_if($draft->user_id !== auth()->id(), 403);
+
+        $draft->update([
+            'tags' => $request->input('tags'),
+            'mappings' => $request->input('mappings'),
+            'tagged_html' => $request->input('tagged_html'),
+        ]);
+
+        return response()->json(['status' => 'saved']);
+    }
+
+    public function cdsSaveDraft(Request $request)
+    {
+        $draft = CdsDraft::findOrFail($request->input('draft_id'));
+        abort_if($draft->user_id !== auth()->id(), 403);
+
+        $draft->update([
+            'template_name' => $request->input('template_name', $draft->template_name),
+            'tags' => $request->input('tags'),
+            'mappings' => $request->input('mappings'),
+            'tagged_html' => $request->input('tagged_html'),
+            'settings' => $request->input('settings'),
+        ]);
+
+        return response()->json([
+            'status' => 'saved',
+            'saved_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    public function cdsGenerate(Request $request)
+    {
+        $user = auth()->user();
+        if (!$user->hasPermission('manage_templates')) {
+            abort(403);
+        }
+
+        $draft = CdsDraft::findOrFail($request->input('draft_id'));
+        abort_if($draft->user_id !== $user->id, 403);
+
+        $templateData = [
+            'name' => $request->input('template_name', $draft->template_name),
+            'render_type' => 'web',
+            'template_type' => 'cds',
+            'cds_json' => $draft->cds_json,
+            'field_mappings' => $draft->mappings,
+            'fields_json' => $this->convertMappingsToFieldsJson($draft->mappings ?? []),
+            'is_esign' => $request->boolean('is_esign', true),
+            'party_mode' => $request->input('party_mode', 'shared'),
+            'allowed_delivery_modes' => $request->input('allowed_delivery_modes', 'esign,wet_ink,download'),
+            'security_tier' => $request->input('security_tier', 'enhanced'),
+            'is_global' => true,
+            'owner_id' => $user->id,
+            'editor_state' => [
+                'tags' => $draft->tags,
+                'mappings' => $draft->mappings,
+                'tagged_html' => $draft->tagged_html,
+            ],
+        ];
+
+        if ($draft->source_template_id) {
+            $template = Template::findOrFail($draft->source_template_id);
+            $template->update($templateData);
+        } else {
+            $template = Template::create($templateData);
+        }
+
+        // Generate blade view from CDS JSON
+        $bladeView = $this->generateCdsBladeView(
+            $draft->cds_json,
+            $draft->mappings ?? [],
+            $template->id,
+            $template->name
+        );
+        $template->update(['blade_view' => $bladeView]);
+
+        // Mark draft as saved
+        $draft->update(['status' => 'saved']);
+
+        return redirect()->route('docuperfect.templates.index')
+            ->with('success', 'Template saved: ' . $template->name);
+    }
+
+    public function cdsDestroyDraft(CdsDraft $draft)
+    {
+        abort_if($draft->user_id !== auth()->id(), 403);
+        $draft->delete(); // soft delete
+
+        return redirect()->route('docuperfect.import.index')
+            ->with('info', 'Draft discarded.');
+    }
+
+    private function extractFieldsFromCds(array $cds): array
+    {
+        $fields = [];
+        $index = 0;
+
+        foreach ($cds['sections'] ?? [] as $section) {
+            $this->collectFieldsFromContent($section, $fields, $index);
+        }
+
+        return $fields;
+    }
+
+    private function collectFieldsFromContent(array $section, array &$fields, int &$index): void
+    {
+        foreach ($section['content'] ?? [] as $item) {
+            if (($item['type'] ?? '') === 'field_placeholder') {
+                $fields[] = [
+                    'index' => $index++,
+                    'label' => $item['label'] ?? 'FIELD',
+                    'field_name' => $item['field_name'] ?? '',
+                    'field_type' => $item['field_type'] ?? 'text',
+                    'source' => $this->inferSource($item['field_name'] ?? ''),
+                    'filled_by' => $this->inferFilledBy($item['field_name'] ?? ''),
+                ];
+            }
+        }
+
+        // Check label_value_group pairs
+        foreach ($section['pairs'] ?? [] as $pair) {
+            foreach ($pair['fields'] ?? [] as $item) {
+                if (($item['type'] ?? '') === 'field_placeholder') {
+                    $fields[] = [
+                        'index' => $index++,
+                        'label' => $item['label'] ?? $pair['label'] ?? 'FIELD',
+                        'field_name' => $item['field_name'] ?? '',
+                        'field_type' => $item['field_type'] ?? 'text',
+                        'source' => $this->inferSource($item['field_name'] ?? ''),
+                        'filled_by' => $this->inferFilledBy($item['field_name'] ?? ''),
+                    ];
+                }
+            }
+        }
+    }
+
+    private function inferSource(string $fieldName): string
+    {
+        if (str_starts_with($fieldName, 'property.')) return 'property';
+        if (str_starts_with($fieldName, 'contact.')) return 'contact';
+        if (str_starts_with($fieldName, 'deal.')) return 'deal';
+        if (str_starts_with($fieldName, 'banking.')) return 'contact';
+        if (str_starts_with($fieldName, 'signing.')) return 'manual';
+        return 'manual';
+    }
+
+    private function inferFilledBy(string $fieldName): string
+    {
+        if (str_starts_with($fieldName, 'banking.')) return 'recipient';
+        if (str_contains($fieldName, 'email')) return 'recipient';
+        if (str_contains($fieldName, 'phone')) return 'recipient';
+        if (str_starts_with($fieldName, 'property.')) return 'agent';
+        if (str_starts_with($fieldName, 'deal.')) return 'agent';
+        return 'agent';
+    }
+
+    private function convertMappingsToFieldsJson(array $mappings): array
+    {
+        return collect($mappings)
+            ->filter(fn($m) => ($m['tag_type'] ?? 'input') === 'input')
+            ->map(fn($m) => [
+                'key' => $m['field_name'] ?? '',
+                'label' => $m['label'] ?? '',
+                'type' => $m['field_type'] ?? 'text',
+                'assignedTo' => $m['filled_by'] ?? 'agent',
+            ])->values()->toArray();
+    }
+
+    /**
+     * Generate a blade view file for a CDS template.
+     * Renders CDS JSON through CdsRendererService, replaces field placeholders
+     * with Blade variables, wraps in the CoreX document layout.
+     */
+    private function generateCdsBladeView(array $cds, array $fieldMappings, int $templateId, string $templateName): string
+    {
+        $renderer = app(CdsRendererService::class);
+        $html = $renderer->render($cds);
+
+        // Build the blade template
+        $title = e($cds['title'] ?? $templateName);
+
+        $blade = <<<'BLADE'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+BLADE;
+        $blade .= "\n    <title>{$title}</title>\n";
+        $blade .= '    <link href="/css/corex-document.css" rel="stylesheet">' . "\n";
+        $blade .= "    <link href=\"https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap\" rel=\"stylesheet\">\n";
+        $blade .= "</head>\n<body>\n";
+        $blade .= '<div class="corex-document-wrapper">' . "\n";
+        $blade .= '<div class="corex-page">' . "\n\n";
+
+        // Company header
+        $blade .= '@include("docuperfect.web-templates.components.company-header")' . "\n\n";
+
+        // Document title
+        $blade .= "<div class=\"corex-h1\" style=\"text-align:center; margin-bottom:12pt;\">{$title}</div>\n\n";
+
+        // Replace marker-based signature/initial placeholders with Blade signature components
+        $processedHtml = preg_replace(
+            '/<span\s+class="corex-field"[^>]*data-marker-type="signature"[^>]*>.*?<\/span>/s',
+            '@include("docuperfect.web-templates.components.signature-line")',
+            $html
+        );
+        $processedHtml = preg_replace(
+            '/<span\s+class="corex-field"[^>]*data-marker-type="initial"[^>]*>.*?<\/span>/s',
+            '@include("docuperfect.web-templates.components.initials-line")',
+            $processedHtml
+        );
+
+        // Replace corex-field spans with Blade variable output
+        // Pattern: <span class="corex-field" data-field-name="X" ...><span class="corex-field-label">Y</span></span>
+        $processedHtml = preg_replace_callback(
+            '/<span\s+class="corex-field"[^>]*data-field-name="([^"]*)"[^>]*>.*?<\/span>/s',
+            function ($matches) {
+                $fieldName = $matches[1];
+                if (empty(trim($fieldName))) {
+                    // No field name — render as an underline blank for manual fill
+                    return '<span class="corex-field-value" style="border-bottom:1px solid #333; min-width:80pt; display:inline-block;">&nbsp;</span>';
+                }
+                // Convert dot notation to underscore for blade variable name
+                $varName = str_replace('.', '_', $fieldName);
+                // Sanitize variable name — must start with letter/underscore
+                $varName = preg_replace('/[^a-zA-Z0-9_]/', '_', $varName);
+                if (is_numeric($varName[0] ?? '')) {
+                    $varName = 'f_' . $varName;
+                }
+                return '<span class="corex-field-value" data-field="' . e($varName) . '">'
+                    . '{{ $' . $varName . ' ?? \'\' }}</span>';
+            },
+            $processedHtml
+        );
+
+        $blade .= $processedHtml . "\n\n";
+
+        $blade .= "</div>\n</div>\n\n";
+
+        // Signature block
+        $blade .= '@include("docuperfect.web-templates.components.signature-block")' . "\n\n";
+        $blade .= "</body>\n</html>\n";
+
+        // Write to disk
+        $viewDir = resource_path('views/docuperfect/web-templates/cds');
+        if (!is_dir($viewDir)) {
+            mkdir($viewDir, 0755, true);
+        }
+
+        $filename = "template-{$templateId}.blade.php";
+        file_put_contents("{$viewDir}/{$filename}", $blade);
+
+        return "docuperfect.web-templates.cds.template-{$templateId}";
+    }
+
     private function editWeb(Template $template)
     {
         $branches = \App\Models\Branch::orderBy('name')->get();
@@ -396,5 +796,23 @@ class TemplateController extends Controller
 
         return redirect()->route('docuperfect.templates.index')
             ->with('status', "Template \"{$name}\" archived.");
+    }
+
+    protected function loadAgencyParties($user): array
+    {
+        $agencyId = $user->effectiveAgencyId();
+
+        $parties = AgencySigningParty::forAgency($agencyId)
+            ->orderBy('sort_order')
+            ->get(['id', 'name', 'sort_order', 'is_default']);
+
+        if ($parties->isEmpty()) {
+            AgencySigningParty::seedDefaultsForAgency($agencyId);
+            $parties = AgencySigningParty::forAgency($agencyId)
+                ->orderBy('sort_order')
+                ->get(['id', 'name', 'sort_order', 'is_default']);
+        }
+
+        return $parties->toArray();
     }
 }

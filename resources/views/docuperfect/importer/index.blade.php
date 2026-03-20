@@ -209,7 +209,40 @@
                     class="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-lg font-medium text-sm hover:bg-blue-700 disabled:opacity-50 transition-colors">
                 <span x-text="submitting ? 'Processing...' : 'Parse Document'"></span>
             </button>
+
+            {{-- CDS Import divider --}}
+            <div class="relative my-6">
+                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-200 dark:border-gray-600"></div></div>
+                <div class="relative flex justify-center"><span class="bg-white dark:bg-gray-800 px-3 text-xs text-gray-400 uppercase tracking-wider">or</span></div>
+            </div>
+
+            {{-- CDS Engine Import --}}
+            <form method="POST" action="{{ route('docuperfect.import.cds') }}" enctype="multipart/form-data"
+                  x-data="{ cdsFile: '', cdsSubmitting: false }"
+                  @submit="cdsSubmitting = true">
+                @csrf
+                <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Import with CoreX Document Engine</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    Uses the new CDS parser for structured document import with field detection.
+                </p>
+                <div class="flex items-center gap-3">
+                    <div class="flex-1">
+                        <input type="file" name="document" accept=".docx" class="hidden" x-ref="cdsFileInput"
+                               @change="cdsFile = $event.target.files[0]?.name || ''">
+                        <div @click="$refs.cdsFileInput.click()"
+                             class="cursor-pointer border border-dashed border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 text-center text-sm text-gray-500 hover:border-teal-400 hover:text-teal-600 transition-colors">
+                            <span x-text="cdsFile || 'Choose .docx file...'"></span>
+                        </div>
+                    </div>
+                    <button type="submit" :disabled="!cdsFile || cdsSubmitting"
+                            class="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50"
+                            style="background:#0d9488;">
+                        <span x-text="cdsSubmitting ? 'Importing...' : 'Import CDS'"></span>
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
+
 @endsection

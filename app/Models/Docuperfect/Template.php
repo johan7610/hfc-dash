@@ -21,12 +21,17 @@ class Template extends Model
         'fields_json',
         'is_global',
         'is_esign',
+        'party_mode',
         'wizard_config',
         'render_type',
         'blade_view',
         'signing_parties',
         'header_display',
         'editor_state',
+        'cds_json',
+        'field_mappings',
+        'allowed_delivery_modes',
+        'security_tier',
         'owner_id',
         'archived_at',
     ];
@@ -36,6 +41,8 @@ class Template extends Model
         'wizard_config' => 'array',
         'signing_parties' => 'array',
         'editor_state' => 'array',
+        'cds_json' => 'array',
+        'field_mappings' => 'array',
         'is_global' => 'boolean',
         'is_esign' => 'boolean',
         'archived_at' => 'datetime',
@@ -97,6 +104,11 @@ class Template extends Model
                 });
             }
         });
+    }
+
+    public function isPerParty(): bool
+    {
+        return $this->party_mode === 'per_party';
     }
 
     public function getPageImagesAttribute(): array

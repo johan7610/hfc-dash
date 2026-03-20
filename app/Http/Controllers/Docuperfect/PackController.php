@@ -22,9 +22,18 @@ class PackController extends Controller
         $user = $request->user();
 
         $packs = Pack::visibleTo($user)
-            ->with(['templates', 'slots', 'branches', 'owner'])
+            ->with(['templates', 'slots.template', 'branches', 'owner'])
             ->orderBy('name')
-            ->get();
+            ->get()
+            ->each(function ($pack) {
+                $templates = $pack->usesSlots()
+                    ? $pack->slots->where('slot_type', 'required')->map->template->filter()
+                    : $pack->templates;
+
+                $pack->esign_eligible = $templates->isNotEmpty() && $templates->every(
+                    fn($t) => $t->is_esign && $t->render_type === 'pdf' && $t->page_count > 0
+                );
+            });
 
         $canManage = $user->hasPermission('packs.edit');
 
@@ -39,6 +48,7 @@ class PackController extends Controller
         }
 
         $templates = Template::active()->visibleTo($user)
+            ->where('render_type', 'pdf')
             ->with('documentType')
             ->orderBy('name')
             ->get();
@@ -101,6 +111,7 @@ class PackController extends Controller
         $pack = Pack::with(['templates', 'slots.template', 'slots.documentType', 'slots.knowledgeCategory', 'branches'])->findOrFail($id);
 
         $templates = Template::active()->visibleTo($user)
+            ->where('render_type', 'pdf')
             ->with('documentType')
             ->orderBy('name')
             ->get();

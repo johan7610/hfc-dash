@@ -128,7 +128,7 @@
                     </div>
                 </template>
 
-                <div x-show="templateGroups.every(g => g.templates.length === 0) && allWebPacks.length === 0" class="text-gray-400 text-sm text-center py-8">
+                <div x-show="templateGroups.every(g => g.templates.length === 0) && allWebPacks.length === 0 && allPdfPacks.length === 0" class="text-gray-400 text-sm text-center py-8">
                     No templates match your search.
                 </div>
 
@@ -159,6 +159,60 @@
                                         </template>
                                     </div>
                                 </button>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
+                {{-- PDF Packs section --}}
+                <template x-if="allPdfPacks.length > 0">
+                    <div class="mt-6">
+                        <div class="px-3 py-2 bg-gray-50 rounded-lg mb-3">
+                            <h4 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Document Packs</h4>
+                        </div>
+                        <div class="space-y-2">
+                            <template x-for="p in allPdfPacks" :key="'pdfpack-' + p.id">
+                                <div>
+                                    <template x-if="p.esign_eligible">
+                                        <button @click="selectPdfPack(p)"
+                                                class="w-full text-left p-3 rounded-lg border-2 transition-all duration-150"
+                                                :class="selectedPdfPackId === p.id
+                                                    ? 'border-blue-500 bg-blue-50'
+                                                    : 'border-gray-200 hover:border-gray-300 bg-white'">
+                                            <div class="font-medium text-gray-900 text-sm flex items-center">
+                                                <span x-text="p.name"></span>
+                                                <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 ml-2">Pack</span>
+                                                <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 ml-1" x-text="p.templates.length + ' template' + (p.templates.length !== 1 ? 's' : '')"></span>
+                                            </div>
+                                            <div x-show="p.templates.length > 0" class="mt-1.5 space-y-0.5">
+                                                <template x-for="t in p.templates" :key="'ppt-' + t.id">
+                                                    <div class="text-xs text-gray-500 flex items-center gap-1">
+                                                        <span class="w-1 h-1 rounded-full bg-gray-400 flex-shrink-0"></span>
+                                                        <span x-text="t.name"></span>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </button>
+                                    </template>
+                                    <template x-if="!p.esign_eligible">
+                                        <div class="w-full text-left p-3 rounded-lg border-2 border-gray-200 bg-white opacity-50 cursor-not-allowed">
+                                            <div class="font-medium text-gray-900 text-sm flex items-center">
+                                                <span x-text="p.name"></span>
+                                                <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 ml-2">Pack</span>
+                                                <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 ml-1" x-text="p.templates.length + ' template' + (p.templates.length !== 1 ? 's' : '')"></span>
+                                            </div>
+                                            <div class="text-xs text-amber-600 mt-1">Contains a wet ink document &mdash; not eligible for e-signature</div>
+                                            <div x-show="p.templates.length > 0" class="mt-1.5 space-y-0.5">
+                                                <template x-for="t in p.templates" :key="'ppt-' + t.id">
+                                                    <div class="text-xs text-gray-500 flex items-center gap-1">
+                                                        <span class="w-1 h-1 rounded-full bg-gray-400 flex-shrink-0"></span>
+                                                        <span x-text="t.name"></span>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
                             </template>
                         </div>
                     </div>
@@ -809,6 +863,7 @@ function esignWizard() {
     const serverFlow = @json($flow);
     const serverTemplates = @json($templates);
     const serverWebPacks = @json($webPacks ?? []);
+    const serverPdfPacks = @json($pdfPacks ?? []);
     const serverTemplate = @json($template ?? null);
     const serverFields = @json($fields ?? []);
     const serverCreatorFields = @json($creatorFields ?? []);
@@ -922,8 +977,10 @@ function esignWizard() {
         selectedTemplateId: serverTemplate?.id || null,
         templateName: serverTemplate?.name || '',
         allWebPacks: serverWebPacks,
+        allPdfPacks: serverPdfPacks,
         selectedPackId: null,
         selectedPackName: '',
+        selectedPdfPackId: null,
         isPackFlow: false,
         packPreview: null,
 
@@ -1068,6 +1125,7 @@ function esignWizard() {
             this.templateName = t.name;
             this.selectedPackId = null;
             this.selectedPackName = '';
+            this.selectedPdfPackId = null;
             this.isPackFlow = false;
             this.packPreview = null;
             this.loadTemplatePreview(t.id);
@@ -1078,6 +1136,7 @@ function esignWizard() {
             this.selectedPackName = p.name;
             this.selectedTemplateId = null;
             this.templateName = '';
+            this.selectedPdfPackId = null;
             this.isPackFlow = true;
 
             // Show pack summary in right pane
@@ -1085,6 +1144,21 @@ function esignWizard() {
             this.previewPages = [];
             this.previewReady = true;
             this.packPreview = p;
+        },
+
+        selectPdfPack(p) {
+            this.selectedPdfPackId = p.id;
+            this.selectedPackName = p.name;
+            this.selectedTemplateId = null;
+            this.templateName = '';
+            this.selectedPackId = null;
+            this.isPackFlow = false;
+            this.packPreview = null;
+
+            // Preview the first template in the pack
+            if (p.templates && p.templates.length > 0) {
+                this.loadTemplatePreview(p.templates[0].id);
+            }
         },
 
         async loadTemplatePreview(templateId) {
@@ -1328,7 +1402,7 @@ function esignWizard() {
         },
 
         canGoNext() {
-            if (this.currentStep === 1) return !!(this.selectedTemplateId || this.selectedPackId);
+            if (this.currentStep === 1) return !!(this.selectedTemplateId || this.selectedPackId || this.selectedPdfPackId);
             return true;
         },
 
@@ -1383,6 +1457,7 @@ function esignWizard() {
                     template_id: this.selectedTemplateId,
                     pack_id: this.selectedPackId,
                     is_pack_flow: this.isPackFlow,
+                    pdf_pack_id: this.selectedPdfPackId,
                 }),
             });
             if (!resp.ok) {

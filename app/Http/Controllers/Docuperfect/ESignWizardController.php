@@ -8,6 +8,7 @@ use App\Models\Docuperfect\Document;
 use App\Models\Docuperfect\DocumentType;
 use App\Models\Docuperfect\Flow;
 use App\Models\Docuperfect\NamedField;
+use App\Models\Docuperfect\Pack;
 use App\Models\Docuperfect\SignatureTemplate;
 use App\Models\Docuperfect\Template;
 use App\Models\Property;
@@ -49,9 +50,14 @@ class ESignWizardController extends Controller
 
         $templates = Template::active()
             ->visibleTo($user)
+            ->where('is_esign', true)
             ->where(function ($q) {
-                $q->where('page_count', '>', 0)
-                  ->orWhere('render_type', 'web');
+                // PDF templates need page images; web/CDS templates need a blade view
+                $q->where(function ($q2) {
+                    $q2->where('render_type', 'pdf')->where('page_count', '>', 0);
+                })->orWhere(function ($q2) {
+                    $q2->where('render_type', 'web')->whereNotNull('blade_view');
+                });
             })
             ->with(['documentType', 'branches'])
             ->orderBy('name')
@@ -62,6 +68,16 @@ class ESignWizardController extends Controller
             ->with(['items.template'])
             ->orderBy('name')
             ->get();
+
+        $pdfPacks = Pack::visibleTo($user)
+            ->with(['templates'])
+            ->get()
+            ->map(function ($pack) {
+                $pack->esign_eligible = $pack->templates->isNotEmpty() && $pack->templates->every(
+                    fn($t) => $t->is_esign && $t->render_type === 'pdf'
+                );
+                return $pack;
+            });
 
         $documentTypes = DocumentType::orderBy('sort_order')->get();
 
@@ -74,6 +90,7 @@ class ESignWizardController extends Controller
         return view('docuperfect.esign.wizard', [
             'templates'     => $templates,
             'webPacks'      => $webPacks,
+            'pdfPacks'      => $pdfPacks,
             'documentTypes' => $documentTypes,
             'drafts'        => $drafts,
             'flow'          => null,
@@ -96,6 +113,8 @@ class ESignWizardController extends Controller
     {
         $packId = $request->input('pack_id');
         $isPackFlow = $request->boolean('is_pack_flow');
+
+        $pdfPackId = $request->input('pdf_pack_id');
 
         if ($isPackFlow && $packId) {
             // Web Pack flow — merge multiple templates
@@ -136,6 +155,77 @@ class ESignWizardController extends Controller
                     'pack_name'    => $pack->name,
                     'template_ids' => $templates->pluck('id')->values()->toArray(),
                     'is_pack_flow' => true,
+                ],
+                'status' => 'active',
+            ]);
+        } elseif ($pdfPackId) {
+            // PDF Pack flow — concatenate PDF template pages
+            $pack = Pack::with(['templates', 'slots.template'])->findOrFail($pdfPackId);
+
+            // Get templates: from slots (required) or legacy relationship
+            if ($pack->usesSlots()) {
+                $packTemplates = $pack->slots
+                    ->where('slot_type', 'required')
+                    ->map->template
+                    ->filter()
+                    ->values();
+            } else {
+                $packTemplates = $pack->templates;
+            }
+
+            // Filter to e-sign eligible PDF templates only
+            $packTemplates = $packTemplates->filter(
+                fn($t) => $t->is_esign && $t->render_type === 'pdf' && $t->page_count > 0
+            )->values();
+
+            if ($packTemplates->isEmpty()) {
+                return response()->json(['error' => 'No e-sign eligible PDF templates in this pack.'], 422);
+            }
+
+            $primaryTemplate = $packTemplates->first();
+
+            // Merge fields from all templates with page offsets
+            $mergedFields = [];
+            $pageOffset = 0;
+            $templatePageMap = [];
+
+            foreach ($packTemplates as $idx => $tpl) {
+                $templatePageMap[$tpl->id] = [
+                    'start_page'    => $pageOffset,
+                    'end_page'      => $pageOffset + $tpl->page_count - 1,
+                    'template_name' => $tpl->name,
+                    'template_id'   => $tpl->id,
+                ];
+
+                foreach (($tpl->fields_json ?? []) as $field) {
+                    // Offset the page number so fields land on the correct concatenated page
+                    if (isset($field['page'])) {
+                        $field['page'] = (int) $field['page'] + $pageOffset;
+                    }
+                    $field['_pack_template_id'] = $tpl->id;
+                    $field['_pack_template_index'] = $idx;
+                    $mergedFields[] = $field;
+                }
+
+                $pageOffset += $tpl->page_count;
+            }
+
+            $flow = Flow::create([
+                'type'         => 'esign',
+                'template_id'  => $primaryTemplate->id,
+                'user_id'      => $request->user()->id,
+                'current_step' => 2,
+                'step_data'    => [
+                    'template' => [
+                        'template_id' => (int) $primaryTemplate->id,
+                    ],
+                    'fields'            => $mergedFields,
+                    'is_pdf_pack'       => true,
+                    'pdf_pack_id'       => (int) $pdfPackId,
+                    'pdf_pack_name'     => $pack->name,
+                    'template_ids'      => $packTemplates->pluck('id')->values()->toArray(),
+                    'template_page_map' => $templatePageMap,
+                    'total_pages'       => $pageOffset,
                 ],
                 'status' => 'active',
             ]);
@@ -190,7 +280,17 @@ class ESignWizardController extends Controller
 
         // Build page image URLs (same as DocumentController edit view)
         $pageImages = [];
-        if ($template && $template->page_count > 0) {
+        if (!empty($stepData['is_pdf_pack']) && !empty($stepData['template_ids'])) {
+            // PDF pack flow: concatenate page images from all templates in order
+            foreach ($stepData['template_ids'] as $tplId) {
+                $tpl = Template::find($tplId);
+                if ($tpl && $tpl->page_count > 0) {
+                    for ($n = 0; $n < $tpl->page_count; $n++) {
+                        $pageImages[] = route('docuperfect.page.image', ['id' => $tplId, 'page' => $n]);
+                    }
+                }
+            }
+        } elseif ($template && $template->page_count > 0) {
             for ($n = 0; $n < $template->page_count; $n++) {
                 $pageImages[] = route('docuperfect.page.image', ['id' => $template->id, 'page' => $n]);
             }
@@ -771,6 +871,34 @@ class ESignWizardController extends Controller
             }
         }
 
+        // PDF pack flow: return concatenated page images from all templates
+        if ($flow && !empty($stepData['is_pdf_pack']) && !empty($stepData['template_ids'])) {
+            $allPages = [];
+            $mergedFields = $stepData['fields'] ?? [];
+            $totalPageCount = 0;
+
+            foreach ($stepData['template_ids'] as $tplId) {
+                $tpl = Template::find($tplId);
+                if ($tpl && $tpl->page_count > 0) {
+                    for ($n = 0; $n < $tpl->page_count; $n++) {
+                        $allPages[] = route('docuperfect.page.image', ['id' => $tplId, 'page' => $n]);
+                    }
+                    $totalPageCount += $tpl->page_count;
+                }
+            }
+
+            return response()->json([
+                'render_type'   => 'pdf',
+                'page_count'    => $totalPageCount,
+                'pages'         => $allPages,
+                'fields'        => $mergedFields,
+                'wizard_config' => $template->wizard_config,
+                'name'          => $stepData['pdf_pack_name'] ?? $template->name,
+                'template_type' => $template->template_type,
+                'is_pdf_pack'   => true,
+            ]);
+        }
+
         if ($template->render_type === 'web' && $template->blade_view) {
             if ($packTemplateIds) {
                 // Pack flow — merge all templates
@@ -977,7 +1105,9 @@ class ESignWizardController extends Controller
             }
         }
         $isPackFlow = !empty($stepData['is_pack_flow']);
-        $docName = $isPackFlow ? ($stepData['pack_name'] ?? $template->name) : $template->name;
+        $isPdfPack = !empty($stepData['is_pdf_pack']);
+        $docName = $isPackFlow ? ($stepData['pack_name'] ?? $template->name)
+                 : ($isPdfPack ? ($stepData['pdf_pack_name'] ?? $template->name) : $template->name);
         if ($firstRecipientName) $docName .= ' — ' . $firstRecipientName;
         $docName .= ' — ' . now()->format('Y-m-d');
 
@@ -986,7 +1116,17 @@ class ESignWizardController extends Controller
 
         // Resolve web template data
         $webTemplateData = null;
-        if ($isPackFlow && !empty($stepData['template_ids'])) {
+        if ($isPdfPack && !empty($stepData['template_ids'])) {
+            // PDF Pack flow: store template map so signing view can render all pages
+            $webTemplateData = [
+                'is_pdf_pack'      => true,
+                'template_ids'     => $stepData['template_ids'],
+                'template_page_map' => $stepData['template_page_map'] ?? [],
+                'total_pages'      => $stepData['total_pages'] ?? 0,
+                'pdf_pack_id'      => $stepData['pdf_pack_id'] ?? null,
+                'pdf_pack_name'    => $stepData['pdf_pack_name'] ?? '',
+            ];
+        } elseif ($isPackFlow && !empty($stepData['template_ids'])) {
             // Pack flow: merge all templates into one document
             $templateIds = $stepData['template_ids'];
             $mergedHtml = '';
@@ -1072,7 +1212,7 @@ class ESignWizardController extends Controller
             $webTemplateData['merged_html'] = $styles . $bodyHtml;
         }
 
-        $packInstanceId = $isPackFlow ? (int) round(microtime(true) * 1000) : null;
+        $packInstanceId = ($isPackFlow || $isPdfPack) ? (int) round(microtime(true) * 1000) : null;
 
         // Resolve document_type: map template's DocumentType to a RentalDocumentType slug
         $resolvedDocType = $template->template_type; // fallback

@@ -1,0 +1,537 @@
+/* ==========================================================================
+   CoreX Document Engine — Professional Document Stylesheet
+   ==========================================================================
+   Loaded independently by document views — NOT part of the main app CSS.
+   Every document CoreX produces renders through this stylesheet.
+   ========================================================================== */
+
+/* === PAGE SETUP === */
+@page {
+    size: A4 portrait;
+    margin: 20mm 18mm 25mm 18mm;
+}
+
+@media print {
+    body { margin: 0; padding: 0; }
+    .corex-document-wrapper { box-shadow: none; background: white; padding: 0; }
+    .corex-page { box-shadow: none; margin: 0; }
+    .no-print { display: none !important; }
+}
+
+/* === DOCUMENT WRAPPER (screen display) === */
+.corex-document-wrapper {
+    max-width: 210mm;
+    margin: 0 auto;
+    background: #f1f5f9;
+    padding: 24px 0;
+}
+
+/* === DOCUMENT PAGE === */
+.corex-page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto 24px;
+    padding: 20mm 18mm 25mm 18mm;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+    position: relative;
+    box-sizing: border-box;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.55;
+    color: #1e293b;
+    text-align: justify;
+    page-break-after: always;
+}
+
+.corex-page:last-child {
+    page-break-after: avoid;
+    margin-bottom: 0;
+}
+
+/* === HEADER === */
+.corex-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 14px;
+    margin-bottom: 20px;
+    border-bottom: 2.5px solid var(--agency-accent, #0d9488);
+}
+
+.corex-header-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.corex-header-logo {
+    max-width: 48px;
+    max-height: 48px;
+    object-fit: contain;
+}
+
+.corex-header-agency {
+    font-size: 14px;
+    font-weight: 600;
+    color: #0f172a;
+    letter-spacing: 0.3px;
+}
+
+.corex-header-details {
+    font-size: 10px;
+    color: #64748b;
+    margin-top: 2px;
+}
+
+.corex-header-right {
+    text-align: right;
+}
+
+.corex-header-ref-label {
+    font-size: 10px;
+    color: #64748b;
+}
+
+.corex-header-ref {
+    font-size: 13px;
+    font-weight: 500;
+    color: #0f172a;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* === FIRST PAGE BANNER === */
+.corex-title-banner {
+    text-align: center;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    background: #f8fafc;
+    border-bottom: 0.5px solid #e2e8f0;
+}
+
+.corex-doc-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: 0.5px;
+    margin: 0;
+}
+
+.corex-doc-subtitle {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 4px;
+}
+
+/* === HEADINGS === */
+.corex-h1,
+.corex-h2,
+.corex-h3 {
+    text-align: left;
+}
+
+.corex-h1 {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0f172a;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    padding-bottom: 6px;
+    border-bottom: 0.5px solid #e2e8f0;
+    margin: 24px 0 14px;
+}
+
+.corex-h2 {
+    font-size: 10.5pt;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 16px 0 8px;
+}
+
+.corex-h3 {
+    font-size: 10.5pt;
+    font-weight: 400;
+    color: #1e293b;
+    margin: 10px 0 6px;
+    padding-left: 8mm;
+}
+
+/* === CLAUSES === */
+.corex-clause {
+    margin-bottom: 10px;
+    line-height: 1.65;
+}
+
+.corex-clause-number {
+    font-size: 10.5pt;
+    font-weight: 600;
+    color: #64748b;
+    display: inline-block;
+    min-width: 32px;
+}
+
+.corex-clause-text {
+    font-size: 10.5pt;
+    color: #1e293b;
+}
+
+.corex-clause-indent-1 { padding-left: 0; }
+.corex-clause-indent-2 { padding-left: 8mm; }
+.corex-clause-indent-3 { padding-left: 16mm; }
+
+/* === INTERACTIVE FIELDS === */
+.corex-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 10px;
+    background: #f0fdfa;
+    border: 1px solid #0d9488;
+    border-radius: 3px;
+    font-size: 10pt;
+    color: #0f172a;
+    min-width: 80px;
+    vertical-align: baseline;
+}
+
+.corex-field-label {
+    font-size: 8pt;
+    font-weight: 500;
+    color: #0d9488;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.corex-field[data-filled="true"] {
+    background: white;
+    border-color: #cbd5e1;
+}
+
+.corex-field[data-filled="true"] .corex-field-label {
+    display: none;
+}
+
+.corex-field-empty {
+    color: #94a3b8;
+    font-style: italic;
+}
+
+/* Recipient fill-in fields (different styling) */
+.corex-field-recipient {
+    background: #fffbeb;
+    border-color: #d97706;
+}
+
+.corex-field-recipient .corex-field-label {
+    color: #d97706;
+}
+
+/* === TABLES === */
+.corex-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 10pt;
+}
+
+.corex-table th {
+    background: #f1f5f9;
+    color: #0f172a;
+    font-weight: 600;
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1.5px solid #e2e8f0;
+    font-size: 10pt;
+}
+
+.corex-table td {
+    padding: 8px 12px;
+    border-bottom: 0.5px solid #e2e8f0;
+    color: #1e293b;
+}
+
+.corex-table tr:nth-child(even) td {
+    background: #f8fafc;
+}
+
+/* === CONDITIONAL SECTIONS === */
+.corex-conditional { /* visible — no special styling */ }
+.corex-conditional[data-hidden="true"] { display: none; }
+
+.corex-condition-toggle {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 16px;
+    background: #f8fafc;
+    border-radius: 4px;
+    border: 0.5px solid #e2e8f0;
+    margin: 12px 0;
+}
+
+.corex-condition-option {
+    padding: 4px 12px;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+    border: 0.5px solid #e2e8f0;
+    color: #64748b;
+    background: transparent;
+}
+
+.corex-condition-option[data-selected="true"] {
+    background: #0d9488;
+    color: white;
+    border-color: #0d9488;
+}
+
+/* === SIGNATURE SECTIONS === */
+.corex-signature-section {
+    margin-top: 32px;
+    padding-top: 20px;
+    border-top: 1.5px solid var(--agency-accent, #0d9488);
+}
+
+.corex-signature-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+}
+
+.corex-signature-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+
+.corex-signature-block {
+    padding: 14px 16px;
+    border: 1px solid #3b82f6;
+    background: #eff6ff;
+    border-radius: 4px;
+}
+
+.corex-signature-role {
+    font-size: 9px;
+    font-weight: 600;
+    color: #1d4ed8;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+
+.corex-signature-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #1e293b;
+    margin-bottom: 4px;
+}
+
+.corex-signature-line {
+    height: 36px;
+    border-bottom: 1px solid #93c5fd;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: flex-end;
+    padding-bottom: 4px;
+}
+
+.corex-signature-prompt {
+    font-size: 11px;
+    color: #93c5fd;
+}
+
+.corex-signature-date {
+    font-size: 10px;
+    color: #64748b;
+}
+
+/* Witness blocks (neutral styling) */
+.corex-signature-block-witness {
+    border-color: #cbd5e1;
+    background: #f8fafc;
+}
+
+.corex-signature-block-witness .corex-signature-role {
+    color: #64748b;
+}
+
+.corex-signature-block-witness .corex-signature-line {
+    border-color: #cbd5e1;
+}
+
+/* === INITIAL BLOCKS (footer) === */
+.corex-initials-row {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.corex-initial-block {
+    width: 28px;
+    height: 20px;
+    border: 0.5px solid #cbd5e1;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 7px;
+    color: #94a3b8;
+}
+
+/* === FOOTER === */
+.corex-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 10px;
+    border-top: 0.5px solid #cbd5e1;
+    margin-top: auto;
+    font-size: 10px;
+    color: #64748b;
+}
+
+/* === OTHER CONDITIONS ZONE === */
+.corex-other-conditions {
+    border: 1px dashed #94a3b8;
+    border-radius: 4px;
+    padding: 12px 14px;
+    min-height: 60px;
+    margin: 12px 0;
+}
+
+.corex-other-conditions-empty {
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+/* === AMENDMENT MARKERS === */
+.corex-strikeout {
+    text-decoration: line-through;
+    color: #94a3b8;
+}
+
+.corex-amendment-new {
+    background: #fef3c7;
+    border-left: 3px solid #d97706;
+    padding: 8px 12px;
+    margin: 4px 0;
+    font-size: 10.5pt;
+}
+
+.corex-addition {
+    background: #ecfdf5;
+    border-left: 3px solid #059669;
+    padding: 8px 12px;
+    margin: 4px 0;
+    font-size: 10.5pt;
+}
+
+/* === NEGOTIABLE CLAUSE TOOLBAR === */
+.corex-clause-toolbar {
+    display: none;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.corex-clause[data-negotiable="true"]:hover .corex-clause-toolbar,
+.corex-clause[data-negotiable="true"]:focus-within .corex-clause-toolbar {
+    display: inline-flex;
+}
+
+.corex-clause-toolbar button {
+    font-size: 10px;
+    padding: 2px 8px;
+    border: 0.5px solid #cbd5e1;
+    border-radius: 2px;
+    background: white;
+    color: #64748b;
+    cursor: pointer;
+}
+
+.corex-clause-toolbar button:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+/* === MONEY WATERFALL === */
+.corex-waterfall {
+    width: 100%;
+    margin: 16px 0;
+}
+
+.corex-waterfall-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 0.5px solid #e2e8f0;
+}
+
+.corex-waterfall-label {
+    font-size: 10.5pt;
+    color: #1e293b;
+}
+
+.corex-waterfall-amount {
+    font-size: 10.5pt;
+    font-weight: 500;
+    color: #0f172a;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.corex-waterfall-total {
+    font-weight: 600;
+    border-top: 2px solid #0f172a;
+    border-bottom: none;
+    padding-top: 8px;
+}
+
+.corex-waterfall-balanced {
+    color: #059669;
+}
+
+.corex-waterfall-unbalanced {
+    color: #dc2626;
+}
+
+/* === ITEMISED LIST === */
+.corex-item-list {
+    width: 100%;
+    margin: 12px 0;
+}
+
+.corex-item-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 0.5px solid #e2e8f0;
+    font-size: 10.5pt;
+}
+
+.corex-item-description {
+    flex: 2;
+    color: #1e293b;
+}
+
+.corex-item-location {
+    flex: 1;
+    color: #64748b;
+    text-align: right;
+}
+
+/* === UTILITY === */
+.corex-text-bold { font-weight: 600; }
+.corex-text-italic { font-style: italic; }
+.corex-text-underline { text-decoration: underline; }
+.corex-text-small { font-size: 8.5pt; color: #64748b; }
+.corex-spacer { height: 12px; }
+.corex-divider {
+    border: none;
+    border-top: 0.5px solid #e2e8f0;
+    margin: 16px 0;
+}
