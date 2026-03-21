@@ -246,8 +246,14 @@ class ESignWizardController extends Controller
 
             $template = Template::findOrFail($request->template_id);
 
-            // Copy template fields into flow step_data (same as DocumentController::store)
+            // Copy template fields into flow step_data
+            // For web templates with field_mappings, build proper fields instead of copying
+            // potentially skeletal fields_json (which may lack id/field_name/named_field_id)
             $fieldsJson = $template->fields_json ?? [];
+            $renderType = $template->render_type ?? 'pdf';
+            if (($renderType === 'web') && !empty($template->field_mappings) && (empty($fieldsJson) || $this->fieldsAreSkeletal($fieldsJson))) {
+                $fieldsJson = $this->buildFieldsFromMappings($template->field_mappings);
+            }
 
             $flow = Flow::create([
                 'type'         => 'esign',
@@ -309,8 +315,18 @@ class ESignWizardController extends Controller
         // with any values filled during wizard steps merged in
         $fields = $stepData['fields'] ?? ($template->fields_json ?? []);
 
-        // Normalise web template fields so wizard JS sees consistent keys
+        // For CDS/web templates with empty or skeletal fields, build from field_mappings
+        // Skeletal = entries exist but lack id/field_name/named_field_id (e.g. bare fields_json)
         $renderType = $template->render_type ?? 'pdf';
+        if ((empty($fields) || $this->fieldsAreSkeletal($fields)) && $renderType === 'web' && !empty($template->field_mappings)) {
+            $fields = $this->buildFieldsFromMappings($template->field_mappings);
+            // Store into step_data so subsequent loads have the fields
+            $stepData['fields'] = $fields;
+            $flow->step_data = $stepData;
+            $flow->save();
+        }
+
+        // Normalise web template fields so wizard JS sees consistent keys
         if ($renderType === 'web') {
             $fields = array_map(fn($f) => $this->normalizeFieldForWizard($f, $renderType), $fields);
         }
@@ -518,6 +534,19 @@ class ESignWizardController extends Controller
             } else {
                 $signerFields[] = $fieldWithIndex;
             }
+        }
+
+        // TEMPORARY DEBUG — remove after verifying step 5 fields work
+        if ($step === 5) {
+            \Illuminate\Support\Facades\Log::info('STEP5_DEBUG', [
+                'flow_id'              => $flow->id,
+                'template_type'        => $template->template_type ?? null,
+                'field_mappings_count' => count($template->field_mappings ?? []),
+                'fields_from_step_data'=> count($flow->step_data['fields'] ?? []),
+                'allWizardFields_count'=> count($allWizardFields),
+                'first_wizard_field'   => json_encode(head($allWizardFields) ?: null),
+                'first_mapping'        => json_encode(head($template->field_mappings ?? []) ?: null),
+            ]);
         }
 
         // Templates list (for step navigation back to step 1)
@@ -948,6 +977,7 @@ class ESignWizardController extends Controller
 
                     if (!empty($tpl->signing_parties)) {
                         $tplData['signing_parties'] = $tpl->signing_parties;
+                        $tplData['document_context'] = $tpl->isSalesDocument() ? 'sales' : 'rental';
                     }
                     $html = view($tpl->blade_view, $tplData)->render();
                     $styles = '';
@@ -995,6 +1025,7 @@ class ESignWizardController extends Controller
             // Strip to inner body content so it can be injected via x-html.
             if (!empty($template->signing_parties)) {
                 $viewData['signing_parties'] = $template->signing_parties;
+                $viewData['document_context'] = $template->isSalesDocument() ? 'sales' : 'rental';
             }
             $fullHtml = view($template->blade_view, $viewData)->render();
             $bodyHtml = $fullHtml;
@@ -1072,6 +1103,7 @@ class ESignWizardController extends Controller
      */
     public function prepareSigning(Request $request, $flowId)
     {
+        try {
         set_time_limit(300);
         $user = $request->user();
         $flow = Flow::where('user_id', $user->id)->findOrFail($flowId);
@@ -1083,6 +1115,13 @@ class ESignWizardController extends Controller
 
         // Normalise web template fields
         $renderType = $template->render_type ?? 'pdf';
+
+        // Rebuild from field_mappings if fields are skeletal (no id/field_name)
+        if ((empty($fields) || $this->fieldsAreSkeletal($fields)) && $renderType === 'web' && !empty($template->field_mappings)) {
+            $fields = $this->buildFieldsFromMappings($template->field_mappings);
+            $stepData['fields'] = $fields;
+        }
+
         if ($renderType === 'web') {
             $fields = array_map(fn($f) => $this->normalizeFieldForWizard($f, $renderType), $fields);
         }
@@ -1210,6 +1249,7 @@ class ESignWizardController extends Controller
             $viewData = $webTemplateData;
             if (!empty($template->signing_parties)) {
                 $viewData['signing_parties'] = $template->signing_parties;
+                $viewData['document_context'] = $template->isSalesDocument() ? 'sales' : 'rental';
             }
             $fullHtml = view($template->blade_view, $viewData)->render();
 
@@ -1471,6 +1511,16 @@ class ESignWizardController extends Controller
         }
 
         return redirect($signingUrl);
+
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('PREPARE_SIGNING_FAILED', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return back()->withErrors(['error' => 'Failed to prepare signing: ' . $e->getMessage()]);
+        }
     }
 
     /**
@@ -2187,6 +2237,53 @@ class ESignWizardController extends Controller
             6 => 'signing_setup',
             default => "step_{$step}",
         };
+    }
+
+    /**
+     * Build proper wizard fields from template field_mappings.
+     * Used when fields_json is empty or skeletal (no id/field_name/named_field_id).
+     */
+    private function buildFieldsFromMappings(array $fieldMappings): array
+    {
+        return collect($fieldMappings)->map(function ($m, $i) {
+            $fieldName = $m['field_name'] ?? '';
+            if (empty($fieldName)) {
+                $label = $m['label'] ?? $m['manualLabel'] ?? '';
+                $fieldName = strtolower(trim(preg_replace('/[^a-zA-Z0-9]+/', '_', $label), '_'));
+            }
+            $varName = str_replace('.', '_', $fieldName);
+            $varName = preg_replace('/[^a-zA-Z0-9_]/', '_', $varName);
+            $id = is_string($i) ? $i : ($m['id'] ?? ('mapping_' . $i));
+            $source = $m['source'] ?? $m['sourceType'] ?? 'manual';
+            if (($m['mappingType'] ?? '') === 'manual') {
+                $source = 'manual';
+            }
+            $editableBy = $m['filled_by'] ?? $m['editable_by'] ?? 'agent';
+            if (is_array($editableBy)) {
+                $editableBy = $editableBy[0] ?? 'agent';
+            }
+            return [
+                'id'              => $id,
+                'field_name'      => $varName,
+                'name'            => $varName,
+                'label'           => $m['label'] ?? $m['manualLabel'] ?? $fieldName,
+                'named_field_name'=> $m['label'] ?? $m['manualLabel'] ?? $fieldName,
+                'named_field_id'  => $m['namedFieldId'] ?? null,
+                'type'            => $m['type'] ?? 'placeholder',
+                'tag_type'        => $m['type'] ?? 'input',
+                'assignedTo'      => $editableBy,
+                'source'          => $source,
+                'mapping_type'    => $m['mappingType'] ?? $m['mapping_type'] ?? '',
+            ];
+        })->toArray();
+    }
+
+    /**
+     * Check if fields array is skeletal (entries lack id and field_name).
+     */
+    private function fieldsAreSkeletal(array $fields): bool
+    {
+        return !empty($fields) && empty($fields[0]['id'] ?? null) && empty($fields[0]['field_name'] ?? null);
     }
 
 }

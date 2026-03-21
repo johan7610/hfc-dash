@@ -589,6 +589,20 @@
     display: none; /* shown conditionally at signing */
 }
 
+/* === CDS FIELD VALUES (bold + underline to match PDF/web template fields) === */
+.corex-field-value {
+    font-weight: 700;
+    text-decoration: underline;
+    display: inline;
+}
+
+.corex-field-value:empty {
+    border-bottom: 1px solid #333;
+    min-width: 80pt;
+    display: inline-block;
+    text-decoration: none;
+}
+
 /* === UTILITY === */
 .corex-text-bold { font-weight: 600; }
 .corex-text-italic { font-style: italic; }

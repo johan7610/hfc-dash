@@ -500,26 +500,36 @@
                         <div class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Asking Price (R)</label>
-                                <input type="text" x-model="details.price" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 2500000">
+                                <input type="text" x-model="details.price"
+                                       @input="updatePreviewField('price', $event.target.value)"
+                                       class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 2500000">
                             </div>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Commission (%)</label>
-                                    <input type="text" x-model="details.commission" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 7.5">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Marketing Fee (R)</label>
-                                    <input type="text" x-model="details.marketing_fee" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 2500">
-                                </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Commission (%)</label>
+                                <input type="text" x-model="details.commission"
+                                       @input="updatePreviewField('commission_percent', $event.target.value)"
+                                       class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 7.5">
                             </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Mandate Start Date</label>
-                                    <input type="date" x-model="details.mandate_start" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
+                                    <input type="date" x-model="details.mandate_start"
+                                           @input="updatePreviewField('mandate_start', $event.target.value)"
+                                           class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Mandate Expiry Date</label>
-                                    <input type="date" x-model="details.mandate_expiry" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
+                                    <input type="date" x-model="details.mandate_expiry"
+                                           @input="updatePreviewField('mandate_expiry', $event.target.value)"
+                                           class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
+                                    <div class="flex flex-wrap gap-1.5 mt-2">
+                                        <template x-for="opt in [{m:1,l:'1 Mo'},{m:3,l:'3 Mo'},{m:6,l:'6 Mo'},{m:9,l:'9 Mo'}]" :key="opt.m">
+                                            <button type="button" @click="quickFillExpiry(opt.m)"
+                                                    class="px-2.5 py-1 rounded-full border text-[11px] font-medium transition"
+                                                    :class="details.mandate_expiry === calcExpiryDate(opt.m) ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-600 border-gray-300 hover:border-teal-400 hover:text-teal-600'"
+                                                    x-text="opt.l"></button>
+                                        </template>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -531,11 +541,15 @@
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Monthly Rental (R)</label>
-                                    <input type="text" x-model="details.monthly_rental" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 12000">
+                                    <input type="text" x-model="details.monthly_rental"
+                                           @input="updatePreviewField('monthly_rental', $event.target.value); updatePreviewField('rental_amount', $event.target.value)"
+                                           class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 12000">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Deposit (R)</label>
-                                    <input type="text" x-model="details.deposit" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 12000">
+                                    <input type="text" x-model="details.deposit"
+                                           @input="updatePreviewField('deposit_amount', $event.target.value)"
+                                           class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 12000">
                                 </div>
                             </div>
 
@@ -544,6 +558,7 @@
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Lease Start Date</label>
                                 <input type="date" x-model="details.lease_start"
                                        @change="calculateLeaseEnd()"
+                                       @input="updatePreviewField('lease_start', $event.target.value)"
                                        class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
                             </div>
                             <div>
@@ -844,7 +859,7 @@
             {{-- Web template preview (wrapped in CoreX document CSS) --}}
             <div x-show="previewRenderType === 'web' && previewHtml" class="overflow-y-auto" style="max-height: calc(100vh - 200px);">
                 <link href="/css/corex-document.css" rel="stylesheet">
-                <div style="transform-origin: top left; transform: scale(0.7); width: 142%;">
+                <div style="zoom: 0.7;">
                     <div class="web-template-preview" x-html="previewHtml"></div>
                 </div>
             </div>
@@ -1206,6 +1221,7 @@ function esignWizard() {
         previewFields: serverFields || [],
         previewRenderType: 'pdf',
         previewHtml: '',
+        previewFieldValues: {},
 
         // Step 2: Property
         property: {
@@ -1242,7 +1258,7 @@ function esignWizard() {
                 lease_end: det.lease_end || '',
                 // Sales fields
                 price: det.price || prop.price || '',
-                mandate_start: det.mandate_start || '',
+                mandate_start: det.mandate_start || new Date().toISOString().slice(0, 10),
                 mandate_expiry: det.mandate_expiry || '',
                 // Shared fields
                 commission: det.commission || prop.commission_percent || '',
@@ -1290,6 +1306,10 @@ function esignWizard() {
         _resizing: false,
 
         init() {
+            // TEMPORARY DEBUG — remove after verifying step 5 fields work
+            console.log('STEP5_DEBUG allWizardFields count:', this.allWizardFields?.length);
+            console.log('STEP5_DEBUG first 3:', JSON.stringify(this.allWizardFields?.slice(0, 3)));
+
             // Initialize field values from server data (unified ordered list)
             const allFields = this.allWizardFields.length > 0
                 ? this.allWizardFields
@@ -1347,7 +1367,14 @@ function esignWizard() {
             // Load web template preview on steps 2+ (PDF preview loads via serverPageImages)
             if (serverIsWebTemplate && this.currentStep > 1 && this.flowId && serverTemplateId) {
                 this.previewRenderType = 'web';
-                this.loadTemplatePreview(serverTemplateId);
+                this.loadTemplatePreview(serverTemplateId).then(() => {
+                    this.$nextTick(() => {
+                        // Scroll preview to relevant section for current step
+                        this.scrollPreviewToStep(this.currentStep);
+                        // Reapply all stored field values (belt-and-suspenders on top of server rendering)
+                        this.reapplyPreviewFields();
+                    });
+                });
             }
 
             // Global mouse events for resize
@@ -1542,6 +1569,8 @@ function esignWizard() {
                     this.previewHtml = data.html || '';
                     this.previewPages = [];
                     this.previewFields = [];
+                    // Reapply all stored field values after preview HTML loads
+                    this.$nextTick(() => this.reapplyPreviewFields());
                 } else {
                     this.previewHtml = '';
                     this.previewPages = data.pages || [];
@@ -1550,6 +1579,53 @@ function esignWizard() {
             } catch (e) {
                 console.error('Failed to load template preview:', e);
             }
+        },
+
+        reapplyPreviewFields() {
+            if (this.previewRenderType !== 'web') return;
+            const doc = document.querySelector('.web-template-preview');
+            if (!doc) return;
+
+            // Reapply previewFieldValues (from updatePreviewField calls)
+            Object.entries(this.previewFieldValues).forEach(([fieldName, value]) => {
+                if (!value) return;
+                const selectors = [
+                    '[data-field="' + fieldName + '"]',
+                    '[data-field="' + fieldName.replace(/\./g, '_') + '"]',
+                ];
+                selectors.forEach(sel => {
+                    doc.querySelectorAll(sel).forEach(el => {
+                        // Only apply if element is currently empty or has placeholder text
+                        if (!el.textContent.trim() || el.textContent.trim() === el.getAttribute('data-field')) {
+                            el.textContent = value;
+                            el.style.color = '#0d9488';
+                            el.style.fontWeight = '600';
+                        }
+                    });
+                });
+            });
+
+            // Also reapply fieldValues (from allWizardFields / step 5 inputs)
+            Object.entries(this.fieldValues).forEach(([fieldId, value]) => {
+                if (!value) return;
+                const field = (this.allWizardFields || []).find(f => f.id === fieldId || f.id == fieldId);
+                if (!field) return;
+                const fieldName = field.field_name || field.name || '';
+                if (!fieldName) return;
+                const selectors = [
+                    '[data-field="' + fieldName + '"]',
+                    '[data-field="' + fieldName.replace(/\./g, '_') + '"]',
+                ];
+                selectors.forEach(sel => {
+                    doc.querySelectorAll(sel).forEach(el => {
+                        if (!el.textContent.trim() || el.textContent.trim() === el.getAttribute('data-field')) {
+                            el.textContent = value;
+                            el.style.color = '#0d9488';
+                            el.style.fontWeight = '600';
+                        }
+                    });
+                });
+            });
         },
 
         // ---- Field helpers ----
@@ -1574,6 +1650,12 @@ function esignWizard() {
 
         setFieldValue(fieldId, value) {
             this.fieldValues = { ...this.fieldValues, [fieldId]: value };
+            // Immediate client-side preview update
+            const field = (this.allWizardFields || []).find(f => f.id === fieldId);
+            if (field) {
+                const fieldName = field.field_name || field.name || '';
+                if (fieldName) this.updatePreviewField(fieldName, value);
+            }
             this.refreshPreviewDebounced();
         },
 
@@ -1639,6 +1721,92 @@ function esignWizard() {
         },
         clearFieldHighlight() {
             document.querySelectorAll('.field-highlighted').forEach(el => el.classList.remove('field-highlighted'));
+        },
+
+        // ---- Live preview field updates (client-side DOM manipulation) ----
+        updatePreviewField(fieldName, value) {
+            // Always store for reapplication after preview reload
+            this.previewFieldValues[fieldName] = value;
+            if (this.previewRenderType !== 'web') return;
+            const doc = document.querySelector('.web-template-preview');
+            if (!doc) return;
+            // Try both the exact name and underscore variant
+            const selectors = [
+                '[data-field="' + fieldName + '"]',
+                '[data-field="' + fieldName.replace(/\./g, '_') + '"]',
+            ];
+            selectors.forEach(sel => {
+                doc.querySelectorAll(sel).forEach(el => {
+                    el.textContent = value || '';
+                    if (value) {
+                        el.style.color = '#0d9488';
+                        el.style.fontWeight = '600';
+                    } else {
+                        el.style.color = '';
+                        el.style.fontWeight = '';
+                    }
+                });
+            });
+        },
+
+        updatePreviewFields(fieldMap) {
+            Object.entries(fieldMap).forEach(([name, value]) => {
+                this.updatePreviewField(name, value);
+            });
+        },
+
+        focusPreviewField(fieldName) {
+            if (this.previewRenderType !== 'web') return;
+            const doc = document.querySelector('.web-template-preview');
+            if (!doc) return;
+            const field = doc.querySelector('[data-field="' + fieldName + '"]')
+                       || doc.querySelector('[data-field="' + fieldName.replace(/\./g, '_') + '"]');
+            if (field) {
+                field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                field.style.outline = '2px solid #0d9488';
+                setTimeout(() => { field.style.outline = ''; }, 2000);
+            }
+        },
+
+        scrollPreviewToStep(step) {
+            if (this.previewRenderType !== 'web') return;
+            const doc = document.querySelector('.web-template-preview');
+            if (!doc) return;
+            const find = (...sels) => {
+                for (const sel of sels) {
+                    const el = doc.querySelector(sel);
+                    if (el) return el;
+                }
+                return null;
+            };
+            let target = null;
+            if (step === 2) {
+                target = find('[data-field="property_address"]', '[data-field="property_full_address"]', '[data-field="property_erf_number"]');
+            } else if (step === 3) {
+                target = find('[data-field="seller_name"]', '[data-field="lessor_name"]', '[data-field="contact_full_names"]');
+            } else if (step === 4) {
+                target = find('[data-field="price"]', '[data-field="monthly_rental"]', '[data-field="mandate_start"]', '[data-field="commission_percent"]');
+            } else if (step === 5) {
+                target = doc.firstElementChild;
+            }
+            if (target) {
+                setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+            }
+        },
+
+        quickFillExpiry(months) {
+            const start = this.details.mandate_start || new Date().toISOString().slice(0, 10);
+            const d = new Date(start);
+            d.setMonth(d.getMonth() + months);
+            this.details.mandate_expiry = d.toISOString().slice(0, 10);
+            this.updatePreviewField('mandate_expiry', this.details.mandate_expiry);
+        },
+
+        calcExpiryDate(months) {
+            const start = this.details.mandate_start || new Date().toISOString().slice(0, 10);
+            const d = new Date(start);
+            d.setMonth(d.getMonth() + months);
+            return d.toISOString().slice(0, 10);
         },
 
         // ---- Preview overlay styling ----
@@ -2092,6 +2260,23 @@ function esignWizard() {
                 this.details.lease_end = result.lease_end_date;
             }
 
+            // Live preview: push property fields to DOM
+            // Covers both standard web template names and CDS-generated names
+            const fullAddr = [result.address, result.suburb].filter(Boolean).join(', ');
+            this.updatePreviewFields({
+                'property_address': fullAddr,
+                'property_full_address': fullAddr,
+                'street_address': fullAddr,
+                'property_street': result.address || '',
+                'property_township': result.suburb || '',
+                'property_suburb': result.suburb || '',
+                'erf_no': result.erf_no || '',
+                'property_erf_number': result.erf_no || '',
+                'complex_name': result.complex_name || '',
+                'property_complex_name': result.complex_name || '',
+                'property_type': result.property_type || '',
+            });
+
             this.showToast('Property selected — fields auto-filled', 'success');
         },
 
@@ -2144,6 +2329,28 @@ function esignWizard() {
             r.bank_account_name = contact.bank_account_name || '';
             r.bank_account_number = contact.bank_account_number || '';
             r.bank_branch_name = contact.bank_branch_name || '';
+
+            // Live preview: push contact fields to DOM based on role
+            // Covers both standard names (seller_name) and CDS generic names (contact_full_names)
+            const role = r.role;
+            const prefix = (role === 'seller') ? 'seller'
+                         : (role === 'buyer') ? 'buyer'
+                         : (role === 'landlord' || role === 'lessor') ? 'lessor'
+                         : (role === 'tenant' || role === 'lessee') ? 'lessee'
+                         : role;
+            const contactName = contact.full_name || ((contact.first_name || '') + ' ' + (contact.last_name || '')).trim();
+            this.updatePreviewFields({
+                [prefix + '_name']: contactName,
+                [prefix + '_id_number']: contact.id_number || '',
+                [prefix + '_email']: contact.email || '',
+                [prefix + '_cell']: contact.phone || '',
+                [prefix + '_address']: contact.address || '',
+                // CDS generic names
+                'contact_full_names': contactName,
+                'contact_email': contact.email || '',
+                'contact_phone': contact.phone || '',
+                'contact_address': contact.address || '',
+            });
 
             this.showToast(contact.full_name + ' selected', 'success');
         },
