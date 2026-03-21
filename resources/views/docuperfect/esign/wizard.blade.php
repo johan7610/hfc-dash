@@ -147,22 +147,14 @@
                                             : 'border-gray-200 hover:border-gray-300 bg-white'">
                                     <div class="font-medium text-gray-900 text-sm flex items-center">
                                         <span x-text="p.name"></span>
-                                        <template x-if="p.items.some(i => i.template?.template_type === 'cds')">
-                                            <span class="text-[10px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 font-semibold ml-2">CDS</span>
-                                        </template>
-                                        <template x-if="!p.items.some(i => i.template?.template_type === 'cds')">
-                                            <span class="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 ml-2">Web</span>
-                                        </template>
+                                        <span class="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 ml-2">Web</span>
                                         <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 ml-1" x-text="p.items.length + ' template' + (p.items.length !== 1 ? 's' : '')"></span>
                                     </div>
                                     <div x-show="p.items.length > 0" class="mt-1.5 space-y-0.5">
                                         <template x-for="item in p.items" :key="'pi-' + item.id">
                                             <div class="text-xs text-gray-500 flex items-center gap-1">
-                                                <span class="w-1 h-1 rounded-full flex-shrink-0"
-                                                      :class="item.template?.template_type === 'cds' ? 'bg-teal-500' : 'bg-blue-400'"></span>
+                                                <span class="w-1 h-1 rounded-full bg-blue-400 flex-shrink-0"></span>
                                                 <span x-text="item.template?.name || 'Unknown template'"></span>
-                                                <span x-show="item.template?.template_type === 'cds'"
-                                                      class="text-[9px] px-1 py-0 rounded bg-teal-50 text-teal-600">CDS</span>
                                             </div>
                                         </template>
                                     </div>
@@ -1059,6 +1051,7 @@ function esignWizard() {
             'rental': 'Rental',
             'sales': 'Sales',
             'compliance': 'Compliance',
+            'cds': 'Web Templates',
         };
 
         templates.forEach(t => {

@@ -64,11 +64,7 @@
                            :checked="selectedItems.some(i => i.id === {{ $template->id }})"
                            @change="toggleTemplate({{ $template->id }}, '{{ addslashes($template->name) }}')">
                     <span class="text-slate-700">{{ $template->name }}</span>
-                    @if($template->template_type === 'cds')
-                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 font-semibold">CDS</span>
-                    @else
-                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 font-semibold">Web</span>
-                    @endif
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 font-semibold">Web</span>
                 </label>
                 @empty
                 <div class="px-3 py-4 text-sm text-slate-400 text-center">No web templates available.</div>
