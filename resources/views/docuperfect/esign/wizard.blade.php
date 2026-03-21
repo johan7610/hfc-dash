@@ -267,9 +267,10 @@
                                         <div class="text-xs text-gray-500 mt-0.5 flex items-center gap-2">
                                             <span x-show="result.property_type" x-text="result.property_type" class="capitalize"></span>
                                             <span x-show="result.beds" x-text="result.beds + ' bed'"></span>
+                                            <span x-show="result.price && result.source === 'properties'" x-text="'R ' + Number(result.price).toLocaleString()"></span>
                                             <span x-show="result.rental_amount" x-text="'R ' + Number(result.rental_amount).toLocaleString() + '/mo'"></span>
                                         </div>
-                                        <div x-show="result.lessor_name" class="text-xs text-blue-600 mt-0.5" x-text="'Landlord: ' + result.lessor_name"></div>
+                                        <div x-show="result.lessor_name" class="text-xs text-blue-600 mt-0.5" x-text="ownerPartyLabel + ': ' + result.lessor_name"></div>
                                     </div>
                                     <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 flex-shrink-0 ml-2"
                                           x-text="result.source === 'properties' ? 'Property' : 'Rental'"></span>
@@ -357,12 +358,15 @@
                                     </template>
                                     <template x-if="!r.readonly">
                                         <select x-model="r.role" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
-                                            <option value="landlord">Landlord</option>
-                                            <option value="tenant">Tenant</option>
-                                            <option value="buyer">Buyer</option>
-                                            <option value="seller">Seller</option>
-                                            <option value="witness">Witness</option>
-                                            <option value="other">Other</option>
+                                            <optgroup :label="isSalesContext ? 'Sales Parties' : 'Rental Parties'">
+                                                <option :value="ownerPartyRole" x-text="ownerPartyLabel"></option>
+                                                <option :value="acquiringPartyRole" x-text="acquiringPartyLabel"></option>
+                                            </optgroup>
+                                            <optgroup label="Other Roles">
+                                                <option value="spouse">Spouse</option>
+                                                <option value="witness">Witness</option>
+                                                <option value="other">Other</option>
+                                            </optgroup>
                                         </select>
                                     </template>
                                 </div>
@@ -462,11 +466,11 @@
                     </template>
                 </div>
 
-                {{-- Add second owner button (only when a landlord exists but no second landlord yet) --}}
-                <button x-show="hasRoleRecipient('landlord') && !hasSecondRoleRecipient('landlord')"
+                {{-- Add second owner button (only when an owner party exists but no second one yet) --}}
+                <button x-show="hasRoleRecipient(ownerPartyRole) && !hasSecondRoleRecipient(ownerPartyRole)"
                         @click="addSecondOwner()"
                         class="w-full mt-3 py-2.5 border-2 border-dashed border-emerald-300 rounded-xl text-sm text-emerald-600 hover:border-emerald-500 hover:text-emerald-700 transition">
-                    + Add Second Owner (Co-owner)
+                    <span x-text="'+ Add Second ' + ownerPartyLabel + ' (Co-owner)'"></span>
                 </button>
 
                 <button @click="addRecipient()" class="w-full mt-3 py-2.5 border-2 border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 transition">
@@ -484,56 +488,97 @@
                     Some fields were auto-filled from the selected property. You can adjust them below.
                 </div>
 
+                {{-- Context indicator --}}
+                <div class="mb-4 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2"
+                     :class="isSalesContext ? 'bg-purple-50 border border-purple-200 text-purple-700' : 'bg-teal-50 border border-teal-200 text-teal-700'">
+                    <span x-text="isSalesContext ? 'Sales Document' : 'Rental Document'"></span>
+                </div>
+
                 <div class="space-y-4">
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Monthly Rental (R)</label>
-                            <input type="text" x-model="details.monthly_rental" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 12000">
+                    {{-- ---- SALES FIELDS ---- --}}
+                    <template x-if="isSalesContext">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Asking Price (R)</label>
+                                <input type="text" x-model="details.price" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 2500000">
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Commission (%)</label>
+                                    <input type="text" x-model="details.commission" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 7.5">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Marketing Fee (R)</label>
+                                    <input type="text" x-model="details.marketing_fee" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 2500">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Mandate Start Date</label>
+                                    <input type="date" x-model="details.mandate_start" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Mandate Expiry Date</label>
+                                    <input type="date" x-model="details.mandate_expiry" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Deposit (R)</label>
-                            <input type="text" x-model="details.deposit" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 12000">
-                        </div>
-                    </div>
+                    </template>
 
-                    {{-- Lease dates with duration selector --}}
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Lease Start Date</label>
-                        <input type="date" x-model="details.lease_start"
-                               @change="calculateLeaseEnd()"
-                               class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Lease Duration</label>
-                        <div class="flex flex-wrap gap-2 mb-3">
-                            <template x-for="opt in [{value: 6, label: '6 months'}, {value: 12, label: '12 months'}, {value: 24, label: '24 months'}, {value: 0, label: 'Custom'}]" :key="opt.value">
-                                <button type="button"
-                                        @click="details._duration = opt.value; calculateLeaseEnd()"
-                                        class="px-3 py-1.5 rounded-lg border text-xs font-medium transition"
-                                        :class="details._duration === opt.value ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'"
-                                        x-text="opt.label"></button>
-                            </template>
-                        </div>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Lease End Date</label>
-                        <input type="date" x-model="details.lease_end"
-                               :readonly="details._duration !== 0"
-                               class="w-full rounded-lg border px-3 py-2 text-sm"
-                               :class="details._duration !== 0 ? 'border-gray-200 bg-gray-100 text-gray-500' : 'border-slate-300 bg-white text-slate-900'">
-                        <p x-show="details._duration !== 0 && details.lease_end" class="text-xs text-gray-400 mt-1" x-text="'Auto-calculated: ' + details._duration + ' months from start'"></p>
-                    </div>
+                    {{-- ---- RENTAL FIELDS ---- --}}
+                    <template x-if="!isSalesContext">
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Monthly Rental (R)</label>
+                                    <input type="text" x-model="details.monthly_rental" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 12000">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Deposit (R)</label>
+                                    <input type="text" x-model="details.deposit" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 12000">
+                                </div>
+                            </div>
 
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Commission (%)</label>
-                            <input type="text" x-model="details.commission" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 8.5">
+                            {{-- Lease dates with duration selector --}}
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Lease Start Date</label>
+                                <input type="date" x-model="details.lease_start"
+                                       @change="calculateLeaseEnd()"
+                                       class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Lease Duration</label>
+                                <div class="flex flex-wrap gap-2 mb-3">
+                                    <template x-for="opt in [{value: 6, label: '6 months'}, {value: 12, label: '12 months'}, {value: 24, label: '24 months'}, {value: 0, label: 'Custom'}]" :key="opt.value">
+                                        <button type="button"
+                                                @click="details._duration = opt.value; calculateLeaseEnd()"
+                                                class="px-3 py-1.5 rounded-lg border text-xs font-medium transition"
+                                                :class="details._duration === opt.value ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'"
+                                                x-text="opt.label"></button>
+                                    </template>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Lease End Date</label>
+                                <input type="date" x-model="details.lease_end"
+                                       :readonly="details._duration !== 0"
+                                       class="w-full rounded-lg border px-3 py-2 text-sm"
+                                       :class="details._duration !== 0 ? 'border-gray-200 bg-gray-100 text-gray-500' : 'border-slate-300 bg-white text-slate-900'">
+                                <p x-show="details._duration !== 0 && details.lease_end" class="text-xs text-gray-400 mt-1" x-text="'Auto-calculated: ' + details._duration + ' months from start'"></p>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Commission (%)</label>
+                                    <input type="text" x-model="details.commission" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 8.5">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Marketing Fee (R)</label>
+                                    <input type="text" x-model="details.marketing_fee" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 2500">
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Marketing Fee (R)</label>
-                            <input type="text" x-model="details.marketing_fee" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 2500">
-                        </div>
-                    </div>
+                    </template>
 
                     {{-- Dynamic manual fields from template --}}
                     <template x-if="manualFields.length > 0">
@@ -800,12 +845,13 @@
             <div x-show="previewRenderType === 'web' && previewHtml" class="overflow-y-auto" style="max-height: calc(100vh - 200px);">
                 <link href="/css/corex-document.css" rel="stylesheet">
                 <div style="transform-origin: top left; transform: scale(0.7); width: 142%;">
-                    <div class="corex-document-wrapper">
-                        <div class="corex-page web-template-preview" x-html="previewHtml"></div>
-                    </div>
+                    <div class="web-template-preview" x-html="previewHtml"></div>
                 </div>
             </div>
             <style>
+                .web-template-preview .corex-page {
+                    min-height: auto !important;
+                }
                 .field-highlighted {
                     background: rgba(255,200,0,0.3) !important;
                     outline: 2px solid #f59e0b;
@@ -1087,13 +1133,22 @@ function esignWizard() {
         'agent': 'agent', 'creator': 'agent',
     };
 
+    // Detect sales vs rental context from template name
+    function detectSalesContext(templateName) {
+        if (!templateName) return false;
+        const n = templateName.toLowerCase();
+        return n.includes('sell') || n.includes('sale') || n.includes('authority')
+            || n.includes('otp') || n.includes('purchase') || n.includes('mandate to sell');
+    }
+
     function getRoleLabel(role) {
         const labels = {
             'agent': 'Agent', 'creator': 'Agent',
             'landlord': 'Landlord', 'lessor': 'Landlord',
             'tenant': 'Tenant', 'lessee': 'Tenant',
             'buyer': 'Buyer', 'seller': 'Seller',
-            'witness': 'Witness',
+            'witness': 'Witness', 'spouse': 'Spouse',
+            'owner_party': 'Owner Party', 'acquiring_party': 'Acquiring Party',
         };
         return labels[role] || (role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Signer');
     }
@@ -1128,6 +1183,24 @@ function esignWizard() {
         slotSelections: {},
         optionalSelections: [],
 
+        // Document context detection (sales vs rental)
+        get isSalesContext() {
+            const name = this.templateName || serverTemplate?.name || '';
+            return detectSalesContext(name);
+        },
+        get ownerPartyLabel() {
+            return this.isSalesContext ? 'Seller' : 'Landlord';
+        },
+        get acquiringPartyLabel() {
+            return this.isSalesContext ? 'Buyer' : 'Tenant';
+        },
+        get ownerPartyRole() {
+            return this.isSalesContext ? 'seller' : 'landlord';
+        },
+        get acquiringPartyRole() {
+            return this.isSalesContext ? 'buyer' : 'tenant';
+        },
+
         // Preview
         previewPages: serverPageImages || [],
         previewFields: serverFields || [],
@@ -1157,16 +1230,22 @@ function esignWizard() {
             ? serverRecipients.map((r, i) => ({ ...r, readonly: i === 0 && r.role === 'agent' }))
             : [{ order: 1, role: 'agent', name: currentUser.name, id_number: '', email: currentUser.email || '', cell: '', address: '', readonly: true }],
 
-        // Step 4: Details — deposit defaults to rental if empty
+        // Step 4: Details — supports both rental and sales fields
         details: (() => {
             const prop = serverStepData?.property || {};
             const det = serverStepData?.details || {};
             const d = {
+                // Rental fields
                 monthly_rental: det.monthly_rental || prop.rental_amount || '',
                 deposit: det.deposit || prop.deposit_amount || '',
                 lease_start: det.lease_start || '',
                 lease_end: det.lease_end || '',
-                commission: det.commission || prop.commission_percent || '10',
+                // Sales fields
+                price: det.price || prop.price || '',
+                mandate_start: det.mandate_start || '',
+                mandate_expiry: det.mandate_expiry || '',
+                // Shared fields
+                commission: det.commission || prop.commission_percent || '',
                 marketing_fee: det.marketing_fee || prop.marketing_fee || '',
                 _duration: det._duration ?? 12,
                 _autoFilled: false,
@@ -1176,8 +1255,13 @@ function esignWizard() {
                 const key = 'named_field_' + mf.id;
                 if (det[key]) d[key] = det[key];
             });
-            // Auto-set deposit = rental when deposit is empty
+            // Auto-set deposit = rental when deposit is empty (rental context only)
             if (!d.deposit && d.monthly_rental) d.deposit = d.monthly_rental;
+            // Default commission based on context
+            if (!d.commission) {
+                const tplName = serverTemplate?.name || '';
+                d.commission = detectSalesContext(tplName) ? '7.5' : '10';
+            }
             return d;
         })(),
 
@@ -1315,6 +1399,13 @@ function esignWizard() {
             this.selectedPdfPackId = null;
             this.isPackFlow = false;
             this.packPreview = null;
+
+            // Immediately reset preview state to prevent flash of old content
+            this.previewPages = [];
+            this.previewHtml = '';
+            this.previewFields = [];
+            this.previewRenderType = t.render_type || 'pdf';
+
             this.loadTemplatePreview(t.id);
         },
 
@@ -1798,10 +1889,16 @@ function esignWizard() {
                 };
                 case 4: {
                     const detailsData = {
+                        // Rental fields
                         monthly_rental: this.details.monthly_rental,
                         deposit: this.details.deposit,
                         lease_start: this.details.lease_start,
                         lease_end: this.details.lease_end,
+                        // Sales fields
+                        price: this.details.price,
+                        mandate_start: this.details.mandate_start,
+                        mandate_expiry: this.details.mandate_expiry,
+                        // Shared fields
                         commission: this.details.commission,
                         marketing_fee: this.details.marketing_fee,
                         _duration: this.details._duration,
@@ -1973,6 +2070,9 @@ function esignWizard() {
             this.propSearchQuery = result.display || result.address;
 
             // Pre-fill details from property data
+            if (result.price && !this.details.price) {
+                this.details.price = String(result.price);
+            }
             if (result.rental_amount && !this.details.monthly_rental) {
                 this.details.monthly_rental = String(result.rental_amount);
             }
@@ -2109,10 +2209,11 @@ function esignWizard() {
         },
 
         addSecondOwner() {
-            // Insert after the first landlord
-            const idx = this.recipients.findIndex(r => r.role === 'landlord' && !r.readonly);
+            // Insert after the first owner party (landlord or seller)
+            const role = this.ownerPartyRole;
+            const idx = this.recipients.findIndex(r => r.role === role && !r.readonly);
             const newOwner = {
-                order: 0, role: 'landlord', name: '', id_number: '', email: '', cell: '', address: '', readonly: false,
+                order: 0, role: role, name: '', id_number: '', email: '', cell: '', address: '', readonly: false,
                 _contact_id: null, _searchQuery: '', _searchResults: [], _searchOpen: false, _searching: false, _searchIdx: 0,
                 _includeEmail: false,
             };
@@ -2125,8 +2226,10 @@ function esignWizard() {
         },
 
         addRecipient() {
+            // Default new recipient to acquiring party role (tenant or buyer)
+            const defaultRole = this.acquiringPartyRole;
             this.recipients.push({
-                order: this.recipients.length + 1, role: 'landlord', name: '', id_number: '', email: '', cell: '', address: '', readonly: false,
+                order: this.recipients.length + 1, role: defaultRole, name: '', id_number: '', email: '', cell: '', address: '', readonly: false,
                 _contact_id: null, _searchQuery: '', _searchResults: [], _searchOpen: false, _searching: false, _searchIdx: 0,
             });
         },

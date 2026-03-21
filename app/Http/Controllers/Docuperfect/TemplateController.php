@@ -648,8 +648,15 @@ class TemplateController extends Controller
      */
     private function generateCdsBladeView(array $cds, array $fieldMappings, int $templateId, string $templateName): string
     {
+        // Filter out company_header and title sections — these are handled separately
+        $filteredCds = $cds;
+        $filteredCds['sections'] = array_values(array_filter(
+            $cds['sections'] ?? [],
+            fn($s) => !in_array($s['type'] ?? '', ['company_header', 'title'])
+        ));
+
         $renderer = app(CdsRendererService::class);
-        $html = $renderer->render($cds);
+        $html = $renderer->render($filteredCds);
 
         // Build the blade template
         $title = e($cds['title'] ?? $templateName);
@@ -668,11 +675,8 @@ BLADE;
         $blade .= '<div class="corex-document-wrapper">' . "\n";
         $blade .= '<div class="corex-page">' . "\n\n";
 
-        // Company header
+        // Company header — use the shared component (logo, two-column layout, reg numbers)
         $blade .= '@include("docuperfect.web-templates.components.company-header")' . "\n\n";
-
-        // Document title
-        $blade .= "<div class=\"corex-h1\" style=\"text-align:center; margin-bottom:12pt;\">{$title}</div>\n\n";
 
         // Replace marker-based signature/initial placeholders with Blade signature components
         $processedHtml = preg_replace(
@@ -711,10 +715,19 @@ BLADE;
 
         $blade .= $processedHtml . "\n\n";
 
-        $blade .= "</div>\n</div>\n\n";
+        // Signature block — must be INSIDE corex-page
+        // Detect document context from template name to pass correct party labels
+        $nameLower = strtolower($templateName);
+        $isSalesDoc = str_contains($nameLower, 'sell') || str_contains($nameLower, 'sale')
+            || str_contains($nameLower, 'authority') || str_contains($nameLower, 'otp')
+            || str_contains($nameLower, 'purchase');
+        if ($isSalesDoc) {
+            $blade .= '@include("docuperfect.web-templates.components.signature-block", ["parties" => ["Seller", "Buyer", "Agent"]])' . "\n\n";
+        } else {
+            $blade .= '@include("docuperfect.web-templates.components.signature-block", ["parties" => ["Lessor", "Lessee", "Agent"]])' . "\n\n";
+        }
 
-        // Signature block
-        $blade .= '@include("docuperfect.web-templates.components.signature-block")' . "\n\n";
+        $blade .= "</div>\n</div>\n\n";
         $blade .= "</body>\n</html>\n";
 
         // Write to disk

@@ -13,8 +13,6 @@
 
 @include("docuperfect.web-templates.components.company-header")
 
-<div class="corex-h1" style="text-align:center; margin-bottom:12pt;">EXCLUSIVE AUTHORITY TO SELL</div>
-
 <div class="corex-h1">EXCLUSIVE AUTHORITY TO SELL</div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">I <span class="corex-field-value" data-field="contact_full_names">{{ $contact_full_names ?? '' }}</span></span> We  the undersigned, being the registered owner/s, or duly authorised representative/s of the owner/s (Seller) of the</span></div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text"> Property Erf / Sectional Scheme / Unit no <span class="corex-field-value" data-field="property_erf_number">{{ $property_erf_number ?? '' }}</span></span> in the </span></div>
@@ -76,10 +74,10 @@
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">The Seller/s hereby give their consent to the Estate Agency/ies involved in the Exclusive Authority To Sell to process their personal information for all purposes related to the Exclusive Authority To Sell, in accordance with the provisions of the Protection of Personal Information Act.</span></div>
 <div class="corex-signature-section"><div class="corex-signature-section-title">THUS DONE AND SIGNED</div><div class="corex-clause"><span class="corex-clause-text">This Exclusive Authority To Sell was done and signed by the Seller at on this  day of  20 at  am / pm.</span></div><div class="corex-signature-grid"><div class="corex-signature-block"><div class="corex-signature-role">AGENT</div><div class="corex-signature-name">&nbsp;</div><div class="corex-signature-line"><span class="corex-signature-prompt">Sign here</span></div><div class="corex-signature-date">Date: _______________</div></div></div></div>
 
-</div>
-</div>
+@include("docuperfect.web-templates.components.signature-block", ["parties" => ["Seller", "Buyer", "Agent"]])
 
-@include("docuperfect.web-templates.components.signature-block")
+</div>
+</div>
 
 </body>
 </html>

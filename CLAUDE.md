@@ -121,13 +121,24 @@ No demo modes. No "we'll fix it later." No patches over root causes. If it works
    Tightly related changes in the same file = together.
    Everything else = separate prompts, tested one at a time.
 
-4. Before declaring done:
-   - php artisan view:clear
-   - php artisan route:clear
-   - php artisan cache:clear
-   - php -l on all changed PHP files
-   - scripts/dev-check.ps1 (894 tests, 2236 assertions)
-   - Verify the feature works end-to-end, not just "no errors"
+4. Read the relevant spec from .ai/specs/ for whatever module you're
+   working on. If working on documents/e-sign, read .ai/specs/docuperfect.md
+   AND .ai/specs/esignature.md. If no spec exists for the feature, STOP
+   and create one before writing any code.
+
+5. Before declaring done — run ALL of these in order:
+   a. php -l on every changed PHP file
+   b. php artisan view:clear
+   c. php artisan route:clear
+   d. php artisan cache:clear
+   e. scripts/dev-check.ps1 — must pass with 0 new failures
+   f. Functional verification via Tinker:
+      - If you created a route: verify it resolves
+      - If you created a view: verify it renders without error
+      - If you created a model: verify it instantiates
+      - If you saved data: verify it persists and loads
+      - If you built a form: verify the POST endpoint accepts data
+      Do NOT mark done until all verification passes.
 ```
 
 ---

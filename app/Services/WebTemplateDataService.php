@@ -104,9 +104,16 @@ class WebTemplateDataService
         $rental     = $details['monthly_rental'] ?? $property['rental_amount'] ?? '';
         $deposit    = $details['deposit'] ?? $property['deposit_amount'] ?? '';
 
+        // Sales fields
+        $price = $details['price'] ?? $property['price'] ?? '';
+        $mandateStart = $details['mandate_start'] ?? '';
+        $mandateExpiry = $details['mandate_expiry'] ?? '';
+
         // Compute derived financial values
         $commission = $details['commission'] ?? $details['commission_percent'] ?? '';
-        $commissionAmount = ($rental && $commission) ? round((float) $rental * (float) $commission / 100, 2) : '';
+        // Commission calculated from rental (rental context) or price (sales context)
+        $commissionBase = ($rental && (float) $rental > 0) ? (float) $rental : (($price && (float) $price > 0) ? (float) $price : 0);
+        $commissionAmount = ($commissionBase > 0 && $commission) ? round($commissionBase * (float) $commission / 100, 2) : '';
         $vatAmount = $commissionAmount ? round((float) $commissionAmount * 0.15, 2) : '';
         $serviceFee = $commissionAmount ? round((float) $commissionAmount + $vatAmount, 2) : '';
         $letsAssist = $details['lets_assist'] ?? '';
@@ -232,8 +239,14 @@ class WebTemplateDataService
             'commission_amount'     => $commissionAmount,
             'marketing_fee'         => $details['marketing_fee'] ?? '',
             'marketing_agent'       => $agent->name ?? '',
-            'price'                 => $details['price'] ?? $property['price'] ?? '',
-            'price_in_words'        => !empty($details['price']) ? $this->numberToWords((int) $details['price']) : '',
+            'price'                 => $price,
+            'price_in_words'        => $price ? $this->numberToWords((int) $price) : '',
+            'commission_incl_vat'   => $serviceFee,
+            // Mandate dates (sales)
+            'mandate_start'         => $mandateStart,
+            'mandate_expiry'        => $mandateExpiry,
+            'mandate_start_formatted' => $mandateStart ? date('j F Y', strtotime($mandateStart)) : '',
+            'mandate_expiry_formatted' => $mandateExpiry ? date('j F Y', strtotime($mandateExpiry)) : '',
             // Lease escalation
             'escalation_percent'    => $details['escalation_percent'] ?? $details['escalation'] ?? '',
             'escalation_in_words'   => '',

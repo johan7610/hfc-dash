@@ -379,11 +379,12 @@
                                     {{-- Field dropdown (single field, not manual) --}}
                                     <template x-if="getMapping(tag.id).mappingType === 'named_field' && getMapping(tag.id).typeKey && getMapping(tag.id).typeKey !== 'sf:manual'">
                                         <select class="w-full text-xs border border-gray-300 rounded px-2 py-1.5 mb-1.5 bg-white"
-                                                :value="getMapping(tag.id).namedFieldId || ''"
+                                                x-init="$nextTick(() => { $el.value = String(getMapping(tag.id).namedFieldId || '') })"
+                                                :value="String(getMapping(tag.id).namedFieldId || '')"
                                                 @change="setNamedField(tag.id, parseInt($event.target.value))">
                                             <option value="">Select field...</option>
                                             <template x-for="nf in getFieldsForType(getMapping(tag.id).typeKey)" :key="nf.id">
-                                                <option :value="nf.id" x-text="nf.name"></option>
+                                                <option :value="String(nf.id)" x-text="nf.name"></option>
                                             </template>
                                         </select>
                                     </template>

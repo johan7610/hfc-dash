@@ -362,7 +362,7 @@ class ESignWizardController extends Controller
         unset($field);
 
         // Enrich details defaults from property record BEFORE autoFillFields
-        // so manual fields (commission, deposit, rental, lease dates) can resolve
+        // so manual fields (commission, deposit, rental, lease dates, price) can resolve
         if ($step >= 4 && empty($stepData['details'])) {
             $propertyId = $stepData['property']['property_id'] ?? null;
             $propertySource = $stepData['property']['_property_source'] ?? null;
@@ -374,20 +374,25 @@ class ESignWizardController extends Controller
                     $propRecord = RentalProperty::find($propertyId);
                 }
                 if ($propRecord) {
-                    // Use rental_amount, monthly_rental, or price (whichever has a value > 0)
+                    // Sales: price field
+                    $price = $propRecord->price ?? null;
+                    $propDefaults['price'] = ($price && (float) $price > 0) ? $price : '';
+
+                    // Rental: rental_amount / monthly_rental
                     $rental = !empty($propRecord->rental_amount) ? $propRecord->rental_amount
-                            : (!empty($propRecord->monthly_rental) ? $propRecord->monthly_rental
-                            : (!empty($propRecord->price) ? $propRecord->price : ''));
-                    // Don't populate 0 values — leave blank for agent to fill
+                            : (!empty($propRecord->monthly_rental) ? $propRecord->monthly_rental : '');
                     $propDefaults['monthly_rental'] = ($rental && (float) $rental > 0) ? $rental : '';
                     $deposit = !empty($propRecord->deposit_amount) ? $propRecord->deposit_amount : $rental;
                     $propDefaults['deposit'] = ($deposit && (float) $deposit > 0) ? $deposit : '';
-                    $propDefaults['commission'] = !empty($propRecord->commission_percent) ? $propRecord->commission_percent : '10';
+                    $propDefaults['commission'] = !empty($propRecord->commission_percent) ? $propRecord->commission_percent : '';
                     $propDefaults['marketing_fee'] = $propRecord->marketing_fee ?? '';
                 }
             }
             // Fallback: use values saved in step 2 property data (from search results)
             $propStep = $stepData['property'] ?? [];
+            if (empty($propDefaults['price']) && !empty($propStep['price']) && (float) $propStep['price'] > 0) {
+                $propDefaults['price'] = $propStep['price'];
+            }
             if (empty($propDefaults['monthly_rental']) && !empty($propStep['rental_amount']) && (float) $propStep['rental_amount'] > 0) {
                 $propDefaults['monthly_rental'] = $propStep['rental_amount'];
             }
@@ -402,8 +407,13 @@ class ESignWizardController extends Controller
             if (empty($propDefaults['marketing_fee']) && !empty($propStep['marketing_fee'])) {
                 $propDefaults['marketing_fee'] = $propStep['marketing_fee'];
             }
+            // Commission default based on template context (sales=7.5, rental=10)
             if (empty($propDefaults['commission'])) {
-                $propDefaults['commission'] = '10';
+                $templateName = strtolower($template->name ?? '');
+                $isSales = str_contains($templateName, 'sell') || str_contains($templateName, 'sale')
+                    || str_contains($templateName, 'authority') || str_contains($templateName, 'otp')
+                    || str_contains($templateName, 'purchase') || str_contains($templateName, 'mandate to sell');
+                $propDefaults['commission'] = $isSales ? '7.5' : '10';
             }
             $stepData['details'] = $propDefaults;
         }
@@ -743,7 +753,8 @@ class ESignWizardController extends Controller
                 'complex_name'      => $p->complex_name ?? '',
                 'unit_number'       => $p->unit_number ?? '',
                 'property_type'     => $p->property_type ?? '',
-                'rental_amount'     => $p->rental_amount ?: $p->price,
+                'price'             => $p->price,
+                'rental_amount'     => $p->rental_amount,
                 'deposit_amount'    => $p->deposit_amount,
                 'commission_percent'=> $p->commission_percent,
                 'marketing_fee'     => $p->marketing_fee,
@@ -823,7 +834,7 @@ class ESignWizardController extends Controller
                 'landlord' => 'Lessor', 'lessor' => 'Lessor',
                 'tenant' => 'Lessee', 'lessee' => 'Lessee',
                 'buyer' => 'Buyer', 'seller' => 'Seller',
-                'witness' => 'Witness',
+                'witness' => 'Witness', 'spouse' => 'Spouse',
             ];
             $typeName = $roleMap[strtolower($role)] ?? null;
             if ($typeName) {
@@ -1287,6 +1298,7 @@ class ESignWizardController extends Controller
                 'landlord' => 'landlord', 'tenant' => 'tenant',
                 'buyer' => 'buyer', 'seller' => 'seller',
                 'agent' => 'agent', 'witness' => 'witness',
+                'spouse' => 'spouse', 'other' => 'other',
             ];
 
             // Agent is always first party (signing_order=1)

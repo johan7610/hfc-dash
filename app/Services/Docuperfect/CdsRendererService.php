@@ -26,7 +26,7 @@ class CdsRendererService
             'paragraph' => $this->renderParagraph($section),
             'table' => $this->renderTable($section),
             'title' => $this->renderTitle($section),
-            'company_header' => '', // Skip — CoreX renders its own header
+            'company_header' => $this->renderTable($section), // Render as table — no separate @include needed
             'signature_section' => $this->renderSignatureSection($section),
             'inline_signature' => $this->renderInlineSignature($section),
             'page_initials' => $this->renderPageInitials($section),

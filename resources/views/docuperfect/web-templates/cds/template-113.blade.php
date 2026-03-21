@@ -11,10 +11,6 @@
 <div class="corex-document-wrapper">
 <div class="corex-page">
 
-@include("docuperfect.web-templates.components.company-header")
-
-<div class="corex-h1" style="text-align:center; margin-bottom:12pt;">IMMOVABLE PROPERTY CONDITION REPORT IN RELATION TO THE LEASE OF ANY IMMOVABLE PROPERTY (Property Practitioner Act 22 of 2019, Section 70 – Property Practitioners Regulations 2022 Section 36 – Mandatory Disclosure)</div>
-
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text"><u><strong>IMMOVABLE PROPERTY CONDITION REPORT IN RELATION TO THE </strong></u><u><strong>LEASE</strong></u><u><strong> OF ANY IMMOVABLE PROPERTY</strong></u><u><strong> (Property Practitioner Act 22 of 2019, Section 70 – Property Practitioners Regulations 2022 Section 36 – Mandatory Disclosure)</strong></u></span></div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-number">1</span> <span class="corex-clause-text"><strong>Disclaimer </strong></span></div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">This condition report concerns the immovable property situated at </span></div>
