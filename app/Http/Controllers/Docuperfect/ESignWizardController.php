@@ -17,6 +17,7 @@ use App\Services\Docuperfect\SignatureService;
 use App\Services\Docuperfect\WebTemplatePdfService;
 use App\Services\WebTemplateDataService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -315,10 +316,11 @@ class ESignWizardController extends Controller
         // with any values filled during wizard steps merged in
         $fields = $stepData['fields'] ?? ($template->fields_json ?? []);
 
-        // For CDS/web templates with empty or skeletal fields, build from field_mappings
-        // Skeletal = entries exist but lack id/field_name/named_field_id (e.g. bare fields_json)
+        // For CDS/web templates, ALWAYS rebuild fields from field_mappings to preserve
+        // document order and ensure field_names match blade data-field attributes.
         $renderType = $template->render_type ?? 'pdf';
-        if ((empty($fields) || $this->fieldsAreSkeletal($fields)) && $renderType === 'web' && !empty($template->field_mappings)) {
+        $isCds = ($template->template_type ?? '') === 'cds';
+        if ($renderType === 'web' && !empty($template->field_mappings) && ($isCds || empty($fields) || $this->fieldsAreSkeletal($fields))) {
             $fields = $this->buildFieldsFromMappings($template->field_mappings);
             // Store into step_data so subsequent loads have the fields
             $stepData['fields'] = $fields;
@@ -365,14 +367,22 @@ class ESignWizardController extends Controller
             unset($field);
         }
 
-        // Final fallback: ensure NO field ever shows a raw ID as its label
+        // Final fallback: ensure NO field ever shows a raw tag ID as its label
         foreach ($fields as &$field) {
-            if (empty($field['named_field_name'])) {
-                // Check field_name/field_label before falling back to type
-                $field['named_field_name'] = $field['field_name']
-                    ?? $field['field_label']
-                    ?? $field['label']
-                    ?? ucfirst($field['type'] ?? 'Field');
+            $currentName = $field['named_field_name'] ?? '';
+            // If empty or looks like a tag ID, replace with something human-readable
+            if (empty($currentName) || str_starts_with($currentName, 'tag-')) {
+                $fallback = $field['label'] ?? '';
+                if (empty($fallback) || str_starts_with($fallback, 'tag-')) {
+                    $fallback = $field['field_label'] ?? '';
+                }
+                if (empty($fallback) || str_starts_with($fallback, 'tag-')) {
+                    $fn = $field['field_name'] ?? '';
+                    $fallback = (!empty($fn) && !str_starts_with($fn, 'tag-'))
+                        ? ucwords(str_replace('_', ' ', $fn))
+                        : ucfirst($field['type'] ?? 'Field');
+                }
+                $field['named_field_name'] = $fallback;
             }
         }
         unset($field);
@@ -449,12 +459,23 @@ class ESignWizardController extends Controller
             if ($propertyId && $propertySource === 'properties') {
                 $prop = Property::with(['contacts' => fn($q) => $q->withPivot('role')])->find($propertyId);
                 if ($prop) {
+                    // Determine correct fallback role based on template type
+                    $defaultOwnerRole = $template->isSalesDocument() ? 'seller' : 'landlord';
+
                     // Agent is always first recipient (added by JS), so just add linked contacts
                     foreach ($prop->contacts as $contact) {
+                        $pivotRole = $contact->pivot->role ?? $defaultOwnerRole;
+                        // Map generic roles to match template field prefixes
+                        if ($template->isSalesDocument() && in_array($pivotRole, ['landlord', 'owner', 'lessor'])) {
+                            $pivotRole = 'seller';
+                        }
+
                         $recipients[] = [
                             'order'       => count($recipients) + 1,
-                            'role'        => $contact->pivot->role ?? 'landlord',
+                            'role'        => $pivotRole,
                             'name'        => $contact->first_name . ' ' . $contact->last_name,
+                            'first_name'  => $contact->first_name ?? '',
+                            'last_name'   => $contact->last_name ?? '',
                             'id_number'   => $contact->id_number ?? '',
                             'email'       => $contact->email ?? '',
                             'cell'        => $contact->phone ?? '',
@@ -576,6 +597,20 @@ class ESignWizardController extends Controller
         }
 
         \Illuminate\Support\Facades\Log::debug('VIEW recipients', ['r' => $recipients]);
+
+        \Log::info('STEP 5 STEPDATA', [
+            'has_recipients' => isset($stepData['recipients']),
+            'recipients_raw' => $stepData['recipients'] ?? 'NOT SET',
+            'all_step_keys' => array_keys($stepData),
+        ]);
+
+        \Log::info('STEP 5 DEBUG', [
+            'step' => $step,
+            'allWizardFields_count' => count($allWizardFields),
+            'allWizardFields_names' => collect($allWizardFields)->pluck('field_name')->toArray(),
+            'allWizardFields_values' => collect($allWizardFields)->pluck('value', 'field_name')->toArray(),
+            'resolvedValues_seller_keys' => array_filter($resolvedValues, fn($v, $k) => str_contains($k, 'seller'), ARRAY_FILTER_USE_BOTH),
+        ]);
 
         return view('docuperfect.esign.wizard', [
             'flow'           => $flow,
@@ -945,7 +980,8 @@ class ESignWizardController extends Controller
                 'name'          => $stepData['pdf_pack_name'] ?? $template->name,
                 'template_type' => $template->template_type,
                 'is_pdf_pack'   => true,
-            ]);
+            ])->header('Cache-Control', 'no-store, no-cache, must-revalidate')
+              ->header('Pragma', 'no-cache');
         }
 
         if ($template->render_type === 'web' && $template->blade_view) {
@@ -998,7 +1034,8 @@ class ESignWizardController extends Controller
                 return response()->json([
                     'render_type' => 'web',
                     'html'        => $mergedHtml,
-                ]);
+                ])->header('Cache-Control', 'no-store, no-cache, must-revalidate')
+                  ->header('Pragma', 'no-cache');
             }
 
             // Single template — render normally
@@ -1047,7 +1084,8 @@ class ESignWizardController extends Controller
                 'wizard_config' => $template->wizard_config,
                 'name'          => $template->name,
                 'template_type' => $template->template_type,
-            ]);
+            ])->header('Cache-Control', 'no-store, no-cache, must-revalidate')
+              ->header('Pragma', 'no-cache');
         }
 
         return response()->json([
@@ -1058,7 +1096,8 @@ class ESignWizardController extends Controller
             'wizard_config' => $template->wizard_config,
             'name'          => $template->name,
             'template_type' => $template->template_type,
-        ]);
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate')
+          ->header('Pragma', 'no-cache');
     }
 
     /**
@@ -1172,6 +1211,9 @@ class ESignWizardController extends Controller
 
         $signatureService = app(SignatureService::class);
         $webTemplateDataService = app(WebTemplateDataService::class);
+
+        // Clear compiled view cache so we always render the latest blade file
+        Artisan::call('view:clear');
 
         // Resolve web template data
         $webTemplateData = null;
@@ -1831,16 +1873,18 @@ class ESignWizardController extends Controller
     private function resolveContactValue(string $column, array $contact)
     {
         return match ($column) {
-            'first_name+last_name' => $contact['name'] ?? '',
-            'address'              => $contact['address'] ?? '',
-            'id_number'            => $contact['id_number'] ?? '',
-            'email'                => $contact['email'] ?? '',
-            'phone'                => $contact['cell'] ?? $contact['phone'] ?? '',
-            'bank_name'            => $contact['bank_name'] ?? '',
-            'bank_account_name'    => $contact['bank_account_name'] ?? '',
-            'bank_account_number'  => $contact['bank_account_number'] ?? '',
-            'bank_branch_name'     => $contact['bank_branch_name'] ?? '',
-            default                => '',
+            'first_name+last_name', 'full_name', 'name' => $contact['name'] ?? trim(($contact['first_name'] ?? '') . ' ' . ($contact['last_name'] ?? '')),
+            'last_name', 'surname'  => $contact['last_name'] ?? '',
+            'first_name'            => $contact['first_name'] ?? '',
+            'address'               => $contact['address'] ?? '',
+            'id_number'             => $contact['id_number'] ?? '',
+            'email'                 => $contact['email'] ?? '',
+            'phone', 'cell'         => $contact['cell'] ?? $contact['phone'] ?? '',
+            'bank_name'             => $contact['bank_name'] ?? '',
+            'bank_account_name'     => $contact['bank_account_name'] ?? '',
+            'bank_account_number'   => $contact['bank_account_number'] ?? '',
+            'bank_branch_name'      => $contact['bank_branch_name'] ?? '',
+            default                 => $contact[$column] ?? '',
         };
     }
 
@@ -2242,17 +2286,72 @@ class ESignWizardController extends Controller
     /**
      * Build proper wizard fields from template field_mappings.
      * Used when fields_json is empty or skeletal (no id/field_name/named_field_id).
+     * Looks up named fields from DB to derive blade-matching field_names.
      */
     private function buildFieldsFromMappings(array $fieldMappings): array
     {
-        return collect($fieldMappings)->map(function ($m, $i) {
-            $fieldName = $m['field_name'] ?? '';
-            if (empty($fieldName)) {
-                $label = $m['label'] ?? $m['manualLabel'] ?? '';
-                $fieldName = strtolower(trim(preg_replace('/[^a-zA-Z0-9]+/', '_', $label), '_'));
+        // Pre-load all referenced named fields for proper field_name derivation
+        $namedFieldIds = collect($fieldMappings)->pluck('namedFieldId')->filter()->unique()->values();
+        $namedFieldRecords = [];
+        if ($namedFieldIds->isNotEmpty()) {
+            $namedFieldRecords = DB::table('docuperfect_named_fields')
+                ->whereIn('id', $namedFieldIds)
+                ->get()
+                ->keyBy('id');
+        }
+
+        // Track used field_names to avoid duplicates (append _2, _3, etc.)
+        $usedFieldNames = [];
+
+        return collect($fieldMappings)->filter(function ($m) {
+            // Skip ghost fields: no label AND no named field
+            if (empty($m['label']) && empty($m['namedFieldId'])) {
+                return false;
             }
-            $varName = str_replace('.', '_', $fieldName);
-            $varName = preg_replace('/[^a-zA-Z0-9_]/', '_', $varName);
+            return true;
+        })->map(function ($m, $i) use ($namedFieldRecords, &$usedFieldNames) {
+            $namedFieldId = $m['namedFieldId'] ?? null;
+            $namedField = $namedFieldId ? ($namedFieldRecords[$namedFieldId] ?? null) : null;
+
+            // Derive field_name that matches blade data-field attributes:
+            // 1. From named field source properties (best match)
+            // 2. From mapping field_name if present and not a tag ID
+            // 3. From label as fallback
+            $varName = '';
+
+            if ($namedField) {
+                $varName = $this->deriveBladeName(
+                    $namedField->source_type ?? $m['sourceType'] ?? 'manual',
+                    $namedField->source_column ?? '',
+                    $namedField->source_contact_type ?? $m['sourceContactType'] ?? ''
+                );
+            }
+
+            if (empty($varName)) {
+                $fieldName = $m['field_name'] ?? '';
+                if (!empty($fieldName) && !str_starts_with($fieldName, 'tag-')) {
+                    $varName = str_replace('.', '_', $fieldName);
+                    $varName = preg_replace('/[^a-zA-Z0-9_]/', '_', $varName);
+                }
+            }
+
+            if (empty($varName)) {
+                $label = $m['label'] ?? $m['manualLabel'] ?? '';
+                if (!empty($label)) {
+                    $varName = strtolower(trim(preg_replace('/[^a-zA-Z0-9]+/', '_', $label), '_'));
+                } else {
+                    $varName = 'field_' . (is_string($i) ? substr(md5($i), 0, 8) : $i);
+                }
+            }
+
+            // Deduplicate field_names (e.g., two "property_street" fields)
+            if (isset($usedFieldNames[$varName])) {
+                $usedFieldNames[$varName]++;
+                $varName .= '_' . $usedFieldNames[$varName];
+            } else {
+                $usedFieldNames[$varName] = 1;
+            }
+
             $id = is_string($i) ? $i : ($m['id'] ?? ('mapping_' . $i));
             $source = $m['source'] ?? $m['sourceType'] ?? 'manual';
             if (($m['mappingType'] ?? '') === 'manual') {
@@ -2262,13 +2361,22 @@ class ESignWizardController extends Controller
             if (is_array($editableBy)) {
                 $editableBy = $editableBy[0] ?? 'agent';
             }
+
+            // Label: always use the mapping's user-facing label, NEVER the tag ID
+            $label = $m['label'] ?? $m['manualLabel'] ?? '';
+            if (empty($label)) {
+                // For fields without labels (signatures, initials), use the type
+                $tagType = $m['tag_type'] ?? $m['type'] ?? 'input';
+                $label = ucfirst($tagType === 'input' ? 'Field' : $tagType);
+            }
+
             return [
                 'id'              => $id,
                 'field_name'      => $varName,
                 'name'            => $varName,
-                'label'           => $m['label'] ?? $m['manualLabel'] ?? $fieldName,
-                'named_field_name'=> $m['label'] ?? $m['manualLabel'] ?? $fieldName,
-                'named_field_id'  => $m['namedFieldId'] ?? null,
+                'label'           => $label,
+                'named_field_name'=> $label,
+                'named_field_id'  => $namedFieldId,
                 'type'            => $m['type'] ?? 'placeholder',
                 'tag_type'        => $m['type'] ?? 'input',
                 'assignedTo'      => $editableBy,
@@ -2276,6 +2384,50 @@ class ESignWizardController extends Controller
                 'mapping_type'    => $m['mappingType'] ?? $m['mapping_type'] ?? '',
             ];
         })->toArray();
+    }
+
+    /**
+     * Derive the blade variable name from named field source properties.
+     * Maps {source_type, source_column, contact_type} to standard blade data-field names.
+     */
+    private function deriveBladeName(string $sourceType, string $sourceColumn, ?string $contactType): ?string
+    {
+        if (empty($sourceColumn)) return null;
+
+        if ($sourceType === 'contact' && $contactType) {
+            $role = strtolower(preg_replace('/\s+\d+$/', '', trim($contactType)));
+            $prefixMap = ['landlord' => 'lessor', 'tenant' => 'lessee'];
+            $prefix = $prefixMap[$role] ?? $role;
+            $attrMap = [
+                'first_name+last_name' => 'name', 'full_name' => 'name', 'name' => 'name',
+                'last_name' => 'last_name', 'surname' => 'last_name',
+                'first_name' => 'first_name',
+                'id_number' => 'id_number', 'address' => 'address',
+                'phone' => in_array($prefix, ['seller', 'buyer']) ? 'phone' : 'cell',
+                'cell' => in_array($prefix, ['seller', 'buyer']) ? 'phone' : 'cell',
+                'email' => 'email',
+            ];
+            $suffix = $attrMap[$sourceColumn] ?? $sourceColumn;
+            return $prefix . '_' . $suffix;
+        }
+
+        if ($sourceType === 'property') {
+            $propMap = [
+                'property_number' => 'property_erf_number', 'erf_number' => 'property_erf_number',
+                'address' => 'property_street', 'street' => 'property_street',
+                'suburb' => 'property_township', 'township' => 'property_township',
+                'district' => 'property_district', 'complex_name' => 'property_complex_name',
+                'price' => 'price', 'rental_amount' => 'monthly_rental',
+                'expiry_date' => 'mandate_expiry',
+            ];
+            return $propMap[$sourceColumn] ?? 'property_' . $sourceColumn;
+        }
+
+        if ($sourceType === 'computed') return $sourceColumn;
+        if ($sourceType === 'deal') return $sourceColumn;
+        if ($sourceType === 'agent') return 'agent_' . $sourceColumn;
+
+        return null;
     }
 
     /**

@@ -442,15 +442,39 @@ class WebTemplateDataService
         // Resolve each field from field_mappings using named field keys
         foreach ($template->field_mappings ?? [] as $field) {
             $fieldName = $field['field_name'] ?? '';
-            if (empty($fieldName)) continue;
-
-            // Variable name in blade = dots replaced with underscores
-            $varName = str_replace('.', '_', $fieldName);
-            $varName = preg_replace('/[^a-zA-Z0-9_]/', '_', $varName);
 
             $namedFieldId = $field['namedFieldId'] ?? null;
             $namedField = $namedFieldId ? ($namedFields[$namedFieldId] ?? null) : null;
-            $source = $field['source'] ?? 'manual';
+            $source = $field['source'] ?? $field['sourceType'] ?? 'manual';
+
+            // Derive the blade variable name:
+            // 1. From field_name if present (and not a tag ID)
+            // 2. From named field source properties (matches blade data-field attributes)
+            // 3. From label as last resort
+            $varName = '';
+            if (!empty($fieldName) && !str_starts_with($fieldName, 'tag-')) {
+                $varName = str_replace('.', '_', $fieldName);
+                $varName = preg_replace('/[^a-zA-Z0-9_]/', '_', $varName);
+            }
+
+            // Derive from named field source properties to match blade data-field names
+            if (empty($varName) && $namedField) {
+                $varName = $this->deriveBladeName(
+                    $namedField->source_type ?? $source,
+                    $namedField->source_column ?? '',
+                    $namedField->source_contact_type ?? $field['sourceContactType'] ?? ''
+                );
+            }
+
+            // Fallback: derive from label
+            if (empty($varName)) {
+                $label = $field['label'] ?? $field['manualLabel'] ?? '';
+                if (!empty($label)) {
+                    $varName = strtolower(trim(preg_replace('/[^a-zA-Z0-9]+/', '_', $label), '_'));
+                }
+            }
+
+            if (empty($varName)) continue;
 
             // Manual/unlinked fields: leave empty for agent to fill
             if ($source === 'manual' && !$namedField) {
@@ -460,12 +484,12 @@ class WebTemplateDataService
 
             $value = '';
 
-            // If we have a named field, use its key for precise resolution
+            // If we have a named field, use its source_column for precise resolution
             if ($namedField) {
                 $nfKey = $namedField->key ?? '';
                 $nfSourceType = $namedField->source_type ?? $source;
                 $nfSourceColumn = $namedField->source_column ?? '';
-                $nfContactType = $namedField->source_contact_type ?? '';
+                $nfContactType = $namedField->source_contact_type ?? $field['sourceContactType'] ?? '';
 
                 $value = $this->resolveByNamedFieldKey(
                     $nfKey, $nfSourceType, $nfSourceColumn, $nfContactType,
@@ -475,7 +499,7 @@ class WebTemplateDataService
 
             // Fallback: source-based resolution (backward compat for mappings without named fields)
             if (($value === '' || $value === null) && !$namedField) {
-                $value = $this->resolveBySource($source, $fieldName, $property, $contactsByRole, $details, $agent);
+                $value = $this->resolveBySource($source, $fieldName ?: $varName, $property, $contactsByRole, $details, $agent);
             }
 
             $data[$varName] = (string) ($value ?? '');
@@ -829,7 +853,8 @@ class WebTemplateDataService
         if ($agent) $initialsParties[] = 'Agent';
 
         return [
-            'lessor_name' => $lessorName, 'lessor_id_number' => $lessor['id_number'] ?? '',
+            'lessor_name' => $lessorName, 'lessor_first_name' => $lessor['first_name'] ?? '', 'lessor_last_name' => $lessor['last_name'] ?? '',
+            'lessor_id_number' => $lessor['id_number'] ?? '',
             'lessor_email' => $lessor['email'] ?? '', 'lessor_cell' => $lessor['cell'] ?? $lessor['phone'] ?? '',
             'lessor_address' => $lessor['address'] ?? '',
             'lessor_bank_name' => $lessor['bank_name'] ?? '',
@@ -837,13 +862,16 @@ class WebTemplateDataService
             'lessor_bank_account_number' => $lessor['bank_account_number'] ?? '',
             'lessor_bank_branch_name' => $lessor['bank_branch_name'] ?? '',
             'owner_names' => $lessor2Name ? ($lessorName . ' & ' . $lessor2Name) : $lessorName,
-            'lessee_name' => $lesseeName, 'lessee_id_number' => $lessee['id_number'] ?? '',
+            'lessee_name' => $lesseeName, 'lessee_first_name' => $lessee['first_name'] ?? '', 'lessee_last_name' => $lessee['last_name'] ?? '',
+            'lessee_id_number' => $lessee['id_number'] ?? '',
             'lessee_email' => $lessee['email'] ?? '', 'lessee_cell' => $lessee['cell'] ?? $lessee['phone'] ?? '',
             'lessee_address' => $lessee['address'] ?? '',
-            'seller_name' => $sellerName, 'seller_id_number' => $seller['id_number'] ?? '',
+            'seller_name' => $sellerName, 'seller_first_name' => $seller['first_name'] ?? '', 'seller_last_name' => $seller['last_name'] ?? '',
+            'seller_id_number' => $seller['id_number'] ?? '',
             'seller_address' => $seller['address'] ?? '', 'seller_email' => $seller['email'] ?? '',
             'seller_phone' => $seller['cell'] ?? $seller['phone'] ?? '',
-            'buyer_name' => $buyerName, 'buyer_id_number' => $buyer['id_number'] ?? '',
+            'buyer_name' => $buyerName, 'buyer_first_name' => $buyer['first_name'] ?? '', 'buyer_last_name' => $buyer['last_name'] ?? '',
+            'buyer_id_number' => $buyer['id_number'] ?? '',
             'buyer_address' => $buyer['address'] ?? '', 'buyer_email' => $buyer['email'] ?? '',
             'buyer_phone' => $buyer['cell'] ?? $buyer['phone'] ?? '',
             'property_address' => trim("{$address}, {$suburb}", ', '),
@@ -886,6 +914,67 @@ class WebTemplateDataService
             'signed_at_location' => '', 'signed_day' => '', 'signed_month' => '', 'signed_year' => '',
             'initialsParties' => $initialsParties,
         ];
+    }
+
+    /**
+     * Derive the blade variable name from named field source properties.
+     * Maps {source_type, source_column, contact_type} to the standard variable
+     * names used in blade templates (matching data-field attributes).
+     */
+    private function deriveBladeName(string $sourceType, string $sourceColumn, ?string $contactType): ?string
+    {
+        if (empty($sourceColumn)) return null;
+
+        if ($sourceType === 'contact' && $contactType) {
+            $role = strtolower(preg_replace('/\s+\d+$/', '', trim($contactType)));
+            $prefixMap = ['landlord' => 'lessor', 'tenant' => 'lessee'];
+            $prefix = $prefixMap[$role] ?? $role;
+
+            $attrMap = [
+                'first_name+last_name' => 'name', 'full_name' => 'name', 'name' => 'name',
+                'last_name' => 'last_name', 'surname' => 'last_name',
+                'first_name' => 'first_name',
+                'id_number' => 'id_number',
+                'address' => 'address',
+                'phone' => in_array($prefix, ['seller', 'buyer']) ? 'phone' : 'cell',
+                'cell' => in_array($prefix, ['seller', 'buyer']) ? 'phone' : 'cell',
+                'email' => 'email',
+                'bank_name' => 'bank_name', 'bank_account_name' => 'bank_account_name',
+                'bank_account_number' => 'bank_account_number', 'bank_branch_name' => 'bank_branch_name',
+            ];
+            $suffix = $attrMap[$sourceColumn] ?? $sourceColumn;
+            return $prefix . '_' . $suffix;
+        }
+
+        if ($sourceType === 'property') {
+            $propMap = [
+                'property_number' => 'property_erf_number', 'erf_number' => 'property_erf_number',
+                'erf' => 'property_erf_number',
+                'address' => 'property_street', 'street' => 'property_street',
+                'suburb' => 'property_township', 'township' => 'property_township',
+                'district' => 'property_district',
+                'complex_name' => 'property_complex_name',
+                'unit_number' => 'unit_no',
+                'price' => 'price', 'rental_amount' => 'monthly_rental',
+                'deposit_amount' => 'deposit_amount',
+                'expiry_date' => 'mandate_expiry',
+            ];
+            return $propMap[$sourceColumn] ?? 'property_' . $sourceColumn;
+        }
+
+        if ($sourceType === 'deal') {
+            return $sourceColumn;
+        }
+
+        if ($sourceType === 'computed') {
+            return $sourceColumn;
+        }
+
+        if ($sourceType === 'agent') {
+            return 'agent_' . $sourceColumn;
+        }
+
+        return null;
     }
 
     private function numberToWords(int $number): string

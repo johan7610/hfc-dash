@@ -1373,6 +1373,8 @@ function esignWizard() {
                         this.scrollPreviewToStep(this.currentStep);
                         // Reapply all stored field values (belt-and-suspenders on top of server rendering)
                         this.reapplyPreviewFields();
+                        // Reapply clauses to preview
+                        if (this.selectedClauses.length > 0) this.updateClausesPreview();
                     });
                 });
             }
@@ -1411,10 +1413,40 @@ function esignWizard() {
             if (this.selectedClauses.find(c => c.id === clause.id)) return;
             this.selectedClauses.push({...clause});
             this.showClauseLibrary = false;
+            this.updateClausesPreview();
         },
 
         removeClause(idx) {
             this.selectedClauses.splice(idx, 1);
+            this.updateClausesPreview();
+        },
+
+        updateClausesPreview() {
+            if (this.previewRenderType !== 'web') return;
+            const doc = document.querySelector('.web-template-preview');
+            if (!doc) return;
+
+            // Build clause text from selected clauses
+            const clauseText = this.selectedClauses
+                .map((c, i) => (i + 1) + '. ' + c.name + ': ' + c.text)
+                .join('\n');
+
+            // Update the other_conditions data-field in the preview
+            const otherField = doc.querySelector('[data-field="other_conditions"]');
+            if (otherField) {
+                otherField.textContent = clauseText || '';
+                if (clauseText) {
+                    otherField.style.color = '#0d9488';
+                    otherField.style.fontWeight = '600';
+                    otherField.style.whiteSpace = 'pre-line';
+                } else {
+                    otherField.style.color = '';
+                    otherField.style.fontWeight = '';
+                }
+            }
+
+            // Also store in previewFieldValues for reapplication after preview reload
+            this.previewFieldValues['other_conditions'] = clauseText;
         },
 
         // ---- Template selection (Step 1) ----
@@ -1562,7 +1594,7 @@ function esignWizard() {
             try {
                 let url = '/docuperfect/esign/api/template/' + templateId + '/pages';
                 if (this.flowId) url += '?flow_id=' + this.flowId;
-                const resp = await fetch(url);
+                const resp = await fetch(url, { cache: 'no-store' });
                 const data = await resp.json();
                 this.previewRenderType = data.render_type || 'pdf';
                 if (data.render_type === 'web') {
@@ -2044,6 +2076,8 @@ function esignWizard() {
                         order: i + 1,
                         role: r.role,
                         name: r.name,
+                        first_name: r.first_name || '',
+                        last_name: r.last_name || '',
                         id_number: r.id_number || '',
                         email: r.email,
                         cell: r.cell,
@@ -2316,6 +2350,8 @@ function esignWizard() {
         selectContact(recipientIndex, contact) {
             const r = this.recipients[recipientIndex];
             r.name = contact.full_name || (contact.first_name + ' ' + contact.last_name);
+            r.first_name = contact.first_name || '';
+            r.last_name = contact.last_name || '';
             r.email = contact.email || '';
             r.cell = contact.phone || '';
             r.id_number = contact.id_number || '';
@@ -2341,9 +2377,12 @@ function esignWizard() {
             const contactName = contact.full_name || ((contact.first_name || '') + ' ' + (contact.last_name || '')).trim();
             this.updatePreviewFields({
                 [prefix + '_name']: contactName,
+                [prefix + '_first_name']: contact.first_name || '',
+                [prefix + '_last_name']: contact.last_name || '',
                 [prefix + '_id_number']: contact.id_number || '',
                 [prefix + '_email']: contact.email || '',
                 [prefix + '_cell']: contact.phone || '',
+                [prefix + '_phone']: contact.phone || '',
                 [prefix + '_address']: contact.address || '',
                 // CDS generic names
                 'contact_full_names': contactName,
