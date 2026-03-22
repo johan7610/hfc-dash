@@ -90,9 +90,11 @@
         {{-- Page display with markers --}}
         <div class="flex-1 overflow-auto flex justify-center" style="background:#e2e8f0;">
             @if(!empty($isWebTemplate))
+            <link href="/css/corex-document.css" rel="stylesheet">
+            <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
             <div x-ref="pageContainer"
-                 style="position:relative; width:210mm; max-width:100%; background:white; margin:0 auto; box-shadow:0 2px 8px rgba(0,0,0,0.15); overflow:hidden;">
-                {!! $webTemplateHtml !!}
+                 style="position:relative; max-width:100%; margin:0 auto;">
+                <div style="pointer-events:none;">{!! $webTemplateHtml !!}</div>
             @else
             <div class="relative inline-block" style="max-width:800px; width:100%;" x-ref="pageContainer">
                 <img :src="pageImages[currentPage - 1]"

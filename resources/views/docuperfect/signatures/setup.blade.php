@@ -269,13 +269,14 @@
         {{-- Party summary bar --}}
         <div class="ds-status-card p-4 flex flex-wrap items-center gap-4 text-sm">
             @foreach($parties as $party)
+                @php $baseRole = $party['role_label'] ?? preg_replace('/_\d+$/', '', $party['role']); @endphp
                 <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium
                     @if($party['role'] === 'agent') bg-blue-100 text-blue-700
-                    @elseif(in_array($party['role'], ['tenant', 'buyer'])) bg-green-100 text-green-700
-                    @elseif(in_array($party['role'], ['landlord', 'seller'])) bg-orange-100 text-orange-700
+                    @elseif(in_array($baseRole, ['tenant', 'buyer'])) bg-green-100 text-green-700
+                    @elseif(in_array($baseRole, ['landlord', 'seller'])) bg-orange-100 text-orange-700
                     @else bg-purple-100 text-purple-700
                     @endif">
-                    {{ ucfirst(str_replace('_', ' ', $party['role'])) }}: {{ $party['name'] }}
+                    {{ ucfirst(str_replace('_', ' ', $baseRole)) }}: {{ $party['name'] }}
                 </span>
             @endforeach
         </div>
@@ -285,19 +286,19 @@
             <div class="flex-1 ds-status-card p-4 overflow-hidden flex flex-col">
 
                 @if($isWebTemplate ?? false)
-                {{-- Web template: no page navigation needed (single page) --}}
-                <div class="flex-1 overflow-y-auto" style="background:#f3f4f6;">
-                    <div class="relative" style="width:210mm; max-width:100%; background:white; margin:0 auto; box-shadow:0 2px 8px rgba(0,0,0,0.15); overflow:hidden;"
+                {{-- Web template: direct DOM injection (not iframe) so CSS applies and markers can detect data-marker-party attributes --}}
+                <div class="flex-1 overflow-y-auto" style="background:#f1f5f9;">
+                    <link href="/css/corex-document.css" rel="stylesheet">
+                    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+                    <div class="relative" style="max-width:100%; margin:0 auto;"
                          x-ref="pageContainer"
                          @dragover.prevent="$event.dataTransfer.dropEffect = 'copy'"
                          @drop.prevent="handleDrop($event)"
                          x-init="pageLoaded = true; setupWebTemplateObserver()">
 
-                        <iframe id="webDocFrame"
-                                style="width:100%; height:2000px; min-height:800px; border:none; display:block; overflow:hidden;"
-                                scrolling="no"
-                                srcdoc="{!! htmlspecialchars($webTemplateHtml ?? '', ENT_QUOTES, 'UTF-8') !!}">
-                        </iframe>
+                        <div id="webDocContent" style="pointer-events:none;">
+                            {!! $webTemplateHtml ?? '' !!}
+                        </div>
                 @else
                 {{-- PDF template: page navigation + page images --}}
                 <div class="flex items-center justify-between mb-3 flex-shrink-0">
@@ -619,19 +620,12 @@
             parties: @json($parties),
 
             get partyOptions() {
-                const grouped = {};
-                (this.parties || []).forEach(p => {
-                    if (!grouped[p.role]) {
-                        grouped[p.role] = { role: p.role, names: [] };
-                    }
-                    if (p.name) grouped[p.role].names.push(p.name);
-                });
-                return Object.values(grouped).map(g => {
-                    const roleLabel = g.role.charAt(0).toUpperCase() + g.role.slice(1).replace('_', ' ');
-                    const label = g.names.length > 0
-                        ? roleLabel + ': ' + g.names.join(' & ')
-                        : roleLabel;
-                    return { value: g.role, label, dotClass: this.partyDotClass(g.role) };
+                // V2 spec: each person is a separate signer — show individually, not grouped
+                return (this.parties || []).map(p => {
+                    const baseRole = (p.role_label || p.role || '').replace(/_\d+$/, '');
+                    const roleLabel = baseRole.charAt(0).toUpperCase() + baseRole.slice(1).replace(/_/g, ' ');
+                    const label = p.name ? roleLabel + ': ' + p.name : roleLabel;
+                    return { value: p.role, label, dotClass: this.partyDotClass(p.role) };
                 });
             },
 
@@ -657,23 +651,43 @@
                     const cols = container.querySelectorAll('[data-marker-party]');
                     if (cols.length === 0) return false;
 
-                    // Map display party names to signature_request party_roles
+                    // Map display party names to base signing roles
                     const partyRoleMap = {
-                        'owner': 'landlord',
-                        'landlord': 'landlord',
+                        'owner': 'landlord', 'owner_party': 'landlord',
+                        'landlord': 'landlord', 'lessor': 'landlord',
                         'seller': 'seller',
-                        'tenant': 'tenant',
-                        'buyer': 'buyer',
+                        'tenant': 'tenant', 'lessee': 'tenant',
+                        'buyer': 'buyer', 'acquiring_party': 'buyer',
                         'agent': 'agent',
                     };
 
-                    // Known parties from server (for matching names to roles)
+                    // Known parties from server (each person is a separate entry with unique role key)
                     const knownParties = @json($parties ?? []);
+
+                    // Build a tracker for matching generic roles to individual party keys
+                    // e.g. two sellers: first "seller" DOM element → seller, second → seller_2
+                    const roleAssignTracker = {};
 
                     cols.forEach((col, i) => {
                         const partyLabel = (col.dataset.markerParty || '').toLowerCase();
                         const name = col.dataset.name || '';
-                        const role = partyRoleMap[partyLabel] || partyLabel;
+                        const baseRole = partyRoleMap[partyLabel] || partyLabel;
+
+                        // Find the next available party with this base role
+                        if (!roleAssignTracker[baseRole]) roleAssignTracker[baseRole] = 0;
+                        const matchIdx = roleAssignTracker[baseRole];
+                        const candidates = knownParties.filter(p => {
+                            const pBase = (p.role_label || p.role || '').replace(/_\d+$/, '');
+                            return pBase === baseRole;
+                        });
+                        const matchedParty = candidates[matchIdx] || candidates[0];
+                        roleAssignTracker[baseRole]++;
+
+                        if (!matchedParty) return;
+
+                        const assignedParty = matchedParty.role;
+                        const assignedEmail = matchedParty.email || null;
+                        const displayName = matchedParty.name || name;
 
                         // Use getBoundingClientRect for accurate position relative to container
                         container.scrollTop = 0;
@@ -690,23 +704,7 @@
                         const wPct = (col.offsetWidth / container.scrollWidth) * 100;
                         const xOffset = (50 / container.scrollWidth) * 100;
 
-                        // Determine assigned_party and assigned_email — match by name to a known party
-                        let assignedParty = role;
-                        let assignedEmail = null;
-                        if (name && knownParties.length > 0) {
-                            const match = knownParties.find(p =>
-                                p.role === role && p.name && p.name.toLowerCase() === name.toLowerCase()
-                            );
-                            if (match) {
-                                assignedParty = match.role;
-                                assignedEmail = match.email || null;
-                            }
-                        }
-
-                        // Check this party role exists in the known parties list
-                        const partyExists = knownParties.some(p => p.role === assignedParty);
-                        if (!partyExists && knownParties.length > 0) return;
-
+                        const roleDisplay = baseRole.charAt(0).toUpperCase() + baseRole.slice(1);
                         self.markers.push({
                             _id: 'auto_' + self._nextId++,
                             id: null,
@@ -718,7 +716,7 @@
                             type: 'signature',
                             assigned_party: assignedParty,
                             assigned_email: assignedEmail,
-                            label: name ? (assignedParty.charAt(0).toUpperCase() + assignedParty.slice(1) + ' — ' + name) : null,
+                            label: displayName ? (roleDisplay + ' — ' + displayName) : null,
                             required: true,
                             auto_placed: true,
                         });
@@ -818,27 +816,39 @@
             },
 
             markerLabel(m) {
-                const partyLabel = m.assigned_party.replace('_', ' ');
+                // Use label if set (auto-placed markers have descriptive labels)
+                if (m.label) return m.label;
+                // Strip suffix for display: seller_2 → Seller
+                const baseRole = (m.assigned_party || '').replace(/_\d+$/, '');
+                const roleLabel = baseRole.charAt(0).toUpperCase() + baseRole.slice(1).replace(/_/g, ' ');
+                // Find party name from knownParties
+                const party = (this.parties || []).find(p => p.role === m.assigned_party);
+                const name = party ? party.name : '';
                 const typeLabel = m.type.charAt(0).toUpperCase() + m.type.slice(1);
-                return partyLabel.charAt(0).toUpperCase() + partyLabel.slice(1) + ' ' + typeLabel;
+                return name ? roleLabel + ' — ' + name + ' ' + typeLabel : roleLabel + ' ' + typeLabel;
             },
 
             markerClasses(m) {
                 const base = 'rounded border-2 ';
-                switch (m.assigned_party) {
+                const baseRole = (m.assigned_party || '').replace(/_\d+$/, '');
+                switch (baseRole) {
                     case 'agent': return base + 'border-blue-500 bg-blue-50 text-blue-700';
-                    case 'tenant': return base + 'border-green-500 bg-green-50 text-green-700';
-                    case 'landlord': return base + 'border-orange-500 bg-orange-50 text-orange-700';
+                    case 'tenant': case 'buyer': return base + 'border-green-500 bg-green-50 text-green-700';
+                    case 'landlord': case 'seller': return base + 'border-orange-500 bg-orange-50 text-orange-700';
                     default: return base + 'border-purple-500 bg-purple-50 text-purple-700';
                 }
             },
 
             partyDotClass(party) {
-                switch (party) {
+                // Strip numeric suffix (seller_2 → seller) for colour lookup
+                const base = (party || '').replace(/_\d+$/, '');
+                switch (base) {
                     case 'agent': return 'bg-blue-500';
-                    case 'tenant': return 'bg-green-500';
-                    case 'landlord': return 'bg-orange-500';
-                    default: return 'bg-purple-500';
+                    case 'tenant': case 'buyer': return 'bg-green-500';
+                    case 'landlord': case 'seller': return 'bg-orange-500';
+                    case 'witness': return 'bg-purple-500';
+                    case 'spouse': return 'bg-pink-500';
+                    default: return 'bg-gray-500';
                 }
             },
 

@@ -14,7 +14,7 @@
 @include("docuperfect.web-templates.components.company-header")
 
 <div class="corex-h1">EXCLUSIVE AUTHORITY TO SELL</div>
-<div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">I / We&nbsp;<span class="corex-field-value" data-field="seller_first_name">{{ $seller_first_name ?? '' }}</span>&nbsp;<span class="corex-field-value" data-field="seller_last_name">{{ $seller_last_name ?? '' }}</span><span class="corex-field-value" data-field="seller_id_number">{{ $seller_id_number ?? '' }}</span>, the undersigned, being the registered owner/s, or duly authorised representative/s of the owner/s (Seller) of the</span></div>
+<div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">I / We&nbsp;&nbsp;<span class="corex-field-value" data-field="seller_name_surname_id">{{ $seller_name_surname_id ?? '' }}</span>, the undersigned, being the registered owner/s, or duly authorised representative/s of the owner/s (Seller) of the</span></div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text"> Property Erf / Sectional Scheme / Unit no <span class="corex-field-value" data-field="property_erf_number">{{ $property_erf_number ?? '' }}</span> in the </span></div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">Complex / Estate known as <span class="corex-field-value" data-field="property_complex_name">{{ $property_complex_name ?? '' }}</span> in</span></div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text"><span class="corex-field-value" data-field="property_street">{{ $property_street ?? '' }}</span> (Street) in <span class="corex-field-value" data-field="property_township">{{ $property_township ?? '' }}</span> (Township) of </span></div>
@@ -30,10 +30,10 @@
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">2:  Physical address<span class="corex-field-value" data-field="seller_address_2">{{ $seller_address_2 ?? '' }}</span></span></div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">Tel: <span class="corex-field-value" data-field="seller_2_phone">{{ $seller_2_phone ?? '' }}</span> Email: <span class="corex-field-value" data-field="seller_2_email">{{ $seller_2_email ?? '' }}</span></span></div>
 <div class="corex-h2">Seller</div>
-<div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">3:  Physical address <span class="corex-field-value" data-field="seller_address_3">{{ $seller_address_3 ?? '' }}</span></span></div>
+<div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">3:  Physical address <span class="corex-field-value" data-field="seller_addres_3">{{ $seller_addres_3 ?? '' }}</span></span></div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">Tel: <span class="corex-field-value" data-field="seller_3_phone">{{ $seller_3_phone ?? '' }}</span> Email: <span class="corex-field-value" data-field="seller_3_email">{{ $seller_3_email ?? '' }}</span></span></div>
 <div class="corex-h2">Seller</div>
-<div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">4:  Physical address <span class="corex-field-value" data-field="seller_address_4">{{ $seller_address_4 ?? '' }}</span></span></div>
+<div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">4:  Physical address <span class="corex-field-value" data-field="seller_addres_4">{{ $seller_addres_4 ?? '' }}</span></span></div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">Tel: <span class="corex-field-value" data-field="seller_4_phone">{{ $seller_4_phone ?? '' }}</span> Email: <span class="corex-field-value" data-field="seller_4_email">{{ $seller_4_email ?? '' }}</span></span></div>
 <div class="corex-h1">2. &nbsp;TERMS AND CONDITIONS OF THE EXCLUSIVE AUTHORITY TO SELL</div>
 <div class="corex-clause corex-clause-indent-2"><span class="corex-clause-number">2.1</span> <span class="corex-clause-text">The gross price for the Property is R<span class="corex-field-value" data-field="price">{{ $price ?? '' }}</span> (<span class="corex-field-value" data-field="price_in_words">{{ $price_in_words ?? '' }}</span>) or such other price as may be agreed upon by the Seller.</span></div>

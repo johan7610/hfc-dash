@@ -709,6 +709,15 @@
                                           :class="(fieldValues[f.id] && fieldValues[f.id] !== '') ? 'border-green-400 bg-green-50' : 'border-slate-300 bg-white'"
                                           :placeholder="fieldLabel(f)"></textarea>
                             </template>
+
+                            {{-- Field group display (read-only, collapsed group members) --}}
+                            <template x-if="fieldInputType(f) === 'field_group_display'">
+                                <div class="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-gray-800"
+                                     :class="(f.value || fieldValues[f.id]) ? 'border-green-400 bg-green-50' : ''">
+                                    <span x-text="f.value || fieldValues[f.id] || 'Pending — will auto-fill from recipient data'"
+                                          :class="(f.value || fieldValues[f.id]) ? 'text-gray-900 font-medium' : 'text-gray-400 italic'"></span>
+                                </div>
+                            </template>
                         </div>
                     </template>
                 </div>
@@ -1671,6 +1680,7 @@ function esignWizard() {
 
         fieldInputType(f) {
             const type = (f.type || f.tag_type || 'placeholder').toLowerCase();
+            if (type === 'field_group_display') return 'field_group_display';
             if (type === 'date') return 'date';
             if (type === 'selection') return 'select';
             if (type === 'tick') return 'tick';
@@ -2006,7 +2016,15 @@ function esignWizard() {
         },
 
         async goNext() {
-            if (this.loading || !this.canGoNext()) return;
+            console.log('goNext called', {step: this.currentStep, loading: this.loading, canGoNext: this.canGoNext()});
+            if (this.loading) {
+                console.log('goNext: BLOCKED — loading is true');
+                return;
+            }
+            if (!this.canGoNext()) {
+                console.log('goNext: BLOCKED — canGoNext() returned false');
+                return;
+            }
             this.loading = true;
 
             try {
@@ -2183,34 +2201,45 @@ function esignWizard() {
 
         // ---- Prepare Signing ----
         async prepareSigning() {
-            if (!this.flowId) return;
+            console.log('SIGN ACTION FIRED', JSON.stringify({flowId: this.flowId, step: this.currentStep}));
+            if (!this.flowId) {
+                console.log('prepareSigning: ABORT — no flowId');
+                this.showToast('Error: No flow ID found. Please reload and try again.', 'error');
+                return;
+            }
             this.loading = true;
             try {
-                // First save step 6 data
+                // First save step 6 data via AJAX (lightweight, always works)
                 const saveUrl = '/docuperfect/esign/' + this.flowId + '/step/6';
-                await fetch(saveUrl, {
+                const stepData = this.getStepData();
+                console.log('prepareSigning: saving step 6 data');
+                const saveResp = await fetch(saveUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-                    body: JSON.stringify({ data: this.getStepData() }),
+                    body: JSON.stringify({ data: stepData }),
                 });
+                if (!saveResp.ok) {
+                    const saveText = await saveResp.text();
+                    console.error('prepareSigning: step 6 save failed', saveResp.status, saveText);
+                    throw new Error('Failed to save signing setup (step 6): HTTP ' + saveResp.status);
+                }
+                console.log('prepareSigning: step 6 saved OK, submitting form to prepare-signing');
 
-                // Then prepare signing (creates Document + SignatureTemplate + redirects to signing)
-                const resp = await fetch('/docuperfect/esign/' + this.flowId + '/prepare-signing', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-                });
-                if (!resp.ok) {
-                    const text = await resp.text();
-                    throw new Error('Failed to prepare signing: ' + text);
-                }
-                if (resp.redirected) {
-                    window.location.href = resp.url;
-                    return;
-                }
-                const data = await resp.json();
-                if (data.redirect) {
-                    window.location.href = data.redirect;
-                }
+                // Submit as a regular form POST — browser follows the redirect natively.
+                // This matches the working pattern: no fetch, no response body parsing,
+                // no hanging on resp.text(). The server returns redirect() and the browser
+                // navigates to the signing page directly.
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/docuperfect/esign/' + this.flowId + '/prepare-signing';
+                const tokenInput = document.createElement('input');
+                tokenInput.type = 'hidden';
+                tokenInput.name = '_token';
+                tokenInput.value = csrfToken;
+                form.appendChild(tokenInput);
+                document.body.appendChild(form);
+                form.submit();
+                // Browser will navigate away — no further JS executes
             } catch (e) {
                 console.error('prepareSigning error:', e);
                 this.showToast('Error: ' + (e.message || 'Something went wrong'), 'error');

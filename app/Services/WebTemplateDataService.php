@@ -58,9 +58,11 @@ class WebTemplateDataService
         // Build contact lookup by wizard role (first + second per role for co-owners)
         $contactsByRole = [];
         $secondContactByRole = [];
+        $allContactsByRole = []; // all contacts per role, indexed from 0
         foreach ($recipients as $r) {
             $role = strtolower($r['role'] ?? '');
             if (!$role) continue;
+            $allContactsByRole[$role][] = $r;
             if (!isset($contactsByRole[$role])) {
                 $contactsByRole[$role] = $r;
             } elseif (!isset($secondContactByRole[$role])) {
@@ -76,9 +78,11 @@ class WebTemplateDataService
         $lessee = $contactsByRole['tenant'] ?? $contactsByRole['lessee'] ?? [];
         $lessee2 = $secondContactByRole['tenant'] ?? $secondContactByRole['lessee'] ?? [];
 
-        // Resolve seller/buyer
+        // Resolve seller/buyer (first + second per role for co-owners)
         $seller = $contactsByRole['seller'] ?? [];
+        $seller2 = $secondContactByRole['seller'] ?? [];
         $buyer  = $contactsByRole['buyer'] ?? [];
+        $buyer2 = $secondContactByRole['buyer'] ?? [];
 
         // Check which templates have dedicated ID fields
         $hasLessorId = $this->hasField($templateId, 'lessor_id_number')
@@ -95,7 +99,9 @@ class WebTemplateDataService
         $lesseeName  = trim(($lessee['first_name'] ?? '') . ' ' . ($lessee['last_name'] ?? '')) ?: ($lessee['name'] ?? '');
         $lessee2Name = trim(($lessee2['first_name'] ?? '') . ' ' . ($lessee2['last_name'] ?? '')) ?: ($lessee2['name'] ?? '');
         $sellerName  = trim(($seller['first_name'] ?? '') . ' ' . ($seller['last_name'] ?? '')) ?: ($seller['name'] ?? '');
+        $seller2Name = trim(($seller2['first_name'] ?? '') . ' ' . ($seller2['last_name'] ?? '')) ?: ($seller2['name'] ?? '');
         $buyerName   = trim(($buyer['first_name'] ?? '') . ' ' . ($buyer['last_name'] ?? '')) ?: ($buyer['name'] ?? '');
+        $buyer2Name  = trim(($buyer2['first_name'] ?? '') . ' ' . ($buyer2['last_name'] ?? '')) ?: ($buyer2['name'] ?? '');
 
         // Property values
         $address    = $property['address'] ?? $property['title'] ?? '';
@@ -203,13 +209,38 @@ class WebTemplateDataService
             'pets_1'                => '',
             'pets_2'                => '',
 
-            // Seller
+            // Seller (first)
             'seller_name'           => $sellerName,
+            'seller_first_name'     => $seller['first_name'] ?? '',
+            'seller_last_name'      => $seller['last_name'] ?? '',
             'seller_id_number'      => $seller['id_number'] ?? '',
             'seller_address'        => $seller['address'] ?? '',
+            'seller_email'          => $seller['email'] ?? '',
+            'seller_cell'           => $seller['cell'] ?? $seller['phone'] ?? '',
+            // Seller indexed (seller 1 = first seller, seller 2 = second seller)
+            'seller_address_1'      => $seller['address'] ?? '',
+            'seller_1_phone'        => $seller['cell'] ?? $seller['phone'] ?? '',
+            'seller_1_email'        => $seller['email'] ?? '',
+            'seller_address_2'      => $seller2['address'] ?? '',
+            'seller_2_phone'        => $seller2['cell'] ?? $seller2['phone'] ?? '',
+            'seller_2_email'        => $seller2['email'] ?? '',
+            // Seller 2 (co-seller)
+            'seller_name_2'         => $seller2Name,
+            'seller_2_first_name'   => $seller2['first_name'] ?? '',
+            'seller_2_last_name'    => $seller2['last_name'] ?? '',
+            'seller_2_id_number'    => $seller2['id_number'] ?? '',
+            // Seller 3 & 4 (from additional recipients if present)
+            'seller_address_3'      => ($allContactsByRole['seller'][2] ?? [])['address'] ?? '',
+            'seller_3_phone'        => ($allContactsByRole['seller'][2] ?? [])['cell'] ?? ($allContactsByRole['seller'][2] ?? [])['phone'] ?? '',
+            'seller_3_email'        => ($allContactsByRole['seller'][2] ?? [])['email'] ?? '',
+            'seller_address_4'      => ($allContactsByRole['seller'][3] ?? [])['address'] ?? '',
+            'seller_4_phone'        => ($allContactsByRole['seller'][3] ?? [])['cell'] ?? ($allContactsByRole['seller'][3] ?? [])['phone'] ?? '',
+            'seller_4_email'        => ($allContactsByRole['seller'][3] ?? [])['email'] ?? '',
 
-            // Buyer
+            // Buyer (first)
             'buyer_name'            => $buyerName,
+            'buyer_first_name'      => $buyer['first_name'] ?? '',
+            'buyer_last_name'       => $buyer['last_name'] ?? '',
             'buyer_id_number'       => $buyer['id_number'] ?? '',
             'buyer_address'         => $buyer['address'] ?? '',
 
@@ -475,6 +506,17 @@ class WebTemplateDataService
             }
 
             if (empty($varName)) continue;
+
+            // Field groups: resolve member columns from ALL matching recipients,
+            // formatted as "FirstName LastName (ID: xxx) and FirstName LastName (ID: xxx)"
+            $mappingType = $field['mappingType'] ?? $field['mapping_type'] ?? '';
+            if ($mappingType === 'field_group') {
+                $fgId = $field['fieldGroupId'] ?? $field['field_group_id'] ?? null;
+                if ($fgId) {
+                    $data[$varName] = $this->resolveFieldGroupValue($fgId, $recipients);
+                }
+                continue;
+            }
 
             // Manual/unlinked fields: leave empty for agent to fill
             if ($source === 'manual' && !$namedField) {
@@ -794,6 +836,77 @@ class WebTemplateDataService
     }
 
     /**
+     * Resolve a field group into a formatted string from ALL matching recipients.
+     *
+     * Looks up the group's member named fields, determines the contact type,
+     * then formats each matching recipient as "FirstName LastName (ID: xxx)",
+     * joining multiple with " and ".
+     *
+     * Systemic — works for any role (seller, buyer, landlord, tenant, lessor, lessee).
+     */
+    private function resolveFieldGroupValue(int $fgId, array $recipients): string
+    {
+        $fg = \App\Models\Docuperfect\FieldGroup::find($fgId);
+        if (!$fg || empty($fg->fields)) return '';
+
+        // Load member named fields
+        $memberNfIds = collect($fg->fields)->pluck('named_field_id')->filter()->unique()->values();
+        $memberNfs = DB::table('docuperfect_named_fields')->whereIn('id', $memberNfIds)->get()->keyBy('id');
+
+        // Determine contact type and member columns from the named fields
+        $contactType = '';
+        $memberColumns = [];
+        foreach ($fg->fields as $member) {
+            $nfId = $member['named_field_id'] ?? null;
+            $nf = $nfId ? ($memberNfs[$nfId] ?? null) : null;
+            if (!$nf) continue;
+
+            $memberColumns[] = $nf->source_column ?? '';
+            if (empty($contactType) && !empty($nf->source_contact_type)) {
+                $contactType = preg_replace('/\s+\d+$/', '', $nf->source_contact_type);
+            }
+        }
+
+        if (empty($contactType) || empty($memberColumns)) return '';
+
+        // Collect ALL recipients matching this role (supports multiple per role)
+        $roleLookup = strtolower($contactType);
+        $contacts = [];
+        foreach ($recipients as $r) {
+            if (strtolower($r['role'] ?? '') === $roleLookup) {
+                $contacts[] = $r;
+            }
+        }
+
+        if (empty($contacts)) return '';
+
+        // Format each contact: "FirstName LastName (ID: xxx)"
+        $displayParts = [];
+        foreach ($contacts as $contact) {
+            $nameParts = [];
+            $idNumber = '';
+            foreach ($memberColumns as $col) {
+                $val = $contact[$col] ?? '';
+                if (empty($val)) continue;
+                if ($col === 'id_number') {
+                    $idNumber = $val;
+                } else {
+                    $nameParts[] = $val;
+                }
+            }
+            $line = implode(' ', $nameParts);
+            if (!empty($idNumber)) {
+                $line .= ' (ID: ' . $idNumber . ')';
+            }
+            if (!empty(trim($line))) {
+                $displayParts[] = trim($line);
+            }
+        }
+
+        return implode(' and ', $displayParts);
+    }
+
+    /**
      * Base resolve — the standard flat variable set used by all web templates.
      * Extracted from resolve() so CDS templates can merge on top.
      */
@@ -806,9 +919,11 @@ class WebTemplateDataService
 
         $contactsByRole = [];
         $secondContactByRole = [];
+        $allContactsByRole = [];
         foreach ($recipients as $r) {
             $role = strtolower($r['role'] ?? '');
             if (!$role) continue;
+            $allContactsByRole[$role][] = $r;
             if (!isset($contactsByRole[$role])) {
                 $contactsByRole[$role] = $r;
             } elseif (!isset($secondContactByRole[$role])) {
@@ -821,6 +936,7 @@ class WebTemplateDataService
         $lessee = $contactsByRole['tenant'] ?? $contactsByRole['lessee'] ?? [];
         $lessee2 = $secondContactByRole['tenant'] ?? $secondContactByRole['lessee'] ?? [];
         $seller = $contactsByRole['seller'] ?? [];
+        $seller2 = $secondContactByRole['seller'] ?? [];
         $buyer  = $contactsByRole['buyer'] ?? [];
 
         $lessorName  = trim(($lessor['first_name'] ?? '') . ' ' . ($lessor['last_name'] ?? '')) ?: ($lessor['name'] ?? '');
@@ -828,6 +944,7 @@ class WebTemplateDataService
         $lesseeName  = trim(($lessee['first_name'] ?? '') . ' ' . ($lessee['last_name'] ?? '')) ?: ($lessee['name'] ?? '');
         $lessee2Name = trim(($lessee2['first_name'] ?? '') . ' ' . ($lessee2['last_name'] ?? '')) ?: ($lessee2['name'] ?? '');
         $sellerName  = trim(($seller['first_name'] ?? '') . ' ' . ($seller['last_name'] ?? '')) ?: ($seller['name'] ?? '');
+        $seller2Name = trim(($seller2['first_name'] ?? '') . ' ' . ($seller2['last_name'] ?? '')) ?: ($seller2['name'] ?? '');
         $buyerName   = trim(($buyer['first_name'] ?? '') . ' ' . ($buyer['last_name'] ?? '')) ?: ($buyer['name'] ?? '');
 
         $address    = $property['address'] ?? $property['title'] ?? '';
@@ -870,6 +987,23 @@ class WebTemplateDataService
             'seller_id_number' => $seller['id_number'] ?? '',
             'seller_address' => $seller['address'] ?? '', 'seller_email' => $seller['email'] ?? '',
             'seller_phone' => $seller['cell'] ?? $seller['phone'] ?? '',
+            // Seller indexed (1=first, 2=second, 3/4 from additional)
+            'seller_address_1' => $seller['address'] ?? '',
+            'seller_1_phone' => $seller['cell'] ?? $seller['phone'] ?? '',
+            'seller_1_email' => $seller['email'] ?? '',
+            'seller_address_2' => $seller2['address'] ?? '',
+            'seller_2_phone' => $seller2['cell'] ?? $seller2['phone'] ?? '',
+            'seller_2_email' => $seller2['email'] ?? '',
+            'seller_name_2' => $seller2Name,
+            'seller_2_first_name' => $seller2['first_name'] ?? '',
+            'seller_2_last_name' => $seller2['last_name'] ?? '',
+            'seller_2_id_number' => $seller2['id_number'] ?? '',
+            'seller_address_3' => ($allContactsByRole['seller'][2] ?? [])['address'] ?? '',
+            'seller_3_phone' => ($allContactsByRole['seller'][2] ?? [])['cell'] ?? ($allContactsByRole['seller'][2] ?? [])['phone'] ?? '',
+            'seller_3_email' => ($allContactsByRole['seller'][2] ?? [])['email'] ?? '',
+            'seller_address_4' => ($allContactsByRole['seller'][3] ?? [])['address'] ?? '',
+            'seller_4_phone' => ($allContactsByRole['seller'][3] ?? [])['cell'] ?? ($allContactsByRole['seller'][3] ?? [])['phone'] ?? '',
+            'seller_4_email' => ($allContactsByRole['seller'][3] ?? [])['email'] ?? '',
             'buyer_name' => $buyerName, 'buyer_first_name' => $buyer['first_name'] ?? '', 'buyer_last_name' => $buyer['last_name'] ?? '',
             'buyer_id_number' => $buyer['id_number'] ?? '',
             'buyer_address' => $buyer['address'] ?? '', 'buyer_email' => $buyer['email'] ?? '',

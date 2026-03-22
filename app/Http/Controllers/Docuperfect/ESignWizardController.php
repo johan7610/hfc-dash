@@ -9,15 +9,16 @@ use App\Models\Docuperfect\DocumentType;
 use App\Models\Docuperfect\Flow;
 use App\Models\Docuperfect\NamedField;
 use App\Models\Docuperfect\Pack;
+use App\Models\Docuperfect\SignatureMarker;
 use App\Models\Docuperfect\SignatureTemplate;
 use App\Models\Docuperfect\Template;
 use App\Models\Property;
 use App\Models\Rental\RentalProperty;
 use App\Services\Docuperfect\SignatureService;
-use App\Services\Docuperfect\WebTemplatePdfService;
+
 use App\Services\WebTemplateDataService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Artisan;
+
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -531,7 +532,7 @@ class ESignWizardController extends Controller
             $fieldName = $field['field_name'] ?? '';
 
             if ($tagType === 'signature') continue;
-            if ($mappingType === 'field_group') continue;
+            // field_group_member entries from older builds — skip _Full duplicates
             if ($mappingType === 'field_group_member' && str_ends_with($fieldName, '_Full')) continue;
 
             // Pre-fill value from WebTemplateDataService if field_name maps to a resolved key
@@ -568,6 +569,24 @@ class ESignWizardController extends Controller
                 'first_wizard_field'   => json_encode(head($allWizardFields) ?: null),
                 'first_mapping'        => json_encode(head($template->field_mappings ?? []) ?: null),
             ]);
+
+            \Illuminate\Support\Facades\Log::info('STEP5_FIELD_GROUPS', [
+                'template_id' => $template->id,
+                'group_members_in_fields' => collect($fields)->filter(fn($f) => ($f['mapping_type'] ?? '') === 'field_group_member')->map(fn($f) => [
+                    'field_name' => $f['field_name'] ?? 'none',
+                    'named_field_id' => $f['named_field_id'] ?? 'none',
+                    'value' => $f['value'] ?? 'NULL',
+                    'assignedTo' => $f['assignedTo'] ?? 'none',
+                    'field_group_id' => $f['field_group_id'] ?? 'none',
+                ])->values()->toArray(),
+                'group_display_in_wizard' => collect($allWizardFields)->filter(fn($f) => ($f['mapping_type'] ?? '') === 'field_group_display' || ($f['mapping_type'] ?? '') === 'field_group_member')->map(fn($f) => [
+                    'field_name' => $f['field_name'] ?? 'none',
+                    'type' => $f['type'] ?? 'none',
+                    'value' => $f['value'] ?? 'NULL',
+                    'position_in_array' => array_search($f, $allWizardFields),
+                ])->values()->toArray(),
+                'recipients_by_role' => collect($stepData['recipients']['recipients'] ?? [])->groupBy('role')->map->count()->toArray(),
+            ]);
         }
 
         // Templates list (for step navigation back to step 1)
@@ -596,12 +615,52 @@ class ESignWizardController extends Controller
                 ->toArray();
         }
 
+        // Sort allWizardFields in document flow order for the left panel
+        // For web templates: parse the Blade file to get the order of data-field attributes
+        if (($template->render_type ?? 'pdf') === 'web' && $template->blade_view) {
+            $bladeViewPath = resource_path('views/' . str_replace('.', '/', $template->blade_view) . '.blade.php');
+            if (file_exists($bladeViewPath)) {
+                $html = file_get_contents($bladeViewPath);
+                preg_match_all('/data-field="([^"]+)"/', $html, $matches);
+                $fieldOrder = array_flip($matches[1]); // field_name => position
+                usort($allWizardFields, function ($a, $b) use ($fieldOrder) {
+                    $posA = $fieldOrder[$a['field_name'] ?? ''] ?? PHP_INT_MAX;
+                    $posB = $fieldOrder[$b['field_name'] ?? ''] ?? PHP_INT_MAX;
+                    return $posA - $posB;
+                });
+            }
+        }
+
+        // Auto-fill field group display values from recipients
+        $allWizardFields = $this->autoFillFieldGroupDisplays($allWizardFields, $stepData);
+
         \Illuminate\Support\Facades\Log::debug('VIEW recipients', ['r' => $recipients]);
 
         \Log::info('STEP 5 STEPDATA', [
             'has_recipients' => isset($stepData['recipients']),
             'recipients_raw' => $stepData['recipients'] ?? 'NOT SET',
             'all_step_keys' => array_keys($stepData),
+        ]);
+
+        \Log::info('STEP 5 RECIPIENTS DETAIL', [
+            'recipient_count' => count($stepData['recipients']['recipients'] ?? []),
+            'recipients' => collect($stepData['recipients']['recipients'] ?? [])->map(function($r, $i) {
+                return [
+                    'index' => $i,
+                    'role' => $r['role'] ?? 'none',
+                    'name' => $r['name'] ?? '',
+                    'first_name' => $r['first_name'] ?? 'MISSING',
+                    'last_name' => $r['last_name'] ?? 'MISSING',
+                    'id_number' => $r['id_number'] ?? 'MISSING',
+                ];
+            })->toArray(),
+        ]);
+
+        \Log::info('STEP 5 SELLER FIELDS', [
+            'seller_fields' => collect($allWizardFields)->filter(fn($f) => str_contains($f['field_name'] ?? '', 'seller'))->map(fn($f) => [
+                'field_name' => $f['field_name'],
+                'value' => $f['value'] ?? 'NULL',
+            ])->values()->toArray(),
         ]);
 
         \Log::info('STEP 5 DEBUG', [
@@ -1143,7 +1202,7 @@ class ESignWizardController extends Controller
     public function prepareSigning(Request $request, $flowId)
     {
         try {
-        set_time_limit(300);
+        \Log::info('PREPARE_SIGNING HIT', ['flow_id' => $flowId]);
         $user = $request->user();
         $flow = Flow::where('user_id', $user->id)->findOrFail($flowId);
         $flow->load('template');
@@ -1211,9 +1270,6 @@ class ESignWizardController extends Controller
 
         $signatureService = app(SignatureService::class);
         $webTemplateDataService = app(WebTemplateDataService::class);
-
-        // Clear compiled view cache so we always render the latest blade file
-        Artisan::call('view:clear');
 
         // Resolve web template data
         $webTemplateData = null;
@@ -1293,7 +1349,9 @@ class ESignWizardController extends Controller
                 $viewData['signing_parties'] = $template->signing_parties;
                 $viewData['document_context'] = $template->isSalesDocument() ? 'sales' : 'rental';
             }
+            \Log::info('PREPARE_SIGNING: rendering blade view', ['blade_view' => $template->blade_view]);
             $fullHtml = view($template->blade_view, $viewData)->render();
+            \Log::info('PREPARE_SIGNING: blade rendered OK', ['html_length' => strlen($fullHtml)]);
 
             // Extract body HTML (between <body> and </body>)
             preg_match('/<body[^>]*>(.*)<\/body>/si', $fullHtml, $bodyMatch);
@@ -1360,6 +1418,7 @@ class ESignWizardController extends Controller
             $resolvedPropertyId = $stepData['property']['property_id'];
         }
 
+        \Log::info('PREPARE_SIGNING: starting DB transaction', ['doc_name' => $docName]);
         $result = DB::transaction(function () use ($user, $flow, $template, $fields, $recipients, $signingSetup, $docName, $propertyAddress, $signatureService, $webTemplateData, $packInstanceId, $resolvedDocType, $resolvedPropertyId) {
             // 1. Create Document
             $document = Document::create([
@@ -1385,7 +1444,7 @@ class ESignWizardController extends Controller
 
             // Agent is always first party (signing_order=1)
             $parties = [
-                ['role' => 'agent', 'name' => $user->name, 'email' => $user->email, 'id_number' => ''],
+                ['role' => 'agent', 'role_label' => 'agent', 'name' => $user->name, 'email' => $user->email, 'id_number' => ''],
             ];
             $signingOrder = ['agent'];
 
@@ -1408,16 +1467,32 @@ class ESignWizardController extends Controller
                 if (empty($orderedRecipients)) $orderedRecipients = $recipients;
             }
 
-            foreach ($orderedRecipients as $r) {
-                $role = $roleAliases[$r['role'] ?? 'other'] ?? ($r['role'] ?? 'other');
-                if ($role === 'agent') continue;
+            // Per V2 spec: each person is a SEPARATE signer in the chain.
+            // Two sellers = two separate parties with unique keys (seller, seller_2).
+            $roleCounts = [];
+            $recipientPartyKeys = [];
+            foreach ($orderedRecipients as $i => $r) {
+                $baseRole = $roleAliases[$r['role'] ?? 'other'] ?? ($r['role'] ?? 'other');
+                if ($baseRole === 'agent') continue;
+
+                // Generate unique party key: seller, seller_2, seller_3, etc.
+                if (!isset($roleCounts[$baseRole])) {
+                    $roleCounts[$baseRole] = 1;
+                    $partyKey = $baseRole;
+                } else {
+                    $roleCounts[$baseRole]++;
+                    $partyKey = $baseRole . '_' . $roleCounts[$baseRole];
+                }
+
+                $recipientPartyKeys[$i] = $partyKey;
                 $parties[] = [
-                    'role'      => $role,
-                    'name'      => $r['name'] ?? '',
-                    'email'     => $r['email'] ?? '',
-                    'id_number' => $r['id_number'] ?? '',
+                    'role'       => $partyKey,
+                    'role_label' => $baseRole,
+                    'name'       => $r['name'] ?? '',
+                    'email'      => $r['email'] ?? '',
+                    'id_number'  => $r['id_number'] ?? '',
                 ];
-                $signingOrder[] = $role;
+                $signingOrder[] = $partyKey;
             }
 
             $documentHash = hash('sha256', json_encode($fields, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
@@ -1443,10 +1518,10 @@ class ESignWizardController extends Controller
             );
 
             foreach ($orderedRecipients as $i => $r) {
-                $role = $roleAliases[$r['role'] ?? 'other'] ?? ($r['role'] ?? 'other');
-                if ($role === 'agent') continue;
-                // Match to signing_setup by index (agent is index 0 in setup, so offset by 1)
-                $setupIdx = $i;
+                $baseRole = $roleAliases[$r['role'] ?? 'other'] ?? ($r['role'] ?? 'other');
+                if ($baseRole === 'agent') continue;
+                $partyKey = $recipientPartyKeys[$i] ?? $baseRole;
+
                 // Find matching signing_setup entry for this recipient
                 $matchedSetup = null;
                 foreach ($signingSetup as $ss) {
@@ -1458,18 +1533,9 @@ class ESignWizardController extends Controller
                 $skipEmail = !empty($matchedSetup['skipEmail'] ?? false);
                 $email = $matchedSetup['email'] ?? $r['email'] ?? '';
 
-                // skipEmail = in-person signing (no email sent)
-                if ($skipEmail) {
-                    $action = 'sign_later';
-                }
-                // No email = deferred
-                if (empty($email)) {
-                    $action = 'sign_later';
-                }
-
                 $signatureService->createSigningRequest(
                     $sigTemplate,
-                    $role,
+                    $partyKey,
                     $r['name'] ?? '',
                     $skipEmail ? '' : $email,
                     $r['id_number'] ?? null,
@@ -1495,6 +1561,15 @@ class ESignWizardController extends Controller
                 $signatureService->createDefaultMarkers($sigTemplate);
             }
 
+            // 4c. Expand role-based markers to individual party markers.
+            // Marker creation uses generic roles (e.g. "seller") but we need
+            // separate markers for each person (e.g. "seller", "seller_2").
+            $this->expandMarkersToIndividualParties($sigTemplate, $signingOrder);
+
+            // 4d. Auto-place initial markers on every page except the last
+            // for every signing party (per V2 spec).
+            $this->autoPlaceInitialMarkers($sigTemplate, $signingOrder, $template);
+
             // 5. Keep template in ready status so agent can place markers and sign in-app.
             // sendForSigning() fires later via the send-confirmation page after agent completes signing.
             $sigTemplate->update(['status' => SignatureTemplate::STATUS_READY]);
@@ -1519,38 +1594,17 @@ class ESignWizardController extends Controller
             return $document;
         });
 
-        // Flatten web template to page images so signature setup uses the PDF path
-        $renderType = $template->render_type ?? 'pdf';
-        if ($renderType === 'web') {
-            try {
-                $pdfService = app(WebTemplatePdfService::class);
-                $flattenedPages = $pdfService->flatten($result);
-                if ($flattenedPages > 0) {
-                    \Log::info('prepareSigning: web template flattened to ' . $flattenedPages . ' page images', [
-                        'document_id' => $result->id,
-                    ]);
-                } else {
-                    \Log::warning('prepareSigning: web template flatten returned 0 pages — falling back to iframe', [
-                        'document_id' => $result->id,
-                    ]);
-                }
-            } catch (\Throwable $e) {
-                \Log::error('prepareSigning: web template flatten failed — falling back to iframe', [
-                    'document_id' => $result->id,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
-
         // Store wizard context in session so signComplete redirects back to wizard
         session(['esign_wizard_flow_id' => $flow->id]);
 
-        // Redirect to existing signature setup interface (agent places markers, then signs)
+        // Redirect to signature setup (Step 2: marker placement) — agent places markers before signing
         $signingUrl = route('docuperfect.signatures.setup', ['document' => $result->id]);
 
-        if ($request->expectsJson()) {
-            return response()->json(['success' => true, 'redirect' => $signingUrl]);
-        }
+        \Log::info('PREPARE_SIGNING_RETURN', [
+            'document_id' => $result->id,
+            'redirect' => $signingUrl,
+            'render_type' => $template->render_type ?? 'pdf',
+        ]);
 
         return redirect($signingUrl);
 
@@ -1561,7 +1615,95 @@ class ESignWizardController extends Controller
                 'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            return back()->withErrors(['error' => 'Failed to prepare signing: ' . $e->getMessage()]);
+
+            return redirect()->route('docuperfect.esign.wizard')
+                ->withErrors(['error' => 'Failed to prepare signing: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Expand role-based markers to individual party markers.
+     * E.g. a "seller" signature marker becomes separate markers for "seller" and "seller_2".
+     */
+    private function expandMarkersToIndividualParties(SignatureTemplate $sigTemplate, array $signingOrder): void
+    {
+        // Build base role → [unique_key_1, unique_key_2, ...]
+        $roleToKeys = [];
+        foreach ($signingOrder as $key) {
+            $baseRole = preg_replace('/_\d+$/', '', $key);
+            $roleToKeys[$baseRole][] = $key;
+        }
+
+        $markers = $sigTemplate->markers()->get();
+        foreach ($markers as $marker) {
+            $assignedParty = $marker->assigned_party;
+            $keys = $roleToKeys[$assignedParty] ?? [$assignedParty];
+
+            if (count($keys) <= 1) continue;
+
+            // Multiple people for this role: update first marker, duplicate for rest
+            $marker->update(['assigned_party' => $keys[0]]);
+            for ($j = 1; $j < count($keys); $j++) {
+                $newMarker = $marker->replicate();
+                $newMarker->assigned_party = $keys[$j];
+                $newMarker->y_position = min(94, $marker->y_position + ($j * 6));
+                $newMarker->sort_order = $marker->sort_order + ($j * 100);
+                $newMarker->save();
+            }
+        }
+    }
+
+    /**
+     * Auto-place initial markers on every page except the last for every signing party.
+     * Per V2 spec, each page gets initials from each signer at bottom-right.
+     */
+    private function autoPlaceInitialMarkers(SignatureTemplate $sigTemplate, array $signingOrder, Template $template): void
+    {
+        // Estimate page count from the web template's CDS data or default to 1
+        $pageCount = 1;
+        $cdsData = $template->cds_json ?? [];
+        if (!empty($cdsData['sections'])) {
+            // Estimate pages from content lines (~45 lines per A4 page)
+            $lineCount = 0;
+            foreach ($cdsData['sections'] as $section) {
+                $type = $section['type'] ?? '';
+                if ($type === 'signature_section') { $lineCount += 15; }
+                elseif ($type === 'table') { $lineCount += max(3, count($section['rows'] ?? []) + 2); }
+                elseif ($type === 'page_initials') { $lineCount += 2; }
+                else {
+                    $text = '';
+                    foreach ($section['content'] ?? [] as $item) { $text .= $item['value'] ?? ''; }
+                    $lineCount += max(1, (int) ceil(mb_strlen($text) / 80));
+                }
+            }
+            $pageCount = max(1, (int) ceil($lineCount / 45));
+        }
+        // Also check template page_count if set
+        if ($template->page_count && $template->page_count > $pageCount) {
+            $pageCount = $template->page_count;
+        }
+
+        // Don't place initials if only 1 page (signature page IS the only page)
+        if ($pageCount <= 1) return;
+
+        // Place initials on pages 1 through (pageCount - 1) for every party
+        $sortBase = 10000; // high sort_order so they don't interfere with signature markers
+        foreach ($signingOrder as $partyIdx => $partyKey) {
+            for ($page = 1; $page < $pageCount; $page++) {
+                SignatureMarker::create([
+                    'signature_template_id' => $sigTemplate->id,
+                    'page_number'           => $page,
+                    'x_position'            => 85,
+                    'y_position'            => 92 + ($partyIdx * 3),
+                    'width'                 => 12,
+                    'height'                => 3,
+                    'type'                  => SignatureMarker::TYPE_INITIAL,
+                    'assigned_party'        => $partyKey,
+                    'label'                 => ucfirst(preg_replace('/_\d+$/', '', $partyKey)) . ' Initial — Pg ' . $page,
+                    'sort_order'            => $sortBase + ($page * 100) + $partyIdx,
+                    'required'              => true,
+                ]);
+            }
         }
     }
 
@@ -1824,15 +1966,10 @@ class ESignWizardController extends Controller
                 $contacts = $contactsByRole[$contactType] ?? [];
                 if (empty($contacts)) return null;
 
-                // Loop all contacts of this role, concatenate with ' & '
-                $values = [];
-                foreach ($contacts as $contact) {
-                    $val = $this->resolveContactValue($sourceColumn, $contact);
-                    if ($val !== null && $val !== '') {
-                        $values[] = $val;
-                    }
-                }
-                return !empty($values) ? implode(' & ', $values) : null;
+                // Use first contact only — indexed fields (seller_1_phone etc.)
+                // are resolved separately via WebTemplateDataService
+                $contact = $contacts[0] ?? [];
+                return $this->resolveContactValue($sourceColumn, $contact);
 
             case 'agent':
                 if ($sourceColumn === 'name') return $agent->name ?? '';
@@ -2287,6 +2424,10 @@ class ESignWizardController extends Controller
      * Build proper wizard fields from template field_mappings.
      * Used when fields_json is empty or skeletal (no id/field_name/named_field_id).
      * Looks up named fields from DB to derive blade-matching field_names.
+     *
+     * Field groups are emitted as SINGLE entries with field_name matching the blade
+     * slug (e.g. "seller_name_surname_id") and type "field_group_display".
+     * The actual value is resolved later by autoFillFieldGroups().
      */
     private function buildFieldsFromMappings(array $fieldMappings): array
     {
@@ -2300,16 +2441,70 @@ class ESignWizardController extends Controller
                 ->keyBy('id');
         }
 
+        // Pre-load all referenced field groups
+        $fieldGroupIds = collect($fieldMappings)
+            ->filter(fn($m) => ($m['mappingType'] ?? $m['mapping_type'] ?? '') === 'field_group')
+            ->map(fn($m) => $m['fieldGroupId'] ?? $m['field_group_id'] ?? null)
+            ->filter()->unique()->values();
+        $fieldGroupMap = collect();
+        if ($fieldGroupIds->isNotEmpty()) {
+            $fieldGroupMap = \App\Models\Docuperfect\FieldGroup::whereIn('id', $fieldGroupIds)->get()->keyBy('id');
+        }
+
         // Track used field_names to avoid duplicates (append _2, _3, etc.)
         $usedFieldNames = [];
 
         return collect($fieldMappings)->filter(function ($m) {
-            // Skip ghost fields: no label AND no named field
+            // Skip ghost fields: no label AND no named field AND not a field group
+            $mappingType = $m['mappingType'] ?? $m['mapping_type'] ?? '';
+            if ($mappingType === 'field_group') return true; // Always keep groups
             if (empty($m['label']) && empty($m['namedFieldId'])) {
                 return false;
             }
             return true;
-        })->map(function ($m, $i) use ($namedFieldRecords, &$usedFieldNames) {
+        })->map(function ($m, $i) use ($namedFieldRecords, &$usedFieldNames, $fieldGroupMap) {
+            $mappingType = $m['mappingType'] ?? $m['mapping_type'] ?? '';
+
+            // Field groups → emit as a single display field with the blade slug as field_name
+            if ($mappingType === 'field_group') {
+                $fgId = $m['fieldGroupId'] ?? $m['field_group_id'] ?? null;
+                $fg = $fgId ? $fieldGroupMap->get($fgId) : null;
+                $groupLabel = $m['label'] ?? ($fg ? $fg->name : 'Field Group');
+                $varName = strtolower(trim(preg_replace('/[^a-zA-Z0-9]+/', '_', $groupLabel), '_'));
+
+                // Deduplicate
+                if (isset($usedFieldNames[$varName])) {
+                    $usedFieldNames[$varName]++;
+                    $varName .= '_' . $usedFieldNames[$varName];
+                } else {
+                    $usedFieldNames[$varName] = 1;
+                }
+
+                $editableBy = $m['filled_by'] ?? $m['editable_by'] ?? 'agent';
+                if (is_array($editableBy)) {
+                    $editableBy = $editableBy[0] ?? 'agent';
+                }
+
+                $id = is_string($i) ? $i : ($m['id'] ?? ('mapping_' . $i));
+
+                return [
+                    'id'              => $id,
+                    'field_name'      => $varName,
+                    'name'            => $varName,
+                    'label'           => $groupLabel,
+                    'named_field_name'=> $groupLabel,
+                    'named_field_id'  => null,
+                    'type'            => 'field_group_display',
+                    'tag_type'        => 'field_group_display',
+                    'assignedTo'      => $editableBy,
+                    'source'          => 'field_group',
+                    'mapping_type'    => 'field_group',
+                    'field_group_id'  => (int) $fgId,
+                    'field_group_name'=> $fg ? $fg->name : $groupLabel,
+                    'party'           => $m['party'] ?? '',
+                ];
+            }
+
             $namedFieldId = $m['namedFieldId'] ?? null;
             $namedField = $namedFieldId ? ($namedFieldRecords[$namedFieldId] ?? null) : null;
 
@@ -2362,15 +2557,18 @@ class ESignWizardController extends Controller
                 $editableBy = $editableBy[0] ?? 'agent';
             }
 
-            // Label: always use the mapping's user-facing label, NEVER the tag ID
+            // Label: derive from named field if this is a group member with no override
             $label = $m['label'] ?? $m['manualLabel'] ?? '';
+            if (empty($label) && $namedField) {
+                $label = $namedField->name ?? '';
+            }
             if (empty($label)) {
                 // For fields without labels (signatures, initials), use the type
                 $tagType = $m['tag_type'] ?? $m['type'] ?? 'input';
                 $label = ucfirst($tagType === 'input' ? 'Field' : $tagType);
             }
 
-            return [
+            $entry = [
                 'id'              => $id,
                 'field_name'      => $varName,
                 'name'            => $varName,
@@ -2383,7 +2581,123 @@ class ESignWizardController extends Controller
                 'source'          => $source,
                 'mapping_type'    => $m['mappingType'] ?? $m['mapping_type'] ?? '',
             ];
+
+            return $entry;
         })->toArray();
+    }
+
+    /**
+     * Auto-fill field_group_display entries in allWizardFields from recipient data.
+     *
+     * For each field group display entry, looks up the group's member named fields,
+     * determines the matching role from the group's member contact types, then
+     * formats one line per recipient of that role:
+     *   "FirstName LastName (ID: xxx) and FirstName LastName (ID: xxx)"
+     *
+     * Fully systemic — works for any role (seller, buyer, landlord, tenant, lessor, lessee).
+     */
+    private function autoFillFieldGroupDisplays(array $allWizardFields, array $stepData): array
+    {
+        // Build recipients lookup by role (supports multiple contacts per role)
+        $recipients = $stepData['recipients']['recipients'] ?? [];
+        $contactsByRole = [];
+        foreach ($recipients as $r) {
+            $role = strtolower($r['role'] ?? '');
+            if (!$role) continue;
+            $contactsByRole[$role][] = $r;
+        }
+        // Aliases: wizard roles → DB roles
+        $aliasMap = [
+            'landlord' => 'lessor', 'tenant' => 'lessee',
+            'lessor' => 'lessor', 'lessee' => 'lessee',
+            'seller' => 'seller', 'buyer' => 'buyer',
+        ];
+        foreach ($aliasMap as $from => $to) {
+            if (isset($contactsByRole[$from]) && !isset($contactsByRole[$to])) {
+                $contactsByRole[$to] = $contactsByRole[$from];
+            }
+        }
+
+        foreach ($allWizardFields as &$field) {
+            if (($field['type'] ?? '') !== 'field_group_display') continue;
+            if (!empty($field['value'])) continue; // Already filled
+
+            $fgId = $field['field_group_id'] ?? null;
+            if (!$fgId) continue;
+
+            $fg = \App\Models\Docuperfect\FieldGroup::find($fgId);
+            if (!$fg || empty($fg->fields)) continue;
+
+            // Load the group's member named fields to determine columns and contact type
+            $memberNfIds = collect($fg->fields)->pluck('named_field_id')->filter()->unique()->values();
+            $memberNfs = DB::table('docuperfect_named_fields')->whereIn('id', $memberNfIds)->get()->keyBy('id');
+
+            // Determine contact type from member named fields (e.g. "Seller", "Lessor", "Tenant")
+            $contactType = '';
+            $memberColumns = [];
+            foreach ($fg->fields as $member) {
+                $nfId = $member['named_field_id'] ?? null;
+                $nf = $nfId ? ($memberNfs[$nfId] ?? null) : null;
+                if (!$nf) continue;
+
+                $column = $nf->source_column ?? '';
+                $memberColumns[] = $column;
+
+                if (empty($contactType) && !empty($nf->source_contact_type)) {
+                    // Strip numeric suffix: "Seller 2" → "Seller"
+                    $contactType = preg_replace('/\s+\d+$/', '', $nf->source_contact_type);
+                }
+            }
+
+            if (empty($contactType) || empty($memberColumns)) continue;
+
+            // Resolve contacts: try the exact contact type, then alias
+            $roleLookup = strtolower($contactType);
+            $contacts = $contactsByRole[$roleLookup] ?? [];
+
+            // Also try the party from the mapping if no contacts found
+            if (empty($contacts)) {
+                $party = strtolower($field['party'] ?? '');
+                // Handle compound parties like "owner_party" → try "seller", "lessor"
+                if (str_contains($party, 'owner')) {
+                    $contacts = $contactsByRole['seller'] ?? $contactsByRole['lessor'] ?? [];
+                } elseif (str_contains($party, 'tenant') || str_contains($party, 'lessee')) {
+                    $contacts = $contactsByRole['tenant'] ?? $contactsByRole['lessee'] ?? [];
+                } else {
+                    $contacts = $contactsByRole[$party] ?? [];
+                }
+            }
+
+            if (empty($contacts)) continue;
+
+            // Format each contact: "FirstName LastName (ID: xxx)"
+            $displayParts = [];
+            foreach ($contacts as $contact) {
+                $nameParts = [];
+                $idNumber = '';
+                foreach ($memberColumns as $col) {
+                    $val = $contact[$col] ?? '';
+                    if (empty($val)) continue;
+                    if ($col === 'id_number') {
+                        $idNumber = $val;
+                    } else {
+                        $nameParts[] = $val;
+                    }
+                }
+                $line = implode(' ', $nameParts);
+                if (!empty($idNumber)) {
+                    $line .= ' (ID: ' . $idNumber . ')';
+                }
+                if (!empty(trim($line))) {
+                    $displayParts[] = trim($line);
+                }
+            }
+
+            $field['value'] = implode(' and ', $displayParts);
+        }
+        unset($field);
+
+        return $allWizardFields;
     }
 
     /**
