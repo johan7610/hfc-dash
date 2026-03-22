@@ -6,8 +6,14 @@
 
     @php
         $isSalesTemplate = ($templateType ?? 'rentals') === 'sales';
-        $backRoute = $isSalesTemplate ? route('docuperfect.sales') : route('docuperfect.rental');
-        $backLabel = $isSalesTemplate ? 'Back to Sales' : 'Back to Rental';
+        $esignFlowId = $esignFlowId ?? session('esign_wizard_flow_id');
+        if ($esignFlowId) {
+            $backRoute = route('docuperfect.esign.step', ['flow' => $esignFlowId, 'step' => 6]);
+            $backLabel = 'Back to E-Sign';
+        } else {
+            $backRoute = $isSalesTemplate ? route('docuperfect.sales') : route('docuperfect.rental');
+            $backLabel = $isSalesTemplate ? 'Back to Sales' : 'Back to Rental';
+        }
         $partyOneRole = $isSalesTemplate ? 'buyer' : 'tenant';
         $partyTwoRole = $isSalesTemplate ? 'seller' : 'landlord';
         $partyOneLabel = ucfirst($partyOneRole);
@@ -290,6 +296,11 @@
                 <div class="flex-1 overflow-y-auto" style="background:#f1f5f9;">
                     <link href="/css/corex-document.css" rel="stylesheet">
                     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+                    <style>
+                        #webDocContent .corex-page {
+                            min-height: auto !important;
+                        }
+                    </style>
                     <div class="relative" style="max-width:100%; margin:0 auto;"
                          x-ref="pageContainer"
                          @dragover.prevent="$event.dataTransfer.dropEffect = 'copy'"
@@ -661,27 +672,37 @@
                         'agent': 'agent',
                     };
 
+                    // Only these data-marker-type values become placeable markers
+                    const markerTypeAllowed = { 'signature': 'signature', 'initial': 'initial' };
+
                     // Known parties from server (each person is a separate entry with unique role key)
                     const knownParties = @json($parties ?? []);
 
                     // Build a tracker for matching generic roles to individual party keys
                     // e.g. two sellers: first "seller" DOM element → seller, second → seller_2
+                    // Separate trackers per marker type so signature and initial counts don't interfere
                     const roleAssignTracker = {};
 
                     cols.forEach((col, i) => {
+                        const domType = (col.dataset.markerType || '').toLowerCase();
+                        const markerType = markerTypeAllowed[domType];
+                        // Skip non-marker elements (location, day, month, year, time, witness, etc.)
+                        if (!markerType) return;
+
                         const partyLabel = (col.dataset.markerParty || '').toLowerCase();
                         const name = col.dataset.name || '';
                         const baseRole = partyRoleMap[partyLabel] || partyLabel;
 
-                        // Find the next available party with this base role
-                        if (!roleAssignTracker[baseRole]) roleAssignTracker[baseRole] = 0;
-                        const matchIdx = roleAssignTracker[baseRole];
+                        // Track per role+type to handle multiple people per role
+                        const trackerKey = baseRole + ':' + markerType;
+                        if (!roleAssignTracker[trackerKey]) roleAssignTracker[trackerKey] = 0;
+                        const matchIdx = roleAssignTracker[trackerKey];
                         const candidates = knownParties.filter(p => {
                             const pBase = (p.role_label || p.role || '').replace(/_\d+$/, '');
                             return pBase === baseRole;
                         });
                         const matchedParty = candidates[matchIdx] || candidates[0];
-                        roleAssignTracker[baseRole]++;
+                        roleAssignTracker[trackerKey]++;
 
                         if (!matchedParty) return;
 
@@ -705,18 +726,19 @@
                         const xOffset = (50 / container.scrollWidth) * 100;
 
                         const roleDisplay = baseRole.charAt(0).toUpperCase() + baseRole.slice(1);
+                        const isInitial = markerType === 'initial';
                         self.markers.push({
                             _id: 'auto_' + self._nextId++,
                             id: null,
                             page_number: 1,
                             x_position: Math.round((xPct + xOffset) * 100) / 100,
                             y_position: Math.round(yPct * 100) / 100,
-                            width: Math.round(Math.min(wPct - 2, 13) * 100) / 100,
-                            height: 4,
-                            type: 'signature',
+                            width: isInitial ? 5 : 8,
+                            height: isInitial ? 2 : 2.5,
+                            type: markerType,
                             assigned_party: assignedParty,
                             assigned_email: assignedEmail,
-                            label: displayName ? (roleDisplay + ' — ' + displayName) : null,
+                            label: displayName ? (roleDisplay + ' — ' + displayName + (isInitial ? ' Initial' : '')) : null,
                             required: true,
                             auto_placed: true,
                         });

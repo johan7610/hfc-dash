@@ -1548,27 +1548,35 @@ class ESignWizardController extends Controller
             $fields = $this->setSignatureRequiredFlags($fields, $recipients);
             $document->update(['fields_json' => $fields]);
 
-            // 4b. Convert template signature zones to markers
-            $markerCount = $signatureService->convertZonesToMarkers($sigTemplate);
+            // For web templates (CDS), the setup view JS auto-detects markers from
+            // data-marker-party DOM attributes (signatures) and data-marker-type="initial"
+            // (initials). Server-side marker creation is skipped — it gets cleared by JS anyway.
+            // For PDF templates, create markers server-side as they rely on stored coordinates.
+            $isWebRenderType = ($template->render_type ?? 'pdf') === 'web';
 
-            // Fallback: create markers from fields_json sign/initial fields
-            if ($markerCount === 0) {
-                $markerCount = $signatureService->convertFieldsJsonToMarkers($sigTemplate, $fields);
+            if (!$isWebRenderType) {
+                // 4b. Convert template signature zones to markers
+                $markerCount = $signatureService->convertZonesToMarkers($sigTemplate);
+
+                // Fallback: create markers from fields_json sign/initial fields
+                if ($markerCount === 0) {
+                    $markerCount = $signatureService->convertFieldsJsonToMarkers($sigTemplate, $fields);
+                }
+
+                // Final fallback: create one default signature marker per party
+                if ($markerCount === 0) {
+                    $signatureService->createDefaultMarkers($sigTemplate);
+                }
+
+                // 4c. Expand role-based markers to individual party markers.
+                // Marker creation uses generic roles (e.g. "seller") but we need
+                // separate markers for each person (e.g. "seller", "seller_2").
+                $this->expandMarkersToIndividualParties($sigTemplate, $signingOrder);
+
+                // 4d. Auto-place initial markers on every page except the last
+                // for every signing party (per V2 spec).
+                $this->autoPlaceInitialMarkers($sigTemplate, $signingOrder, $template);
             }
-
-            // Final fallback: create one default signature marker per party
-            if ($markerCount === 0) {
-                $signatureService->createDefaultMarkers($sigTemplate);
-            }
-
-            // 4c. Expand role-based markers to individual party markers.
-            // Marker creation uses generic roles (e.g. "seller") but we need
-            // separate markers for each person (e.g. "seller", "seller_2").
-            $this->expandMarkersToIndividualParties($sigTemplate, $signingOrder);
-
-            // 4d. Auto-place initial markers on every page except the last
-            // for every signing party (per V2 spec).
-            $this->autoPlaceInitialMarkers($sigTemplate, $signingOrder, $template);
 
             // 5. Keep template in ready status so agent can place markers and sign in-app.
             // sendForSigning() fires later via the send-confirmation page after agent completes signing.
@@ -1641,12 +1649,17 @@ class ESignWizardController extends Controller
 
             if (count($keys) <= 1) continue;
 
-            // Multiple people for this role: update first marker, duplicate for rest
+            // Multiple people for this role: update first marker, duplicate for rest.
+            // Compress y-offset so duplicates stay within page bounds (max 90%).
+            $numCopies = count($keys);
+            $yStep = min(6, (90 - $marker->y_position) / max(1, $numCopies - 1));
+            $yStep = max(2, $yStep); // at least 2% apart
+
             $marker->update(['assigned_party' => $keys[0]]);
-            for ($j = 1; $j < count($keys); $j++) {
+            for ($j = 1; $j < $numCopies; $j++) {
                 $newMarker = $marker->replicate();
                 $newMarker->assigned_party = $keys[$j];
-                $newMarker->y_position = min(94, $marker->y_position + ($j * 6));
+                $newMarker->y_position = min(90, round($marker->y_position + ($j * $yStep), 2));
                 $newMarker->sort_order = $marker->sort_order + ($j * 100);
                 $newMarker->save();
             }
@@ -1686,15 +1699,22 @@ class ESignWizardController extends Controller
         // Don't place initials if only 1 page (signature page IS the only page)
         if ($pageCount <= 1) return;
 
-        // Place initials on pages 1 through (pageCount - 1) for every party
-        $sortBase = 10000; // high sort_order so they don't interfere with signature markers
+        // Place initials on pages 1 through (pageCount - 1) for every party.
+        // Start at 85% y, max 90% — compress interval if many parties.
+        $sortBase = 10000;
+        $partyCount = count($signingOrder);
+        $startY = 85;
+        $maxY = 90;
+        $interval = $partyCount > 1 ? min(3, ($maxY - $startY) / ($partyCount - 1)) : 0;
+
         foreach ($signingOrder as $partyIdx => $partyKey) {
+            $yPos = round($startY + ($partyIdx * $interval), 2);
             for ($page = 1; $page < $pageCount; $page++) {
                 SignatureMarker::create([
                     'signature_template_id' => $sigTemplate->id,
                     'page_number'           => $page,
                     'x_position'            => 85,
-                    'y_position'            => 92 + ($partyIdx * 3),
+                    'y_position'            => $yPos,
                     'width'                 => 12,
                     'height'                => 3,
                     'type'                  => SignatureMarker::TYPE_INITIAL,

@@ -303,6 +303,9 @@ class SignatureController extends Controller
         // Determine template type for dynamic party labels (buyer/seller vs tenant/landlord)
         $templateType = $docTemplate?->template_type ?? 'rentals';
 
+        // E-sign wizard context — allows back navigation to the wizard
+        $esignFlowId = session('esign_wizard_flow_id');
+
         return view('docuperfect.signatures.setup', [
             'document' => $document,
             'template' => $template,
@@ -317,6 +320,7 @@ class SignatureController extends Controller
             'step' => $step,
             'user' => $user,
             'templateType' => $templateType,
+            'esignFlowId' => $esignFlowId,
         ]);
     }
 

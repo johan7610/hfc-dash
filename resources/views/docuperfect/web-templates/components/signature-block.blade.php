@@ -21,6 +21,13 @@
         ));
     }
     $parties = $parties ?? ['Lessor', 'Lessee', 'Agent'];
+
+    // Determine if witness columns should render
+    // Show witness only if 'witness' is explicitly in signing_parties or $show_witness is true
+    $showWitness = $show_witness ?? false;
+    if (!$showWitness && isset($signing_parties) && is_array($signing_parties)) {
+        $showWitness = in_array('witness', $signing_parties);
+    }
 @endphp
 
 <style>
@@ -41,10 +48,11 @@
     .sig-field-year { min-width: 36pt; }
     .sig-row-4 {
         display: grid;
-        grid-template-columns: 1fr 1fr 1fr 1fr;
         gap: 12pt;
         margin-top: 14pt;
     }
+    .sig-row-4.with-witness { grid-template-columns: 1fr 1fr 1fr 1fr; }
+    .sig-row-4.no-witness { grid-template-columns: 1fr 1fr; }
     .sig-cell { text-align: center; }
     .sig-cell-line {
         border-bottom: 1px solid #333;
@@ -56,10 +64,11 @@
     }
     .sig-row-right {
         display: grid;
-        grid-template-columns: 1fr 1fr 1fr 1fr;
         gap: 12pt;
         margin-top: 10pt;
     }
+    .sig-row-right.with-witness { grid-template-columns: 1fr 1fr 1fr 1fr; }
+    .sig-row-right.no-witness { display: none; }
     .sig-cell-empty { visibility: hidden; }
 </style>
 
@@ -85,8 +94,8 @@
                 am / pm.
             </p>
 
-            {{-- Signature row: Party, Party, Witness, Witness --}}
-            <div class="sig-row-4">
+            {{-- Signature row: Party, Party [, Witness, Witness] --}}
+            <div class="sig-row-4 {{ $showWitness ? 'with-witness' : 'no-witness' }}">
                 <div class="sig-cell">
                     <div class="sig-cell-line" data-marker-party="{{ $partyKey }}" data-marker-type="signature" data-marker-index="{{ $i }}" data-name="{{ $partyName }}"></div>
                     <div class="sig-cell-label">{{ $partyName ?: $party }}</div>
@@ -95,6 +104,7 @@
                     <div class="sig-cell-line" data-marker-party="{{ $partyKey }}" data-marker-type="signature" data-marker-index="{{ $i }}-2" data-name="{{ $partyName }}"></div>
                     <div class="sig-cell-label">{{ $partyName ?: $party }}</div>
                 </div>
+                @if($showWitness)
                 <div class="sig-cell">
                     <div class="sig-cell-line" data-marker-party="{{ $partyKey }}" data-marker-type="witness" data-marker-index="{{ $i }}-w1"></div>
                     <div class="sig-cell-label">As Witness</div>
@@ -103,10 +113,12 @@
                     <div class="sig-cell-line" data-marker-party="{{ $partyKey }}" data-marker-type="witness" data-marker-index="{{ $i }}-w2"></div>
                     <div class="sig-cell-label">As Witness</div>
                 </div>
+                @endif
             </div>
 
-            {{-- Witness name row: empty, empty, Name of Witness, Name of Witness --}}
-            <div class="sig-row-right">
+            {{-- Witness name row — only if witness is enabled --}}
+            @if($showWitness)
+            <div class="sig-row-right with-witness">
                 <div class="sig-cell sig-cell-empty">
                     <div class="sig-cell-line"></div>
                     <div class="sig-cell-label">&nbsp;</div>
@@ -124,6 +136,7 @@
                     <div class="sig-cell-label">Name of Witness</div>
                 </div>
             </div>
+            @endif
         </div>
     @endforeach
 </div>
