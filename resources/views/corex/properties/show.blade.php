@@ -1445,8 +1445,8 @@
                         @endif
                     </div>
 
-                    {{-- Showday Event (PP) --}}
-                    @if(!$isNew && $property->pp_syndication_enabled && in_array($property->pp_syndication_status, ['submitted', 'active']))
+                    {{-- Showday Event --}}
+                    @if(!$isNew)
                     <div x-data="{ showForm: false, sdStart: '', sdEnd: '', sdDesc: '', sdLoading: false, sdMsg: '' }" class="mt-5">
                         <div class="flex items-center justify-between mb-3">
                             <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--text-muted);">Showday Events</p>
