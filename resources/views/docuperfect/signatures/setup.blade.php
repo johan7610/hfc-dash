@@ -2,6 +2,7 @@
 @extends('layouts.corex')
 
 @section('corex-content')
+@include('docuperfect.signatures.partials.a4-page-styles')
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
 
     @php
@@ -290,7 +291,7 @@
                     </style>
                     <div class="relative" style="max-width:100%; margin:0 auto;"
                          x-ref="pageContainer"
-                         x-init="pageLoaded = true;"
+                         x-init="pageLoaded = true; $nextTick(() => splitDocumentIntoPages(document.getElementById('webDocContent')))"
                          @dragover.prevent="$event.dataTransfer.dropEffect = 'copy'"
                          @drop.prevent="handleDrop($event)"
                          @mousedown.prevent="startZoneDrawOnPage($event)">

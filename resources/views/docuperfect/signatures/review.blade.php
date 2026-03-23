@@ -9,6 +9,7 @@
     $completedRoleLabel = $completedRole ? ucfirst(preg_replace('/_\d+$/', '', $completedRole)) : '';
 @endphp
 
+@include('docuperfect.signatures.partials.a4-page-styles')
 <style>
 /* Read-only document container — interactive elements made inert */
 .review-doc-container .web-sig-interactive,
@@ -300,9 +301,16 @@
             {{-- Web template: render merged_html inline (read-only) --}}
             <link href="/css/corex-document.css" rel="stylesheet">
             <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-            <div class="review-doc-container border border-slate-200 rounded-lg bg-white">
-                {!! $webTemplateHtml !!}
+            <div class="review-doc-container border border-slate-200 rounded-lg" style="background:#e2e8f0; padding:16px;">
+                <div id="reviewDocContent">
+                    {!! $webTemplateHtml !!}
+                </div>
             </div>
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    splitDocumentIntoPages(document.getElementById('reviewDocContent'));
+                });
+            </script>
         @else
             {{-- PDF/image-based template: render page images with overlays --}}
             <div class="space-y-4">

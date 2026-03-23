@@ -6,6 +6,7 @@
     <title>{{ $document->name ?? 'Document' }} — Print</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="/css/corex-document.css" rel="stylesheet">
+    @include('docuperfect.signatures.partials.a4-page-styles')
     <style>
         /* Screen: show document centered with subtle background */
         body {
@@ -185,14 +186,6 @@
                 margin: 0;
                 padding: 0;
             }
-            .corex-page-break {
-                page-break-after: always;
-                margin: 0;
-            }
-            .corex-page-initials-row {
-                justify-content: flex-end;
-                padding: 4px 0;
-            }
             .corex-page-initials {
                 border: 1px solid #000;
             }
@@ -235,8 +228,10 @@
     </div>
 
     <script>
-        // Remove interactive elements that shouldn't appear in print
+        // Split into A4 pages, then clean up interactive elements
         document.addEventListener('DOMContentLoaded', function() {
+            splitDocumentIntoPages(document.querySelector('.document-content'));
+
             // Remove "Click to sign" prompts
             document.querySelectorAll('.web-sig-prompt, .init-prompt').forEach(function(el) {
                 el.remove();

@@ -12,6 +12,7 @@
     @if(!empty($isWebTemplate))
     <link href="/css/corex-document.css" rel="stylesheet">
     @endif
+    @include('docuperfect.signatures.partials.a4-page-styles')
     <style>
         [x-cloak] { display: none !important; }
         @keyframes pulseHighlight {
@@ -1224,11 +1225,12 @@ function externalSign() {
                 this.signingMethod = null;
             });
 
-            // For web templates: convert editable field spans to inputs, make sig elements interactive
+            // For web templates: split into A4 pages, convert editable field spans to inputs, make sig elements interactive
             // Only init if the document container is already visible (signingMethod already set)
             if (this.isWebTemplate && this.signingMethod === 'electronic') {
                 this.$nextTick(() => {
                     setTimeout(() => {
+                        splitDocumentIntoPages(this.$refs.webDocContent);
                         if (this.editableFields.length > 0) {
                             this.initWebTemplateFields();
                         }
@@ -1716,10 +1718,11 @@ function externalSign() {
                 const data = await resp.json();
                 if (data.ok) {
                     this.signingMethod = method;
-                    // After method choice renders the document view, re-init web interactive elements
+                    // After method choice renders the document view, split into A4 pages and re-init
                     if (method === 'electronic' && this.isWebTemplate) {
                         this.$nextTick(() => {
                             setTimeout(() => {
+                                splitDocumentIntoPages(this.$refs.webDocContent);
                                 if (this.editableFields.length > 0) {
                                     this.initWebTemplateFields();
                                 }

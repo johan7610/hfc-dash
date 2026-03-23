@@ -8,6 +8,7 @@
 @section('corex-content')
 {{-- Signature Pad library --}}
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+@include('docuperfect.signatures.partials.a4-page-styles')
 <style>
 @keyframes pulseHighlight {
     0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
@@ -86,14 +87,6 @@
     background: rgba(59,130,246,0.06);
 }
 @media print {
-    .corex-page-break {
-        page-break-after: always;
-        margin: 0;
-    }
-    .corex-page-initials-row {
-        justify-content: flex-end;
-        padding: 4px 0;
-    }
     .corex-page-initials {
         border: 1px solid #000;
     }
@@ -186,7 +179,7 @@
         </div>
 
         {{-- Page display with markers --}}
-        <div class="flex-1 overflow-auto flex justify-center" style="background:#e2e8f0;">
+        <div class="flex-1 overflow-auto flex justify-center" style="background:#e2e8f0; padding:16px 0;">
             @if(!empty($isWebTemplate))
             <link href="/css/corex-document.css" rel="stylesheet">
             <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -613,9 +606,10 @@ function signDocument() {
             // Check if agent already has at least one signed marker
             this.firstSignatureDone = this.markers.some(m => m.assigned_party === 'agent' && m.signed);
 
-            // For web templates: make document signature elements interactive
+            // For web templates: split into A4 pages, then make elements interactive
             if (this.isWebTemplate) {
                 this.$nextTick(() => {
+                    splitDocumentIntoPages(this.$refs.webDocContent);
                     this._makeWebElementsInteractive();
                     // Delay to let DOM settle after ceremony fields are created
                     setTimeout(() => this._updateIncompleteCount(), 500);
