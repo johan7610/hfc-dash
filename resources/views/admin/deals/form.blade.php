@@ -332,8 +332,8 @@
 
                     row.innerHTML = `
                         <input type="hidden" name="${sideName}_agents[]" value="${id}">
-                        <div class="w-48 font-semibold" style="color:#0b2a4a">${label}</div>
-                        <input type="number" step="0.01" name="${sideName}_override[${id}]" placeholder="% override" class="w-32" value="${initial ?? ''}">
+                        <div class="w-48 font-semibold" style="color:var(--text-primary, #0b2a4a)">${label}</div>
+                        <input type="number" step="0.01" name="${sideName}_override[${id}]" placeholder="% override" class="w-32 rounded-lg border-gray-200" value="${initial ?? ''}">
                         <button type="button" class="text-xs text-red-600">Remove</button>
                     `;
 
@@ -359,8 +359,21 @@
             syncSelected(listingSelect, listingSelected, 'listing', listingPercents);
             syncSelected(sellingSelect, sellingSelected, 'selling', sellingPercents);
 
-            listingSelect.addEventListener('change', () => syncSelected(listingSelect, listingSelected, 'listing', listingPercents));
-            sellingSelect.addEventListener('change', () => syncSelected(sellingSelect, sellingSelected, 'selling', sellingPercents));
+            listingSelect.addEventListener('change', () => {
+                console.log('[DealForm] Listing agent selection changed', Array.from(listingSelect.selectedOptions).map(o => o.value));
+                syncSelected(listingSelect, listingSelected, 'listing', listingPercents);
+            });
+            sellingSelect.addEventListener('change', () => {
+                console.log('[DealForm] Selling agent selection changed', Array.from(sellingSelect.selectedOptions).map(o => o.value));
+                syncSelected(sellingSelect, sellingSelected, 'selling', sellingPercents);
+            });
+
+            console.log('[DealForm] Agent selection initialized', {
+                listingSelect: !!listingSelect,
+                sellingSelect: !!sellingSelect,
+                listingSelected: !!listingSelected,
+                sellingSelected: !!sellingSelected,
+            });
 
 
             // Side split sliders: keep listing + selling = 100.00 (UI convenience only; server validates truth)
