@@ -86,16 +86,10 @@ class PrivatePropertyListingMapper
             $listing['SoleMandateExclusiveDays'] = (int) $property->pp_exclusive_days;
         }
 
-        // Photo URLs
-        $skipImages = $property->pp_listing_last_synced_at !== null
-            && $property->pp_images_last_synced_at !== null
-            && $property->pp_images_last_synced_at >= $property->pp_listing_last_synced_at;
-
-        if (!$skipImages) {
-            $photos = $this->buildPhotoUrls($property);
-            if (!empty($photos)) {
-                $listing['PhotoUrls'] = ['string' => $photos];
-            }
+        // Photo URLs — always send images on every submission
+        $photos = $this->buildPhotoUrls($property);
+        if (!empty($photos)) {
+            $listing['PhotoUrls'] = ['string' => $photos];
         }
 
         return $listing;
