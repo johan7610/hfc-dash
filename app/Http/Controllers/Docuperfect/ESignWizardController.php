@@ -2375,10 +2375,13 @@ class ESignWizardController extends Controller
                 . '</div>';
         }
 
-        return '<div class="corex-page-break" style="display:flex;justify-content:flex-end;'
-            . 'align-items:center;gap:12px;padding:8px 0;border-top:1px dashed #cbd5e1;margin:16px 0;">'
+        return '<div class="corex-page-break" style="margin:16px 0;">'
+            . '<div class="corex-page-initials-row" style="display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:12px 0 4px 0;">'
             . $blocks
-            . '<div style="margin-left:8px;font-size:9px;color:#94a3b8;font-style:italic;">Page Break</div>'
+            . '</div>'
+            . '<div style="border-top:2px dashed #cbd5e1;margin:8px 0;position:relative;">'
+            . '<span style="position:absolute;right:0;top:-10px;font-size:10px;color:#94a3b8;font-style:italic;background:white;padding:0 4px;">Page Break</span>'
+            . '</div>'
             . '</div>';
     }
 

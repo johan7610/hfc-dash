@@ -133,13 +133,14 @@
 
         /* Page break markers: show as visual dividers on screen, actual breaks in print */
         .corex-page-break {
+            margin: 16px 0;
+        }
+        .corex-page-initials-row {
             display: flex;
             justify-content: flex-end;
             align-items: center;
-            gap: 12px;
-            border-top: 1px dashed #cbd5e1;
-            margin: 16px 0;
-            padding: 8px 0;
+            gap: 8px;
+            padding: 12px 0 4px 0;
         }
         .corex-page-initials {
             width: 60px;
@@ -185,9 +186,11 @@
                 padding: 0;
             }
             .corex-page-break {
-                page-break-before: always;
-                border-top: none;
+                page-break-after: always;
                 margin: 0;
+            }
+            .corex-page-initials-row {
+                justify-content: flex-end;
                 padding: 4px 0;
             }
             .corex-page-initials {

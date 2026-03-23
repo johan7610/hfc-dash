@@ -89,13 +89,14 @@
         }
         /* Page break markers with initials */
         .corex-page-break {
+            margin: 16px 0;
+        }
+        .corex-page-initials-row {
             display: flex;
             justify-content: flex-end;
             align-items: center;
-            gap: 12px;
-            padding: 8px 0;
-            border-top: 1px dashed #cbd5e1;
-            margin: 16px 0;
+            gap: 8px;
+            padding: 12px 0 4px 0;
         }
         .corex-page-initials {
             width: 60px;
