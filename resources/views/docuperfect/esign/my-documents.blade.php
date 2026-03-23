@@ -437,27 +437,41 @@
 
     {{-- ===== CANCEL MODAL ===== --}}
     <div x-show="showCancelModal" x-cloak
-         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+         x-data="{ cancelReason: '', submitting: false }">
         <div class="rounded-md shadow-xl p-6 w-full max-w-md" style="background: var(--surface); border: 1px solid var(--border);" @click.away="showCancelModal = false">
             <h3 class="text-lg font-bold text-red-400 mb-4">Cancel Document</h3>
             <p class="text-sm mb-4" style="color: var(--text-secondary);">
                 Cancel <strong x-text="cancelDocName"></strong>?
             </p>
-            <p class="text-sm mb-6" style="color: var(--text-muted);">
-                All pending signatures will be voided. This action cannot be undone.
+            <p class="text-sm mb-4" style="color: var(--text-muted);">
+                All pending signatures will be voided and waiting parties will be notified. This action cannot be undone.
             </p>
 
-            <form method="POST" :action="'/esign/documents/' + cancelTemplateId + '/cancel'">
+            <form method="POST" :action="'{{ url('docuperfect/esign/documents') }}/' + cancelTemplateId + '/cancel'"
+                  @submit="submitting = true">
                 @csrf
 
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-1" style="color: var(--text-primary);">Reason for cancellation <span class="text-red-500">*</span></label>
+                    <textarea name="cancellation_reason" x-model="cancelReason" rows="3" required
+                              class="w-full rounded-md border text-sm px-3 py-2 focus:ring-red-500 focus:border-red-500"
+                              style="background: var(--surface); border-color: var(--border); color: var(--text-primary);"
+                              placeholder="e.g. Document contains errors, deal fell through, terms changed..."></textarea>
+                    <p class="text-xs mt-1" style="color: var(--text-muted);">This reason will be shared with all waiting signers.</p>
+                </div>
+
                 <div class="flex justify-end gap-3">
-                    <button type="button" @click="showCancelModal = false"
+                    <button type="button" @click="showCancelModal = false; cancelReason = ''"
                             class="px-4 py-2 text-sm transition-all duration-300" style="color: var(--text-secondary);">
                         Keep Document
                     </button>
                     <button type="submit"
-                            class="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 transition-all duration-300">
-                        Cancel Document
+                            :disabled="!cancelReason.trim() || submitting"
+                            class="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 transition-all duration-300"
+                            :class="(!cancelReason.trim() || submitting) ? 'opacity-50 cursor-not-allowed' : ''">
+                        <span x-show="!submitting">Cancel Document</span>
+                        <span x-show="submitting" x-cloak>Cancelling...</span>
                     </button>
                 </div>
             </form>

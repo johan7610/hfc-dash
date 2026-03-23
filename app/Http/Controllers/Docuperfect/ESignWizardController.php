@@ -3612,6 +3612,7 @@ class ESignWizardController extends Controller
 
     /**
      * Cancel / void an e-sign document — sets template + all pending requests to cancelled.
+     * Requires a cancellation reason. Notifies all waiting/pending parties.
      */
     public function cancelDocument(Request $request, SignatureTemplate $signatureTemplate)
     {
@@ -3630,14 +3631,30 @@ class ESignWizardController extends Controller
             return back()->withErrors(['This document cannot be cancelled — it is already ' . $signatureTemplate->status . '.']);
         }
 
-        DB::transaction(function () use ($signatureTemplate, $user, $request) {
+        $request->validate([
+            'cancellation_reason' => 'required|string|min:3|max:1000',
+        ]);
+
+        $reason = $request->input('cancellation_reason');
+
+        // Collect pending requests BEFORE cancelling (for notification)
+        $pendingRequests = $signatureTemplate->requests()
+            ->whereIn('status', ['waiting', 'pending', 'viewed', 'partially_signed'])
+            ->get();
+
+        DB::transaction(function () use ($signatureTemplate, $user, $request, $reason) {
             // Cancel all pending/waiting signature requests
             $signatureTemplate->requests()
                 ->whereIn('status', ['waiting', 'pending', 'viewed', 'partially_signed'])
                 ->update(['status' => 'cancelled']);
 
-            // Set template status to cancelled
-            $signatureTemplate->update(['status' => SignatureTemplate::STATUS_CANCELLED]);
+            // Set template status to cancelled with reason
+            $signatureTemplate->update([
+                'status' => SignatureTemplate::STATUS_CANCELLED,
+                'cancellation_reason' => $reason,
+                'cancelled_by' => $user->id,
+                'cancelled_at' => now(),
+            ]);
 
             // Audit log
             SignatureAuditLog::log(
@@ -3650,10 +3667,33 @@ class ESignWizardController extends Controller
                 null,
                 $request->ip(),
                 $request->userAgent(),
-                ['reason' => 'Agent cancelled document from My E-Sign Documents page']
+                ['reason' => $reason]
             );
         });
 
-        return back()->with('status', 'Document "' . ($signatureTemplate->document->name ?? 'Untitled') . '" has been cancelled.');
+        // Notify all pending/waiting parties of the cancellation
+        $documentName = $signatureTemplate->document->name ?? 'Untitled';
+        foreach ($pendingRequests as $sigReq) {
+            if (!empty($sigReq->signer_email)) {
+                try {
+                    \Illuminate\Support\Facades\Mail::to($sigReq->signer_email)->send(
+                        (new \App\Mail\Signatures\DocumentCancelledMail(
+                            signerName: $sigReq->signer_name ?? 'Signer',
+                            documentName: $documentName,
+                            agentName: $user->name,
+                            cancellationReason: $reason,
+                        ))->fromAgent($user)
+                    );
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::error('Failed to send cancellation email', [
+                        'request_id' => $sigReq->id,
+                        'signer_email' => $sigReq->signer_email,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+        }
+
+        return back()->with('status', 'Document "' . $documentName . '" has been cancelled. ' . $pendingRequests->count() . ' waiting parties notified.');
     }
 }
