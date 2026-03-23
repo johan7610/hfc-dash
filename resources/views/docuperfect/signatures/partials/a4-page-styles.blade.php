@@ -142,7 +142,7 @@ function paginateDocument(container, parties) {
     // A4 content area dimensions (accounting for .corex-a4-page padding)
     // Page: 210mm x 297mm.  Padding: 20mm top, 25mm bottom, 18mm left/right.
     // Content area: 174mm x 252mm.  At 96dpi ≈ 658px x 953px.
-    var PAGE_CONTENT_HEIGHT = 950;
+    var PAGE_CONTENT_HEIGHT = 1500;
     var PAGE_CONTENT_WIDTH = 658;
 
     // Find the innermost content container (unwrap nested wrappers)
