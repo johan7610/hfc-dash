@@ -2227,25 +2227,28 @@ class ESignWizardController extends Controller
             . '</div>';
 
         // Split HTML on page div openings to identify pages
-        // Pattern matches <div class="page"> or <div class="page page-break">
-        $parts = preg_split('/(<div\s+class="page[^"]*">)/i', $html, -1, PREG_SPLIT_DELIM_CAPTURE);
+        // Pattern matches <div class="page">, <div class="page page-break">, or <div class="corex-page">
+        $parts = preg_split('/(<div\s+class="(?:corex-)?page[^"]*">)/i', $html, -1, PREG_SPLIT_DELIM_CAPTURE);
 
         // Count how many page divs we have
         $pageCount = 0;
         foreach ($parts as $part) {
-            if (preg_match('/^<div\s+class="page[^"]*">/i', $part)) {
+            if (preg_match('/^<div\s+class="(?:corex-)?page[^"]*">/i', $part)) {
                 $pageCount++;
             }
         }
 
-        // Paged templates: inject at bottom of each non-last page
+        // Paged templates: inject page-break marker at bottom of each non-last page
         if ($pageCount > 1) {
+            // Build a proper .corex-page-break marker (not just initials row)
+            $pageBreakHtml = $this->buildPageBreakMarker($parties);
+
             $currentPage = 0;
             $result = '';
             for ($i = 0; $i < count($parts); $i++) {
                 $part = $parts[$i];
 
-                if (preg_match('/^<div\s+class="page[^"]*">/i', $part)) {
+                if (preg_match('/^<div\s+class="(?:corex-)?page[^"]*">/i', $part)) {
                     $currentPage++;
                     $result .= $part;
                     continue;
@@ -2254,7 +2257,7 @@ class ESignWizardController extends Controller
                 if ($currentPage > 0 && $currentPage < $pageCount) {
                     $lastDivPos = strrpos($part, '</div>');
                     if ($lastDivPos !== false) {
-                        $part = substr($part, 0, $lastDivPos) . $initialsRow . substr($part, $lastDivPos);
+                        $part = substr($part, 0, $lastDivPos) . $pageBreakHtml . substr($part, $lastDivPos);
                     }
                 }
 

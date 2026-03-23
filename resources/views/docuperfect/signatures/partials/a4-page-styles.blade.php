@@ -77,12 +77,88 @@
 <script>
 function splitDocumentIntoPages(container) {
     if (!container) return;
-    // Guard against double invocation (e.g. init + method choice in external signing)
+    // Guard against double invocation
     if (container.dataset.pagesSplit === 'true') return;
     container.dataset.pagesSplit = 'true';
+
+    // Strategy 1: Template already has .corex-page divs (paged templates).
+    // These are the template's own page structure — each becomes an A4 page.
+    var wrapper = container.querySelector('.corex-document-wrapper');
+    var corexPages = wrapper
+        ? wrapper.querySelectorAll(':scope > .corex-page')
+        : container.querySelectorAll(':scope > .corex-page');
+
+    if (corexPages.length > 1) {
+        // Collect any <style> tags that are siblings (keep them)
+        var styles = [];
+        Array.from(container.children).forEach(function(el) {
+            if (el.tagName === 'STYLE' || el.tagName === 'LINK') styles.push(el);
+        });
+
+        // Extract pages from the wrapper
+        var pageEls = Array.from(corexPages);
+        container.innerHTML = '';
+
+        // Re-add styles
+        styles.forEach(function(s) { container.appendChild(s); });
+
+        var totalPages = pageEls.length;
+        pageEls.forEach(function(pageEl, idx) {
+            var pageDiv = document.createElement('div');
+            pageDiv.className = 'corex-a4-page';
+            // Move all children from the .corex-page into the A4 wrapper
+            while (pageEl.firstChild) {
+                pageDiv.appendChild(pageEl.firstChild);
+            }
+
+            // Page number footer
+            var pageNum = document.createElement('div');
+            pageNum.className = 'page-number';
+            pageNum.textContent = 'Page ' + (idx + 1) + ' of ' + totalPages;
+            pageDiv.appendChild(pageNum);
+
+            container.appendChild(pageDiv);
+
+            // Gap between pages (not after last)
+            if (idx < totalPages - 1) {
+                var gap = document.createElement('div');
+                gap.className = 'corex-page-gap';
+                container.appendChild(gap);
+            }
+        });
+        return;
+    }
+
+    // Strategy 2: Continuous HTML with .corex-page-break markers.
+    // Breaks may be nested inside wrapper divs — unwrap first.
     var breaks = container.querySelectorAll('.corex-page-break');
     if (breaks.length === 0) return;
 
+    // If breaks are not direct children, unwrap from .corex-document-wrapper / .corex-page
+    var firstBreak = breaks[0];
+    if (firstBreak.parentElement !== container) {
+        // Find the deepest single-child wrapper and unwrap content to container level
+        var contentSource = container;
+        var innerWrapper = container.querySelector('.corex-document-wrapper');
+        if (innerWrapper) contentSource = innerWrapper;
+        var innerPage = contentSource.querySelector(':scope > .corex-page');
+        if (innerPage) contentSource = innerPage;
+
+        // Collect styles before unwrapping
+        var styleEls = [];
+        Array.from(container.children).forEach(function(el) {
+            if (el.tagName === 'STYLE' || el.tagName === 'LINK') styleEls.push(el.cloneNode(true));
+        });
+
+        // Move all children from the inner container up to the main container
+        container.innerHTML = '';
+        styleEls.forEach(function(s) { container.appendChild(s); });
+        while (contentSource.firstChild) {
+            container.appendChild(contentSource.firstChild);
+        }
+    }
+
+    // Now split on .corex-page-break markers (which are now direct children)
     var allNodes = Array.from(container.childNodes);
     var pages = [];
     var currentPageNodes = [];
@@ -126,27 +202,6 @@ function splitDocumentIntoPages(container) {
             gap.className = 'corex-page-gap';
             container.appendChild(gap);
         }
-    });
-
-    // Strip inner container styling — the template HTML contains .corex-document-wrapper
-    // and .corex-page with their own width/shadow/padding. Now that .corex-a4-page handles
-    // all page styling, neutralize the inner containers to prevent nested white boxes.
-    container.querySelectorAll('.corex-document-wrapper').forEach(function(el) {
-        el.style.width = '100%';
-        el.style.maxWidth = '100%';
-        el.style.boxShadow = 'none';
-        el.style.background = 'transparent';
-        el.style.margin = '0';
-        el.style.padding = '0';
-    });
-    container.querySelectorAll('.corex-page').forEach(function(el) {
-        el.style.width = '100%';
-        el.style.maxWidth = '100%';
-        el.style.boxShadow = 'none';
-        el.style.background = 'transparent';
-        el.style.margin = '0';
-        el.style.padding = '0';
-        el.style.minHeight = 'auto';
     });
 }
 </script>
