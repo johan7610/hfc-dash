@@ -161,11 +161,21 @@
     {{-- Completion overlay — prevents Alpine re-render issues --}}
     <div x-show="completionDone" x-cloak class="bg-white border border-emerald-200 rounded-md p-8 text-center" style="min-height:300px;">
         <div class="flex flex-col items-center justify-center gap-4 py-12">
-            <svg class="w-16 h-16 text-emerald-500 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <svg class="w-16 h-16 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
             </svg>
             <h3 class="text-lg font-semibold text-emerald-700">Signing Complete</h3>
-            <p class="text-sm text-gray-500">Processing your signatures... Redirecting shortly.</p>
+            <p class="text-sm text-gray-500">Your signatures have been saved successfully.</p>
+            <div class="flex flex-col items-center gap-3 mt-4">
+                <a href="{{ route('docuperfect.esign.myDocuments') }}"
+                   style="background: #00d4aa; color: #fff; border-radius: 3px; padding: 10px 24px; font-size: 14px; font-weight: 600; text-decoration: none; display: inline-block; transition: opacity 0.2s;"
+                   onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+                    Back to My Documents
+                </a>
+                <a href="/dashboard" style="color: var(--text-muted, #64748b); font-size: 13px; text-decoration: none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">
+                    Go to Dashboard
+                </a>
+            </div>
         </div>
     </div>
 
