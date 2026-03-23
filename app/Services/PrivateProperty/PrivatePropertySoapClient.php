@@ -46,29 +46,58 @@ class PrivatePropertySoapClient
     }
 
     /**
-     * Execute a raw SOAP call. Params must already include Token.
+     * Execute a raw SOAP call with retry on timeout.
      */
     public function call(string $method, array $params): array
     {
         $this->log('info', "SOAP call: {$method}", ['params' => $this->sanitizeForLog($params)]);
 
-        try {
-            $response = $this->soapClient()->__soapCall($method, [$params]);
+        $maxAttempts = 2;
+        $lastError = null;
 
-            $result = json_decode(json_encode($response), true) ?? [];
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            try {
+                // Set PHP's global socket timeout for this call
+                $oldTimeout = ini_get('default_socket_timeout');
+                ini_set('default_socket_timeout', 120);
 
-            $this->log('info', "SOAP response: {$method}", ['response' => $result]);
+                $response = $this->soapClient()->__soapCall($method, [$params]);
 
-            return $result;
-        } catch (\SoapFault $e) {
-            $this->log('error', "SOAP fault: {$method}", [
-                'code'    => $e->getCode(),
-                'message' => $e->getMessage(),
-                'request' => $this->soapClient()->__getLastRequest(),
-            ]);
+                ini_set('default_socket_timeout', $oldTimeout);
 
-            return ['error' => true, 'message' => $e->getMessage()];
+                $result = json_decode(json_encode($response), true) ?? [];
+
+                $this->log('info', "SOAP response: {$method}", ['response' => $result]);
+
+                return $result;
+            } catch (\SoapFault $e) {
+                ini_set('default_socket_timeout', $oldTimeout ?? 60);
+                $lastError = $e;
+
+                // Retry only on timeout errors
+                $isTimeout = str_contains($e->getMessage(), 'Error Fetching http headers')
+                          || str_contains($e->getMessage(), 'Could not connect')
+                          || str_contains($e->getMessage(), 'timed out');
+
+                if ($isTimeout && $attempt < $maxAttempts) {
+                    $this->log('warning', "SOAP timeout on {$method}, retrying (attempt {$attempt}/{$maxAttempts})");
+                    $this->client = null; // Force fresh connection
+                    sleep(3);
+                    continue;
+                }
+
+                $this->log('error', "SOAP fault: {$method}", [
+                    'code'    => $e->getCode(),
+                    'message' => $e->getMessage(),
+                    'attempt' => $attempt,
+                ]);
+
+                return ['error' => true, 'message' => $e->getMessage()];
+            }
         }
+
+        // Should never reach here, but just in case
+        return ['error' => true, 'message' => $lastError?->getMessage() ?? 'Unknown error'];
     }
 
     /**
