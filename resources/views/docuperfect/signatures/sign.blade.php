@@ -610,7 +610,7 @@ function signDocument() {
             this.firstSignatureDone = this.markers.some(m => m.assigned_party === 'agent' && m.signed);
 
             // For web templates: split into A4 pages, then make elements interactive
-            // Uses $nextTick + setTimeout to ensure {!! !!} HTML is fully in the DOM
+            // Uses $nextTick + setTimeout to ensure server-rendered HTML is fully in the DOM
             if (this.isWebTemplate) {
                 this.$nextTick(() => {
                     setTimeout(() => {
