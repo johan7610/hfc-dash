@@ -186,10 +186,10 @@ class PrivatePropertyListingMapper
         $hasStreetName   = !empty($property->street_name) || !empty($this->parseStreetName($property->address));
 
         if (!$hasStreetNumber) {
-            $missing[] = ['field' => 'address', 'label' => 'Street number (e.g. "14 Ocean Drive")', 'tab' => 'info'];
+            $missing[] = ['field' => 'street_number', 'label' => 'Street number (e.g. "14 Ocean Drive")', 'tab' => 'info'];
         }
         if (!$hasStreetName) {
-            $missing[] = ['field' => 'address', 'label' => 'Street name (e.g. "14 Ocean Drive")', 'tab' => 'info'];
+            $missing[] = ['field' => 'street_name', 'label' => 'Street name (e.g. "14 Ocean Drive")', 'tab' => 'info'];
         }
 
         // PP requires minimum 3 images for sale listings, 1 for rentals

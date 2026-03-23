@@ -333,7 +333,7 @@
                                  style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25);">
                                 <p class="text-[11px] font-semibold" style="color:#f59e0b;">Cannot submit — missing required fields:</p>
                                 <ul class="space-y-0.5 m-0 pl-3" style="list-style:disc;">
-                                    <template x-for="f in missingFields" :key="f.field">
+                                    <template x-for="(f, idx) in missingFields" :key="idx">
                                         <li class="text-[11px]" style="color:#f59e0b;">
                                             <span x-text="f.label"></span>
                                             <span class="opacity-60" x-text="'(' + f.tab + ' tab)'"></span>
