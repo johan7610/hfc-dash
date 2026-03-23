@@ -149,6 +149,16 @@ class Property extends Model
         return $this->belongsTo(Branch::class);
     }
 
+    public function showdays(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(PropertyShowday::class)->orderBy('start_date');
+    }
+
+    public function activeShowdays(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(PropertyShowday::class)->where('active', true)->where('end_date', '>=', now())->orderBy('start_date');
+    }
+
     public function agency(): BelongsTo
     {
         return $this->belongsTo(Agency::class);

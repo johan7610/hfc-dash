@@ -61,7 +61,7 @@ class PrivatePropertyListingMapper
             'YCoordinate'             => (float) ($property->longitude ?? 0),
             'ListingType'             => $listingType,
             'PropertyStatus'          => $status,
-            'ShowdayEvents'           => new \stdClass(), // empty ArrayOfShowdayEvent
+            'ShowdayEvents'           => $this->buildShowdayEvents($property),
             'Attributes'              => $this->buildAttributes($property),
             'HideStreetName'          => (bool) ($property->pp_hide_street_name ?? false),
             'HideStreetNo'            => (bool) ($property->pp_hide_street_number ?? false),
@@ -376,6 +376,28 @@ class PrivatePropertyListingMapper
             'PrivatePropertyAgentId' => '',
             'PrivysealAlias'        => '',
         ];
+    }
+
+    /**
+     * Build ShowdayEvents array from saved property showdays.
+     */
+    private function buildShowdayEvents(Property $property): mixed
+    {
+        $showdays = $property->activeShowdays ?? collect();
+
+        if ($showdays->isEmpty()) {
+            return new \stdClass(); // empty ArrayOfShowdayEvent
+        }
+
+        $events = $showdays->map(fn($s) => [
+            'PropertyId'  => (string) $property->id,
+            'StartDate'   => $s->start_date->format('Y-m-d\TH:i:s'),
+            'EndDate'     => $s->end_date->format('Y-m-d\TH:i:s'),
+            'Description' => $s->description ?? 'Open Showday',
+            'Active'      => true,
+        ])->values()->all();
+
+        return ['ShowdayEvent' => count($events) === 1 ? $events[0] : $events];
     }
 
     private function buildPhotoUrls(Property $property): array

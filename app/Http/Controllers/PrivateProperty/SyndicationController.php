@@ -177,7 +177,7 @@ class SyndicationController extends Controller
     }
 
     /**
-     * Submit a showday event to PP for this property.
+     * Create a showday event for this property (saved locally, synced to PP on submission).
      */
     public function showday(Request $request, Property $property): JsonResponse
     {
@@ -189,13 +189,57 @@ class SyndicationController extends Controller
             'description' => 'nullable|string|max:500',
         ]);
 
-        $result = $this->syndicationService->submitShowday($property, [
-            'start_date'  => \Carbon\Carbon::parse($request->start_date)->format('Y-m-d\TH:i:s'),
-            'end_date'    => \Carbon\Carbon::parse($request->end_date)->format('Y-m-d\TH:i:s'),
+        $showday = $property->showdays()->create([
+            'start_date'  => \Carbon\Carbon::parse($request->start_date),
+            'end_date'    => \Carbon\Carbon::parse($request->end_date),
             'description' => $request->description ?? 'Open Showday',
+            'active'      => true,
         ]);
 
-        return response()->json($result, $result['success'] ? 200 : 422);
+        $showdays = $property->activeShowdays()->get()->map(fn($s) => [
+            'id'          => $s->id,
+            'start_date'  => $s->start_date->format('d M Y H:i'),
+            'end_date'    => $s->end_date->format('d M Y H:i'),
+            'description' => $s->description,
+            'active'      => $s->active,
+        ]);
+
+        return response()->json([
+            'success'  => true,
+            'message'  => 'Showday created',
+            'showday'  => [
+                'id'          => $showday->id,
+                'start_date'  => $showday->start_date->format('d M Y H:i'),
+                'end_date'    => $showday->end_date->format('d M Y H:i'),
+                'description' => $showday->description,
+            ],
+            'showdays' => $showdays,
+        ]);
+    }
+
+    /**
+     * Delete a showday event.
+     */
+    public function deleteShowday(Request $request, Property $property, int $showdayId): JsonResponse
+    {
+        $this->authorizeProperty($property);
+
+        $showday = $property->showdays()->findOrFail($showdayId);
+        $showday->delete();
+
+        $showdays = $property->activeShowdays()->get()->map(fn($s) => [
+            'id'          => $s->id,
+            'start_date'  => $s->start_date->format('d M Y H:i'),
+            'end_date'    => $s->end_date->format('d M Y H:i'),
+            'description' => $s->description,
+            'active'      => $s->active,
+        ]);
+
+        return response()->json([
+            'success'  => true,
+            'message'  => 'Showday removed',
+            'showdays' => $showdays,
+        ]);
     }
 
     /**

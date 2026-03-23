@@ -1445,9 +1445,50 @@
                         @endif
                     </div>
 
-                    {{-- Showday Event --}}
+                    {{-- Showday Events --}}
                     @if(!$isNew)
-                    <div x-data="{ showForm: false, sdStart: '', sdEnd: '', sdDesc: '', sdLoading: false, sdMsg: '' }" class="mt-5">
+                    @php $existingShowdays = $property->activeShowdays()->get(); @endphp
+                    <div x-data="{
+                        showForm: false,
+                        sdStart: '', sdEnd: '', sdDesc: '', sdLoading: false, sdMsg: '',
+                        showdays: {{ Js::from($existingShowdays->map(fn($s) => [
+                            'id' => $s->id,
+                            'start_date' => $s->start_date->format('d M Y H:i'),
+                            'end_date' => $s->end_date->format('d M Y H:i'),
+                            'description' => $s->description,
+                        ])) }},
+                        async createShowday() {
+                            if (!this.sdStart || !this.sdEnd) return;
+                            this.sdLoading = true; this.sdMsg = '';
+                            try {
+                                const res = await fetch('/corex/properties/{{ $property->id }}/syndication/showday', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'X-Requested-With': 'XMLHttpRequest' },
+                                    body: JSON.stringify({ start_date: this.sdStart, end_date: this.sdEnd, description: this.sdDesc || 'Open Showday' }),
+                                });
+                                const d = await res.json();
+                                if (d.success) {
+                                    this.showdays = d.showdays;
+                                    this.sdStart = ''; this.sdEnd = ''; this.sdDesc = '';
+                                    this.showForm = false;
+                                    this.sdMsg = 'Showday created';
+                                    setTimeout(() => this.sdMsg = '', 3000);
+                                } else { this.sdMsg = d.message || 'Failed'; }
+                            } catch { this.sdMsg = 'Network error'; }
+                            finally { this.sdLoading = false; }
+                        },
+                        async removeShowday(id) {
+                            if (!confirm('Remove this showday?')) return;
+                            try {
+                                const res = await fetch('/corex/properties/{{ $property->id }}/syndication/showday/' + id, {
+                                    method: 'DELETE',
+                                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'X-Requested-With': 'XMLHttpRequest' },
+                                });
+                                const d = await res.json();
+                                if (d.success) this.showdays = d.showdays;
+                            } catch {}
+                        }
+                    }" class="mt-5">
                         <div class="flex items-center justify-between mb-3">
                             <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--text-muted);">Showday Events</p>
                             <button type="button" @click="showForm = !showForm"
@@ -1457,6 +1498,34 @@
                                 <span x-text="showForm ? 'Cancel' : 'Add Showday'"></span>
                             </button>
                         </div>
+
+                        {{-- Existing showdays --}}
+                        <template x-if="showdays.length > 0">
+                            <div class="space-y-2 mb-3">
+                                <template x-for="sd in showdays" :key="sd.id">
+                                    <div class="flex items-center justify-between px-3 py-2 rounded-md text-xs"
+                                         style="background:var(--surface-2); border:1px solid var(--border);">
+                                        <div class="flex items-center gap-3">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 flex-shrink-0" style="color:#00d4aa;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+                                            <div>
+                                                <span style="color:var(--text-primary);" x-text="sd.start_date + ' — ' + sd.end_date"></span>
+                                                <span class="ml-2" style="color:var(--text-muted);" x-text="sd.description"></span>
+                                            </div>
+                                        </div>
+                                        <button type="button" @click="removeShowday(sd.id)"
+                                                class="p-1 rounded hover:bg-red-500/10 transition-colors flex-shrink-0"
+                                                style="color:#ef4444;" title="Remove showday">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                        <template x-if="showdays.length === 0 && !showForm">
+                            <p class="text-[11px] mb-3" style="color:var(--text-muted);">No showdays scheduled</p>
+                        </template>
+
+                        {{-- Create form --}}
                         <div x-show="showForm" x-cloak x-transition class="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
                             <div>
                                 <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Start</label>
@@ -1477,21 +1546,11 @@
                                        style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                             </div>
                             <div class="sm:col-span-3 flex items-center gap-3">
-                                <button type="button" @click="
-                                    if (!sdStart || !sdEnd) return;
-                                    sdLoading = true; sdMsg = '';
-                                    fetch('/corex/properties/{{ $property->id }}/syndication/showday', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'X-Requested-With': 'XMLHttpRequest' },
-                                        body: JSON.stringify({ start_date: sdStart, end_date: sdEnd, description: sdDesc || 'Open Showday' }),
-                                    }).then(r => r.json()).then(d => {
-                                        sdMsg = d.success ? 'Showday submitted to PP' : (d.message || 'Failed');
-                                        if (d.success) { sdStart = ''; sdEnd = ''; sdDesc = ''; showForm = false; }
-                                    }).catch(() => { sdMsg = 'Network error'; }).finally(() => { sdLoading = false; });
-                                " :disabled="sdLoading || !sdStart || !sdEnd"
-                                   class="px-4 py-2 rounded-md text-xs font-semibold text-white"
-                                   style="background:#00d4aa;">
-                                    <span x-text="sdLoading ? 'Submitting...' : 'Submit Showday to PP'"></span>
+                                <button type="button" @click="createShowday()"
+                                        :disabled="sdLoading || !sdStart || !sdEnd"
+                                        class="px-4 py-2 rounded-md text-xs font-semibold text-white"
+                                        style="background:#00d4aa;">
+                                    <span x-text="sdLoading ? 'Creating...' : 'Create Showday'"></span>
                                 </button>
                                 <span x-show="sdMsg" x-text="sdMsg" class="text-xs" style="color:#00d4aa;"></span>
                             </div>

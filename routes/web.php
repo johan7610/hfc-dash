@@ -614,6 +614,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/{property}/syndication/deactivate', [\App\Http\Controllers\PrivateProperty\SyndicationController::class, 'deactivate'])->name('syndication.deactivate');
         Route::post('/{property}/syndication/reactivate', [\App\Http\Controllers\PrivateProperty\SyndicationController::class, 'reactivate'])->name('syndication.reactivate');
         Route::post('/{property}/syndication/showday',    [\App\Http\Controllers\PrivateProperty\SyndicationController::class, 'showday'])->name('syndication.showday');
+        Route::delete('/{property}/syndication/showday/{showday}', [\App\Http\Controllers\PrivateProperty\SyndicationController::class, 'deleteShowday'])->name('syndication.showday.delete');
         Route::post('/{property}/syndication/visibility', [\App\Http\Controllers\PrivateProperty\SyndicationController::class, 'updateVisibility'])->name('syndication.visibility');
         Route::get('/{property}/syndication/status',      [\App\Http\Controllers\PrivateProperty\SyndicationController::class, 'status'])->name('syndication.status');
         Route::get('/{property}/syndication/readiness',   [\App\Http\Controllers\PrivateProperty\SyndicationController::class, 'readiness'])->name('syndication.readiness');
