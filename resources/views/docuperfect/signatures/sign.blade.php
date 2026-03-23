@@ -161,7 +161,8 @@
     {{-- Main content: Document viewer --}}
     <div class="bg-white border border-gray-200 rounded-md p-4 overflow-hidden flex flex-col" style="min-height:600px;">
 
-        {{-- Page navigation --}}
+        {{-- Page navigation (PDF only — web templates scroll all A4 pages) --}}
+        <template x-if="!isWebTemplate">
         <div class="flex items-center justify-between mb-3 flex-shrink-0">
             <button @click="prevPage()" :disabled="currentPage <= 1"
                     class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
@@ -177,6 +178,7 @@
                 Next
             </button>
         </div>
+        </template>
 
         {{-- Page display with markers --}}
         <div class="flex-1 overflow-auto flex justify-center" style="background:#e2e8f0; padding:16px 0;">
@@ -195,10 +197,9 @@
                      x-ref="pageImage">
             @endif
 
-                {{-- Render document field values --}}
-                {{-- Creator fields: show only when NOT flattened (baked in when flattened) --}}
-                {{-- Agent-assigned fields: interactive (agent fills during signing) --}}
-                {{-- Other signer fields: locked with label --}}
+                {{-- Render document field values (PDF only — web templates use inline interactive elements) --}}
+                <template x-if="!isWebTemplate">
+                <div>
                 <template x-for="field in fieldsForCurrentPage()" :key="field.id">
                     <div x-show="!hasFlattened || (field.assignedTo && field.assignedTo !== 'creator')"
                          class="absolute overflow-hidden"
@@ -377,6 +378,8 @@
                             </div>
                         </template>
                     </div>
+                </template>
+                </div>
                 </template>
 
                 {{-- Render floating markers for PDF templates ONLY --}}
@@ -607,12 +610,18 @@ function signDocument() {
             this.firstSignatureDone = this.markers.some(m => m.assigned_party === 'agent' && m.signed);
 
             // For web templates: split into A4 pages, then make elements interactive
+            // Uses $nextTick + setTimeout to ensure {!! !!} HTML is fully in the DOM
             if (this.isWebTemplate) {
                 this.$nextTick(() => {
-                    splitDocumentIntoPages(this.$refs.webDocContent);
-                    this._makeWebElementsInteractive();
-                    // Delay to let DOM settle after ceremony fields are created
-                    setTimeout(() => this._updateIncompleteCount(), 500);
+                    setTimeout(() => {
+                        const container = this.$refs.webDocContent;
+                        console.log('SPLIT_PRE', container ? container.querySelectorAll('.corex-page-break').length : 'NO_CONTAINER');
+                        splitDocumentIntoPages(container);
+                        console.log('SPLIT_POST', container ? container.querySelectorAll('.corex-a4-page').length : 'NO_CONTAINER');
+                        this._makeWebElementsInteractive();
+                        // Delay to let DOM settle after ceremony fields are created
+                        setTimeout(() => this._updateIncompleteCount(), 300);
+                    }, 150);
                 });
             } else {
                 // PDF template: incomplete count = unsigned agent markers
