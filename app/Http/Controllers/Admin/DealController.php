@@ -232,36 +232,46 @@ public function index(Request $request)
     {
         abort_unless(auth()->user()?->hasPermission('deals.create'), 403);
 
-        return DB::transaction(function () use ($request) {
-            $deal = new Deal();            // NUMERIC DEAL NUMBERING — supports legacy D-#### and numeric formats
-            $maxNumericOnly = (int) Deal::query()
-                ->whereRaw("deal_no NOT LIKE 'D-%'")
-                ->whereRaw("deal_no REGEXP '^[0-9]+$'")
-                ->max('deal_no');
+        try {
+            return DB::transaction(function () use ($request) {
+                $deal = new Deal();            // NUMERIC DEAL NUMBERING — supports legacy D-#### and numeric formats
+                $maxNumericOnly = (int) Deal::query()
+                    ->whereRaw("deal_no NOT LIKE 'D-%'")
+                    ->whereRaw("deal_no REGEXP '^[0-9]+$'")
+                    ->max('deal_no');
 
-            $maxFromPrefixed = (int) Deal::query()
-                ->selectRaw("MAX(CAST(SUBSTR(deal_no, 3) AS UNSIGNED)) as m")
-                ->where('deal_no', 'like', 'D-%')
-                ->value('m');
+                $maxFromPrefixed = (int) Deal::query()
+                    ->selectRaw("MAX(CAST(SUBSTR(deal_no, 3) AS UNSIGNED)) as m")
+                    ->where('deal_no', 'like', 'D-%')
+                    ->value('m');
 
-            $maxNumeric = max($maxNumericOnly, $maxFromPrefixed, 0);
+                $maxNumeric = max($maxNumericOnly, $maxFromPrefixed, 0);
 
-            // If the database is empty (fresh/wiped), start at 1001 to match real-world file numbering.
-            if ($maxNumeric <= 0) {
-                $maxNumeric = 1000;
-            }
+                // If the database is empty (fresh/wiped), start at 1001 to match real-world file numbering.
+                if ($maxNumeric <= 0) {
+                    $maxNumeric = 1000;
+                }
 
-            $next = $maxNumeric + 1;
+                $next = $maxNumeric + 1;
 
-            // NEW FORMAT: numeric only
-            $deal->deal_no = (string)$next;
+                // NEW FORMAT: numeric only
+                $deal->deal_no = (string)$next;
 
-            $resp = $this->persistDeal($deal, $request);
-            if ($deal->exists) {
-                $this->logDealEvent($deal, 'created', null, null, 'Deal created');
-            }
-            return $resp;
-        });
+                $resp = $this->persistDeal($deal, $request);
+                if ($deal->exists) {
+                    $this->logDealEvent($deal, 'created', null, null, 'Deal created');
+                }
+                return $resp;
+            });
+        } catch (\Throwable $e) {
+            \Log::error('Deal store() failed', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile() . ':' . $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'input' => $request->except(['_token']),
+            ]);
+            return back()->withErrors('Failed to save deal: ' . $e->getMessage())->withInput();
+        }
     }
 
     public function update(Request $request, Deal $deal)
@@ -549,17 +559,29 @@ $financialLocked = ($deal->exists && (($deal->commission_status ?? "") === "Paid
         // Sliding scale recalculation: only when accepted_status changes to/from Granted
         $newAcceptedStatus = (string)($deal->accepted_status ?? "");
         if ($oldAcceptedStatus !== $newAcceptedStatus && ($oldAcceptedStatus === "G" || $newAcceptedStatus === "G")) {
-            (new SlidingScaleService())->applyForDeal($deal->fresh());
+            try {
+                (new SlidingScaleService())->applyForDeal($deal->fresh());
+            } catch (\Throwable $e) {
+                \Log::error('SlidingScaleService failed for deal', ['deal_id' => $deal->id, 'error' => $e->getMessage()]);
+            }
         }
 
         // CRITICAL: Rebuild deal_money_lines after any deal create/update and pivot changes
-        \Log::info('Rebuilding deal_money_lines after deal create/update', ['deal_id' => (int)$deal->id]);
-        \App\Services\DealMoneyLineRebuilder::rebuildDealId((int)$deal->id);
+        try {
+            \Log::info('Rebuilding deal_money_lines after deal create/update', ['deal_id' => (int)$deal->id]);
+            \App\Services\DealMoneyLineRebuilder::rebuildDealId((int)$deal->id);
+        } catch (\Throwable $e) {
+            \Log::error('DealMoneyLineRebuilder failed', ['deal_id' => $deal->id, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+        }
 
         // Refresh finance_computed_values for the affected period (single source of truth)
         $dealPeriod = (string)($deal->period ?? '');
         if ($dealPeriod && preg_match('/^\d{4}-\d{2}$/', $dealPeriod)) {
-            (new \App\Services\Finance\RollupService())->refreshPeriod($dealPeriod);
+            try {
+                (new \App\Services\Finance\RollupService())->refreshPeriod($dealPeriod);
+            } catch (\Throwable $e) {
+                \Log::error('RollupService failed', ['deal_id' => $deal->id, 'period' => $dealPeriod, 'error' => $e->getMessage()]);
+            }
         }
 
         return redirect()->route('admin.deals');
