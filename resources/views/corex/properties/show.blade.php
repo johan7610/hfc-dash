@@ -1140,208 +1140,274 @@
                 </div>
 
                 {{-- Property Address --}}
-                <div x-data="{
-                    addressTab: 'internal',
-                    streetNumber: '{{ old('street_number', $property->street_number ?? '') }}',
-                    streetName: '{{ old('street_name', $property->street_name ?? '') }}',
-                    suburb: '{{ old('suburb', $property->suburb ?? '') }}',
-                    city: '{{ old('city', $property->city ?? '') }}',
-                    province: '{{ old('province', $property->province ?? 'KwaZulu-Natal') }}',
-                    get internalAddress() {
-                        return [this.streetNumber, this.streetName].filter(Boolean).join('-') + (this.streetName ? ', ' : '') + [this.suburb, this.city, this.province].filter(Boolean).join(', ');
-                    },
-                    get publicAddress() {
-                        let parts = [];
-                        if (!{{ $property->pp_hide_street_name ? 'true' : 'false' }}) {
-                            let street = [this.streetNumber, this.streetName].filter(Boolean).join(' ');
-                            if (street) parts.push(street);
-                        }
-                        parts.push(...[this.suburb, this.city, this.province].filter(Boolean));
-                        return parts.join(', ') || 'No public address';
-                    }
-                }">
+                <div x-data="propertyAddress({{ Js::from([
+                    'streetNumber' => old('street_number', $property->street_number ?? ''),
+                    'streetName' => old('street_name', $property->street_name ?? ''),
+                    'complexName' => old('complex_name', $property->complex_name ?? ''),
+                    'unitNumber' => old('unit_number', $property->unit_number ?? ''),
+                    'suburb' => old('suburb', $property->suburb ?? ''),
+                    'city' => old('city', $property->city ?? ''),
+                    'province' => old('province', $property->province ?? 'KwaZulu-Natal'),
+                    'hideStreetName' => (bool) old('pp_hide_street_name', $property->pp_hide_street_name ?? false),
+                    'hideStreetNumber' => (bool) old('pp_hide_street_number', $property->pp_hide_street_number ?? false),
+                    'hideComplexName' => (bool) old('pp_hide_complex_name', $property->pp_hide_complex_name ?? false),
+                    'hideUnitNumber' => (bool) old('pp_hide_unit_number', $property->pp_hide_unit_number ?? false),
+                ]) }})">
                     <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Property Address</h3>
 
-                    {{-- Internal / Public display --}}
-                    <div class="rounded-md mb-5 overflow-hidden" style="border:1px solid var(--border);">
-                        <div class="grid grid-cols-[100px_1fr] text-xs" style="border-bottom:1px solid var(--border);">
-                            <div class="px-3 py-2 font-semibold" style="color:#c97a2e;">Internal</div>
-                            <div class="px-3 py-2 text-right" style="color:var(--text-primary);" x-text="internalAddress"></div>
+                    {{-- Summary rows — Internal & Public --}}
+                    <div class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
+                        {{-- Internal row --}}
+                        <div class="flex items-center cursor-pointer transition-colors"
+                             style="border-bottom:1px solid var(--border);"
+                             @click="openModal = 'internal'"
+                             @mouseenter="$el.style.background='var(--surface-2)'" @mouseleave="$el.style.background=''">
+                            <div class="px-3 py-2.5 flex items-center gap-1.5 flex-shrink-0" style="width:100px;">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" style="color:#c97a2e;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                                <span class="text-xs font-semibold" style="color:#c97a2e;">Internal</span>
+                            </div>
+                            <div class="flex-1 px-3 py-2.5 text-right text-xs truncate" style="color:var(--text-primary);" x-text="internalAddress || 'Click to set address'"></div>
                         </div>
-                        <div class="grid grid-cols-[100px_1fr] text-xs">
-                            <div class="px-3 py-2 font-semibold" style="color:#c93434;">Public</div>
-                            <div class="px-3 py-2 text-right" style="color:var(--text-primary);" x-text="publicAddress"></div>
+                        {{-- Public row --}}
+                        <div class="flex items-center cursor-pointer transition-colors"
+                             @click="openModal = 'public'"
+                             @mouseenter="$el.style.background='var(--surface-2)'" @mouseleave="$el.style.background=''">
+                            <div class="px-3 py-2.5 flex items-center gap-1.5 flex-shrink-0" style="width:100px;">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" style="color:#c93434;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418"/></svg>
+                                <span class="text-xs font-semibold" style="color:#c93434;">Public</span>
+                            </div>
+                            <div class="flex-1 px-3 py-2.5 text-right text-xs truncate" style="color:var(--text-primary);" x-text="publicAddress || 'Click to configure'"></div>
                         </div>
                     </div>
 
-                    {{-- Complex or Estate --}}
-                    <div class="mb-5">
-                        <div class="text-[10px] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default,#0b2a4a); color:#fff;">Complex or Estate</div>
-                        <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
-                            <div class="grid grid-cols-2 gap-4">
+                    {{-- Hidden inputs that always submit with the form --}}
+                    <input type="hidden" name="address" value="{{ old('address', $property->address) }}">
+
+                    {{-- ===== INTERNAL MODAL ===== --}}
+                    <div x-show="openModal === 'internal'" x-cloak
+                         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                         @keydown.escape.window="openModal = null">
+                        <div class="absolute inset-0 bg-black/60" @click="openModal = null"></div>
+                        <div class="relative w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-lg shadow-2xl"
+                             style="background:var(--surface); border:1px solid var(--border);" @click.stop>
+
+                            <div class="sticky top-0 z-10 flex items-center justify-between px-5 py-3 rounded-t-lg"
+                                 style="background:var(--brand-default,#0b2a4a); color:#fff;">
+                                <div class="flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" style="color:#c97a2e;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                                    <span class="text-sm font-bold">Internal Address</span>
+                                </div>
+                                <button type="button" @click="openModal = null" class="p-1 rounded hover:bg-white/10">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+                                </button>
+                            </div>
+
+                            <div class="p-5 space-y-5">
+                                {{-- Complex or Estate --}}
                                 <div>
-                                    <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Unit Number</label>
-                                    <div class="flex items-center gap-2">
-                                        <input type="text" name="unit_number" value="{{ old('unit_number', $property->unit_number) }}"
-                                               class="flex-1 rounded-md px-3 py-1.5 text-sm"
-                                               style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                                        <label class="flex items-center gap-1 text-[9px] flex-shrink-0 cursor-pointer" style="color:var(--text-muted);" title="Hide unit number on PP feed">
-                                            <input type="checkbox" name="pp_hide_unit_number" value="1" {{ old('pp_hide_unit_number', $property->pp_hide_unit_number ?? false) ? 'checked' : '' }} class="w-3 h-3 rounded" style="accent-color:#00d4aa;">
-                                            Hide
+                                    <div class="text-[10px] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default,#0b2a4a); color:#fff;">Complex or Estate</div>
+                                    <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Unit Number</label>
+                                                <input type="text" name="unit_number" x-model="unitNumber" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            </div>
+                                            <div>
+                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Floor Number</label>
+                                                <input type="text" name="floor_number" value="{{ old('floor_number', $property->floor_number) }}" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Name of Unit, Section or Block</label>
+                                            <input type="text" name="unit_section_block" value="{{ old('unit_section_block', $property->unit_section_block) }}" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Name of Complex or Estate</label>
+                                            <input type="text" name="complex_name" x-model="complexName" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- Street --}}
+                                <div>
+                                    <div class="text-[10px] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default,#0b2a4a); color:#fff;">Street</div>
+                                    <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
+                                        <div>
+                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Street Number</label>
+                                            <input type="text" name="street_number" x-model="streetNumber" placeholder="e.g. 1046-2" class="w-40 rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Street Name</label>
+                                            <input type="text" name="street_name" x-model="streetName" placeholder="e.g. Clarendon Road" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- City or Suburb --}}
+                                <div>
+                                    <div class="text-[10px] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default,#0b2a4a); color:#fff;">City or Suburb</div>
+                                    <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
+                                        <div>
+                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Suburb <span class="text-red-400">*</span></label>
+                                            <input type="text" name="suburb" x-model="suburb" required placeholder="e.g. Uvongo Beach" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">City / Town</label>
+                                                <input type="text" name="city" x-model="city" placeholder="e.g. Margate" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            </div>
+                                            <div>
+                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Province</label>
+                                                <select name="province" x-model="province" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                                    @foreach(['KwaZulu-Natal','Gauteng','Western Cape','Eastern Cape','Free State','Limpopo','Mpumalanga','North West','Northern Cape'] as $prov)
+                                                    <option value="{{ $prov }}">{{ $prov }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- More Info --}}
+                                <div>
+                                    <div class="text-[10px] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default,#0b2a4a); color:#fff;">More Info</div>
+                                    <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Property / Erf Number</label>
+                                                <input type="text" name="property_number" value="{{ old('property_number', $property->property_number) }}" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            </div>
+                                            <div>
+                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Stand Number</label>
+                                                <input type="text" name="stand_number" value="{{ old('stand_number', $property->stand_number) }}" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            </div>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Zone Type</label>
+                                                <select name="zone_type" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                                    <option value="">-- None --</option>
+                                                    @foreach(['Residential','Commercial','Industrial','Agricultural','Mixed Use'] as $zt)
+                                                    <option value="{{ $zt }}" {{ old('zone_type', $property->zone_type) === $zt ? 'selected' : '' }}>{{ $zt }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">District / Municipality</label>
+                                                <input type="text" name="district" value="{{ old('district', $property->district) }}" placeholder="e.g. Ray Nkonyeni" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Region</label>
+                                            <input type="text" name="region" value="{{ old('region', $property->region) }}" placeholder="KZN South Coast" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Internal Note</label>
+                                            <textarea name="address_internal_note" rows="2" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">{{ old('address_internal_note', $property->address_internal_note) }}</textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="sticky bottom-0 px-5 py-3 rounded-b-lg flex justify-end" style="background:var(--surface); border-top:1px solid var(--border);">
+                                <button type="button" @click="openModal = null" class="px-4 py-2 rounded-md text-xs font-semibold text-white" style="background:#00d4aa;">Done</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- ===== PUBLIC MODAL ===== --}}
+                    <div x-show="openModal === 'public'" x-cloak
+                         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                         @keydown.escape.window="openModal = null">
+                        <div class="absolute inset-0 bg-black/60" @click="openModal = null"></div>
+                        <div class="relative w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-lg shadow-2xl"
+                             style="background:var(--surface); border:1px solid var(--border);" @click.stop>
+
+                            <div class="sticky top-0 z-10 flex items-center justify-between px-5 py-3 rounded-t-lg"
+                                 style="background:#c93434; color:#fff;">
+                                <div class="flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3"/></svg>
+                                    <span class="text-sm font-bold">Public Address &mdash; Portal Feeds</span>
+                                </div>
+                                <button type="button" @click="openModal = null" class="p-1 rounded hover:bg-white/10">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+                                </button>
+                            </div>
+
+                            <div class="p-5 space-y-5">
+                                <p class="text-[11px]" style="color:var(--text-muted);">
+                                    This controls what is shown on portal feeds (Private Property, Property24, website). Unchecked fields are <strong>hidden</strong> from the public.
+                                </p>
+
+                                {{-- Public preview --}}
+                                <div class="rounded-md px-4 py-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                                    <p class="text-[10px] font-bold uppercase tracking-wider mb-2" style="color:var(--text-muted);">Feed Preview</p>
+                                    <p class="text-sm font-semibold" style="color:var(--text-primary);" x-text="publicAddress"></p>
+                                </div>
+
+                                {{-- Visibility toggles --}}
+                                <div class="space-y-0" style="border:1px solid var(--border); border-radius:6px; overflow:hidden;">
+                                    <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid var(--border);">
+                                        <div>
+                                            <p class="text-xs font-semibold" style="color:var(--text-primary);">Street Number</p>
+                                            <p class="text-[11px]" style="color:var(--text-muted);" x-text="streetNumber || '(not set)'"></p>
+                                        </div>
+                                        <label class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200"
+                                               :style="!hideStreetNumber ? 'background:#00d4aa' : 'background:var(--surface-3,#374151)'">
+                                            <input type="checkbox" name="pp_hide_street_number" value="1" :checked="hideStreetNumber" @change="hideStreetNumber = $el.checked" class="sr-only">
+                                            <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-sm transition-transform duration-200"
+                                                  style="background:#fff; margin-top:2px;"
+                                                  :style="!hideStreetNumber ? 'transform:translateX(18px); margin-left:1px;' : 'transform:translateX(2px); margin-left:1px;'"></span>
+                                        </label>
+                                    </div>
+                                    <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid var(--border);">
+                                        <div>
+                                            <p class="text-xs font-semibold" style="color:var(--text-primary);">Street Name</p>
+                                            <p class="text-[11px]" style="color:var(--text-muted);" x-text="streetName || '(not set)'"></p>
+                                        </div>
+                                        <label class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200"
+                                               :style="!hideStreetName ? 'background:#00d4aa' : 'background:var(--surface-3,#374151)'">
+                                            <input type="checkbox" name="pp_hide_street_name" value="1" :checked="hideStreetName" @change="hideStreetName = $el.checked" class="sr-only">
+                                            <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-sm transition-transform duration-200"
+                                                  style="background:#fff; margin-top:2px;"
+                                                  :style="!hideStreetName ? 'transform:translateX(18px); margin-left:1px;' : 'transform:translateX(2px); margin-left:1px;'"></span>
+                                        </label>
+                                    </div>
+                                    <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid var(--border);">
+                                        <div>
+                                            <p class="text-xs font-semibold" style="color:var(--text-primary);">Complex Name</p>
+                                            <p class="text-[11px]" style="color:var(--text-muted);" x-text="complexName || '(not set)'"></p>
+                                        </div>
+                                        <label class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200"
+                                               :style="!hideComplexName ? 'background:#00d4aa' : 'background:var(--surface-3,#374151)'">
+                                            <input type="checkbox" name="pp_hide_complex_name" value="1" :checked="hideComplexName" @change="hideComplexName = $el.checked" class="sr-only">
+                                            <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-sm transition-transform duration-200"
+                                                  style="background:#fff; margin-top:2px;"
+                                                  :style="!hideComplexName ? 'transform:translateX(18px); margin-left:1px;' : 'transform:translateX(2px); margin-left:1px;'"></span>
+                                        </label>
+                                    </div>
+                                    <div class="flex items-center justify-between px-4 py-3">
+                                        <div>
+                                            <p class="text-xs font-semibold" style="color:var(--text-primary);">Unit Number</p>
+                                            <p class="text-[11px]" style="color:var(--text-muted);" x-text="unitNumber || '(not set)'"></p>
+                                        </div>
+                                        <label class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200"
+                                               :style="!hideUnitNumber ? 'background:#00d4aa' : 'background:var(--surface-3,#374151)'">
+                                            <input type="checkbox" name="pp_hide_unit_number" value="1" :checked="hideUnitNumber" @change="hideUnitNumber = $el.checked" class="sr-only">
+                                            <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-sm transition-transform duration-200"
+                                                  style="background:#fff; margin-top:2px;"
+                                                  :style="!hideUnitNumber ? 'transform:translateX(18px); margin-left:1px;' : 'transform:translateX(2px); margin-left:1px;'"></span>
                                         </label>
                                     </div>
                                 </div>
-                                <div>
-                                    <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Floor Number</label>
-                                    <input type="text" name="floor_number" value="{{ old('floor_number', $property->floor_number) }}"
-                                           class="w-full rounded-md px-3 py-1.5 text-sm"
-                                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                                </div>
-                            </div>
-                            <div>
-                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Name of Unit, Section or Block</label>
-                                <input type="text" name="unit_section_block" value="{{ old('unit_section_block', $property->unit_section_block) }}"
-                                       class="w-full rounded-md px-3 py-1.5 text-sm"
-                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                            </div>
-                            <div>
-                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Name of Complex or Estate</label>
-                                <div class="flex items-center gap-2">
-                                    <input type="text" name="complex_name" value="{{ old('complex_name', $property->complex_name) }}"
-                                           class="flex-1 rounded-md px-3 py-1.5 text-sm"
-                                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                                    <label class="flex items-center gap-1 text-[9px] flex-shrink-0 cursor-pointer" style="color:var(--text-muted);" title="Hide complex name on PP feed">
-                                        <input type="checkbox" name="pp_hide_complex_name" value="1" {{ old('pp_hide_complex_name', $property->pp_hide_complex_name ?? false) ? 'checked' : '' }} class="w-3 h-3 rounded" style="accent-color:#00d4aa;">
-                                        Hide
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 
-                    {{-- Street --}}
-                    <div class="mb-5">
-                        <div class="text-[10px] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default,#0b2a4a); color:#fff;">Street</div>
-                        <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
-                            <div>
-                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Street Number</label>
-                                <div class="flex items-center gap-2">
-                                    <input type="text" name="street_number" x-model="streetNumber" value="{{ old('street_number', $property->street_number) }}"
-                                           placeholder="e.g. 1046-2"
-                                           class="w-40 rounded-md px-3 py-1.5 text-sm"
-                                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                                    <label class="flex items-center gap-1 text-[9px] flex-shrink-0 cursor-pointer" style="color:var(--text-muted);" title="Hide street number on PP feed">
-                                        <input type="checkbox" name="pp_hide_street_number" value="1" {{ old('pp_hide_street_number', $property->pp_hide_street_number ?? false) ? 'checked' : '' }} class="w-3 h-3 rounded" style="accent-color:#00d4aa;">
-                                        Hide
-                                    </label>
-                                </div>
+                                <p class="text-[10px]" style="color:var(--text-muted);">
+                                    Toggle ON (green) = visible on feeds. Toggle OFF = hidden. Changes apply when you save the property.
+                                </p>
                             </div>
-                            <div>
-                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Street Name</label>
-                                <div class="flex items-center gap-2">
-                                    <input type="text" name="street_name" x-model="streetName" value="{{ old('street_name', $property->street_name) }}"
-                                           placeholder="e.g. Clarendon Road"
-                                           class="flex-1 rounded-md px-3 py-1.5 text-sm"
-                                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                                    <label class="flex items-center gap-1 text-[9px] flex-shrink-0 cursor-pointer" style="color:var(--text-muted);" title="Hide street name on PP feed">
-                                        <input type="checkbox" name="pp_hide_street_name" value="1" {{ old('pp_hide_street_name', $property->pp_hide_street_name ?? false) ? 'checked' : '' }} class="w-3 h-3 rounded" style="accent-color:#00d4aa;">
-                                        Hide
-                                    </label>
-                                </div>
-                            </div>
-                            {{-- Keep the combined address field as a hidden fallback for existing data --}}
-                            <input type="hidden" name="address" value="{{ old('address', $property->address) }}">
-                        </div>
-                    </div>
 
-                    {{-- City or Suburb --}}
-                    <div class="mb-5">
-                        <div class="text-[10px] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default,#0b2a4a); color:#fff;">City or Suburb</div>
-                        <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div>
-                                    <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Suburb <span class="text-red-400">*</span></label>
-                                    <input type="text" name="suburb" x-model="suburb" value="{{ old('suburb', $property->suburb) }}" required
-                                           placeholder="e.g. Uvongo Beach"
-                                           class="w-full rounded-md px-3 py-1.5 text-sm"
-                                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                                </div>
-                                <div>
-                                    <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">City / Town</label>
-                                    <input type="text" name="city" x-model="city" value="{{ old('city', $property->city) }}"
-                                           placeholder="e.g. Margate"
-                                           class="w-full rounded-md px-3 py-1.5 text-sm"
-                                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                                </div>
-                                <div>
-                                    <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Province</label>
-                                    <select name="province" x-model="province" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                                        <option value="KwaZulu-Natal" {{ old('province', $property->province ?? 'KwaZulu-Natal') === 'KwaZulu-Natal' ? 'selected' : '' }}>KwaZulu-Natal</option>
-                                        <option value="Gauteng" {{ old('province', $property->province) === 'Gauteng' ? 'selected' : '' }}>Gauteng</option>
-                                        <option value="Western Cape" {{ old('province', $property->province) === 'Western Cape' ? 'selected' : '' }}>Western Cape</option>
-                                        <option value="Eastern Cape" {{ old('province', $property->province) === 'Eastern Cape' ? 'selected' : '' }}>Eastern Cape</option>
-                                        <option value="Free State" {{ old('province', $property->province) === 'Free State' ? 'selected' : '' }}>Free State</option>
-                                        <option value="Limpopo" {{ old('province', $property->province) === 'Limpopo' ? 'selected' : '' }}>Limpopo</option>
-                                        <option value="Mpumalanga" {{ old('province', $property->province) === 'Mpumalanga' ? 'selected' : '' }}>Mpumalanga</option>
-                                        <option value="North West" {{ old('province', $property->province) === 'North West' ? 'selected' : '' }}>North West</option>
-                                        <option value="Northern Cape" {{ old('province', $property->province) === 'Northern Cape' ? 'selected' : '' }}>Northern Cape</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {{-- More Info --}}
-                    <div>
-                        <div class="text-[10px] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default,#0b2a4a); color:#fff;">More Info</div>
-                        <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div>
-                                    <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Property / Erf Number</label>
-                                    <input type="text" name="property_number" value="{{ old('property_number', $property->property_number) }}"
-                                           placeholder="e.g. Erf 789"
-                                           class="w-full rounded-md px-3 py-1.5 text-sm"
-                                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                                </div>
-                                <div>
-                                    <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Stand Number</label>
-                                    <input type="text" name="stand_number" value="{{ old('stand_number', $property->stand_number) }}"
-                                           class="w-full rounded-md px-3 py-1.5 text-sm"
-                                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                                </div>
-                                <div>
-                                    <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Zone Type</label>
-                                    <select name="zone_type" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                                        <option value="">— None —</option>
-                                        <option value="Residential" {{ old('zone_type', $property->zone_type) === 'Residential' ? 'selected' : '' }}>Residential</option>
-                                        <option value="Commercial" {{ old('zone_type', $property->zone_type) === 'Commercial' ? 'selected' : '' }}>Commercial</option>
-                                        <option value="Industrial" {{ old('zone_type', $property->zone_type) === 'Industrial' ? 'selected' : '' }}>Industrial</option>
-                                        <option value="Agricultural" {{ old('zone_type', $property->zone_type) === 'Agricultural' ? 'selected' : '' }}>Agricultural</option>
-                                        <option value="Mixed Use" {{ old('zone_type', $property->zone_type) === 'Mixed Use' ? 'selected' : '' }}>Mixed Use</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">District / Municipality</label>
-                                    <input type="text" name="district" value="{{ old('district', $property->district) }}"
-                                           placeholder="e.g. Ray Nkonyeni"
-                                           class="w-full rounded-md px-3 py-1.5 text-sm"
-                                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                                </div>
-                                <div>
-                                    <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Region</label>
-                                    <input type="text" name="region" value="{{ old('region', $property->region) }}"
-                                           placeholder="KZN South Coast"
-                                           class="w-full rounded-md px-3 py-1.5 text-sm"
-                                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                                </div>
-                            </div>
-                            <div>
-                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Internal Note</label>
-                                <textarea name="address_internal_note" rows="2"
-                                          class="w-full rounded-md px-3 py-1.5 text-sm"
-                                          style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">{{ old('address_internal_note', $property->address_internal_note) }}</textarea>
+                            <div class="sticky bottom-0 px-5 py-3 rounded-b-lg flex justify-end" style="background:var(--surface); border-top:1px solid var(--border);">
+                                <button type="button" @click="openModal = null" class="px-4 py-2 rounded-md text-xs font-semibold text-white" style="background:#00d4aa;">Done</button>
                             </div>
                         </div>
                     </div>
@@ -2732,6 +2798,46 @@ document.addEventListener('keydown', function(e) {
         });
     }
 })();
+
+// Property Address modal component
+function propertyAddress(config) {
+    return {
+        openModal: null,
+        streetNumber: config.streetNumber || '',
+        streetName: config.streetName || '',
+        complexName: config.complexName || '',
+        unitNumber: config.unitNumber || '',
+        suburb: config.suburb || '',
+        city: config.city || '',
+        province: config.province || 'KwaZulu-Natal',
+        hideStreetName: config.hideStreetName || false,
+        hideStreetNumber: config.hideStreetNumber || false,
+        hideComplexName: config.hideComplexName || false,
+        hideUnitNumber: config.hideUnitNumber || false,
+
+        get internalAddress() {
+            let street = [this.streetNumber, this.streetName].filter(Boolean).join(' ');
+            let location = [this.suburb, this.city, this.province].filter(Boolean).join(', ');
+            return [street, location].filter(Boolean).join(', ');
+        },
+
+        get publicAddress() {
+            let parts = [];
+            if (!this.hideStreetNumber && this.streetNumber) parts.push(this.streetNumber);
+            if (!this.hideStreetName && this.streetName) {
+                if (parts.length > 0) {
+                    parts[parts.length - 1] += ' ' + this.streetName;
+                } else {
+                    parts.push(this.streetName);
+                }
+            }
+            if (!this.hideComplexName && this.complexName) parts.push(this.complexName);
+            if (!this.hideUnitNumber && this.unitNumber) parts.push('Unit ' + this.unitNumber);
+            parts.push(...[this.suburb, this.city, this.province].filter(Boolean));
+            return parts.join(', ') || 'No public address configured';
+        },
+    };
+}
 
 // Private Property Syndication Alpine component
 function ppSyndication(config) {
