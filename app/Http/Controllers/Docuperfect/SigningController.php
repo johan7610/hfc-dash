@@ -1413,6 +1413,14 @@ class SigningController extends Controller
         $document = $signatureTemplate->document;
         $docTemplate = $document->template ?? null;
 
+        // Web template with merged_html: render document HTML directly via dompdf
+        $webTemplateData = $document->web_template_data ?? [];
+        $mergedHtml = $webTemplateData['merged_html'] ?? '';
+
+        if (!empty($mergedHtml) && $docTemplate && $docTemplate->render_type === 'web') {
+            return $this->downloadWebTemplateAsPdf($signingRequest, $document, $mergedHtml);
+        }
+
         $flattenedPages = $signatureTemplate->flattened_pages_json ?? [];
         if (!$docTemplate && empty($flattenedPages)) {
             return redirect()->route('signatures.external', $token)
@@ -1507,6 +1515,55 @@ class SigningController extends Controller
         }
 
         return $response;
+    }
+
+    /**
+     * Generate a printable PDF from a web template's merged_html.
+     * Used when the external signer chooses "Download, Print & Sign".
+     */
+    private function downloadWebTemplateAsPdf(SignatureRequest $signingRequest, $document, string $mergedHtml)
+    {
+        // Load corex-document.css inline for dompdf (it cannot resolve external URLs)
+        $cssPath = public_path('css/corex-document.css');
+        $css = file_exists($cssPath) ? file_get_contents($cssPath) : '';
+
+        // Build a complete HTML document for dompdf
+        $html = '<!DOCTYPE html><html><head><meta charset="utf-8">'
+            . '<style>' . $css . '</style>'
+            . '<style>'
+            // Overrides for PDF rendering: remove screen-only styling
+            . 'body { margin: 0; padding: 0; background: white; font-family: "Plus Jakarta Sans", Arial, Helvetica, sans-serif; font-size: 10.5pt; }'
+            . '.corex-document-wrapper { max-width: none; padding: 0; background: white; }'
+            . '.corex-page { box-shadow: none; margin: 0; width: auto; min-height: auto; }'
+            // Ensure page breaks work at corex-page-break markers
+            . '.corex-page-break { page-break-before: always; border-top: none; margin: 4pt 0; padding: 4pt 0; }'
+            // Hide interactive UI elements that shouldn't appear in print
+            . '.web-sig-prompt { display: none; }'
+            . '.web-sig-interactive { border: 1px solid #ccc !important; background: transparent !important; }'
+            . '.web-sig-other-party { opacity: 1; }'
+            // Signature images should be visible
+            . '.web-sig-signed-img { display: block; max-height: 50px; }'
+            . '.corex-page-initials .initial-placeholder { font-size: 8px; color: #666; }'
+            . '</style>'
+            . '</head><body>';
+
+        $html .= $mergedHtml;
+        $html .= '</body></html>';
+
+        $pdf = Pdf::loadHTML($html);
+        $pdf->setPaper('a4', 'portrait');
+        $pdf->setOption('isRemoteEnabled', true);
+        $pdf->setOption('isHtml5ParserEnabled', true);
+
+        // Update signing method
+        $signingRequest->update([
+            'signing_method' => 'wet_ink',
+            'wet_ink_status' => $signingRequest->wet_ink_status ?: SignatureRequest::WET_INK_PENDING_UPLOAD,
+        ]);
+
+        $filename = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', $document->name) . ' - For Signing.pdf';
+
+        return $pdf->download($filename);
     }
 
     /**
