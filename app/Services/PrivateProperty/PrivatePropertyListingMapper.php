@@ -320,7 +320,8 @@ class PrivatePropertyListingMapper
 
     private function buildPhotoUrls(Property $property): array
     {
-        $allImages = $property->allImages();
+        // PP practical limit — too many images causes their transaction to timeout
+        $allImages = array_slice($property->allImages(), 0, 20);
         // Use PP_IMAGE_BASE_URL if set (for local dev against sandbox), otherwise APP_URL
         $override  = config('services.private_property.image_base_url');
         $baseUrl   = rtrim(!empty($override) ? $override : config('app.url'), '/');
