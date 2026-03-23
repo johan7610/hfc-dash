@@ -101,5 +101,26 @@ function splitDocumentIntoPages(container) {
             container.appendChild(gap);
         }
     });
+
+    // Strip inner container styling — the template HTML contains .corex-document-wrapper
+    // and .corex-page with their own width/shadow/padding. Now that .corex-a4-page handles
+    // all page styling, neutralize the inner containers to prevent nested white boxes.
+    container.querySelectorAll('.corex-document-wrapper').forEach(function(el) {
+        el.style.width = '100%';
+        el.style.maxWidth = '100%';
+        el.style.boxShadow = 'none';
+        el.style.background = 'transparent';
+        el.style.margin = '0';
+        el.style.padding = '0';
+    });
+    container.querySelectorAll('.corex-page').forEach(function(el) {
+        el.style.width = '100%';
+        el.style.maxWidth = '100%';
+        el.style.boxShadow = 'none';
+        el.style.background = 'transparent';
+        el.style.margin = '0';
+        el.style.padding = '0';
+        el.style.minHeight = 'auto';
+    });
 }
 </script>
