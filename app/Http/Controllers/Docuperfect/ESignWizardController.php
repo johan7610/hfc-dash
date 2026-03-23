@@ -2302,10 +2302,11 @@ class ESignWizardController extends Controller
         // when we exceed the chars-per-page threshold.
         $breakTags = ['</p>', '</div>', '</tr>', '</table>', '</section>', '</ul>', '</ol>', '</blockquote>'];
 
-        // Don't insert page breaks inside the signature section
-        $sigSectionPos = strpos($html, 'corex-signature-section');
+        // Don't insert page breaks inside the signature section.
+        // Must match the actual HTML element, not CSS selectors in <style> blocks.
+        $sigSectionPos = strpos($html, 'class="corex-signature-section"');
         if ($sigSectionPos === false) {
-            $sigSectionPos = strpos($html, 'sig-section');
+            $sigSectionPos = strpos($html, 'class="sig-section"');
         }
         $sigSectionStart = $sigSectionPos !== false ? $sigSectionPos : strlen($html);
 
@@ -2333,13 +2334,14 @@ class ESignWizardController extends Controller
 
             $i++;
 
-            // Check if we've exceeded the page threshold and we're at a block boundary
+            // Check if we've exceeded the page threshold and we're before the sig section
             if ($charCount >= $charsPerPage && $i < $sigSectionStart) {
-                // Look for the next block closing tag
+                $inserted = false;
+
+                // Strategy A: Look FORWARD for the next block closing tag (within 2000 bytes, before sig section)
                 foreach ($breakTags as $tag) {
                     $tagPos = strpos($html, $tag, $i);
-                    if ($tagPos !== false && $tagPos < $sigSectionStart && ($tagPos - $i) < 500) {
-                        // Insert page break after this closing tag
+                    if ($tagPos !== false && $tagPos < $sigSectionStart && ($tagPos - $i) < 2000) {
                         $insertAt = $tagPos + strlen($tag);
                         $result .= substr($html, $lastBreakPos, $insertAt - $lastBreakPos);
                         $result .= $pageBreakHtml;
@@ -2347,7 +2349,31 @@ class ESignWizardController extends Controller
                         $i = $insertAt;
                         $charCount = 0;
                         $pageBreaksInserted++;
+                        $inserted = true;
                         break;
+                    }
+                }
+
+                // Strategy B: Forward search failed — look BACKWARD for the last block tag since the previous break
+                if (!$inserted) {
+                    $searchWindow = substr($html, $lastBreakPos, $i - $lastBreakPos);
+                    $bestPos = false;
+                    foreach ($breakTags as $tag) {
+                        $tagPos = strrpos($searchWindow, $tag);
+                        if ($tagPos !== false) {
+                            $absPos = $lastBreakPos + $tagPos + strlen($tag);
+                            if ($bestPos === false || $absPos > $bestPos) {
+                                $bestPos = $absPos;
+                            }
+                        }
+                    }
+                    if ($bestPos !== false && $bestPos > $lastBreakPos) {
+                        $result .= substr($html, $lastBreakPos, $bestPos - $lastBreakPos);
+                        $result .= $pageBreakHtml;
+                        $lastBreakPos = $bestPos;
+                        // Don't change $i — continue scanning forward
+                        $charCount = 0;
+                        $pageBreaksInserted++;
                     }
                 }
             }

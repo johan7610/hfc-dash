@@ -81,12 +81,13 @@ function splitDocumentIntoPages(container) {
     if (container.dataset.pagesSplit === 'true') return;
     container.dataset.pagesSplit = 'true';
 
-    // Strategy 1: Template already has .corex-page divs (paged templates).
+    // Strategy 1: Template already has multiple .corex-page divs (paged templates).
     // These are the template's own page structure — each becomes an A4 page.
     var wrapper = container.querySelector('.corex-document-wrapper');
-    var corexPages = wrapper
-        ? wrapper.querySelectorAll(':scope > .corex-page')
-        : container.querySelectorAll(':scope > .corex-page');
+    var searchIn = wrapper || container;
+    var corexPages = Array.from(searchIn.children).filter(function(el) {
+        return el.classList && el.classList.contains('corex-page');
+    });
 
     if (corexPages.length > 1) {
         // Collect any <style> tags that are siblings (keep them)
@@ -141,7 +142,9 @@ function splitDocumentIntoPages(container) {
         var contentSource = container;
         var innerWrapper = container.querySelector('.corex-document-wrapper');
         if (innerWrapper) contentSource = innerWrapper;
-        var innerPage = contentSource.querySelector(':scope > .corex-page');
+        var innerPage = Array.from(contentSource.children).find(function(el) {
+            return el.classList && el.classList.contains('corex-page');
+        });
         if (innerPage) contentSource = innerPage;
 
         // Collect styles before unwrapping
