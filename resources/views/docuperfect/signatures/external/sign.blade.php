@@ -87,6 +87,45 @@
             margin: 2px auto;
             object-fit: contain;
         }
+        /* Page break markers with initials */
+        .corex-page-break {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 0;
+            border-top: 1px dashed #cbd5e1;
+            margin: 16px 0;
+        }
+        .corex-page-initials {
+            width: 60px;
+            height: 30px;
+            border: 1px solid #94a3b8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            color: #64748b;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .corex-page-initials:hover {
+            border-color: #d97706;
+            background: rgba(251,191,36,0.06);
+        }
+        .corex-page-initials.initial-signed {
+            border-color: #10b981;
+            background: rgba(16,185,129,0.06);
+            cursor: default;
+        }
+        /* Ceremony field highlight when incomplete */
+        @keyframes ceremonyPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(217,119,6,0.6); }
+            50% { box-shadow: 0 0 0 6px rgba(217,119,6,0); }
+        }
+        .ceremony-pulse {
+            animation: ceremonyPulse 1s ease-in-out 3;
+        }
         .corex-signing-view .sig-block-party[data-signer="true"] {
             background: #fffbeb;
             border: 2px dashed #d97706;
@@ -602,9 +641,11 @@
             {{-- Web Template Consent + Submit (only for live HTML signing) --}}
             <template x-if="isWebTemplate">
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 space-y-4">
-                    <label class="flex items-start gap-3 cursor-pointer">
+                    <label id="consent-checkbox-label" class="flex items-start gap-3 cursor-pointer">
                         <input type="checkbox" x-model="webConsented"
-                               class="mt-0.5 w-4 h-4 text-teal-600 rounded border-slate-300 focus:ring-teal-500">
+                               id="consent-checkbox"
+                               class="mt-0.5 w-4 h-4 text-teal-600 rounded border-slate-300 focus:ring-teal-500"
+                               @change="updateIncompleteCount()">
                         <span class="text-sm text-slate-700 leading-relaxed">
                             I confirm that I have read and understood this document.
                             I consent to signing this document electronically.
@@ -658,39 +699,29 @@
                 </div>
             </div>
 
-            {{-- Floating progress bar — unified for both web templates and marker-based --}}
+            {{-- Floating progress bar — unified incomplete tracker for web templates --}}
             <template x-if="isWebTemplate">
                 <div x-show="signingMethod === 'electronic'" x-cloak x-transition
-                     class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-full px-5 py-2.5 flex items-center gap-3 z-40 border border-slate-200">
-                    {{-- Disclosure progress --}}
-                    <template x-if="totalDisclosureRows > 0">
-                        <span class="text-xs font-medium flex items-center gap-1"
-                              :class="Object.keys(webDisclosureAnswers).filter(k => k.startsWith('disclosure_row_')).length >= totalDisclosureRows ? 'text-emerald-600' : 'text-slate-600'">
-                            <span x-text="Object.keys(webDisclosureAnswers).filter(k => k.startsWith('disclosure_row_')).length + '/' + totalDisclosureRows"></span>
-                            items
-                            <template x-if="Object.keys(webDisclosureAnswers).filter(k => k.startsWith('disclosure_row_')).length >= totalDisclosureRows">
-                                <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-                            </template>
-                        </span>
+                     class="fixed bottom-4 left-1/2 transform -translate-x-1/2 shadow-lg rounded-xl px-5 py-3 flex items-center gap-3 z-40 border border-gray-700"
+                     style="background:#0b2a4a;">
+                    <template x-if="webIncompleteCount > 0">
+                        <div class="flex items-center gap-3">
+                            <svg class="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                            </svg>
+                            <span class="text-sm font-medium text-white" x-text="webIncompleteCount + ' item' + (webIncompleteCount !== 1 ? 's' : '') + ' remaining'"></span>
+                            <button @click="scrollToNextIncomplete()"
+                                    class="text-sm font-semibold px-3 py-1 rounded transition-colors bg-amber-500 text-white hover:bg-amber-600">
+                                Go to next
+                            </button>
+                        </div>
                     </template>
-                    {{-- Separator --}}
-                    <template x-if="totalDisclosureRows > 0 && webTotalSigBlocks > 0">
-                        <span class="text-slate-300">&middot;</span>
+                    <template x-if="webIncompleteCount === 0">
+                        <div class="flex items-center gap-2">
+                            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            <span class="text-sm font-medium text-emerald-300">Ready to submit</span>
+                        </div>
                     </template>
-                    {{-- Signature progress --}}
-                    <template x-if="webTotalSigBlocks > 0">
-                        <span class="text-xs font-medium flex items-center gap-1"
-                              :class="Object.keys(webSignatures).length >= webTotalSigBlocks ? 'text-emerald-600' : 'text-slate-600'">
-                            <span x-text="Object.keys(webSignatures).length + '/' + webTotalSigBlocks"></span>
-                            signed
-                            <template x-if="Object.keys(webSignatures).length >= webTotalSigBlocks">
-                                <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-                            </template>
-                        </span>
-                    </template>
-                    {{-- Consent indicator --}}
-                    <span class="text-slate-300">&middot;</span>
-                    <span class="text-xs font-medium" :class="webConsented ? 'text-emerald-600' : 'text-slate-400'" x-text="webConsented ? 'Consented' : 'Consent needed'"></span>
                 </div>
             </template>
 
@@ -1162,6 +1193,9 @@ function externalSign() {
         totalDisclosureRows: 0,
         webIsDrawing: false,
         webSigCtx: null,
+        webInitialElements: [],
+        webInitialSigData: null,
+        webIncompleteCount: 99,
 
         // Section-by-section signing
         hasSections: {{ !empty($sections) ? 'true' : 'false' }},
@@ -1202,6 +1236,7 @@ function externalSign() {
                         this.processWebDisclosureChecklists();
                         this._processDisclosureTable();
                         this._initClauseFlagging();
+                        setTimeout(() => this.updateIncompleteCount(), 300);
                     }, 150);
                 });
             }
@@ -1277,6 +1312,9 @@ function externalSign() {
                 const pageContainer = container.closest('.relative') || container.parentElement;
                 if (pageContainer) pageContainer.classList.add('corex-signing-view');
 
+                // Make page-break initials interactive
+                self._makeWebInitialsInteractive(container);
+
                 return true;
             };
 
@@ -1285,6 +1323,7 @@ function externalSign() {
                 attempts++;
                 if (tryInit() || attempts > 20) {
                     clearInterval(interval);
+                    self.updateIncompleteCount();
                 }
             }, 200);
         },
@@ -1351,6 +1390,7 @@ function externalSign() {
 
                     input.addEventListener('input', () => {
                         self.webCeremonyValues[rawParty + '_' + fieldType] = input.value;
+                        self.updateIncompleteCount();
                     });
 
                     // Store prefilled value
@@ -1362,6 +1402,147 @@ function externalSign() {
                 });
             });
 
+        },
+
+        /**
+         * Make page-break initials elements interactive for the current signer.
+         * Adapted from agent sign.blade.php — filters to current signer's party.
+         */
+        _makeWebInitialsInteractive(container) {
+            if (!container) return;
+            const self = this;
+            const initialElements = container.querySelectorAll('[data-marker-type="initial"]');
+            if (initialElements.length === 0) return;
+
+            if (!this.webInitialElements) this.webInitialElements = [];
+            let myCount = 0;
+
+            initialElements.forEach((el, idx) => {
+                const rawParty = (el.dataset.markerParty || '').toLowerCase();
+                const isMine = self.isMyWebSigBlock(rawParty);
+                const initKey = rawParty + '-init-' + idx;
+
+                const entry = { el, rawParty, index: idx, initKey, isMine, signed: false, sigData: null };
+                self.webInitialElements.push(entry);
+
+                if (isMine) {
+                    myCount++;
+                    el.style.cursor = 'pointer';
+                    el.style.border = '2px dashed #d97706';
+                    el.style.background = 'rgba(251,191,36,0.06)';
+                    el.title = 'Click to initial';
+                    if (!el.querySelector('.init-prompt')) {
+                        el.innerHTML = '<span class="init-prompt" style="font-size:9px;color:#b45309;font-weight:600;">Click to initial</span>';
+                    }
+
+                    el.addEventListener('click', () => {
+                        if (entry.signed) return;
+                        self.currentWebSigBlockId = initKey;
+                        self.showWebSigCapture = true;
+                        self.$nextTick(() => self.initWebSigCanvas());
+                    });
+                } else {
+                    el.style.opacity = '0.5';
+                    el.style.pointerEvents = 'none';
+                    el.style.cursor = 'default';
+                }
+            });
+
+            // Add initials to the total required count
+            if (myCount > 0) {
+                this.webTotalSigBlocksCount = (this.webTotalSigBlocksCount || 0) + myCount;
+                this.totalRequired = this.webTotalSigBlocksCount;
+            }
+        },
+
+        /**
+         * Compute all incomplete items for the web template signing flow.
+         * Returns array of {el, label} for each incomplete item.
+         */
+        _computeIncompleteItems() {
+            const items = [];
+            const container = this.$el ? this.$el.querySelector('[x-html="webTemplateHtml"]') : null;
+
+            // 1. Unsigned signature elements
+            if (container) {
+                container.querySelectorAll('.web-sig-interactive').forEach(el => {
+                    if (el.getAttribute('data-signed') !== 'true') {
+                        items.push({ el, label: 'Signature' });
+                    }
+                });
+            }
+
+            // 2. Unsigned initial elements
+            (this.webInitialElements || []).forEach(entry => {
+                if (entry.isMine && !entry.signed) {
+                    items.push({ el: entry.el, label: 'Page Initial' });
+                }
+            });
+
+            // 3. Empty ceremony fields
+            if (container) {
+                container.querySelectorAll('input[data-ceremony-field="true"]').forEach(inp => {
+                    if (!inp.value || !inp.value.trim()) {
+                        const type = inp.dataset.markerType || 'field';
+                        items.push({ el: inp, label: type.charAt(0).toUpperCase() + type.slice(1) });
+                    }
+                });
+            }
+
+            // 4. Unanswered disclosure rows
+            if (this.totalDisclosureRows > 0) {
+                const answered = Object.keys(this.webDisclosureAnswers).filter(k => k.startsWith('disclosure_row_')).length;
+                if (answered < this.totalDisclosureRows) {
+                    // Find first unanswered radio group
+                    if (container) {
+                        const allRadioGroups = container.querySelectorAll('input[type="radio"][name^="disclosure_row_"]');
+                        const answeredNames = new Set();
+                        allRadioGroups.forEach(r => { if (r.checked) answeredNames.add(r.name); });
+                        allRadioGroups.forEach(r => {
+                            if (!answeredNames.has(r.name) && !items.find(i => i.el && i.el.name === r.name)) {
+                                items.push({ el: r.closest('tr') || r, label: 'Disclosure item' });
+                                answeredNames.add(r.name); // avoid duplicates
+                            }
+                        });
+                    }
+                }
+            }
+
+            // 5. Consent checkbox
+            if (!this.webConsented) {
+                const consentEl = document.getElementById('consent-checkbox-label');
+                items.push({ el: consentEl, label: 'Consent' });
+            }
+
+            return items;
+        },
+
+        /**
+         * Update the webIncompleteCount reactive property.
+         */
+        updateIncompleteCount() {
+            const items = this._computeIncompleteItems();
+            // Don't count consent in the "items remaining" number since it's always last
+            this.webIncompleteCount = items.filter(i => i.label !== 'Consent').length + (this.webConsented ? 0 : 1);
+        },
+
+        /**
+         * Scroll to the next incomplete field and highlight it.
+         */
+        scrollToNextIncomplete() {
+            const items = this._computeIncompleteItems();
+            if (items.length === 0) return;
+            const item = items[0];
+            if (item.el) {
+                item.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                item.el.classList.add('ceremony-pulse', 'pulse-highlight');
+                setTimeout(() => {
+                    item.el.classList.remove('ceremony-pulse', 'pulse-highlight');
+                }, 3000);
+                if (item.el.tagName === 'INPUT' && item.el.type !== 'checkbox') {
+                    setTimeout(() => item.el.focus(), 400);
+                }
+            }
         },
 
         // ── Section-by-section navigation ──
@@ -1546,6 +1727,7 @@ function externalSign() {
                                 this.processWebDisclosureChecklists();
                                 this._processDisclosureTable();
                                 this._initClauseFlagging();
+                                setTimeout(() => this.updateIncompleteCount(), 300);
                             }, 150);
                         });
                     }
@@ -2038,15 +2220,7 @@ function externalSign() {
         },
 
         get canSubmitWeb() {
-            const totalSigs = this.webTotalSigBlocks;
-            const signedSigs = Object.keys(this.webSignatures).length;
-            const sigsComplete = totalSigs === 0 || signedSigs >= totalSigs;
-
-            // All disclosure rows must be answered (radio buttons are mandatory)
-            const disclosureComplete = this.totalDisclosureRows === 0 ||
-                Object.keys(this.webDisclosureAnswers).filter(k => k.startsWith('disclosure_row_')).length >= this.totalDisclosureRows;
-
-            return this.webConsented && sigsComplete && disclosureComplete;
+            return this.webConsented && this.webIncompleteCount === 0;
         },
 
         // Legacy — replaced by _makeWebElementsInteractive()
@@ -2254,6 +2428,7 @@ function externalSign() {
 
                         radio.addEventListener('change', () => {
                             self.webDisclosureAnswers[radioGroupName] = opt.value;
+                            self.updateIncompleteCount();
                         });
 
                         label.appendChild(radio);
@@ -2533,7 +2708,36 @@ function externalSign() {
             this.signedCount = Object.keys(this.webSignatures).length;
 
             this.showWebSigCapture = false;
-            this.showNotification('Signature applied.', 'info');
+            this.updateIncompleteCount();
+
+            // Check if this was a signature (not initial) and offer apply-to-all
+            const sigId = this.currentWebSigBlockId;
+            const isInitial = sigId && sigId.includes('-init-');
+            if (isInitial) {
+                // Check for remaining unsigned initials and offer apply-to-all
+                const unsignedInitials = this.webInitialElements.filter(e => e.isMine && !e.signed);
+                if (unsignedInitials.length > 0 && !this.webInitialSigData) {
+                    this.webInitialSigData = sigData;
+                    // Auto-apply to all remaining initials
+                    unsignedInitials.forEach(entry => {
+                        entry.signed = true;
+                        entry.sigData = sigData;
+                        this.webSignatures[entry.initKey] = sigData;
+                        entry.el.innerHTML = '<img src="' + sigData + '" style="max-height:26px;margin:auto;display:block;object-fit:contain;" alt="Initial">';
+                        entry.el.classList.add('initial-signed');
+                        entry.el.style.border = '2px solid #10b981';
+                        entry.el.style.background = 'rgba(16,185,129,0.06)';
+                        entry.el.style.cursor = 'default';
+                    });
+                    this.signedCount = Object.keys(this.webSignatures).length;
+                    this.updateIncompleteCount();
+                    this.showNotification('Initial applied to all page breaks.', 'info');
+                } else {
+                    this.showNotification('Initial applied.', 'info');
+                }
+            } else {
+                this.showNotification('Signature applied.', 'info');
+            }
         },
 
         // Collect web field values from inline inputs
@@ -2585,6 +2789,11 @@ function externalSign() {
                         other_conditions_text: this.otherConditionsText,
                         consented: this.webConsented,
                         consent_timestamp: new Date().toISOString(),
+                        initials: Object.fromEntries(
+                            (this.webInitialElements || [])
+                                .filter(e => e.isMine && e.signed && e.sigData)
+                                .map(e => [e.initKey, e.sigData])
+                        ),
                     }),
                 });
                 const data = await resp.json();

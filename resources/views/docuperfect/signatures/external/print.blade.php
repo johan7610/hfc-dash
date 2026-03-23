@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $document->name ?? 'Document' }} — Print</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="/css/corex-document.css" rel="stylesheet">
     <style>
         /* Screen: show document centered with subtle background */
@@ -12,6 +13,8 @@
             padding: 0;
             background: #f1f5f9;
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
 
         .print-toolbar {
@@ -45,6 +48,9 @@
             border: none;
             cursor: pointer;
             transition: background 0.2s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
         }
         .print-btn-primary {
             background: #10b981;
@@ -68,22 +74,69 @@
             margin: 0 auto;
             background: white;
             padding: 20mm 18mm 25mm 18mm;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+            border-radius: 4px;
             box-sizing: border-box;
+            line-height: 1.5;
         }
 
-        /* Hide interactive signing UI elements in print view */
+        /* Ensure document body text inherits proper styling */
+        .document-content * {
+            max-width: 100%;
+        }
+        .document-content table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        .document-content table td,
+        .document-content table th {
+            padding: 4px 8px;
+            vertical-align: top;
+        }
+
+        /* Hide ALL interactive signing UI elements in print view */
         .web-sig-prompt { display: none !important; }
+        .init-prompt { display: none !important; }
         .web-sig-interactive {
-            border: 1px solid #ccc !important;
+            border: 1px solid #94a3b8 !important;
             background: transparent !important;
             cursor: default !important;
+            min-height: 28pt;
         }
-        .web-sig-other-party { opacity: 1 !important; pointer-events: auto !important; }
-        .web-sig-signed-img { display: block; max-height: 50px; }
+        .web-sig-other-party {
+            opacity: 1 !important;
+            pointer-events: auto !important;
+        }
+        .web-sig-signed-img {
+            display: block;
+            max-height: 50px;
+            object-fit: contain;
+        }
+
+        /* Radio placeholders: show as filled/empty circles */
+        .corex-radio-placeholder {
+            display: inline-block;
+            font-size: 14pt;
+            line-height: 1;
+        }
+
+        /* Hide input borders in print — show values only */
+        .field-editable,
+        input[data-ceremony-field="true"] {
+            border: none !important;
+            background: transparent !important;
+            outline: none !important;
+            padding: 0 !important;
+            font: inherit !important;
+            color: inherit !important;
+        }
 
         /* Page break markers: show as visual dividers on screen, actual breaks in print */
         .corex-page-break {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 12px;
             border-top: 1px dashed #cbd5e1;
             margin: 16px 0;
             padding: 8px 0;
@@ -99,24 +152,62 @@
             color: #64748b;
         }
 
+        /* Clause flagging: hide flag icons in print */
+        .clause-flag-icon { display: none !important; }
+        .clause-flag-comment { display: none !important; }
+
         /* Print styles */
         @media print {
-            body { background: white; margin: 0; padding: 0; }
+            body {
+                background: white;
+                margin: 0;
+                padding: 0;
+            }
             .print-toolbar { display: none !important; }
-            .document-container { margin-top: 0; padding: 0; }
+            .document-container {
+                margin-top: 0;
+                padding: 0;
+            }
             .document-content {
                 max-width: none;
-                padding: 0;
+                padding: 15mm 18mm 20mm 18mm;
                 box-shadow: none;
                 margin: 0;
+                border-radius: 0;
             }
-            .corex-document-wrapper { padding: 0; background: white; }
-            .corex-page { box-shadow: none; margin: 0; }
+            .corex-document-wrapper {
+                padding: 0;
+                background: white;
+            }
+            .corex-page {
+                box-shadow: none;
+                margin: 0;
+                padding: 0;
+            }
             .corex-page-break {
                 page-break-before: always;
                 border-top: none;
                 margin: 0;
                 padding: 4px 0;
+            }
+            .corex-page-initials {
+                border: 1px solid #000;
+            }
+
+            /* Ensure signatures print */
+            .web-sig-signed-img {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            img {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            /* Tables: ensure borders print */
+            table, td, th {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }
         }
     </style>
@@ -141,9 +232,27 @@
     </div>
 
     <script>
+        // Remove interactive elements that shouldn't appear in print
+        document.addEventListener('DOMContentLoaded', function() {
+            // Remove "Click to sign" prompts
+            document.querySelectorAll('.web-sig-prompt, .init-prompt').forEach(function(el) {
+                el.remove();
+            });
+
+            // Remove dashed borders on unsigned elements — show as clean signature lines
+            document.querySelectorAll('.web-sig-interactive').forEach(function(el) {
+                if (!el.querySelector('img')) {
+                    el.style.borderStyle = 'solid';
+                    el.style.borderColor = '#94a3b8';
+                    el.style.borderWidth = '0 0 1px 0';
+                    el.style.background = 'transparent';
+                }
+            });
+        });
+
         // Auto-trigger print dialog after page loads
         window.addEventListener('load', function() {
-            setTimeout(function() { window.print(); }, 600);
+            setTimeout(function() { window.print(); }, 800);
         });
     </script>
 </body>
