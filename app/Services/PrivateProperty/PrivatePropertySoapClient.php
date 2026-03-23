@@ -20,13 +20,18 @@ class PrivatePropertySoapClient
             $wsdl = config('services.private_property.wsdl');
 
             $this->client = new \SoapClient($wsdl, [
-                'trace'      => true,
-                'exceptions' => true,
-                'cache_wsdl' => WSDL_CACHE_NONE,
+                'trace'              => true,
+                'exceptions'         => true,
+                'cache_wsdl'         => WSDL_CACHE_BOTH,
+                'connection_timeout' => 30,
+                'default_socket_timeout' => 60,
                 'stream_context' => stream_context_create([
                     'ssl' => [
                         'verify_peer'      => false,
                         'verify_peer_name' => false,
+                    ],
+                    'http' => [
+                        'timeout' => 60,
                     ],
                 ]),
             ]);
