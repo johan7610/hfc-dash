@@ -1440,12 +1440,12 @@ class SigningController extends Controller
         $document = $signatureTemplate->document;
         $docTemplate = $document->template ?? null;
 
-        // Web template with merged_html: render document HTML directly via dompdf
+        // Web template with merged_html: redirect to print view (no dompdf — it hangs)
         $webTemplateData = $document->web_template_data ?? [];
         $mergedHtml = $webTemplateData['merged_html'] ?? '';
 
         if (!empty($mergedHtml) && $docTemplate && $docTemplate->render_type === 'web') {
-            return $this->downloadWebTemplateAsPdf($signingRequest, $document, $mergedHtml);
+            return redirect()->route('signatures.external.print', $token);
         }
 
         $flattenedPages = $signatureTemplate->flattened_pages_json ?? [];
