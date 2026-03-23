@@ -358,9 +358,10 @@
                                     </template>
                                     <template x-if="!r.readonly">
                                         <select x-model="r.role" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
-                                            <optgroup :label="isSalesContext ? 'Sales Parties' : 'Rental Parties'">
-                                                <option :value="ownerPartyRole" x-text="ownerPartyLabel"></option>
-                                                <option :value="acquiringPartyRole" x-text="acquiringPartyLabel"></option>
+                                            <optgroup :label="partyRolesGroupLabel">
+                                                <template x-for="pr in resolvedPartyRoles" :key="pr.value">
+                                                    <option :value="pr.value" x-text="pr.label"></option>
+                                                </template>
                                             </optgroup>
                                             <optgroup label="Other Roles">
                                                 <option value="spouse">Spouse</option>
@@ -1206,12 +1207,56 @@ function esignWizard() {
         'agent': 'agent', 'creator': 'agent',
     };
 
-    // Detect sales vs rental context from template name
-    function detectSalesContext(templateName) {
+    // Detect sales vs rental context from template name (fallback only)
+    function detectSalesContextFromName(templateName) {
         if (!templateName) return false;
         const n = templateName.toLowerCase();
         return n.includes('sell') || n.includes('sale') || n.includes('authority')
             || n.includes('otp') || n.includes('purchase') || n.includes('mandate to sell');
+    }
+
+    // Detect context from signing_parties: only explicit concrete roles determine context.
+    // Generic roles (owner_party, acquiring_party) are ambiguous and return null,
+    // forcing detection to fall through to property source (Layer 2) or template name (Layer 3).
+    // Returns: 'sales' | 'rental' | null (null = no explicit signal)
+    function detectContextFromSigningParties(signingParties) {
+        if (!Array.isArray(signingParties) || signingParties.length === 0) return null;
+        const roles = signingParties.map(r => r.toLowerCase());
+        const hasSalesRoles = roles.some(r => ['seller', 'buyer'].includes(r));
+        const hasRentalRoles = roles.some(r => ['landlord', 'tenant', 'lessor', 'lessee'].includes(r));
+        if (hasSalesRoles && !hasRentalRoles) return 'sales';
+        if (hasRentalRoles && !hasSalesRoles) return 'rental';
+        return null; // generic roles like owner_party or mixed — need property source / name fallback
+    }
+
+    // Detect context from property source table
+    function detectContextFromPropertySource(propertySource) {
+        if (propertySource === 'properties') return 'sales';
+        if (propertySource === 'rental_properties') return 'rental';
+        return null;
+    }
+
+    // Layered context detection: signing_parties > property source > template name
+    function detectSalesContext(templateName, signingParties, propertySource) {
+        // Layer 1: explicit roles in signing_parties
+        const fromParties = detectContextFromSigningParties(signingParties);
+        if (fromParties === 'sales') return true;
+        if (fromParties === 'rental') return false;
+
+        // Layer 2: property source table
+        const fromProp = detectContextFromPropertySource(propertySource);
+        if (fromProp === 'sales') return true;
+        if (fromProp === 'rental') return false;
+
+        // Layer 3: template name pattern matching (fallback)
+        return detectSalesContextFromName(templateName);
+    }
+
+    // Resolve a generic role (owner_party, acquiring_party) to concrete role based on context
+    function resolvePartyRole(role, isSales) {
+        if (role === 'owner_party') return isSales ? 'seller' : 'landlord';
+        if (role === 'acquiring_party') return isSales ? 'buyer' : 'tenant';
+        return role;
     }
 
     function getRoleLabel(role) {
@@ -1221,7 +1266,7 @@ function esignWizard() {
             'tenant': 'Tenant', 'lessee': 'Tenant',
             'buyer': 'Buyer', 'seller': 'Seller',
             'witness': 'Witness', 'spouse': 'Spouse',
-            'owner_party': 'Owner Party', 'acquiring_party': 'Acquiring Party',
+            'owner_party': 'Owner/Seller', 'acquiring_party': 'Buyer/Tenant',
         };
         return labels[role] || (role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Signer');
     }
@@ -1256,10 +1301,15 @@ function esignWizard() {
         slotSelections: {},
         optionalSelections: [],
 
-        // Document context detection (sales vs rental)
+        // Template signing parties (from DB config)
+        templateSigningParties: serverTemplate?.signing_parties || [],
+
+        // Document context detection (sales vs rental) — layered: signing_parties > property source > name
         get isSalesContext() {
             const name = this.templateName || serverTemplate?.name || '';
-            return detectSalesContext(name);
+            const sigParties = this.templateSigningParties;
+            const propSource = this.property?._property_source || serverStepData?.property?._property_source || null;
+            return detectSalesContext(name, sigParties, propSource);
         },
         get ownerPartyLabel() {
             return this.isSalesContext ? 'Seller' : 'Landlord';
@@ -1272,6 +1322,40 @@ function esignWizard() {
         },
         get acquiringPartyRole() {
             return this.isSalesContext ? 'buyer' : 'tenant';
+        },
+
+        // Dynamic role options built from template signing_parties
+        // Resolves generic roles (owner_party, acquiring_party) to concrete roles based on context
+        get resolvedPartyRoles() {
+            const parties = this.templateSigningParties;
+            if (!Array.isArray(parties) || parties.length === 0) {
+                // Fallback: standard binary based on context
+                return this.isSalesContext
+                    ? [{ value: 'seller', label: 'Seller' }, { value: 'buyer', label: 'Buyer' }]
+                    : [{ value: 'landlord', label: 'Landlord' }, { value: 'tenant', label: 'Tenant' }];
+            }
+            const isSales = this.isSalesContext;
+            const roles = [];
+            const seen = new Set();
+            parties.forEach(role => {
+                if (role === 'agent' || role === 'creator') return; // agent is always row 1
+                const resolved = resolvePartyRole(role, isSales);
+                if (seen.has(resolved)) return;
+                seen.add(resolved);
+                roles.push({ value: resolved, label: getRoleLabel(resolved) });
+            });
+            // If signing_parties only had agent + owner_party but template allows acquiring_party
+            // (e.g. mandatory disclosure can have buyer/tenant added), ensure both owner + acquiring are available
+            if (roles.length === 1 && parties.includes('owner_party')) {
+                const acqRole = isSales ? 'buyer' : 'tenant';
+                if (!seen.has(acqRole)) {
+                    roles.push({ value: acqRole, label: getRoleLabel(acqRole) });
+                }
+            }
+            return roles;
+        },
+        get partyRolesGroupLabel() {
+            return this.isSalesContext ? 'Sales Parties' : 'Rental Parties';
         },
 
         // Preview

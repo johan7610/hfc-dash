@@ -118,6 +118,73 @@
             color: #0f766e;
             transform: scale(1.2);
         }
+        /* A4 page visual separation for web templates */
+        .corex-page-container {
+            width: 210mm;
+            max-width: 100%;
+            background: white;
+            margin: 0 auto 24px auto;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .corex-page-container .corex-page {
+            padding: 20mm;
+            min-height: auto;
+        }
+        /* Clause flagging */
+        .clause-flag-icon {
+            display: none;
+            position: absolute;
+            right: 4px;
+            top: 2px;
+            width: 22px;
+            height: 22px;
+            border-radius: 4px;
+            background: #fef3c7;
+            border: 1px solid #d97706;
+            color: #92400e;
+            cursor: pointer;
+            font-size: 12px;
+            line-height: 22px;
+            text-align: center;
+            z-index: 10;
+            transition: all 0.15s;
+        }
+        .clause-flag-icon:hover {
+            background: #fde68a;
+            border-color: #b45309;
+        }
+        .corex-clause:hover > .clause-flag-icon {
+            display: block;
+        }
+        .corex-clause.clause-flagged {
+            background: #fefce8;
+            border-left: 3px solid #d97706;
+            padding-left: 6px;
+            position: relative;
+        }
+        .corex-clause.clause-flagged > .clause-flag-icon {
+            display: block;
+            background: #f59e0b;
+            color: white;
+        }
+        .clause-flag-comment {
+            margin: 4px 0 8px 24px;
+            padding: 6px 10px;
+            background: #fffbeb;
+            border: 1px solid #fbbf24;
+            border-radius: 6px;
+            font-size: 11px;
+        }
+        .clause-flag-comment input {
+            width: 100%;
+            border: none;
+            background: transparent;
+            outline: none;
+            font-size: 11px;
+            color: #78350f;
+        }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen">
@@ -356,12 +423,10 @@
 
                 {{-- Web template: render HTML directly — document elements are the interactive surface --}}
                 <template x-if="isWebTemplate">
-                    <div class="flex-1 overflow-auto" style="background:#e2e8f0;">
-                        <div class="relative" style="width:210mm; max-width:100%; background:white; padding:20mm; margin:0 auto; box-shadow:0 2px 8px rgba(0,0,0,0.15);"
-                             x-ref="pageContainer">
+                    <div class="flex-1 overflow-auto" style="background:#e2e8f0; padding:16px 0;">
+                        <div x-ref="pageContainer"
+                             style="position:relative; max-width:100%; margin:0 auto;">
                             <div x-ref="webDocContent" x-html="webTemplateHtml"></div>
-                            {{-- No floating markers for web templates --}}
-                            {{-- Signature elements in the document HTML become interactive --}}
                         </div>
                     </div>
                 </template>
@@ -626,26 +691,20 @@
                         </span>
                     </label>
 
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs text-slate-400">
-                            <span x-text="Object.keys(webSignatures).length"></span> of
-                            <span x-text="webTotalSigBlocks"></span> signature<span x-show="webTotalSigBlocks !== 1">s</span> completed
-                        </span>
-                        <div class="flex items-center gap-3">
-                            <button @click="signingMethod = null"
-                                    class="text-sm text-slate-500 hover:text-slate-700 font-medium">
-                                &larr; Back
-                            </button>
-                            <button @click="completeWebSigning()"
-                                    :disabled="!canSubmitWeb || completing"
-                                    :class="canSubmitWeb && !completing
-                                        ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                        : 'bg-slate-100 text-slate-400 cursor-not-allowed'"
-                                    class="rounded-lg px-6 py-2.5 text-sm font-medium transition-colors">
-                                <span x-show="!completing">Submit Signed Document</span>
-                                <span x-show="completing" x-cloak>Submitting...</span>
-                            </button>
-                        </div>
+                    <div class="flex items-center justify-end gap-3">
+                        <button @click="signingMethod = null"
+                                class="text-sm text-slate-500 hover:text-slate-700 font-medium">
+                            &larr; Back
+                        </button>
+                        <button @click="completeWebSigning()"
+                                :disabled="!canSubmitWeb || completing"
+                                :class="canSubmitWeb && !completing
+                                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'"
+                                class="rounded-lg px-6 py-2.5 text-sm font-medium transition-colors">
+                            <span x-show="!completing">Submit Signed Document</span>
+                            <span x-show="completing" x-cloak>Submitting...</span>
+                        </button>
                     </div>
                 </div>
             </template>
@@ -677,8 +736,44 @@
                 </div>
             </div>
 
-            {{-- Floating progress bar for unsigned markers --}}
-            <div x-show="signedCount < totalRequired && totalRequired > 0" x-cloak x-transition
+            {{-- Floating progress bar — unified for both web templates and marker-based --}}
+            <template x-if="isWebTemplate">
+                <div x-show="signingMethod === 'electronic'" x-cloak x-transition
+                     class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-full px-5 py-2.5 flex items-center gap-3 z-40 border border-slate-200">
+                    {{-- Disclosure progress --}}
+                    <template x-if="totalDisclosureRows > 0">
+                        <span class="text-xs font-medium flex items-center gap-1"
+                              :class="Object.keys(webDisclosureAnswers).filter(k => k.startsWith('disclosure_row_')).length >= totalDisclosureRows ? 'text-emerald-600' : 'text-slate-600'">
+                            <span x-text="Object.keys(webDisclosureAnswers).filter(k => k.startsWith('disclosure_row_')).length + '/' + totalDisclosureRows"></span>
+                            items
+                            <template x-if="Object.keys(webDisclosureAnswers).filter(k => k.startsWith('disclosure_row_')).length >= totalDisclosureRows">
+                                <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            </template>
+                        </span>
+                    </template>
+                    {{-- Separator --}}
+                    <template x-if="totalDisclosureRows > 0 && webTotalSigBlocks > 0">
+                        <span class="text-slate-300">&middot;</span>
+                    </template>
+                    {{-- Signature progress --}}
+                    <template x-if="webTotalSigBlocks > 0">
+                        <span class="text-xs font-medium flex items-center gap-1"
+                              :class="Object.keys(webSignatures).length >= webTotalSigBlocks ? 'text-emerald-600' : 'text-slate-600'">
+                            <span x-text="Object.keys(webSignatures).length + '/' + webTotalSigBlocks"></span>
+                            signed
+                            <template x-if="Object.keys(webSignatures).length >= webTotalSigBlocks">
+                                <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            </template>
+                        </span>
+                    </template>
+                    {{-- Consent indicator --}}
+                    <span class="text-slate-300">&middot;</span>
+                    <span class="text-xs font-medium" :class="webConsented ? 'text-emerald-600' : 'text-slate-400'" x-text="webConsented ? 'Consented' : 'Consent needed'"></span>
+                </div>
+            </template>
+
+            {{-- Floating progress bar for non-web marker-based signing --}}
+            <div x-show="!isWebTemplate && signedCount < totalRequired && totalRequired > 0" x-cloak x-transition
                  class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white shadow-lg rounded-full px-6 py-3 flex items-center gap-3 z-40 border border-slate-200">
                 <div class="flex items-center gap-2">
                     <span class="text-sm font-medium text-slate-700" x-text="`${signedCount} of ${totalRequired} completed`"></span>
@@ -1138,6 +1233,10 @@ function externalSign() {
         currentWebSigBlockId: null,
         webSigMode: 'draw',
         webTypedSignature: '',
+        webCeremonyValues: {},
+        webClauseFlaggedItems: [],
+        otherConditionsText: '',
+        totalDisclosureRows: 0,
         webIsDrawing: false,
         webSigCtx: null,
 
@@ -1168,13 +1267,19 @@ function externalSign() {
             });
 
             // For web templates: convert editable field spans to inputs, make sig elements interactive
-            if (this.isWebTemplate) {
+            // Only init if the document container is already visible (signingMethod already set)
+            if (this.isWebTemplate && this.signingMethod === 'electronic') {
                 this.$nextTick(() => {
-                    if (this.editableFields.length > 0) {
-                        this.initWebTemplateFields();
-                    }
-                    this._makeWebElementsInteractive();
-                    this.processWebDisclosureChecklists();
+                    setTimeout(() => {
+                        if (this.editableFields.length > 0) {
+                            this.initWebTemplateFields();
+                        }
+                        this._makeWebElementsInteractive();
+                        this._makeCeremonyFieldsEditable();
+                        this.processWebDisclosureChecklists();
+                        this._processDisclosureTable();
+                        this._initClauseFlagging();
+                    }, 150);
                 });
             }
         },
@@ -1223,11 +1328,17 @@ function externalSign() {
                             self.$nextTick(() => self.initWebSigCanvas());
                         });
                     } else {
-                        // Other party — grey out or show "signed" if previous signer
-                        el.classList.add('web-sig-other-party');
-                        const partyLabel = rawParty.replace(/_/g, ' ');
-                        if (!el.querySelector('.sig-cell-label')) {
-                            el.innerHTML = '<div style="font-size:9px;color:#94a3b8;text-align:center;padding:4px;">Awaiting ' + partyLabel + '</div>';
+                        // Other party — check if already signed (img embedded in HTML)
+                        const existingImg = el.querySelector('img.web-sig-signed-img, img[alt="Signature"]');
+                        if (existingImg) {
+                            el.classList.add('web-sig-other-signed');
+                            // Already has a signature image embedded — leave as is
+                        } else {
+                            el.classList.add('web-sig-other-party');
+                            const partyLabel = rawParty.replace(/_/g, ' ');
+                            if (!el.querySelector('.sig-cell-label')) {
+                                el.innerHTML = '<div style="font-size:9px;color:#94a3b8;text-align:center;padding:4px;">Awaiting ' + partyLabel + '</div>';
+                            }
                         }
                     }
                 });
@@ -1243,7 +1354,6 @@ function externalSign() {
                 const pageContainer = container.closest('.relative') || container.parentElement;
                 if (pageContainer) pageContainer.classList.add('corex-signing-view');
 
-                console.log('EXT_WEB_SIG_INTERACTIVE', myCount, 'signer elements,', sigElements.length, 'total');
                 return true;
             };
 
@@ -1254,6 +1364,81 @@ function externalSign() {
                     clearInterval(interval);
                 }
             }, 200);
+        },
+
+        /**
+         * Make "Thus done and signed" ceremony fields editable for the current signer.
+         * Adapted from agent sign.blade.php — filters to current signer's party only.
+         */
+        _makeCeremonyFieldsEditable() {
+            const container = this.$refs.webDocContent || this.$el.querySelector('[x-html="webTemplateHtml"]');
+            if (!container) return;
+
+            const ceremonyTypes = ['location', 'day', 'month', 'year', 'time', 'am_pm'];
+            const now = new Date();
+            const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+            const prefills = {
+                day: String(now.getDate()),
+                month: months[now.getMonth()],
+                year: String(now.getFullYear()).slice(-2),
+                time: now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0'),
+                am_pm: now.getHours() >= 12 ? 'pm' : 'am',
+            };
+            const placeholders = {
+                location: 'Location',
+                day: 'DD',
+                month: 'Month',
+                year: 'YY',
+                time: 'HH:MM',
+                am_pm: 'am/pm',
+            };
+
+            const self = this;
+            if (!this.webCeremonyValues) this.webCeremonyValues = {};
+
+            ceremonyTypes.forEach(fieldType => {
+                const selector = '[data-marker-party][data-marker-type="' + fieldType + '"]';
+                container.querySelectorAll(selector).forEach(el => {
+                    const rawParty = (el.dataset.markerParty || '').toLowerCase();
+                    const isMine = self.isMyWebSigBlock(rawParty);
+
+                    if (!isMine) {
+                        // Other party or already-filled — leave as read-only
+                        if (!el.textContent.trim()) {
+                            el.style.opacity = '0.5';
+                        }
+                        return;
+                    }
+
+                    // Replace span with an inline input
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.setAttribute('data-marker-party', el.dataset.markerParty);
+                    input.setAttribute('data-marker-type', fieldType);
+                    input.setAttribute('data-ceremony-field', 'true');
+                    input.value = prefills[fieldType] || '';
+                    input.placeholder = placeholders[fieldType] || fieldType;
+                    input.className = el.className;
+                    input.style.cssText = (el.style.cssText || '') +
+                        'background:rgba(251,191,36,0.08);' +
+                        'border:none;border-bottom:2px solid rgba(217,119,6,0.5);' +
+                        'outline:none;font:inherit;color:inherit;' +
+                        'padding:1pt 4pt;box-sizing:border-box;' +
+                        'min-height:14pt;';
+
+                    input.addEventListener('input', () => {
+                        self.webCeremonyValues[rawParty + '_' + fieldType] = input.value;
+                    });
+
+                    // Store prefilled value
+                    if (prefills[fieldType]) {
+                        self.webCeremonyValues[rawParty + '_' + fieldType] = prefills[fieldType];
+                    }
+
+                    el.replaceWith(input);
+                });
+            });
+
         },
 
         // ── Section-by-section navigation ──
@@ -1426,6 +1611,21 @@ function externalSign() {
                 const data = await resp.json();
                 if (data.ok) {
                     this.signingMethod = method;
+                    // After method choice renders the document view, re-init web interactive elements
+                    if (method === 'electronic' && this.isWebTemplate) {
+                        this.$nextTick(() => {
+                            setTimeout(() => {
+                                if (this.editableFields.length > 0) {
+                                    this.initWebTemplateFields();
+                                }
+                                this._makeWebElementsInteractive();
+                                this._makeCeremonyFieldsEditable();
+                                this.processWebDisclosureChecklists();
+                                this._processDisclosureTable();
+                                this._initClauseFlagging();
+                            }, 150);
+                        });
+                    }
                 }
             } catch (err) {
                 alert('Failed to set signing method. Please try again.');
@@ -1917,7 +2117,13 @@ function externalSign() {
         get canSubmitWeb() {
             const totalSigs = this.webTotalSigBlocks;
             const signedSigs = Object.keys(this.webSignatures).length;
-            return this.webConsented && (totalSigs === 0 || signedSigs >= totalSigs);
+            const sigsComplete = totalSigs === 0 || signedSigs >= totalSigs;
+
+            // All disclosure rows must be answered (radio buttons are mandatory)
+            const disclosureComplete = this.totalDisclosureRows === 0 ||
+                Object.keys(this.webDisclosureAnswers).filter(k => k.startsWith('disclosure_row_')).length >= this.totalDisclosureRows;
+
+            return this.webConsented && sigsComplete && disclosureComplete;
         },
 
         // Legacy — replaced by _makeWebElementsInteractive()
@@ -1972,6 +2178,343 @@ function externalSign() {
                     });
                 });
             }, 150);
+        },
+
+        /**
+         * Attach clause-level flagging to numbered clauses in the document.
+         * Signer can flag individual clauses with a concern — does NOT block signing.
+         */
+        _initClauseFlagging() {
+            const container = this.$refs.webDocContent || this.$el.querySelector('[x-html="webTemplateHtml"]');
+            if (!container) return;
+
+            const self = this;
+            const clauses = container.querySelectorAll('.corex-clause');
+
+            clauses.forEach((clause, idx) => {
+                // Only flag clauses that have a clause number
+                const numEl = clause.querySelector('.corex-clause-number');
+                if (!numEl) return;
+                const clauseNum = numEl.textContent.trim();
+
+                // Make the clause container relative for positioning
+                clause.style.position = 'relative';
+
+                // Create flag icon
+                const flagBtn = document.createElement('span');
+                flagBtn.className = 'clause-flag-icon';
+                flagBtn.title = 'Flag this clause';
+                flagBtn.textContent = '⚑';
+                flagBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    console.log('[ClauseFlag] Clicked clause', clauseNum, 'idx', idx);
+                    self._toggleClauseFlag(clause, clauseNum, idx);
+                });
+
+                clause.appendChild(flagBtn);
+            });
+
+        },
+
+        _toggleClauseFlag(clauseEl, clauseNum, idx) {
+            const isFlagged = clauseEl.classList.contains('clause-flagged');
+            if (isFlagged) {
+                // Remove flag
+                clauseEl.classList.remove('clause-flagged');
+                const commentDiv = clauseEl.querySelector('.clause-flag-comment');
+                if (commentDiv) commentDiv.remove();
+                this.webClauseFlaggedItems = this.webClauseFlaggedItems.filter(f => f.clauseNum !== clauseNum);
+            } else {
+                // Add flag
+                clauseEl.classList.add('clause-flagged');
+
+                const commentDiv = document.createElement('div');
+                commentDiv.className = 'clause-flag-comment';
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.placeholder = 'What is your concern with clause ' + clauseNum + '?';
+                input.addEventListener('input', () => {
+                    const existing = this.webClauseFlaggedItems.find(f => f.clauseNum === clauseNum);
+                    if (existing) {
+                        existing.concern = input.value;
+                    }
+                });
+                input.addEventListener('click', (e) => e.stopPropagation());
+
+                commentDiv.appendChild(input);
+                clauseEl.appendChild(commentDiv);
+
+                this.webClauseFlaggedItems.push({
+                    clauseNum: clauseNum,
+                    clauseIndex: idx,
+                    concern: '',
+                });
+
+                // Focus input
+                setTimeout(() => input.focus(), 50);
+            }
+        },
+
+        /**
+         * Process disclosure tables (corex-table with YES/NO/N/A headers)
+         * and inject radio button inputs into each data row.
+         */
+        _processDisclosureTable() {
+            const container = this.$refs.webDocContent || this.$el.querySelector('[x-html="webTemplateHtml"]');
+            if (!container) return;
+
+            const self = this;
+            const tables = container.querySelectorAll('table.corex-table, table');
+            let totalRows = 0;
+
+            tables.forEach(table => {
+                // Check if this table has YES/NO/N/A headers
+                const headers = table.querySelectorAll('thead th');
+                if (headers.length < 2) return;
+                const headerTexts = Array.from(headers).map(h => h.textContent.trim().toUpperCase());
+                const yesIdx = headerTexts.indexOf('YES');
+                const noIdx = headerTexts.indexOf('NO');
+                const naIdx = headerTexts.indexOf('N/A');
+                if (yesIdx === -1 || noIdx === -1) return; // Not a disclosure table
+
+                const optionCols = [];
+                if (yesIdx >= 0) optionCols.push({ idx: yesIdx, value: 'YES' });
+                if (noIdx >= 0) optionCols.push({ idx: noIdx, value: 'NO' });
+                if (naIdx >= 0) optionCols.push({ idx: naIdx, value: 'N/A' });
+
+                // Process each body row
+                const rows = table.querySelectorAll('tbody tr');
+                rows.forEach((row, rowIdx) => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length < headers.length) return; // Skip spacer/header rows
+
+                    // Skip single-cell rows (sub-headers like "EXTRA INFORMATION", "ADDITIONAL INFORMATION")
+                    if (cells.length === 1) return;
+
+                    // Certificate compliance rows: 5 cells, cells[0] empty, cells[1] has cert text
+                    // e.g. [empty] | [Cert Name – If Yes, when was it issued?] | [] | [] | []
+                    const cell0Text = (cells[0]?.textContent || '').trim();
+                    const cell1Text = (cells[1]?.textContent || '').trim();
+
+                    if (cells.length > headers.length && !cell0Text && cell1Text.includes('If Yes, when was it issued')) {
+                        self._processCertificateRow(row, cells, rowIdx);
+                        totalRows++;
+                        return;
+                    }
+
+                    // Normal disclosure rows — need question text in cells[0]
+                    if (!cell0Text) return;
+
+                    // Skip sub-header rows like "Are you in possession of..." that end with ":"
+                    const isSubHeader = !cells[yesIdx]?.textContent.trim() &&
+                        !cells[noIdx]?.textContent.trim() &&
+                        cell0Text.endsWith(':');
+                    if (isSubHeader) return;
+
+                    const radioGroupName = 'disclosure_row_' + rowIdx;
+                    totalRows++;
+
+                    optionCols.forEach(opt => {
+                        const cell = cells[opt.idx];
+                        if (!cell) return;
+
+                        const label = document.createElement('label');
+                        label.style.cssText = 'display:flex;align-items:center;justify-content:center;cursor:pointer;width:100%;height:100%;min-height:20px;';
+
+                        const radio = document.createElement('input');
+                        radio.type = 'radio';
+                        radio.name = radioGroupName;
+                        radio.value = opt.value;
+                        radio.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:#0d9488;';
+
+                        radio.addEventListener('change', () => {
+                            self.webDisclosureAnswers[radioGroupName] = opt.value;
+                        });
+
+                        label.appendChild(radio);
+                        cell.innerHTML = '';
+                        cell.style.textAlign = 'center';
+                        cell.style.verticalAlign = 'middle';
+                        cell.appendChild(label);
+                    });
+                });
+
+                // Process Additional Information rows — make them editable
+                self._processAdditionalInfoSection(table);
+            });
+
+            this.totalDisclosureRows = totalRows;
+        },
+
+        /**
+         * Process a certificate compliance row with YES/NO radios + conditional date input.
+         * These rows have 5 cells: [spacer] | [Cert Name – If Yes, when was it issued?] | [] | [] | []
+         * Radio buttons go in cells[2] (YES) and cells[3] (NO). Date input in cells[4].
+         */
+        _processCertificateRow(row, cells, rowIdx) {
+            const self = this;
+            const radioGroupName = 'disclosure_row_' + rowIdx;
+
+            // Extract certificate name from cells[1] (everything before the dash)
+            const fullText = cells[1].textContent.trim();
+            const certName = fullText.replace(/\s*[–-]\s*If Yes.*$/i, '').trim();
+
+            // Replace cells[1] with just the certificate name
+            cells[1].textContent = certName;
+            cells[1].style.cssText = 'font-size:12px;padding:4px 8px;';
+
+            // YES radio in cells[2]
+            const yesOpts = [
+                { cell: cells[2], value: 'YES' },
+                { cell: cells[3], value: 'NO' },
+            ];
+
+            yesOpts.forEach(opt => {
+                if (!opt.cell) return;
+                const label = document.createElement('label');
+                label.style.cssText = 'display:flex;align-items:center;justify-content:center;cursor:pointer;width:100%;height:100%;min-height:20px;gap:2px;';
+
+                const radio = document.createElement('input');
+                radio.type = 'radio';
+                radio.name = radioGroupName;
+                radio.value = opt.value;
+                radio.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:#0d9488;';
+
+                const labelText = document.createElement('span');
+                labelText.textContent = opt.value;
+                labelText.style.cssText = 'font-size:10px;color:#64748b;';
+
+                radio.addEventListener('change', () => {
+                    self.webDisclosureAnswers[radioGroupName] = opt.value;
+                    // Show/hide date input based on YES/NO
+                    const dateWrapper = row.querySelector('.cert-date-wrapper');
+                    if (dateWrapper) {
+                        if (opt.value === 'YES') {
+                            dateWrapper.style.display = 'flex';
+                        } else {
+                            dateWrapper.style.display = 'none';
+                            const dateInput = dateWrapper.querySelector('input[type="date"]');
+                            if (dateInput) {
+                                dateInput.value = '';
+                                delete self.webDisclosureAnswers['disclosure_date_' + rowIdx];
+                            }
+                        }
+                    }
+                });
+
+                label.appendChild(radio);
+                label.appendChild(labelText);
+                opt.cell.innerHTML = '';
+                opt.cell.style.textAlign = 'center';
+                opt.cell.style.verticalAlign = 'middle';
+                opt.cell.appendChild(label);
+            });
+
+            // Date input in cells[4] (or cells[3] if only 4 cells) — hidden until YES
+            const dateCell = cells[4] || cells[3];
+            if (dateCell && dateCell !== cells[3]) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'cert-date-wrapper';
+                wrapper.style.cssText = 'display:none;align-items:center;gap:4px;';
+
+                const dateLabel = document.createElement('span');
+                dateLabel.style.cssText = 'font-size:10px;color:#475569;white-space:nowrap;';
+                dateLabel.textContent = 'Date issued:';
+
+                const dateInput = document.createElement('input');
+                dateInput.type = 'date';
+                dateInput.style.cssText = 'border:1px solid #cbd5e1;border-radius:4px;padding:2px 4px;font-size:11px;width:130px;';
+
+                dateInput.addEventListener('change', () => {
+                    self.webDisclosureAnswers['disclosure_date_' + rowIdx] = dateInput.value;
+                });
+
+                wrapper.appendChild(dateLabel);
+                wrapper.appendChild(dateInput);
+                dateCell.innerHTML = '';
+                dateCell.style.verticalAlign = 'middle';
+                dateCell.appendChild(wrapper);
+            }
+        },
+
+        /**
+         * Issue 3: Find the "ADDITIONAL INFORMATION" section in the disclosure table
+         * and replace empty rows with an editable textarea for signer input.
+         */
+        _processAdditionalInfoSection(table) {
+            const rows = table.querySelectorAll('tbody tr');
+            let inAdditionalInfo = false;
+            let additionalInfoStartRow = null;
+            const emptyRowsToRemove = [];
+
+            rows.forEach((row, idx) => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length === 1) {
+                    const text = cells[0].textContent.trim().toUpperCase();
+                    if (text === 'ADDITIONAL INFORMATION') {
+                        inAdditionalInfo = true;
+                        additionalInfoStartRow = row;
+                        return;
+                    }
+                }
+
+                if (inAdditionalInfo && cells.length === 1) {
+                    const text = cells[0].textContent.trim();
+                    // Check if this row has a field value (pre-filled by agent)
+                    const fieldEl = cells[0].querySelector('[data-field="additional_information"]');
+                    if (fieldEl) {
+                        // Replace with textarea containing existing content
+                        const existingText = fieldEl.textContent.trim();
+                        this._insertOtherConditionsTextarea(cells[0], existingText);
+                        inAdditionalInfo = false;
+                        return;
+                    }
+                    // Empty row — mark for removal
+                    if (!text) {
+                        emptyRowsToRemove.push(row);
+                    }
+                }
+            });
+
+            // If we found the Additional Information header but no field element,
+            // insert a textarea after the header row
+            if (additionalInfoStartRow && inAdditionalInfo) {
+                // Remove empty placeholder rows
+                emptyRowsToRemove.forEach(r => r.remove());
+
+                // Insert a new row with a textarea
+                const newRow = document.createElement('tr');
+                const newCell = document.createElement('td');
+                newCell.setAttribute('colspan', '4');
+                this._insertOtherConditionsTextarea(newCell, '');
+                newRow.appendChild(newCell);
+
+                // Insert after the header row
+                if (additionalInfoStartRow.nextSibling) {
+                    additionalInfoStartRow.parentNode.insertBefore(newRow, additionalInfoStartRow.nextSibling);
+                } else {
+                    additionalInfoStartRow.parentNode.appendChild(newRow);
+                }
+            }
+        },
+
+        _insertOtherConditionsTextarea(container, existingText) {
+            const self = this;
+            container.innerHTML = '';
+
+            const textarea = document.createElement('textarea');
+            textarea.style.cssText = 'width:100%;min-height:80px;border:1px solid #cbd5e1;border-radius:6px;padding:8px;font-size:12px;font-family:inherit;resize:vertical;';
+            textarea.placeholder = 'Enter any additional information or conditions here...';
+            textarea.value = existingText;
+            self.otherConditionsText = existingText;
+
+            textarea.addEventListener('input', () => {
+                self.otherConditionsText = textarea.value;
+            });
+
+            container.appendChild(textarea);
         },
 
         // Signature canvas methods for web signing
@@ -2087,6 +2630,11 @@ function externalSign() {
                     this.showNotification('Please accept the consent checkbox to continue.', 'warning');
                     return;
                 }
+                const answeredRows = Object.keys(this.webDisclosureAnswers).filter(k => k.startsWith('disclosure_row_')).length;
+                if (this.totalDisclosureRows > 0 && answeredRows < this.totalDisclosureRows) {
+                    this.showNotification('Please complete all disclosure items before signing. (' + answeredRows + ' of ' + this.totalDisclosureRows + ' answered)', 'warning');
+                    return;
+                }
                 this.showNotification('Please complete all required signatures.', 'warning');
                 return;
             }
@@ -2109,6 +2657,9 @@ function externalSign() {
                         field_values: fieldValues,
                         signatures: this.webSignatures,
                         disclosure_answers: this.webDisclosureAnswers,
+                        ceremony_values: this.webCeremonyValues,
+                        clause_flags: this.webClauseFlaggedItems,
+                        other_conditions_text: this.otherConditionsText,
                         consented: this.webConsented,
                         consent_timestamp: new Date().toISOString(),
                     }),

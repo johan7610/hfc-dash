@@ -479,14 +479,14 @@ class ESignWizardController extends Controller
             if ($propertyId && $propertySource === 'properties') {
                 $prop = Property::with(['contacts' => fn($q) => $q->withPivot('role')])->find($propertyId);
                 if ($prop) {
-                    // Determine correct fallback role based on template type
-                    $defaultOwnerRole = $template->isSalesDocument() ? 'seller' : 'landlord';
+                    // Determine correct fallback role based on template type + property source
+                    $defaultOwnerRole = $template->isSalesDocument($propertySource) ? 'seller' : 'landlord';
 
                     // Agent is always first recipient (added by JS), so just add linked contacts
                     foreach ($prop->contacts as $contact) {
                         $pivotRole = $contact->pivot->role ?? $defaultOwnerRole;
                         // Map generic roles to match template field prefixes
-                        if ($template->isSalesDocument() && in_array($pivotRole, ['landlord', 'owner', 'lessor'])) {
+                        if ($template->isSalesDocument($propertySource) && in_array($pivotRole, ['landlord', 'owner', 'lessor'])) {
                             $pivotRole = 'seller';
                         }
 
@@ -1040,7 +1040,8 @@ class ESignWizardController extends Controller
 
                     if (!empty($tpl->signing_parties)) {
                         $tplData['signing_parties'] = $tpl->signing_parties;
-                        $tplData['document_context'] = $tpl->isSalesDocument() ? 'sales' : 'rental';
+                        $propSrc = $stepData['property']['_property_source'] ?? null;
+                        $tplData['document_context'] = $tpl->isSalesDocument($propSrc) ? 'sales' : 'rental';
                     }
                     $html = view($tpl->blade_view, $tplData)->render();
                     $styles = '';
@@ -1089,7 +1090,8 @@ class ESignWizardController extends Controller
             // Strip to inner body content so it can be injected via x-html.
             if (!empty($template->signing_parties)) {
                 $viewData['signing_parties'] = $template->signing_parties;
-                $viewData['document_context'] = $template->isSalesDocument() ? 'sales' : 'rental';
+                $propSrc = $stepData['property']['_property_source'] ?? null;
+                $viewData['document_context'] = $template->isSalesDocument($propSrc) ? 'sales' : 'rental';
             }
             $fullHtml = view($template->blade_view, $viewData)->render();
             $bodyHtml = $fullHtml;
@@ -1313,6 +1315,11 @@ class ESignWizardController extends Controller
             $webTemplateData = $webTemplateDataService->resolve($template->id, $stepData, $user);
 
             // Build parties list for initials/signature processing
+            // Resolve generic roles (owner_party, acquiring_party) to concrete roles
+            // based on property source so downstream code uses seller/landlord/buyer/tenant
+            $propSource = $stepData['property']['_property_source'] ?? null;
+            $isSalesContext = ($propSource === 'properties')
+                || (!$propSource && str_contains(strtolower($template->name ?? ''), 'sell'));
             $partiesForSigning = [];
             $partiesForSigning[] = [
                 'role' => 'agent',
@@ -1320,8 +1327,14 @@ class ESignWizardController extends Controller
                 'display' => $user->name,
             ];
             foreach ($stepData['recipients']['recipients'] ?? [] as $r) {
+                $resolvedRole = $r['role'];
+                if ($resolvedRole === 'owner_party') {
+                    $resolvedRole = $isSalesContext ? 'seller' : 'landlord';
+                } elseif ($resolvedRole === 'acquiring_party') {
+                    $resolvedRole = $isSalesContext ? 'buyer' : 'tenant';
+                }
                 $partiesForSigning[] = [
-                    'role' => $r['role'],
+                    'role' => $resolvedRole,
                     'name' => $r['name'],
                     'display' => $r['name'],
                 ];
@@ -1331,7 +1344,8 @@ class ESignWizardController extends Controller
             $viewData = $webTemplateData;
             if (!empty($template->signing_parties)) {
                 $viewData['signing_parties'] = $template->signing_parties;
-                $viewData['document_context'] = $template->isSalesDocument() ? 'sales' : 'rental';
+                $propSrc = $stepData['property']['_property_source'] ?? null;
+                $viewData['document_context'] = $template->isSalesDocument($propSrc) ? 'sales' : 'rental';
             }
 
             // Build party_names for signature-block component (non-agent recipients first, agent last)
@@ -1396,21 +1410,7 @@ class ESignWizardController extends Controller
 
                 // Insert BEFORE the signature section so additional conditions
                 // appear in the document body, not after signatures.
-                $sigSectionPos = strpos($bodyHtml, '<div class="corex-signature-section">');
-                if ($sigSectionPos === false) {
-                    // Fallback: try .sig-section class
-                    $sigSectionPos = strpos($bodyHtml, 'class="sig-section"');
-                    if ($sigSectionPos !== false) {
-                        // Back up to the opening <div or <section tag
-                        $sigSectionPos = strrpos(substr($bodyHtml, 0, $sigSectionPos), '<');
-                    }
-                }
-                if ($sigSectionPos !== false) {
-                    $bodyHtml = substr($bodyHtml, 0, $sigSectionPos) . $clauseHtml . substr($bodyHtml, $sigSectionPos);
-                } else {
-                    // No signature section found — append at end as fallback
-                    $bodyHtml .= $clauseHtml;
-                }
+                $bodyHtml = $this->insertBeforeSignatureSection($bodyHtml, $clauseHtml);
             }
 
             // Store as merged_html so SignatureController uses it directly
@@ -1719,15 +1719,9 @@ class ESignWizardController extends Controller
         // Store wizard context in session so signComplete redirects back to wizard
         session(['esign_wizard_flow_id' => $flow->id]);
 
-        // Web templates: skip setup (marker placement) — signature positions are embedded in document HTML
-        // PDF templates: redirect to setup for manual marker placement
-        if ($renderType === 'web') {
-            $signingUrl = route('docuperfect.signatures.sign', ['document' => $result->id]);
-        } else {
-            $signingUrl = route('docuperfect.signatures.setup', ['document' => $result->id]);
-        }
-
-        return redirect($signingUrl);
+        // All template types go to setup first — agent reviews markers and can add ad-hoc ones.
+        // Web templates show embedded signature elements; PDF templates show overlay markers.
+        return redirect()->route('docuperfect.signatures.setup', ['document' => $result->id]);
 
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('PREPARE_SIGNING_FAILED', [
@@ -2396,6 +2390,25 @@ class ESignWizardController extends Controller
             },
             $html
         );
+    }
+
+    /**
+     * Insert content before the signature section in HTML.
+     * Looks for corex-signature-section first, falls back to sig-section, then appends at end.
+     */
+    private function insertBeforeSignatureSection(string $html, string $content): string
+    {
+        $sigSectionPos = strpos($html, '<div class="corex-signature-section">');
+        if ($sigSectionPos === false) {
+            $sigSectionPos = strpos($html, 'class="sig-section"');
+            if ($sigSectionPos !== false) {
+                $sigSectionPos = strrpos(substr($html, 0, $sigSectionPos), '<');
+            }
+        }
+        if ($sigSectionPos !== false) {
+            return substr($html, 0, $sigSectionPos) . $content . substr($html, $sigSectionPos);
+        }
+        return $html . $content;
     }
 
     /**
@@ -3131,7 +3144,8 @@ class ESignWizardController extends Controller
             $viewData = $webTemplateData;
             if (!empty($template->signing_parties)) {
                 $viewData['signing_parties'] = $template->signing_parties;
-                $viewData['document_context'] = $template->isSalesDocument() ? 'sales' : 'rental';
+                $propSrc = $stepData['property']['_property_source'] ?? null;
+                $viewData['document_context'] = $template->isSalesDocument($propSrc) ? 'sales' : 'rental';
             }
 
             // Build party_names for signature-block component
@@ -3183,19 +3197,7 @@ class ESignWizardController extends Controller
                 }
                 $clauseHtml .= '</div>';
 
-                // Insert BEFORE signature section (same logic as prepareSigning)
-                $sigSectionPos = strpos($bodyHtml, '<div class="corex-signature-section">');
-                if ($sigSectionPos === false) {
-                    $sigSectionPos = strpos($bodyHtml, 'class="sig-section"');
-                    if ($sigSectionPos !== false) {
-                        $sigSectionPos = strrpos(substr($bodyHtml, 0, $sigSectionPos), '<');
-                    }
-                }
-                if ($sigSectionPos !== false) {
-                    $bodyHtml = substr($bodyHtml, 0, $sigSectionPos) . $clauseHtml . substr($bodyHtml, $sigSectionPos);
-                } else {
-                    $bodyHtml .= $clauseHtml;
-                }
+                $bodyHtml = $this->insertBeforeSignatureSection($bodyHtml, $clauseHtml);
             }
 
             $webTemplateData['merged_html'] = $styles . $bodyHtml;
@@ -3306,7 +3308,8 @@ class ESignWizardController extends Controller
             $viewData = $webTemplateData;
             if (!empty($template->signing_parties)) {
                 $viewData['signing_parties'] = $template->signing_parties;
-                $viewData['document_context'] = $template->isSalesDocument() ? 'sales' : 'rental';
+                $propSrc = $stepData['property']['_property_source'] ?? null;
+                $viewData['document_context'] = $template->isSalesDocument($propSrc) ? 'sales' : 'rental';
             }
 
             $partyNames = [];
@@ -3354,19 +3357,7 @@ class ESignWizardController extends Controller
                 }
                 $clauseHtml .= '</div>';
 
-                // Insert BEFORE signature section (same logic as prepareSigning)
-                $sigSectionPos = strpos($bodyHtml, '<div class="corex-signature-section">');
-                if ($sigSectionPos === false) {
-                    $sigSectionPos = strpos($bodyHtml, 'class="sig-section"');
-                    if ($sigSectionPos !== false) {
-                        $sigSectionPos = strrpos(substr($bodyHtml, 0, $sigSectionPos), '<');
-                    }
-                }
-                if ($sigSectionPos !== false) {
-                    $bodyHtml = substr($bodyHtml, 0, $sigSectionPos) . $clauseHtml . substr($bodyHtml, $sigSectionPos);
-                } else {
-                    $bodyHtml .= $clauseHtml;
-                }
+                $bodyHtml = $this->insertBeforeSignatureSection($bodyHtml, $clauseHtml);
             }
 
             $webTemplateData['merged_html'] = $styles . $bodyHtml;
@@ -3558,6 +3549,29 @@ class ESignWizardController extends Controller
             'flow' => $flow,
             'template' => $flow->template,
             'document' => $document,
+        ]);
+    }
+
+    /**
+     * My E-Sign Documents — list all signature templates created by the current agent.
+     */
+    public function myDocuments(Request $request)
+    {
+        $user = $request->user();
+
+        $templates = SignatureTemplate::with(['document', 'requests'])
+            ->where('created_by', $user->id)
+            ->orderByDesc('created_at')
+            ->paginate(25);
+
+        // Pending approval count for dashboard badge
+        $pendingApprovalCount = SignatureTemplate::where('created_by', $user->id)
+            ->where('status', SignatureTemplate::STATUS_PENDING_AGENT_APPROVAL)
+            ->count();
+
+        return view('docuperfect.esign.my-documents', [
+            'templates' => $templates,
+            'pendingApprovalCount' => $pendingApprovalCount,
         ]);
     }
 }

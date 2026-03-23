@@ -116,23 +116,33 @@ class TemplateController extends Controller
 
         // CDS templates route to the CDS builder (DB-backed draft)
         if ($template->template_type === 'cds') {
-            $draft = CdsDraft::create([
-                'user_id' => auth()->id(),
-                'agency_id' => auth()->user()->agency_id ?? null,
-                'template_name' => $template->name,
-                'cds_json' => $template->cds_json,
-                'tags' => $template->editor_state['tags'] ?? null,
-                'mappings' => $template->editor_state['mappings'] ?? null,
-                'tagged_html' => $template->editor_state['tagged_html'] ?? null,
-                'settings' => [
-                    'is_esign' => $template->is_esign,
-                    'party_mode' => $template->party_mode,
-                    'allowed_delivery_modes' => $template->allowed_delivery_modes,
-                    'security_tier' => $template->security_tier,
-                ],
-                'source_template_id' => $template->id,
-                'status' => 'draft',
-            ]);
+            // Reuse existing unsaved draft for this template+user (prevents data loss)
+            $draft = CdsDraft::where('source_template_id', $template->id)
+                ->where('user_id', auth()->id())
+                ->where('status', 'draft')
+                ->latest()
+                ->first();
+
+            if (!$draft) {
+                $draft = CdsDraft::create([
+                    'user_id' => auth()->id(),
+                    'agency_id' => auth()->user()->agency_id ?? null,
+                    'template_name' => $template->name,
+                    'cds_json' => $template->cds_json,
+                    'tags' => $template->editor_state['tags'] ?? null,
+                    'mappings' => $template->editor_state['mappings'] ?? null,
+                    'tagged_html' => $template->editor_state['tagged_html'] ?? null,
+                    'settings' => [
+                        'is_esign' => $template->is_esign,
+                        'party_mode' => $template->party_mode,
+                        'allowed_delivery_modes' => $template->allowed_delivery_modes,
+                        'security_tier' => $template->security_tier,
+                    ],
+                    'source_template_id' => $template->id,
+                    'status' => 'draft',
+                ]);
+            }
+
             return redirect()->route('docuperfect.cds.builder', $draft);
         }
 
@@ -489,6 +499,16 @@ class TemplateController extends Controller
     {
         $draft = CdsDraft::findOrFail($request->input('draft_id'));
         abort_if($draft->user_id !== auth()->id(), 403);
+
+        Log::info('CDS_SAVE_DRAFT', [
+            'draft_id' => $draft->id,
+            'has_tags' => !empty($request->input('tags')),
+            'tag_count' => is_array($request->input('tags')) ? count($request->input('tags')) : 0,
+            'has_mappings' => !empty($request->input('mappings')),
+            'mapping_keys' => is_array($request->input('mappings')) ? array_keys($request->input('mappings')) : [],
+            'sample_mapping' => is_array($request->input('mappings')) ? array_slice($request->input('mappings'), 0, 1, true) : null,
+            'has_settings' => !empty($request->input('settings')),
+        ]);
 
         $draft->update([
             'template_name' => $request->input('template_name', $draft->template_name),

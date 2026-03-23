@@ -273,7 +273,7 @@
 
                 @if($isWebTemplate ?? false)
                 {{-- Web template: document preview — signature elements are visible in the HTML --}}
-                {{-- No zone/marker overlay needed — the template defines signature positions --}}
+                {{-- Zone/marker overlays render after the HTML content for ad-hoc markers --}}
                 <div class="flex-1 overflow-y-auto" style="background:#f1f5f9;">
                     <link href="/css/corex-document.css" rel="stylesheet">
                     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -290,7 +290,10 @@
                     </style>
                     <div class="relative" style="max-width:100%; margin:0 auto;"
                          x-ref="pageContainer"
-                         x-init="pageLoaded = true;">
+                         x-init="pageLoaded = true;"
+                         @dragover.prevent="$event.dataTransfer.dropEffect = 'copy'"
+                         @drop.prevent="handleDrop($event)"
+                         @mousedown.prevent="startZoneDrawOnPage($event)">
 
                         <div id="webDocContent">
                             {!! $webTemplateHtml ?? '' !!}
@@ -384,8 +387,7 @@
                         </template>
                         @endif
 
-                        @if(!($isWebTemplate ?? false))
-                        {{-- Render dynamic signature zones for current page (PDF only) --}}
+                        {{-- Render dynamic signature zones for current page (all template types) --}}
                         <template x-for="zone in zonesForCurrentPage()" :key="'zone_' + zone.id">
                             <div class="absolute select-none"
                                  :style="`left:${zone.x_position}%;top:${zone.y_position}%;width:${zone.width}%;height:50px;z-index:5;`"
@@ -453,34 +455,11 @@
                                 </div>
                             </div>
                         </template>
-                        @endif
                     </div>
                 </div>
             </div>
 
-            {{-- RIGHT: Toolbar --}}
-            @if($isWebTemplate ?? false)
-            {{-- Web template: simplified panel — no markers/zones needed --}}
-            <div class="w-72 flex-shrink-0 ds-status-card flex flex-col">
-                <div class="flex-1 overflow-y-auto p-4 min-h-0">
-                    <h4 class="text-sm font-semibold text-slate-800 mb-3">Document Preview</h4>
-                    <p class="text-xs text-slate-500 mb-4">This web template has signature positions built into the document. No manual marker placement is needed.</p>
-                    <div class="rounded-lg bg-emerald-50 border border-emerald-200 p-3 mb-4">
-                        <div class="flex items-center gap-2 mb-2">
-                            <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                            <span class="text-xs font-semibold text-emerald-700">Signature areas detected</span>
-                        </div>
-                        <p class="text-[11px] text-emerald-600">The dashed outlines in the document show where each party will sign.</p>
-                    </div>
-                </div>
-                <div class="flex-shrink-0 border-t border-slate-200 p-4 bg-white rounded-b-2xl">
-                    <a href="{{ route('docuperfect.signatures.sign', $document) }}"
-                       class="block w-full rounded-lg px-4 py-2.5 text-sm font-medium text-center bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">
-                        Continue to Signing
-                    </a>
-                </div>
-            </div>
-            @else
+            {{-- RIGHT: Toolbar — identical for web and PDF templates --}}
             <div class="w-72 flex-shrink-0 ds-status-card flex flex-col">
                 {{-- Scrollable content area --}}
                 <div class="flex-1 overflow-y-auto p-4 min-h-0">
@@ -637,15 +616,14 @@
                         <span x-show="!saving">Save Markers</span>
                         <span x-show="saving" x-cloak>Saving...</span>
                     </button>
-                    <button @click="showSummary = true"
-                            :disabled="markers.length === 0 || !saved"
+                    <button @click="isWebTemplate && markers.length === 0 ? (window.location.href = '{{ route('docuperfect.signatures.sign', $document) }}') : showSummary = true"
+                            :disabled="!isWebTemplate && (markers.length === 0 || !saved)"
                             class="w-full rounded-lg px-4 py-2.5 text-sm font-medium transition-colors"
-                            :class="markers.length === 0 || !saved ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'">
+                            :class="!isWebTemplate && (markers.length === 0 || !saved) ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'">
                         Preview & Continue
                     </button>
                 </div>
             </div>
-            @endif
         </div>
 
         {{-- ═══════════════════════════════════════════════
@@ -747,7 +725,7 @@
             selectedType: 'signature',
             selectedParty: '{{ $parties[0]['role'] ?? 'agent' }}',
             saving: false,
-            saved: {{ $markers->count() > 0 ? 'true' : 'false' }},
+            saved: {{ ($markers->count() > 0 || ($isWebTemplate ?? false)) ? 'true' : 'false' }},
             saveMessage: '',
             saveError: false,
             showSummary: false,
@@ -775,8 +753,6 @@
                 // Global mouse handlers for drag (markers + zones)
                 document.addEventListener('mousemove', (e) => { this.onDrag(e); this.onZoneDraw(e); this.onZoneDrag(e); });
                 document.addEventListener('mouseup', () => { this.endDrag(); this.endZoneDraw(); this.endZoneDrag(); });
-                console.log('MARKERS_INIT', this.markers.map(m => ({id: m.id, party: m.assigned_party, y: m.y_position, h: m.height, w: m.width})));
-                console.log('ZONES_INIT', this.zones.map(z => ({id: z.id, role: z.party_role, y: z.y_position, h: z.height, w: z.width, source: z.source})));
             },
 
             setupWebTemplateObserver() {

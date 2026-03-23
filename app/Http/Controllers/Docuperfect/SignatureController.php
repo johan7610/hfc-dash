@@ -11,6 +11,7 @@ use App\Models\Docuperfect\SignatureMarker;
 use App\Models\Docuperfect\SignatureRequest;
 use App\Models\Docuperfect\SignatureTemplate;
 use App\Models\Docuperfect\SignatureZone;
+use App\Models\Docuperfect\Template;
 use App\Models\Docuperfect\WetInkInspection;
 use App\Services\Docuperfect\DocumentFlattener;
 use App\Services\Docuperfect\SignaturePdfService;
@@ -219,13 +220,15 @@ class SignatureController extends Controller
             )->with('missing_fields', $validation['missing']);
         }
 
-        // Get or create signature template
+        // Get or create signature template with dynamic signing order from template config
+        $docTpl = $document->template;
+        $defaultSignOrder = $this->buildDefaultSigningOrder($docTpl);
         $template = SignatureTemplate::firstOrCreate(
             ['document_id' => $document->id],
             [
                 'status' => SignatureTemplate::STATUS_DRAFT,
                 'created_by' => $user->id,
-                'signing_order_json' => ['agent', 'tenant', 'landlord'],
+                'signing_order_json' => $defaultSignOrder,
             ]
         );
 
@@ -306,7 +309,8 @@ class SignatureController extends Controller
         }
 
         // Determine template type for dynamic party labels (buyer/seller vs tenant/landlord)
-        $templateType = $docTemplate?->template_type ?? 'rentals';
+        // Use isSalesDocument() for layered detection (signing_parties > name) instead of raw template_type
+        $templateType = ($docTemplate && $docTemplate->isSalesDocument()) ? 'sales' : 'rentals';
 
         // E-sign wizard context — allows back navigation to the wizard
         $esignFlowId = session('esign_wizard_flow_id');
@@ -351,13 +355,15 @@ class SignatureController extends Controller
             $uploadPaths[] = $file->store("docuperfect/presigned-uploads/{$document->id}", 'local');
         }
 
-        // Get or create signature template
+        // Get or create signature template with dynamic signing order
+        $docTpl = $document->template;
+        $defaultSignOrder = $this->buildDefaultSigningOrder($docTpl);
         $template = SignatureTemplate::firstOrCreate(
             ['document_id' => $document->id],
             [
                 'status' => SignatureTemplate::STATUS_DRAFT,
                 'created_by' => $user->id,
-                'signing_order_json' => ['agent', 'tenant', 'landlord'],
+                'signing_order_json' => $defaultSignOrder,
             ]
         );
 
@@ -381,8 +387,7 @@ class SignatureController extends Controller
         $this->authorizeDocument($user, $document);
 
         // Determine template type for party role labels
-        $templateType = $document->template?->template_type ?? 'rentals';
-        $isSales = $templateType === 'sales';
+        $isSales = $document->template ? $document->template->isSalesDocument() : false;
 
         // Party role labels differ by template type
         $partyOneRole = $isSales ? 'buyer' : 'tenant';
@@ -948,6 +953,7 @@ class SignatureController extends Controller
             'user' => $user,
             'sections' => $sections,
             'sectionAcceptances' => $sectionAcceptances,
+            'isSalesTemplate' => $docTemplate ? $docTemplate->isSalesDocument() : false,
         ]);
     }
 
@@ -1263,88 +1269,259 @@ class SignatureController extends Controller
         $user = $request->user();
         $this->authorizeDocument($user, $document);
 
-        $signatures = $request->input('signatures', []);
-        $partyRole = $request->input('party_role', 'agent');
+        try {
+            $signatures = $request->input('signatures', []);
+            $partyRole = $request->input('party_role', 'agent');
 
-        $template = SignatureTemplate::where('document_id', $document->id)->firstOrFail();
+            $template = SignatureTemplate::where('document_id', $document->id)->firstOrFail();
 
-        // Store each signature as a Signature record linked to the document
-        foreach ($signatures as $sigKey => $sigData) {
-            // Create a marker record for each web sig element (for audit trail)
-            $marker = SignatureMarker::create([
-                'signature_template_id' => $template->id,
-                'page_number' => 1,
-                'x_position' => 0,
-                'y_position' => 0,
-                'width' => 20,
-                'height' => 5,
-                'type' => 'signature',
-                'assigned_party' => $partyRole,
-                'label' => 'Web element: ' . $sigKey,
-                'required' => true,
-                'sort_order' => 0,
-            ]);
+            // Store each signature as a Signature record linked to the document
+            foreach ($signatures as $sigKey => $sigData) {
+                // Create a marker record for each web sig element (for audit trail)
+                $marker = SignatureMarker::create([
+                    'signature_template_id' => $template->id,
+                    'page_number' => 1,
+                    'x_position' => 0,
+                    'y_position' => 0,
+                    'width' => 20,
+                    'height' => 5,
+                    'type' => 'signature',
+                    'assigned_party' => $partyRole,
+                    'label' => 'Web element: ' . $sigKey,
+                    'required' => true,
+                    'sort_order' => 0,
+                ]);
 
-            Signature::create([
-                'signature_marker_id' => $marker->id,
-                'signature_request_id' => $template->requests()->where('party_role', $partyRole)->value('id'),
-                'signature_data' => $sigData,
-                'signature_type' => 'drawn',
-                'signer_name' => $user->name,
-                'signer_email' => $user->email,
-                'signed_at' => now(),
-                'ip_address' => $request->ip(),
-                'user_agent' => $request->userAgent(),
-            ]);
-        }
+                Signature::create([
+                    'signature_template_id' => $template->id,
+                    'signature_marker_id' => $marker->id,
+                    'signature_request_id' => $template->requests()->where('party_role', $partyRole)->value('id'),
+                    'signature_data' => $sigData,
+                    'signature_type' => 'drawn',
+                    'signer_name' => $user->name,
+                    'signer_email' => $user->email,
+                    'signed_at' => now(),
+                    'signer_ip_address' => $request->ip(),
+                    'signer_user_agent' => $request->userAgent(),
+                ]);
+            }
 
-        // Inject signatures into the document's web_template_data merged_html
-        $webData = $document->web_template_data ?? [];
-        if (!empty($webData['merged_html'])) {
-            // Store signature data in web_template_data for future rendering
+            // Store signatures and ceremony values in web_template_data
+            $webData = $document->web_template_data ?? [];
             $webData['agent_signatures'] = $signatures;
+            $ceremonyValues = $request->input('ceremony_values', []);
+            if (!empty($ceremonyValues)) {
+                $webData['ceremony_values'] = array_merge($webData['ceremony_values'] ?? [], $ceremonyValues);
+            }
+
+            // Embed agent signature images into merged_html so next signer sees them
+            if (!empty($webData['merged_html'])) {
+                $html = $webData['merged_html'];
+                $html = $this->embedSignaturesIntoHtml($html, $signatures, $partyRole);
+                // Also embed ceremony values into the HTML
+                if (!empty($ceremonyValues)) {
+                    $html = $this->embedCeremonyValuesIntoHtml($html, $ceremonyValues);
+                }
+                $webData['merged_html'] = $html;
+            }
+
             $document->update(['web_template_data' => $webData]);
-        }
 
-        // Find agent request for audit logging
-        $agentRequest = $template->requests()
-            ->where('party_role', 'agent')
-            ->where('status', '!=', SignatureRequest::STATUS_COMPLETED)
-            ->first();
+            // Find agent request for audit logging
+            $agentRequest = $template->requests()
+                ->where('party_role', 'agent')
+                ->where('status', '!=', SignatureRequest::STATUS_COMPLETED)
+                ->first();
 
-        SignatureAuditLog::log(
-            $template,
-            SignatureAuditLog::ACTION_COMPLETED,
-            SignatureAuditLog::ACTOR_USER,
-            $user->name,
-            $user->email,
-            $user->id,
-            $agentRequest?->id,
-            $request->ip(),
-            $request->userAgent(),
-            [
-                'phase' => 'agent_web_signing',
-                'total_signatures' => count($signatures),
-            ],
-        );
+            SignatureAuditLog::log(
+                $template,
+                SignatureAuditLog::ACTION_COMPLETED,
+                SignatureAuditLog::ACTOR_USER,
+                $user->name,
+                $user->email,
+                $user->id,
+                $agentRequest?->id,
+                $request->ip(),
+                $request->userAgent(),
+                [
+                    'phase' => 'agent_web_signing',
+                    'total_signatures' => count($signatures),
+                ],
+            );
 
-        // Use the unified chain advancement logic — handles candidate flows,
-        // supervisor routing, approval gates, and all status transitions.
-        $this->signatureService->handlePartyCompletion($template, $partyRole, $agentRequest);
+            // Use the unified chain advancement logic — handles candidate flows,
+            // supervisor routing, approval gates, and all status transitions.
+            $this->signatureService->handlePartyCompletion($template, $partyRole, $agentRequest);
 
-        // If signing was initiated from the e-sign wizard, redirect to completion page
-        $wizardFlowId = session()->pull('esign_wizard_flow_id');
-        if ($wizardFlowId) {
+            // If signing was initiated from the e-sign wizard, redirect to completion page
+            $wizardFlowId = session()->pull('esign_wizard_flow_id');
+            if ($wizardFlowId) {
+                return response()->json([
+                    'ok' => true,
+                    'redirect' => route('docuperfect.esign.signingComplete', ['flow' => $wizardFlowId]),
+                ]);
+            }
+
             return response()->json([
                 'ok' => true,
-                'redirect' => route('docuperfect.esign.signingComplete', ['flow' => $wizardFlowId]),
+                'redirect' => route('docuperfect.signatures.sendConfirmation', $document),
             ]);
+        } catch (\Throwable $e) {
+            \Log::error('WEB_SIGN_COMPLETE_EXCEPTION', [
+                'document_id' => $document->id,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => substr($e->getTraceAsString(), 0, 2000),
+            ]);
+
+            return response()->json([
+                'ok' => false,
+                'error' => 'Server error: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Embed signature images into HTML by finding data-marker-party elements
+     * and replacing their content with <img> tags.
+     */
+    public function embedSignaturesIntoHtml(string $html, array $signatures, string $partyRole): string
+    {
+        try {
+            // Role aliases: the signing code uses keys like "agent-sig-0", "landlord-sig-1"
+            // The HTML has data-marker-party="agent", data-marker-party="lessor", etc.
+            // Frontend sets data-sig-id on interactive elements with global index.
+            $dom = new \DOMDocument();
+            @$dom->loadHTML('<?xml encoding="utf-8"?>' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NOERROR);
+            $xpath = new \DOMXPath($dom);
+
+            // Map party role to possible marker-party values in the HTML
+            $agentAliases = ['agent', 'property_practitioner'];
+            $ownerAliases = ['owner_party', 'lessor', 'seller', 'landlord', 'owner'];
+            $acquiringAliases = ['acquiring_party', 'lessee', 'buyer', 'tenant', 'purchaser'];
+
+            $partyAliases = match (true) {
+                in_array($partyRole, $agentAliases) => $agentAliases,
+                in_array($partyRole, $ownerAliases) => $ownerAliases,
+                in_array($partyRole, $acquiringAliases) => $acquiringAliases,
+                default => [$partyRole],
+            };
+
+            // Strategy 1: Match by data-sig-id attribute (set by frontend _makeWebElementsInteractive)
+            // Signature keys from frontend match data-sig-id values exactly
+            $matched = [];
+            foreach ($signatures as $sigKey => $sigData) {
+                $els = $xpath->query('//*[@data-sig-id="' . htmlspecialchars($sigKey) . '"]');
+                if ($els->length > 0) {
+                    $this->embedSigIntoElement($dom, $els->item(0), $sigData, $partyRole);
+                    $matched[$sigKey] = true;
+                }
+            }
+
+            // Strategy 2: For any unmatched signatures, fall back to party-based sequential matching
+            $unmatched = array_diff_key($signatures, $matched);
+            if (!empty($unmatched)) {
+                $sigElements = $xpath->query('//*[@data-marker-party][@data-marker-type="signature"]');
+                $sigIdx = 0;
+
+                foreach ($sigElements as $el) {
+                    // Skip elements already embedded via Strategy 1
+                    if ($el->getAttribute('data-signed') === 'true') continue;
+
+                    $elParty = strtolower($el->getAttribute('data-marker-party'));
+                    if (in_array($elParty, $partyAliases) || $elParty === $partyRole) {
+                        $sigData = null;
+                        foreach ($unmatched as $key => $data) {
+                            if (preg_match('/sig-(\d+)$/', $key, $m) && (int)$m[1] === $sigIdx) {
+                                $sigData = $data;
+                                break;
+                            }
+                        }
+
+                        if (!$sigData && $sigIdx === 0) {
+                            $sigData = reset($unmatched);
+                        }
+
+                        if ($sigData) {
+                            $this->embedSigIntoElement($dom, $el, $sigData, $partyRole);
+                        }
+
+                        $sigIdx++;
+                    }
+                }
+            }
+
+            $result = $dom->saveHTML();
+            $result = preg_replace('/^<\?xml encoding="utf-8"\?>/', '', $result);
+            return trim($result);
+        } catch (\Throwable $e) {
+            \Log::error('EMBED_SIGNATURES_HTML_FAILED', [
+                'party_role' => $partyRole,
+                'sig_count' => count($signatures),
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            return $html; // Return original HTML on failure
+        }
+    }
+
+    /**
+     * Insert a signature image into a DOM element and mark it as signed.
+     */
+    private function embedSigIntoElement(\DOMDocument $dom, \DOMElement $el, string $sigData, string $partyRole): void
+    {
+        while ($el->firstChild) {
+            $el->removeChild($el->firstChild);
+        }
+        $img = $dom->createElement('img');
+        $img->setAttribute('src', $sigData);
+        $img->setAttribute('class', 'web-sig-signed-img');
+        $img->setAttribute('alt', 'Signature');
+        $img->setAttribute('style', 'display:block;max-height:50px;margin:2px auto;object-fit:contain;');
+        $el->appendChild($img);
+        $el->setAttribute('data-signed', 'true');
+
+        $label = $dom->createElement('div');
+        $label->setAttribute('style', 'font-size:8px;color:#059669;text-align:center;font-weight:600;');
+        $label->textContent = 'Signed by ' . ucfirst($partyRole);
+        $el->appendChild($label);
+    }
+
+    /**
+     * Embed ceremony field values into HTML by finding data-marker-type elements
+     * and setting their text content.
+     */
+    public function embedCeremonyValuesIntoHtml(string $html, array $ceremonyValues): string
+    {
+        $dom = new \DOMDocument();
+        @$dom->loadHTML('<?xml encoding="utf-8"?>' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NOERROR);
+        $xpath = new \DOMXPath($dom);
+
+        foreach ($ceremonyValues as $key => $value) {
+            if (empty($value)) continue;
+
+            // Keys are like "agent_location", "agent_day", etc.
+            $parts = explode('_', $key, 2);
+            if (count($parts) < 2) continue;
+
+            $party = $parts[0];
+            $fieldType = $parts[1];
+
+            $elements = $xpath->query("//*[@data-marker-party][@data-marker-type='{$fieldType}']");
+            foreach ($elements as $el) {
+                $elParty = strtolower($el->getAttribute('data-marker-party'));
+                if ($elParty === $party || str_starts_with($elParty, $party)) {
+                    $el->textContent = $value;
+                    $el->setAttribute('style', ($el->getAttribute('style') ?: '') . 'font-weight:500;');
+                }
+            }
         }
 
-        return response()->json([
-            'ok' => true,
-            'redirect' => route('docuperfect.signatures.sendConfirmation', $document),
-        ]);
+        $result = $dom->saveHTML();
+        $result = preg_replace('/^<\?xml encoding="utf-8"\?>/', '', $result);
+        return trim($result);
     }
 
     /**
@@ -1781,8 +1958,8 @@ class SignatureController extends Controller
             ->sortByDesc('completed_at')
             ->first();
 
-        // Determine the next party
-        $order = $template->signing_order_json ?? ['agent', 'tenant', 'landlord'];
+        // Determine the next party — fallback to dynamic order from document template
+        $order = $template->signing_order_json ?? $this->buildDefaultSigningOrder($document->template);
         $completedParties = $template->requests
             ->where('status', SignatureRequest::STATUS_COMPLETED)
             ->pluck('party_role')
@@ -2005,6 +2182,30 @@ class SignatureController extends Controller
         }
 
         return ['valid' => true, 'message' => ''];
+    }
+
+    /**
+     * Build default signing order from template signing_parties, resolving generic roles.
+     */
+    private function buildDefaultSigningOrder(?Template $docTemplate): array
+    {
+        $order = ['agent'];
+        if ($docTemplate && !empty($docTemplate->signing_parties)) {
+            $isSales = $docTemplate->isSalesDocument();
+            foreach ($docTemplate->signing_parties as $party) {
+                if ($party === 'agent') continue;
+                if ($party === 'owner_party') {
+                    $order[] = $isSales ? 'seller' : 'landlord';
+                } elseif ($party === 'acquiring_party') {
+                    $order[] = $isSales ? 'buyer' : 'tenant';
+                } else {
+                    $order[] = $party;
+                }
+            }
+        } else {
+            $order = ['agent', 'tenant', 'landlord'];
+        }
+        return $order;
     }
 
     private function authorizeDocument($user, Document $document): void

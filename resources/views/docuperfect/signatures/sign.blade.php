@@ -108,89 +108,9 @@
         </div>
     </div>
 
-    {{-- Section-by-Section Navigator (agent-side) --}}
-    @if(!empty($sections))
-    <div x-show="hasSections" x-cloak class="bg-white border border-gray-200 rounded-md overflow-hidden">
-        {{-- Section progress --}}
-        <div class="px-5 py-3 bg-slate-50 border-b border-slate-200">
-            <div class="flex items-center justify-between mb-2">
-                <h3 class="text-sm font-semibold text-slate-700">
-                    Section <span x-text="currentSection + 1"></span> of <span x-text="totalSections"></span>:
-                    <span class="text-blue-600" x-text="sectionLabels[currentSection] || ''"></span>
-                </h3>
-                <span class="text-xs text-slate-500" x-text="acceptedSections + ' of ' + totalSections + ' accepted'"></span>
-            </div>
-            <div class="w-full bg-slate-200 rounded-full h-2">
-                <div class="h-2 rounded-full transition-all duration-300"
-                     style="background:var(--brand-button, #0ea5e9);"
-                     :style="'width: ' + ((acceptedSections / totalSections) * 100) + '%'"></div>
-            </div>
-        </div>
-
-        {{-- Section dots --}}
-        <div class="px-5 py-2 flex items-center gap-1.5 overflow-x-auto">
-            <template x-for="(sec, si) in sectionLabels" :key="si">
-                <button @click="goToSection(si)"
-                        class="w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center transition-all flex-shrink-0"
-                        :class="{
-                            'bg-emerald-500 text-white': sectionStates[si] === 'accepted',
-                            'bg-red-500 text-white': sectionStates[si] === 'rejected',
-                            'ring-2 ring-blue-300 text-white': si === currentSection && sectionStates[si] === 'pending',
-                            'bg-slate-200 text-slate-600': si !== currentSection && sectionStates[si] === 'pending',
-                        }"
-                        :style="si === currentSection && sectionStates[si] === 'pending' ? 'background:var(--brand-button, #0ea5e9);' : ''"
-                        x-text="si + 1"></button>
-            </template>
-        </div>
-
-        {{-- Section action buttons --}}
-        <div class="px-5 py-3 border-t border-slate-100 flex items-center justify-between gap-3">
-            <button @click="rejectCurrentSection()"
-                    x-show="sectionStates[currentSection] === 'pending'"
-                    class="text-xs px-3 py-1.5 rounded-lg border border-red-300 text-red-600 hover:bg-red-50">
-                Reject Section
-            </button>
-            <div class="flex items-center gap-2 ml-auto">
-                <button @click="goToSection(currentSection - 1)" x-show="currentSection > 0"
-                        class="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50">
-                    &larr; Previous
-                </button>
-                <button @click="acceptCurrentSection()"
-                        x-show="sectionStates[currentSection] === 'pending' && currentSection < totalSections"
-                        class="text-xs px-4 py-1.5 rounded-lg text-white font-medium hover:brightness-110"
-                        style="background:var(--brand-button, #0ea5e9);"
-                        :disabled="sectionAccepting">
-                    <span x-show="!sectionAccepting">Accept &amp; Next &rarr;</span>
-                    <span x-show="sectionAccepting">Saving...</span>
-                </button>
-                <button @click="goToSection(currentSection + 1)"
-                        x-show="sectionStates[currentSection] !== 'pending' && currentSection < totalSections - 1"
-                        class="text-xs px-4 py-1.5 rounded-lg text-white font-medium hover:brightness-110"
-                        style="background:var(--brand-button, #0ea5e9);">
-                    Next &rarr;
-                </button>
-            </div>
-        </div>
-
-        {{-- Rejection reason --}}
-        <div x-show="showRejectModal" x-cloak class="px-5 py-3 border-t border-red-100 bg-red-50">
-            <label class="block text-xs font-medium text-red-700 mb-1">Reason for rejection:</label>
-            <textarea x-model="rejectReasonText" rows="2"
-                      class="w-full rounded-lg border border-red-300 text-sm px-3 py-2 focus:ring-red-500 focus:border-red-500"
-                      placeholder="Explain why you are rejecting this section..."></textarea>
-            <div class="flex items-center gap-2 mt-2">
-                <button @click="confirmRejectSection()" :disabled="!rejectReasonText.trim() || sectionRejecting"
-                        class="text-xs px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
-                    Confirm Rejection
-                </button>
-                <button @click="showRejectModal = false"
-                        class="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50">
-                    Cancel
-                </button>
-            </div>
-        </div>
-    </div>
-    @endif
+    {{-- Section-by-section acceptance/rejection is for EXTERNAL signers only.
+         The agent created the document — they sign, they don't reject their own sections.
+         Section navigator and rejection UI live in external/sign.blade.php. --}}
 
     {{-- Main content: Document viewer --}}
     <div class="bg-white border border-gray-200 rounded-md p-4 overflow-hidden flex flex-col" style="min-height:600px;">
@@ -576,7 +496,7 @@ function signDocument() {
         // Data from server
         markers: @json($markersJson),
         pageImages: @json($pageImages),
-        documentFields: @json($document->fields_json ?? []),
+        documentFields: Array.from(Object.values(@json($document->fields_json ?? []))),
         hasFlattened: {{ !empty($hasFlattened) ? 'true' : 'false' }},
         isWebTemplate: {{ !empty($isWebTemplate) ? 'true' : 'false' }},
         currentPage: 1,
@@ -609,6 +529,7 @@ function signDocument() {
         webSignatures: {},         // { 'agent-sig-0': dataUrl, ... }
         webSigTotal: 0,
         webSigSigned: 0,
+        webCeremonyValues: {},     // { 'agent_location': 'Shelly Beach', 'agent_day': '23', ... }
 
         // Section-by-section signing state
         hasSections: {{ !empty($sections) ? 'true' : 'false' }},
@@ -648,12 +569,15 @@ function signDocument() {
             if (!container) return;
 
             const self = this;
+            const _isSales = @json($isSalesTemplate ?? false);
             const partyRoleMap = {
-                'owner': 'landlord', 'owner_party': 'landlord',
+                'owner': _isSales ? 'seller' : 'landlord',
+                'owner_party': _isSales ? 'seller' : 'landlord',
                 'landlord': 'landlord', 'lessor': 'landlord',
                 'seller': 'seller',
                 'tenant': 'tenant', 'lessee': 'tenant',
-                'buyer': 'buyer', 'acquiring_party': 'buyer',
+                'buyer': 'buyer',
+                'acquiring_party': _isSales ? 'buyer' : 'tenant',
                 'agent': 'agent',
             };
 
@@ -705,7 +629,9 @@ function signDocument() {
                     self.signedCount = 0;
                 }
 
-                console.log('WEB_SIG_INTERACTIVE', agentCount, 'agent elements,', sigElements.length, 'total');
+                // Make "Thus done and signed" ceremony fields editable for the agent's blocks
+                self._makeCeremonyFieldsEditable(container);
+
                 return true;
             };
 
@@ -716,6 +642,132 @@ function signDocument() {
                     clearInterval(interval);
                 }
             }, 200);
+        },
+
+        /**
+         * Make "Thus done and signed" ceremony fields editable for the current signer.
+         * Fields: location, day, month, year, time, am_pm
+         * Pre-fills date/time with current values. Agent fills location manually.
+         */
+        _makeCeremonyFieldsEditable(container) {
+            const ceremonyTypes = ['location', 'day', 'month', 'year', 'time', 'am_pm'];
+            const now = new Date();
+            const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+            const prefills = {
+                day: String(now.getDate()),
+                month: months[now.getMonth()],
+                year: String(now.getFullYear()).slice(-2),
+                time: now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0'),
+                am_pm: now.getHours() >= 12 ? 'pm' : 'am',
+            };
+            const placeholders = {
+                location: 'Location',
+                day: 'DD',
+                month: 'Month',
+                year: 'YY',
+                time: 'HH:MM',
+                am_pm: 'am/pm',
+            };
+
+            const _isSales = @json($isSalesTemplate ?? false);
+            const partyRoleMap = {
+                'owner': _isSales ? 'seller' : 'landlord',
+                'owner_party': _isSales ? 'seller' : 'landlord',
+                'landlord': 'landlord', 'lessor': 'landlord',
+                'seller': 'seller',
+                'tenant': 'tenant', 'lessee': 'tenant',
+                'buyer': 'buyer',
+                'acquiring_party': _isSales ? 'buyer' : 'tenant',
+                'agent': 'agent',
+            };
+
+            const self = this;
+            ceremonyTypes.forEach(fieldType => {
+                const selector = '[data-marker-party][data-marker-type="' + fieldType + '"]';
+                container.querySelectorAll(selector).forEach(el => {
+                    const rawParty = (el.dataset.markerParty || '').toLowerCase();
+                    const baseRole = partyRoleMap[rawParty] || rawParty;
+                    const isMine = baseRole === 'agent';
+
+                    if (!isMine) {
+                        // Other party's ceremony fields — leave as-is (read-only)
+                        el.style.opacity = '0.5';
+                        return;
+                    }
+
+                    // Replace the span with an inline input
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.setAttribute('data-marker-party', el.dataset.markerParty);
+                    input.setAttribute('data-marker-type', fieldType);
+                    input.setAttribute('data-ceremony-field', 'true');
+                    input.value = prefills[fieldType] || '';
+                    input.placeholder = placeholders[fieldType] || fieldType;
+                    input.className = el.className;
+                    input.style.cssText = el.style.cssText +
+                        'background:rgba(59,130,246,0.06);' +
+                        'border:none;border-bottom:2px solid rgba(59,130,246,0.5);' +
+                        'outline:none;font:inherit;color:inherit;' +
+                        'padding:1pt 4pt;box-sizing:border-box;' +
+                        'min-height:14pt;';
+
+                    // Track changes
+                    input.addEventListener('input', () => {
+                        if (!self.webCeremonyValues) self.webCeremonyValues = {};
+                        self.webCeremonyValues[rawParty + '_' + fieldType] = input.value;
+                    });
+
+                    // Store prefilled value
+                    if (prefills[fieldType]) {
+                        if (!self.webCeremonyValues) self.webCeremonyValues = {};
+                        self.webCeremonyValues[rawParty + '_' + fieldType] = prefills[fieldType];
+                    }
+
+                    el.replaceWith(input);
+                });
+            });
+
+            // Handle am/pm: find literal "am / pm" text next to time fields and make it a toggle
+            // The signature-block renders "am / pm" as plain text after the time field
+            container.querySelectorAll('[data-marker-type="time"]').forEach(timeEl => {
+                const parent = timeEl.parentElement;
+                if (!parent) return;
+                const rawParty = (timeEl.dataset.markerParty || '').toLowerCase();
+                const baseRole = partyRoleMap[rawParty] || rawParty;
+                if (baseRole !== 'agent') return;
+
+                // Walk sibling text nodes after the time input to find "am / pm"
+                let node = timeEl.nextSibling;
+                while (node) {
+                    if (node.nodeType === Node.TEXT_NODE && /am\s*\/\s*pm/i.test(node.textContent)) {
+                        const amPmBtn = document.createElement('button');
+                        amPmBtn.type = 'button';
+                        amPmBtn.className = 'sig-field sig-field-short';
+                        amPmBtn.style.cssText = 'cursor:pointer;background:rgba(59,130,246,0.06);border:none;border-bottom:2px solid rgba(59,130,246,0.5);font:inherit;color:inherit;padding:1pt 4pt;min-width:40pt;text-align:center;min-height:14pt;';
+                        amPmBtn.textContent = now.getHours() >= 12 ? 'pm' : 'am';
+                        amPmBtn.setAttribute('data-ceremony-field', 'true');
+                        amPmBtn.setAttribute('data-marker-party', rawParty);
+                        amPmBtn.setAttribute('data-marker-type', 'am_pm');
+                        amPmBtn.addEventListener('click', () => {
+                            amPmBtn.textContent = amPmBtn.textContent === 'am' ? 'pm' : 'am';
+                            if (!self.webCeremonyValues) self.webCeremonyValues = {};
+                            self.webCeremonyValues[rawParty + '_am_pm'] = amPmBtn.textContent;
+                        });
+                        // Replace "am / pm" text with the button
+                        const remaining = node.textContent.replace(/am\s*\/\s*pm/i, '').trim();
+                        if (remaining) {
+                            node.textContent = remaining + ' ';
+                            node.after(amPmBtn);
+                        } else {
+                            node.replaceWith(amPmBtn);
+                        }
+                        if (!self.webCeremonyValues) self.webCeremonyValues = {};
+                        self.webCeremonyValues[rawParty + '_am_pm'] = amPmBtn.textContent;
+                        break;
+                    }
+                    node = node.nextSibling;
+                }
+            });
         },
 
         /**
@@ -1233,18 +1285,21 @@ function signDocument() {
                 }
 
                 // Submit all web signatures to server
+                const url = @json(route('docuperfect.signatures.webSignComplete', $document));
+                const payload = {
+                    signatures: this.webSignatures,
+                    party_role: 'agent',
+                    ceremony_values: this.webCeremonyValues || {},
+                };
                 try {
-                    const resp = await fetch(@json(route('docuperfect.signatures.webSignComplete', $document)), {
+                    const resp = await fetch(url, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                             'Accept': 'application/json',
                             'X-CSRF-TOKEN': @json(csrf_token()),
                         },
-                        body: JSON.stringify({
-                            signatures: this.webSignatures,
-                            party_role: 'agent',
-                        }),
+                        body: JSON.stringify(payload),
                     });
                     const data = await resp.json();
                     if (data.ok && data.redirect) {
@@ -1261,11 +1316,13 @@ function signDocument() {
                         document.body.appendChild(form);
                         form.submit();
                     } else {
+                        console.error('COMPLETE_FAIL', data);
                         alert(data.error || 'Failed to complete signing.');
                         this.completingForm = false;
                     }
                 } catch (err) {
-                    alert('Network error. Please try again.');
+                    console.error('COMPLETE_ERROR', err);
+                    alert('Network error: ' + err.message);
                     this.completingForm = false;
                 }
                 return;

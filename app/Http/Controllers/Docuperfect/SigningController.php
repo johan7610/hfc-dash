@@ -987,11 +987,37 @@ class SigningController extends Controller
             );
         }
 
+        // Save ceremony values (location, day, month, year, time, am_pm per party)
+        $ceremonyValues = $request->input('ceremony_values', []);
+        if (!empty($ceremonyValues)) {
+            $webData['ceremony_values'] = array_merge($webData['ceremony_values'] ?? [], $ceremonyValues);
+        }
+
+        // Save clause flags (concerns raised by signer)
+        $clauseFlags = $request->input('clause_flags', []);
+        if (!empty($clauseFlags)) {
+            $existingFlags = $webData['clause_flags'] ?? [];
+            $webData['clause_flags'] = array_merge($existingFlags, [
+                $signingRequest->party_role => $clauseFlags,
+            ]);
+        }
+
         // Save signatures (base64 data URIs keyed by block ID)
         $signatures = $request->input('signatures', []);
         if (!empty($signatures)) {
             $existingSigs = $webData['signatures'] ?? [];
             $webData['signatures'] = array_merge($existingSigs, $signatures);
+        }
+
+        // Embed this signer's signatures and ceremony values into merged_html
+        if (!empty($webData['merged_html']) && !empty($signatures)) {
+            $sigController = app(SignatureController::class);
+            $html = $webData['merged_html'];
+            $html = $sigController->embedSignaturesIntoHtml($html, $signatures, $signingRequest->party_role);
+            if (!empty($ceremonyValues)) {
+                $html = $sigController->embedCeremonyValuesIntoHtml($html, $ceremonyValues);
+            }
+            $webData['merged_html'] = $html;
         }
 
         $document->update(['web_template_data' => $webData]);

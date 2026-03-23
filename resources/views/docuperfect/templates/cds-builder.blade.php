@@ -66,7 +66,8 @@
                             <svg class="w-4 h-4 text-emerald-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg>
                             <span x-text="'All ' + totalTagCount + ' fields linked — ready to save'"></span>
                         </div>
-                        <form x-ref="generateForm" method="POST" action="{{ route('docuperfect.cds.generate') }}" class="inline">
+                        <form x-ref="generateForm" method="POST" action="{{ route('docuperfect.cds.generate') }}" class="inline"
+                              @submit.prevent="saveAndGenerate($el)">
                             @csrf
                             <input type="hidden" name="draft_id" :value="draftId">
                             <input type="hidden" name="template_name" :value="templateName">
@@ -87,7 +88,8 @@
                 <template x-if="totalTagCount === 0">
                     <div class="flex items-center gap-3">
                         <span class="text-sm text-gray-400">No fields tagged yet</span>
-                        <form x-ref="generateForm" method="POST" action="{{ route('docuperfect.cds.generate') }}" class="inline">
+                        <form x-ref="generateFormEmpty" method="POST" action="{{ route('docuperfect.cds.generate') }}" class="inline"
+                              @submit.prevent="saveAndGenerate($el)">
                             @csrf
                             <input type="hidden" name="draft_id" :value="draftId">
                             <input type="hidden" name="template_name" :value="templateName">
@@ -385,6 +387,7 @@
 
                                     {{-- Type dropdown — single fields + field groups --}}
                                     <select class="w-full text-xs border border-gray-300 rounded px-2 py-1.5 mb-1.5 bg-white"
+                                            x-init="$nextTick(() => { $el.value = getMapping(tag.id).typeKey || '' })"
                                             :value="getMapping(tag.id).typeKey"
                                             @change="setType(tag.id, $event.target.value)">
                                         <option value="">Select type...</option>
@@ -960,6 +963,12 @@ function cdsEditor() {
 
         async manualSaveDraft() {
             await this._doSaveDraft(true);
+        },
+
+        async saveAndGenerate(formEl) {
+            // Pre-save draft so cdsGenerate reads fresh data
+            await this._doSaveDraft(false);
+            formEl.submit();
         },
 
         async _doSaveDraft(showToast) {
