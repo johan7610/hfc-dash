@@ -31,7 +31,9 @@ class UserManagementController extends Controller
             ->orderBy('name')
             ->get();
 
-        $branches = Branch::when($agencyId, fn ($q) => $q->where('agency_id', $agencyId))
+        $branches = Branch::when($agencyId, fn ($q) => $q->where(function ($q2) use ($agencyId) {
+                $q2->where('agency_id', $agencyId)->orWhereNull('agency_id');
+            }))
             ->orderBy('name')
             ->get(['id','name']);
         $designations = DB::table('designations')
@@ -49,7 +51,9 @@ class UserManagementController extends Controller
 
         $agencyId = auth()->user()->effectiveAgencyId();
 
-        $branches = Branch::when($agencyId, fn ($q) => $q->where('agency_id', $agencyId))
+        $branches = Branch::when($agencyId, fn ($q) => $q->where(function ($q2) use ($agencyId) {
+                $q2->where('agency_id', $agencyId)->orWhereNull('agency_id');
+            }))
             ->orderBy('name')->get(['id','name']);
         $designations = DB::table('designations')
             ->where('is_enabled', 1)->orderBy('sort_order')->orderBy('name')->get(['id','name']);
@@ -156,7 +160,9 @@ class UserManagementController extends Controller
 
         $agencyId = auth()->user()->effectiveAgencyId();
 
-        $branches = Branch::when($agencyId, fn ($q) => $q->where('agency_id', $agencyId))
+        $branches = Branch::when($agencyId, fn ($q) => $q->where(function ($q2) use ($agencyId) {
+                $q2->where('agency_id', $agencyId)->orWhereNull('agency_id');
+            }))
             ->orderBy('name')->get(['id','name']);
         $designations = DB::table('designations')
             ->where('is_enabled', 1)->orderBy('sort_order')->orderBy('name')->get(['id','name']);
