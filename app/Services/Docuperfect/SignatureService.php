@@ -383,12 +383,11 @@ class SignatureService
     // ──────────────────────────────────────────────
 
     /**
-     * Create dynamic signature zones from web template HTML by scanning
-     * data-marker-party and data-marker-type attributes.
+     * Create estimated signature zones for PDF templates.
      *
-     * Groups detected positions by role+type into zones. Creates zone records
-     * on the SignatureTemplate, then expands them into individual markers
-     * using SignatureZoneRenderer.
+     * NOTE: For web/CDS templates, zones are created client-side from actual
+     * DOM positions of data-marker-party elements. This method is only used
+     * for PDF templates where no DOM positions are available.
      *
      * @param  SignatureTemplate  $sigTemplate
      * @param  array  $parties  Parties from the signing chain (with role, name, email)
@@ -443,6 +442,27 @@ class SignatureService
                 ];
             }
         }
+
+        // Sort zones: inline zones first (earlier in doc), then final zones,
+        // agent always last (agent signs at the final signature section).
+        usort($zonePlacements, function ($a, $b) {
+            // Agent final zones always sort last
+            $aIsAgentFinal = ($a['baseRole'] === 'agent' && $a['isFinal']);
+            $bIsAgentFinal = ($b['baseRole'] === 'agent' && $b['isFinal']);
+            if ($aIsAgentFinal !== $bIsAgentFinal) {
+                return $aIsAgentFinal ? 1 : -1;
+            }
+            // Inline zones before final zones
+            if ($a['isFinal'] !== $b['isFinal']) {
+                return $a['isFinal'] ? 1 : -1;
+            }
+            // Within same category, preserve role order then location index
+            $roleOrder = strcmp($a['baseRole'], $b['baseRole']);
+            if ($roleOrder !== 0) {
+                return $roleOrder;
+            }
+            return $a['locationIndex'] <=> $b['locationIndex'];
+        });
 
         // Distribute zones through the signature area of the document.
         // Inline sigs start around 50%, final sigs around 85-92%.

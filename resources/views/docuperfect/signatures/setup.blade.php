@@ -272,7 +272,8 @@
             <div class="flex-1 ds-status-card p-4 overflow-hidden flex flex-col">
 
                 @if($isWebTemplate ?? false)
-                {{-- Web template: direct DOM injection (not iframe) so CSS applies and markers can detect data-marker-party attributes --}}
+                {{-- Web template: document preview — signature elements are visible in the HTML --}}
+                {{-- No zone/marker overlay needed — the template defines signature positions --}}
                 <div class="flex-1 overflow-y-auto" style="background:#f1f5f9;">
                     <link href="/css/corex-document.css" rel="stylesheet">
                     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -280,15 +281,18 @@
                         #webDocContent .corex-page {
                             min-height: auto !important;
                         }
+                        /* Highlight signature areas in setup preview */
+                        #webDocContent [data-marker-party][data-marker-type="signature"] {
+                            border: 2px dashed #94a3b8 !important;
+                            background: rgba(148,163,184,0.08) !important;
+                            min-height: 28pt;
+                        }
                     </style>
                     <div class="relative" style="max-width:100%; margin:0 auto;"
                          x-ref="pageContainer"
-                         @dragover.prevent="$event.dataTransfer.dropEffect = 'copy'"
-                         @drop.prevent="handleDrop($event)"
-                         @mousedown.prevent="startZoneDrawOnPage($event)"
-                         x-init="pageLoaded = true; setupWebTemplateObserver()">
+                         x-init="pageLoaded = true;">
 
-                        <div id="webDocContent" style="pointer-events:none;">
+                        <div id="webDocContent">
                             {!! $webTemplateHtml ?? '' !!}
                         </div>
                 @else
@@ -380,10 +384,11 @@
                         </template>
                         @endif
 
-                        {{-- Render dynamic signature zones for current page --}}
+                        @if(!($isWebTemplate ?? false))
+                        {{-- Render dynamic signature zones for current page (PDF only) --}}
                         <template x-for="zone in zonesForCurrentPage()" :key="'zone_' + zone.id">
                             <div class="absolute select-none"
-                                 :style="`left:${zone.x_position}%;top:${zone.y_position}%;width:${zone.width}%;height:${zone.height}%;z-index:5;`"
+                                 :style="`left:${zone.x_position}%;top:${zone.y_position}%;width:${zone.width}%;height:50px;z-index:5;`"
                                  style="border:2px dashed rgba(99,102,241,0.6); background:rgba(99,102,241,0.05); cursor:grab;"
                                  @mousedown.prevent="startZoneDrag($event, zone)">
 
@@ -419,16 +424,16 @@
                             </div>
                         </template>
 
-                        {{-- Render markers for current page --}}
+                        {{-- Render markers for current page (PDF only) --}}
                         <template x-for="(marker, idx) in markersForCurrentPage()" :key="marker._id">
                             <div class="absolute flex items-center justify-center text-xs font-medium select-none"
-                                 :style="`left:${marker.x_position}%;top:${marker.y_position}%;width:${marker.width}%;height:${marker.height}%;opacity:0.7;z-index:10;`"
+                                 :style="`left:${marker.x_position}%;top:${marker.y_position}%;width:${Math.min(marker.width, 50)}%;height:40px;max-width:200px;opacity:0.7;z-index:10;`"
                                  :class="markerClasses(marker)"
                                  @mousedown.prevent="startDrag($event, marker)"
                                  style="cursor:grab;">
 
                                 {{-- Label --}}
-                                <span class="truncate px-1 pointer-events-none" x-text="markerLabel(marker)"></span>
+                                <span class="truncate px-1 pointer-events-none" style="font-size:9px;line-height:1.2;" x-text="markerLabel(marker)"></span>
                                 <template x-if="marker.auto_placed">
                                     <span class="absolute -top-2 -left-1 px-1 py-0 rounded text-[8px] font-bold bg-indigo-500 text-white pointer-events-none" style="line-height:1.3;">Auto</span>
                                 </template>
@@ -448,11 +453,34 @@
                                 </div>
                             </div>
                         </template>
+                        @endif
                     </div>
                 </div>
             </div>
 
             {{-- RIGHT: Toolbar --}}
+            @if($isWebTemplate ?? false)
+            {{-- Web template: simplified panel — no markers/zones needed --}}
+            <div class="w-72 flex-shrink-0 ds-status-card flex flex-col">
+                <div class="flex-1 overflow-y-auto p-4 min-h-0">
+                    <h4 class="text-sm font-semibold text-slate-800 mb-3">Document Preview</h4>
+                    <p class="text-xs text-slate-500 mb-4">This web template has signature positions built into the document. No manual marker placement is needed.</p>
+                    <div class="rounded-lg bg-emerald-50 border border-emerald-200 p-3 mb-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            <span class="text-xs font-semibold text-emerald-700">Signature areas detected</span>
+                        </div>
+                        <p class="text-[11px] text-emerald-600">The dashed outlines in the document show where each party will sign.</p>
+                    </div>
+                </div>
+                <div class="flex-shrink-0 border-t border-slate-200 p-4 bg-white rounded-b-2xl">
+                    <a href="{{ route('docuperfect.signatures.sign', $document) }}"
+                       class="block w-full rounded-lg px-4 py-2.5 text-sm font-medium text-center bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">
+                        Continue to Signing
+                    </a>
+                </div>
+            </div>
+            @else
             <div class="w-72 flex-shrink-0 ds-status-card flex flex-col">
                 {{-- Scrollable content area --}}
                 <div class="flex-1 overflow-y-auto p-4 min-h-0">
@@ -617,6 +645,7 @@
                     </button>
                 </div>
             </div>
+            @endif
         </div>
 
         {{-- ═══════════════════════════════════════════════
@@ -676,7 +705,7 @@
             'x_position' => (float) $m->x_position,
             'y_position' => (float) $m->y_position,
             'width' => (float) $m->width,
-            'height' => (float) $m->height,
+            'height' => min((float) $m->height, 8.0),
             'type' => $m->type,
             'assigned_party' => $m->assigned_party,
             'label' => $m->label,
@@ -746,221 +775,21 @@
                 // Global mouse handlers for drag (markers + zones)
                 document.addEventListener('mousemove', (e) => { this.onDrag(e); this.onZoneDraw(e); this.onZoneDrag(e); });
                 document.addEventListener('mouseup', () => { this.endDrag(); this.endZoneDraw(); this.endZoneDrag(); });
+                console.log('MARKERS_INIT', this.markers.map(m => ({id: m.id, party: m.assigned_party, y: m.y_position, h: m.height, w: m.width})));
+                console.log('ZONES_INIT', this.zones.map(z => ({id: z.id, role: z.party_role, y: z.y_position, h: z.height, w: z.width, source: z.source})));
             },
 
             setupWebTemplateObserver() {
-                if (!this.isWebTemplate) return;
-
-                // DOM-sourced zones were already created from real positions — keep them.
-                const hasDomZones = this.zones.some(z => z.source === 'dom');
-                if (hasDomZones) return;
-
-                // Server-created template zones use hardcoded y-positions that don't
-                // match where signature elements actually render. Delete them and
-                // re-create from DOM positions so each signature LOCATION gets its own
-                // zone (e.g. seller has inline sigs at 49% and 65% plus final sig at 85%
-                // = 3 separate zones, not one giant zone spanning 49-93%).
-                const serverZones = this.zones.filter(z => z.is_auto_placed && z.source !== 'dom');
-                if (serverZones.length > 0) {
-                    const deletePromises = serverZones.map(z => {
-                        const url = '/docuperfect/documents/' + @json($document->id) + '/signatures/zones/' + z.id;
-                        return fetch(url, {
-                            method: 'DELETE',
-                            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': @json(csrf_token()) },
-                        }).catch(err => console.error('Zone delete failed:', err));
-                    });
-                    // Clear local state
-                    this.zones = this.zones.filter(z => !z.is_auto_placed || z.source === 'dom');
-                    this.markers = this.markers.filter(m => !serverZones.some(z => z.id === m.from_zone_id));
-                    // After deletes complete, fall through to DOM-based creation
-                    Promise.all(deletePromises).then(() => this._createZonesFromDOM());
-                    return;
-                }
-
-                // No zones at all — create from DOM
-                this._createZonesFromDOM();
+                // No-op for web templates. Signature positions are defined by
+                // the template HTML — no overlay zones needed.
+                // The document preview shows signature areas via CSS highlighting.
             },
 
             /**
-             * Create zones from actual DOM signature element positions.
-             * Groups by role + vertical position so each signature LOCATION
-             * gets its own zone (inline at 49%, inline at 65%, final at 85%
-             * = 3 separate zones, NOT one giant zone spanning the full range).
+             * No-op — web templates define signature positions in the HTML.
+             * Zone creation from DOM is no longer needed.
              */
-            _createZonesFromDOM() {
-                // Clear any existing individual markers — zones will create new ones
-                this.markers = [];
-
-                const container = this.$refs.pageContainer;
-                if (!container) return;
-
-                const self = this;
-                const partyRoleMap = {
-                    'owner': 'landlord', 'owner_party': 'landlord',
-                    'landlord': 'landlord', 'lessor': 'landlord',
-                    'seller': 'seller',
-                    'tenant': 'tenant', 'lessee': 'tenant',
-                    'buyer': 'buyer', 'acquiring_party': 'buyer',
-                    'agent': 'agent',
-                };
-
-                const tryCreateZonesFromDOM = async () => {
-                    const sigElements = container.querySelectorAll('[data-marker-party][data-marker-type="signature"]');
-                    if (sigElements.length === 0) return false;
-
-                    // Reset scroll so getBoundingClientRect is accurate
-                    container.scrollTop = 0;
-                    const containerRect = container.getBoundingClientRect();
-                    const scrollH = container.scrollHeight;
-                    const scrollW = container.scrollWidth;
-
-                    // Group signature elements by: baseRole + context (inline vs final sig block)
-                    // For final sig block: one zone per role wrapping all that role's sig cells
-                    // For inline: one zone per inline occurrence group
-                    const groups = {};
-                    sigElements.forEach(el => {
-                        const partyLabel = (el.dataset.markerParty || '').toLowerCase();
-                        const baseRole = partyRoleMap[partyLabel] || partyLabel;
-                        const isInFinalSig = el.closest('.sig-section') !== null;
-
-                        // For inline sigs at different positions, group by approximate Y
-                        // so separate inline occurrences get separate zones
-                        let groupKey;
-                        if (isInFinalSig) {
-                            groupKey = baseRole + ':final';
-                        } else {
-                            const elRect = el.getBoundingClientRect();
-                            const yApprox = Math.round((elRect.top - containerRect.top + container.scrollTop) / 50) * 50;
-                            groupKey = baseRole + ':inline:' + yApprox;
-                        }
-
-                        if (!groups[groupKey]) {
-                            groups[groupKey] = {
-                                baseRole,
-                                isFinal: isInFinalSig,
-                                elements: [],
-                            };
-                        }
-                        groups[groupKey].elements.push(el);
-                    });
-
-                    // Build zone definitions from DOM bounding boxes
-                    const zoneDefs = [];
-                    for (const [groupKey, group] of Object.entries(groups)) {
-                        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-                        group.elements.forEach(el => {
-                            const rect = el.getBoundingClientRect();
-                            const relLeft = rect.left - containerRect.left;
-                            const relTop = rect.top - containerRect.top + container.scrollTop;
-                            const relRight = relLeft + rect.width;
-                            const relBottom = relTop + rect.height;
-
-                            minX = Math.min(minX, relLeft);
-                            minY = Math.min(minY, relTop);
-                            maxX = Math.max(maxX, relRight);
-                            maxY = Math.max(maxY, relBottom);
-                        });
-
-                        // Convert to percentage of container
-                        const xPct = (minX / scrollW) * 100;
-                        const yPct = (minY / scrollH) * 100;
-                        const wPct = ((maxX - minX) / scrollW) * 100;
-                        const hPct = ((maxY - minY) / scrollH) * 100;
-
-                        // Add padding: 5px above/below for signature drawing space
-                        const padPx = 5;
-                        const padYPct = (padPx / scrollH) * 100;
-                        const padXPct = (padPx / scrollW) * 100;
-
-                        const roleLabel = group.baseRole.charAt(0).toUpperCase() + group.baseRole.slice(1);
-                        const label = group.isFinal
-                            ? roleLabel + ' Signature Zone'
-                            : roleLabel + ' Inline Signature';
-
-                        zoneDefs.push({
-                            zone_type: 'signature',
-                            party_role: group.baseRole,
-                            page_number: 1,
-                            x_position: Math.round(Math.max(0, xPct - padXPct) * 100) / 100,
-                            y_position: Math.round(Math.max(0, yPct - padYPct) * 100) / 100,
-                            width: Math.round(Math.min(wPct + padXPct * 2, 100) * 100) / 100,
-                            height: Math.round(Math.min(hPct + padYPct * 2, 100) * 100) / 100,
-                            label: label,
-                        });
-                    }
-
-                    if (zoneDefs.length === 0) return true;
-
-                    // Batch-create zones via API
-                    try {
-                        const resp = await fetch(@json(route('docuperfect.signatures.batchStoreZones', $document)), {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Accept': 'application/json',
-                                'X-CSRF-TOKEN': @json(csrf_token()),
-                            },
-                            body: JSON.stringify({ zones: zoneDefs }),
-                        });
-
-                        const data = await resp.json();
-                        if (data.ok) {
-                            // Add zones to local state
-                            (data.zones || []).forEach(z => {
-                                self.zones.push(z);
-                            });
-
-                            // Add expanded markers from zones to local state
-                            (data.markers || []).forEach(m => {
-                                self.markers.push({
-                                    _id: 'zone_' + self._nextId++,
-                                    id: m.id,
-                                    page_number: m.page_number,
-                                    x_position: m.x_position,
-                                    y_position: m.y_position,
-                                    width: m.width,
-                                    height: m.height,
-                                    type: m.type,
-                                    assigned_party: m.assigned_party,
-                                    label: m.label,
-                                    required: true,
-                                    from_zone_id: m.from_zone_id || null,
-                                });
-                            });
-
-                            self.saved = false;
-                            self.saveMessage = data.zones.length + ' zones created from document layout.';
-                            self.saveError = false;
-                            setTimeout(() => { self.saveMessage = ''; }, 4000);
-                        }
-                    } catch (err) {
-                        console.error('Failed to create zones from DOM:', err);
-                        self.saveMessage = 'Failed to auto-create zones.';
-                        self.saveError = true;
-                        setTimeout(() => { self.saveMessage = ''; }, 4000);
-                    }
-
-                    return true;
-                };
-
-                // Try immediately first (DOM may already be ready)
-                if (tryCreateZonesFromDOM()) return;
-
-                // Use MutationObserver to wait for DOM content to render
-                const observer = new MutationObserver(() => {
-                    const els = container.querySelectorAll('[data-marker-party][data-marker-type="signature"]');
-                    if (els.length === 0) return;
-                    observer.disconnect();
-                    // Wait one frame for layout to settle
-                    requestAnimationFrame(() => tryCreateZonesFromDOM());
-                });
-
-                observer.observe(container, { childList: true, subtree: true });
-
-                // Safety timeout — disconnect after 5s
-                setTimeout(() => observer.disconnect(), 5000);
-            },
+            _createZonesFromDOM() { /* no-op */ },
 
             prevPage() { if (this.currentPage > 1) this.currentPage--; },
             nextPage() { if (this.currentPage < this.totalPages) this.currentPage++; },
@@ -1298,7 +1127,7 @@
                                 x_position: m.x_position,
                                 y_position: m.y_position,
                                 width: m.width,
-                                height: m.height,
+                                height: Math.min(m.height, 8),
                                 type: m.type,
                                 assigned_party: m.assigned_party,
                                 label: m.label,

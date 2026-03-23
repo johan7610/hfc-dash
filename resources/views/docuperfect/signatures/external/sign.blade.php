@@ -42,6 +42,51 @@
             padding: 2px 6px;
             display: inline-block;
         }
+        /* Interactive signature elements (web templates) */
+        .web-sig-interactive {
+            cursor: pointer;
+            border: 2px dashed #d97706 !important;
+            background: rgba(251,191,36,0.06) !important;
+            min-height: 28pt;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .web-sig-interactive:hover {
+            background: rgba(251,191,36,0.12) !important;
+            border-color: #b45309 !important;
+            box-shadow: 0 0 0 3px rgba(217,119,6,0.15);
+        }
+        .web-sig-interactive.web-sig-signed {
+            border: 2px solid #10b981 !important;
+            background: rgba(16,185,129,0.06) !important;
+            cursor: default;
+        }
+        .web-sig-other-party {
+            opacity: 0.5;
+            pointer-events: none;
+            position: relative;
+        }
+        .web-sig-other-signed {
+            opacity: 0.8;
+            position: relative;
+        }
+        .web-sig-prompt {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #b45309;
+        }
+        .web-sig-interactive:hover .web-sig-prompt { color: #92400e; }
+        .web-sig-signed-img {
+            display: block;
+            max-height: 50px;
+            margin: 2px auto;
+            object-fit: contain;
+        }
         .corex-signing-view .sig-block-party[data-signer="true"] {
             background: #fffbeb;
             border: 2px dashed #d97706;
@@ -309,57 +354,14 @@
             {{-- Document viewer --}}
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 overflow-hidden flex flex-col" style="min-height:600px;">
 
-                {{-- Web template: render HTML directly with markers --}}
+                {{-- Web template: render HTML directly — document elements are the interactive surface --}}
                 <template x-if="isWebTemplate">
                     <div class="flex-1 overflow-auto" style="background:#e2e8f0;">
                         <div class="relative" style="width:210mm; max-width:100%; background:white; padding:20mm; margin:0 auto; box-shadow:0 2px 8px rgba(0,0,0,0.15);"
                              x-ref="pageContainer">
-                            <div x-html="webTemplateHtml"></div>
-
-                            {{-- Render markers on web template --}}
-                            <template x-for="marker in markersForCurrentPage()" :key="marker.id">
-                                <div x-show="!hasFlattened || (marker.is_mine && !marker.signed)"
-                                     class="absolute flex items-center justify-center select-none transition-all duration-200"
-                                     :id="'marker-' + marker.id"
-                                     :style="`left:${marker.x_position}%;top:${marker.y_position}%;width:${marker.width}%;height:${marker.height}%;z-index:10;`"
-                                     :class="markerDisplayClasses(marker)"
-                                     @click="handleMarkerClick(marker)">
-
-                                    {{-- My unsigned marker (clickable) --}}
-                                    <template x-if="marker.is_mine && !marker.signed">
-                                        <div class="flex flex-col items-center justify-center w-full h-full px-1">
-                                            <span class="text-xs font-bold leading-tight truncate" x-text="markerActionLabel(marker)"></span>
-                                            <span class="text-[10px] leading-tight opacity-70 truncate" x-text="marker.label || markerTypeLabel(marker)"></span>
-                                        </div>
-                                    </template>
-
-                                    {{-- My signed marker --}}
-                                    <template x-if="marker.is_mine && marker.signed">
-                                        <div class="flex flex-col items-center justify-center w-full h-full relative">
-                                            <template x-if="marker.signature_data && marker.type !== 'date' && marker.type !== 'text'">
-                                                <img :src="marker.signature_data" class="w-full h-full object-contain p-0.5" alt="Signature">
-                                            </template>
-                                            <template x-if="marker.type === 'date'">
-                                                <span class="text-xs font-medium" x-text="marker.text_value || marker.date_value || formatDate(new Date())"></span>
-                                            </template>
-                                            <template x-if="marker.type === 'text'">
-                                                <span class="text-xs font-medium truncate px-1" x-text="marker.text_value || ''"></span>
-                                            </template>
-                                            <span class="absolute -bottom-0.5 right-0.5 text-[9px] text-emerald-700 font-semibold" x-text="marker.type === 'text' ? 'Done' : 'Signed'"></span>
-                                        </div>
-                                    </template>
-
-                                    {{-- Other party's marker --}}
-                                    <template x-if="!marker.is_mine">
-                                        <div class="flex flex-col items-center justify-center w-full h-full px-1 opacity-60">
-                                            <svg class="w-3.5 h-3.5 mb-0.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                            </svg>
-                                            <span class="text-[10px] leading-tight capitalize truncate" x-text="marker.assigned_party"></span>
-                                        </div>
-                                    </template>
-                                </div>
-                            </template>
+                            <div x-ref="webDocContent" x-html="webTemplateHtml"></div>
+                            {{-- No floating markers for web templates --}}
+                            {{-- Signature elements in the document HTML become interactive --}}
                         </div>
                     </div>
                 </template>
@@ -550,7 +552,7 @@
                             <div x-show="!hasFlattened || (marker.is_mine && !marker.signed)"
                                  class="absolute flex items-center justify-center select-none transition-all duration-200"
                                  :id="'marker-' + marker.id"
-                                 :style="`left:${marker.x_position}%;top:${marker.y_position}%;width:${marker.width}%;height:${marker.height}%;z-index:10;`"
+                                 :style="`left:${marker.x_position}%;top:${marker.y_position}%;width:${marker.width}%;height:40px;max-width:200px;z-index:10;`"
                                  :class="markerDisplayClasses(marker)"
                                  @click="handleMarkerClick(marker)">
 
@@ -1165,16 +1167,93 @@ function externalSign() {
                 this.signingMethod = null;
             });
 
-            // For web templates: convert editable field spans to inputs, process sig blocks + disclosures
+            // For web templates: convert editable field spans to inputs, make sig elements interactive
             if (this.isWebTemplate) {
                 this.$nextTick(() => {
                     if (this.editableFields.length > 0) {
                         this.initWebTemplateFields();
                     }
-                    this.processWebSignatureBlocks();
+                    this._makeWebElementsInteractive();
                     this.processWebDisclosureChecklists();
                 });
             }
+        },
+
+        /**
+         * Web template interactive signing: find all [data-marker-party][data-marker-type="signature"]
+         * elements in the document HTML and make the current signer's elements clickable.
+         * No floating overlays — the document elements ARE the signing surface.
+         */
+        _makeWebElementsInteractive() {
+            const container = this.$refs.webDocContent || (this.$refs.pageContainer ? this.$refs.pageContainer.querySelector('[x-html]') : null);
+            if (!container) return;
+
+            const self = this;
+            const partyRoleMap = {
+                'owner': 'landlord', 'owner_party': 'landlord',
+                'landlord': 'landlord', 'lessor': 'landlord',
+                'seller': 'seller',
+                'tenant': 'tenant', 'lessee': 'tenant',
+                'buyer': 'buyer', 'acquiring_party': 'buyer',
+                'agent': 'agent',
+            };
+
+            const tryInit = () => {
+                const sigElements = container.querySelectorAll('[data-marker-party][data-marker-type="signature"]');
+                if (sigElements.length === 0) return false;
+
+                let myCount = 0;
+
+                sigElements.forEach((el, idx) => {
+                    const rawParty = (el.dataset.markerParty || '').toLowerCase();
+                    const baseRole = partyRoleMap[rawParty] || rawParty;
+                    const sigKey = baseRole + '-sig-' + idx;
+                    const isMine = self.isMyWebSigBlock(rawParty);
+
+                    if (isMine) {
+                        myCount++;
+                        el.classList.add('web-sig-interactive');
+                        el.setAttribute('data-sig-id', sigKey);
+                        el.innerHTML = '<div class="web-sig-prompt"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg> Click to sign</div>';
+
+                        el.addEventListener('click', () => {
+                            if (el.getAttribute('data-signed') === 'true') return;
+                            self.currentWebSigBlockId = sigKey;
+                            self.showWebSigCapture = true;
+                            self.$nextTick(() => self.initWebSigCanvas());
+                        });
+                    } else {
+                        // Other party — grey out or show "signed" if previous signer
+                        el.classList.add('web-sig-other-party');
+                        const partyLabel = rawParty.replace(/_/g, ' ');
+                        if (!el.querySelector('.sig-cell-label')) {
+                            el.innerHTML = '<div style="font-size:9px;color:#94a3b8;text-align:center;padding:4px;">Awaiting ' + partyLabel + '</div>';
+                        }
+                    }
+                });
+
+                // Update counters
+                self.webTotalSigBlocksCount = myCount;
+                if (myCount > 0) {
+                    self.totalRequired = myCount;
+                    self.signedCount = 0;
+                }
+
+                // Add the corex-signing-view class for CSS
+                const pageContainer = container.closest('.relative') || container.parentElement;
+                if (pageContainer) pageContainer.classList.add('corex-signing-view');
+
+                console.log('EXT_WEB_SIG_INTERACTIVE', myCount, 'signer elements,', sigElements.length, 'total');
+                return true;
+            };
+
+            let attempts = 0;
+            const interval = setInterval(() => {
+                attempts++;
+                if (tryInit() || attempts > 20) {
+                    clearInterval(interval);
+                }
+            }, 200);
         },
 
         // ── Section-by-section navigation ──
@@ -1829,11 +1908,10 @@ function externalSign() {
         },
 
         // ── Web template signing helpers ──
+        webTotalSigBlocksCount: 0,
 
         get webTotalSigBlocks() {
-            const container = this.$el ? this.$el.querySelector('[x-html="webTemplateHtml"]') : null;
-            if (!container) return 0;
-            return container.querySelectorAll('.sig-block-party[data-signer="true"]').length;
+            return this.webTotalSigBlocksCount;
         },
 
         get canSubmitWeb() {
@@ -1842,48 +1920,8 @@ function externalSign() {
             return this.webConsented && (totalSigs === 0 || signedSigs >= totalSigs);
         },
 
-        processWebSignatureBlocks() {
-            const container = this.$el ? this.$el.querySelector('[x-html="webTemplateHtml"]') : null;
-            if (!container) return;
-
-            setTimeout(() => {
-                const sigBlocks = container.querySelectorAll('.sig-block-party');
-                const self = this;
-
-                sigBlocks.forEach((block, idx) => {
-                    const partyRole = block.dataset.markerParty || block.dataset.party || '';
-                    const isSigner = this.isMyWebSigBlock(partyRole);
-                    block.setAttribute('data-signer', isSigner ? 'true' : 'false');
-                    block.setAttribute('data-signed', 'false');
-                    block.setAttribute('data-sig-id', 'sig-' + idx);
-
-                    if (isSigner) {
-                        const sigLine = block.querySelector('.corex-signature-line, .sig-line');
-                        const promptDiv = document.createElement('div');
-                        promptDiv.className = 'text-center py-3';
-                        promptDiv.innerHTML = '<span style="font-size:13px;font-weight:600;color:#b45309;">Click to sign here</span>';
-
-                        if (sigLine) {
-                            sigLine.innerHTML = '';
-                            sigLine.appendChild(promptDiv);
-                        } else {
-                            block.appendChild(promptDiv);
-                        }
-
-                        block.addEventListener('click', () => {
-                            if (block.getAttribute('data-signed') === 'true') return;
-                            self.currentWebSigBlockId = 'sig-' + idx;
-                            self.showWebSigCapture = true;
-                            self.$nextTick(() => self.initWebSigCanvas());
-                        });
-                    }
-                });
-
-                // Add the corex-signing-view class for CSS
-                const pageContainer = container.closest('.relative') || container.parentElement;
-                if (pageContainer) pageContainer.classList.add('corex-signing-view');
-            }, 150);
-        },
+        // Legacy — replaced by _makeWebElementsInteractive()
+        processWebSignatureBlocks() { /* no-op */ },
 
         isMyWebSigBlock(partyRole) {
             const role = (partyRole || '').toLowerCase();
@@ -2014,18 +2052,19 @@ function externalSign() {
 
             this.webSignatures[this.currentWebSigBlockId] = sigData;
 
-            // Update the signature block in the document
-            const container = this.$el.querySelector('[x-html="webTemplateHtml"]');
+            // Update the signature element in the document using the new interactive approach
+            const container = this.$refs.webDocContent || this.$el.querySelector('[x-html="webTemplateHtml"]');
             if (container) {
                 const block = container.querySelector('[data-sig-id="' + this.currentWebSigBlockId + '"]');
                 if (block) {
                     block.setAttribute('data-signed', 'true');
-                    const sigLine = block.querySelector('.corex-signature-line, .sig-line, .text-center');
-                    if (sigLine) {
-                        sigLine.innerHTML = '<img src="' + sigData + '" style="max-height:60px;margin:0 auto;display:block;">';
-                    }
+                    block.classList.add('web-sig-signed');
+                    block.innerHTML = '<img src="' + sigData + '" class="web-sig-signed-img" alt="Signature">';
                 }
             }
+
+            // Update signed count
+            this.signedCount = Object.keys(this.webSignatures).length;
 
             this.showWebSigCapture = false;
             this.showNotification('Signature applied.', 'info');

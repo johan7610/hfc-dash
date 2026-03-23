@@ -17,6 +17,47 @@
     animation: pulseHighlight 1s ease-in-out 3;
     border-color: #ef4444 !important;
 }
+/* Web template interactive signature elements */
+.web-sig-interactive {
+    cursor: pointer;
+    border: 2px dashed #3b82f6 !important;
+    background: rgba(59,130,246,0.06) !important;
+    min-height: 28pt;
+    transition: all 0.2s;
+    position: relative;
+}
+.web-sig-interactive:hover {
+    background: rgba(59,130,246,0.12) !important;
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+}
+.web-sig-interactive.web-sig-signed {
+    border: 2px solid #10b981 !important;
+    background: rgba(16,185,129,0.06) !important;
+    cursor: default;
+}
+.web-sig-other-party {
+    opacity: 0.5;
+    pointer-events: none;
+    position: relative;
+}
+.web-sig-prompt {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #3b82f6;
+}
+.web-sig-interactive:hover .web-sig-prompt { color: #1d4ed8; }
+.web-sig-signed-img {
+    display: block;
+    max-height: 50px;
+    margin: 2px auto;
+    object-fit: contain;
+}
 </style>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-4"
@@ -178,7 +219,8 @@
             <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
             <div x-ref="pageContainer"
                  style="position:relative; max-width:100%; margin:0 auto;">
-                <div style="pointer-events:none;">{!! $webTemplateHtml !!}</div>
+                {{-- Web template: document elements ARE the interactive surface --}}
+                <div x-ref="webDocContent">{!! $webTemplateHtml !!}</div>
             @else
             <div class="relative inline-block" style="max-width:800px; width:100%;" x-ref="pageContainer">
                 <img :src="pageImages[currentPage - 1]"
@@ -371,50 +413,53 @@
                     </div>
                 </template>
 
-                {{-- Render markers for current page --}}
-                <template x-for="marker in markersForCurrentPage()" :key="marker.id">
-                    <div class="absolute flex items-center justify-center select-none transition-all duration-200"
-                         :id="'marker-' + marker.id"
-                         :style="`left:${marker.x_position}%;top:${marker.y_position}%;width:${marker.width}%;height:${marker.height}%;z-index:10;`"
-                         :class="markerDisplayClasses(marker)"
-                         @click="handleMarkerClick(marker)">
+                {{-- Render floating markers for PDF templates ONLY --}}
+                {{-- Web templates use interactive document elements instead --}}
+                <template x-if="!isWebTemplate">
+                    <template x-for="marker in markersForCurrentPage()" :key="marker.id">
+                        <div class="absolute flex items-center justify-center select-none transition-all duration-200"
+                             :id="'marker-' + marker.id"
+                             :style="`left:${marker.x_position}%;top:${marker.y_position}%;width:${marker.width}%;height:40px;max-width:200px;z-index:10;`"
+                             :class="markerDisplayClasses(marker)"
+                             @click="handleMarkerClick(marker)">
 
-                        {{-- Unsigned agent marker (clickable) --}}
-                        <template x-if="marker.assigned_party === 'agent' && !marker.signed">
-                            <div class="flex flex-col items-center justify-center w-full h-full px-1">
-                                <span class="text-xs font-bold leading-tight truncate" x-text="markerActionLabel(marker)"></span>
-                                <span class="text-[10px] leading-tight opacity-70 truncate" x-text="marker.label || markerTypeLabel(marker)"></span>
-                            </div>
-                        </template>
+                            {{-- Unsigned agent marker (clickable) --}}
+                            <template x-if="marker.assigned_party === 'agent' && !marker.signed">
+                                <div class="flex flex-col items-center justify-center w-full h-full px-1">
+                                    <span class="text-xs font-bold leading-tight truncate" x-text="markerActionLabel(marker)"></span>
+                                    <span class="text-[10px] leading-tight opacity-70 truncate" x-text="marker.label || markerTypeLabel(marker)"></span>
+                                </div>
+                            </template>
 
-                        {{-- Signed agent marker (shows signature/value) --}}
-                        <template x-if="marker.assigned_party === 'agent' && marker.signed">
-                            <div class="flex flex-col items-center justify-center w-full h-full relative">
-                                <template x-if="marker.signature_data && marker.type !== 'date' && marker.type !== 'text'">
-                                    <img :src="marker.signature_data"
-                                         class="w-full h-full object-contain p-0.5"
-                                         alt="Signature">
-                                </template>
-                                <template x-if="marker.type === 'date'">
-                                    <span class="text-xs font-medium" x-text="marker.text_value || marker.date_value || formatDate(new Date())"></span>
-                                </template>
-                                <template x-if="marker.type === 'text'">
-                                    <span class="text-xs font-medium truncate px-1" x-text="marker.text_value || ''"></span>
-                                </template>
-                                <span class="absolute -bottom-0.5 right-0.5 text-[9px] text-emerald-700 font-semibold" x-text="marker.type === 'text' ? 'Done' : 'Signed'"></span>
-                            </div>
-                        </template>
+                            {{-- Signed agent marker (shows signature/value) --}}
+                            <template x-if="marker.assigned_party === 'agent' && marker.signed">
+                                <div class="flex flex-col items-center justify-center w-full h-full relative">
+                                    <template x-if="marker.signature_data && marker.type !== 'date' && marker.type !== 'text'">
+                                        <img :src="marker.signature_data"
+                                             class="w-full h-full object-contain p-0.5"
+                                             alt="Signature">
+                                    </template>
+                                    <template x-if="marker.type === 'date'">
+                                        <span class="text-xs font-medium" x-text="marker.text_value || marker.date_value || formatDate(new Date())"></span>
+                                    </template>
+                                    <template x-if="marker.type === 'text'">
+                                        <span class="text-xs font-medium truncate px-1" x-text="marker.text_value || ''"></span>
+                                    </template>
+                                    <span class="absolute -bottom-0.5 right-0.5 text-[9px] text-emerald-700 font-semibold" x-text="marker.type === 'text' ? 'Done' : 'Signed'"></span>
+                                </div>
+                            </template>
 
-                        {{-- Other party's marker (greyed out) --}}
-                        <template x-if="marker.assigned_party !== 'agent'">
-                            <div class="flex flex-col items-center justify-center w-full h-full px-1 opacity-60">
-                                <svg class="w-3.5 h-3.5 mb-0.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                </svg>
-                                <span class="text-[10px] leading-tight capitalize truncate" x-text="marker.assigned_party"></span>
-                            </div>
-                        </template>
-                    </div>
+                            {{-- Other party's marker (greyed out) --}}
+                            <template x-if="marker.assigned_party !== 'agent'">
+                                <div class="flex flex-col items-center justify-center w-full h-full px-1 opacity-60">
+                                    <svg class="w-3.5 h-3.5 mb-0.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                    </svg>
+                                    <span class="text-[10px] leading-tight capitalize truncate" x-text="marker.assigned_party"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
                 </template>
             </div>
         </div>
@@ -533,6 +578,7 @@ function signDocument() {
         pageImages: @json($pageImages),
         documentFields: @json($document->fields_json ?? []),
         hasFlattened: {{ !empty($hasFlattened) ? 'true' : 'false' }},
+        isWebTemplate: {{ !empty($isWebTemplate) ? 'true' : 'false' }},
         currentPage: 1,
         totalPages: {{ $pageCount }},
         signedCount: {{ $signedCount }},
@@ -558,6 +604,12 @@ function signDocument() {
         lastSignatureType: null,
         applyingAll: false,
 
+        // Web template interactive signing state
+        webSigElements: [],       // [{el, partyRole, type, index, isMine, signed, sigData}]
+        webSignatures: {},         // { 'agent-sig-0': dataUrl, ... }
+        webSigTotal: 0,
+        webSigSigned: 0,
+
         // Section-by-section signing state
         hasSections: {{ !empty($sections) ? 'true' : 'false' }},
         sections: @json($sections ?? []),
@@ -579,6 +631,111 @@ function signDocument() {
         init() {
             // Check if agent already has at least one signed marker
             this.firstSignatureDone = this.markers.some(m => m.assigned_party === 'agent' && m.signed);
+
+            // For web templates: make document signature elements interactive
+            if (this.isWebTemplate) {
+                this.$nextTick(() => this._makeWebElementsInteractive());
+            }
+        },
+
+        /**
+         * Web template interactive signing: find all [data-marker-party][data-marker-type="signature"]
+         * elements in the document HTML and make the agent's elements clickable.
+         * No floating overlays — the document elements ARE the signing surface.
+         */
+        _makeWebElementsInteractive() {
+            const container = this.$refs.webDocContent;
+            if (!container) return;
+
+            const self = this;
+            const partyRoleMap = {
+                'owner': 'landlord', 'owner_party': 'landlord',
+                'landlord': 'landlord', 'lessor': 'landlord',
+                'seller': 'seller',
+                'tenant': 'tenant', 'lessee': 'tenant',
+                'buyer': 'buyer', 'acquiring_party': 'buyer',
+                'agent': 'agent',
+            };
+
+            const tryInit = () => {
+                const sigElements = container.querySelectorAll('[data-marker-party][data-marker-type="signature"]');
+                if (sigElements.length === 0) return false;
+
+                self.webSigElements = [];
+                let agentCount = 0;
+
+                sigElements.forEach((el, idx) => {
+                    const rawParty = (el.dataset.markerParty || '').toLowerCase();
+                    const baseRole = partyRoleMap[rawParty] || rawParty;
+                    const markerType = el.dataset.markerType || 'signature';
+                    const isMine = baseRole === 'agent';
+                    const sigKey = baseRole + '-sig-' + idx;
+
+                    const entry = { el, partyRole: baseRole, rawParty: rawParty, type: markerType, index: idx, sigKey, isMine, signed: false, sigData: null };
+                    self.webSigElements.push(entry);
+
+                    if (isMine) {
+                        agentCount++;
+                        // Make clickable
+                        el.classList.add('web-sig-interactive');
+                        el.setAttribute('data-sig-key', sigKey);
+                        el.innerHTML = '<div class="web-sig-prompt"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg> Click to sign</div>';
+
+                        el.addEventListener('click', () => {
+                            if (entry.signed) return;
+                            self._openWebSigCapture(entry);
+                        });
+                    } else {
+                        // Other party — grey out
+                        el.classList.add('web-sig-other-party');
+                        const nameEl = el.querySelector('.sig-cell-label');
+                        const partyLabel = rawParty.replace(/_/g, ' ');
+                        if (!nameEl) {
+                            el.innerHTML = '<div style="font-size:9px;color:#94a3b8;text-align:center;padding:4px;">Awaiting ' + partyLabel + '</div>';
+                        }
+                    }
+                });
+
+                self.webSigTotal = agentCount;
+                self.webSigSigned = 0;
+
+                // Also update marker totals for the progress bar
+                if (agentCount > 0) {
+                    self.totalAgent = agentCount;
+                    self.signedCount = 0;
+                }
+
+                console.log('WEB_SIG_INTERACTIVE', agentCount, 'agent elements,', sigElements.length, 'total');
+                return true;
+            };
+
+            let attempts = 0;
+            const interval = setInterval(() => {
+                attempts++;
+                if (tryInit() || attempts > 20) {
+                    clearInterval(interval);
+                }
+            }, 200);
+        },
+
+        /**
+         * Open the signature capture modal for a web template element.
+         */
+        _openWebSigCapture(entry) {
+            // Create a synthetic marker object so the existing modal works
+            this.activeMarker = {
+                id: entry.sigKey,
+                type: 'signature',
+                assigned_party: 'agent',
+                page_number: 1,
+                label: 'Agent Signature',
+                signed: false,
+                _webEntry: entry,
+            };
+            this.captureMode = 'draw';
+            this.typedName = @json($userFullName);
+            this.showSignModal = true;
+            this.$nextTick(() => this.initCanvas());
         },
 
         // ── Section signing ──
@@ -913,6 +1070,37 @@ function signDocument() {
                 signatureType = 'typed';
             }
 
+            // Web template: apply signature to the DOM element directly
+            if (this.isWebTemplate && this.activeMarker._webEntry) {
+                const entry = this.activeMarker._webEntry;
+                entry.signed = true;
+                entry.sigData = signatureData;
+                this.webSignatures[entry.sigKey] = signatureData;
+
+                // Update the DOM element
+                entry.el.classList.add('web-sig-signed');
+                entry.el.innerHTML = '<img src="' + signatureData + '" class="web-sig-signed-img" alt="Signature">';
+
+                // Update counts
+                this.webSigSigned++;
+                this.signedCount = this.webSigSigned;
+
+                this.showSignModal = false;
+
+                // Offer apply-to-all for remaining agent sig elements
+                const remaining = this.webSigElements.filter(e => e.isMine && !e.signed);
+                if (!this.firstSignatureDone && remaining.length > 0) {
+                    this.lastSignatureData = signatureData;
+                    this.lastSignatureType = signatureType;
+                    this.showApplyAll = true;
+                }
+
+                this.firstSignatureDone = true;
+                this.applying = false;
+                return;
+            }
+
+            // PDF template: submit to server per marker
             const success = await this.submitSignature(this.activeMarker, signatureData, signatureType);
 
             if (success) {
@@ -981,15 +1169,29 @@ function signDocument() {
         async applyToAllSignatureMarkers() {
             this.applyingAll = true;
 
-            const remainingSignatures = this.markers.filter(m =>
-                m.assigned_party === 'agent' &&
-                !m.signed &&
-                m.type === 'signature'
-            );
+            if (this.isWebTemplate) {
+                // Web template: apply to all remaining agent sig elements
+                const remaining = this.webSigElements.filter(e => e.isMine && !e.signed);
+                for (const entry of remaining) {
+                    entry.signed = true;
+                    entry.sigData = this.lastSignatureData;
+                    this.webSignatures[entry.sigKey] = this.lastSignatureData;
+                    entry.el.classList.add('web-sig-signed');
+                    entry.el.innerHTML = '<img src="' + this.lastSignatureData + '" class="web-sig-signed-img" alt="Signature">';
+                    this.webSigSigned++;
+                }
+                this.signedCount = this.webSigSigned;
+            } else {
+                const remainingSignatures = this.markers.filter(m =>
+                    m.assigned_party === 'agent' &&
+                    !m.signed &&
+                    m.type === 'signature'
+                );
 
-            for (const marker of remainingSignatures) {
-                const success = await this.submitSignature(marker, this.lastSignatureData, this.lastSignatureType);
-                if (!success) break;
+                for (const marker of remainingSignatures) {
+                    const success = await this.submitSignature(marker, this.lastSignatureData, this.lastSignatureType);
+                    if (!success) break;
+                }
             }
 
             this.showApplyAll = false;
@@ -1011,7 +1213,65 @@ function signDocument() {
 
         // ── Complete signing (with guided navigation if unsigned markers remain) ──
         async handleComplete() {
-            // Check if all agent markers are signed
+            // Web template flow: check web sig elements instead of markers
+            if (this.isWebTemplate) {
+                const unsigned = this.webSigElements.filter(e => e.isMine && !e.signed);
+                if (unsigned.length > 0) {
+                    alert(`Please sign ${unsigned.length} remaining signature area${unsigned.length > 1 ? 's' : ''}.`);
+                    unsigned[0].el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return;
+                }
+
+                if (this.completingForm) return;
+                this.completingForm = true;
+
+                // Save agent-assigned field values before completing
+                const agentFields = (this.documentFields || []).filter(f => f.assignedTo === 'agent');
+                if (agentFields.length > 0) {
+                    const saved = await this.saveAgentFields();
+                    if (!saved) { this.completingForm = false; return; }
+                }
+
+                // Submit all web signatures to server
+                try {
+                    const resp = await fetch(@json(route('docuperfect.signatures.webSignComplete', $document)), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': @json(csrf_token()),
+                        },
+                        body: JSON.stringify({
+                            signatures: this.webSignatures,
+                            party_role: 'agent',
+                        }),
+                    });
+                    const data = await resp.json();
+                    if (data.ok && data.redirect) {
+                        window.location.href = data.redirect;
+                    } else if (data.ok) {
+                        // Fallback: use the standard signComplete POST
+                        const form = document.createElement('form');
+                        form.method = 'POST';
+                        form.action = @json(route('docuperfect.signatures.signComplete', $document));
+                        const csrf = document.createElement('input');
+                        csrf.type = 'hidden'; csrf.name = '_token';
+                        csrf.value = @json(csrf_token());
+                        form.appendChild(csrf);
+                        document.body.appendChild(form);
+                        form.submit();
+                    } else {
+                        alert(data.error || 'Failed to complete signing.');
+                        this.completingForm = false;
+                    }
+                } catch (err) {
+                    alert('Network error. Please try again.');
+                    this.completingForm = false;
+                }
+                return;
+            }
+
+            // PDF template flow: check markers
             const unsignedMarkers = this.markers.filter(m => m.assigned_party === 'agent' && !m.signed);
 
             if (unsignedMarkers.length > 0) {
@@ -1050,6 +1310,14 @@ function signDocument() {
 
         // ── Navigate to next unsigned agent marker ──
         goToNextUnsigned() {
+            if (this.isWebTemplate) {
+                const unsigned = this.webSigElements.filter(e => e.isMine && !e.signed);
+                if (unsigned.length === 0) return;
+                unsigned[0].el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                unsigned[0].el.classList.add('pulse-highlight');
+                setTimeout(() => unsigned[0].el.classList.remove('pulse-highlight'), 3000);
+                return;
+            }
             const unsigned = this.markers.filter(m => m.assigned_party === 'agent' && !m.signed);
             if (unsigned.length === 0) return;
             this.navigateToMarker(unsigned[0]);

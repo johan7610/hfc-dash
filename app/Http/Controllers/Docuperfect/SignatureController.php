@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Docuperfect;
 use App\Http\Controllers\Controller;
 use App\Models\Docuperfect\Document;
 use App\Models\Docuperfect\LeaseRecord;
+use App\Models\Docuperfect\Signature;
 use App\Models\Docuperfect\SignatureAuditLog;
 use App\Models\Docuperfect\SignatureMarker;
 use App\Models\Docuperfect\SignatureRequest;
@@ -831,13 +832,15 @@ class SignatureController extends Controller
 
         $template = SignatureTemplate::where('document_id', $document->id)->firstOrFail();
 
-        // Must have markers placed
-        if ($template->markers()->count() === 0) {
+        $docTemplate = $document->template;
+
+        // Must have markers placed — but web templates use embedded document
+        // elements instead of markers, so skip this check for them.
+        $isWebRenderType = $docTemplate && ($docTemplate->render_type ?? 'pdf') === 'web';
+        if (!$isWebRenderType && $template->markers()->count() === 0) {
             return redirect()->route('docuperfect.signatures.setup', $document)
                 ->with('error', 'Place signature markers before signing.');
         }
-
-        $docTemplate = $document->template;
 
         // Get all markers with their signatures
         $allMarkers = $template->markers()
@@ -1249,6 +1252,99 @@ class SignatureController extends Controller
 
         return redirect()->route('docuperfect.signatures.sendConfirmation', $document)
             ->with('success', "You have signed all your markers. Now send to {$nextPartyLabel}.");
+    }
+
+    /**
+     * Web template sign complete — stores signatures from interactive document elements,
+     * then injects them into the merged_html and completes the agent signing phase.
+     */
+    public function webSignComplete(Request $request, Document $document)
+    {
+        $user = $request->user();
+        $this->authorizeDocument($user, $document);
+
+        $signatures = $request->input('signatures', []);
+        $partyRole = $request->input('party_role', 'agent');
+
+        $template = SignatureTemplate::where('document_id', $document->id)->firstOrFail();
+
+        // Store each signature as a Signature record linked to the document
+        foreach ($signatures as $sigKey => $sigData) {
+            // Create a marker record for each web sig element (for audit trail)
+            $marker = SignatureMarker::create([
+                'signature_template_id' => $template->id,
+                'page_number' => 1,
+                'x_position' => 0,
+                'y_position' => 0,
+                'width' => 20,
+                'height' => 5,
+                'type' => 'signature',
+                'assigned_party' => $partyRole,
+                'label' => 'Web element: ' . $sigKey,
+                'required' => true,
+                'sort_order' => 0,
+            ]);
+
+            Signature::create([
+                'signature_marker_id' => $marker->id,
+                'signature_request_id' => $template->requests()->where('party_role', $partyRole)->value('id'),
+                'signature_data' => $sigData,
+                'signature_type' => 'drawn',
+                'signer_name' => $user->name,
+                'signer_email' => $user->email,
+                'signed_at' => now(),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+        }
+
+        // Inject signatures into the document's web_template_data merged_html
+        $webData = $document->web_template_data ?? [];
+        if (!empty($webData['merged_html'])) {
+            // Store signature data in web_template_data for future rendering
+            $webData['agent_signatures'] = $signatures;
+            $document->update(['web_template_data' => $webData]);
+        }
+
+        // Find agent request for audit logging
+        $agentRequest = $template->requests()
+            ->where('party_role', 'agent')
+            ->where('status', '!=', SignatureRequest::STATUS_COMPLETED)
+            ->first();
+
+        SignatureAuditLog::log(
+            $template,
+            SignatureAuditLog::ACTION_COMPLETED,
+            SignatureAuditLog::ACTOR_USER,
+            $user->name,
+            $user->email,
+            $user->id,
+            $agentRequest?->id,
+            $request->ip(),
+            $request->userAgent(),
+            [
+                'phase' => 'agent_web_signing',
+                'total_signatures' => count($signatures),
+            ],
+        );
+
+        // Use the unified chain advancement logic — handles candidate flows,
+        // supervisor routing, approval gates, and all status transitions.
+        $this->signatureService->handlePartyCompletion($template, $partyRole, $agentRequest);
+
+        // If signing was initiated from the e-sign wizard, redirect to completion page
+        $wizardFlowId = session()->pull('esign_wizard_flow_id');
+        if ($wizardFlowId) {
+            return response()->json([
+                'ok' => true,
+                'redirect' => route('docuperfect.esign.signingComplete', ['flow' => $wizardFlowId]),
+            ]);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'redirect' => route('docuperfect.signatures.sendConfirmation', $document),
+        ]);
     }
 
     /**

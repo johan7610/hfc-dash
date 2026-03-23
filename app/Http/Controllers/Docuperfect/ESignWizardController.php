@@ -1372,20 +1372,45 @@ class ESignWizardController extends Controller
             $bodyHtml = $this->resolveSignatureNames($bodyHtml, $webTemplateData, $partiesForSigning);
             $bodyHtml = $this->injectFieldValues($bodyHtml, $webTemplateData);
 
-            // Inject additional clauses from wizard step 5
-            $selectedClauses = $stepData['fill_review']['clauses'] ?? [];
-            if (!empty($selectedClauses)) {
+            // Inject additional clauses from wizard step 5 (unified text field)
+            $otherConditionsText = trim($stepData['fill_review']['other_conditions_text'] ?? '');
+            if (empty($otherConditionsText)) {
+                // Fallback: build from legacy selectedClauses array
+                $selectedClauses = $stepData['fill_review']['clauses'] ?? [];
+                if (!empty($selectedClauses)) {
+                    $otherConditionsText = implode("\n\n", array_map(fn($c) => $c['text'] ?? $c['content'] ?? '', $selectedClauses));
+                }
+            }
+            if (!empty($otherConditionsText)) {
+                // Split by double-newline for individual clause blocks
+                $clauseBlocks = array_values(array_filter(array_map('trim', preg_split('/\n\s*\n/', $otherConditionsText))));
                 $clauseHtml = '<div class="corex-additional-clauses" style="margin-top:16pt;">';
                 $clauseHtml .= '<h3 style="font-weight:bold;margin-top:12pt;margin-bottom:8pt;">Additional Conditions</h3>';
-                foreach ($selectedClauses as $idx => $clause) {
+                foreach ($clauseBlocks as $idx => $block) {
                     $num = $idx + 1;
-                    $clauseHtml .= '<div style="margin:6pt 0;">';
-                    $clauseHtml .= '<p><strong>' . $num . '.</strong> '
-                        . e($clause['text'] ?? $clause['content'] ?? '') . '</p>';
+                    $clauseHtml .= '<div class="clause-block" data-clause-index="' . $idx . '" style="margin:6pt 0;">';
+                    $clauseHtml .= '<p><strong>' . $num . '.</strong> ' . e($block) . '</p>';
                     $clauseHtml .= '</div>';
                 }
                 $clauseHtml .= '</div>';
-                $bodyHtml .= $clauseHtml;
+
+                // Insert BEFORE the signature section so additional conditions
+                // appear in the document body, not after signatures.
+                $sigSectionPos = strpos($bodyHtml, '<div class="corex-signature-section">');
+                if ($sigSectionPos === false) {
+                    // Fallback: try .sig-section class
+                    $sigSectionPos = strpos($bodyHtml, 'class="sig-section"');
+                    if ($sigSectionPos !== false) {
+                        // Back up to the opening <div or <section tag
+                        $sigSectionPos = strrpos(substr($bodyHtml, 0, $sigSectionPos), '<');
+                    }
+                }
+                if ($sigSectionPos !== false) {
+                    $bodyHtml = substr($bodyHtml, 0, $sigSectionPos) . $clauseHtml . substr($bodyHtml, $sigSectionPos);
+                } else {
+                    // No signature section found — append at end as fallback
+                    $bodyHtml .= $clauseHtml;
+                }
             }
 
             // Store as merged_html so SignatureController uses it directly
@@ -1543,6 +1568,7 @@ class ESignWizardController extends Controller
                 'is_candidate_flow'   => $isCandidateFlow,
                 'supervisor_user_id'  => null,
                 'sections_json'       => $template->sections,
+                'other_conditions_text' => trim($stepData['fill_review']['other_conditions_text'] ?? '') ?: null,
             ]);
 
             // 3. Create SignatureRequests — agent first (signing_order=1), then supervisor (if candidate), then recipients
@@ -1651,17 +1677,20 @@ class ESignWizardController extends Controller
                 $this->autoPlaceInitialMarkers($sigTemplate, $signingOrder, $template);
             }
 
-            // 4e. Create signature zones for all template types.
-            // Zones provide bounding boxes that the setup screen renders as
-            // draggable/resizable regions. The setup screen JS may refine
-            // positions from DOM measurements, but zones must always exist
-            // server-side first so the setup screen has something to display.
-            $signatureService->createZonesFromParties(
-                $sigTemplate,
-                $parties,
-                max(1, count($webTemplateData['template_ids'] ?? [1])),
-                $isCandidateFlow
-            );
+            // 4e. Create signature zones for PDF templates only.
+            // Web/CDS templates define marker positions via data-marker-party
+            // attributes in their rendered HTML. The setup screen JS reads
+            // those exact DOM positions and creates zones from them — no
+            // server-side estimation needed. This works for ANY template
+            // because positions come from the template author's layout.
+            if (!$isWebRenderType) {
+                $signatureService->createZonesFromParties(
+                    $sigTemplate,
+                    $parties,
+                    max(1, count($webTemplateData['template_ids'] ?? [1])),
+                    $isCandidateFlow
+                );
+            }
 
             // 5. Keep template in ready status so agent can place markers and sign in-app.
             // sendForSigning() fires later via the send-confirmation page after agent completes signing.
@@ -1690,8 +1719,13 @@ class ESignWizardController extends Controller
         // Store wizard context in session so signComplete redirects back to wizard
         session(['esign_wizard_flow_id' => $flow->id]);
 
-        // Redirect to signature setup (Step 2: marker placement) — agent places markers before signing
-        $signingUrl = route('docuperfect.signatures.setup', ['document' => $result->id]);
+        // Web templates: skip setup (marker placement) — signature positions are embedded in document HTML
+        // PDF templates: redirect to setup for manual marker placement
+        if ($renderType === 'web') {
+            $signingUrl = route('docuperfect.signatures.sign', ['document' => $result->id]);
+        } else {
+            $signingUrl = route('docuperfect.signatures.setup', ['document' => $result->id]);
+        }
 
         return redirect($signingUrl);
 
@@ -3131,17 +3165,37 @@ class ESignWizardController extends Controller
             // Inject field values and clauses
             $bodyHtml = $this->injectFieldValues($bodyHtml, $webTemplateData);
 
-            $selectedClauses = $stepData['fill_review']['clauses'] ?? [];
-            if (!empty($selectedClauses)) {
+            $otherConditionsText2 = trim($stepData['fill_review']['other_conditions_text'] ?? '');
+            if (empty($otherConditionsText2)) {
+                $legacyClauses = $stepData['fill_review']['clauses'] ?? [];
+                if (!empty($legacyClauses)) {
+                    $otherConditionsText2 = implode("\n\n", array_map(fn($c) => $c['text'] ?? $c['content'] ?? '', $legacyClauses));
+                }
+            }
+            if (!empty($otherConditionsText2)) {
+                $clauseBlocks = array_values(array_filter(array_map('trim', preg_split('/\n\s*\n/', $otherConditionsText2))));
                 $clauseHtml = '<div class="corex-additional-clauses" style="margin-top:16pt;">';
                 $clauseHtml .= '<h3 style="font-weight:bold;margin-top:12pt;margin-bottom:8pt;">Additional Conditions</h3>';
-                foreach ($selectedClauses as $idx => $clause) {
+                foreach ($clauseBlocks as $idx => $block) {
                     $num = $idx + 1;
-                    $clauseHtml .= '<div style="margin:6pt 0;"><p><strong>' . $num . '.</strong> '
-                        . e($clause['text'] ?? $clause['content'] ?? '') . '</p></div>';
+                    $clauseHtml .= '<div class="clause-block" data-clause-index="' . $idx . '" style="margin:6pt 0;"><p><strong>' . $num . '.</strong> '
+                        . e($block) . '</p></div>';
                 }
                 $clauseHtml .= '</div>';
-                $bodyHtml .= $clauseHtml;
+
+                // Insert BEFORE signature section (same logic as prepareSigning)
+                $sigSectionPos = strpos($bodyHtml, '<div class="corex-signature-section">');
+                if ($sigSectionPos === false) {
+                    $sigSectionPos = strpos($bodyHtml, 'class="sig-section"');
+                    if ($sigSectionPos !== false) {
+                        $sigSectionPos = strrpos(substr($bodyHtml, 0, $sigSectionPos), '<');
+                    }
+                }
+                if ($sigSectionPos !== false) {
+                    $bodyHtml = substr($bodyHtml, 0, $sigSectionPos) . $clauseHtml . substr($bodyHtml, $sigSectionPos);
+                } else {
+                    $bodyHtml .= $clauseHtml;
+                }
             }
 
             $webTemplateData['merged_html'] = $styles . $bodyHtml;
@@ -3282,17 +3336,37 @@ class ESignWizardController extends Controller
 
             $bodyHtml = $this->injectFieldValues($bodyHtml, $webTemplateData);
 
-            $selectedClauses = $stepData['fill_review']['clauses'] ?? [];
-            if (!empty($selectedClauses)) {
+            $otherConditionsText3 = trim($stepData['fill_review']['other_conditions_text'] ?? '');
+            if (empty($otherConditionsText3)) {
+                $legacyClauses = $stepData['fill_review']['clauses'] ?? [];
+                if (!empty($legacyClauses)) {
+                    $otherConditionsText3 = implode("\n\n", array_map(fn($c) => $c['text'] ?? $c['content'] ?? '', $legacyClauses));
+                }
+            }
+            if (!empty($otherConditionsText3)) {
+                $clauseBlocks = array_values(array_filter(array_map('trim', preg_split('/\n\s*\n/', $otherConditionsText3))));
                 $clauseHtml = '<div class="corex-additional-clauses" style="margin-top:16pt;">';
                 $clauseHtml .= '<h3 style="font-weight:bold;margin-top:12pt;margin-bottom:8pt;">Additional Conditions</h3>';
-                foreach ($selectedClauses as $idx => $clause) {
+                foreach ($clauseBlocks as $idx => $block) {
                     $num = $idx + 1;
-                    $clauseHtml .= '<div style="margin:6pt 0;"><p><strong>' . $num . '.</strong> '
-                        . e($clause['text'] ?? $clause['content'] ?? '') . '</p></div>';
+                    $clauseHtml .= '<div class="clause-block" data-clause-index="' . $idx . '" style="margin:6pt 0;"><p><strong>' . $num . '.</strong> '
+                        . e($block) . '</p></div>';
                 }
                 $clauseHtml .= '</div>';
-                $bodyHtml .= $clauseHtml;
+
+                // Insert BEFORE signature section (same logic as prepareSigning)
+                $sigSectionPos = strpos($bodyHtml, '<div class="corex-signature-section">');
+                if ($sigSectionPos === false) {
+                    $sigSectionPos = strpos($bodyHtml, 'class="sig-section"');
+                    if ($sigSectionPos !== false) {
+                        $sigSectionPos = strrpos(substr($bodyHtml, 0, $sigSectionPos), '<');
+                    }
+                }
+                if ($sigSectionPos !== false) {
+                    $bodyHtml = substr($bodyHtml, 0, $sigSectionPos) . $clauseHtml . substr($bodyHtml, $sigSectionPos);
+                } else {
+                    $bodyHtml .= $clauseHtml;
+                }
             }
 
             $webTemplateData['merged_html'] = $styles . $bodyHtml;
@@ -3394,6 +3468,7 @@ class ESignWizardController extends Controller
                 'signing_order_json'  => $signingOrder,
                 'created_by'          => $user->id,
                 'sections_json'       => $template->sections,
+                'other_conditions_text' => trim($stepData['fill_review']['other_conditions_text'] ?? '') ?: null,
             ]);
 
             // 3. Create SignatureRequests with signing_method = 'wet_ink'

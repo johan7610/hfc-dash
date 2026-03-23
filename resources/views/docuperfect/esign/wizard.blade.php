@@ -726,9 +726,9 @@
                 <div class="mt-6 mb-4 p-3 border border-dashed border-blue-300 rounded-lg bg-blue-50/50">
                     <div class="flex items-center justify-between">
                         <div>
-                            <span class="text-sm font-semibold text-blue-700">Additional Clauses</span>
+                            <span class="text-sm font-semibold text-blue-700">Other Conditions / Additional Clauses</span>
                             <p class="text-xs text-blue-500 mt-0.5">
-                                Add standard clauses from the clause library
+                                Type conditions manually or insert from the clause library. Separate each clause with a blank line.
                             </p>
                         </div>
                         <button type="button" @click="showClauseLibrary = true"
@@ -737,27 +737,14 @@
                         </button>
                     </div>
 
-                    {{-- Selected clauses list --}}
-                    <template x-if="selectedClauses.length > 0">
-                        <div class="mt-3 space-y-2">
-                            <template x-for="(clause, idx) in selectedClauses" :key="clause.id">
-                                <div class="flex items-start gap-2 bg-white p-2 rounded border border-blue-200">
-                                    <span class="text-xs font-semibold text-blue-600 mt-0.5"
-                                          x-text="(idx + 1) + '.'"></span>
-                                    <div class="flex-1">
-                                        <span class="text-xs font-semibold text-gray-700"
-                                              x-text="clause.name"></span>
-                                        <p class="text-xs text-gray-500 mt-0.5 line-clamp-2"
-                                           x-text="clause.text"></p>
-                                    </div>
-                                    <button @click="removeClause(idx)"
-                                            class="text-gray-400 hover:text-red-500 text-xs">
-                                        &times;
-                                    </button>
-                                </div>
-                            </template>
-                        </div>
-                    </template>
+                    {{-- Unified editable textarea for all clauses (manual + library) --}}
+                    <textarea x-model="otherConditionsText"
+                              @input="updateClausesPreview()"
+                              rows="6"
+                              class="mt-3 w-full rounded-lg border px-3 py-2 text-sm"
+                              :class="otherConditionsText.trim() ? 'border-green-400 bg-green-50' : 'border-slate-300 bg-white'"
+                              placeholder="Type additional conditions here, or use 'Insert Clause' to add from the library. Separate each clause with a blank line for per-clause initials tracking."
+                              style="min-height:120px; resize:vertical;"></textarea>
                 </div>
             </div>
 
@@ -1368,6 +1355,7 @@ function esignWizard() {
         clauseSearch: '',
         allClauses: [],
         selectedClauses: [],
+        otherConditionsText: '',
 
         // Step 6: Signing setup
         signingActions: [],
@@ -1459,9 +1447,11 @@ function esignWizard() {
             // Load clause library
             this.loadClauses();
 
-            // Restore selected clauses from step data
+            // Restore selected clauses and other conditions text from step data
             const savedClauses = serverStepData?.fill_review?.clauses || [];
             if (savedClauses.length > 0) this.selectedClauses = savedClauses;
+            const savedOtherConditions = serverStepData?.fill_review?.other_conditions_text || '';
+            if (savedOtherConditions) this.otherConditionsText = savedOtherConditions;
 
             // Load web template preview on steps 2+ (PDF preview loads via serverPageImages)
             if (serverIsWebTemplate && this.currentStep > 1 && this.flowId && serverTemplateId) {
@@ -1509,7 +1499,15 @@ function esignWizard() {
         },
 
         insertClause(clause) {
-            if (this.selectedClauses.find(c => c.id === clause.id)) return;
+            // Append clause text to the unified textarea (don't block duplicates — user may want same clause twice)
+            const existing = this.otherConditionsText.trim();
+            const clauseContent = clause.text || '';
+            if (existing) {
+                this.otherConditionsText = existing + '\n\n' + clauseContent;
+            } else {
+                this.otherConditionsText = clauseContent;
+            }
+            // Track insertion in selectedClauses for reference
             this.selectedClauses.push({...clause});
             this.showClauseLibrary = false;
             this.updateClausesPreview();
@@ -1525,10 +1523,8 @@ function esignWizard() {
             const doc = document.querySelector('.web-template-preview');
             if (!doc) return;
 
-            // Build clause text from selected clauses
-            const clauseText = this.selectedClauses
-                .map((c, i) => (i + 1) + '. ' + c.name + ': ' + c.text)
-                .join('\n');
+            // Use the unified textarea content directly
+            const clauseText = this.otherConditionsText.trim();
 
             // Update the other_conditions data-field in the preview
             const otherField = doc.querySelector('[data-field="other_conditions"]');
@@ -2211,7 +2207,7 @@ function esignWizard() {
                     });
                     return detailsData;
                 }
-                case 5: return { fieldValues: { ...this.fieldValues }, partyOverrides: { ...this.fieldPartyOverrides }, clauses: this.selectedClauses };
+                case 5: return { fieldValues: { ...this.fieldValues }, partyOverrides: { ...this.fieldPartyOverrides }, clauses: this.selectedClauses, other_conditions_text: this.otherConditionsText };
                 case 6: return {
                     delivery_mode: this.deliveryMode,
                     parties: this.signingActions.map((action, i) => ({
