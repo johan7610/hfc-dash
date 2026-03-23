@@ -43,6 +43,13 @@
 
     {{-- Status summary tiles --}}
     <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+        @if(($counts['needs_authorisation'] ?? 0) > 0)
+        <a href="#section-needs-authorisation" onclick="event.preventDefault(); scrollToSection('section-needs-authorisation')"
+           class="rounded-md p-4 text-center border-2 cursor-pointer block transition-all duration-300 hover:opacity-90" style="border-color: #f59e0b; background: rgba(245,158,11,0.1);">
+            <div class="text-2xl font-bold" style="color: #f59e0b;">{{ $counts['needs_authorisation'] }}</div>
+            <div class="text-xs mt-1 font-semibold" style="color: #b45309;">Needs Authorisation</div>
+        </a>
+        @endif
         @if($counts['pending_approval'] > 0)
         <a href="#section-pending-approval" onclick="event.preventDefault(); scrollToSection('section-pending-approval')"
            class="rounded-md p-4 text-center border-2 border-amber-400 cursor-pointer block transition-all duration-300 hover:border-amber-500" style="background: rgba(245,158,11,0.1);">
@@ -71,6 +78,60 @@
             <div class="text-xs mt-1" style="color: {{ $counts['completed'] > 0 ? 'var(--text-secondary)' : 'var(--text-muted)' }}">Completed</div>
         </a>
     </div>
+
+    {{-- ===== CANDIDATE DOCUMENTS — NEEDS AUTHORISATION ===== --}}
+    @if(($groups['needs_authorisation'] ?? collect())->isNotEmpty())
+    <div id="section-needs-authorisation" class="space-y-3 scroll-mt-4">
+        <h3 class="text-sm font-semibold uppercase tracking-wider flex items-center gap-2" style="color: #f59e0b;">
+            <span class="inline-flex items-center justify-center w-5 h-5 text-white text-[10px] font-bold rounded-md" style="background: #f59e0b;">{{ $groups['needs_authorisation']->count() }}</span>
+            Candidate Documents &mdash; Needs Authorisation
+        </h3>
+        <div class="space-y-3">
+            @foreach($groups['needs_authorisation'] as $tpl)
+                @php
+                    $doc = $tpl->document;
+                    $candidateName = $tpl->creator?->name ?? 'Unknown Candidate';
+                @endphp
+                <div class="rounded-md border-2 p-4" style="border-color: #f59e0b; background: rgba(245,158,11,0.08);">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                            <div class="font-semibold" style="color: var(--text-primary);">
+                                {{ $doc->name ?? 'Untitled' }}
+                                @if($doc && $doc->template)
+                                    <span class="inline-block ml-2 px-2 py-0.5 rounded-md text-[10px] font-semibold" style="background: var(--surface-2); color: var(--text-secondary);">{{ $doc->template->name }}</span>
+                                @endif
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2 mt-2">
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold" style="background: rgba(245,158,11,0.15); color: #b45309;">
+                                    Candidate: <strong>{{ $candidateName }}</strong>
+                                </span>
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold
+                                    {{ $tpl->status === 'awaiting_supervisor' ? 'bg-yellow-100 text-yellow-800' : 'bg-orange-100 text-orange-800' }}">
+                                    {{ $tpl->status === 'awaiting_supervisor' ? 'Initial Review' : 'Final Sign-off' }}
+                                </span>
+                                <span class="text-[10px]" style="color: var(--text-muted);">
+                                    Created {{ $tpl->created_at->format('d M Y') }}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="flex flex-col gap-2 ml-4">
+                            @if($doc)
+                            <a href="{{ route('docuperfect.signatures.review', $doc) }}"
+                               class="inline-flex items-center gap-1.5 px-4 py-2 text-white text-xs font-semibold rounded-md shadow hover:opacity-90 whitespace-nowrap transition-all duration-300"
+                               style="background: #f59e0b;">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                </svg>
+                                Review &amp; Authorise
+                            </a>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    </div>
+    @endif
 
     {{-- ===== NEEDS YOUR APPROVAL ===== --}}
     @if($groups['pending_approval']->isNotEmpty())

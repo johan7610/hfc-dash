@@ -1966,7 +1966,13 @@ class SignatureController extends Controller
 
         $template = SignatureTemplate::where('document_id', $document->id)->firstOrFail();
 
-        if ($template->status !== SignatureTemplate::STATUS_PENDING_AGENT_APPROVAL) {
+        // Accept pending_agent_approval (normal flow) AND supervisor statuses (candidate flow)
+        $reviewableStatuses = [
+            SignatureTemplate::STATUS_PENDING_AGENT_APPROVAL,
+            SignatureTemplate::STATUS_AWAITING_SUPERVISOR,
+            SignatureTemplate::STATUS_AWAITING_SUPERVISOR_FINAL,
+        ];
+        if (!in_array($template->status, $reviewableStatuses)) {
             return redirect()->route('docuperfect.rental')
                 ->with('error', 'This document is not pending approval.');
         }
@@ -2094,7 +2100,12 @@ class SignatureController extends Controller
 
         $template = SignatureTemplate::where('document_id', $document->id)->firstOrFail();
 
-        if ($template->status !== SignatureTemplate::STATUS_PENDING_AGENT_APPROVAL) {
+        $reviewableStatuses = [
+            SignatureTemplate::STATUS_PENDING_AGENT_APPROVAL,
+            SignatureTemplate::STATUS_AWAITING_SUPERVISOR,
+            SignatureTemplate::STATUS_AWAITING_SUPERVISOR_FINAL,
+        ];
+        if (!in_array($template->status, $reviewableStatuses)) {
             $templateType = $document->template?->template_type ?? 'rentals';
             $dashboardRoute = $templateType === 'sales' ? 'docuperfect.sales' : 'docuperfect.rental';
             return redirect()->route($dashboardRoute)

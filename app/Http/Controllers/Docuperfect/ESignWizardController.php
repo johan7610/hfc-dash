@@ -3780,7 +3780,25 @@ class ESignWizardController extends Controller
             'cancelled'        => $allTemplates->where('status', SignatureTemplate::STATUS_CANCELLED)->values(),
         ];
 
+        // Candidate documents needing authorisation (shared queue for full-status users)
+        $candidateService = new \App\Services\CandidatePractitionerService();
+        $needsAuthorisation = collect();
+
+        if ($candidateService->canAuthorise($user)) {
+            $needsAuthorisation = SignatureTemplate::with(['document.template', 'requests', 'creator'])
+                ->where('is_candidate_flow', true)
+                ->whereIn('status', [
+                    SignatureTemplate::STATUS_AWAITING_SUPERVISOR,
+                    SignatureTemplate::STATUS_AWAITING_SUPERVISOR_FINAL,
+                ])
+                ->orderByDesc('created_at')
+                ->get();
+        }
+
+        $groups['needs_authorisation'] = $needsAuthorisation;
+
         $counts = [
+            'needs_authorisation' => $groups['needs_authorisation']->count(),
             'pending_approval'    => $groups['pending_approval']->count(),
             'draft'               => $groups['draft']->count(),
             'ready_to_sign'       => $groups['ready_to_sign']->count(),
