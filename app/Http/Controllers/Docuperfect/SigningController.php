@@ -1745,70 +1745,20 @@ class SigningController extends Controller
 
         $command = sprintf('%s%s %s %s %s', $envPrefix, $nodeArg, $scriptArg, $htmlArg, $outArg);
 
-        // Use proc_open with a timeout to prevent indefinite hangs
-        $envVars = array_merge([
-            'HOME' => sys_get_temp_dir(),
-            'PATH' => getenv('PATH') ?: '',
-            'SystemRoot' => getenv('SystemRoot') ?: '',
-            'PUPPETEER_BROWSER_PATH' => $browserPath,
-        ], $_ENV ?? []);
-
         Log::info('PDF generation starting', ['doc_id' => $documentId, 'command' => $command]);
 
-        $process = proc_open(
-            $command,
-            [
-                0 => ['pipe', 'r'],
-                1 => ['pipe', 'w'],
-                2 => ['pipe', 'w'],
-            ],
-            $pipes,
-            base_path(),
-            $envVars
-        );
-
-        if (!is_resource($process)) {
-            @unlink($htmlPath);
-            throw new \RuntimeException('Failed to start PDF process');
-        }
-
-        fclose($pipes[0]);
-        stream_set_blocking($pipes[1], false);
-        stream_set_blocking($pipes[2], false);
-
-        $stdout = '';
-        $stderr = '';
-        $timeout = 30;
         $startTime = time();
+        $output = [];
+        $exitCode = -1;
+        exec($command . ' 2>&1', $output, $exitCode);
+        $stdout = implode("\n", $output);
 
-        while (true) {
-            $status = proc_get_status($process);
-            if (!$status['running']) {
-                break;
-            }
-            if ((time() - $startTime) > $timeout) {
-                $pid = $status['pid'];
-                if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-                    exec("taskkill /F /T /PID $pid 2>NUL");
-                } else {
-                    exec("kill -9 $pid 2>/dev/null");
-                }
-                proc_close($process);
-                @unlink($htmlPath);
-                throw new \RuntimeException('PDF generation timed out after ' . $timeout . 's');
-            }
-            $stdout .= fread($pipes[1], 8192);
-            $stderr .= fread($pipes[2], 8192);
-            usleep(100000); // 100ms
-        }
-
-        $stdout .= stream_get_contents($pipes[1]);
-        $stderr .= stream_get_contents($pipes[2]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
-        proc_close($process);
-
-        Log::info('PDF generation complete', ['doc_id' => $documentId, 'seconds' => time() - $startTime]);
+        Log::info('PDF generation finished', [
+            'doc_id' => $documentId,
+            'seconds' => time() - $startTime,
+            'exit_code' => $exitCode,
+            'output' => $stdout,
+        ]);
 
         // Clean up temp HTML
         @unlink($htmlPath);
@@ -1816,8 +1766,8 @@ class SigningController extends Controller
         if (!file_exists($pdfPath)) {
             Log::error('generatePdfFromHtml — PDF not generated', [
                 'command' => $command,
-                'stdout' => $stdout ?: 'empty',
-                'stderr' => $stderr ?: 'empty',
+                'exit_code' => $exitCode,
+                'output' => $stdout ?: 'empty',
             ]);
             return null;
         }
