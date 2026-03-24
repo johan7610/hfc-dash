@@ -322,28 +322,29 @@ class PrivatePropertyListingMapper
         }
 
         $priceType = strtolower($property->rental_price_type ?? '');
+        // PP enum values use spaces: "Per Month", "Per Sqm", etc.
         $map = [
-            'per month'        => 'PerMonth',
-            'per_month'        => 'PerMonth',
-            'monthly'          => 'PerMonth',
-            'per sqm'          => 'PerSqm',
-            'per_sqm'          => 'PerSqm',
-            'persqm'           => 'PerSqm',
-            'per m2'           => 'PerSqm',
-            'per square meter' => 'PerSqm',
-            'per day'          => 'PerDay',
-            'per_day'          => 'PerDay',
-            'daily'            => 'PerDay',
-            'per week'         => 'PerWeek',
-            'per_week'         => 'PerWeek',
-            'weekly'           => 'PerWeek',
-            'per year'         => 'PerYear',
-            'per_year'         => 'PerYear',
-            'yearly'           => 'PerYear',
-            'annual'           => 'PerYear',
+            'per month'        => 'Per Month',
+            'per_month'        => 'Per Month',
+            'monthly'          => 'Per Month',
+            'per sqm'          => 'Per Sqm',
+            'per_sqm'          => 'Per Sqm',
+            'persqm'           => 'Per Sqm',
+            'per m2'           => 'Per Sqm',
+            'per square meter' => 'Per Sqm',
+            'per day'          => 'Per Day',
+            'per_day'          => 'Per Day',
+            'daily'            => 'Per Day',
+            'per week'         => 'Per Week',
+            'per_week'         => 'Per Week',
+            'weekly'           => 'Per Week',
+            'per year'         => 'Per Year',
+            'per_year'         => 'Per Year',
+            'yearly'           => 'Per Year',
+            'annual'           => 'Per Year',
         ];
 
-        return $map[$priceType] ?? 'PerMonth';
+        return $map[$priceType] ?? 'Per Month';
     }
 
     /**
