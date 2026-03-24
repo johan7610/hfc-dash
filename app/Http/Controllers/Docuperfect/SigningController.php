@@ -1851,17 +1851,31 @@ class SigningController extends Controller
 /* === PDF-specific overrides === */
 @page {
     size: A4;
-    margin: 15mm 18mm 20mm 18mm;
+    margin: 10mm 12mm 15mm 12mm;
+    @bottom-center {
+        content: "Page " counter(page) " of " counter(pages);
+        font-size: 9pt;
+        color: #94a3b8;
+        font-family: 'Plus Jakarta Sans', sans-serif;
+    }
 }
 body {
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 10.5pt;
     line-height: 1.55;
     color: #1e293b;
+    text-align: left;
     margin: 0;
     padding: 0;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+}
+/* Override justify from corex-document.css — PDF should match web left-align */
+.corex-page {
+    text-align: left !important;
+}
+p, div, span, td, li {
+    text-align: left !important;
 }
 /* Ensure page breaks work */
 .page-break, [style*="page-break"] {
@@ -1873,7 +1887,7 @@ body {
     min-height: auto;
     box-shadow: none;
     margin: 0;
-    padding: 20mm 18mm;
+    padding: 0;
 }
 .corex-a4-page:last-child {
     page-break-after: avoid;
@@ -1950,15 +1964,6 @@ p, li, div {
 .corex-disclosure-table tr {
     page-break-inside: avoid;
 }
-/* Page numbers via CSS counters */
-@page {
-    @bottom-center {
-        content: "Page " counter(page) " of " counter(pages);
-        font-size: 9px;
-        color: #94a3b8;
-        font-family: 'Plus Jakarta Sans', sans-serif;
-    }
-}
 /* === Interactive element cleanup (hide for PDF) === */
 {$cleanupCss}
 CSS;
@@ -1978,7 +1983,7 @@ CSS;
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Dancing+Script:wght@400;700&display=swap" rel="stylesheet">
     <style>
         {$pdfStyles}
     </style>
