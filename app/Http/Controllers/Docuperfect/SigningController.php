@@ -1710,6 +1710,24 @@ class SigningController extends Controller
         $browserPath = env('PUPPETEER_BROWSER_PATH', '');
         $isWindows = DIRECTORY_SEPARATOR === '\\';
 
+        // Resolve full node path — proc_open may not have PATH on Windows
+        $nodePath = 'node';
+        if ($isWindows) {
+            $candidates = [
+                'C:\\Program Files\\nodejs\\node.exe',
+                'C:\\Program Files (x86)\\nodejs\\node.exe',
+                trim(shell_exec('where node 2>NUL') ?? ''),
+            ];
+            foreach ($candidates as $candidate) {
+                $candidate = trim($candidate);
+                if ($candidate && file_exists($candidate)) {
+                    $nodePath = $candidate;
+                    break;
+                }
+            }
+        }
+
+        $nodeArg = escapeshellarg(str_replace('\\', '/', $nodePath));
         $scriptArg = escapeshellarg(str_replace('\\', '/', $scriptPath));
         $htmlArg = escapeshellarg(str_replace('\\', '/', $htmlPath));
         $outArg = escapeshellarg(str_replace('\\', '/', $pdfPath));
@@ -1723,13 +1741,15 @@ class SigningController extends Controller
             $envPrefix .= ' ';
         }
 
-        $command = sprintf('%snode %s %s %s', $envPrefix, $scriptArg, $htmlArg, $outArg);
+        $command = sprintf('%s%s %s %s %s', $envPrefix, $nodeArg, $scriptArg, $htmlArg, $outArg);
 
         // Use proc_open with a timeout to prevent indefinite hangs
-        $envVars = array_merge($_ENV ?? [], [
+        $envVars = array_merge([
             'HOME' => sys_get_temp_dir(),
+            'PATH' => getenv('PATH') ?: '',
+            'SystemRoot' => getenv('SystemRoot') ?: '',
             'PUPPETEER_BROWSER_PATH' => $browserPath,
-        ]);
+        ], $_ENV ?? []);
 
         $process = proc_open(
             $command,
