@@ -2393,15 +2393,27 @@ function externalSign() {
         processWebSignatureBlocks() { /* no-op */ },
 
         isMyWebSigBlock(partyRole) {
-            const role = (partyRole || '').toLowerCase().replace(/_\d+$/, '');
-            const myRole = (this.signerRole || '').toLowerCase().replace(/_\d+$/, '');
+            const role = (partyRole || '').toLowerCase();
+            const myRole = (this.signerRole || '').toLowerCase();
+
+            // Exact match
             if (role === myRole) return true;
+
+            // Alias matching: strip suffix, check same group, but ONLY
+            // if both have the same suffix (or both have no suffix)
+            const roleSuffix = (role.match(/_(\d+)$/) || ['', ''])[1];
+            const myRoleSuffix = (myRole.match(/_(\d+)$/) || ['', ''])[1];
+            if (roleSuffix !== myRoleSuffix) return false;
+
+            const roleBase = role.replace(/_\d+$/, '');
+            const myRoleBase = myRole.replace(/_\d+$/, '');
+
             const ownerTerms = ['owner_party', 'lessor', 'seller', 'landlord', 'owner'];
             const acquiringTerms = ['acquiring_party', 'lessee', 'buyer', 'tenant', 'purchaser'];
             const agentTerms = ['agent', 'property_practitioner'];
-            if (ownerTerms.includes(myRole) && ownerTerms.includes(role)) return true;
-            if (acquiringTerms.includes(myRole) && acquiringTerms.includes(role)) return true;
-            if (agentTerms.includes(myRole) && agentTerms.includes(role)) return true;
+            if (ownerTerms.includes(myRoleBase) && ownerTerms.includes(roleBase)) return true;
+            if (acquiringTerms.includes(myRoleBase) && acquiringTerms.includes(roleBase)) return true;
+            if (agentTerms.includes(myRoleBase) && agentTerms.includes(roleBase)) return true;
             return false;
         },
 
