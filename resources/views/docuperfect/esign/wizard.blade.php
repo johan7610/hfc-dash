@@ -364,7 +364,6 @@
                                                 </template>
                                             </optgroup>
                                             <optgroup label="Other Roles">
-                                                <option value="spouse">Spouse</option>
                                                 <option value="witness">Witness</option>
                                                 <option value="other">Other</option>
                                             </optgroup>
@@ -2587,6 +2586,11 @@ function esignWizard() {
             r._contact_id = contact.id;
             r._searchOpen = false;
             r._searchQuery = contact.full_name;
+
+            // Map non-signing roles to proper signing roles
+            if (r.role === 'spouse' || r.role === 'owner') {
+                r.role = this.isSalesContext ? 'seller' : 'landlord';
+            }
 
             // Store bank details for WebTemplateDataService
             r.bank_name = contact.bank_name || '';

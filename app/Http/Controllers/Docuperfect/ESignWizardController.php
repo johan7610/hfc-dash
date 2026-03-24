@@ -523,6 +523,20 @@ class ESignWizardController extends Controller
             $stepData['recipients'] = ['recipients' => $recipients];
         }
 
+        // Normalize non-signing roles (spouse, owner) to proper signing roles
+        // Runs on ALL recipients regardless of how they were loaded (auto-populate, manual, step navigation)
+        if (!empty($stepData['recipients']['recipients'])) {
+            $propSource = $stepData['property']['_property_source'] ?? null;
+            $isSales = $template->isSalesDocument($propSource);
+            foreach ($stepData['recipients']['recipients'] as &$recipient) {
+                $role = $recipient['role'] ?? '';
+                if (in_array($role, ['spouse', 'owner'])) {
+                    $recipient['role'] = $isSales ? 'seller' : 'landlord';
+                }
+            }
+            unset($recipient);
+        }
+
         // Auto-fill fields from wizard step data (property, recipients, details)
         // Contact fields with multiple contacts of the same role (e.g., 2 lessors)
         // are concatenated with ' & ' (e.g., "Koos Kombuis & Lienkie Kombuis")
