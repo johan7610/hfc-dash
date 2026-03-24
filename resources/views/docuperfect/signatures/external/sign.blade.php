@@ -2393,8 +2393,8 @@ function externalSign() {
         processWebSignatureBlocks() { /* no-op */ },
 
         isMyWebSigBlock(partyRole) {
-            const role = (partyRole || '').toLowerCase();
-            const myRole = (this.signerRole || '').toLowerCase();
+            const role = (partyRole || '').toLowerCase().replace(/_\d+$/, '');
+            const myRole = (this.signerRole || '').toLowerCase().replace(/_\d+$/, '');
             if (role === myRole) return true;
             const ownerTerms = ['owner_party', 'lessor', 'seller', 'landlord', 'owner'];
             const acquiringTerms = ['acquiring_party', 'lessee', 'buyer', 'tenant', 'purchaser'];
