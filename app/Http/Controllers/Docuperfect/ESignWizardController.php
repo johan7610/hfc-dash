@@ -481,8 +481,10 @@ class ESignWizardController extends Controller
             if ($propertyId && $propertySource === 'properties') {
                 $prop = Property::with(['contacts' => fn($q) => $q->withPivot('role')])->find($propertyId);
                 if ($prop) {
-                    // Determine correct fallback role based on template type + property source
-                    $defaultOwnerRole = $template->isSalesDocument($propertySource) ? 'seller' : 'landlord';
+                    // Determine correct fallback role from template signing_parties, then document context
+                    $signingParties = $template->signing_parties ?? [];
+                    $defaultOwnerRole = collect($signingParties)->first(fn($r) => $r !== 'agent' && $r !== 'creator')
+                        ?? ($template->isSalesDocument($propertySource) ? 'seller' : 'landlord');
 
                     // Agent is always first recipient (added by JS), so just add linked contacts
                     foreach ($prop->contacts as $contact) {
@@ -641,6 +643,12 @@ class ESignWizardController extends Controller
         // Auto-fill field group display values from recipients
         $allWizardFields = $this->autoFillFieldGroupDisplays($allWizardFields, $stepData);
 
+        $contactTypes = DB::table('contact_types')
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
         return view('docuperfect.esign.wizard', [
             'flow'           => $flow,
             'step'           => $step,
@@ -660,6 +668,7 @@ class ESignWizardController extends Controller
             'templateId'     => $flow->template_id,
             'flowId'         => $flow->id,
             'manualFields'   => $manualFields,
+            'contactTypes'   => $contactTypes,
         ]);
     }
 

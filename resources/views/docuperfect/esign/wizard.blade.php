@@ -358,17 +358,12 @@
                                     </template>
                                     <template x-if="!r.readonly">
                                         <select x-model="r.role" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
-                                            {{-- Hidden option preserves the bound value before x-for renders --}}
+                                            <option value="">Select role...</option>
+                                            {{-- Hidden fallback preserves bound value for roles not in the list --}}
                                             <option x-show="false" :value="r.role" x-text="getRoleLabel(r.role)" selected></option>
-                                            <optgroup :label="partyRolesGroupLabel">
-                                                <template x-for="pr in resolvedPartyRoles" :key="pr.value">
-                                                    <option :value="pr.value" x-text="pr.label"></option>
-                                                </template>
-                                            </optgroup>
-                                            <optgroup label="Other Roles">
-                                                <option value="witness">Witness</option>
-                                                <option value="other">Other</option>
-                                            </optgroup>
+                                            @foreach($contactTypes as $ct)
+                                                <option value="{{ strtolower($ct->name) }}">{{ $ct->name }}</option>
+                                            @endforeach
                                         </select>
                                     </template>
                                 </div>
@@ -1134,6 +1129,7 @@ function esignWizard() {
     const serverRecipients = @json($recipients ?? []);
     const serverStepData = @json($stepData ?? []);
     const serverManualFields = @json($manualFields ?? []);
+    const serverContactTypes = @json($contactTypes ?? []);
     const serverCurrentStep = {{ $safeStep }};
     const serverIsWebTemplate = @json($isWebTemplate ?? false);
     const serverTemplateId = @json($templateId ?? null);
@@ -1261,15 +1257,16 @@ function esignWizard() {
     }
 
     function getRoleLabel(role) {
+        if (!role) return 'Signer';
+        // Check contact_types table first
+        const ct = (serverContactTypes || []).find(c => c.name.toLowerCase() === role);
+        if (ct) return ct.name;
+        // Fallback for system roles and aliases
         const labels = {
             'agent': 'Agent', 'creator': 'Agent',
-            'landlord': 'Landlord', 'lessor': 'Landlord',
-            'tenant': 'Tenant', 'lessee': 'Tenant',
-            'buyer': 'Buyer', 'seller': 'Seller',
-            'witness': 'Witness', 'spouse': 'Spouse',
             'owner_party': 'Owner/Seller', 'acquiring_party': 'Buyer/Tenant',
         };
-        return labels[role] || (role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Signer');
+        return labels[role] || role.charAt(0).toUpperCase() + role.slice(1);
     }
 
     return {
