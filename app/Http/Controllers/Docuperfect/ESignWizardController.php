@@ -1265,6 +1265,8 @@ class ESignWizardController extends Controller
         $propertyAddress = $stepData['property']['address'] ?? $stepData['property']['title'] ?? '';
 
         // Build document name — use custom name from wizard if set, else auto-build
+        $isPackFlow = !empty($stepData['is_pack_flow']);
+        $isPdfPack = !empty($stepData['is_pdf_pack']);
         $docName = $stepData['document_name'] ?? null;
         if (empty($docName)) {
             $firstRecipientName = '';
@@ -1274,8 +1276,6 @@ class ESignWizardController extends Controller
                     break;
                 }
             }
-            $isPackFlow = !empty($stepData['is_pack_flow']);
-            $isPdfPack = !empty($stepData['is_pdf_pack']);
             $docName = $isPackFlow ? ($stepData['pack_name'] ?? $template->name)
                      : ($isPdfPack ? ($stepData['pdf_pack_name'] ?? $template->name) : $template->name);
             if ($firstRecipientName) $docName .= ' — ' . $firstRecipientName;
