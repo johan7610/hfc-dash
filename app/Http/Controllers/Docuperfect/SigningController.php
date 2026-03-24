@@ -1827,17 +1827,109 @@ class SigningController extends Controller
      */
     private function wrapHtmlForPdf(string $mergedHtml): string
     {
-        // If it already has a DOCTYPE or <html> tag, inject PDF-specific styles
-        if (preg_match('/<!DOCTYPE|<html/i', $mergedHtml)) {
-            // Insert PDF cleanup styles before </head>
-            $pdfStyles = '<style>' . $this->getPdfCleanupCss() . '</style>';
-            if (preg_match('/<\/head>/i', $mergedHtml)) {
-                return preg_replace('/<\/head>/i', $pdfStyles . '</head>', $mergedHtml, 1);
-            }
-            return $mergedHtml;
+        // Load the full CDS stylesheet — this is what makes web documents look correct
+        $cdsStylesheet = '';
+        $cssPath = public_path('css/corex-document.css');
+        if (file_exists($cssPath)) {
+            $cdsStylesheet = file_get_contents($cssPath);
         }
 
         $cleanupCss = $this->getPdfCleanupCss();
+
+        $pdfStyles = <<<CSS
+/* === CDS Document Stylesheet (inlined from corex-document.css) === */
+{$cdsStylesheet}
+
+/* === PDF-specific overrides === */
+@page {
+    size: A4;
+    margin: 15mm 18mm 20mm 18mm;
+}
+body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.55;
+    color: #1e293b;
+    margin: 0;
+    padding: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+/* Ensure page breaks work */
+.page-break, [style*="page-break"] {
+    page-break-after: always;
+}
+/* A4 page styling for Puppeteer print rendering */
+.corex-a4-page {
+    page-break-after: always;
+    min-height: auto;
+    box-shadow: none;
+    margin: 0;
+    padding: 20mm 18mm;
+}
+.corex-a4-page:last-child {
+    page-break-after: avoid;
+}
+.corex-page-gap {
+    display: none;
+}
+/* Kill inner container styling for PDF — no shadows, no screen padding */
+.corex-document-wrapper {
+    max-width: 100% !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+.corex-page {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+    box-shadow: none !important;
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    page-break-after: always;
+}
+.corex-page:last-child {
+    page-break-after: avoid;
+}
+/* Ensure images print in colour */
+img, .web-sig-signed-img {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+/* Page initials row — clean for PDF */
+.corex-page-initials-row {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 0 4px 0;
+}
+.corex-page-initials {
+    width: 60px;
+    height: 30px;
+    border: 1px solid #94a3b8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: #64748b;
+}
+/* === Interactive element cleanup (hide for PDF) === */
+{$cleanupCss}
+CSS;
+
+        // If it already has a DOCTYPE or <html> tag, inject all styles before </head>
+        if (preg_match('/<!DOCTYPE|<html/i', $mergedHtml)) {
+            $styleTag = '<style>' . $pdfStyles . '</style>';
+            if (preg_match('/<\/head>/i', $mergedHtml)) {
+                return preg_replace('/<\/head>/i', $styleTag . '</head>', $mergedHtml, 1);
+            }
+            return $mergedHtml;
+        }
 
         return <<<HTML
 <!DOCTYPE html>
@@ -1847,55 +1939,7 @@ class SigningController extends Controller
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        @page {
-            size: A4;
-            margin: 15mm 18mm 20mm 18mm;
-        }
-        body {
-            font-family: 'Plus Jakarta Sans', Arial, Helvetica, sans-serif;
-            font-size: 11px;
-            line-height: 1.4;
-            color: #000;
-            margin: 0;
-            padding: 0;
-        }
-        /* Ensure page breaks work */
-        .page-break, [style*="page-break"] {
-            page-break-after: always;
-        }
-        /* A4 page styling for Puppeteer print rendering */
-        .corex-a4-page {
-            page-break-after: always;
-            min-height: auto;
-        }
-        .corex-a4-page:last-child {
-            page-break-after: avoid;
-        }
-        .corex-page-gap {
-            display: none;
-        }
-        /* Kill inner container styling */
-        .corex-document-wrapper,
-        .corex-page {
-            width: 100% !important;
-            max-width: 100% !important;
-            min-height: auto !important;
-            box-shadow: none !important;
-            background: transparent !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            border: none !important;
-            border-radius: 0 !important;
-        }
-        /* Table styling */
-        table { border-collapse: collapse; width: 100%; }
-        table td, table th { padding: 4px 8px; vertical-align: top; }
-        /* Ensure images print in colour */
-        img, .web-sig-signed-img {
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-        }
-        {$cleanupCss}
+        {$pdfStyles}
     </style>
 </head>
 <body>
