@@ -1831,7 +1831,7 @@ class SigningController extends Controller
 /* === PDF-specific overrides === */
 @page {
     size: A4;
-    margin: 10mm 12mm 15mm 12mm;
+    margin: 12mm 8mm 12mm 8mm;
     @bottom-center {
         content: "Page " counter(page) " of " counter(pages);
         font-size: 9pt;
@@ -2088,7 +2088,7 @@ p, li, div {
 }
 /* Remove @page bottom-center (wkhtmltopdf uses its own footer, not CSS counters) */
 @page {
-    margin: 10mm 12mm 15mm 12mm;
+    margin: 12mm 8mm 12mm 8mm;
 }
 /* === Interactive element cleanup (hide for PDF) === */
 {$cleanupCss}
