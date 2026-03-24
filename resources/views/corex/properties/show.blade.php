@@ -346,17 +346,12 @@
                                 </ul>
                             </div>
 
-                            {{-- Exclusive days (sole mandate sale only) --}}
-                            @if(in_array(strtolower($property->mandate_type ?? ''), ['sole', 'sole mandate']) && !in_array(strtolower($property->mandate_type ?? ''), ['rental']))
+                            {{-- Exclusive days auto-calculated from Listed Date → Expiry Date for sole mandates --}}
+                            @if(in_array(strtolower($property->mandate_type ?? ''), ['sole', 'sole mandate']) && ($property->listing_type ?? 'sale') === 'sale' && $property->listed_date && $property->expiry_date)
                             <div x-show="enabled" x-cloak class="flex items-center gap-2">
-                                <label class="text-[11px]" style="color:var(--text-secondary);">Exclusive Days</label>
-                                <input type="number"
-                                       x-model.number="exclusiveDays"
-                                       @click.stop
-                                       min="0" max="92" step="1"
-                                       class="w-16 px-2 py-1 rounded-md text-xs text-center"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                                <span class="text-[10px]" style="color:var(--text-muted);">0-92</span>
+                                <span class="text-[11px]" style="color:var(--text-secondary);">Exclusive:</span>
+                                <span class="text-[11px] font-medium" style="color:var(--text-primary);">{{ $property->listed_date->diffInDays($property->expiry_date) }} days</span>
+                                <span class="text-[10px]" style="color:var(--text-muted);">({{ $property->listed_date->format('d M') }} – {{ $property->expiry_date->format('d M Y') }})</span>
                             </div>
                             @endif
 
@@ -3011,7 +3006,7 @@ function ppSyndication(config) {
                 const res = await fetch(`/corex/properties/${this.propertyId}/syndication/submit`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
-                    body: JSON.stringify({ pp_exclusive_days: this.exclusiveDays || null }),
+                    body: JSON.stringify({}),
                 });
                 const data = await res.json();
                 if (data.success) {

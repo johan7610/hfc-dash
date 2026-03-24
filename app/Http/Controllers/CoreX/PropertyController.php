@@ -207,6 +207,7 @@ class PropertyController extends Controller
             'property_type'    => 'nullable|string|max:50',
             'category'         => 'nullable|string|max:100',
             'mandate_type'     => 'nullable|string|max:50',
+            'listing_type'     => 'nullable|string|in:sale,rental',
             'status'           => 'nullable|string|max:100',
             'features'         => 'nullable|array',
             'features.*'       => 'string|max:100',

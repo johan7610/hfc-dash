@@ -25,7 +25,7 @@ class PrivatePropertyListingMapper
         $branchGuid  = config('services.private_property.branch_guid');
         $category    = $this->mapCategory($property->category);
         $mandateType = $this->mapMandateType($property->mandate_type);
-        $listingType = $this->mapListingType($property->mandate_type);
+        $listingType = $this->mapListingType($property->listing_type ?? $property->mandate_type);
         $status      = $listingType === 'Rental' ? 'ToLet' : 'ForSale';
 
         // Build the full Listing struct — ALL fields must be present for PHP SoapClient
@@ -81,9 +81,12 @@ class PrivatePropertyListingMapper
             $listing['Province'] = 'KwaZuluNatal'; // Province enum still required
         }
 
-        // SoleMandateExclusiveDays — only for FullMandate Sale
-        if ($mandateType === 'FullMandate' && $listingType === 'Sale' && $property->pp_exclusive_days) {
-            $listing['SoleMandateExclusiveDays'] = (int) $property->pp_exclusive_days;
+        // SoleMandateExclusiveDays — auto-calculated from listed_date and expiry_date for sole mandates
+        if ($mandateType === 'FullMandate' && $listingType === 'Sale' && $property->listed_date && $property->expiry_date) {
+            $days = (int) $property->listed_date->diffInDays($property->expiry_date);
+            if ($days >= 1 && $days <= 92) {
+                $listing['SoleMandateExclusiveDays'] = $days;
+            }
         }
 
         // Photo URLs — always send images on every submission
@@ -134,12 +137,7 @@ class PrivatePropertyListingMapper
             $errors[] = 'Headline is required and cannot be empty';
         }
 
-        if (!empty($payload['SoleMandateExclusiveDays'])) {
-            $days = $payload['SoleMandateExclusiveDays'];
-            if ($days < 1 || $days > 92) {
-                $errors[] = 'SoleMandateExclusiveDays must be between 1 and 92';
-            }
-        }
+        // SoleMandateExclusiveDays is auto-calculated from listed_date and expiry_date — no user validation needed
 
         return $errors;
     }
@@ -263,9 +261,9 @@ class PrivatePropertyListingMapper
         return $map[strtolower($mandateType ?? '')] ?? 'OpenMandate';
     }
 
-    private function mapListingType(?string $mandateType): string
+    private function mapListingType(?string $listingType): string
     {
-        return in_array(strtolower($mandateType ?? ''), ['rental']) ? 'Rental' : 'Sale';
+        return strtolower($listingType ?? '') === 'rental' ? 'Rental' : 'Sale';
     }
 
     private function mapPropertyType(?string $type): string

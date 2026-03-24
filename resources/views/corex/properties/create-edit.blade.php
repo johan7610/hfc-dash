@@ -28,6 +28,28 @@
         @csrf
         @if($property) @method('PUT') @endif
 
+        {{-- ── Listing Type (only on create or extension import, hidden after first save) ── --}}
+        @if(!$property || !$property->exists)
+        <div class="rounded-2xl border border-slate-200 bg-white p-6">
+            <h3 class="text-sm font-bold uppercase tracking-wider mb-4" style="color:var(--brand-default,#0b2a4a);">Listing Type</h3>
+            <div class="flex gap-3" x-data="{ type: '{{ old('listing_type', 'sale') }}' }">
+                <input type="hidden" name="listing_type" :value="type">
+                <button type="button" @click="type = 'sale'"
+                        :class="type === 'sale' ? 'ring-2 ring-blue-500 bg-blue-50 border-blue-400' : 'border-slate-300 hover:border-slate-400'"
+                        class="flex-1 flex flex-col items-center gap-2 rounded-xl border px-4 py-4 transition-all cursor-pointer">
+                    <svg class="w-6 h-6" :class="type === 'sale' ? 'text-blue-600' : 'text-slate-400'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" /></svg>
+                    <span class="text-sm font-semibold" :class="type === 'sale' ? 'text-blue-700' : 'text-slate-600'">For Sale</span>
+                </button>
+                <button type="button" @click="type = 'rental'"
+                        :class="type === 'rental' ? 'ring-2 ring-blue-500 bg-blue-50 border-blue-400' : 'border-slate-300 hover:border-slate-400'"
+                        class="flex-1 flex flex-col items-center gap-2 rounded-xl border px-4 py-4 transition-all cursor-pointer">
+                    <svg class="w-6 h-6" :class="type === 'rental' ? 'text-blue-600' : 'text-slate-400'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" /></svg>
+                    <span class="text-sm font-semibold" :class="type === 'rental' ? 'text-blue-700' : 'text-slate-600'">For Rental</span>
+                </button>
+            </div>
+        </div>
+        @endif
+
         {{-- ── Core Details ──────────────────────────────────────────────────── --}}
         <div class="rounded-2xl border border-slate-200 bg-white p-6 space-y-5">
             <h3 class="text-sm font-bold uppercase tracking-wider" style="color:var(--brand-default,#0b2a4a);">Listing Details</h3>
@@ -236,10 +258,10 @@
             </div>
         </div>
 
-        {{-- ── Rental & Lease Details (collapsible) ──────────────────────────── --}}
+        {{-- ── Additional Details (collapsible) ──────────────────────────── --}}
         <div class="rounded-2xl border border-slate-200 bg-white p-6 space-y-5" x-data="{ open: false }">
             <button type="button" @click="open = !open" class="flex items-center gap-2 w-full text-left">
-                <h3 class="text-sm font-bold uppercase tracking-wider" style="color:var(--brand-default,#0b2a4a);">Rental & Lease Details</h3>
+                <h3 class="text-sm font-bold uppercase tracking-wider" style="color:var(--brand-default,#0b2a4a);">Additional Details</h3>
                 <svg :class="open ? 'rotate-180' : ''" class="w-4 h-4 transition-transform text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
             </button>
             <div x-show="open" x-cloak class="space-y-4">
@@ -269,18 +291,6 @@
                                placeholder="e.g. Ray Nkonyeni">
                     </div>
                     <div>
-                        <label class="block text-sm font-semibold mb-1 text-slate-700">Monthly Rental (R)</label>
-                        <input type="number" name="rental_amount" value="{{ old('rental_amount', $property?->rental_amount) }}"
-                               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
-                               placeholder="0.00" min="0" step="0.01">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-semibold mb-1 text-slate-700">Deposit (R)</label>
-                        <input type="number" name="deposit_amount" value="{{ old('deposit_amount', $property?->deposit_amount) }}"
-                               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
-                               placeholder="0.00" min="0" step="0.01">
-                    </div>
-                    <div>
                         <label class="block text-sm font-semibold mb-1 text-slate-700">Commission (%)</label>
                         <input type="number" name="commission_percent" value="{{ old('commission_percent', $property?->commission_percent) }}"
                                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
@@ -298,17 +308,38 @@
                                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
                                placeholder="0.00" min="0" step="0.01">
                     </div>
-                    <div>
-                        <label class="block text-sm font-semibold mb-1 text-slate-700">Lease Start Date</label>
-                        <input type="date" name="lease_start_date" value="{{ old('lease_start_date', $property?->lease_start_date?->format('Y-m-d')) }}"
-                               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-400">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-semibold mb-1 text-slate-700">Lease End Date</label>
-                        <input type="date" name="lease_end_date" value="{{ old('lease_end_date', $property?->lease_end_date?->format('Y-m-d')) }}"
-                               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-400">
+                </div>
+
+                {{-- Rental-only fields --}}
+                @if(($property?->listing_type ?? old('listing_type', 'sale')) === 'rental')
+                <div class="border-t border-slate-200 pt-4 mt-4">
+                    <p class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Rental Details</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-semibold mb-1 text-slate-700">Monthly Rental (R)</label>
+                            <input type="number" name="rental_amount" value="{{ old('rental_amount', $property?->rental_amount) }}"
+                                   class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
+                                   placeholder="0.00" min="0" step="0.01">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-1 text-slate-700">Deposit (R)</label>
+                            <input type="number" name="deposit_amount" value="{{ old('deposit_amount', $property?->deposit_amount) }}"
+                                   class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
+                                   placeholder="0.00" min="0" step="0.01">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-1 text-slate-700">Lease Start Date</label>
+                            <input type="date" name="lease_start_date" value="{{ old('lease_start_date', $property?->lease_start_date?->format('Y-m-d')) }}"
+                                   class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-400">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-1 text-slate-700">Lease End Date</label>
+                            <input type="date" name="lease_end_date" value="{{ old('lease_end_date', $property?->lease_end_date?->format('Y-m-d')) }}"
+                                   class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-400">
+                        </div>
                     </div>
                 </div>
+                @endif
             </div>
         </div>
 

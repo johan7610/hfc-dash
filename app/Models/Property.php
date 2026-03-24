@@ -42,6 +42,7 @@ class Property extends Model
         'property_type',
         'category',
         'mandate_type',
+        'listing_type',
         'status',
         'features_json',
         'spaces_json',
