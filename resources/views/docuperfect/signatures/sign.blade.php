@@ -683,15 +683,18 @@ function signDocument() {
 
                 self.webSigElements = [];
                 let agentCount = 0;
+                const partyCounters = {};
 
-                sigElements.forEach((el, idx) => {
+                sigElements.forEach((el) => {
                     const rawParty = (el.dataset.markerParty || '').toLowerCase();
                     const baseRole = partyRoleMap[rawParty] || rawParty;
                     const markerType = el.dataset.markerType || 'signature';
                     const isMine = baseRole === 'agent';
-                    const sigKey = baseRole + '-sig-' + idx;
+                    if (partyCounters[baseRole] === undefined) partyCounters[baseRole] = 0;
+                    const sigKey = baseRole + '-sig-' + partyCounters[baseRole];
+                    partyCounters[baseRole]++;
 
-                    const entry = { el, partyRole: baseRole, rawParty: rawParty, type: markerType, index: idx, sigKey, isMine, signed: false, sigData: null };
+                    const entry = { el, partyRole: baseRole, rawParty: rawParty, type: markerType, index: partyCounters[baseRole] - 1, sigKey, isMine, signed: false, sigData: null };
                     self.webSigElements.push(entry);
 
                     if (isMine) {
@@ -767,14 +770,17 @@ function signDocument() {
 
             if (!this.webInitialElements) this.webInitialElements = [];
             let agentInitialCount = 0;
+            const initPartyCounters = {};
 
-            initialElements.forEach((el, idx) => {
+            initialElements.forEach((el) => {
                 const rawParty = (el.dataset.markerParty || '').toLowerCase();
                 const baseRole = partyRoleMap[rawParty] || rawParty;
                 const isMine = baseRole === 'agent';
-                const initKey = baseRole + '-init-' + idx;
+                if (initPartyCounters[baseRole] === undefined) initPartyCounters[baseRole] = 0;
+                const initKey = baseRole + '-init-' + initPartyCounters[baseRole];
+                initPartyCounters[baseRole]++;
 
-                const entry = { el, partyRole: baseRole, rawParty, index: idx, initKey, isMine, signed: false, sigData: null };
+                const entry = { el, partyRole: baseRole, rawParty, index: initPartyCounters[baseRole] - 1, initKey, isMine, signed: false, sigData: null };
                 self.webInitialElements.push(entry);
 
                 if (isMine) {

@@ -1294,11 +1294,14 @@ function externalSign() {
                 if (sigElements.length === 0) return false;
 
                 let myCount = 0;
+                const partyCounters = {};
 
-                sigElements.forEach((el, idx) => {
+                sigElements.forEach((el) => {
                     const rawParty = (el.dataset.markerParty || '').toLowerCase();
                     const baseRole = partyRoleMap[rawParty] || rawParty;
-                    const sigKey = baseRole + '-sig-' + idx;
+                    if (partyCounters[baseRole] === undefined) partyCounters[baseRole] = 0;
+                    const sigKey = baseRole + '-sig-' + partyCounters[baseRole];
+                    partyCounters[baseRole]++;
                     const isMine = self.isMyWebSigBlock(rawParty);
 
                     if (isMine) {
@@ -1444,13 +1447,16 @@ function externalSign() {
 
             if (!this.webInitialElements) this.webInitialElements = [];
             let myCount = 0;
+            const initPartyCounters = {};
 
-            initialElements.forEach((el, idx) => {
+            initialElements.forEach((el) => {
                 const rawParty = (el.dataset.markerParty || '').toLowerCase();
                 const isMine = self.isMyWebSigBlock(rawParty);
-                const initKey = rawParty + '-init-' + idx;
+                if (initPartyCounters[rawParty] === undefined) initPartyCounters[rawParty] = 0;
+                const initKey = rawParty + '-init-' + initPartyCounters[rawParty];
+                initPartyCounters[rawParty]++;
 
-                const entry = { el, rawParty, index: idx, initKey, isMine, signed: false, sigData: null };
+                const entry = { el, rawParty, index: initPartyCounters[rawParty] - 1, initKey, isMine, signed: false, sigData: null };
                 self.webInitialElements.push(entry);
 
                 if (isMine) {
