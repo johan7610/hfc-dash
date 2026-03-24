@@ -1751,83 +1751,120 @@ class SigningController extends Controller
 
         // Fire the process without waiting — exec() hangs on Windows because
         // Puppeteer spawns Chrome child processes that don't exit cleanly
-        $logPath = $tempDir . '/pdf_gen_' . $documentId . '.log';
+        $logPath = $tempDir . DIRECTORY_SEPARATOR . 'pdf_gen_' . $documentId . '.log';
         if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
             // Write a temp batch file to avoid Windows cmd quoting hell
-            $batPath = $tempDir . '/pdf_gen_' . $documentId . '_' . time() . '.bat';
+            $batPath = $tempDir . DIRECTORY_SEPARATOR . 'pdf_gen_' . $documentId . '_' . time() . '.bat';
+            $batLogPath = str_replace('/', '\\', $logPath);
             $batContent = '@echo off' . "\r\n"
-                . $command . ' > "' . str_replace('/', '\\', $logPath) . '" 2>&1' . "\r\n"
+                . $command . ' > "' . $batLogPath . '" 2>&1' . "\r\n"
                 . 'del "%~f0"' . "\r\n";
             file_put_contents($batPath, $batContent);
 
-            // Fire async — the bat file deletes itself after running
-            pclose(popen('start /B cmd /c "' . str_replace('/', '\\', $batPath) . '"', 'r'));
+            // Fire async via WScript.Shell — popen('start /B...') is unreliable from PHP
+            $batPathWin = str_replace('/', '\\', $batPath);
+            $wshCommand = 'cmd /c start /B "" cmd /c "' . $batPathWin . '"';
+            Log::info('PDF firing bat', ['wsh_command' => $wshCommand, 'bat_path' => $batPathWin]);
+            pclose(popen($wshCommand, 'r'));
         } else {
             exec($command . ' > /dev/null 2>&1 &');
         }
 
-        // Poll for the PDF file
+        // Poll for completion by watching the log file (proven to be created by the bat)
+        // Then verify PDF exists
         $timeout = 30;
         $pollStart = time();
         $pdfReady = false;
-        $loopCount = 0;
+
+        // Normalise pdfPath to native separators for consistent file checks
+        $pdfPathNative = str_replace('/', DIRECTORY_SEPARATOR, $pdfPath);
 
         while ((time() - $pollStart) < $timeout) {
-            clearstatcache(true, $pdfPath);
+            clearstatcache();
 
-            if ($loopCount === 0) {
-                Log::info('PDF polling started', [
-                    'polling_for' => $pdfPath,
-                    'dir_contents' => glob(dirname($pdfPath) . '/doc_*'),
-                ]);
+            // Strategy 1: Check log file — bat writes stdout here on completion
+            if (file_exists($logPath) && filesize($logPath) > 0) {
+                $logContent = file_get_contents($logPath);
+                Log::info('PDF bat completed', ['log' => $logContent]);
+
+                if (str_contains($logContent, '"success":true')) {
+                    // Give filesystem a moment to flush
+                    usleep(500000);
+                    clearstatcache();
+
+                    if (file_exists($pdfPathNative) && filesize($pdfPathNative) > 0) {
+                        $pdfReady = true;
+                        break;
+                    }
+
+                    // Try the original path format too
+                    if (file_exists($pdfPath) && filesize($pdfPath) > 0) {
+                        $pdfPathNative = $pdfPath;
+                        $pdfReady = true;
+                        break;
+                    }
+
+                    // Wait one more second and retry
+                    usleep(1000000);
+                    clearstatcache();
+                    if (file_exists($pdfPathNative) && filesize($pdfPathNative) > 0) {
+                        $pdfReady = true;
+                        break;
+                    }
+
+                    // Log says success but no PDF — report and break
+                    Log::error('PDF log says success but file not found', [
+                        'pdfPath' => $pdfPath,
+                        'pdfPathNative' => $pdfPathNative,
+                        'dir_listing' => glob($tempDir . DIRECTORY_SEPARATOR . 'doc_' . $documentId . '_*'),
+                    ]);
+                    break;
+                }
+
+                // Log exists but no success marker — process errored
+                Log::error('PDF bat completed with error', ['log' => $logContent]);
+                break;
             }
-            $loopCount++;
 
-            if (file_exists($pdfPath) && filesize($pdfPath) > 0) {
-                // Verify it starts with %PDF (valid PDF header)
-                $handle = fopen($pdfPath, 'rb');
+            // Strategy 2: Direct PDF file check (in case log isn't written)
+            if (file_exists($pdfPathNative) && filesize($pdfPathNative) > 0) {
+                $handle = fopen($pdfPathNative, 'rb');
                 if ($handle) {
                     $header = fread($handle, 4);
                     fclose($handle);
                     if ($header === '%PDF') {
-                        // Wait an extra 500ms for file to finish writing
                         usleep(500000);
                         $pdfReady = true;
                         break;
                     }
                 }
             }
-            usleep(500000); // Poll every 500ms
+
+            usleep(500000); // 500ms between polls
         }
 
-        // Clean up temp HTML
+        // Clean up temp files
         @unlink($htmlPath);
+        @unlink($logPath);
 
         if (!$pdfReady) {
-            $errorLog = '';
-            if (file_exists($logPath)) {
-                $errorLog = file_get_contents($logPath);
-                @unlink($logPath);
-            }
             Log::error('PDF generation timed out or failed', [
                 'doc_id' => $documentId,
                 'seconds' => time() - $startTime,
-                'pdf_exists' => file_exists($pdfPath),
-                'process_output' => $errorLog ?: 'no log file',
+                'pdf_path' => $pdfPathNative,
+                'pdf_exists' => file_exists($pdfPathNative),
+                'log_exists' => file_exists($logPath),
             ]);
             throw new \RuntimeException('PDF generation failed');
         }
 
-        // Clean up log file on success
-        @unlink($logPath);
-
         Log::info('PDF generation complete', [
             'doc_id' => $documentId,
             'seconds' => time() - $startTime,
-            'pdf_size' => filesize($pdfPath),
+            'pdf_size' => filesize($pdfPathNative),
         ]);
 
-        return $pdfPath;
+        return $pdfPathNative;
     }
 
     /**
@@ -1927,6 +1964,39 @@ img, .web-sig-signed-img {
     justify-content: center;
     font-size: 9px;
     color: #64748b;
+}
+/* === PDF quality: prevent orphans, widows, mid-clause breaks === */
+p, li, div {
+    orphans: 3;
+    widows: 3;
+}
+.corex-clause, .corex-clause-indent-1, .corex-clause-indent-2, .corex-clause-indent-3 {
+    page-break-inside: avoid;
+}
+.corex-h1, .corex-h2, .corex-h3, .corex-section-heading {
+    page-break-after: avoid;
+}
+.corex-signature-section, .corex-signature-grid, .corex-signature-block {
+    page-break-inside: avoid;
+}
+.corex-header, .corex-title-banner {
+    page-break-inside: avoid;
+    page-break-after: avoid;
+}
+.corex-table tr {
+    page-break-inside: avoid;
+}
+.corex-disclosure-table tr {
+    page-break-inside: avoid;
+}
+/* Page numbers via CSS counters */
+@page {
+    @bottom-center {
+        content: "Page " counter(page) " of " counter(pages);
+        font-size: 9px;
+        color: #94a3b8;
+        font-family: 'Plus Jakarta Sans', sans-serif;
+    }
 }
 /* === Interactive element cleanup (hide for PDF) === */
 {$cleanupCss}
