@@ -1669,7 +1669,7 @@ class SigningController extends Controller
                 'document_id' => $document->id,
                 'error' => $e->getMessage(),
             ]);
-            return response()->json(['error' => 'PDF generation failed.'], 500);
+            return response()->json(['error' => 'PDF generation failed: ' . $e->getMessage()], 500);
         }
 
         if (!$outputPath || !file_exists($outputPath) || filesize($outputPath) === 0) {
@@ -1723,8 +1723,66 @@ class SigningController extends Controller
             $envPrefix .= ' ';
         }
 
-        $command = sprintf('%snode %s %s %s 2>&1', $envPrefix, $scriptArg, $htmlArg, $outArg);
-        $output = shell_exec($command);
+        $command = sprintf('%snode %s %s %s', $envPrefix, $scriptArg, $htmlArg, $outArg);
+
+        // Use proc_open with a timeout to prevent indefinite hangs
+        $envVars = array_merge($_ENV ?? [], [
+            'HOME' => sys_get_temp_dir(),
+            'PUPPETEER_BROWSER_PATH' => $browserPath,
+        ]);
+
+        $process = proc_open(
+            $command,
+            [
+                0 => ['pipe', 'r'],
+                1 => ['pipe', 'w'],
+                2 => ['pipe', 'w'],
+            ],
+            $pipes,
+            base_path(),
+            $envVars
+        );
+
+        if (!is_resource($process)) {
+            @unlink($htmlPath);
+            throw new \RuntimeException('Failed to start PDF process');
+        }
+
+        fclose($pipes[0]);
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
+
+        $stdout = '';
+        $stderr = '';
+        $timeout = 15;
+        $startTime = time();
+
+        while (true) {
+            $status = proc_get_status($process);
+            if (!$status['running']) {
+                break;
+            }
+            if ((time() - $startTime) > $timeout) {
+                $pid = $status['pid'];
+                if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                    exec("taskkill /F /T /PID $pid 2>NUL");
+                } else {
+                    exec("kill -9 $pid 2>/dev/null");
+                }
+                proc_close($process);
+                @unlink($htmlPath);
+                throw new \RuntimeException('PDF generation timed out after ' . $timeout . 's');
+            }
+            $stdout .= fread($pipes[1], 8192);
+            $stderr .= fread($pipes[2], 8192);
+            usleep(100000); // 100ms
+        }
+
+        $stdout .= stream_get_contents($pipes[1]);
+        $stderr .= stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        proc_close($process);
 
         // Clean up temp HTML
         @unlink($htmlPath);
@@ -1732,14 +1790,15 @@ class SigningController extends Controller
         if (!file_exists($pdfPath)) {
             Log::error('generatePdfFromHtml — PDF not generated', [
                 'command' => $command,
-                'output' => $output ?: 'unknown error',
+                'stdout' => $stdout ?: 'empty',
+                'stderr' => $stderr ?: 'empty',
             ]);
             return null;
         }
 
         // Parse JSON output for logging
-        if ($output) {
-            $lines = explode("\n", trim($output));
+        if ($stdout) {
+            $lines = explode("\n", trim($stdout));
             foreach ($lines as $line) {
                 $decoded = json_decode(trim($line), true);
                 if ($decoded && !empty($decoded['success'])) {
