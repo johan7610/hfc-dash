@@ -358,6 +358,8 @@
                                     </template>
                                     <template x-if="!r.readonly">
                                         <select x-model="r.role" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
+                                            {{-- Hidden option preserves the bound value before x-for renders --}}
+                                            <option x-show="false" :value="r.role" x-text="getRoleLabel(r.role)" selected></option>
                                             <optgroup :label="partyRolesGroupLabel">
                                                 <template x-for="pr in resolvedPartyRoles" :key="pr.value">
                                                     <option :value="pr.value" x-text="pr.label"></option>
