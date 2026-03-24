@@ -1645,6 +1645,8 @@ class SigningController extends Controller
      */
     public function downloadWebPdf($token)
     {
+        set_time_limit(120);
+
         $signingRequest = SignatureRequest::where('token', $token)
             ->with(['template.document.template'])
             ->firstOrFail();
@@ -1751,6 +1753,8 @@ class SigningController extends Controller
             'PUPPETEER_BROWSER_PATH' => $browserPath,
         ], $_ENV ?? []);
 
+        Log::info('PDF generation starting', ['doc_id' => $documentId, 'command' => $command]);
+
         $process = proc_open(
             $command,
             [
@@ -1774,7 +1778,7 @@ class SigningController extends Controller
 
         $stdout = '';
         $stderr = '';
-        $timeout = 15;
+        $timeout = 30;
         $startTime = time();
 
         while (true) {
@@ -1803,6 +1807,8 @@ class SigningController extends Controller
         fclose($pipes[1]);
         fclose($pipes[2]);
         proc_close($process);
+
+        Log::info('PDF generation complete', ['doc_id' => $documentId, 'seconds' => time() - $startTime]);
 
         // Clean up temp HTML
         @unlink($htmlPath);
