@@ -1748,44 +1748,56 @@ class SigningController extends Controller
         Log::info('PDF generation starting', ['doc_id' => $documentId, 'command' => $command]);
 
         $startTime = time();
-        $output = [];
-        $exitCode = -1;
-        exec($command . ' 2>&1', $output, $exitCode);
-        $stdout = implode("\n", $output);
 
-        Log::info('PDF generation finished', [
-            'doc_id' => $documentId,
-            'seconds' => time() - $startTime,
-            'exit_code' => $exitCode,
-            'output' => $stdout,
-        ]);
+        // Fire the process without waiting — exec() hangs on Windows because
+        // Puppeteer spawns Chrome child processes that don't exit cleanly
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            pclose(popen('start /B "" ' . $command, 'r'));
+        } else {
+            exec($command . ' > /dev/null 2>&1 &');
+        }
+
+        // Poll for the PDF file
+        $timeout = 30;
+        $pollStart = time();
+        $pdfReady = false;
+
+        while ((time() - $pollStart) < $timeout) {
+            if (file_exists($pdfPath) && filesize($pdfPath) > 0) {
+                // Verify it starts with %PDF (valid PDF header)
+                $handle = fopen($pdfPath, 'rb');
+                if ($handle) {
+                    $header = fread($handle, 4);
+                    fclose($handle);
+                    if ($header === '%PDF') {
+                        // Wait an extra 500ms for file to finish writing
+                        usleep(500000);
+                        $pdfReady = true;
+                        break;
+                    }
+                }
+            }
+            usleep(500000); // Poll every 500ms
+        }
 
         // Clean up temp HTML
         @unlink($htmlPath);
 
-        if (!file_exists($pdfPath)) {
-            Log::error('generatePdfFromHtml — PDF not generated', [
-                'command' => $command,
-                'exit_code' => $exitCode,
-                'output' => $stdout ?: 'empty',
+        if (!$pdfReady) {
+            Log::error('PDF generation timed out or failed', [
+                'doc_id' => $documentId,
+                'seconds' => time() - $startTime,
+                'pdf_exists' => file_exists($pdfPath),
+                'pdf_size' => file_exists($pdfPath) ? filesize($pdfPath) : 0,
             ]);
-            return null;
+            throw new \RuntimeException('PDF generation timed out after ' . $timeout . 's');
         }
 
-        // Parse JSON output for logging
-        if ($stdout) {
-            $lines = explode("\n", trim($stdout));
-            foreach ($lines as $line) {
-                $decoded = json_decode(trim($line), true);
-                if ($decoded && !empty($decoded['success'])) {
-                    Log::info('generatePdfFromHtml — success', [
-                        'document_id' => $documentId,
-                        'pdf_size' => filesize($pdfPath),
-                    ]);
-                    break;
-                }
-            }
-        }
+        Log::info('PDF generation complete', [
+            'doc_id' => $documentId,
+            'seconds' => time() - $startTime,
+            'pdf_size' => filesize($pdfPath),
+        ]);
 
         return $pdfPath;
     }
