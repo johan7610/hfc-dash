@@ -1772,6 +1772,7 @@ class SigningController extends Controller
         $pdfReady = false;
 
         while ((time() - $pollStart) < $timeout) {
+            clearstatcache(true, $pdfPath);
             if (file_exists($pdfPath) && filesize($pdfPath) > 0) {
                 // Verify it starts with %PDF (valid PDF header)
                 $handle = fopen($pdfPath, 'rb');
