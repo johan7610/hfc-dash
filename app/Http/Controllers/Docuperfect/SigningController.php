@@ -1828,7 +1828,7 @@ class SigningController extends Controller
 /* === CDS Document Stylesheet (inlined from corex-document.css) === */
 {$cdsStylesheet}
 
-/* === PDF-specific overrides === */
+/* === PDF: page setup === */
 @page {
     size: A4;
     margin: 12mm 8mm 12mm 8mm;
@@ -1836,53 +1836,21 @@ class SigningController extends Controller
         content: "Page " counter(page) " of " counter(pages);
         font-size: 9pt;
         color: #94a3b8;
-        font-family: 'Plus Jakarta Sans', sans-serif;
     }
 }
-body {
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-    font-size: 10.5pt;
-    line-height: 1.55;
-    color: #1e293b;
-    text-align: left;
-    margin: 0;
-    padding: 0;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-}
-/* Override justify from corex-document.css — PDF should match web left-align */
-.corex-page {
-    text-align: left !important;
-}
-p, div, span, td, li {
-    text-align: left !important;
-}
-/* Ensure page breaks work */
-.page-break, [style*="page-break"] {
-    page-break-after: always;
-}
-/* A4 page styling for Puppeteer print rendering */
-.corex-a4-page {
-    page-break-after: always;
-    min-height: auto;
-    box-shadow: none;
-    margin: 0;
-    padding: 0;
-}
-.corex-a4-page:last-child {
-    page-break-after: avoid;
-}
-.corex-page-gap {
-    display: none;
-}
-/* Kill inner container styling for PDF — no shadows, no screen padding */
+
+/* === PDF: basic resets (no typography — corex-document.css handles that) === */
+body { margin: 0; padding: 0; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+/* === PDF: screen → print container resets === */
 .corex-document-wrapper {
     max-width: 100% !important;
     background: transparent !important;
     padding: 0 !important;
     margin: 0 !important;
 }
-.corex-page {
+.corex-page, .page {
     width: 100% !important;
     max-width: 100% !important;
     min-height: auto !important;
@@ -1892,39 +1860,16 @@ p, div, span, td, li {
     padding: 0 !important;
     border: none !important;
     border-radius: 0 !important;
-    page-break-after: always;
 }
-.corex-page:last-child {
-    page-break-after: avoid;
+.corex-a4-page {
+    min-height: auto;
+    box-shadow: none;
+    margin: 0;
+    padding: 0;
 }
-/* Ensure images print in colour */
-img, .web-sig-signed-img {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-}
-/* Page initials row — clean for PDF */
-.corex-page-initials-row {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 0 4px 0;
-}
-.corex-page-initials {
-    width: 60px;
-    height: 30px;
-    border: 1px solid #94a3b8;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 9px;
-    color: #64748b;
-}
-/* === PDF quality: prevent orphans, widows, mid-clause breaks === */
-p, li, div {
-    orphans: 3;
-    widows: 3;
-}
+.corex-page-gap { display: none; }
+
+/* === PDF: page-break rules === */
 .corex-clause, .corex-clause-indent-1, .corex-clause-indent-2, .corex-clause-indent-3 {
     page-break-inside: avoid;
 }
@@ -1938,159 +1883,11 @@ p, li, div {
     page-break-inside: avoid;
     page-break-after: avoid;
 }
-.corex-table tr {
+.corex-table tr, .corex-disclosure-table tr {
     page-break-inside: avoid;
 }
-.corex-disclosure-table tr {
-    page-break-inside: avoid;
-}
-/* === wkhtmltopdf compatibility (older WebKit — no CSS vars, limited flexbox/grid) === */
-/* Replace CSS variable references with literal values */
-.corex-header {
-    border-bottom-color: #0d9488 !important;
-}
-.corex-signature-section {
-    border-top-color: #0d9488 !important;
-}
-/* --- Company header (company-header.blade.php) — inline grid → table fallback --- */
-.company-header-contact-grid {
-    display: table !important;
-    width: 100% !important;
-    table-layout: fixed !important;
-}
-.company-header-contact-grid > div {
-    display: table-cell !important;
-    vertical-align: top !important;
-    width: 50% !important;
-}
-/* Imported template .page — same treatment as .corex-page for PDF */
-.page {
-    width: 100% !important;
-    max-width: 100% !important;
-    min-height: auto !important;
-    box-shadow: none !important;
-    background: white !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: none !important;
-}
-/* Header layout — table-based fallback for wkhtmltopdf (no reliable flexbox) */
-.corex-header {
-    display: table !important;
-    width: 100% !important;
-    table-layout: fixed !important;
-}
-.corex-header-left {
-    display: table-cell !important;
-    vertical-align: middle !important;
-    width: 70% !important;
-}
-.corex-header-left > img,
-.corex-header-logo {
-    display: inline-block !important;
-    vertical-align: middle !important;
-    margin-right: 14px !important;
-}
-.corex-header-left > div {
-    display: inline-block !important;
-    vertical-align: middle !important;
-}
-.corex-header-right {
-    display: table-cell !important;
-    vertical-align: middle !important;
-    text-align: right !important;
-    width: 30% !important;
-}
-/* Company details — ensure line breaks between items */
-.corex-header-details {
-    display: block !important;
-    white-space: normal !important;
-    line-height: 1.6 !important;
-}
-/* Signature grid — float-based fallback (wkhtmltopdf has no CSS grid) */
-.corex-signature-grid {
-    display: block !important;
-    overflow: hidden !important;
-}
-.corex-signature-grid > .corex-signature-block,
-.corex-signature-grid > div {
-    display: block !important;
-    float: left !important;
-    width: 48% !important;
-    margin-right: 2% !important;
-    margin-bottom: 12px !important;
-    box-sizing: border-box !important;
-}
-.corex-signature-grid > .corex-signature-block:nth-child(2n),
-.corex-signature-grid > div:nth-child(2n) {
-    margin-right: 0 !important;
-}
-/* Initials row — float-based fallback */
-.corex-initials-row,
-.corex-page-initials-row {
-    display: block !important;
-    overflow: hidden !important;
-    text-align: right !important;
-}
-.corex-initial-block,
-.corex-page-initials {
-    display: inline-block !important;
-    vertical-align: middle !important;
-}
-/* Signature line — block fallback */
-.corex-signature-line {
-    display: block !important;
-    height: 36px !important;
-    line-height: 36px !important;
-    vertical-align: bottom !important;
-}
-/* Waterfall and item rows — table-based fallback */
-.corex-waterfall-row,
-.corex-item-row {
-    display: table !important;
-    width: 100% !important;
-    table-layout: fixed !important;
-}
-.corex-waterfall-label,
-.corex-item-description {
-    display: table-cell !important;
-    width: 70% !important;
-}
-.corex-waterfall-amount,
-.corex-item-location {
-    display: table-cell !important;
-    width: 30% !important;
-    text-align: right !important;
-}
-/* Footer — table-based fallback */
-.corex-footer {
-    display: table !important;
-    width: 100% !important;
-}
-.corex-footer > * {
-    display: table-cell !important;
-    vertical-align: middle !important;
-}
-/* Condition toggles — inline-block fallback */
-.corex-condition-toggle {
-    display: block !important;
-    overflow: hidden !important;
-}
-.corex-condition-option {
-    display: inline-block !important;
-    vertical-align: middle !important;
-    margin-right: 6px !important;
-}
-/* Inline-flex fields — inline-block fallback */
-.corex-field {
-    display: inline-block !important;
-    vertical-align: baseline !important;
-}
-/* Remove @page bottom-center (wkhtmltopdf uses its own footer, not CSS counters) */
-@page {
-    margin: 12mm 8mm 12mm 8mm;
-}
-/* === Interactive element cleanup (hide for PDF) === */
+
+/* === PDF: hide interactive elements === */
 {$cleanupCss}
 CSS;
 
