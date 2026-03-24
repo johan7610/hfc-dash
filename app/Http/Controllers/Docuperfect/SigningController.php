@@ -1721,6 +1721,41 @@ class SigningController extends Controller
         $fullHtml = $this->wrapHtmlForPdf($mergedHtml);
         file_put_contents($htmlPath, $fullHtml);
 
+        $startTime = time();
+
+        // Use wkhtmltopdf on Linux (reliable on ARM64), Puppeteer on Windows
+        if (strtoupper(substr(PHP_OS, 0, 3)) !== 'WIN') {
+            $wkhtmltopdf = trim(shell_exec('which wkhtmltopdf 2>/dev/null') ?? '');
+            if ($wkhtmltopdf && file_exists($wkhtmltopdf)) {
+                $command = sprintf(
+                    'XDG_RUNTIME_DIR=/tmp %s --quiet --no-stop-slow-scripts --page-size A4 --margin-top 10mm --margin-right 12mm --margin-bottom 15mm --margin-left 12mm --encoding UTF-8 --print-media-type %s %s 2>&1',
+                    escapeshellarg($wkhtmltopdf),
+                    escapeshellarg($htmlPath),
+                    escapeshellarg($pdfPath)
+                );
+
+                Log::info('PDF via wkhtmltopdf', ['doc_id' => $documentId, 'command' => $command]);
+
+                $output = shell_exec($command);
+
+                clearstatcache();
+                if (file_exists($pdfPath) && filesize($pdfPath) > 0) {
+                    Log::info('PDF generated via wkhtmltopdf', [
+                        'doc_id' => $documentId,
+                        'seconds' => time() - $startTime,
+                        'size' => filesize($pdfPath),
+                    ]);
+                    @unlink($htmlPath);
+                    return $pdfPath;
+                }
+
+                Log::warning('wkhtmltopdf failed, falling back to Puppeteer', [
+                    'output' => $output,
+                ]);
+            }
+        }
+
+        // Puppeteer fallback — primary on Windows, fallback on Linux
         // Build command — same pattern as WebTemplatePdfService::runPuppeteerFlatten()
         $scriptPath = base_path('scripts/html-to-pdf.mjs');
         $browserPath = env('PUPPETEER_BROWSER_PATH', '');
@@ -1759,9 +1794,7 @@ class SigningController extends Controller
 
         $command = sprintf('%s%s %s %s %s', $envPrefix, $nodeArg, $scriptArg, $htmlArg, $outArg);
 
-        Log::info('PDF generation starting', ['doc_id' => $documentId, 'command' => $command]);
-
-        $startTime = time();
+        Log::info('PDF generation starting (Puppeteer)', ['doc_id' => $documentId, 'command' => $command]);
 
         $logPath = $tempDir . DIRECTORY_SEPARATOR . 'pdf_gen_' . $documentId . '.log';
 
