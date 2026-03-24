@@ -1650,7 +1650,7 @@ class SignatureController extends Controller
             $partyLabel = $currentRole ? ucfirst($currentRole) : 'next party';
 
             if ($document->document_type === 'rental_upload_send') {
-                return redirect()->route('rental.signatures')
+                return redirect()->route('docuperfect.esign.myDocuments')
                     ->with('success', "Document sent to {$partyLabel} for signing.");
             }
 
@@ -1690,7 +1690,7 @@ class SignatureController extends Controller
         }
 
         if ($document->document_type === 'rental_upload_send') {
-            return redirect()->route('rental.signatures')
+            return redirect()->route('docuperfect.esign.myDocuments')
                 ->with('success', 'Document sent for signing.');
         }
 
@@ -2446,7 +2446,7 @@ class SignatureController extends Controller
         }
 
         // 5. Archive action — just leave it rejected
-        return redirect()->route('rental.signatures')
+        return redirect()->route('docuperfect.esign.myDocuments')
             ->with('status', 'Document rejected and archived.');
     }
 

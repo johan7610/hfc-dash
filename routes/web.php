@@ -1045,7 +1045,7 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
 
     // ===== RENTAL DOCUMENTS (redirect to new Rental Division) =====
     Route::get('/rental', function () {
-        return redirect()->route('rental.signatures');
+        return redirect()->route('docuperfect.esign.myDocuments');
     })->name('docuperfect.rental');
 
     // Rental Upload & Send (standalone signing flow)
