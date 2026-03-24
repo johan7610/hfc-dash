@@ -1751,8 +1751,17 @@ class SigningController extends Controller
 
         // Fire the process without waiting — exec() hangs on Windows because
         // Puppeteer spawns Chrome child processes that don't exit cleanly
+        $logPath = $tempDir . '/pdf_gen_' . $documentId . '.log';
         if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-            pclose(popen('start /B "" ' . $command, 'r'));
+            // Write a temp batch file to avoid Windows cmd quoting hell
+            $batPath = $tempDir . '/pdf_gen_' . $documentId . '_' . time() . '.bat';
+            $batContent = '@echo off' . "\r\n"
+                . $command . ' > "' . str_replace('/', '\\', $logPath) . '" 2>&1' . "\r\n"
+                . 'del "%~f0"' . "\r\n";
+            file_put_contents($batPath, $batContent);
+
+            // Fire async — the bat file deletes itself after running
+            pclose(popen('start /B cmd /c "' . str_replace('/', '\\', $batPath) . '"', 'r'));
         } else {
             exec($command . ' > /dev/null 2>&1 &');
         }
@@ -1784,14 +1793,22 @@ class SigningController extends Controller
         @unlink($htmlPath);
 
         if (!$pdfReady) {
+            $errorLog = '';
+            if (file_exists($logPath)) {
+                $errorLog = file_get_contents($logPath);
+                @unlink($logPath);
+            }
             Log::error('PDF generation timed out or failed', [
                 'doc_id' => $documentId,
                 'seconds' => time() - $startTime,
                 'pdf_exists' => file_exists($pdfPath),
-                'pdf_size' => file_exists($pdfPath) ? filesize($pdfPath) : 0,
+                'process_output' => $errorLog ?: 'no log file',
             ]);
-            throw new \RuntimeException('PDF generation timed out after ' . $timeout . 's');
+            throw new \RuntimeException('PDF generation failed');
         }
+
+        // Clean up log file on success
+        @unlink($logPath);
 
         Log::info('PDF generation complete', [
             'doc_id' => $documentId,
