@@ -321,30 +321,16 @@ class PrivatePropertyListingMapper
             return '';
         }
 
-        $priceType = strtolower($property->rental_price_type ?? '');
-        // PP .NET enum: Monthly, PerSquareMeter, Daily, Weekly, Annually
-        $map = [
-            'per month'        => 'Monthly',
-            'per_month'        => 'Monthly',
-            'monthly'          => 'Monthly',
-            'per sqm'          => 'PerSquareMeter',
-            'per_sqm'          => 'PerSquareMeter',
-            'persqm'           => 'PerSquareMeter',
-            'per m2'           => 'PerSquareMeter',
-            'per square meter' => 'PerSquareMeter',
-            'per day'          => 'Daily',
-            'per_day'          => 'Daily',
-            'daily'            => 'Daily',
-            'per week'         => 'Weekly',
-            'per_week'         => 'Weekly',
-            'weekly'           => 'Weekly',
-            'per year'         => 'Annually',
-            'per_year'         => 'Annually',
-            'yearly'           => 'Annually',
-            'annual'           => 'Annually',
-        ];
-
-        return $map[$priceType] ?? 'Monthly';
+        // PP Agency Feed Service Rev 4.6 Section 2.3.1
+        // Valid enum: PerMonth, PerWeek, PerDay, PerM2 (Commercial/Land only)
+        return match (strtolower($property->rental_price_type ?? '')) {
+            'per month', 'per_month', 'monthly'                           => 'PerMonth',
+            'per week', 'per_week', 'weekly'                              => 'PerWeek',
+            'per day', 'per_day', 'daily'                                 => 'PerDay',
+            'per sqm', 'per_sqm', 'persqm', 'per m2', 'per_m2',
+            'persquaremeter', 'per square meter', 'per_square_meter'      => 'PerM2',
+            default                                                       => 'PerMonth',
+        };
     }
 
     /**
