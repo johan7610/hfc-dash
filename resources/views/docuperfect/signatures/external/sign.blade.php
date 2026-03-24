@@ -1880,6 +1880,7 @@ function externalSign() {
                         this.$nextTick(() => {
                             setTimeout(() => {
                                 paginateDocument(this.$refs.webDocContent, this.signingParties);
+                                restoreStoredInitials(this.$refs.webDocContent, this.storedInitials);
                                 if (this.editableFields.length > 0) {
                                     this.initWebTemplateFields();
                                 }
