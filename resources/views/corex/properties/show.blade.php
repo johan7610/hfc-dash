@@ -1764,8 +1764,8 @@
                     </div>
                 </div>
 
-                {{-- Rental & Lease Details — visible when mandate_type is Rental --}}
-                @php $isRental = in_array(strtolower(old('mandate_type', $property->mandate_type) ?? ''), ['rental']); @endphp
+                {{-- Rental & Lease Details — visible when listing_type is rental --}}
+                @php $isRental = ($property->listing_type ?? '') === 'rental' || in_array(strtolower(old('mandate_type', $property->mandate_type) ?? ''), ['rental']); @endphp
                 <div x-data="{ isRental: {{ $isRental ? 'true' : 'false' }} }"
                      x-init="$watch('$root.querySelector(\'[name=mandate_type]\')?.value', v => { isRental = v && v.toLowerCase() === 'rental'; })"
                      @change.window="if ($event.target?.name === 'mandate_type') { isRental = $event.target.value.toLowerCase() === 'rental'; }">
@@ -1789,8 +1789,9 @@
                             <div>
                                 <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Price Type</label>
                                 <select name="rental_price_type" class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                                    <option value="per month" {{ old('rental_price_type', $property->rental_price_type) === 'per month' ? 'selected' : '' }}>Per Month</option>
-                                    <option value="per sqm" {{ old('rental_price_type', $property->rental_price_type) === 'per sqm' ? 'selected' : '' }}>Per Sqm</option>
+                                    @foreach(['per month' => 'Per Month', 'per sqm' => 'Per Sqm', 'per day' => 'Per Day', 'per week' => 'Per Week', 'per year' => 'Per Year'] as $val => $lbl)
+                                    <option value="{{ $val }}" {{ old('rental_price_type', $property->rental_price_type) === $val ? 'selected' : '' }}>{{ $lbl }}</option>
+                                    @endforeach
                                 </select>
                             </div>
                             <div>

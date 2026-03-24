@@ -316,21 +316,31 @@ class PrivatePropertyListingMapper
      */
     private function mapRentalPriceType(Property $property): string
     {
-        $listingType = $this->mapListingType($property->mandate_type);
+        $listingType = $this->mapListingType($property->listing_type ?? $property->mandate_type);
         if ($listingType !== 'Rental') {
             return '';
         }
 
         $priceType = strtolower($property->rental_price_type ?? '');
         $map = [
-            'per month'  => 'PerMonth',
-            'per_month'  => 'PerMonth',
-            'monthly'    => 'PerMonth',
-            'per sqm'    => 'PerSqm',
-            'per_sqm'    => 'PerSqm',
-            'persqm'     => 'PerSqm',
-            'per m2'     => 'PerSqm',
+            'per month'        => 'PerMonth',
+            'per_month'        => 'PerMonth',
+            'monthly'          => 'PerMonth',
+            'per sqm'          => 'PerSqm',
+            'per_sqm'          => 'PerSqm',
+            'persqm'           => 'PerSqm',
+            'per m2'           => 'PerSqm',
             'per square meter' => 'PerSqm',
+            'per day'          => 'PerDay',
+            'per_day'          => 'PerDay',
+            'daily'            => 'PerDay',
+            'per week'         => 'PerWeek',
+            'per_week'         => 'PerWeek',
+            'weekly'           => 'PerWeek',
+            'per year'         => 'PerYear',
+            'per_year'         => 'PerYear',
+            'yearly'           => 'PerYear',
+            'annual'           => 'PerYear',
         ];
 
         return $map[$priceType] ?? 'PerMonth';
