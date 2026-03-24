@@ -1984,6 +1984,28 @@ p, li, div {
 .corex-signature-section {
     border-top-color: #0d9488 !important;
 }
+/* --- Company header (company-header.blade.php) — inline grid → table fallback --- */
+.company-header-contact-grid {
+    display: table !important;
+    width: 100% !important;
+    table-layout: fixed !important;
+}
+.company-header-contact-grid > div {
+    display: table-cell !important;
+    vertical-align: top !important;
+    width: 50% !important;
+}
+/* Imported template .page — same treatment as .corex-page for PDF */
+.page {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+    box-shadow: none !important;
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+}
 /* Header layout — table-based fallback for wkhtmltopdf (no reliable flexbox) */
 .corex-header {
     display: table !important;
