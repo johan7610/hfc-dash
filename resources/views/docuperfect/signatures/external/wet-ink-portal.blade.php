@@ -74,8 +74,7 @@
             <div class="rounded-lg bg-blue-50 border border-blue-200 p-4">
                 <h3 class="text-sm font-semibold text-blue-800 mb-2">How to complete your signing</h3>
                 <ol class="text-sm text-blue-700 space-y-2 list-decimal ml-5">
-                    <li>Download the document using the button below</li>
-                    <li>Print the document</li>
+                    <li>Download and print the document using the button below</li>
                     <li>Sign in ink at all marked positions</li>
                     <li>Scan or photograph the signed pages</li>
                     <li>Upload the signed document using the upload area below</li>
@@ -83,21 +82,56 @@
             </div>
 
             {{-- Step 1: Download --}}
-            <div>
-                <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Step 1: Download Document</h3>
-                <a href="{{ route('signatures.external.print', $token) }}"
-                   target="_blank"
-                   @click="downloaded = true"
+            <div x-data="{ downloading: false, error: false }">
+                <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Step 1: Download the Document</h3>
+                <p class="text-sm text-gray-600 mb-3">Download and print the document. Sign in all marked positions by hand.</p>
+                <a href="{{ route('signing.download-pdf', $token) }}"
+                   x-show="!downloading"
+                   @click.prevent="downloading = true; error = false;
+                       fetch($el.href).then(r => {
+                           if (!r.ok) throw new Error();
+                           return r.blob();
+                       }).then(blob => {
+                           const url = URL.createObjectURL(blob);
+                           const a = document.createElement('a');
+                           a.href = url;
+                           a.download = '{{ preg_replace('/[^A-Za-z0-9_\-]/', '_', $document->name ?? 'Document') }}_{{ now()->format('Y-m-d') }}.pdf';
+                           a.click();
+                           URL.revokeObjectURL(url);
+                           downloading = false;
+                           downloaded = true;
+                       }).catch(() => {
+                           downloading = false;
+                           error = true;
+                       })"
                    class="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors"
                    style="background:{{ $branding['color'] ?? '#0b2a4a' }};">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
-                    Open Document for Printing
+                    Download Document
                 </a>
-                <div x-show="downloaded" class="mt-2 text-xs text-green-600 flex items-center gap-1">
+                <div x-show="downloading" class="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white opacity-75 cursor-wait"
+                     style="background:{{ $branding['color'] ?? '#0b2a4a' }};">
+                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    Generating PDF…
+                </div>
+                <div x-show="downloaded && !error" x-cloak class="mt-2 text-xs text-green-600 flex items-center gap-1">
                     <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
                     Downloaded
+                </div>
+                <div x-show="error" x-cloak class="mt-3 rounded-lg bg-red-50 border border-red-200 p-3">
+                    <p class="text-sm text-red-700">PDF generation failed. Use the print option below as an alternative.</p>
+                    <a href="{{ route('signatures.external.print', $token) }}" target="_blank"
+                       class="inline-flex items-center gap-1 mt-2 text-sm font-medium text-red-700 underline hover:text-red-900">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
+                        Open printable version
+                    </a>
                 </div>
             </div>
 

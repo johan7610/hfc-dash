@@ -231,11 +231,16 @@
 </head>
 <body>
     <div class="print-toolbar no-print">
-        <div class="print-toolbar-title">{{ $document->name ?? 'Document' }}</div>
+        <div class="print-toolbar-title">
+            {{ $document->name ?? 'Document' }}
+            <span style="font-size:11px;font-weight:400;opacity:0.7;margin-left:12px;">For best results, disable "Headers and footers" in your browser's print settings.</span>
+        </div>
         <div class="print-toolbar-actions">
+            @if(($signingMethod ?? null) !== 'wet_ink')
             <a href="{{ route('signatures.external', $token) }}" class="print-btn print-btn-secondary">
                 &larr; Back to Signing
             </a>
+            @endif
             <a href="{{ route('signing.download-pdf', $token) }}" class="print-btn print-btn-secondary" style="gap:6px;">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 Download PDF
@@ -278,10 +283,12 @@
             });
         });
 
-        // Auto-trigger print dialog after page loads
+        // Auto-trigger print dialog only for e-signing flow (not wet-ink fallback)
+        @if(($signingMethod ?? null) !== 'wet_ink')
         window.addEventListener('load', function() {
             setTimeout(function() { window.print(); }, 800);
         });
+        @endif
     </script>
 </body>
 </html>

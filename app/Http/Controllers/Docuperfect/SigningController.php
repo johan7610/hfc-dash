@@ -1635,6 +1635,7 @@ class SigningController extends Controller
             'token' => $token,
             'signingParties' => $signingParties,
             'storedInitials' => $webTemplateData['signed_initials'] ?? [],
+            'signingMethod' => $signingRequest->signing_method,
         ]);
     }
 
@@ -1649,8 +1650,7 @@ class SigningController extends Controller
             ->firstOrFail();
 
         if ($signingRequest->isExpired()) {
-            return redirect()->route('signatures.external', $token)
-                ->with('error', 'Signing link has expired.');
+            return response()->json(['error' => 'Signing link has expired.'], 410);
         }
 
         $signatureTemplate = $signingRequest->template;
@@ -1659,14 +1659,23 @@ class SigningController extends Controller
         $mergedHtml = $webTemplateData['merged_html'] ?? '';
 
         if (empty($mergedHtml)) {
-            abort(404, 'Document content not available for PDF generation.');
+            return response()->json(['error' => 'Document content not available for PDF generation.'], 404);
         }
 
-        $outputPath = $this->generatePdfFromHtml($mergedHtml, $document->id);
+        try {
+            $outputPath = $this->generatePdfFromHtml($mergedHtml, $document->id);
+        } catch (\Throwable $e) {
+            Log::error('downloadWebPdf — exception during PDF generation', [
+                'document_id' => $document->id,
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json(['error' => 'PDF generation failed.'], 500);
+        }
 
-        if (!$outputPath || !file_exists($outputPath)) {
+        if (!$outputPath || !file_exists($outputPath) || filesize($outputPath) === 0) {
             Log::error('downloadWebPdf — PDF generation failed', ['document_id' => $document->id]);
-            return back()->with('error', 'PDF generation failed. Please use browser print instead.');
+            @unlink($outputPath);
+            return response()->json(['error' => 'PDF generation failed.'], 500);
         }
 
         $docName = $document->name ?? 'Document';
