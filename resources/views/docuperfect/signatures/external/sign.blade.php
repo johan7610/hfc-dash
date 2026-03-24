@@ -1511,7 +1511,7 @@ function externalSign() {
             const initialElements = container.querySelectorAll('[data-marker-type="initial"]');
             if (initialElements.length === 0) return;
 
-            if (!this.webInitialElements) this.webInitialElements = [];
+            this.webInitialElements = [];
             let myCount = 0;
             const initPartyCounters = {};
 

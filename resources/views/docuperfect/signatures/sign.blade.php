@@ -761,7 +761,7 @@ function signDocument() {
                 'agent': 'agent',
             };
 
-            if (!this.webInitialElements) this.webInitialElements = [];
+            this.webInitialElements = [];
             let agentInitialCount = 0;
             const initPartyCounters = {};
 
