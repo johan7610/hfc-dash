@@ -665,6 +665,13 @@
                                 @endforeach
                             </select>
                         </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Listing Type</label>
+                            <select name="listing_type" class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                <option value="sale" {{ old('listing_type', $property->listing_type ?? 'sale') === 'sale' ? 'selected' : '' }}>For Sale</option>
+                                <option value="rental" {{ old('listing_type', $property->listing_type ?? 'sale') === 'rental' ? 'selected' : '' }}>For Rental</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
