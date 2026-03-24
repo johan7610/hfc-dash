@@ -119,7 +119,7 @@
         <x-slot name="center">
             <h2 class="text-sm font-semibold text-gray-700 truncate">
                 Sign Document — {{ $document->name }}
-                <span class="text-gray-400 font-normal">(<span x-text="totalAgent - incompleteCount"></span> / <span x-text="totalAgent"></span> items)</span>
+                <span class="text-gray-400 font-normal">(<span x-text="totalAgent - incompleteCount"></span> / <span x-text="totalAgent"></span>)</span>
             </h2>
         </x-slot>
         <x-slot name="right">
@@ -140,16 +140,13 @@
     {{-- Progress bar --}}
     <div class="bg-white border border-gray-200 rounded-md p-4" style="border-left:4px solid var(--brand-button, #0ea5e9);">
         <div class="flex items-center justify-between mb-2">
-            <span class="text-sm font-medium text-slate-700">
-                Agent Signing Progress
-            </span>
+            <span class="text-sm font-medium text-slate-700">Agent Signing Progress</span>
             <span class="text-sm text-slate-500">
                 <span x-text="totalAgent - incompleteCount"></span> / <span x-text="totalAgent"></span> items completed
             </span>
         </div>
         <div class="w-full bg-slate-200 rounded h-2">
             <div class="h-2 rounded transition-all duration-500"
-                 style="background:var(--brand-button, #0ea5e9);"
                  :style="'width:' + (totalAgent > 0 ? Math.round(((totalAgent - incompleteCount) / totalAgent) * 100) : 0) + '%;background:var(--brand-button, #0ea5e9);'"></div>
         </div>
     </div>
@@ -1027,17 +1024,16 @@ function signDocument() {
                 return aTop - bTop;
             });
 
-            console.log('INCOMPLETE_ORDER', items.map(i => i.type + ' ' + i.party + ' y=' + (i.el ? getDocumentTop(i.el) : '?')));
-
             return items;
         },
 
         /**
-         * Compute total and incomplete counts for all interactive items.
-         * Single source of truth for top bar, bottom bar, and completion gate.
+         * Single source of truth for all counters.
+         * total = ALL items (sigs + initials + ceremony + disclosures)
+         * incomplete = items still needing user action
+         * Pre-filled ceremony fields count as completed (in total, not in incomplete).
          */
-        _computeAllCounts() {
-            const container = this.$refs.webDocContent;
+        _updateIncompleteCount() {
             let total = 0;
             let incomplete = 0;
 
@@ -1056,20 +1052,20 @@ function signDocument() {
                         if (!entry.signed) incomplete++;
                     }
                 });
-                // 3. Ceremony fields (agent's — inputs with data-ceremony-field)
+                // 3. Ceremony fields — ALL count in total, only empty ones are incomplete
+                const container = this.$refs.webDocContent;
                 if (container) {
                     container.querySelectorAll('input[data-ceremony-field="true"]').forEach(inp => {
                         total++;
                         if (!inp.value || !inp.value.trim()) incomplete++;
                     });
-                    // Also check am_pm buttons
                     container.querySelectorAll('button[data-ceremony-field="true"]').forEach(btn => {
                         total++;
                         if (!btn.textContent || !btn.textContent.trim()) incomplete++;
                     });
                 }
             } else {
-                // PDF marker-based: count agent's unsigned markers
+                // PDF marker-based: count agent's markers
                 this.markers.forEach(m => {
                     if (m.assigned_party === 'agent') {
                         total++;
@@ -1078,15 +1074,6 @@ function signDocument() {
                 });
             }
 
-            return { total, incomplete };
-        },
-
-        /**
-         * Update incompleteCount and totalAgent from single computation.
-         * This is the SINGLE source of truth for all counters.
-         */
-        _updateIncompleteCount() {
-            const { total, incomplete } = this._computeAllCounts();
             this.totalAgent = total;
             this.incompleteCount = incomplete;
         },
