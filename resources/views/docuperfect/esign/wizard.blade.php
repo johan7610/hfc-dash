@@ -368,6 +368,27 @@
                                     </template>
                                 </div>
 
+                                {{-- Role mismatch warning --}}
+                                <template x-if="!r.readonly && r.role && requiredSigningRoles.length > 0 && !roleMatchesTemplate(r.role)">
+                                    <div class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
+                                        <p class="text-xs text-amber-800">
+                                            <strong x-text="r.name || ('Recipient ' + (ri+1))"></strong>
+                                            is set as <strong x-text="getRoleLabel(r.role)"></strong>
+                                            but this document requires
+                                            <strong x-text="requiredSigningRoles.map(r => getRoleLabel(r)).join(' / ')"></strong>.
+                                        </p>
+                                        <div class="mt-1.5 flex flex-wrap gap-1.5">
+                                            <template x-for="pr in resolvedPartyRoles" :key="pr.value">
+                                                <button type="button"
+                                                        @click="fixRecipientRole(ri, pr.value)"
+                                                        class="px-2.5 py-1 text-xs font-medium rounded-md bg-amber-200 text-amber-900 hover:bg-amber-300 transition">
+                                                    <span x-text="'Set as ' + pr.label"></span>
+                                                </button>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+
                                 {{-- Contact search (only for non-agent recipients) --}}
                                 <template x-if="!r.readonly">
                                     <div class="relative" @click.outside="r._searchOpen = false" @keydown.escape.window="r._searchOpen = false">
@@ -1356,6 +1377,60 @@ function esignWizard() {
             return this.isSalesContext ? 'Sales Parties' : 'Rental Parties';
         },
 
+        // Role alias map for matching (SA real estate: lessor=landlord, lessee=tenant)
+        _roleAliasMap: {
+            'lessor': 'landlord', 'landlord': 'lessor',
+            'lessee': 'tenant', 'tenant': 'lessee',
+            'seller': 'seller', 'buyer': 'buyer', 'agent': 'agent',
+            'owner_party': 'owner_party', 'acquiring_party': 'acquiring_party',
+        },
+
+        // Get the list of non-agent signing roles for this template (resolved to concrete roles)
+        get requiredSigningRoles() {
+            const parties = this.templateSigningParties;
+            if (!Array.isArray(parties) || parties.length === 0) return [];
+            const isSales = this.isSalesContext;
+            const roles = [];
+            parties.forEach(role => {
+                if (role === 'agent' || role === 'creator') return;
+                roles.push(resolvePartyRole(role, isSales).toLowerCase());
+            });
+            return roles;
+        },
+
+        // Check if a recipient role matches any required signing role (with alias support)
+        roleMatchesTemplate(recipientRole) {
+            if (!recipientRole) return false;
+            const role = recipientRole.toLowerCase();
+            const required = this.requiredSigningRoles;
+            if (required.length === 0) return true; // no signing parties defined — allow any
+            if (required.includes(role)) return true;
+            const alias = this._roleAliasMap[role];
+            if (alias && required.includes(alias)) return true;
+            return false;
+        },
+
+        // Get mismatched recipients (non-agent recipients whose role doesn't match template)
+        get recipientRoleMismatches() {
+            const mismatches = [];
+            const required = this.requiredSigningRoles;
+            if (required.length === 0) return mismatches; // no signing parties — skip validation
+            this.recipients.forEach((r, idx) => {
+                if (r.readonly) return; // agent — skip
+                if (!r.role || !this.roleMatchesTemplate(r.role)) {
+                    mismatches.push({ index: idx, name: r.name || ('Recipient ' + (idx + 1)), currentRole: r.role });
+                }
+            });
+            return mismatches;
+        },
+
+        // Fix a recipient's role to match the template
+        fixRecipientRole(recipientIndex, newRole) {
+            if (this.recipients[recipientIndex]) {
+                this.recipients[recipientIndex].role = newRole;
+            }
+        },
+
         // Preview
         previewPages: serverPageImages || [],
         previewFields: serverFields || [],
@@ -2189,6 +2264,13 @@ function esignWizard() {
                     return this.resolvedPackTemplateIds.length > 0;
                 }
                 return !!(this.selectedTemplateId || this.selectedPackId || this.selectedPdfPackId);
+            }
+            if (this.currentStep === 3) {
+                // Block if any recipient's role doesn't match template signing parties
+                if (this.recipientRoleMismatches.length > 0) return false;
+                // Block if any non-agent recipient has no role
+                const hasEmptyRole = this.recipients.some(r => !r.readonly && !r.role);
+                if (hasEmptyRole) return false;
             }
             return true;
         },
