@@ -23,9 +23,16 @@
     {{-- ===== PROGRESS BAR (sticky header) ===== --}}
     <div style="background:#0b2a4a;" class="px-6 py-4 flex-shrink-0">
         <div class="flex items-center justify-between mb-3">
-            <h2 class="text-xl font-bold text-white leading-tight">
-                E-Sign Document
-                <span x-show="templateName || selectedPackName" class="text-white/60 font-normal text-base" x-text="'— ' + (isPackFlow ? selectedPackName : templateName)"></span>
+            <h2 class="text-xl font-bold text-white leading-tight flex items-center gap-2">
+                <span class="whitespace-nowrap">E-Sign Document —</span>
+                <input type="text"
+                       x-model="documentName"
+                       class="bg-transparent text-white/80 font-normal text-base border-0 border-b border-transparent
+                              focus:border-white/40 outline-none transition-colors px-0 py-0"
+                       style="min-width:200px; max-width:500px;"
+                       :size="Math.max(20, (documentName || '').length + 2)"
+                       placeholder="Document name..."
+                />
             </h2>
             <span class="text-sm text-white/60" x-text="'Step ' + currentStep + ' of 6'"></span>
         </div>
@@ -1309,6 +1316,7 @@ function esignWizard() {
         templateSearch: '',
         selectedTemplateId: serverTemplate?.id || null,
         templateName: serverTemplate?.name || '',
+        documentName: serverStepData?.document_name || '',
         allWebPacks: serverWebPacks,
         allPdfPacks: serverPdfPacks,
         selectedPackId: null,
@@ -2300,6 +2308,11 @@ function esignWizard() {
             this.loading = true;
 
             try {
+                // Auto-build document name when leaving step 3 (Recipients) if not yet set
+                if (this.currentStep === 3 && !this.documentName) {
+                    this.buildDocumentName();
+                }
+
                 if (this.currentStep === 1) {
                     await this.createFlow();
                 } else if (this.currentStep === 6) {
@@ -2417,6 +2430,16 @@ function esignWizard() {
             }
         },
 
+        buildDocumentName() {
+            const base = this.isPackFlow ? this.selectedPackName : this.templateName;
+            const firstRecipient = (this.recipients || []).find(r => r.role !== 'agent' && r.name);
+            const today = new Date().toISOString().slice(0, 10);
+            let name = base || 'Untitled';
+            if (firstRecipient) name += ' — ' + firstRecipient.name;
+            name += ' — ' + today;
+            this.documentName = name;
+        },
+
         async saveAndAdvance() {
             const url = '/docuperfect/esign/' + this.flowId + '/step/' + this.currentStep;
             const resp = await fetch(url, {
@@ -2426,7 +2449,7 @@ function esignWizard() {
                     'X-CSRF-TOKEN': csrfToken,
                     'Accept': 'application/json',
                 },
-                body: JSON.stringify({ data: this.getStepData() }),
+                body: JSON.stringify({ data: this.getStepData(), document_name: this.documentName }),
             });
 
             if (!resp.ok) {

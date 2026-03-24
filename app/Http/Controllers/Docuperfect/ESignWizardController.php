@@ -738,6 +738,12 @@ class ESignWizardController extends Controller
             $stepData['delivery_mode'] = $data['delivery_mode'];
         }
 
+        // Persist custom document name at top level of step_data
+        $documentName = $request->input('document_name');
+        if ($documentName) {
+            $stepData['document_name'] = $documentName;
+        }
+
         // Assign step_data AFTER all modifications (hoisting etc.) so nothing is lost
         $flow->step_data = $stepData;
 
@@ -1258,20 +1264,23 @@ class ESignWizardController extends Controller
         $signingSetup = isset($signingSetupRaw['parties']) ? $signingSetupRaw['parties'] : $signingSetupRaw;
         $propertyAddress = $stepData['property']['address'] ?? $stepData['property']['title'] ?? '';
 
-        // Build document name
-        $firstRecipientName = '';
-        foreach ($recipients as $r) {
-            if (($r['role'] ?? '') !== 'agent' && !empty($r['name'])) {
-                $firstRecipientName = $r['name'];
-                break;
+        // Build document name — use custom name from wizard if set, else auto-build
+        $docName = $stepData['document_name'] ?? null;
+        if (empty($docName)) {
+            $firstRecipientName = '';
+            foreach ($recipients as $r) {
+                if (($r['role'] ?? '') !== 'agent' && !empty($r['name'])) {
+                    $firstRecipientName = $r['name'];
+                    break;
+                }
             }
+            $isPackFlow = !empty($stepData['is_pack_flow']);
+            $isPdfPack = !empty($stepData['is_pdf_pack']);
+            $docName = $isPackFlow ? ($stepData['pack_name'] ?? $template->name)
+                     : ($isPdfPack ? ($stepData['pdf_pack_name'] ?? $template->name) : $template->name);
+            if ($firstRecipientName) $docName .= ' — ' . $firstRecipientName;
+            $docName .= ' — ' . now()->format('Y-m-d');
         }
-        $isPackFlow = !empty($stepData['is_pack_flow']);
-        $isPdfPack = !empty($stepData['is_pdf_pack']);
-        $docName = $isPackFlow ? ($stepData['pack_name'] ?? $template->name)
-                 : ($isPdfPack ? ($stepData['pdf_pack_name'] ?? $template->name) : $template->name);
-        if ($firstRecipientName) $docName .= ' — ' . $firstRecipientName;
-        $docName .= ' — ' . now()->format('Y-m-d');
 
         $signatureService = app(SignatureService::class);
         $webTemplateDataService = app(WebTemplateDataService::class);
@@ -3333,8 +3342,11 @@ class ESignWizardController extends Controller
             }
         }
 
-        $docName = $template->name . ($firstRecipientName ? " — {$firstRecipientName}" : '')
-            . ' — ' . now()->format('Y-m-d');
+        $docName = $stepData['document_name'] ?? null;
+        if (empty($docName)) {
+            $docName = $template->name . ($firstRecipientName ? " — {$firstRecipientName}" : '')
+                . ' — ' . now()->format('Y-m-d');
+        }
 
         // Render filled document HTML for web templates
         $webTemplateData = null;
@@ -3497,8 +3509,11 @@ class ESignWizardController extends Controller
             }
         }
 
-        $docName = $template->name . ($firstRecipientName ? " — {$firstRecipientName}" : '')
-            . ' — ' . now()->format('Y-m-d');
+        $docName = $stepData['document_name'] ?? null;
+        if (empty($docName)) {
+            $docName = $template->name . ($firstRecipientName ? " — {$firstRecipientName}" : '')
+                . ' — ' . now()->format('Y-m-d');
+        }
 
         $signatureService = app(SignatureService::class);
 
