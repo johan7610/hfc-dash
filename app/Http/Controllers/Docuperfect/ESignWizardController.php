@@ -3798,12 +3798,27 @@ class ESignWizardController extends Controller
 
         $stepData = $flow->step_data ?? [];
         $documentId = $stepData['document_id'] ?? null;
-        $document = $documentId ? Document::find($documentId) : null;
+        $document = $documentId ? Document::with('signatureTemplate.requests')->find($documentId) : null;
+
+        $mergedHtml = $document ? ($document->web_template_data['merged_html'] ?? null) : null;
+
+        // Find the agent's signature request for upload wiring
+        $agentRequest = null;
+        $agentToken = null;
+        if ($document && $document->signatureTemplate) {
+            $agentRequest = $document->signatureTemplate->requests
+                ->where('party_role', 'agent')
+                ->first();
+            $agentToken = $agentRequest?->token;
+        }
 
         return view('docuperfect.esign.wet-ink-confirmation', [
             'flow' => $flow,
             'template' => $flow->template,
             'document' => $document,
+            'mergedHtml' => $mergedHtml,
+            'agentRequest' => $agentRequest,
+            'agentToken' => $agentToken,
         ]);
     }
 
