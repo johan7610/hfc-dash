@@ -19,6 +19,8 @@ class SignatureTemplate extends Model
         'parties_json',
         'signing_order_json',
         'created_by',
+        'is_candidate_flow',
+        'supervisor_user_id',
         'completed_at',
         'rejected_at',
         'rejection_reason',
@@ -26,14 +28,24 @@ class SignatureTemplate extends Model
         'signed_pdf_path',
         'signed_pdf_client_path',
         'flattened_pages_json',
+        'sections_json',
+        'document_version',
+        'other_conditions_text',
+        'amendment_status',
+        'cancellation_reason',
+        'cancelled_by',
+        'cancelled_at',
     ];
 
     protected $casts = [
         'parties_json' => 'array',
         'signing_order_json' => 'array',
         'flattened_pages_json' => 'array',
+        'sections_json' => 'array',
+        'is_candidate_flow' => 'boolean',
         'completed_at' => 'datetime',
         'rejected_at' => 'datetime',
+        'cancelled_at' => 'datetime',
     ];
 
     // Status constants
@@ -44,11 +56,18 @@ class SignatureTemplate extends Model
     const STATUS_AWAITING_LANDLORD = 'awaiting_landlord';
     const STATUS_AWAITING_BUYER = 'awaiting_buyer';
     const STATUS_AWAITING_SELLER = 'awaiting_seller';
+    const STATUS_AWAITING_SUPERVISOR = 'awaiting_supervisor';
+    const STATUS_AWAITING_SUPERVISOR_FINAL = 'awaiting_supervisor_final';
     const STATUS_PENDING_AGENT_APPROVAL = 'pending_agent_approval';
+    const STATUS_RETURNED_TO_CANDIDATE = 'returned_to_candidate';
     const STATUS_COMPLETED = 'completed';
     const STATUS_EXPIRED = 'expired';
     const STATUS_DECLINED = 'declined';
     const STATUS_REJECTED = 'rejected';
+    const STATUS_PARTIAL = 'partial';
+    const STATUS_AWAITING_DEFERRED = 'awaiting_deferred';
+    const STATUS_AMENDMENT_REVIEW = 'amendment_review';
+    const STATUS_CANCELLED = 'cancelled';
 
     // --- Relationships ---
 
@@ -62,9 +81,19 @@ class SignatureTemplate extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    public function supervisorUser()
+    {
+        return $this->belongsTo(User::class, 'supervisor_user_id');
+    }
+
     public function markers()
     {
         return $this->hasMany(SignatureMarker::class);
+    }
+
+    public function zones()
+    {
+        return $this->hasMany(SignatureZone::class);
     }
 
     public function requests()
@@ -85,6 +114,11 @@ class SignatureTemplate extends Model
     public function leaseRecord()
     {
         return $this->hasOne(LeaseRecord::class);
+    }
+
+    public function amendments()
+    {
+        return $this->hasMany(DocumentAmendment::class);
     }
 
     // --- Scopes ---
@@ -149,6 +183,21 @@ class SignatureTemplate extends Model
         return $this->status === self::STATUS_REJECTED;
     }
 
+    public function isPartial(): bool
+    {
+        return $this->status === self::STATUS_PARTIAL;
+    }
+
+    public function isAwaitingDeferred(): bool
+    {
+        return $this->status === self::STATUS_AWAITING_DEFERRED;
+    }
+
+    public function hasSections(): bool
+    {
+        return !empty($this->sections_json);
+    }
+
     public function rejectedBy()
     {
         return $this->belongsTo(User::class, 'rejected_by');
@@ -203,6 +252,7 @@ class SignatureTemplate extends Model
                 'wet_ink_status' => $request?->wet_ink_status,
                 'reviewed_by' => $request?->reviewed_by,
                 'reviewed_at' => $request?->reviewed_at,
+                'is_deferred' => $request?->isDeferred() ?? false,
             ];
         }
 

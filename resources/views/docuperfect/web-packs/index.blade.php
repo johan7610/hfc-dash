@@ -43,13 +43,30 @@
                     @foreach($webPacks as $webPack)
                     <tr class="hover:bg-slate-50">
                         <td class="py-3 px-4">
-                            <div class="font-semibold text-slate-900">{{ $webPack->name }}</div>
+                            <div class="font-semibold text-slate-900 flex items-center gap-2">
+                                {{ $webPack->name }}
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 font-semibold">Web</span>
+                            </div>
                             @if($webPack->description)
                             <div class="text-xs text-slate-400 mt-0.5">{{ Str::limit($webPack->description, 60) }}</div>
                             @endif
                         </td>
                         <td class="py-3 px-4 text-slate-600">
-                            {{ $webPack->items->count() }} template{{ $webPack->items->count() !== 1 ? 's' : '' }}
+                            <div>{{ $webPack->items->count() }} template{{ $webPack->items->count() !== 1 ? 's' : '' }}</div>
+                            @php
+                                $hasSelectable = $webPack->items->contains(fn($i) => ($i->slot_type ?? 'required') === 'selectable');
+                                $hasOptional = $webPack->items->contains(fn($i) => ($i->slot_type ?? 'required') === 'optional');
+                            @endphp
+                            @if($hasSelectable || $hasOptional)
+                            <div class="flex gap-1 mt-0.5">
+                                @if($hasSelectable)
+                                <span class="text-[9px] px-1 py-0 rounded bg-amber-100 text-amber-700">Selectable</span>
+                                @endif
+                                @if($hasOptional)
+                                <span class="text-[9px] px-1 py-0 rounded bg-gray-100 text-gray-500">Optional</span>
+                                @endif
+                            </div>
+                            @endif
                         </td>
                         <td class="py-3 px-4 text-slate-600">
                             {{ $webPack->createdBy?->name ?? '—' }}

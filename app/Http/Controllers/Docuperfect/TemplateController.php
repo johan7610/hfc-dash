@@ -12,6 +12,7 @@ use App\Models\Docuperfect\Template;
 use App\Models\Docuperfect\TemplateSignatureZone;
 use Illuminate\Http\Request;
 use App\Services\Docuperfect\CdsRendererService;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -46,6 +47,15 @@ class TemplateController extends Controller
                 $query->whereNull('document_type_id');
             } else {
                 $query->where('document_type_id', $docType);
+            }
+        }
+
+        // Category filter (sales/rentals)
+        if ($cat = $request->input('category')) {
+            if ($cat === 'none') {
+                $query->whereNull('category');
+            } else {
+                $query->where('category', $cat);
             }
         }
 
@@ -115,23 +125,35 @@ class TemplateController extends Controller
 
         // CDS templates route to the CDS builder (DB-backed draft)
         if ($template->template_type === 'cds') {
-            $draft = CdsDraft::create([
-                'user_id' => auth()->id(),
-                'agency_id' => auth()->user()->agency_id ?? null,
-                'template_name' => $template->name,
-                'cds_json' => $template->cds_json,
-                'tags' => $template->editor_state['tags'] ?? null,
-                'mappings' => $template->editor_state['mappings'] ?? null,
-                'tagged_html' => $template->editor_state['tagged_html'] ?? null,
-                'settings' => [
-                    'is_esign' => $template->is_esign,
-                    'party_mode' => $template->party_mode,
-                    'allowed_delivery_modes' => $template->allowed_delivery_modes,
-                    'security_tier' => $template->security_tier,
-                ],
-                'source_template_id' => $template->id,
-                'status' => 'draft',
-            ]);
+            // Reuse existing unsaved draft for this template+user (prevents data loss)
+            $draft = CdsDraft::where('source_template_id', $template->id)
+                ->where('user_id', auth()->id())
+                ->where('status', 'draft')
+                ->latest()
+                ->first();
+
+            if (!$draft) {
+                $draft = CdsDraft::create([
+                    'user_id' => auth()->id(),
+                    'agency_id' => auth()->user()->agency_id ?? null,
+                    'template_name' => $template->name,
+                    'cds_json' => $template->cds_json,
+                    'tags' => $template->editor_state['tags'] ?? null,
+                    'mappings' => $template->editor_state['mappings'] ?? null,
+                    'tagged_html' => $template->editor_state['tagged_html'] ?? null,
+                    'settings' => [
+                        'is_esign' => $template->is_esign,
+                        'party_mode' => $template->party_mode,
+                        'allowed_delivery_modes' => $template->allowed_delivery_modes,
+                        'security_tier' => $template->security_tier,
+                        'category' => $template->category,
+                        'document_type_id' => $template->document_type_id,
+                    ],
+                    'source_template_id' => $template->id,
+                    'status' => 'draft',
+                ]);
+            }
+
             return redirect()->route('docuperfect.cds.builder', $draft);
         }
 
@@ -214,6 +236,10 @@ class TemplateController extends Controller
         }
         if ($request->has('document_type_id')) {
             $data['document_type_id'] = $request->input('document_type_id') ?: null;
+        }
+        if ($request->has('category')) {
+            $val = $request->input('category');
+            $data['category'] = in_array($val, ['sales', 'rentals']) ? $val : null;
         }
         if ($request->has('is_global')) {
             $data['is_global'] = $request->boolean('is_global');
@@ -445,6 +471,11 @@ class TemplateController extends Controller
         // Load signing parties for agency
         $agencyParties = $this->loadAgencyParties($user);
 
+        // Load source template for fallback values (category, document_type_id)
+        $sourceTemplate = $draft->source_template_id
+            ? Template::find($draft->source_template_id)
+            : null;
+
         return view('docuperfect.templates.cds-builder', [
             'draftId' => $draft->id,
             'cds' => $draft->cds_json,
@@ -453,6 +484,7 @@ class TemplateController extends Controller
             'title' => $draft->template_name,
             'templateName' => $draft->template_name,
             'sourceTemplateId' => $draft->source_template_id,
+            'sourceTemplate' => $sourceTemplate,
             'groupedFields' => $groupedFields,
             'fieldGroups' => $fieldGroups,
             'namedFieldsAll' => $namedFields->map(fn($nf) => [
@@ -489,6 +521,16 @@ class TemplateController extends Controller
         $draft = CdsDraft::findOrFail($request->input('draft_id'));
         abort_if($draft->user_id !== auth()->id(), 403);
 
+        Log::info('CDS_SAVE_DRAFT', [
+            'draft_id' => $draft->id,
+            'has_tags' => !empty($request->input('tags')),
+            'tag_count' => is_array($request->input('tags')) ? count($request->input('tags')) : 0,
+            'has_mappings' => !empty($request->input('mappings')),
+            'mapping_keys' => is_array($request->input('mappings')) ? array_keys($request->input('mappings')) : [],
+            'sample_mapping' => is_array($request->input('mappings')) ? array_slice($request->input('mappings'), 0, 1, true) : null,
+            'has_settings' => !empty($request->input('settings')),
+        ]);
+
         $draft->update([
             'template_name' => $request->input('template_name', $draft->template_name),
             'tags' => $request->input('tags'),
@@ -524,6 +566,9 @@ class TemplateController extends Controller
             'party_mode' => $request->input('party_mode', 'shared'),
             'allowed_delivery_modes' => $request->input('allowed_delivery_modes', 'esign,wet_ink,download'),
             'security_tier' => $request->input('security_tier', 'enhanced'),
+            'signing_parties' => $request->input('signing_parties') ? json_decode($request->input('signing_parties'), true) : null,
+            'category' => in_array($request->input('category'), ['sales', 'rentals']) ? $request->input('category') : null,
+            'document_type_id' => $request->input('document_type_id') ?: null,
             'is_global' => true,
             'owner_id' => $user->id,
             'editor_state' => [
@@ -540,14 +585,20 @@ class TemplateController extends Controller
             $template = Template::create($templateData);
         }
 
-        // Generate blade view from CDS JSON
+        // Generate blade view — use tagged_html (user-edited) as source, fall back to cds_json
         $bladeView = $this->generateCdsBladeView(
             $draft->cds_json,
             $draft->mappings ?? [],
             $template->id,
-            $template->name
+            $template->name,
+            $template->signing_parties,
+            $draft->tagged_html,
+            $draft->tags ?? []
         );
         $template->update(['blade_view' => $bladeView]);
+
+        // Clear compiled view cache so the e-sign wizard renders the fresh blade file
+        Artisan::call('view:clear');
 
         // Mark draft as saved
         $draft->update(['status' => 'saved']);
@@ -643,15 +694,88 @@ class TemplateController extends Controller
 
     /**
      * Generate a blade view file for a CDS template.
-     * Renders CDS JSON through CdsRendererService, replaces field placeholders
-     * with Blade variables, wraps in the CoreX document layout.
+     *
+     * When $taggedHtml is provided (user-edited content from the CDS builder),
+     * it is used as the document body. Field tag spans are replaced with Blade
+     * variables using the same derivation as WebTemplateDataService.
+     *
+     * When $taggedHtml is null, falls back to rendering from CDS JSON via
+     * CdsRendererService (original path, for backward compatibility).
      */
-    private function generateCdsBladeView(array $cds, array $fieldMappings, int $templateId, string $templateName): string
-    {
-        $renderer = app(CdsRendererService::class);
-        $html = $renderer->render($cds);
+    private function generateCdsBladeView(
+        array $cds,
+        array $fieldMappings,
+        int $templateId,
+        string $templateName,
+        ?array $signingParties = null,
+        ?string $taggedHtml = null,
+        ?array $tags = null
+    ): string {
+        // Determine document body HTML
+        if (!empty($taggedHtml)) {
+            $html = $this->processTaggedHtmlToBladeBody($taggedHtml, $fieldMappings);
+        } else {
+            // Legacy path: render from CDS JSON
+            $filteredCds = $cds;
+            $filteredCds['sections'] = array_values(array_filter(
+                $cds['sections'] ?? [],
+                fn($s) => !in_array($s['type'] ?? '', ['company_header', 'title'])
+            ));
 
-        // Build the blade template
+            $renderer = app(CdsRendererService::class);
+            $rawHtml = $renderer->render($filteredCds);
+
+            // Replace marker-based signature/initial placeholders (preserving party param)
+            $html = preg_replace_callback(
+                '/<span\s+class="corex-field"[^>]*data-marker-type="signature"[^>]*>.*?<\/span>/s',
+                function ($m) {
+                    $party = null;
+                    if (preg_match('/data-marker-party="([^"]*)"/', $m[0], $pm)) {
+                        $party = $pm[1];
+                    }
+                    if ($party) {
+                        return '@include("docuperfect.web-templates.components.signature-line", [\'party\' => \'' . addslashes($party) . '\'])';
+                    }
+                    return '@include("docuperfect.web-templates.components.signature-line")';
+                },
+                $rawHtml
+            );
+            $html = preg_replace_callback(
+                '/<span\s+class="corex-field"[^>]*data-marker-type="initial"[^>]*>.*?<\/span>/s',
+                function ($m) {
+                    $party = null;
+                    if (preg_match('/data-marker-party="([^"]*)"/', $m[0], $pm)) {
+                        $party = $pm[1];
+                    }
+                    if ($party) {
+                        return '@include("docuperfect.web-templates.components.initials-line", [\'party\' => \'' . addslashes($party) . '\'])';
+                    }
+                    return '@include("docuperfect.web-templates.components.initials-line")';
+                },
+                $html
+            );
+
+            // Replace corex-field spans with Blade variable output
+            $html = preg_replace_callback(
+                '/<span\s+class="corex-field"[^>]*data-field-name="([^"]*)"[^>]*>.*?<\/span>/s',
+                function ($matches) {
+                    $fieldName = $matches[1];
+                    if (empty(trim($fieldName))) {
+                        return '<span class="corex-field-value" style="border-bottom:1px solid #333; min-width:80pt; display:inline-block;">&nbsp;</span>';
+                    }
+                    $varName = str_replace('.', '_', $fieldName);
+                    $varName = preg_replace('/[^a-zA-Z0-9_]/', '_', $varName);
+                    if (is_numeric($varName[0] ?? '')) {
+                        $varName = 'f_' . $varName;
+                    }
+                    return '<span class="corex-field-value" data-field="' . e($varName) . '">'
+                        . '{{ $' . $varName . ' ?? \'\' }}</span>';
+                },
+                $html
+            );
+        }
+
+        // Build the blade template wrapper
         $title = e($cds['title'] ?? $templateName);
 
         $blade = <<<'BLADE'
@@ -667,54 +791,29 @@ BLADE;
         $blade .= "</head>\n<body>\n";
         $blade .= '<div class="corex-document-wrapper">' . "\n";
         $blade .= '<div class="corex-page">' . "\n\n";
-
-        // Company header
         $blade .= '@include("docuperfect.web-templates.components.company-header")' . "\n\n";
 
-        // Document title
-        $blade .= "<div class=\"corex-h1\" style=\"text-align:center; margin-bottom:12pt;\">{$title}</div>\n\n";
-
-        // Replace marker-based signature/initial placeholders with Blade signature components
-        $processedHtml = preg_replace(
-            '/<span\s+class="corex-field"[^>]*data-marker-type="signature"[^>]*>.*?<\/span>/s',
-            '@include("docuperfect.web-templates.components.signature-line")',
-            $html
-        );
-        $processedHtml = preg_replace(
-            '/<span\s+class="corex-field"[^>]*data-marker-type="initial"[^>]*>.*?<\/span>/s',
-            '@include("docuperfect.web-templates.components.initials-line")',
-            $processedHtml
-        );
-
-        // Replace corex-field spans with Blade variable output
-        // Pattern: <span class="corex-field" data-field-name="X" ...><span class="corex-field-label">Y</span></span>
-        $processedHtml = preg_replace_callback(
-            '/<span\s+class="corex-field"[^>]*data-field-name="([^"]*)"[^>]*>.*?<\/span>/s',
-            function ($matches) {
-                $fieldName = $matches[1];
-                if (empty(trim($fieldName))) {
-                    // No field name — render as an underline blank for manual fill
-                    return '<span class="corex-field-value" style="border-bottom:1px solid #333; min-width:80pt; display:inline-block;">&nbsp;</span>';
-                }
-                // Convert dot notation to underscore for blade variable name
-                $varName = str_replace('.', '_', $fieldName);
-                // Sanitize variable name — must start with letter/underscore
-                $varName = preg_replace('/[^a-zA-Z0-9_]/', '_', $varName);
-                if (is_numeric($varName[0] ?? '')) {
-                    $varName = 'f_' . $varName;
-                }
-                return '<span class="corex-field-value" data-field="' . e($varName) . '">'
-                    . '{{ $' . $varName . ' ?? \'\' }}</span>';
-            },
-            $processedHtml
-        );
-
-        $blade .= $processedHtml . "\n\n";
-
-        $blade .= "</div>\n</div>\n\n";
+        $blade .= $html . "\n\n";
 
         // Signature block
-        $blade .= '@include("docuperfect.web-templates.components.signature-block")' . "\n\n";
+        $nameLower = strtolower($templateName);
+        $isSalesDoc = str_contains($nameLower, 'sell') || str_contains($nameLower, 'sale')
+            || str_contains($nameLower, 'authority') || str_contains($nameLower, 'otp')
+            || str_contains($nameLower, 'purchase');
+
+        if (!empty($signingParties)) {
+            $displayParties = Template::mapSigningPartyKeys($signingParties, $isSalesDoc);
+        } elseif ($isSalesDoc) {
+            $isAuthorityDoc = str_contains($nameLower, 'authority') || str_contains($nameLower, 'mandate');
+            $displayParties = $isAuthorityDoc ? ['Seller', 'Agent'] : ['Seller', 'Buyer', 'Agent'];
+        } else {
+            $displayParties = ['Lessor', 'Lessee', 'Agent'];
+        }
+
+        $partiesPhp = '["' . implode('", "', $displayParties) . '"]';
+        $blade .= '@include("docuperfect.web-templates.components.signature-block", ["parties" => ' . $partiesPhp . '])' . "\n\n";
+
+        $blade .= "</div>\n</div>\n\n";
         $blade .= "</body>\n</html>\n";
 
         // Write to disk
@@ -727,6 +826,190 @@ BLADE;
         file_put_contents("{$viewDir}/{$filename}", $blade);
 
         return "docuperfect.web-templates.cds.template-{$templateId}";
+    }
+
+    /**
+     * Convert tagged_html from the CDS builder into Blade-ready HTML.
+     *
+     * Replaces .doc-tag spans with Blade {{ $var }} output, using the same
+     * variable name derivation as WebTemplateDataService::resolve().
+     * Signature/initial tags become @include directives.
+     */
+    private function processTaggedHtmlToBladeBody(string $taggedHtml, array $mappings): string
+    {
+        // Pre-load all NamedFields referenced by mappings
+        $namedFieldIds = collect($mappings)->pluck('namedFieldId')->filter()->unique()->values()->all();
+        $namedFields = NamedField::whereIn('id', $namedFieldIds)->get()->keyBy('id');
+
+        // Replace doc-tag spans with Blade output
+        $processed = preg_replace_callback(
+            '/<span[^>]*class="[^"]*doc-tag[^"]*"[^>]*>.*?<\/span>/s',
+            function ($matches) use ($mappings, $namedFields) {
+                $span = $matches[0];
+
+                // Signature tags → @include component (preserve party from mappings)
+                if (str_contains($span, 'doc-tag-sig')) {
+                    $party = $this->extractPartyFromTagSpan($span, $mappings);
+                    if ($party) {
+                        return '@include("docuperfect.web-templates.components.signature-line", [\'party\' => \'' . addslashes($party) . '\'])';
+                    }
+                    return '@include("docuperfect.web-templates.components.signature-line")';
+                }
+                // Initial tags → @include component (preserve party from mappings)
+                if (str_contains($span, 'doc-tag-ini')) {
+                    $party = $this->extractPartyFromTagSpan($span, $mappings);
+                    if ($party) {
+                        return '@include("docuperfect.web-templates.components.initials-line", [\'party\' => \'' . addslashes($party) . '\'])';
+                    }
+                    return '@include("docuperfect.web-templates.components.initials-line")';
+                }
+
+                // Extract tag ID to look up the mapping
+                if (!preg_match('/data-tag-id="([^"]*)"/', $span, $idMatch)) {
+                    return '<span class="corex-field-value" style="border-bottom:1px solid #333; min-width:80pt; display:inline-block;">&nbsp;</span>';
+                }
+                $tagId = $idMatch[1];
+
+                $mapping = $mappings[$tagId] ?? null;
+                if (!$mapping) {
+                    return '<span class="corex-field-value" style="border-bottom:1px solid #333; min-width:80pt; display:inline-block;">&nbsp;</span>';
+                }
+
+                // Derive blade variable name (same logic as WebTemplateDataService)
+                $varName = $this->deriveBladeVarName($mapping, $namedFields);
+                if (empty($varName)) {
+                    return '<span class="corex-field-value" style="border-bottom:1px solid #333; min-width:80pt; display:inline-block;">&nbsp;</span>';
+                }
+
+                return '<span class="corex-field-value" data-field="' . e($varName) . '">'
+                    . '{{ $' . $varName . ' ?? \'\' }}</span>';
+            },
+            $taggedHtml
+        );
+
+        return $processed;
+    }
+
+    /**
+     * Extract party role from a doc-tag span using its data-tag-id and the mappings array.
+     * The CDS builder stores party assignments in mappings[tagId].parties = ['Seller'].
+     * Returns lowercase party name (e.g. 'seller') or null if not assigned.
+     */
+    private function extractPartyFromTagSpan(string $span, array $mappings): ?string
+    {
+        if (!preg_match('/data-tag-id="([^"]*)"/', $span, $idMatch)) {
+            return null;
+        }
+        $tagId = $idMatch[1];
+        $mapping = $mappings[$tagId] ?? null;
+        if (!$mapping || empty($mapping['parties'])) {
+            return null;
+        }
+        $party = is_array($mapping['parties']) ? ($mapping['parties'][0] ?? null) : null;
+        if (!$party) {
+            return null;
+        }
+        // Resolve generic party names to concrete roles
+        $party = strtolower($party);
+        $resolveMap = [
+            'owner_party' => 'seller',
+            'acquiring_party' => 'buyer',
+            'lessor' => 'landlord',
+            'lessee' => 'tenant',
+        ];
+        return $resolveMap[$party] ?? $party;
+    }
+
+    /**
+     * Derive the Blade variable name for a field mapping entry.
+     * Mirrors the derivation in WebTemplateDataService::resolve() so that
+     * the blade template variables match the data the wizard provides.
+     */
+    private function deriveBladeVarName(array $mapping, $namedFields): ?string
+    {
+        $namedFieldId = $mapping['namedFieldId'] ?? null;
+        $namedField = $namedFieldId ? ($namedFields[$namedFieldId] ?? null) : null;
+
+        if ($namedField) {
+            $sourceType = $namedField->source_type ?? '';
+            $sourceColumn = $namedField->source_column ?? '';
+            $contactType = $namedField->source_contact_type ?? $mapping['sourceContactType'] ?? '';
+            $varName = $this->deriveBladeName($sourceType, $sourceColumn, $contactType);
+            if ($varName) {
+                return $varName;
+            }
+        }
+
+        // Fallback: derive from label
+        $label = $mapping['label'] ?? $mapping['manualLabel'] ?? '';
+        if (!empty($label)) {
+            return strtolower(trim(preg_replace('/[^a-zA-Z0-9]+/', '_', $label), '_'));
+        }
+
+        return null;
+    }
+
+    /**
+     * Map source_type + source_column + contact_type to a blade variable name.
+     * Exact copy of WebTemplateDataService::deriveBladeName() to ensure
+     * the blade file uses the same variable names the wizard resolves.
+     */
+    private function deriveBladeName(string $sourceType, string $sourceColumn, ?string $contactType): ?string
+    {
+        if (empty($sourceColumn)) {
+            return null;
+        }
+
+        if ($sourceType === 'contact' && $contactType) {
+            $role = strtolower(preg_replace('/\s+\d+$/', '', trim($contactType)));
+            $prefixMap = ['landlord' => 'lessor', 'tenant' => 'lessee'];
+            $prefix = $prefixMap[$role] ?? $role;
+
+            $attrMap = [
+                'first_name+last_name' => 'name', 'full_name' => 'name', 'name' => 'name',
+                'last_name' => 'last_name', 'surname' => 'last_name',
+                'first_name' => 'first_name',
+                'id_number' => 'id_number',
+                'address' => 'address',
+                'phone' => in_array($prefix, ['seller', 'buyer']) ? 'phone' : 'cell',
+                'cell' => in_array($prefix, ['seller', 'buyer']) ? 'phone' : 'cell',
+                'email' => 'email',
+                'bank_name' => 'bank_name', 'bank_account_name' => 'bank_account_name',
+                'bank_account_number' => 'bank_account_number', 'bank_branch_name' => 'bank_branch_name',
+            ];
+            $suffix = $attrMap[$sourceColumn] ?? $sourceColumn;
+            return $prefix . '_' . $suffix;
+        }
+
+        if ($sourceType === 'property') {
+            $propMap = [
+                'property_number' => 'property_erf_number', 'erf_number' => 'property_erf_number',
+                'erf' => 'property_erf_number',
+                'address' => 'property_street', 'street' => 'property_street',
+                'suburb' => 'property_township', 'township' => 'property_township',
+                'district' => 'property_district',
+                'complex_name' => 'property_complex_name',
+                'unit_number' => 'unit_no',
+                'price' => 'price', 'rental_amount' => 'monthly_rental',
+                'deposit_amount' => 'deposit_amount',
+                'expiry_date' => 'mandate_expiry',
+            ];
+            return $propMap[$sourceColumn] ?? 'property_' . $sourceColumn;
+        }
+
+        if ($sourceType === 'deal') {
+            return $sourceColumn;
+        }
+
+        if ($sourceType === 'computed') {
+            return $sourceColumn;
+        }
+
+        if ($sourceType === 'agent') {
+            return 'agent_' . $sourceColumn;
+        }
+
+        return null;
     }
 
     private function editWeb(Template $template)
@@ -771,6 +1054,7 @@ BLADE;
         // Pass signing_parties so the signature-block component renders correct parties
         if (!empty($template->signing_parties)) {
             $viewData['signing_parties'] = $template->signing_parties;
+            $viewData['document_context'] = $template->isSalesDocument() ? 'sales' : 'rental';
         }
 
         // Pass header_display so company-header component respects template setting
@@ -814,5 +1098,44 @@ BLADE;
         }
 
         return $parties->toArray();
+    }
+
+    /**
+     * Show the E-Sign Wizard Setup page for a template.
+     */
+    public function wizardConfig(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user->hasPermission('manage_templates')) {
+            abort(403);
+        }
+
+        $template = Template::with(['branches', 'documentType'])->findOrFail($id);
+
+        return view('docuperfect.templates.wizard-config', [
+            'template' => $template,
+        ]);
+    }
+
+    /**
+     * Save the E-Sign Wizard configuration for a template.
+     */
+    public function saveWizardConfig(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user->hasPermission('manage_templates')) {
+            abort(403);
+        }
+
+        $template = Template::findOrFail($id);
+
+        $template->update([
+            'wizard_config' => $request->input('wizard_config'),
+            'signing_parties' => $request->input('signing_parties'),
+            'sections' => $request->input('sections'),
+            'allowed_delivery_modes' => $request->input('allowed_delivery_modes', 'esign,wet_ink,download'),
+        ]);
+
+        return response()->json(['status' => 'saved', 'saved_at' => now()->toIso8601String()]);
     }
 }

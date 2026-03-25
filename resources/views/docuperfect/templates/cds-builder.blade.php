@@ -66,7 +66,8 @@
                             <svg class="w-4 h-4 text-emerald-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg>
                             <span x-text="'All ' + totalTagCount + ' fields linked — ready to save'"></span>
                         </div>
-                        <form x-ref="generateForm" method="POST" action="{{ route('docuperfect.cds.generate') }}" class="inline">
+                        <form x-ref="generateForm" method="POST" action="{{ route('docuperfect.cds.generate') }}" class="inline"
+                              @submit.prevent="saveAndGenerate($el)">
                             @csrf
                             <input type="hidden" name="draft_id" :value="draftId">
                             <input type="hidden" name="template_name" :value="templateName">
@@ -74,6 +75,9 @@
                             <input type="hidden" name="party_mode" :value="partyMode">
                             <input type="hidden" name="allowed_delivery_modes" :value="deliveryModes.join(',')">
                             <input type="hidden" name="security_tier" :value="securityTier">
+                            <input type="hidden" name="signing_parties" :value="JSON.stringify(templateSigningParties)">
+                            <input type="hidden" name="category" :value="templateCategory">
+                            <input type="hidden" name="document_type_id" :value="templateDocumentTypeId">
                             <button type="submit"
                                     class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-4 py-2 rounded-lg transition-colors font-semibold">
                                 Save Template &rarr;
@@ -86,7 +90,8 @@
                 <template x-if="totalTagCount === 0">
                     <div class="flex items-center gap-3">
                         <span class="text-sm text-gray-400">No fields tagged yet</span>
-                        <form x-ref="generateForm" method="POST" action="{{ route('docuperfect.cds.generate') }}" class="inline">
+                        <form x-ref="generateFormEmpty" method="POST" action="{{ route('docuperfect.cds.generate') }}" class="inline"
+                              @submit.prevent="saveAndGenerate($el)">
                             @csrf
                             <input type="hidden" name="draft_id" :value="draftId">
                             <input type="hidden" name="template_name" :value="templateName">
@@ -94,6 +99,9 @@
                             <input type="hidden" name="party_mode" :value="partyMode">
                             <input type="hidden" name="allowed_delivery_modes" :value="deliveryModes.join(',')">
                             <input type="hidden" name="security_tier" :value="securityTier">
+                            <input type="hidden" name="signing_parties" :value="JSON.stringify(templateSigningParties)">
+                            <input type="hidden" name="category" :value="templateCategory">
+                            <input type="hidden" name="document_type_id" :value="templateDocumentTypeId">
                             <button type="submit"
                                     class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-4 py-2 rounded-lg transition-colors font-semibold">
                                 Save Template &rarr;
@@ -239,6 +247,29 @@
                     </button>
 
                     <div x-show="settingsExpanded" x-transition class="border-t border-gray-200 p-3 space-y-3">
+                        {{-- Category --}}
+                        <div>
+                            <label class="text-[10px] font-semibold text-gray-500 uppercase block mb-1">Category</label>
+                            <select x-model="templateCategory"
+                                    class="w-full text-xs border border-gray-300 rounded px-2 py-1.5 bg-white text-gray-700 focus:ring-teal-400 focus:border-teal-400">
+                                <option value="">Select category...</option>
+                                <option value="sales">Sales</option>
+                                <option value="rentals">Rentals</option>
+                            </select>
+                        </div>
+
+                        {{-- Document Type --}}
+                        <div>
+                            <label class="text-[10px] font-semibold text-gray-500 uppercase block mb-1">Document Type</label>
+                            <select x-model="templateDocumentTypeId"
+                                    class="w-full text-xs border border-gray-300 rounded px-2 py-1.5 bg-white text-gray-700 focus:ring-teal-400 focus:border-teal-400">
+                                <option value="">Select document type...</option>
+                                @foreach(\App\Models\Docuperfect\DocumentType::orderBy('sort_order')->get() as $dt)
+                                <option value="{{ $dt->id }}">{{ $dt->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
                         {{-- Delivery Modes --}}
                         <div>
                             <label class="text-[10px] font-semibold text-gray-500 uppercase block mb-1">Delivery Modes</label>
@@ -284,6 +315,34 @@
                             <input type="checkbox" x-model="isEsign"
                                    class="w-3 h-3 rounded border-gray-300 text-teal-600 focus:ring-teal-400">
                             <span class="text-xs text-gray-700">Eligible for E-Signature</span>
+                        </div>
+
+                        {{-- Signing Parties --}}
+                        <div>
+                            <label class="text-[10px] font-semibold text-gray-500 uppercase block mb-1">Signing Parties</label>
+                            <p class="text-[10px] text-gray-400 mb-2">Select which parties must sign this document</p>
+                            <div class="space-y-1.5">
+                                <label class="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                                    <input type="checkbox" value="owner_party"
+                                           x-model="templateSigningParties"
+                                           class="w-3 h-3 rounded border-gray-300 text-teal-600 focus:ring-teal-400">
+                                    <span x-text="isSalesContext ? 'Seller / Owner' : 'Lessor / Landlord'"></span>
+                                    <span class="text-gray-400">(owner party)</span>
+                                </label>
+                                <label class="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                                    <input type="checkbox" value="acquiring_party"
+                                           x-model="templateSigningParties"
+                                           class="w-3 h-3 rounded border-gray-300 text-teal-600 focus:ring-teal-400">
+                                    <span x-text="isSalesContext ? 'Buyer / Purchaser' : 'Lessee / Tenant'"></span>
+                                    <span class="text-gray-400">(acquiring party)</span>
+                                </label>
+                                <label class="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                                    <input type="checkbox" value="agent"
+                                           x-model="templateSigningParties"
+                                           class="w-3 h-3 rounded border-gray-300 text-teal-600 focus:ring-teal-400">
+                                    Agent
+                                </label>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -355,6 +414,7 @@
 
                                     {{-- Type dropdown — single fields + field groups --}}
                                     <select class="w-full text-xs border border-gray-300 rounded px-2 py-1.5 mb-1.5 bg-white"
+                                            x-init="$nextTick(() => { $el.value = getMapping(tag.id).typeKey || '' })"
                                             :value="getMapping(tag.id).typeKey"
                                             @change="setType(tag.id, $event.target.value)">
                                         <option value="">Select type...</option>
@@ -379,11 +439,12 @@
                                     {{-- Field dropdown (single field, not manual) --}}
                                     <template x-if="getMapping(tag.id).mappingType === 'named_field' && getMapping(tag.id).typeKey && getMapping(tag.id).typeKey !== 'sf:manual'">
                                         <select class="w-full text-xs border border-gray-300 rounded px-2 py-1.5 mb-1.5 bg-white"
-                                                :value="getMapping(tag.id).namedFieldId || ''"
+                                                x-init="$nextTick(() => { $el.value = String(getMapping(tag.id).namedFieldId || '') })"
+                                                :value="String(getMapping(tag.id).namedFieldId || '')"
                                                 @change="setNamedField(tag.id, parseInt($event.target.value))">
                                             <option value="">Select field...</option>
                                             <template x-for="nf in getFieldsForType(getMapping(tag.id).typeKey)" :key="nf.id">
-                                                <option :value="nf.id" x-text="nf.name"></option>
+                                                <option :value="String(nf.id)" x-text="nf.name"></option>
                                             </template>
                                         </select>
                                     </template>
@@ -404,17 +465,59 @@
                                         </div>
                                     </template>
 
+                                    {{-- Editable at signing by --}}
+                                    <div class="mb-1.5">
+                                        <label class="text-[10px] font-semibold text-gray-500 uppercase">Editable at signing by</label>
+                                        <p class="text-[10px] text-gray-400 mb-1">If none selected, field is locked after agent fills it</p>
+                                        <div class="mt-1 space-y-1">
+                                            <label class="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                                                <input type="checkbox"
+                                                       :checked="(getMapping(tag.id).editable_by || []).includes('owner_party')"
+                                                       @change="toggleEditableBy(tag.id, 'owner_party', $event.target.checked)"
+                                                       class="w-3 h-3 text-teal-600 rounded">
+                                                Lessor / Seller
+                                            </label>
+                                            <label class="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                                                <input type="checkbox"
+                                                       :checked="(getMapping(tag.id).editable_by || []).includes('acquiring_party')"
+                                                       @change="toggleEditableBy(tag.id, 'acquiring_party', $event.target.checked)"
+                                                       class="w-3 h-3 text-teal-600 rounded">
+                                                Lessee / Buyer
+                                            </label>
+                                            <label class="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                                                <input type="checkbox"
+                                                       :checked="(getMapping(tag.id).editable_by || []).includes('agent')"
+                                                       @change="toggleEditableBy(tag.id, 'agent', $event.target.checked)"
+                                                       class="w-3 h-3 text-teal-600 rounded">
+                                                Agent
+                                            </label>
+                                            <label class="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                                                <input type="checkbox"
+                                                       :checked="(getMapping(tag.id).editable_by || []).includes('witness')"
+                                                       @change="toggleEditableBy(tag.id, 'witness', $event.target.checked)"
+                                                       class="w-3 h-3 text-teal-600 rounded">
+                                                Witness
+                                            </label>
+                                            <label class="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer border-t border-gray-100 pt-1 mt-1">
+                                                <input type="checkbox"
+                                                       :checked="(getMapping(tag.id).editable_by || []).includes('all')"
+                                                       @change="toggleEditableByAll(tag.id, $event.target.checked)"
+                                                       class="w-3 h-3 text-teal-600 rounded">
+                                                <span class="font-semibold">All parties</span>
+                                            </label>
+                                        </div>
+                                    </div>
+
                                     {{-- Party dropdown --}}
-                                    <select class="w-full text-xs border border-gray-300 rounded px-2 py-1.5 bg-white"
+                                    <select class="w-full text-xs border border-gray-300 rounded px-2 py-1.5 mb-1.5 bg-white"
                                             :value="getMapping(tag.id).party"
                                             :disabled="getMapping(tag.id).partyLocked"
                                             @change="setParty(tag.id, $event.target.value)">
-                                        <option value="auto">Auto-fill</option>
+                                        <option value="auto">Auto-detect</option>
+                                        <option value="owner_party">Lessor / Seller</option>
+                                        <option value="acquiring_party">Lessee / Buyer</option>
                                         <option value="agent">Agent</option>
-                                        <option value="lessor">Lessor</option>
-                                        <option value="lessee">Lessee</option>
-                                        <option value="buyer">Buyer</option>
-                                        <option value="seller">Seller</option>
+                                        <option value="witness">Witness</option>
                                     </select>
                                 </div>
                             </template>
@@ -785,7 +888,17 @@ function cdsEditor() {
         partyMode: 'shared',
         deliveryModes: ['esign', 'wet_ink', 'download'],
         securityTier: 'enhanced',
+        templateSigningParties: ['owner_party', 'agent'],
+        templateCategory: '',
+        templateDocumentTypeId: '',
         settingsExpanded: false,
+
+        get isSalesContext() {
+            const name = (this.templateName || '').toLowerCase();
+            return name.includes('sell') || name.includes('sale')
+                || name.includes('authority') || name.includes('otp')
+                || name.includes('purchase');
+        },
 
         // Draft save state
         draftSaving: false,
@@ -881,6 +994,12 @@ function cdsEditor() {
             await this._doSaveDraft(true);
         },
 
+        async saveAndGenerate(formEl) {
+            // Pre-save draft so cdsGenerate reads fresh data
+            await this._doSaveDraft(false);
+            formEl.submit();
+        },
+
         async _doSaveDraft(showToast) {
             this.draftSaving = true;
             try {
@@ -902,6 +1021,9 @@ function cdsEditor() {
                             party_mode: this.partyMode,
                             allowed_delivery_modes: this.deliveryModes.join(','),
                             security_tier: this.securityTier,
+                            signing_parties: this.templateSigningParties,
+                            category: this.templateCategory || null,
+                            document_type_id: this.templateDocumentTypeId || null,
                         },
                     }),
                 });
@@ -982,6 +1104,20 @@ function cdsEditor() {
                             this.deliveryModes = this.savedSettings.allowed_delivery_modes.split(',');
                         }
                         if (this.savedSettings.security_tier) this.securityTier = this.savedSettings.security_tier;
+                        if (this.savedSettings.signing_parties && Array.isArray(this.savedSettings.signing_parties)) {
+                            this.templateSigningParties = this.savedSettings.signing_parties;
+                        }
+                        if (this.savedSettings.category) this.templateCategory = this.savedSettings.category;
+                        if (this.savedSettings.document_type_id) this.templateDocumentTypeId = String(this.savedSettings.document_type_id);
+                    }
+
+                    // Fallback to source template values if draft settings don't have category/document_type_id
+                    if (!this.templateCategory) {
+                        this.templateCategory = @json($sourceTemplate->category ?? '');
+                    }
+                    if (!this.templateDocumentTypeId) {
+                        const fallbackDocTypeId = @json($sourceTemplate->document_type_id ?? null);
+                        if (fallbackDocTypeId) this.templateDocumentTypeId = String(fallbackDocTypeId);
                     }
 
                     this._startAutoSave();
@@ -1057,6 +1193,7 @@ function cdsEditor() {
                                 party: this._autoPartyForType(typeKey),
                                 partyLocked: typeKey === 'sf:agent',
                                 confidence: confidence,
+                                editable_by: this._autoEditableBy(match.source_type, match.source_contact_type, typeKey),
                             });
                             return;
                         }
@@ -1080,6 +1217,7 @@ function cdsEditor() {
                                 party: this._autoPartyForType(typeKey),
                                 partyLocked: typeKey === 'sf:agent',
                                 confidence: 'medium',
+                                editable_by: this._autoEditableBy(match.source_type, match.source_contact_type, typeKey),
                             });
                             return;
                         }
@@ -1087,6 +1225,7 @@ function cdsEditor() {
 
                     // No DB match — use parser suggestion if available
                     this.mappings[tag.id] = this._emptyInputMapping(confidence);
+                    this.mappings[tag.id].editable_by = ['agent'];
                     if (fieldLabel && fieldLabel !== 'Input' && fieldLabel !== 'FIELD') {
                         this.mappings[tag.id].manualLabel = fieldLabel;
                         this.mappings[tag.id].mappingType = 'manual';
@@ -1145,6 +1284,21 @@ function cdsEditor() {
                     this.mappings[tag.id] = {
                         parties: this.signingParties.map(sp => sp.name),
                     };
+                });
+
+                // Convert disclosure checklists to non-editable blocks
+                const disclosures = document.querySelectorAll(
+                    '#docContainer .corex-disclosure-checklist'
+                );
+                disclosures.forEach((el, idx) => {
+                    el.setAttribute('data-disclosure-index', idx);
+                    el.setAttribute('contenteditable', 'false');
+
+                    const label = document.createElement('div');
+                    label.className = 'text-[10px] font-semibold text-purple-600 uppercase tracking-wider mb-1 mt-3';
+                    label.textContent = 'Disclosure Checklist \u2014 completed by recipient at signing';
+                    label.setAttribute('contenteditable', 'false');
+                    el.parentNode.insertBefore(label, el);
                 });
 
                 this._updateCounts();
@@ -1230,6 +1384,16 @@ function cdsEditor() {
                     el.classList.add('doc-tag-input-linked');
                 } else {
                     el.classList.add('doc-tag-input');
+                }
+
+                // Purple bottom border for editable fields
+                const eb = (mapping.editable_by || []);
+                if (eb.length > 0) {
+                    el.style.borderBottom = '2px solid #a855f7';
+                    el.title = 'Editable by: ' + eb.join(', ');
+                } else {
+                    el.style.borderBottom = '';
+                    el.title = 'Locked after agent fills';
                 }
             } else if (tag.type === 'signature') {
                 if ((mapping.parties || []).length > 0) {
@@ -1323,6 +1487,7 @@ function cdsEditor() {
                 sigType: 'electronic',
                 sourceType: '',
                 sourceContactType: '',
+                editable_by: [],
             };
         },
 
@@ -1404,6 +1569,36 @@ function cdsEditor() {
             this.mappings[tagId] = m;
             this._syncTagColor(tagId);
             this._syncTagLabel(tagId);
+            this._persistMappings();
+        },
+
+        toggleEditableBy(tagId, role, checked) {
+            const m = this.getMapping(tagId);
+            if (!m.editable_by) m.editable_by = [];
+
+            // Remove 'all' if individual is toggled
+            m.editable_by = m.editable_by.filter(r => r !== 'all');
+
+            if (checked && !m.editable_by.includes(role)) {
+                m.editable_by.push(role);
+            } else if (!checked) {
+                m.editable_by = m.editable_by.filter(r => r !== role);
+            }
+
+            this.mappings[tagId] = m;
+            this._syncTagColor(tagId);
+            this._persistMappings();
+        },
+
+        toggleEditableByAll(tagId, checked) {
+            const m = this.getMapping(tagId);
+            if (checked) {
+                m.editable_by = ['all'];
+            } else {
+                m.editable_by = [];
+            }
+            this.mappings[tagId] = m;
+            this._syncTagColor(tagId);
             this._persistMappings();
         },
 
@@ -1579,11 +1774,24 @@ function cdsEditor() {
 
         _autoPartyForType(typeKey) {
             if (typeKey === 'sf:agent') return 'agent';
-            if (typeKey === 'sf:contact_lessor') return 'lessor';
-            if (typeKey === 'sf:contact_lessee') return 'lessee';
-            if (typeKey === 'sf:contact_seller') return 'seller';
-            if (typeKey === 'sf:contact_buyer') return 'buyer';
+            if (typeKey === 'sf:contact_lessor' || typeKey === 'sf:contact_seller') return 'owner_party';
+            if (typeKey === 'sf:contact_lessee' || typeKey === 'sf:contact_buyer') return 'acquiring_party';
             return 'auto';
+        },
+
+        _autoEditableBy(sourceType, sourceContactType, typeKey) {
+            // Contact fields → editable by the contact's party
+            if (sourceType === 'contact' && sourceContactType) {
+                const ct = sourceContactType.toLowerCase();
+                if (ct === 'lessor' || ct === 'seller') return ['owner_party'];
+                if (ct === 'lessee' || ct === 'buyer') return ['acquiring_party'];
+            }
+            // Property and deal fields → locked (auto-filled from DB)
+            if (sourceType === 'property' || sourceType === 'deal') return [];
+            // Agent fields → locked
+            if (typeKey === 'sf:agent') return [];
+            // Manual/unknown → agent editable
+            return ['agent'];
         },
 
         _autoPartyForFieldGroup(fg) {
@@ -1594,7 +1802,10 @@ function cdsEditor() {
             if (contactTypes.length > 0) {
                 const counts = {};
                 contactTypes.forEach(t => { counts[t] = (counts[t] || 0) + 1; });
-                return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+                const dominant = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+                if (dominant === 'lessor' || dominant === 'seller') return 'owner_party';
+                if (dominant === 'lessee' || dominant === 'buyer') return 'acquiring_party';
+                return dominant;
             }
             const agentFields = fg.fields.filter(f => f.source_type === 'agent');
             if (agentFields.length > 0) return 'agent';

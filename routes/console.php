@@ -52,3 +52,6 @@ Schedule::job(new \App\Jobs\SyncMarketingInsightsJob())->dailyAt('04:00');
 
 // Prospecting claim maintenance — runs hourly
 Schedule::command('prospecting:maintain-claims')->hourly();
+
+// Carry forward targets from previous month — runs on the 1st at 00:05
+Schedule::command('targets:carry-forward')->monthlyOn(1, '00:05')->withoutOverlapping();

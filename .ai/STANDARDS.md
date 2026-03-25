@@ -123,3 +123,19 @@ Never in code. Never in the database unless encrypted. Never in comments. `.env`
 - Tables: snake_case plural (`properties`, `contacts`, `deals`)
 - Routes: kebab-case (`/deals/create`, `/listings/edit`)
 - Blade files: kebab-case (`listing-card.blade.php`)
+
+---
+
+## Prompt Execution Rules
+
+### Rule 13: Full CRUD is Non-Negotiable
+Every created entity must have create, read, update, and delete paths. No orphan records.
+
+### Rule 14: Every Action Must Be Reversible
+Undo, soft-delete, or archive. Never hard delete.
+
+### Rule 15: Read Specs Before Coding
+Before any code changes, read CLAUDE.md, STANDARDS.md, and the relevant spec from .ai/specs/. Design decisions in the spec override assumptions.
+
+### Rule 16: Functional Verification Required
+php -l and dev-check are necessary but not sufficient. Every feature must be verified via Tinker or equivalent to confirm it actually works end-to-end, not just compiles.

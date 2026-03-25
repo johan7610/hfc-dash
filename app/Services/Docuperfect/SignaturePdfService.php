@@ -25,9 +25,25 @@ class SignaturePdfService
             $docTemplate = $document->template;
 
             $webTemplateData = $document->web_template_data ?? [];
+            $hasMergedHtml = !empty($webTemplateData['merged_html']);
             $hasDocPages = !empty($webTemplateData['flattened_page_count']);
+            $isWebTemplate = $docTemplate && ($docTemplate->render_type ?? 'pdf') === 'web';
+
+            // Web templates with merged_html: use Puppeteer (Chromium) for pixel-perfect rendering
+            if ($isWebTemplate && $hasMergedHtml) {
+                return $this->generateFromHtml($template, $document, $webTemplateData['merged_html']);
+            }
+
+            // Page-image templates: use DomPDF with overlay rendering
             if ((!$docTemplate || $docTemplate->page_count < 1) && !$hasDocPages) {
-                Log::error('SignaturePdfService: No document template or zero pages', ['template_id' => $template->id]);
+                Log::error('SignaturePdfService: No pages and no merged_html — cannot generate PDF', [
+                    'template_id' => $template->id,
+                    'document_id' => $document->id,
+                    'render_type' => $docTemplate->render_type ?? 'unknown',
+                    'page_count' => $docTemplate->page_count ?? 0,
+                    'has_merged_html' => $hasMergedHtml,
+                    'has_flattened_pages' => $hasDocPages,
+                ]);
                 return null;
             }
 
@@ -65,11 +81,79 @@ class SignaturePdfService
         } catch (\Throwable $e) {
             Log::error('SignaturePdfService: Failed to generate signed PDFs', [
                 'template_id' => $template->id,
+                'document_id' => $template->document_id,
+                'render_type' => $template->document?->template?->render_type ?? 'unknown',
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
             return null;
         }
+    }
+
+    /**
+     * Generate signed PDFs for web templates using Puppeteer (Chromium).
+     * Produces identical rendering to the browser — no raster/overlay approach needed.
+     *
+     * @return array{internal: string, client: string}|null
+     */
+    private function generateFromHtml(SignatureTemplate $template, $document, string $mergedHtml): ?array
+    {
+        $signingController = app(\App\Http\Controllers\Docuperfect\SigningController::class);
+
+        // 1. Client copy — document with signatures (no audit certificate)
+        $clientTempPath = $signingController->generatePdfFromHtml($mergedHtml, $document->id);
+        if (!$clientTempPath || !file_exists($clientTempPath)) {
+            Log::error('SignaturePdfService: Puppeteer client PDF generation failed', [
+                'template_id' => $template->id,
+                'document_id' => $document->id,
+            ]);
+            return null;
+        }
+
+        // 2. Internal copy — document + audit certificate appended
+        $auditData = $this->buildAuditData($template, $document);
+        $auditHtml = view('docuperfect.signatures.pdf.audit-certificate', $auditData)->render();
+        $htmlWithAudit = $mergedHtml
+            . '<div style="page-break-before:always;"></div>'
+            . $auditHtml;
+        $internalTempPath = $signingController->generatePdfFromHtml($htmlWithAudit, $document->id);
+        if (!$internalTempPath || !file_exists($internalTempPath)) {
+            Log::warning('SignaturePdfService: Puppeteer internal PDF failed, using client copy as fallback', [
+                'template_id' => $template->id,
+            ]);
+            $internalTempPath = $clientTempPath;
+        }
+
+        // Store in final locations
+        $baseDir = "docuperfect/signed-documents/{$template->id}";
+        $clientStoragePath = "{$baseDir}/client_signed.pdf";
+        $internalStoragePath = "{$baseDir}/final_signed.pdf";
+
+        $targetDir = storage_path("app/{$baseDir}");
+        if (!is_dir($targetDir)) {
+            mkdir($targetDir, 0755, true);
+        }
+
+        if ($clientTempPath !== $internalTempPath) {
+            rename($clientTempPath, storage_path("app/{$clientStoragePath}"));
+            rename($internalTempPath, storage_path("app/{$internalStoragePath}"));
+        } else {
+            // Same file — copy for client, move for internal
+            copy($clientTempPath, storage_path("app/{$clientStoragePath}"));
+            rename($clientTempPath, storage_path("app/{$internalStoragePath}"));
+        }
+
+        Log::info('SignaturePdfService: Web template PDFs generated via Puppeteer', [
+            'template_id' => $template->id,
+            'document_id' => $document->id,
+            'client_path' => $clientStoragePath,
+            'internal_path' => $internalStoragePath,
+        ]);
+
+        return [
+            'internal' => $internalStoragePath,
+            'client' => $clientStoragePath,
+        ];
     }
 
     /**

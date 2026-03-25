@@ -23,9 +23,16 @@
     {{-- ===== PROGRESS BAR (sticky header) ===== --}}
     <div style="background:#0b2a4a;" class="px-6 py-4 flex-shrink-0">
         <div class="flex items-center justify-between mb-3">
-            <h2 class="text-xl font-bold text-white leading-tight">
-                E-Sign Document
-                <span x-show="templateName || selectedPackName" class="text-white/60 font-normal text-base" x-text="'— ' + (isPackFlow ? selectedPackName : templateName)"></span>
+            <h2 class="text-xl font-bold text-white leading-tight flex items-center gap-2">
+                <span class="whitespace-nowrap">E-Sign Document —</span>
+                <input type="text"
+                       x-model="documentName"
+                       class="bg-transparent text-white/80 font-normal text-base border-0 border-b border-transparent
+                              focus:border-white/40 outline-none transition-colors px-0 py-0"
+                       style="min-width:200px; max-width:500px;"
+                       :size="Math.max(20, (documentName || '').length + 2)"
+                       placeholder="Document name..."
+                />
             </h2>
             <span class="text-sm text-white/60" x-text="'Step ' + currentStep + ' of 6'"></span>
         </div>
@@ -90,6 +97,25 @@
 
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Select Template</h3>
 
+                {{-- Category filter buttons --}}
+                <div class="flex items-center gap-2 mb-3">
+                    <button @click="categoryFilter = 'all'"
+                            class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
+                            :class="categoryFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">
+                        All
+                    </button>
+                    <button @click="categoryFilter = 'sales'"
+                            class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
+                            :class="categoryFilter === 'sales' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">
+                        Sales
+                    </button>
+                    <button @click="categoryFilter = 'rentals'"
+                            class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
+                            :class="categoryFilter === 'rentals' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">
+                        Rentals
+                    </button>
+                </div>
+
                 <input type="text" x-model="templateSearch" placeholder="Search templates..."
                        class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm mb-4" />
 
@@ -113,10 +139,13 @@
                                         :class="selectedTemplateId === t.id
                                             ? 'border-blue-500 bg-blue-50'
                                             : 'border-gray-200 hover:border-gray-300 bg-white'">
-                                    <div class="font-medium text-gray-900 text-sm flex items-center">
+                                    <div class="font-medium text-gray-900 text-sm flex items-center flex-wrap gap-1">
                                         <span x-text="t.name"></span>
-                                        <span x-show="t.render_type === 'web'" class="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 ml-2">Web</span>
-                                        <span x-show="!t.render_type || t.render_type === 'pdf'" class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 ml-2">PDF</span>
+                                        <span x-show="t.render_type === 'web'" class="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-600">Web</span>
+                                        <span x-show="!t.render_type || t.render_type === 'pdf'" class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">PDF</span>
+                                        <span x-show="t.category === 'sales'" class="text-[10px] px-1.5 py-0.5 rounded font-medium" style="background: rgba(249,115,22,0.15); color: #ea580c;">Sales</span>
+                                        <span x-show="t.category === 'rentals'" class="text-[10px] px-1.5 py-0.5 rounded font-medium" style="background: rgba(59,130,246,0.15); color: #2563eb;">Rentals</span>
+                                        <span x-show="t.document_type?.label || t.document_type?.name" class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium" x-text="t.document_type?.label || t.document_type?.name"></span>
                                     </div>
                                     <div class="text-xs text-gray-500 mt-0.5">
                                         <span x-text="t.page_count + ' page' + (t.page_count !== 1 ? 's' : '')"></span>
@@ -147,7 +176,7 @@
                                             : 'border-gray-200 hover:border-gray-300 bg-white'">
                                     <div class="font-medium text-gray-900 text-sm flex items-center">
                                         <span x-text="p.name"></span>
-                                        <span class="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 ml-2">Pack</span>
+                                        <span class="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 ml-2">Web</span>
                                         <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 ml-1" x-text="p.items.length + ' template' + (p.items.length !== 1 ? 's' : '')"></span>
                                     </div>
                                     <div x-show="p.items.length > 0" class="mt-1.5 space-y-0.5">
@@ -267,9 +296,10 @@
                                         <div class="text-xs text-gray-500 mt-0.5 flex items-center gap-2">
                                             <span x-show="result.property_type" x-text="result.property_type" class="capitalize"></span>
                                             <span x-show="result.beds" x-text="result.beds + ' bed'"></span>
+                                            <span x-show="result.price && result.source === 'properties'" x-text="'R ' + Number(result.price).toLocaleString()"></span>
                                             <span x-show="result.rental_amount" x-text="'R ' + Number(result.rental_amount).toLocaleString() + '/mo'"></span>
                                         </div>
-                                        <div x-show="result.lessor_name" class="text-xs text-blue-600 mt-0.5" x-text="'Landlord: ' + result.lessor_name"></div>
+                                        <div x-show="result.lessor_name" class="text-xs text-blue-600 mt-0.5" x-text="ownerPartyLabel + ': ' + result.lessor_name"></div>
                                     </div>
                                     <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 flex-shrink-0 ml-2"
                                           x-text="result.source === 'properties' ? 'Property' : 'Rental'"></span>
@@ -357,15 +387,36 @@
                                     </template>
                                     <template x-if="!r.readonly">
                                         <select x-model="r.role" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
-                                            <option value="landlord">Landlord</option>
-                                            <option value="tenant">Tenant</option>
-                                            <option value="buyer">Buyer</option>
-                                            <option value="seller">Seller</option>
-                                            <option value="witness">Witness</option>
-                                            <option value="other">Other</option>
+                                            <option value="">Select role...</option>
+                                            {{-- Hidden fallback preserves bound value for roles not in the list --}}
+                                            <option x-show="false" :value="r.role" x-text="getRoleLabel(r.role)" selected></option>
+                                            @foreach($contactTypes as $ct)
+                                                <option value="{{ strtolower($ct->name) }}">{{ $ct->name }}</option>
+                                            @endforeach
                                         </select>
                                     </template>
                                 </div>
+
+                                {{-- Role mismatch warning --}}
+                                <template x-if="!r.readonly && r.role && requiredSigningRoles.length > 0 && !roleMatchesTemplate(r.role)">
+                                    <div class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
+                                        <p class="text-xs text-amber-800">
+                                            <strong x-text="r.name || ('Recipient ' + (ri+1))"></strong>
+                                            is set as <strong x-text="getRoleLabel(r.role)"></strong>
+                                            but this document requires
+                                            <strong x-text="requiredSigningRoles.map(r => getRoleLabel(r)).join(' / ')"></strong>.
+                                        </p>
+                                        <div class="mt-1.5 flex flex-wrap gap-1.5">
+                                            <template x-for="pr in resolvedPartyRoles" :key="pr.value">
+                                                <button type="button"
+                                                        @click="fixRecipientRole(ri, pr.value)"
+                                                        class="px-2.5 py-1 text-xs font-medium rounded-md bg-amber-200 text-amber-900 hover:bg-amber-300 transition">
+                                                    <span x-text="'Set as ' + pr.label"></span>
+                                                </button>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
 
                                 {{-- Contact search (only for non-agent recipients) --}}
                                 <template x-if="!r.readonly">
@@ -462,11 +513,11 @@
                     </template>
                 </div>
 
-                {{-- Add second owner button (only when a landlord exists but no second landlord yet) --}}
-                <button x-show="hasRoleRecipient('landlord') && !hasSecondRoleRecipient('landlord')"
+                {{-- Add second owner button (only when an owner party exists but no second one yet) --}}
+                <button x-show="hasRoleRecipient(ownerPartyRole) && !hasSecondRoleRecipient(ownerPartyRole)"
                         @click="addSecondOwner()"
                         class="w-full mt-3 py-2.5 border-2 border-dashed border-emerald-300 rounded-xl text-sm text-emerald-600 hover:border-emerald-500 hover:text-emerald-700 transition">
-                    + Add Second Owner (Co-owner)
+                    <span x-text="'+ Add Second ' + ownerPartyLabel + ' (Co-owner)'"></span>
                 </button>
 
                 <button @click="addRecipient()" class="w-full mt-3 py-2.5 border-2 border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 transition">
@@ -484,56 +535,112 @@
                     Some fields were auto-filled from the selected property. You can adjust them below.
                 </div>
 
+                {{-- Context indicator --}}
+                <div class="mb-4 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2"
+                     :class="isSalesContext ? 'bg-purple-50 border border-purple-200 text-purple-700' : 'bg-teal-50 border border-teal-200 text-teal-700'">
+                    <span x-text="isSalesContext ? 'Sales Document' : 'Rental Document'"></span>
+                </div>
+
                 <div class="space-y-4">
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Monthly Rental (R)</label>
-                            <input type="text" x-model="details.monthly_rental" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 12000">
+                    {{-- ---- SALES FIELDS ---- --}}
+                    <template x-if="isSalesContext">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Asking Price (R)</label>
+                                <input type="text" x-model="details.price"
+                                       @input="updatePreviewField('price', $event.target.value)"
+                                       class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 2500000">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Commission (%)</label>
+                                <input type="text" x-model="details.commission"
+                                       @input="updatePreviewField('commission_percent', $event.target.value)"
+                                       class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 7.5">
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Mandate Start Date</label>
+                                    <input type="date" x-model="details.mandate_start"
+                                           @input="updatePreviewField('mandate_start', $event.target.value)"
+                                           class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Mandate Expiry Date</label>
+                                    <input type="date" x-model="details.mandate_expiry"
+                                           @input="updatePreviewField('mandate_expiry', $event.target.value)"
+                                           class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
+                                    <div class="flex flex-wrap gap-1.5 mt-2">
+                                        <template x-for="opt in [{m:1,l:'1 Mo'},{m:3,l:'3 Mo'},{m:6,l:'6 Mo'},{m:9,l:'9 Mo'}]" :key="opt.m">
+                                            <button type="button" @click="quickFillExpiry(opt.m)"
+                                                    class="px-2.5 py-1 rounded-full border text-[11px] font-medium transition"
+                                                    :class="details.mandate_expiry === calcExpiryDate(opt.m) ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-600 border-gray-300 hover:border-teal-400 hover:text-teal-600'"
+                                                    x-text="opt.l"></button>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Deposit (R)</label>
-                            <input type="text" x-model="details.deposit" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 12000">
-                        </div>
-                    </div>
+                    </template>
 
-                    {{-- Lease dates with duration selector --}}
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Lease Start Date</label>
-                        <input type="date" x-model="details.lease_start"
-                               @change="calculateLeaseEnd()"
-                               class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Lease Duration</label>
-                        <div class="flex flex-wrap gap-2 mb-3">
-                            <template x-for="opt in [{value: 6, label: '6 months'}, {value: 12, label: '12 months'}, {value: 24, label: '24 months'}, {value: 0, label: 'Custom'}]" :key="opt.value">
-                                <button type="button"
-                                        @click="details._duration = opt.value; calculateLeaseEnd()"
-                                        class="px-3 py-1.5 rounded-lg border text-xs font-medium transition"
-                                        :class="details._duration === opt.value ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'"
-                                        x-text="opt.label"></button>
-                            </template>
-                        </div>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Lease End Date</label>
-                        <input type="date" x-model="details.lease_end"
-                               :readonly="details._duration !== 0"
-                               class="w-full rounded-lg border px-3 py-2 text-sm"
-                               :class="details._duration !== 0 ? 'border-gray-200 bg-gray-100 text-gray-500' : 'border-slate-300 bg-white text-slate-900'">
-                        <p x-show="details._duration !== 0 && details.lease_end" class="text-xs text-gray-400 mt-1" x-text="'Auto-calculated: ' + details._duration + ' months from start'"></p>
-                    </div>
+                    {{-- ---- RENTAL FIELDS ---- --}}
+                    <template x-if="!isSalesContext">
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Monthly Rental (R)</label>
+                                    <input type="text" x-model="details.monthly_rental"
+                                           @input="updatePreviewField('monthly_rental', $event.target.value); updatePreviewField('rental_amount', $event.target.value)"
+                                           class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 12000">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Deposit (R)</label>
+                                    <input type="text" x-model="details.deposit"
+                                           @input="updatePreviewField('deposit_amount', $event.target.value)"
+                                           class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 12000">
+                                </div>
+                            </div>
 
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Commission (%)</label>
-                            <input type="text" x-model="details.commission" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 8.5">
+                            {{-- Lease dates with duration selector --}}
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Lease Start Date</label>
+                                <input type="date" x-model="details.lease_start"
+                                       @change="calculateLeaseEnd()"
+                                       @input="updatePreviewField('lease_start', $event.target.value)"
+                                       class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Lease Duration</label>
+                                <div class="flex flex-wrap gap-2 mb-3">
+                                    <template x-for="opt in [{value: 6, label: '6 months'}, {value: 12, label: '12 months'}, {value: 24, label: '24 months'}, {value: 0, label: 'Custom'}]" :key="opt.value">
+                                        <button type="button"
+                                                @click="details._duration = opt.value; calculateLeaseEnd()"
+                                                class="px-3 py-1.5 rounded-lg border text-xs font-medium transition"
+                                                :class="details._duration === opt.value ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'"
+                                                x-text="opt.label"></button>
+                                    </template>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Lease End Date</label>
+                                <input type="date" x-model="details.lease_end"
+                                       :readonly="details._duration !== 0"
+                                       class="w-full rounded-lg border px-3 py-2 text-sm"
+                                       :class="details._duration !== 0 ? 'border-gray-200 bg-gray-100 text-gray-500' : 'border-slate-300 bg-white text-slate-900'">
+                                <p x-show="details._duration !== 0 && details.lease_end" class="text-xs text-gray-400 mt-1" x-text="'Auto-calculated: ' + details._duration + ' months from start'"></p>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Commission (%)</label>
+                                    <input type="text" x-model="details.commission" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 8.5">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Marketing Fee (R)</label>
+                                    <input type="text" x-model="details.marketing_fee" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 2500">
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Marketing Fee (R)</label>
-                            <input type="text" x-model="details.marketing_fee" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 2500">
-                        </div>
-                    </div>
+                    </template>
 
                     {{-- Dynamic manual fields from template --}}
                     <template x-if="manualFields.length > 0">
@@ -649,14 +756,82 @@
                                           :class="(fieldValues[f.id] && fieldValues[f.id] !== '') ? 'border-green-400 bg-green-50' : 'border-slate-300 bg-white'"
                                           :placeholder="fieldLabel(f)"></textarea>
                             </template>
+
+                            {{-- Field group display (read-only, collapsed group members) --}}
+                            <template x-if="fieldInputType(f) === 'field_group_display'">
+                                <div class="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-gray-800"
+                                     :class="(f.value || fieldValues[f.id]) ? 'border-green-400 bg-green-50' : ''">
+                                    <span x-text="f.value || fieldValues[f.id] || 'Pending — will auto-fill from recipient data'"
+                                          :class="(f.value || fieldValues[f.id]) ? 'text-gray-900 font-medium' : 'text-gray-400 italic'"></span>
+                                </div>
+                            </template>
                         </div>
                     </template>
+                </div>
+
+                {{-- Additional Clauses --}}
+                <div class="mt-6 mb-4 p-3 border border-dashed border-blue-300 rounded-lg bg-blue-50/50">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <span class="text-sm font-semibold text-blue-700">Other Conditions / Additional Clauses</span>
+                            <p class="text-xs text-blue-500 mt-0.5">
+                                Type conditions manually or insert from the clause library. Separate each clause with a blank line.
+                            </p>
+                        </div>
+                        <button type="button" @click="showClauseLibrary = true"
+                                class="text-sm px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                            + Insert Clause
+                        </button>
+                    </div>
+
+                    {{-- Unified editable textarea for all clauses (manual + library) --}}
+                    <textarea x-model="otherConditionsText"
+                              @input="updateClausesPreview()"
+                              rows="6"
+                              class="mt-3 w-full rounded-lg border px-3 py-2 text-sm"
+                              :class="otherConditionsText.trim() ? 'border-green-400 bg-green-50' : 'border-slate-300 bg-white'"
+                              placeholder="Type additional conditions here, or use 'Insert Clause' to add from the library. Separate each clause with a blank line for per-clause initials tracking."
+                              style="min-height:120px; resize:vertical;"></textarea>
                 </div>
             </div>
 
             {{-- ======== STEP 6: Signing Setup ======== --}}
             <div x-show="currentStep === 6" x-cloak>
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Signing Setup</h3>
+
+                {{-- Delivery Mode Selection --}}
+                <template x-if="effectiveDeliveryModes.length > 1">
+                    <div class="mb-6 p-4 rounded-lg border border-gray-200 bg-white">
+                        <h4 class="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-3">Delivery Mode</h4>
+                        <div class="space-y-2">
+                            <template x-for="mode in effectiveDeliveryModes" :key="mode">
+                                <label class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all"
+                                       :class="deliveryMode === mode ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'">
+                                    <input type="radio" name="delivery_mode" :value="mode" x-model="deliveryMode"
+                                           class="mt-0.5 rounded-full border-gray-300 text-blue-600">
+                                    <div>
+                                        <div class="text-sm font-semibold text-gray-800" x-text="deliveryModeLabel(mode)"></div>
+                                        <div class="text-xs text-gray-500 mt-0.5" x-text="deliveryModeDescription(mode)"></div>
+                                    </div>
+                                </label>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="effectiveDeliveryModes.length === 1">
+                    <div class="mb-4 p-3 rounded-lg bg-gray-50 border border-gray-200 text-sm text-gray-600">
+                        <span class="font-semibold" x-text="deliveryModeLabel(effectiveDeliveryModes[0])"></span>
+                        <span class="text-xs ml-2 text-gray-400" x-text="'(only available mode for this template)'"></span>
+                    </div>
+                </template>
+                <template x-if="esignBlocked">
+                    <div class="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-300 text-sm text-amber-800">
+                        <strong>Sale agreements must be signed with wet ink</strong> per the Alienation of Land Act. E-signing is not permitted for this document type.
+                    </div>
+                </template>
+
+                {{-- Only show signing order for e-sign mode --}}
+                <div x-show="deliveryMode === 'esign'">
 
                 {{-- Signing order cards --}}
                 <h4 class="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-3">Signing Order</h4>
@@ -710,8 +885,15 @@
                                                 :disabled="r.skipEmail"
                                                 class="text-xs rounded border border-gray-300 bg-white text-gray-700 px-2 py-1">
                                             <option value="send_after" x-bind:disabled="!r.email || r.skipEmail">Send after previous</option>
-                                            <option value="sign_later">Sign later</option>
+                                            <option value="sign_later">Sign later (deferred)</option>
                                         </select>
+                                        <div x-show="signingActions[ri] === 'sign_later'" class="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
+                                            <div class="flex items-center gap-2 text-xs text-amber-700">
+                                                <span>&#9208;</span>
+                                                <span class="font-medium">Deferred — details not yet known</span>
+                                            </div>
+                                            <p class="text-xs text-amber-600 mt-1">This party's signing will be paused until you provide their details. You can resume signing later from the document dashboard.</p>
+                                        </div>
                                         <label class="flex items-center gap-2 mt-2 text-sm">
                                             <input type="checkbox"
                                                    x-model="r.skipEmail"
@@ -746,6 +928,27 @@
                         </div>
                     </template>
                 </div>
+
+                </div>{{-- end deliveryMode === 'esign' wrapper --}}
+
+                {{-- Wet ink mode info --}}
+                <div x-show="deliveryMode === 'wet_ink'" class="p-4 rounded-lg border border-gray-200 bg-white space-y-3">
+                    <h4 class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Wet Ink Signing</h4>
+                    <p class="text-sm text-gray-600">The document will be generated as a PDF. Each signing party will receive a secure link to:</p>
+                    <ol class="text-sm text-gray-600 list-decimal ml-5 space-y-1">
+                        <li>Download the document for printing</li>
+                        <li>Sign in ink on the printed copy</li>
+                        <li>Scan or photograph the signed pages</li>
+                        <li>Upload the signed document through the portal</li>
+                    </ol>
+                    <p class="text-xs text-gray-400 mt-2">You will review and approve each uploaded document before it proceeds to the next party.</p>
+                </div>
+
+                {{-- Download only mode info --}}
+                <div x-show="deliveryMode === 'download'" class="p-4 rounded-lg border border-gray-200 bg-white space-y-3">
+                    <h4 class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Download Only</h4>
+                    <p class="text-sm text-gray-600">The document will be generated as a PDF for you to download. No signing pipeline will be created.</p>
+                </div>
             </div>
 
             </div>{{-- end flex-1 p-6 --}}
@@ -758,12 +961,17 @@
         {{-- RIGHT PANEL: Document Preview --}}
         <div class="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-gray-800 min-w-0">
 
-            {{-- Web template preview --}}
-            <div x-show="previewRenderType === 'web' && previewHtml"
-                 x-html="previewHtml"
-                 class="web-template-preview">
+            {{-- Web template preview (wrapped in CoreX document CSS) --}}
+            <div x-show="previewRenderType === 'web' && previewHtml" class="overflow-y-auto" style="max-height: calc(100vh - 200px);">
+                <link href="/css/corex-document.css" rel="stylesheet">
+                <div style="zoom: 0.7;">
+                    <div class="web-template-preview" x-html="previewHtml"></div>
+                </div>
             </div>
             <style>
+                .web-template-preview .corex-page {
+                    min-height: auto !important;
+                }
                 .field-highlighted {
                     background: rgba(255,200,0,0.3) !important;
                     outline: 2px solid #f59e0b;
@@ -798,17 +1006,81 @@
                 </template>
             </div>
 
-            {{-- Pack summary preview --}}
+            {{-- Pack summary / slot selection --}}
             <div x-show="isPackFlow && packPreview" class="p-6" x-cloak>
                 <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
                     <div class="font-semibold text-blue-700 mb-2 text-base">
                         <span x-text="selectedPackName"></span>
                     </div>
-                    <p class="text-xs text-gray-500 mb-3">This pack contains the following documents in order:</p>
-                    <template x-for="(item, i) in (packPreview?.items || [])" :key="i">
-                        <div class="flex items-center gap-2 py-2 border-b border-slate-100 last:border-0">
-                            <span class="text-xs font-bold text-gray-400 w-5 text-center" x-text="i+1"></span>
-                            <span class="text-sm text-gray-700" x-text="item.template?.name || 'Unknown'"></span>
+
+                    {{-- Simple pack (no slots) — just list the templates --}}
+                    <template x-if="!packHasSlots">
+                        <div>
+                            <p class="text-xs text-gray-500 mb-3">This pack contains the following documents in order:</p>
+                            <template x-for="(item, i) in (packPreview?.items || [])" :key="i">
+                                <div class="flex items-center gap-2 py-2 border-b border-slate-100 last:border-0">
+                                    <span class="text-xs font-bold text-gray-400 w-5 text-center" x-text="i+1"></span>
+                                    <span class="text-sm text-gray-700" x-text="item.template?.name || 'Unknown'"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
+                    {{-- Pack with slots — show slot selection UI --}}
+                    <template x-if="packHasSlots">
+                        <div>
+                            <p class="text-xs text-gray-500 mb-3">Configure which documents to include:</p>
+                            <div class="space-y-3">
+                                <template x-for="slot in packSlots" :key="slot.key">
+                                    <div class="border rounded-lg p-3">
+                                        {{-- Required slot --}}
+                                        <template x-if="slot.type === 'required'">
+                                            <div class="flex items-center gap-2">
+                                                <span class="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
+                                                <span class="text-sm text-gray-700" x-text="slot.templates[0].name"></span>
+                                                <span class="text-[10px] text-gray-400">Required</span>
+                                            </div>
+                                        </template>
+
+                                        {{-- Selectable slot — radio buttons --}}
+                                        <template x-if="slot.type === 'selectable'">
+                                            <div>
+                                                <span class="text-xs font-semibold text-gray-500 uppercase"
+                                                      x-text="slot.label || 'Select one'"></span>
+                                                <div class="mt-2 space-y-1">
+                                                    <template x-for="tmpl in slot.templates" :key="tmpl.id">
+                                                        <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer p-2 rounded hover:bg-gray-50">
+                                                            <input type="radio"
+                                                                   :name="'slot-' + slot.group"
+                                                                   :value="tmpl.id"
+                                                                   x-model.number="slotSelections[slot.group]"
+                                                                   class="w-3.5 h-3.5 text-teal-600">
+                                                            <span x-text="tmpl.name"></span>
+                                                        </label>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </template>
+
+                                        {{-- Optional slot — checkbox --}}
+                                        <template x-if="slot.type === 'optional'">
+                                            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                                                <input type="checkbox"
+                                                       :value="slot.templates[0].id"
+                                                       x-model.number="optionalSelections"
+                                                       class="w-3.5 h-3.5 text-teal-600 rounded">
+                                                <span x-text="slot.templates[0].name"></span>
+                                                <span class="text-[10px] text-gray-400">Optional</span>
+                                            </label>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+
+                            {{-- Resolved template count --}}
+                            <div class="mt-3 text-xs text-gray-500">
+                                <span x-text="resolvedPackTemplateIds.length"></span> document(s) will be included
+                            </div>
                         </div>
                     </template>
                 </div>
@@ -855,6 +1127,40 @@
             </button>
         </div>
     </div>
+
+    {{-- Clause Library Modal --}}
+    <template x-if="showClauseLibrary">
+        <div class="fixed inset-0 z-50 flex items-center justify-center"
+             style="background:rgba(0,0,0,0.4);" @click.self="showClauseLibrary = false">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
+                <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+                    <h3 class="text-sm font-semibold text-gray-800">Clause Library</h3>
+                    <button @click="showClauseLibrary = false" class="text-gray-400 hover:text-gray-600 text-lg">&times;</button>
+                </div>
+
+                <div class="p-4 border-b border-gray-200">
+                    <input type="text" x-model="clauseSearch" placeholder="Search clauses..."
+                           class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-4 space-y-2">
+                    <template x-for="clause in filteredClauses" :key="clause.id">
+                        <div class="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                             @click="insertClause(clause)">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold text-gray-700" x-text="clause.name"></span>
+                                <span class="text-[10px] text-gray-400" x-text="clause.is_global ? 'Global' : 'Personal'"></span>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1 line-clamp-3" x-text="clause.text"></p>
+                        </div>
+                    </template>
+                    <template x-if="filteredClauses.length === 0">
+                        <p class="text-xs text-gray-400 text-center py-8">No clauses found</p>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </template>
 </div>
 
 <script>
@@ -873,6 +1179,7 @@ function esignWizard() {
     const serverRecipients = @json($recipients ?? []);
     const serverStepData = @json($stepData ?? []);
     const serverManualFields = @json($manualFields ?? []);
+    const serverContactTypes = @json($contactTypes ?? []);
     const serverCurrentStep = {{ $safeStep }};
     const serverIsWebTemplate = @json($isWebTemplate ?? false);
     const serverTemplateId = @json($templateId ?? null);
@@ -909,15 +1216,21 @@ function esignWizard() {
     });
 
     // Build template groups from document types
-    function buildTemplateGroups(templates, search) {
+    function buildTemplateGroups(templates, search, categoryFilter) {
         const types = {};
         const typeLabels = {
             'rental': 'Rental',
             'sales': 'Sales',
             'compliance': 'Compliance',
+            'cds': 'Web Templates',
         };
 
         templates.forEach(t => {
+            // Apply category filter (client-side, no server round-trip)
+            if (categoryFilter && categoryFilter !== 'all') {
+                if (t.category && t.category !== categoryFilter) return;
+            }
+
             const type = (t.template_type || t.document_type?.name || 'other').toLowerCase();
             if (!types[type]) {
                 types[type] = { type, label: typeLabels[type] || type.charAt(0).toUpperCase() + type.slice(1), templates: [], open: true };
@@ -946,15 +1259,69 @@ function esignWizard() {
         'agent': 'agent', 'creator': 'agent',
     };
 
+    // Detect sales vs rental context from template name (fallback only)
+    function detectSalesContextFromName(templateName) {
+        if (!templateName) return false;
+        const n = templateName.toLowerCase();
+        return n.includes('sell') || n.includes('sale') || n.includes('authority')
+            || n.includes('otp') || n.includes('purchase') || n.includes('mandate to sell');
+    }
+
+    // Detect context from signing_parties: only explicit concrete roles determine context.
+    // Generic roles (owner_party, acquiring_party) are ambiguous and return null,
+    // forcing detection to fall through to property source (Layer 2) or template name (Layer 3).
+    // Returns: 'sales' | 'rental' | null (null = no explicit signal)
+    function detectContextFromSigningParties(signingParties) {
+        if (!Array.isArray(signingParties) || signingParties.length === 0) return null;
+        const roles = signingParties.map(r => r.toLowerCase());
+        const hasSalesRoles = roles.some(r => ['seller', 'buyer'].includes(r));
+        const hasRentalRoles = roles.some(r => ['landlord', 'tenant', 'lessor', 'lessee'].includes(r));
+        if (hasSalesRoles && !hasRentalRoles) return 'sales';
+        if (hasRentalRoles && !hasSalesRoles) return 'rental';
+        return null; // generic roles like owner_party or mixed — need property source / name fallback
+    }
+
+    // Detect context from property source table
+    function detectContextFromPropertySource(propertySource) {
+        if (propertySource === 'properties') return 'sales';
+        if (propertySource === 'rental_properties') return 'rental';
+        return null;
+    }
+
+    // Layered context detection: signing_parties > property source > template name
+    function detectSalesContext(templateName, signingParties, propertySource) {
+        // Layer 1: explicit roles in signing_parties
+        const fromParties = detectContextFromSigningParties(signingParties);
+        if (fromParties === 'sales') return true;
+        if (fromParties === 'rental') return false;
+
+        // Layer 2: property source table
+        const fromProp = detectContextFromPropertySource(propertySource);
+        if (fromProp === 'sales') return true;
+        if (fromProp === 'rental') return false;
+
+        // Layer 3: template name pattern matching (fallback)
+        return detectSalesContextFromName(templateName);
+    }
+
+    // Resolve a generic role (owner_party, acquiring_party) to concrete role based on context
+    function resolvePartyRole(role, isSales) {
+        if (role === 'owner_party') return isSales ? 'seller' : 'landlord';
+        if (role === 'acquiring_party') return isSales ? 'buyer' : 'tenant';
+        return role;
+    }
+
     function getRoleLabel(role) {
+        if (!role) return 'Signer';
+        // Check contact_types table first
+        const ct = (serverContactTypes || []).find(c => c.name.toLowerCase() === role);
+        if (ct) return ct.name;
+        // Fallback for system roles and aliases
         const labels = {
             'agent': 'Agent', 'creator': 'Agent',
-            'landlord': 'Landlord', 'lessor': 'Landlord',
-            'tenant': 'Tenant', 'lessee': 'Tenant',
-            'buyer': 'Buyer', 'seller': 'Seller',
-            'witness': 'Witness',
+            'owner_party': 'Owner/Seller', 'acquiring_party': 'Buyer/Tenant',
         };
-        return labels[role] || (role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Signer');
+        return labels[role] || role.charAt(0).toUpperCase() + role.slice(1);
     }
 
     return {
@@ -974,8 +1341,10 @@ function esignWizard() {
         // Step 1: Templates
         allTemplates: serverTemplates,
         templateSearch: '',
+        categoryFilter: 'all',
         selectedTemplateId: serverTemplate?.id || null,
         templateName: serverTemplate?.name || '',
+        documentName: serverStepData?.document_name || '',
         allWebPacks: serverWebPacks,
         allPdfPacks: serverPdfPacks,
         selectedPackId: null,
@@ -983,12 +1352,127 @@ function esignWizard() {
         selectedPdfPackId: null,
         isPackFlow: false,
         packPreview: null,
+        packSlots: [],
+        slotSelections: {},
+        optionalSelections: [],
+
+        // Template signing parties (from DB config)
+        templateSigningParties: serverTemplate?.signing_parties || [],
+
+        // Document context detection (sales vs rental) — layered: signing_parties > property source > name
+        get isSalesContext() {
+            const name = this.templateName || serverTemplate?.name || '';
+            const sigParties = this.templateSigningParties;
+            const propSource = this.property?._property_source || serverStepData?.property?._property_source || null;
+            return detectSalesContext(name, sigParties, propSource);
+        },
+        get ownerPartyLabel() {
+            return this.isSalesContext ? 'Seller' : 'Landlord';
+        },
+        get acquiringPartyLabel() {
+            return this.isSalesContext ? 'Buyer' : 'Tenant';
+        },
+        get ownerPartyRole() {
+            return this.isSalesContext ? 'seller' : 'landlord';
+        },
+        get acquiringPartyRole() {
+            return this.isSalesContext ? 'buyer' : 'tenant';
+        },
+
+        // Dynamic role options built from template signing_parties
+        // Resolves generic roles (owner_party, acquiring_party) to concrete roles based on context
+        get resolvedPartyRoles() {
+            const parties = this.templateSigningParties;
+            if (!Array.isArray(parties) || parties.length === 0) {
+                // Fallback: standard binary based on context
+                return this.isSalesContext
+                    ? [{ value: 'seller', label: 'Seller' }, { value: 'buyer', label: 'Buyer' }]
+                    : [{ value: 'landlord', label: 'Landlord' }, { value: 'tenant', label: 'Tenant' }];
+            }
+            const isSales = this.isSalesContext;
+            const roles = [];
+            const seen = new Set();
+            parties.forEach(role => {
+                if (role === 'agent' || role === 'creator') return; // agent is always row 1
+                const resolved = resolvePartyRole(role, isSales);
+                if (seen.has(resolved)) return;
+                seen.add(resolved);
+                roles.push({ value: resolved, label: getRoleLabel(resolved) });
+            });
+            // If signing_parties only had agent + owner_party but template allows acquiring_party
+            // (e.g. mandatory disclosure can have buyer/tenant added), ensure both owner + acquiring are available
+            if (roles.length === 1 && parties.includes('owner_party')) {
+                const acqRole = isSales ? 'buyer' : 'tenant';
+                if (!seen.has(acqRole)) {
+                    roles.push({ value: acqRole, label: getRoleLabel(acqRole) });
+                }
+            }
+            return roles;
+        },
+        get partyRolesGroupLabel() {
+            return this.isSalesContext ? 'Sales Parties' : 'Rental Parties';
+        },
+
+        // Role alias map for matching (SA real estate: lessor=landlord, lessee=tenant)
+        _roleAliasMap: {
+            'lessor': 'landlord', 'landlord': 'lessor',
+            'lessee': 'tenant', 'tenant': 'lessee',
+            'seller': 'seller', 'buyer': 'buyer', 'agent': 'agent',
+            'owner_party': 'owner_party', 'acquiring_party': 'acquiring_party',
+        },
+
+        // Get the list of non-agent signing roles for this template (resolved to concrete roles)
+        get requiredSigningRoles() {
+            const parties = this.templateSigningParties;
+            if (!Array.isArray(parties) || parties.length === 0) return [];
+            const isSales = this.isSalesContext;
+            const roles = [];
+            parties.forEach(role => {
+                if (role === 'agent' || role === 'creator') return;
+                roles.push(resolvePartyRole(role, isSales).toLowerCase());
+            });
+            return roles;
+        },
+
+        // Check if a recipient role matches any required signing role (with alias support)
+        roleMatchesTemplate(recipientRole) {
+            if (!recipientRole) return false;
+            const role = recipientRole.toLowerCase();
+            const required = this.requiredSigningRoles;
+            if (required.length === 0) return true; // no signing parties defined — allow any
+            if (required.includes(role)) return true;
+            const alias = this._roleAliasMap[role];
+            if (alias && required.includes(alias)) return true;
+            return false;
+        },
+
+        // Get mismatched recipients (non-agent recipients whose role doesn't match template)
+        get recipientRoleMismatches() {
+            const mismatches = [];
+            const required = this.requiredSigningRoles;
+            if (required.length === 0) return mismatches; // no signing parties — skip validation
+            this.recipients.forEach((r, idx) => {
+                if (r.readonly) return; // agent — skip
+                if (!r.role || !this.roleMatchesTemplate(r.role)) {
+                    mismatches.push({ index: idx, name: r.name || ('Recipient ' + (idx + 1)), currentRole: r.role });
+                }
+            });
+            return mismatches;
+        },
+
+        // Fix a recipient's role to match the template
+        fixRecipientRole(recipientIndex, newRole) {
+            if (this.recipients[recipientIndex]) {
+                this.recipients[recipientIndex].role = newRole;
+            }
+        },
 
         // Preview
         previewPages: serverPageImages || [],
         previewFields: serverFields || [],
         previewRenderType: 'pdf',
         previewHtml: '',
+        previewFieldValues: {},
 
         // Step 2: Property
         property: {
@@ -1013,16 +1497,22 @@ function esignWizard() {
             ? serverRecipients.map((r, i) => ({ ...r, readonly: i === 0 && r.role === 'agent' }))
             : [{ order: 1, role: 'agent', name: currentUser.name, id_number: '', email: currentUser.email || '', cell: '', address: '', readonly: true }],
 
-        // Step 4: Details — deposit defaults to rental if empty
+        // Step 4: Details — supports both rental and sales fields
         details: (() => {
             const prop = serverStepData?.property || {};
             const det = serverStepData?.details || {};
             const d = {
+                // Rental fields
                 monthly_rental: det.monthly_rental || prop.rental_amount || '',
                 deposit: det.deposit || prop.deposit_amount || '',
                 lease_start: det.lease_start || '',
                 lease_end: det.lease_end || '',
-                commission: det.commission || prop.commission_percent || '10',
+                // Sales fields
+                price: det.price || prop.price || '',
+                mandate_start: det.mandate_start || new Date().toISOString().slice(0, 10),
+                mandate_expiry: det.mandate_expiry || '',
+                // Shared fields
+                commission: det.commission || prop.commission_percent || '',
                 marketing_fee: det.marketing_fee || prop.marketing_fee || '',
                 _duration: det._duration ?? 12,
                 _autoFilled: false,
@@ -1032,8 +1522,13 @@ function esignWizard() {
                 const key = 'named_field_' + mf.id;
                 if (det[key]) d[key] = det[key];
             });
-            // Auto-set deposit = rental when deposit is empty
+            // Auto-set deposit = rental when deposit is empty (rental context only)
             if (!d.deposit && d.monthly_rental) d.deposit = d.monthly_rental;
+            // Default commission based on context
+            if (!d.commission) {
+                const tplName = serverTemplate?.name || '';
+                d.commission = detectSalesContext(tplName) ? '7.5' : '10';
+            }
             return d;
         })(),
 
@@ -1048,8 +1543,47 @@ function esignWizard() {
         fieldPartyOverrides: {},
         highlightedFieldId: null,
 
+        // Clause library
+        showClauseLibrary: false,
+        clauseSearch: '',
+        allClauses: [],
+        selectedClauses: [],
+        otherConditionsText: '',
+
         // Step 6: Signing setup
         signingActions: [],
+
+        // Delivery mode
+        deliveryMode: serverStepData?.delivery_mode || 'esign',
+        templateDeliveryModes: (serverTemplate?.allowed_delivery_modes || 'esign,wet_ink,download').split(',').map(s => s.trim()).filter(Boolean),
+        esignBlocked: (() => {
+            const tpl = serverTemplate;
+            if (!tpl) return false;
+            const t = (tpl.template_type || '').toLowerCase();
+            if (t === 'sale_agreement' || t === 'otp') return true;
+            const n = (tpl.name || '').toLowerCase();
+            return n.includes('agreement of sale') || n.includes('deed of sale') || n.includes('offer to purchase');
+        })(),
+        get effectiveDeliveryModes() {
+            let modes = [...this.templateDeliveryModes];
+            if (this.esignBlocked) {
+                modes = modes.filter(m => m !== 'esign');
+                if (modes.length === 0) modes = ['wet_ink', 'download'];
+            }
+            return modes;
+        },
+        deliveryModeLabel(mode) {
+            const labels = { 'esign': 'E-Signature', 'wet_ink': 'Wet Ink (Print & Sign)', 'download': 'Download Only' };
+            return labels[mode] || mode;
+        },
+        deliveryModeDescription(mode) {
+            const descs = {
+                'esign': 'Sign electronically through the secure online portal',
+                'wet_ink': 'Download, print, sign in ink, scan and upload through secure portal',
+                'download': 'Generate PDF for download only — no signing pipeline'
+            };
+            return descs[mode] || '';
+        },
 
         // Resize
         leftPanelPx: 420,
@@ -1103,10 +1637,28 @@ function esignWizard() {
                 return serverStepData?.signing_setup?.[i]?.action || 'send_after';
             });
 
+            // Load clause library
+            this.loadClauses();
+
+            // Restore selected clauses and other conditions text from step data
+            const savedClauses = serverStepData?.fill_review?.clauses || [];
+            if (savedClauses.length > 0) this.selectedClauses = savedClauses;
+            const savedOtherConditions = serverStepData?.fill_review?.other_conditions_text || '';
+            if (savedOtherConditions) this.otherConditionsText = savedOtherConditions;
+
             // Load web template preview on steps 2+ (PDF preview loads via serverPageImages)
             if (serverIsWebTemplate && this.currentStep > 1 && this.flowId && serverTemplateId) {
                 this.previewRenderType = 'web';
-                this.loadTemplatePreview(serverTemplateId);
+                this.loadTemplatePreview(serverTemplateId).then(() => {
+                    this.$nextTick(() => {
+                        // Scroll preview to relevant section for current step
+                        this.scrollPreviewToStep(this.currentStep);
+                        // Reapply all stored field values (belt-and-suspenders on top of server rendering)
+                        this.reapplyPreviewFields();
+                        // Reapply clauses to preview
+                        if (this.selectedClauses.length > 0) this.updateClausesPreview();
+                    });
+                });
             }
 
             // Global mouse events for resize
@@ -1116,7 +1668,100 @@ function esignWizard() {
 
         // ---- Template grouping ----
         get templateGroups() {
-            return buildTemplateGroups(this.allTemplates || [], this.templateSearch);
+            return buildTemplateGroups(this.allTemplates || [], this.templateSearch, this.categoryFilter);
+        },
+
+        get filteredClauses() {
+            const search = this.clauseSearch.toLowerCase().trim();
+            if (!search) return this.allClauses;
+            return this.allClauses.filter(c =>
+                c.name.toLowerCase().includes(search) ||
+                c.text.toLowerCase().includes(search)
+            );
+        },
+
+        async loadClauses() {
+            try {
+                const response = await fetch('{{ route("docuperfect.clauses.json") }}');
+                if (response.ok) {
+                    this.allClauses = await response.json();
+                }
+            } catch (e) {
+                console.error('Failed to load clauses:', e);
+            }
+        },
+
+        insertClause(clause) {
+            // Append clause text to the unified textarea (don't block duplicates — user may want same clause twice)
+            const existing = this.otherConditionsText.trim();
+            const clauseContent = clause.text || '';
+            if (existing) {
+                this.otherConditionsText = existing + '\n\n' + clauseContent;
+            } else {
+                this.otherConditionsText = clauseContent;
+            }
+            // Track insertion in selectedClauses for reference
+            this.selectedClauses.push({...clause});
+            this.showClauseLibrary = false;
+            this.updateClausesPreview();
+        },
+
+        removeClause(idx) {
+            this.selectedClauses.splice(idx, 1);
+            this.updateClausesPreview();
+        },
+
+        updateClausesPreview() {
+            if (this.previewRenderType !== 'web') return;
+            const doc = document.querySelector('.web-template-preview');
+            if (!doc) return;
+
+            // Use the unified textarea content directly
+            const clauseText = this.otherConditionsText.trim();
+
+            // Update the other_conditions data-field in the preview
+            const otherField = doc.querySelector('[data-field="other_conditions"]');
+            if (otherField) {
+                otherField.textContent = clauseText || '';
+                if (clauseText) {
+                    otherField.style.color = '#0d9488';
+                    otherField.style.fontWeight = '600';
+                    otherField.style.whiteSpace = 'pre-line';
+                } else {
+                    otherField.style.color = '';
+                    otherField.style.fontWeight = '';
+                }
+            }
+
+            // Fallback: if no data-field element, inject a clause block before the signature section
+            if (!otherField) {
+                // Remove any previously injected clause block
+                const existing = doc.querySelector('.corex-additional-clauses-preview');
+                if (existing) existing.remove();
+
+                if (clauseText) {
+                    // Build clause HTML (mirrors server-side insertBeforeSignatureSection)
+                    const clauses = clauseText.split(/\n\s*\n/).filter(c => c.trim());
+                    let html = '<div class="corex-additional-clauses-preview" style="margin-top:16pt;">';
+                    html += '<h3 style="font-weight:bold;margin-top:12pt;margin-bottom:8pt;">Additional Conditions</h3>';
+                    clauses.forEach((c, i) => {
+                        html += '<div style="margin:6pt 0;"><p><strong>' + (i + 1) + '.</strong> ' + c.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p></div>';
+                    });
+                    html += '</div>';
+
+                    // Insert before signature section (same selectors as server-side)
+                    const sigSection = doc.querySelector('.corex-signature-section') || doc.querySelector('.sig-section');
+                    if (sigSection) {
+                        sigSection.insertAdjacentHTML('beforebegin', html);
+                    } else {
+                        // Append at end of document
+                        doc.insertAdjacentHTML('beforeend', html);
+                    }
+                }
+            }
+
+            // Also store in previewFieldValues for reapplication after preview reload
+            this.previewFieldValues['other_conditions'] = clauseText;
         },
 
         // ---- Template selection (Step 1) ----
@@ -1128,6 +1773,13 @@ function esignWizard() {
             this.selectedPdfPackId = null;
             this.isPackFlow = false;
             this.packPreview = null;
+
+            // Immediately reset preview state to prevent flash of old content
+            this.previewPages = [];
+            this.previewHtml = '';
+            this.previewFields = [];
+            this.previewRenderType = t.render_type || 'pdf';
+
             this.loadTemplatePreview(t.id);
         },
 
@@ -1144,6 +1796,98 @@ function esignWizard() {
             this.previewPages = [];
             this.previewReady = true;
             this.packPreview = p;
+
+            // Build slot structure from pack items
+            this._buildPackSlots(p);
+        },
+
+        _buildPackSlots(p) {
+            const items = p.items || [];
+            const slots = [];
+            const selectableGroups = {};
+
+            // Group selectable items by slot_group
+            items.forEach(item => {
+                const slotType = item.slot_type || 'required';
+                const tmpl = {
+                    id: item.template?.id || item.template_id,
+                    name: item.template?.name || 'Unknown',
+                };
+
+                if (slotType === 'selectable') {
+                    const group = item.slot_group || 1;
+                    if (!selectableGroups[group]) {
+                        selectableGroups[group] = {
+                            key: 'sel-' + group,
+                            type: 'selectable',
+                            group: group,
+                            label: item.slot_label || '',
+                            templates: [],
+                        };
+                    }
+                    selectableGroups[group].templates.push(tmpl);
+                    if (item.slot_label) selectableGroups[group].label = item.slot_label;
+                } else if (slotType === 'optional') {
+                    slots.push({
+                        key: 'opt-' + tmpl.id,
+                        type: 'optional',
+                        templates: [tmpl],
+                    });
+                } else {
+                    slots.push({
+                        key: 'req-' + tmpl.id,
+                        type: 'required',
+                        templates: [tmpl],
+                    });
+                }
+            });
+
+            // Insert selectable groups in sort order
+            Object.values(selectableGroups).forEach(g => slots.push(g));
+
+            this.packSlots = slots;
+
+            // Reset selections
+            this.slotSelections = {};
+            this.optionalSelections = [];
+
+            // Pre-select first option in each selectable group
+            Object.values(selectableGroups).forEach(g => {
+                if (g.templates.length > 0) {
+                    this.slotSelections[g.group] = g.templates[0].id;
+                }
+            });
+        },
+
+        get packHasSlots() {
+            if (!this.packPreview) return false;
+            const items = this.packPreview.items || [];
+            return items.some(i => (i.slot_type || 'required') !== 'required');
+        },
+
+        get resolvedPackTemplateIds() {
+            if (!this.packPreview) return [];
+
+            // If no slots, return all item template IDs
+            if (!this.packHasSlots) {
+                return (this.packPreview.items || []).map(i => i.template?.id || i.template_id).filter(Boolean);
+            }
+
+            const ids = [];
+            for (const slot of this.packSlots) {
+                if (slot.type === 'required') {
+                    ids.push(slot.templates[0].id);
+                } else if (slot.type === 'selectable') {
+                    const selected = this.slotSelections[slot.group];
+                    if (selected) ids.push(selected);
+                } else if (slot.type === 'optional') {
+                    const tmplId = slot.templates[0].id;
+                    if (this.optionalSelections.includes(tmplId)) {
+                        ids.push(tmplId);
+                    }
+                }
+            }
+            return ids;
         },
 
         selectPdfPack(p) {
@@ -1165,13 +1909,15 @@ function esignWizard() {
             try {
                 let url = '/docuperfect/esign/api/template/' + templateId + '/pages';
                 if (this.flowId) url += '?flow_id=' + this.flowId;
-                const resp = await fetch(url);
+                const resp = await fetch(url, { cache: 'no-store' });
                 const data = await resp.json();
                 this.previewRenderType = data.render_type || 'pdf';
                 if (data.render_type === 'web') {
                     this.previewHtml = data.html || '';
                     this.previewPages = [];
                     this.previewFields = [];
+                    // Reapply all stored field values after preview HTML loads
+                    this.$nextTick(() => this.reapplyPreviewFields());
                 } else {
                     this.previewHtml = '';
                     this.previewPages = data.pages || [];
@@ -1180,6 +1926,56 @@ function esignWizard() {
             } catch (e) {
                 console.error('Failed to load template preview:', e);
             }
+        },
+
+        reapplyPreviewFields() {
+            if (this.previewRenderType !== 'web') return;
+            const doc = document.querySelector('.web-template-preview');
+            if (!doc) return;
+
+            // Reapply previewFieldValues (from updatePreviewField calls)
+            Object.entries(this.previewFieldValues).forEach(([fieldName, value]) => {
+                if (!value) return;
+                const selectors = [
+                    '[data-field="' + fieldName + '"]',
+                    '[data-field="' + fieldName.replace(/\./g, '_') + '"]',
+                ];
+                selectors.forEach(sel => {
+                    doc.querySelectorAll(sel).forEach(el => {
+                        // Only apply if element is currently empty or has placeholder text
+                        if (!el.textContent.trim() || el.textContent.trim() === el.getAttribute('data-field')) {
+                            el.textContent = value;
+                            el.style.color = '#0d9488';
+                            el.style.fontWeight = '600';
+                        }
+                    });
+                });
+            });
+
+            // Also reapply fieldValues (from allWizardFields / step 5 inputs)
+            Object.entries(this.fieldValues).forEach(([fieldId, value]) => {
+                if (!value) return;
+                const field = (this.allWizardFields || []).find(f => f.id === fieldId || f.id == fieldId);
+                if (!field) return;
+                const fieldName = field.field_name || field.name || '';
+                if (!fieldName) return;
+                const selectors = [
+                    '[data-field="' + fieldName + '"]',
+                    '[data-field="' + fieldName.replace(/\./g, '_') + '"]',
+                ];
+                selectors.forEach(sel => {
+                    doc.querySelectorAll(sel).forEach(el => {
+                        if (!el.textContent.trim() || el.textContent.trim() === el.getAttribute('data-field')) {
+                            el.textContent = value;
+                            el.style.color = '#0d9488';
+                            el.style.fontWeight = '600';
+                        }
+                    });
+                });
+            });
+
+            // Reapply other conditions (clauses) to the preview
+            this.updateClausesPreview();
         },
 
         // ---- Field helpers ----
@@ -1193,6 +1989,7 @@ function esignWizard() {
 
         fieldInputType(f) {
             const type = (f.type || f.tag_type || 'placeholder').toLowerCase();
+            if (type === 'field_group_display') return 'field_group_display';
             if (type === 'date') return 'date';
             if (type === 'selection') return 'select';
             if (type === 'tick') return 'tick';
@@ -1204,6 +2001,12 @@ function esignWizard() {
 
         setFieldValue(fieldId, value) {
             this.fieldValues = { ...this.fieldValues, [fieldId]: value };
+            // Immediate client-side preview update
+            const field = (this.allWizardFields || []).find(f => f.id === fieldId);
+            if (field) {
+                const fieldName = field.field_name || field.name || '';
+                if (fieldName) this.updatePreviewField(fieldName, value);
+            }
             this.refreshPreviewDebounced();
         },
 
@@ -1271,6 +2074,92 @@ function esignWizard() {
             document.querySelectorAll('.field-highlighted').forEach(el => el.classList.remove('field-highlighted'));
         },
 
+        // ---- Live preview field updates (client-side DOM manipulation) ----
+        updatePreviewField(fieldName, value) {
+            // Always store for reapplication after preview reload
+            this.previewFieldValues[fieldName] = value;
+            if (this.previewRenderType !== 'web') return;
+            const doc = document.querySelector('.web-template-preview');
+            if (!doc) return;
+            // Try both the exact name and underscore variant
+            const selectors = [
+                '[data-field="' + fieldName + '"]',
+                '[data-field="' + fieldName.replace(/\./g, '_') + '"]',
+            ];
+            selectors.forEach(sel => {
+                doc.querySelectorAll(sel).forEach(el => {
+                    el.textContent = value || '';
+                    if (value) {
+                        el.style.color = '#0d9488';
+                        el.style.fontWeight = '600';
+                    } else {
+                        el.style.color = '';
+                        el.style.fontWeight = '';
+                    }
+                });
+            });
+        },
+
+        updatePreviewFields(fieldMap) {
+            Object.entries(fieldMap).forEach(([name, value]) => {
+                this.updatePreviewField(name, value);
+            });
+        },
+
+        focusPreviewField(fieldName) {
+            if (this.previewRenderType !== 'web') return;
+            const doc = document.querySelector('.web-template-preview');
+            if (!doc) return;
+            const field = doc.querySelector('[data-field="' + fieldName + '"]')
+                       || doc.querySelector('[data-field="' + fieldName.replace(/\./g, '_') + '"]');
+            if (field) {
+                field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                field.style.outline = '2px solid #0d9488';
+                setTimeout(() => { field.style.outline = ''; }, 2000);
+            }
+        },
+
+        scrollPreviewToStep(step) {
+            if (this.previewRenderType !== 'web') return;
+            const doc = document.querySelector('.web-template-preview');
+            if (!doc) return;
+            const find = (...sels) => {
+                for (const sel of sels) {
+                    const el = doc.querySelector(sel);
+                    if (el) return el;
+                }
+                return null;
+            };
+            let target = null;
+            if (step === 2) {
+                target = find('[data-field="property_address"]', '[data-field="property_full_address"]', '[data-field="property_erf_number"]');
+            } else if (step === 3) {
+                target = find('[data-field="seller_name"]', '[data-field="lessor_name"]', '[data-field="contact_full_names"]');
+            } else if (step === 4) {
+                target = find('[data-field="price"]', '[data-field="monthly_rental"]', '[data-field="mandate_start"]', '[data-field="commission_percent"]');
+            } else if (step === 5) {
+                target = doc.firstElementChild;
+            }
+            if (target) {
+                setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+            }
+        },
+
+        quickFillExpiry(months) {
+            const start = this.details.mandate_start || new Date().toISOString().slice(0, 10);
+            const d = new Date(start);
+            d.setMonth(d.getMonth() + months);
+            this.details.mandate_expiry = d.toISOString().slice(0, 10);
+            this.updatePreviewField('mandate_expiry', this.details.mandate_expiry);
+        },
+
+        calcExpiryDate(months) {
+            const start = this.details.mandate_start || new Date().toISOString().slice(0, 10);
+            const d = new Date(start);
+            d.setMonth(d.getMonth() + months);
+            return d.toISOString().slice(0, 10);
+        },
+
         // ---- Preview overlay styling ----
         fieldOverlayStyle(f) {
             const role = f.assignedTo || f.assigned_to || 'creator';
@@ -1308,7 +2197,6 @@ function esignWizard() {
         },
 
         moveRecipient(index, direction) {
-            console.log('moveRecipient called', index, direction, this.recipients.length);
             const swapWith = direction === 'up' ? index - 1 : index + 1;
             if (swapWith < 0) return;
             if (swapWith >= this.recipients.length) return;
@@ -1402,7 +2290,24 @@ function esignWizard() {
         },
 
         canGoNext() {
-            if (this.currentStep === 1) return !!(this.selectedTemplateId || this.selectedPackId || this.selectedPdfPackId);
+            if (this.currentStep === 1) {
+                if (this.selectedPackId && this.packHasSlots) {
+                    // All selectable groups must have a selection
+                    for (const slot of this.packSlots.filter(s => s.type === 'selectable')) {
+                        if (!this.slotSelections[slot.group]) return false;
+                    }
+                    // Must have at least one resolved template
+                    return this.resolvedPackTemplateIds.length > 0;
+                }
+                return !!(this.selectedTemplateId || this.selectedPackId || this.selectedPdfPackId);
+            }
+            if (this.currentStep === 3) {
+                // Block if any recipient's role doesn't match template signing parties
+                if (this.recipientRoleMismatches.length > 0) return false;
+                // Block if any non-agent recipient has no role
+                const hasEmptyRole = this.recipients.some(r => !r.readonly && !r.role);
+                if (hasEmptyRole) return false;
+            }
             return true;
         },
 
@@ -1426,10 +2331,16 @@ function esignWizard() {
         },
 
         async goNext() {
-            if (this.loading || !this.canGoNext()) return;
+            if (this.loading) return;
+            if (!this.canGoNext()) return;
             this.loading = true;
 
             try {
+                // Auto-build document name when leaving step 3 (Recipients) if not yet set
+                if (this.currentStep === 3 && !this.documentName) {
+                    this.buildDocumentName();
+                }
+
                 if (this.currentStep === 1) {
                     await this.createFlow();
                 } else if (this.currentStep === 6) {
@@ -1438,7 +2349,6 @@ function esignWizard() {
                     await this.saveAndAdvance();
                 }
             } catch (e) {
-                console.error('goNext error:', e);
                 this.showToast('Error: ' + (e.message || 'Something went wrong'), 'error');
             } finally {
                 this.loading = false;
@@ -1458,6 +2368,7 @@ function esignWizard() {
                     pack_id: this.selectedPackId,
                     is_pack_flow: this.isPackFlow,
                     pdf_pack_id: this.selectedPdfPackId,
+                    resolved_template_ids: this.packHasSlots ? this.resolvedPackTemplateIds : null,
                 }),
             });
             if (!resp.ok) {
@@ -1495,6 +2406,8 @@ function esignWizard() {
                         order: i + 1,
                         role: r.role,
                         name: r.name,
+                        first_name: r.first_name || '',
+                        last_name: r.last_name || '',
                         id_number: r.id_number || '',
                         email: r.email,
                         cell: r.cell,
@@ -1508,10 +2421,16 @@ function esignWizard() {
                 };
                 case 4: {
                     const detailsData = {
+                        // Rental fields
                         monthly_rental: this.details.monthly_rental,
                         deposit: this.details.deposit,
                         lease_start: this.details.lease_start,
                         lease_end: this.details.lease_end,
+                        // Sales fields
+                        price: this.details.price,
+                        mandate_start: this.details.mandate_start,
+                        mandate_expiry: this.details.mandate_expiry,
+                        // Shared fields
                         commission: this.details.commission,
                         marketing_fee: this.details.marketing_fee,
                         _duration: this.details._duration,
@@ -1523,17 +2442,30 @@ function esignWizard() {
                     });
                     return detailsData;
                 }
-                case 5: return { fieldValues: { ...this.fieldValues }, partyOverrides: { ...this.fieldPartyOverrides } };
-                case 6: return this.signingActions.map((action, i) => ({
-                    signing_order: i + 1,
-                    action,
-                    role: this.recipients[i]?.role || '',
-                    name: this.recipients[i]?.name || '',
-                    email: this.recipients[i]?.email || '',
-                    skipEmail: this.recipients[i]?.skipEmail || false,
-                }));
+                case 5: return { fieldValues: { ...this.fieldValues }, partyOverrides: { ...this.fieldPartyOverrides }, clauses: this.selectedClauses, other_conditions_text: this.otherConditionsText };
+                case 6: return {
+                    delivery_mode: this.deliveryMode,
+                    parties: this.signingActions.map((action, i) => ({
+                        signing_order: i + 1,
+                        action,
+                        role: this.recipients[i]?.role || '',
+                        name: this.recipients[i]?.name || '',
+                        email: this.recipients[i]?.email || '',
+                        skipEmail: this.recipients[i]?.skipEmail || false,
+                    })),
+                };
                 default: return {};
             }
+        },
+
+        buildDocumentName() {
+            const base = this.isPackFlow ? this.selectedPackName : this.templateName;
+            const firstRecipient = (this.recipients || []).find(r => r.role !== 'agent' && r.name);
+            const today = new Date().toISOString().slice(0, 10);
+            let name = base || 'Untitled';
+            if (firstRecipient) name += ' — ' + firstRecipient.name;
+            name += ' — ' + today;
+            this.documentName = name;
         },
 
         async saveAndAdvance() {
@@ -1545,7 +2477,7 @@ function esignWizard() {
                     'X-CSRF-TOKEN': csrfToken,
                     'Accept': 'application/json',
                 },
-                body: JSON.stringify({ data: this.getStepData() }),
+                body: JSON.stringify({ data: this.getStepData(), document_name: this.documentName }),
             });
 
             if (!resp.ok) {
@@ -1594,36 +2526,52 @@ function esignWizard() {
 
         // ---- Prepare Signing ----
         async prepareSigning() {
-            if (!this.flowId) return;
+            if (!this.flowId) {
+                this.showToast('Error: No flow ID found. Please reload and try again.', 'error');
+                return;
+            }
             this.loading = true;
             try {
-                // First save step 6 data
+                // First save step 6 data via AJAX (lightweight, always works)
                 const saveUrl = '/docuperfect/esign/' + this.flowId + '/step/6';
-                await fetch(saveUrl, {
+                const stepData = this.getStepData();
+                const saveResp = await fetch(saveUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-                    body: JSON.stringify({ data: this.getStepData() }),
+                    body: JSON.stringify({ data: stepData }),
                 });
+                if (!saveResp.ok) {
+                    throw new Error('Failed to save signing setup (step 6): HTTP ' + saveResp.status);
+                }
 
-                // Then prepare signing (creates Document + SignatureTemplate + redirects to signing)
-                const resp = await fetch('/docuperfect/esign/' + this.flowId + '/prepare-signing', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-                });
-                if (!resp.ok) {
-                    const text = await resp.text();
-                    throw new Error('Failed to prepare signing: ' + text);
+                // Branch by delivery mode BEFORE form submission so each mode
+                // hits its own dedicated endpoint on the server.
+                let prepareUrl;
+                switch (this.deliveryMode) {
+                    case 'download':
+                        prepareUrl = '/docuperfect/esign/' + this.flowId + '/prepare-download';
+                        break;
+                    case 'wet_ink':
+                        prepareUrl = '/docuperfect/esign/' + this.flowId + '/prepare-wet-ink';
+                        break;
+                    default: // 'esign'
+                        prepareUrl = '/docuperfect/esign/' + this.flowId + '/prepare-signing';
+                        break;
                 }
-                if (resp.redirected) {
-                    window.location.href = resp.url;
-                    return;
-                }
-                const data = await resp.json();
-                if (data.redirect) {
-                    window.location.href = data.redirect;
-                }
+
+                // Submit as a regular form POST — browser follows the redirect natively.
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = prepareUrl;
+                const tokenInput = document.createElement('input');
+                tokenInput.type = 'hidden';
+                tokenInput.name = '_token';
+                tokenInput.value = csrfToken;
+                form.appendChild(tokenInput);
+                document.body.appendChild(form);
+                form.submit();
+                // Browser will navigate away — no further JS executes
             } catch (e) {
-                console.error('prepareSigning error:', e);
                 this.showToast('Error: ' + (e.message || 'Something went wrong'), 'error');
                 this.loading = false;
             }
@@ -1683,6 +2631,9 @@ function esignWizard() {
             this.propSearchQuery = result.display || result.address;
 
             // Pre-fill details from property data
+            if (result.price && !this.details.price) {
+                this.details.price = String(result.price);
+            }
             if (result.rental_amount && !this.details.monthly_rental) {
                 this.details.monthly_rental = String(result.rental_amount);
             }
@@ -1701,6 +2652,23 @@ function esignWizard() {
             if (result.lease_end_date && !this.details.lease_end) {
                 this.details.lease_end = result.lease_end_date;
             }
+
+            // Live preview: push property fields to DOM
+            // Covers both standard web template names and CDS-generated names
+            const fullAddr = [result.address, result.suburb].filter(Boolean).join(', ');
+            this.updatePreviewFields({
+                'property_address': fullAddr,
+                'property_full_address': fullAddr,
+                'street_address': fullAddr,
+                'property_street': result.address || '',
+                'property_township': result.suburb || '',
+                'property_suburb': result.suburb || '',
+                'erf_no': result.erf_no || '',
+                'property_erf_number': result.erf_no || '',
+                'complex_name': result.complex_name || '',
+                'property_complex_name': result.complex_name || '',
+                'property_type': result.property_type || '',
+            });
 
             this.showToast('Property selected — fields auto-filled', 'success');
         },
@@ -1741,6 +2709,8 @@ function esignWizard() {
         selectContact(recipientIndex, contact) {
             const r = this.recipients[recipientIndex];
             r.name = contact.full_name || (contact.first_name + ' ' + contact.last_name);
+            r.first_name = contact.first_name || '';
+            r.last_name = contact.last_name || '';
             r.email = contact.email || '';
             r.cell = contact.phone || '';
             r.id_number = contact.id_number || '';
@@ -1749,11 +2719,41 @@ function esignWizard() {
             r._searchOpen = false;
             r._searchQuery = contact.full_name;
 
+            // Set role from the contact's contact_type
+            if (contact.contact_type) {
+                r.role = contact.contact_type.toLowerCase();
+            }
+
             // Store bank details for WebTemplateDataService
             r.bank_name = contact.bank_name || '';
             r.bank_account_name = contact.bank_account_name || '';
             r.bank_account_number = contact.bank_account_number || '';
             r.bank_branch_name = contact.bank_branch_name || '';
+
+            // Live preview: push contact fields to DOM based on role
+            // Covers both standard names (seller_name) and CDS generic names (contact_full_names)
+            const role = r.role;
+            const prefix = (role === 'seller') ? 'seller'
+                         : (role === 'buyer') ? 'buyer'
+                         : (role === 'landlord' || role === 'lessor') ? 'lessor'
+                         : (role === 'tenant' || role === 'lessee') ? 'lessee'
+                         : role;
+            const contactName = contact.full_name || ((contact.first_name || '') + ' ' + (contact.last_name || '')).trim();
+            this.updatePreviewFields({
+                [prefix + '_name']: contactName,
+                [prefix + '_first_name']: contact.first_name || '',
+                [prefix + '_last_name']: contact.last_name || '',
+                [prefix + '_id_number']: contact.id_number || '',
+                [prefix + '_email']: contact.email || '',
+                [prefix + '_cell']: contact.phone || '',
+                [prefix + '_phone']: contact.phone || '',
+                [prefix + '_address']: contact.address || '',
+                // CDS generic names
+                'contact_full_names': contactName,
+                'contact_email': contact.email || '',
+                'contact_phone': contact.phone || '',
+                'contact_address': contact.address || '',
+            });
 
             this.showToast(contact.full_name + ' selected', 'success');
         },
@@ -1819,10 +2819,11 @@ function esignWizard() {
         },
 
         addSecondOwner() {
-            // Insert after the first landlord
-            const idx = this.recipients.findIndex(r => r.role === 'landlord' && !r.readonly);
+            // Insert after the first owner party (landlord or seller)
+            const role = this.ownerPartyRole;
+            const idx = this.recipients.findIndex(r => r.role === role && !r.readonly);
             const newOwner = {
-                order: 0, role: 'landlord', name: '', id_number: '', email: '', cell: '', address: '', readonly: false,
+                order: 0, role: role, name: '', id_number: '', email: '', cell: '', address: '', readonly: false,
                 _contact_id: null, _searchQuery: '', _searchResults: [], _searchOpen: false, _searching: false, _searchIdx: 0,
                 _includeEmail: false,
             };
@@ -1835,8 +2836,10 @@ function esignWizard() {
         },
 
         addRecipient() {
+            // Default new recipient to acquiring party role (tenant or buyer)
+            const defaultRole = this.acquiringPartyRole;
             this.recipients.push({
-                order: this.recipients.length + 1, role: 'landlord', name: '', id_number: '', email: '', cell: '', address: '', readonly: false,
+                order: this.recipients.length + 1, role: defaultRole, name: '', id_number: '', email: '', cell: '', address: '', readonly: false,
                 _contact_id: null, _searchQuery: '', _searchResults: [], _searchOpen: false, _searching: false, _searchIdx: 0,
             });
         },

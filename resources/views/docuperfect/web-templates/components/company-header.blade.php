@@ -62,7 +62,7 @@ if (isset($logo_url)) $logoPath = $logo_url;
     </div>
 
     {{-- Contact strip — Arial, 9pt, bold, two columns --}}
-    <div style="display:grid; grid-template-columns:1fr 1fr; font-family:Arial,Helvetica,sans-serif; font-size:9pt; font-weight:bold; line-height:1.5; border-top:1px solid #000; padding-top:3px;">
+    <div class="company-header-contact-grid" style="display:grid; grid-template-columns:1fr 1fr; font-family:Arial,Helvetica,sans-serif; font-size:9pt; font-weight:bold; line-height:1.5; border-top:1px solid #000; padding-top:3px;">
         <div>
             {{ $d('address') }}<br>
             Reg no: &nbsp;&nbsp; {{ $d('reg_no') }}<br>

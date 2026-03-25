@@ -4,11 +4,26 @@ namespace App\Services\Docuperfect;
 
 class CdsRendererService
 {
+    /** @var array Signing parties extracted from signature_section — used by renderPageInitials. */
+    private array $signingParties = [];
+
     /**
      * Render CDS JSON to HTML using CoreX document classes.
      */
     public function render(array $cds): string
     {
+        // Pre-pass: extract parties from signature_section so page_initials can use them
+        $this->signingParties = [];
+        foreach ($cds['sections'] ?? [] as $section) {
+            if (($section['type'] ?? '') === 'signature_section' && !empty($section['parties'])) {
+                $this->signingParties = $section['parties'];
+                break;
+            }
+            if (($section['type'] ?? '') === 'inline_signature' && !empty($section['parties'])) {
+                $this->signingParties = array_merge($this->signingParties, $section['parties']);
+            }
+        }
+
         $html = '';
 
         foreach ($cds['sections'] ?? [] as $section) {
@@ -26,11 +41,12 @@ class CdsRendererService
             'paragraph' => $this->renderParagraph($section),
             'table' => $this->renderTable($section),
             'title' => $this->renderTitle($section),
-            'company_header' => '', // Skip — CoreX renders its own header
+            'company_header' => $this->renderTable($section), // Render as table — no separate @include needed
             'signature_section' => $this->renderSignatureSection($section),
             'inline_signature' => $this->renderInlineSignature($section),
             'page_initials' => $this->renderPageInitials($section),
             'label_value_group' => $this->renderLabelValueGroup($section),
+            'disclosure_checklist' => $this->renderDisclosureChecklist($section),
             default => '',
         };
     }
@@ -215,7 +231,7 @@ class CdsRendererService
                 $html .= '<div class="' . $blockClass . '">';
                 $html .= '<div class="corex-signature-role">' . e($label) . '</div>';
                 $html .= '<div class="corex-signature-name">&nbsp;</div>';
-                $html .= '<div class="corex-signature-line"><span class="corex-signature-prompt">Sign here</span></div>';
+                $html .= '<div class="corex-signature-line" data-marker-party="' . e($role) . '" data-marker-type="signature"><span class="corex-signature-prompt">Sign here</span></div>';
                 $html .= '<div class="corex-signature-date">Date: _______________</div>';
                 $html .= '</div>';
             }
@@ -238,9 +254,10 @@ class CdsRendererService
         $html .= '<div class="corex-signature-grid">';
         foreach ($parties as $party) {
             $role = strtoupper($party['label'] ?? $party['role'] ?? 'Party');
+            $roleKey = strtolower($party['role'] ?? $party['label'] ?? 'party');
             $html .= '<div class="corex-signature-block">';
             $html .= '<div class="corex-signature-role">' . e($role) . '</div>';
-            $html .= '<div class="corex-signature-line">'
+            $html .= '<div class="corex-signature-line" data-marker-party="' . e($roleKey) . '" data-marker-type="signature">'
                 . '<span class="corex-signature-prompt">Sign here</span></div>';
             $html .= '<div class="corex-signature-date">Date: _______________</div>';
             $html .= '</div>';
@@ -253,7 +270,37 @@ class CdsRendererService
     private function renderPageInitials(array $section): string
     {
         $pageNum = $section['page_number'] ?? '';
+        $parties = $this->signingParties;
 
+        // If parties are known, generate per-party initials blocks with data-marker attributes
+        // matching ESignWizardController::injectInitialsBlocks format
+        if (!empty($parties)) {
+            $blocks = '';
+            foreach ($parties as $n => $party) {
+                $role = strtolower($party['role'] ?? $party['label'] ?? 'party');
+                $label = ucfirst(str_replace('_', ' ', $role));
+                $blocks .= '<div class="corex-page-initials" '
+                    . 'data-marker-party="' . e($role) . '" '
+                    . 'data-marker-type="initial" '
+                    . 'data-marker-index="' . $n . '" '
+                    . 'style="display:inline-block;text-align:center;margin:0 6pt;width:60px;height:30px;'
+                    . 'border:1px solid #94a3b8;font-size:9px;color:#64748b;cursor:pointer;'
+                    . 'line-height:30px;">'
+                    . '<span class="initial-placeholder">' . e($label) . '</span>'
+                    . '</div>';
+            }
+
+            return '<div class="corex-page-break" style="margin:16px 0;">'
+                . '<div class="corex-page-initials-row" style="display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:12px 0 4px 0;">'
+                . $blocks
+                . '</div>'
+                . '<div style="border-top:2px dashed #cbd5e1;margin:8px 0;position:relative;">'
+                . '<span style="position:absolute;right:0;top:-10px;font-size:10px;color:#94a3b8;font-style:italic;background:white;padding:0 4px;">Page ' . e($pageNum) . '</span>'
+                . '</div>'
+                . '</div>';
+        }
+
+        // Fallback: no parties known — generic placeholder (template preview/builder)
         $html = '<div class="corex-page-initials" '
             . 'style="display: flex; justify-content: flex-end; '
             . 'align-items: center; gap: 6px; padding: 8px 0; '
@@ -275,6 +322,77 @@ class CdsRendererService
         }
 
         $html .= '</span></div>';
+
+        return $html;
+    }
+
+    private function renderDisclosureChecklist(array $section): string
+    {
+        $hasNa = $section['has_na'] ?? false;
+        $items = $section['items'] ?? [];
+        $cols = $hasNa ? 4 : 3;
+
+        $html = '<div class="corex-disclosure-checklist" '
+            . 'data-section-type="disclosure_checklist">';
+
+        $html .= '<table class="corex-disclosure-table">';
+        $html .= '<thead><tr>';
+        $html .= '<th class="corex-disclosure-statement">Statement</th>';
+        $html .= '<th class="corex-disclosure-option">YES</th>';
+        $html .= '<th class="corex-disclosure-option">NO</th>';
+        if ($hasNa) {
+            $html .= '<th class="corex-disclosure-option">N/A</th>';
+        }
+        $html .= '</tr></thead>';
+
+        $html .= '<tbody>';
+        foreach ($items as $idx => $item) {
+            if ($item['type'] === 'sub_header') {
+                $html .= '<tr class="corex-disclosure-subheader">';
+                $html .= '<td colspan="' . $cols . '">'
+                    . '<strong>' . e($item['text']) . '</strong></td>';
+                $html .= '</tr>';
+                continue;
+            }
+
+            $html .= '<tr class="corex-disclosure-row" '
+                . 'data-item-index="' . $idx . '">';
+
+            // Statement cell
+            $html .= '<td class="corex-disclosure-statement">'
+                . e($item['statement']);
+
+            // Conditional date field
+            if ($item['has_conditional_date'] ?? false) {
+                $html .= '<br><span class="corex-disclosure-date-field" '
+                    . 'data-conditional="yes">'
+                    . '<span class="text-xs text-gray-400">'
+                    . 'Date: ________________</span></span>';
+            }
+
+            $html .= '</td>';
+
+            // YES/NO/N/A cells
+            $html .= '<td class="corex-disclosure-option">'
+                . '<span class="corex-radio-placeholder" '
+                . 'data-item="' . $idx . '" data-value="yes">'
+                . '&#9675;</span></td>';
+
+            $html .= '<td class="corex-disclosure-option">'
+                . '<span class="corex-radio-placeholder" '
+                . 'data-item="' . $idx . '" data-value="no">'
+                . '&#9675;</span></td>';
+
+            if ($hasNa) {
+                $html .= '<td class="corex-disclosure-option">'
+                    . '<span class="corex-radio-placeholder" '
+                    . 'data-item="' . $idx . '" data-value="na">'
+                    . '&#9675;</span></td>';
+            }
+
+            $html .= '</tr>';
+        }
+        $html .= '</tbody></table></div>';
 
         return $html;
     }

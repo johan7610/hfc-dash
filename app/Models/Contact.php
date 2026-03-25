@@ -55,9 +55,64 @@ class Contact extends Model
         return $this->hasMany(ContactNote::class)->latest();
     }
 
-    public function documents(): HasMany
+    /** @deprecated Use documents() instead. Kept for backward compat during transition. */
+    public function legacyDocuments(): HasMany
     {
         return $this->hasMany(ContactDocument::class)->latest();
+    }
+
+    public function documents(): BelongsToMany
+    {
+        return $this->belongsToMany(Document::class, 'document_contacts')
+            ->withPivot('party_role')
+            ->withTimestamps()
+            ->latest('documents.created_at');
+    }
+
+    /**
+     * Signed e-signature documents linked to this contact via pivot.
+     */
+    public function signedDocuments(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            \App\Models\Docuperfect\Document::class,
+            'document_contact',
+            'contact_id',
+            'document_id'
+        )->withPivot(['party_role', 'document_type', 'is_signed', 'signed_at', 'signed_pdf_path'])
+         ->withTimestamps();
+    }
+
+    /**
+     * Get FICA documents for this contact.
+     */
+    public function ficaDocuments(): BelongsToMany
+    {
+        return $this->signedDocuments()
+            ->wherePivot('document_type', 'fica')
+            ->wherePivot('is_signed', true);
+    }
+
+    /**
+     * Check FICA compliance status.
+     * Returns: 'complete', 'expiring', 'incomplete'
+     */
+    public function ficaStatus(): string
+    {
+        $ficaDocs = $this->ficaDocuments()->get();
+        if ($ficaDocs->isEmpty()) {
+            return 'incomplete';
+        }
+        // Check if most recent FICA is within 12 months
+        $latest = $ficaDocs->sortByDesc('pivot.signed_at')->first();
+        if ($latest && $latest->pivot->signed_at) {
+            $signedAt = \Carbon\Carbon::parse($latest->pivot->signed_at);
+            if ($signedAt->diffInMonths(now()) >= 11) {
+                return 'expiring';
+            }
+            return 'complete';
+        }
+        return 'complete';
     }
 
     public function matches(): HasMany

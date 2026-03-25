@@ -2,12 +2,19 @@
 @extends('layouts.corex')
 
 @section('corex-content')
+@include('docuperfect.signatures.partials.a4-page-styles')
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
 
     @php
         $isSalesTemplate = ($templateType ?? 'rentals') === 'sales';
-        $backRoute = $isSalesTemplate ? route('docuperfect.sales') : route('docuperfect.rental');
-        $backLabel = $isSalesTemplate ? 'Back to Sales' : 'Back to Rental';
+        $esignFlowId = $esignFlowId ?? session('esign_wizard_flow_id');
+        if ($esignFlowId) {
+            $backRoute = route('docuperfect.esign.step', ['flow' => $esignFlowId, 'step' => 6]);
+            $backLabel = 'Back to E-Sign';
+        } else {
+            $backRoute = $isSalesTemplate ? route('docuperfect.sales') : route('docuperfect.rental');
+            $backLabel = $isSalesTemplate ? 'Back to Sales' : 'Back to Rental';
+        }
         $partyOneRole = $isSalesTemplate ? 'buyer' : 'tenant';
         $partyTwoRole = $isSalesTemplate ? 'seller' : 'landlord';
         $partyOneLabel = ucfirst($partyOneRole);
@@ -36,31 +43,11 @@
         </x-slot>
     </x-sticky-action-bar>
 
-    {{-- Header --}}
-    <div style="background:#0b2a4a;" class="rounded-2xl px-6 py-4 flex items-center justify-between">
-        <div>
-            <h2 class="text-xl font-bold text-white leading-tight">Signature Setup &mdash; {{ $document->name }}</h2>
-            <div class="text-sm text-white/60">
-                @if($step === 1) Step 1: Configure Signing Parties
-                @else Step 2: Place Signature Markers
-                @endif
-            </div>
-        </div>
-        <div class="flex items-center gap-3">
-            @if($step === 2)
-                <a href="{{ route('docuperfect.signatures.setup', [$document, 'step' => 1]) }}"
-                   class="corex-btn-primary text-sm" style="background:rgba(255,255,255,0.15);">
-                    Edit Parties
-                </a>
-            @endif
-            <a href="{{ $backRoute }}"
-               class="text-sm text-white/70 hover:text-white">{{ $backLabel }}</a>
-        </div>
-    </div>
+    {{-- Header info is in the sticky action bar above — no duplicate --}}
 
     {{-- Flash messages handled by global toast system --}}
     @if($errors->any())
-        <div class="rounded-2xl border border-red-200 bg-red-50 text-red-900 px-4 py-3 text-sm">
+        <div class="rounded-sm border border-red-200 bg-red-50 text-red-900 px-4 py-3 text-sm">
             @foreach($errors->all() as $error)
                 <div>{{ $error }}</div>
             @endforeach
@@ -87,7 +74,7 @@
             {{-- Agent --}}
             @if(!empty($template->flattened_pages_json) && empty($parties))
                 {{-- Pre-signed wet ink upload — agent section is display-only --}}
-                <div class="mb-6 p-4 rounded-xl border border-emerald-200 bg-emerald-50/50">
+                <div class="mb-6 p-4 rounded-sm border border-emerald-200 bg-emerald-50/50">
                     <div class="flex items-center gap-2 mb-1">
                         <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                         <span class="text-sm font-semibold text-emerald-700 uppercase tracking-wider">Agent (Pre-signed — Wet Ink Upload)</span>
@@ -97,7 +84,7 @@
                     <input type="hidden" name="agent_email" value="{{ $user->email }}">
                 </div>
             @else
-                <div class="mb-6 p-4 rounded-xl border border-blue-200 bg-blue-50/50">
+                <div class="mb-6 p-4 rounded-sm border border-blue-200 bg-blue-50/50">
                     <div class="text-sm font-semibold text-blue-700 mb-3 uppercase tracking-wider">Agent (Signs First)</div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -117,7 +104,7 @@
             @endif
 
             {{-- Party One (Tenant for rental, Buyer for sales) --}}
-            <div class="mb-6 p-4 rounded-xl border border-green-200" :class="partyOneNotRequired ? 'bg-gray-50 opacity-60' : 'bg-green-50/50'">
+            <div class="mb-6 p-4 rounded-sm border border-green-200" :class="partyOneNotRequired ? 'bg-gray-50 opacity-60' : 'bg-green-50/50'">
                 <div class="flex items-center justify-between mb-3">
                     <div class="text-sm font-semibold text-green-700 uppercase tracking-wider">{{ $partyOneLabel }} ({{ $partyOneOrder }})</div>
                     <label class="flex items-center gap-2 text-sm cursor-pointer">
@@ -183,7 +170,7 @@
             </div>
 
             {{-- Party Two (Landlord for rental, Seller for sales) --}}
-            <div class="mb-6 p-4 rounded-xl border border-orange-200" :class="partyTwoNotRequired ? 'bg-gray-50 opacity-60' : 'bg-orange-50/50'">
+            <div class="mb-6 p-4 rounded-sm border border-orange-200" :class="partyTwoNotRequired ? 'bg-gray-50 opacity-60' : 'bg-orange-50/50'">
                 <div class="flex items-center justify-between mb-3">
                     <div class="text-sm font-semibold text-orange-700 uppercase tracking-wider">{{ $partyTwoLabel }} ({{ $partyTwoOrder }})</div>
                     <label class="flex items-center gap-2 text-sm cursor-pointer">
@@ -269,13 +256,14 @@
         {{-- Party summary bar --}}
         <div class="ds-status-card p-4 flex flex-wrap items-center gap-4 text-sm">
             @foreach($parties as $party)
+                @php $baseRole = $party['role_label'] ?? preg_replace('/_\d+$/', '', $party['role']); @endphp
                 <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium
                     @if($party['role'] === 'agent') bg-blue-100 text-blue-700
-                    @elseif(in_array($party['role'], ['tenant', 'buyer'])) bg-green-100 text-green-700
-                    @elseif(in_array($party['role'], ['landlord', 'seller'])) bg-orange-100 text-orange-700
+                    @elseif(in_array($baseRole, ['tenant', 'buyer'])) bg-green-100 text-green-700
+                    @elseif(in_array($baseRole, ['landlord', 'seller'])) bg-orange-100 text-orange-700
                     @else bg-purple-100 text-purple-700
                     @endif">
-                    {{ ucfirst(str_replace('_', ' ', $party['role'])) }}: {{ $party['name'] }}
+                    {{ ucfirst(str_replace('_', ' ', $baseRole)) }}: {{ $party['name'] }}
                 </span>
             @endforeach
         </div>
@@ -285,19 +273,40 @@
             <div class="flex-1 ds-status-card p-4 overflow-hidden flex flex-col">
 
                 @if($isWebTemplate ?? false)
-                {{-- Web template: no page navigation needed (single page) --}}
-                <div class="flex-1 overflow-y-auto" style="background:#f3f4f6;">
-                    <div class="relative" style="width:210mm; max-width:100%; background:white; margin:0 auto; box-shadow:0 2px 8px rgba(0,0,0,0.15); overflow:hidden;"
+                {{-- Web template: document preview — signature elements are visible in the HTML --}}
+                {{-- Zone/marker overlays render after the HTML content for ad-hoc markers --}}
+                <div class="flex-1 overflow-y-auto" style="background:#f1f5f9;">
+                    <link href="/css/corex-document.css" rel="stylesheet">
+                    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+                    <style>
+                        #webDocContent .corex-page {
+                            min-height: auto !important;
+                        }
+                        /* Highlight signature areas in setup preview */
+                        #webDocContent [data-marker-party][data-marker-type="signature"] {
+                            border: 2px dashed #94a3b8 !important;
+                            background: rgba(148,163,184,0.08) !important;
+                            min-height: 28pt;
+                        }
+                    </style>
+                    @php
+                        $setupParties = collect($parties ?? [])->map(function($p) {
+                            return [
+                                'role' => $p['role'] ?? 'unknown',
+                                'label' => ucfirst(str_replace('_', ' ', $p['role_label'] ?? $p['role'] ?? 'unknown')),
+                            ];
+                        })->values()->toArray();
+                    @endphp
+                    <div class="relative" style="max-width:100%; margin:0 auto;"
                          x-ref="pageContainer"
+                         x-init="pageLoaded = true; $nextTick(() => paginateDocument(document.getElementById('webDocContent'), {{ Js::from($setupParties) }}))"
                          @dragover.prevent="$event.dataTransfer.dropEffect = 'copy'"
                          @drop.prevent="handleDrop($event)"
-                         x-init="pageLoaded = true; setupWebTemplateObserver()">
+                         @mousedown.prevent="startZoneDrawOnPage($event)">
 
-                        <iframe id="webDocFrame"
-                                style="width:100%; height:2000px; min-height:800px; border:none; display:block; overflow:hidden;"
-                                scrolling="no"
-                                srcdoc="{!! htmlspecialchars($webTemplateHtml ?? '', ENT_QUOTES, 'UTF-8') !!}">
-                        </iframe>
+                        <div id="webDocContent">
+                            {!! $webTemplateHtml ?? '' !!}
+                        </div>
                 @else
                 {{-- PDF template: page navigation + page images --}}
                 <div class="flex items-center justify-between mb-3 flex-shrink-0">
@@ -321,7 +330,8 @@
                     <div class="relative inline-block" style="max-width:800px; width:100%;"
                          x-ref="pageContainer"
                          @dragover.prevent="$event.dataTransfer.dropEffect = 'copy'"
-                         @drop.prevent="handleDrop($event)">
+                         @drop.prevent="handleDrop($event)"
+                         @mousedown.prevent="startZoneDrawOnPage($event)">
 
                         <img :src="pageImages[currentPage - 1]"
                              class="w-full block select-none pointer-events-none"
@@ -386,16 +396,55 @@
                         </template>
                         @endif
 
-                        {{-- Render markers for current page --}}
+                        {{-- Render dynamic signature zones for current page (all template types) --}}
+                        <template x-for="zone in zonesForCurrentPage()" :key="'zone_' + zone.id">
+                            <div class="absolute select-none"
+                                 :style="`left:${zone.x_position}%;top:${zone.y_position}%;width:${zone.width}%;height:50px;z-index:5;`"
+                                 style="border:2px dashed rgba(99,102,241,0.6); background:rgba(99,102,241,0.05); cursor:grab;"
+                                 @mousedown.prevent="startZoneDrag($event, zone)">
+
+                                {{-- Zone label --}}
+                                <div class="absolute -top-5 left-0 px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-500 text-white pointer-events-none whitespace-nowrap"
+                                     style="line-height:1.3;"
+                                     x-text="zone.label || (zone.party_role + ' ' + zone.zone_type)"></div>
+
+                                {{-- Zone info badge --}}
+                                <div class="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-indigo-100 text-indigo-700 pointer-events-none"
+                                     x-text="(zone.marker_count || 0) + ' block' + ((zone.marker_count || 0) !== 1 ? 's' : '')"></div>
+
+                                {{-- Delete zone button --}}
+                                <button class="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600 shadow"
+                                        @click.stop="removeZone(zone)"
+                                        style="cursor:pointer; z-index:20; line-height:1;">
+                                    &times;
+                                </button>
+
+                                {{-- Resize zone handle --}}
+                                <div class="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize"
+                                     style="z-index:20;"
+                                     @mousedown.stop.prevent="startZoneResize($event, zone)">
+                                    <svg viewBox="0 0 10 10" class="w-full h-full opacity-60"><path d="M9 1L1 9M9 5L5 9" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+                                </div>
+                            </div>
+                        </template>
+
+                        {{-- Zone drawing preview --}}
+                        <template x-if="_zoneDrawState">
+                            <div class="absolute border-2 border-dashed border-indigo-500 bg-indigo-50/30 pointer-events-none"
+                                 :style="`left:${_zoneDrawState.x}%;top:${_zoneDrawState.y}%;width:${_zoneDrawState.w}%;height:${_zoneDrawState.h}%;z-index:15;`">
+                            </div>
+                        </template>
+
+                        {{-- Render markers for current page (PDF only) --}}
                         <template x-for="(marker, idx) in markersForCurrentPage()" :key="marker._id">
                             <div class="absolute flex items-center justify-center text-xs font-medium select-none"
-                                 :style="`left:${marker.x_position}%;top:${marker.y_position}%;width:${marker.width}%;height:${marker.height}%;opacity:0.7;z-index:10;`"
+                                 :style="`left:${marker.x_position}%;top:${marker.y_position}%;width:${Math.min(marker.width, 50)}%;height:40px;max-width:200px;opacity:0.7;z-index:10;`"
                                  :class="markerClasses(marker)"
                                  @mousedown.prevent="startDrag($event, marker)"
                                  style="cursor:grab;">
 
                                 {{-- Label --}}
-                                <span class="truncate px-1 pointer-events-none" x-text="markerLabel(marker)"></span>
+                                <span class="truncate px-1 pointer-events-none" style="font-size:9px;line-height:1.2;" x-text="markerLabel(marker)"></span>
                                 <template x-if="marker.auto_placed">
                                     <span class="absolute -top-2 -left-1 px-1 py-0 rounded text-[8px] font-bold bg-indigo-500 text-white pointer-events-none" style="line-height:1.3;">Auto</span>
                                 </template>
@@ -419,12 +468,69 @@
                 </div>
             </div>
 
-            {{-- RIGHT: Toolbar --}}
+            {{-- RIGHT: Toolbar — identical for web and PDF templates --}}
             <div class="w-72 flex-shrink-0 ds-status-card flex flex-col">
                 {{-- Scrollable content area --}}
                 <div class="flex-1 overflow-y-auto p-4 min-h-0">
+
+                    {{-- ═══ ZONE MODE: Draw Signature Zones ═══ --}}
+                    <div class="mb-4 pb-4 border-b border-slate-200">
+                        <h4 class="text-sm font-semibold text-slate-800 mb-2">Signature Zones</h4>
+                        <p class="text-xs text-slate-500 mb-3">Draw a rectangle on the document. System auto-places blocks for each party of that role.</p>
+
+                        <button @click="zoneDrawMode = !zoneDrawMode"
+                                :class="zoneDrawMode ? 'bg-indigo-600 text-white ring-2 ring-indigo-300' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'"
+                                class="w-full rounded-lg border border-indigo-200 px-3 py-2 text-xs font-medium text-center transition-colors mb-3">
+                            <span x-show="!zoneDrawMode">Draw Zone</span>
+                            <span x-show="zoneDrawMode" x-cloak>Drawing... (click & drag on document)</span>
+                        </button>
+
+                        <template x-if="zoneDrawMode">
+                            <div class="space-y-2" x-cloak>
+                                <div>
+                                    <label class="block text-[10px] font-medium text-slate-500 mb-1">Zone Type</label>
+                                    <select x-model="zoneType" class="w-full text-xs border-slate-200 rounded-lg px-2 py-1.5 focus:ring-indigo-500 focus:border-indigo-500">
+                                        <option value="signature">Signature</option>
+                                        <option value="initial">Initial</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-medium text-slate-500 mb-1">Party Role</label>
+                                    <select x-model="zoneRole" class="w-full text-xs border-slate-200 rounded-lg px-2 py-1.5 focus:ring-indigo-500 focus:border-indigo-500">
+                                        <option value="agent">Agent</option>
+                                        <option value="seller">Seller</option>
+                                        <option value="buyer">Buyer</option>
+                                        <option value="landlord">Landlord</option>
+                                        <option value="tenant">Tenant</option>
+                                        <option value="witness">Witness</option>
+                                        <option value="supervisor">Supervisor</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </template>
+
+                        {{-- Placed zones list --}}
+                        <template x-if="zones.length > 0">
+                            <div class="mt-3 space-y-1" x-cloak>
+                                <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Placed Zones</div>
+                                <template x-for="zone in zones" :key="zone.id">
+                                    <div class="flex items-center justify-between text-xs px-2 py-1.5 rounded-lg bg-indigo-50/50 hover:bg-indigo-50 group">
+                                        <div class="flex items-center gap-1.5 min-w-0">
+                                            <span class="w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0"></span>
+                                            <span class="truncate" x-text="zone.label || (zone.party_role + ' ' + zone.zone_type)"></span>
+                                            <span class="text-slate-400 flex-shrink-0" x-text="'Pg ' + zone.page_number"></span>
+                                            <span class="text-indigo-500 flex-shrink-0 text-[9px]" x-text="(zone.marker_count || 0) + ' blocks'"></span>
+                                        </div>
+                                        <button @click="removeZone(zone)" class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 flex-shrink-0 ml-1">&times;</button>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+
+                    {{-- ═══ MARKER MODE: Individual Markers ═══ --}}
                     <h4 class="text-sm font-semibold text-slate-800 mb-3">Place Markers</h4>
-                    <p class="text-xs text-slate-500 mb-4">Select a marker type and party, then click on the document to place it.</p>
+                    <p class="text-xs text-slate-500 mb-4">For ad-hoc fields: drag a marker type onto the document.</p>
 
                     {{-- Marker type (drag onto document to place) --}}
                     <div class="mb-4">
@@ -519,10 +625,10 @@
                         <span x-show="!saving">Save Markers</span>
                         <span x-show="saving" x-cloak>Saving...</span>
                     </button>
-                    <button @click="showSummary = true"
-                            :disabled="markers.length === 0 || !saved"
+                    <button @click="isWebTemplate && markers.length === 0 ? (window.location.href = '{{ route('docuperfect.signatures.sign', $document) }}') : showSummary = true"
+                            :disabled="!isWebTemplate && (markers.length === 0 || !saved)"
                             class="w-full rounded-lg px-4 py-2.5 text-sm font-medium transition-colors"
-                            :class="markers.length === 0 || !saved ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'">
+                            :class="!isWebTemplate && (markers.length === 0 || !saved) ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'">
                         Preview & Continue
                     </button>
                 </div>
@@ -550,7 +656,7 @@
                     </div>
                 </div>
 
-                <div class="bg-slate-50 rounded-xl p-4 space-y-2">
+                <div class="bg-slate-50 rounded-sm p-4 space-y-2">
                     <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Breakdown by Party</div>
                     <template x-for="summary in partySummary()" :key="summary.party">
                         <div class="flex items-center justify-between text-sm">
@@ -586,12 +692,30 @@
             'x_position' => (float) $m->x_position,
             'y_position' => (float) $m->y_position,
             'width' => (float) $m->width,
-            'height' => (float) $m->height,
+            'height' => min((float) $m->height, 8.0),
             'type' => $m->type,
             'assigned_party' => $m->assigned_party,
             'label' => $m->label,
             'required' => (bool) $m->required,
             'from_template' => $m->from_template_zone_id !== null,
+            'from_zone_id' => $m->from_zone_id,
+        ];
+    })->values();
+
+    $zonesJson = ($zones ?? collect())->map(function($z) {
+        return [
+            'id' => $z->id,
+            'zone_type' => $z->zone_type,
+            'party_role' => $z->party_role,
+            'page_number' => $z->page_number,
+            'x_position' => (float) $z->x_position,
+            'y_position' => (float) $z->y_position,
+            'width' => (float) $z->width,
+            'height' => (float) $z->height,
+            'is_auto_placed' => (bool) $z->is_auto_placed,
+            'source' => $z->source,
+            'label' => $z->label,
+            'marker_count' => $z->expandedMarkers()->count(),
         ];
     })->values();
     @endphp
@@ -600,6 +724,7 @@
     function markerPlacement() {
         return {
             markers: @json($markersJson),
+            zones: @json($zonesJson),
             pageImages: @json($pageImages),
             documentFields: @json($document->fields_json ?? []),
             hasFlattened: {{ !empty($hasFlattened) ? 'true' : 'false' }},
@@ -609,144 +734,47 @@
             selectedType: 'signature',
             selectedParty: '{{ $parties[0]['role'] ?? 'agent' }}',
             saving: false,
-            saved: {{ $markers->count() > 0 ? 'true' : 'false' }},
+            saved: {{ ($markers->count() > 0 || ($isWebTemplate ?? false)) ? 'true' : 'false' }},
             saveMessage: '',
             saveError: false,
             showSummary: false,
             pageLoaded: false,
             _nextId: 1,
             _dragState: null,
+            _zoneDrawState: null,
+            _zoneDragState: null,
+            zoneDrawMode: false,
+            zoneType: 'signature',
+            zoneRole: 'seller',
             parties: @json($parties),
 
             get partyOptions() {
-                const grouped = {};
-                (this.parties || []).forEach(p => {
-                    if (!grouped[p.role]) {
-                        grouped[p.role] = { role: p.role, names: [] };
-                    }
-                    if (p.name) grouped[p.role].names.push(p.name);
-                });
-                return Object.values(grouped).map(g => {
-                    const roleLabel = g.role.charAt(0).toUpperCase() + g.role.slice(1).replace('_', ' ');
-                    const label = g.names.length > 0
-                        ? roleLabel + ': ' + g.names.join(' & ')
-                        : roleLabel;
-                    return { value: g.role, label, dotClass: this.partyDotClass(g.role) };
+                // V2 spec: each person is a separate signer — show individually, not grouped
+                return (this.parties || []).map(p => {
+                    const baseRole = (p.role_label || p.role || '').replace(/_\d+$/, '');
+                    const roleLabel = baseRole.charAt(0).toUpperCase() + baseRole.slice(1).replace(/_/g, ' ');
+                    const label = p.name ? roleLabel + ': ' + p.name : roleLabel;
+                    return { value: p.role, label, dotClass: this.partyDotClass(p.role) };
                 });
             },
 
             init() {
-                // Global mouse handlers for drag
-                document.addEventListener('mousemove', (e) => this.onDrag(e));
-                document.addEventListener('mouseup', () => this.endDrag());
+                // Global mouse handlers for drag (markers + zones)
+                document.addEventListener('mousemove', (e) => { this.onDrag(e); this.onZoneDraw(e); this.onZoneDrag(e); });
+                document.addEventListener('mouseup', () => { this.endDrag(); this.endZoneDraw(); this.endZoneDrag(); });
             },
 
             setupWebTemplateObserver() {
-                if (!this.isWebTemplate) return;
-                // For web templates always re-calculate positions
-                // Old saved markers may have wrong coordinates
-                if (this.markers.length > 0 && !this.isWebTemplate) return;
-                // Clear any existing markers before auto-placing
-                if (this.isWebTemplate) this.markers = [];
-
-                const container = this.$refs.pageContainer;
-                if (!container) return;
-
-                const self = this;
-                const tryPlaceMarkers = () => {
-                    const cols = container.querySelectorAll('[data-marker-party]');
-                    if (cols.length === 0) return false;
-
-                    // Map display party names to signature_request party_roles
-                    const partyRoleMap = {
-                        'owner': 'landlord',
-                        'landlord': 'landlord',
-                        'seller': 'seller',
-                        'tenant': 'tenant',
-                        'buyer': 'buyer',
-                        'agent': 'agent',
-                    };
-
-                    // Known parties from server (for matching names to roles)
-                    const knownParties = @json($parties ?? []);
-
-                    cols.forEach((col, i) => {
-                        const partyLabel = (col.dataset.markerParty || '').toLowerCase();
-                        const name = col.dataset.name || '';
-                        const role = partyRoleMap[partyLabel] || partyLabel;
-
-                        // Use getBoundingClientRect for accurate position relative to container
-                        container.scrollTop = 0;
-                        const containerRect = container.getBoundingClientRect();
-                        const colRect = col.getBoundingClientRect();
-                        const sigLine = col.querySelector('.signature-line') ?? col;
-                        const sigRect = sigLine.getBoundingClientRect();
-
-                        const absoluteTop = (sigRect.top - containerRect.top + container.scrollTop) - 35;
-                        const absoluteLeft = colRect.left - containerRect.left;
-
-                        const yPct = (absoluteTop / container.scrollHeight) * 100;
-                        const xPct = (absoluteLeft / container.scrollWidth) * 100;
-                        const wPct = (col.offsetWidth / container.scrollWidth) * 100;
-                        const xOffset = (50 / container.scrollWidth) * 100;
-
-                        // Determine assigned_party and assigned_email — match by name to a known party
-                        let assignedParty = role;
-                        let assignedEmail = null;
-                        if (name && knownParties.length > 0) {
-                            const match = knownParties.find(p =>
-                                p.role === role && p.name && p.name.toLowerCase() === name.toLowerCase()
-                            );
-                            if (match) {
-                                assignedParty = match.role;
-                                assignedEmail = match.email || null;
-                            }
-                        }
-
-                        // Check this party role exists in the known parties list
-                        const partyExists = knownParties.some(p => p.role === assignedParty);
-                        if (!partyExists && knownParties.length > 0) return;
-
-                        self.markers.push({
-                            _id: 'auto_' + self._nextId++,
-                            id: null,
-                            page_number: 1,
-                            x_position: Math.round((xPct + xOffset) * 100) / 100,
-                            y_position: Math.round(yPct * 100) / 100,
-                            width: Math.round(Math.min(wPct - 2, 13) * 100) / 100,
-                            height: 4,
-                            type: 'signature',
-                            assigned_party: assignedParty,
-                            assigned_email: assignedEmail,
-                            label: name ? (assignedParty.charAt(0).toUpperCase() + assignedParty.slice(1) + ' — ' + name) : null,
-                            required: true,
-                            auto_placed: true,
-                        });
-                    });
-
-                    if (self.markers.length > 0) {
-                        self.saved = false;
-                    }
-                    return true;
-                };
-
-                // Try immediately first (DOM may already be ready)
-                if (tryPlaceMarkers()) return;
-
-                // Use MutationObserver to wait for DOM content to render
-                const observer = new MutationObserver(() => {
-                    const cols = container.querySelectorAll('[data-marker-party]');
-                    if (cols.length === 0) return;
-                    observer.disconnect();
-                    // Wait one frame for layout to settle
-                    requestAnimationFrame(() => tryPlaceMarkers());
-                });
-
-                observer.observe(container, { childList: true, subtree: true });
-
-                // Safety timeout — disconnect after 5s
-                setTimeout(() => observer.disconnect(), 5000);
+                // No-op for web templates. Signature positions are defined by
+                // the template HTML — no overlay zones needed.
+                // The document preview shows signature areas via CSS highlighting.
             },
+
+            /**
+             * No-op — web templates define signature positions in the HTML.
+             * Zone creation from DOM is no longer needed.
+             */
+            _createZonesFromDOM() { /* no-op */ },
 
             prevPage() { if (this.currentPage > 1) this.currentPage--; },
             nextPage() { if (this.currentPage < this.totalPages) this.currentPage++; },
@@ -818,27 +846,39 @@
             },
 
             markerLabel(m) {
-                const partyLabel = m.assigned_party.replace('_', ' ');
+                // Use label if set (auto-placed markers have descriptive labels)
+                if (m.label) return m.label;
+                // Strip suffix for display: seller_2 → Seller
+                const baseRole = (m.assigned_party || '').replace(/_\d+$/, '');
+                const roleLabel = baseRole.charAt(0).toUpperCase() + baseRole.slice(1).replace(/_/g, ' ');
+                // Find party name from knownParties
+                const party = (this.parties || []).find(p => p.role === m.assigned_party);
+                const name = party ? party.name : '';
                 const typeLabel = m.type.charAt(0).toUpperCase() + m.type.slice(1);
-                return partyLabel.charAt(0).toUpperCase() + partyLabel.slice(1) + ' ' + typeLabel;
+                return name ? roleLabel + ' — ' + name + ' ' + typeLabel : roleLabel + ' ' + typeLabel;
             },
 
             markerClasses(m) {
                 const base = 'rounded border-2 ';
-                switch (m.assigned_party) {
+                const baseRole = (m.assigned_party || '').replace(/_\d+$/, '');
+                switch (baseRole) {
                     case 'agent': return base + 'border-blue-500 bg-blue-50 text-blue-700';
-                    case 'tenant': return base + 'border-green-500 bg-green-50 text-green-700';
-                    case 'landlord': return base + 'border-orange-500 bg-orange-50 text-orange-700';
+                    case 'tenant': case 'buyer': return base + 'border-green-500 bg-green-50 text-green-700';
+                    case 'landlord': case 'seller': return base + 'border-orange-500 bg-orange-50 text-orange-700';
                     default: return base + 'border-purple-500 bg-purple-50 text-purple-700';
                 }
             },
 
             partyDotClass(party) {
-                switch (party) {
+                // Strip numeric suffix (seller_2 → seller) for colour lookup
+                const base = (party || '').replace(/_\d+$/, '');
+                switch (base) {
                     case 'agent': return 'bg-blue-500';
-                    case 'tenant': return 'bg-green-500';
-                    case 'landlord': return 'bg-orange-500';
-                    default: return 'bg-purple-500';
+                    case 'tenant': case 'buyer': return 'bg-green-500';
+                    case 'landlord': case 'seller': return 'bg-orange-500';
+                    case 'witness': return 'bg-purple-500';
+                    case 'spouse': return 'bg-pink-500';
+                    default: return 'bg-gray-500';
                 }
             },
 
@@ -896,6 +936,214 @@
 
             endDrag() {
                 this._dragState = null;
+            },
+
+            // ── Zone helpers ──
+            zonesForCurrentPage() {
+                return this.zones.filter(z => z.page_number === this.currentPage);
+            },
+
+            // Start drawing a zone bounding box on the page container
+            startZoneDrawOnPage(e) {
+                if (!this.zoneDrawMode) return;
+                const container = this.$refs.pageContainer;
+                if (!container) return;
+                const rect = container.getBoundingClientRect();
+                const x = ((e.clientX - rect.left) / rect.width) * 100;
+                const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+                this._zoneDrawState = {
+                    startX: x, startY: y,
+                    x: x, y: y, w: 0, h: 0,
+                    containerW: rect.width, containerH: rect.height,
+                    containerRect: rect,
+                };
+            },
+
+            onZoneDraw(e) {
+                if (!this._zoneDrawState) return;
+                const s = this._zoneDrawState;
+                const currentX = ((e.clientX - s.containerRect.left) / s.containerW) * 100;
+                const currentY = ((e.clientY - s.containerRect.top) / s.containerH) * 100;
+
+                s.x = Math.min(s.startX, currentX);
+                s.y = Math.min(s.startY, currentY);
+                s.w = Math.abs(currentX - s.startX);
+                s.h = Math.abs(currentY - s.startY);
+            },
+
+            async endZoneDraw() {
+                if (!this._zoneDrawState) return;
+                const s = this._zoneDrawState;
+                this._zoneDrawState = null;
+
+                // Minimum size check — ignore tiny accidental clicks
+                if (s.w < 3 || s.h < 2) return;
+
+                // Create zone via API
+                try {
+                    const resp = await fetch(@json(route('docuperfect.signatures.storeZone', $document)), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': @json(csrf_token()),
+                        },
+                        body: JSON.stringify({
+                            zone_type: this.zoneType,
+                            party_role: this.zoneRole,
+                            page_number: this.currentPage,
+                            x_position: Math.round(s.x * 100) / 100,
+                            y_position: Math.round(s.y * 100) / 100,
+                            width: Math.round(s.w * 100) / 100,
+                            height: Math.round(s.h * 100) / 100,
+                        }),
+                    });
+
+                    const data = await resp.json();
+                    if (data.ok) {
+                        // Add zone to local state
+                        data.zone.marker_count = (data.markers || []).length;
+                        this.zones.push(data.zone);
+
+                        // Add expanded markers to local state
+                        (data.markers || []).forEach(m => {
+                            this.markers.push({
+                                _id: 'zone_' + this._nextId++,
+                                id: m.id,
+                                page_number: m.page_number,
+                                x_position: m.x_position,
+                                y_position: m.y_position,
+                                width: m.width,
+                                height: m.height,
+                                type: m.type,
+                                assigned_party: m.assigned_party,
+                                label: m.label,
+                                required: true,
+                                from_zone_id: data.zone.id,
+                            });
+                        });
+
+                        this.saved = false;
+                        this.saveMessage = 'Zone created with ' + (data.markers || []).length + ' blocks.';
+                        this.saveError = false;
+                        setTimeout(() => { this.saveMessage = ''; }, 3000);
+                    }
+                } catch (err) {
+                    this.saveMessage = 'Failed to create zone.';
+                    this.saveError = true;
+                    setTimeout(() => { this.saveMessage = ''; }, 3000);
+                }
+            },
+
+            // Zone drag (reposition)
+            startZoneDrag(e, zone) {
+                if (e.target.closest('button') || e.target.closest('.cursor-se-resize')) return;
+                const container = this.$refs.pageContainer;
+                const rect = container.getBoundingClientRect();
+                this._zoneDragState = {
+                    type: 'move', zone,
+                    startMouseX: e.clientX, startMouseY: e.clientY,
+                    startX: zone.x_position, startY: zone.y_position,
+                    containerW: rect.width, containerH: rect.height,
+                };
+            },
+
+            startZoneResize(e, zone) {
+                const container = this.$refs.pageContainer;
+                const rect = container.getBoundingClientRect();
+                this._zoneDragState = {
+                    type: 'resize', zone,
+                    startMouseX: e.clientX, startMouseY: e.clientY,
+                    startW: zone.width, startH: zone.height,
+                    containerW: rect.width, containerH: rect.height,
+                };
+            },
+
+            onZoneDrag(e) {
+                if (!this._zoneDragState) return;
+                const s = this._zoneDragState;
+                const dx = ((e.clientX - s.startMouseX) / s.containerW) * 100;
+                const dy = ((e.clientY - s.startMouseY) / s.containerH) * 100;
+
+                if (s.type === 'move') {
+                    s.zone.x_position = Math.round(Math.max(0, Math.min(s.startX + dx, 100 - s.zone.width)) * 100) / 100;
+                    s.zone.y_position = Math.round(Math.max(0, Math.min(s.startY + dy, 100 - s.zone.height)) * 100) / 100;
+                } else {
+                    s.zone.width = Math.round(Math.max(5, Math.min(s.startW + dx, 100 - s.zone.x_position)) * 100) / 100;
+                    s.zone.height = Math.round(Math.max(3, Math.min(s.startH + dy, 100 - s.zone.y_position)) * 100) / 100;
+                }
+            },
+
+            async endZoneDrag() {
+                if (!this._zoneDragState) return;
+                const zone = this._zoneDragState.zone;
+                this._zoneDragState = null;
+
+                // Persist zone update and get re-expanded markers
+                try {
+                    const resp = await fetch(@json(url('/docuperfect/documents/' . $document->id . '/signatures/zones')) + '/' + zone.id, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': @json(csrf_token()),
+                        },
+                        body: JSON.stringify({
+                            x_position: zone.x_position,
+                            y_position: zone.y_position,
+                            width: zone.width,
+                            height: zone.height,
+                        }),
+                    });
+
+                    const data = await resp.json();
+                    if (data.ok && data.markers) {
+                        // Remove old expanded markers for this zone
+                        this.markers = this.markers.filter(m => m.from_zone_id !== zone.id);
+                        zone.marker_count = data.markers.length;
+
+                        // Add re-expanded markers
+                        data.markers.forEach(m => {
+                            this.markers.push({
+                                _id: 'zone_' + this._nextId++,
+                                id: m.id,
+                                page_number: m.page_number,
+                                x_position: m.x_position,
+                                y_position: m.y_position,
+                                width: m.width,
+                                height: Math.min(m.height, 8),
+                                type: m.type,
+                                assigned_party: m.assigned_party,
+                                label: m.label,
+                                required: true,
+                                from_zone_id: zone.id,
+                            });
+                        });
+                        this.saved = false;
+                    }
+                } catch (err) {
+                    // Silently fail — zone position reverts on reload
+                }
+            },
+
+            async removeZone(zone) {
+                try {
+                    await fetch(@json(url('/docuperfect/documents/' . $document->id . '/signatures/zones')) + '/' + zone.id, {
+                        method: 'DELETE',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': @json(csrf_token()),
+                        },
+                    });
+                } catch (err) {
+                    // Continue with local removal even if API fails
+                }
+
+                // Remove from local state
+                this.zones = this.zones.filter(z => z.id !== zone.id);
+                this.markers = this.markers.filter(m => m.from_zone_id !== zone.id);
+                this.saved = false;
             },
 
             // ── Save ──
