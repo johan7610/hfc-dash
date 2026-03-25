@@ -3802,14 +3802,42 @@ class ESignWizardController extends Controller
 
         $mergedHtml = $document ? ($document->web_template_data['merged_html'] ?? null) : null;
 
-        // Find the agent's signature request for upload wiring
+        // Find the agent's signature request and all recipients
         $agentRequest = null;
-        $agentToken = null;
+        $recipientRequests = collect();
+        $sigTemplate = null;
         if ($document && $document->signatureTemplate) {
-            $agentRequest = $document->signatureTemplate->requests
-                ->where('party_role', 'agent')
-                ->first();
-            $agentToken = $agentRequest?->token;
+            $sigTemplate = $document->signatureTemplate;
+            $allRequests = $sigTemplate->requests;
+            $agentRequest = $allRequests->where('party_role', 'agent')->first();
+            $recipientRequests = $allRequests->where('party_role', '!=', 'agent')->values();
+        }
+
+        // Determine current state
+        // 1 = download & sign, 2 = upload, 3 = approve & send, 4 = awaiting recipient, 5 = review recipient, 6 = complete
+        $state = 1;
+        if ($agentRequest) {
+            if ($agentRequest->status === SignatureRequest::STATUS_COMPLETED) {
+                // Agent done — check recipient status
+                $pendingRecipient = $recipientRequests->first(fn($r) => in_array($r->wet_ink_status, [
+                    SignatureRequest::WET_INK_UPLOADED_PENDING_REVIEW,
+                ]));
+                $completedAll = $recipientRequests->every(fn($r) => $r->status === SignatureRequest::STATUS_COMPLETED);
+
+                if ($completedAll && $recipientRequests->isNotEmpty()) {
+                    $state = 6; // All done
+                } elseif ($pendingRecipient) {
+                    $state = 5; // Review recipient upload
+                } else {
+                    $state = 4; // Awaiting recipient
+                }
+            } elseif ($agentRequest->wet_ink_status === SignatureRequest::WET_INK_UPLOADED_PENDING_REVIEW) {
+                $state = 3; // Uploaded, ready to approve & send
+            } elseif ($agentRequest->wet_ink_upload_path && json_decode($agentRequest->wet_ink_upload_path, true)) {
+                $state = 3;
+            } else {
+                $state = 1; // Download & sign
+            }
         }
 
         return view('docuperfect.esign.wet-ink-confirmation', [
@@ -3818,8 +3846,98 @@ class ESignWizardController extends Controller
             'document' => $document,
             'mergedHtml' => $mergedHtml,
             'agentRequest' => $agentRequest,
-            'agentToken' => $agentToken,
+            'sigTemplate' => $sigTemplate,
+            'recipientRequests' => $recipientRequests,
+            'state' => $state,
         ]);
+    }
+
+    /**
+     * Agent uploads their signed wet-ink document.
+     * Auth-gated, no token/session verification needed.
+     */
+    public function wetInkAgentUpload(Request $request, $documentId)
+    {
+        $user = $request->user();
+        $document = Document::where('owner_id', $user->id)
+            ->with('signatureTemplate.requests')
+            ->findOrFail($documentId);
+
+        $request->validate([
+            'files'   => 'required|array|min:1',
+            'files.*' => 'file|mimes:pdf,jpg,jpeg,png|max:20480',
+        ]);
+
+        $sigTemplate = $document->signatureTemplate;
+        $agentRequest = $sigTemplate?->requests->where('party_role', 'agent')->first();
+
+        if (!$agentRequest) {
+            return back()->with('error', 'No agent signing request found.');
+        }
+
+        $paths = [];
+        foreach ($request->file('files') as $file) {
+            $paths[] = $file->store("docuperfect/wet-ink-uploads/{$agentRequest->id}", 'local');
+        }
+
+        $agentRequest->update([
+            'signing_method'      => 'wet_ink',
+            'wet_ink_upload_path' => json_encode($paths),
+            'wet_ink_status'      => SignatureRequest::WET_INK_UPLOADED_PENDING_REVIEW,
+        ]);
+
+        \App\Models\Docuperfect\SignatureAuditLog::log(
+            $sigTemplate,
+            \App\Models\Docuperfect\SignatureAuditLog::ACTION_WET_INK_UPLOADED,
+            \App\Models\Docuperfect\SignatureAuditLog::ACTOR_USER,
+            $user->name,
+            $user->email,
+            $user->id,
+            $agentRequest->id,
+            $request->ip(),
+            $request->userAgent(),
+            ['file_count' => count($paths), 'agent_self_upload' => true],
+        );
+
+        // Create version records
+        foreach ($paths as $path) {
+            \App\Models\Docuperfect\SignedDocumentVersion::create([
+                'document_id'          => $document->id,
+                'signature_request_id' => $agentRequest->id,
+                'version_number'       => \App\Models\Docuperfect\SignedDocumentVersion::nextVersion($document->id),
+                'file_path'            => $path,
+                'file_type'            => pathinfo($path, PATHINFO_EXTENSION),
+                'uploaded_by_name'     => $user->name,
+                'uploaded_at'          => now(),
+                'ip_address'           => $request->ip(),
+            ]);
+        }
+
+        return back()->with('status', 'Signed document uploaded. Review and send to recipient.');
+    }
+
+    /**
+     * Agent approves their own wet-ink upload and advances to the next party.
+     * Uses the same logic as SignatureService::approveUploadOnBehalf.
+     */
+    public function wetInkAgentApprove(Request $request, $documentId)
+    {
+        $user = $request->user();
+        $document = Document::where('owner_id', $user->id)
+            ->with('signatureTemplate.requests')
+            ->findOrFail($documentId);
+
+        $sigTemplate = $document->signatureTemplate;
+        $agentRequest = $sigTemplate?->requests->where('party_role', 'agent')->first();
+
+        if (!$agentRequest || !$agentRequest->wet_ink_upload_path) {
+            return back()->with('error', 'No uploaded document to approve.');
+        }
+
+        $signatureService = app(\App\Services\Docuperfect\SignatureService::class);
+        $signatureService->approveUploadOnBehalf($agentRequest, $user);
+
+        return back()->with('status', 'Approved and sent to recipient for signing.');
     }
 
     /**
