@@ -14,7 +14,7 @@ chrome.tabs.onUpdated.addListener(function (tabId, changeInfo, tab) {
     if (!url) return;
 
     // Match presentation pages: http(s)://127.0.0.1:8000/presentations/{id} or localhost
-    var match = url.match(/^https?:\/\/(?:127\.0\.0\.1|localhost):8000\/presentations\/(\d+)/);
+    var match = url.match(/^https?:\/\/(?:127\.0\.0\.1|localhost):8000\/presentations\/(\d+)/) || url.match(/^https?:\/\/corex\.hfcoastal\.co\.za\/presentations\/(\d+)/);
     if (match) {
         chrome.storage.local.set({
             presentationId: match[1],

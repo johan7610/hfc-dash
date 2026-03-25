@@ -60,7 +60,8 @@ class PresentationPdfService
         $agent = \App\Models\User::find($presentation->created_by_user_id);
         $agentName = $agent->name ?? 'Agent';
         $agentEmail = $agent->email ?? '';
-        $agentPhone = $agent->phone ?? $agent->designation ?? '';
+        $agentPhone = $agent->cell ?? $agent->phone ?? '';
+        $agentDesignation = $agent->designation ?? 'Property Practitioner';
         $agentPhotoPath = null;
         if ($agent && $agent->agent_photo_path && file_exists(storage_path('app/public/' . $agent->agent_photo_path))) {
             $agentPhotoPath = 'data:image/' . pathinfo($agent->agent_photo_path, PATHINFO_EXTENSION) . ';base64,'
@@ -68,9 +69,14 @@ class PresentationPdfService
         }
 
         $logoBase64 = null;
-        $logoFile = public_path('images/logo.png');
-        if (file_exists($logoFile)) {
-            $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoFile));
+        $agency = $agent ? ($agent->agency ?? \App\Models\Agency::first()) : \App\Models\Agency::first();
+        if ($agency && $agency->logo_path) {
+            $logoFile = storage_path('app/public/' . $agency->logo_path);
+            if (file_exists($logoFile)) {
+                $ext = pathinfo($logoFile, PATHINFO_EXTENSION);
+                $mime = in_array($ext, ['jpg', 'jpeg']) ? 'image/jpeg' : 'image/' . $ext;
+                $logoBase64 = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($logoFile));
+            }
         }
 
         // Compile analysis data from AnalysisDataService (real extracted data)
@@ -612,6 +618,7 @@ a:hover { text-decoration: underline; }
                 <div class="agent-contact">
                     <?php if ($agentEmail): ?><?= $esc($agentEmail) ?><br><?php endif ?>
                     <?php if (!empty($agentPhone)): ?><?= $esc($agentPhone) ?><br><?php endif ?>
+                    <?= $esc($agentDesignation) ?><br>
                     <?= $compiledAt ?>
                 </div>
             </div>
@@ -620,6 +627,7 @@ a:hover { text-decoration: underline; }
             <?php endif ?>
         </div>
     </div>
+    <div style="position:absolute;bottom:40px;left:0;right:0;text-align:center;font-size:9px;color:#888;">Registered with the PPRA</div>
 </div>
 
 <?php // ══════════════════════════════════════════════════════════════════════
