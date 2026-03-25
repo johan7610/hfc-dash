@@ -37,7 +37,7 @@
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">The prospective buyer acknowledges that he/she has been informed that professional expertise and/or technical skill and knowledge may be required to detect defects in, and non-compliant aspects concerning, the property. The prospective buyer acknowledges receipt of a copy of this statement. </span></div>
 <div class="corex-signature-section"><div class="corex-signature-section-title">THUS DONE AND SIGNED</div></div>
 
-@include("docuperfect.web-templates.components.signature-block", ["parties" => ["Seller", "Agent"]])
+@include("docuperfect.web-templates.components.signature-block", ["parties" => ["Seller", "Agent", "Buyer"]])
 
 </div>
 </div>
