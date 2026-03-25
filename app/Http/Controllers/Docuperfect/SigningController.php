@@ -1831,7 +1831,7 @@ class SigningController extends Controller
 /* === PDF: page setup === */
 @page {
     size: A4;
-    margin: 10mm;
+    margin: 18mm 20mm;
     @bottom-center {
         content: "Page " counter(page) " of " counter(pages);
         font-size: 9pt;
