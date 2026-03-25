@@ -97,11 +97,18 @@ function paginateDocument(container, parties) {
     container.querySelectorAll('.corex-page-break').forEach(function(el) { el.remove(); });
 
     // ── Strategy 1: Paged templates (multiple .corex-page divs) ──
-    var wrapper = container.querySelector('.corex-document-wrapper');
-    var searchIn = wrapper || container;
-    var corexPages = Array.from(searchIn.children).filter(function(el) {
-        return el.classList && el.classList.contains('corex-page');
-    });
+    // Use querySelectorAll to find ALL .corex-page elements across ALL wrappers.
+    // Web packs have multiple sibling .corex-document-wrapper divs, each with one .corex-page.
+    var allCorexPages = Array.from(container.querySelectorAll('.corex-document-wrapper > .corex-page'));
+    // Fallback: check for .corex-page directly under container (no wrapper)
+    if (allCorexPages.length === 0) {
+        var wrapper = container.querySelector('.corex-document-wrapper');
+        var searchIn = wrapper || container;
+        allCorexPages = Array.from(searchIn.children).filter(function(el) {
+            return el.classList && el.classList.contains('corex-page');
+        });
+    }
+    var corexPages = allCorexPages;
 
     if (corexPages.length > 1) {
         // Collect <style>/<link> tags to preserve
