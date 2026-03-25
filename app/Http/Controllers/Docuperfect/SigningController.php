@@ -1813,7 +1813,7 @@ class SigningController extends Controller
      * Mirrors WebTemplatePdfService::wrapHtml() structure with additional
      * CSS for clean PDF output (no interactive UI elements).
      */
-    private function wrapHtmlForPdf(string $mergedHtml): string
+    public function wrapHtmlForPdf(string $mergedHtml): string
     {
         // Load the full CDS stylesheet — this is what makes web documents look correct
         $cdsStylesheet = '';
