@@ -187,7 +187,7 @@
         <div class="flex-1 overflow-auto" style="background:#e2e8f0; padding:16px 0; min-width:794px;">
             <link href="/css/corex-document.css" rel="stylesheet">
             <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-            <div x-ref="pageContainer" style="position:relative; max-width:100%; margin:0 auto;">
+            <div x-ref="pageContainer" class="relative" style="max-width:100%; margin:0 auto;">
                 <div x-ref="webDocContent">{!! $webTemplateHtml !!}</div>
 
                 {{-- Floating signature markers — same as PDF path but for web templates.
