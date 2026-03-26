@@ -9,6 +9,7 @@ use App\Models\FicaSubmission;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class FicaController extends Controller
@@ -126,6 +127,9 @@ class FicaController extends Controller
             'verified_at'         => now(),
         ]);
 
+        // Update linked contact with form data (only fill blank fields)
+        $this->updateContactFromSubmission($submission);
+
         return redirect()->route('compliance.fica.show', $submission)
             ->with('success', 'FICA submission approved.');
     }
@@ -179,6 +183,46 @@ class FicaController extends Controller
 
         return redirect()->route('compliance.fica.show', $submission)
             ->with('success', 'Corrections requested — email sent to recipient.');
+    }
+
+    /**
+     * Update the linked contact record with FICA form data.
+     * Only fills fields that are currently empty on the contact.
+     */
+    private function updateContactFromSubmission(FicaSubmission $submission): void
+    {
+        $contact = $submission->contact;
+        if (! $contact) {
+            return;
+        }
+
+        $formData = $submission->form_data ?? [];
+        $personal = $formData['personal'] ?? [];
+
+        $mapping = [
+            'phone'      => $personal['phone'] ?? null,
+            'email'      => $personal['email'] ?? null,
+            'id_number'  => $personal['id_number'] ?? null,
+            'address'    => $personal['residential_address'] ?? null,
+        ];
+
+        $updated = [];
+        foreach ($mapping as $field => $value) {
+            if (! empty($value) && empty($contact->{$field})) {
+                $contact->{$field} = $value;
+                $updated[] = $field;
+            }
+        }
+
+        if (! empty($updated)) {
+            $contact->save();
+            Log::info('FICA approval updated contact fields', [
+                'contact_id'    => $contact->id,
+                'submission_id' => $submission->id,
+                'fields_updated' => $updated,
+                'approved_by'   => Auth::id(),
+            ]);
+        }
     }
 
     /**

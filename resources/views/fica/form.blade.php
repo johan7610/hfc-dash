@@ -455,7 +455,7 @@
                         <div class="fica-grid-full">
                             <label class="fica-label">Principal's SA ID / Passport Number <span class="req">*</span></label>
                             <input type="text" name="principal[id_number]" class="fica-input" x-model="principal.id_number">
-                            <p class="fica-hint">Their ID must be inspected. If original not available, certified copy required</p>
+                            <p class="fica-hint">Their ID must be inspected and a copy will be required</p>
                         </div>
                         <div class="fica-grid-full">
                             <label class="fica-label">Is the Principal a South African citizen / permanent resident? <span class="req">*</span></label>
@@ -557,55 +557,70 @@
             <div class="fica-card" x-show="entityType" x-cloak x-transition>
                 <h2 class="fica-section-title"><span x-text="entityType === 'natural' ? '7' : '5'"></span>. Politically Exposed Person (PEP)</h2>
 
-                {{-- Foreign PEP --}}
-                <h3 class="fica-subsection-title">Foreign PEP</h3>
-                <p class="fica-hint" style="margin-bottom: 0.75rem;">Do you now occupy, or have you in the past 12 months occupied, any of the following positions in any country OTHER than South Africa?</p>
-                <div class="fica-checkbox-group" style="margin-bottom: 1.25rem;">
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[foreign_pep][]" value="head_of_state" x-model="pep.foreign_pep"> Head of state</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[foreign_pep][]" value="royal_family" x-model="pep.foreign_pep"> Member of the royal family</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[foreign_pep][]" value="cabinet_member" x-model="pep.foreign_pep"> Cabinet member</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[foreign_pep][]" value="political_party" x-model="pep.foreign_pep"> Senior member of a political party</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[foreign_pep][]" value="judicial_officer" x-model="pep.foreign_pep"> Senior judicial officer</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[foreign_pep][]" value="soe_executive" x-model="pep.foreign_pep"> Senior executive of a state-owned entity</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[foreign_pep][]" value="military" x-model="pep.foreign_pep"> High rank in the military</label>
+                {{-- a) Foreign PEP --}}
+                <div style="margin-bottom: 1.25rem;">
+                    <label class="fica-label">Do you now occupy, or have you in the past 12 months occupied, any prominent public position in a country OTHER than South Africa? <span class="req">*</span></label>
+                    <div class="fica-radio-group">
+                        <label class="fica-radio-label"><input type="radio" name="pep[is_foreign_pep]" value="yes" required x-model="pep.is_foreign_pep"> Yes</label>
+                        <label class="fica-radio-label"><input type="radio" name="pep[is_foreign_pep]" value="no" x-model="pep.is_foreign_pep"> No</label>
+                    </div>
+                </div>
+                <div x-show="pep.is_foreign_pep === 'yes'" x-cloak style="margin-bottom: 1.25rem; padding-left: 1rem; border-left: 2px solid #0d9488;">
+                    <p class="fica-hint" style="margin-bottom: 0.5rem;">Please indicate which position(s):</p>
+                    <div class="fica-checkbox-group">
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[foreign_pep][]" value="head_of_state" x-model="pep.foreign_pep"> Head of state</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[foreign_pep][]" value="royal_family" x-model="pep.foreign_pep"> Member of the royal family</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[foreign_pep][]" value="cabinet_member" x-model="pep.foreign_pep"> Cabinet member</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[foreign_pep][]" value="political_party" x-model="pep.foreign_pep"> Senior member of a political party</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[foreign_pep][]" value="judicial_officer" x-model="pep.foreign_pep"> Senior judicial officer</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[foreign_pep][]" value="soe_executive" x-model="pep.foreign_pep"> Senior executive of a state-owned entity</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[foreign_pep][]" value="military" x-model="pep.foreign_pep"> High rank in the military</label>
+                    </div>
                 </div>
 
-                {{-- Domestic PEP --}}
-                <h3 class="fica-subsection-title">Domestic PEP</h3>
-                <p class="fica-hint" style="margin-bottom: 0.75rem;">Do you now occupy, or have you in the past 12 months occupied, any of the following positions in South Africa?</p>
-                <div class="fica-checkbox-group" style="margin-bottom: 1.25rem;">
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="president" x-model="pep.domestic_pep"> President or Deputy President of South Africa</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="cabinet_minister" x-model="pep.domestic_pep"> Cabinet Minister or Deputy Minister</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="premier" x-model="pep.domestic_pep"> Premier of a province</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="mec" x-model="pep.domestic_pep"> MEC of a province</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="mayor" x-model="pep.domestic_pep"> Mayor of a municipality</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="political_leader" x-model="pep.domestic_pep"> Leader of a political party</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="royal_family" x-model="pep.domestic_pep"> Member of a royal family</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="traditional_leader" x-model="pep.domestic_pep"> Senior traditional leader</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="dept_head" x-model="pep.domestic_pep"> Head, accounting officer or CFO of a national or provincial department</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="municipal_manager" x-model="pep.domestic_pep"> Manager or CFO of a municipality</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="public_entity" x-model="pep.domestic_pep"> Chairperson, CEO, accounting authority, CFO or chief investment officer of a public entity</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="judge" x-model="pep.domestic_pep"> Judge</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="ambassador" x-model="pep.domestic_pep"> Ambassador, high commissioner or other senior representative of a foreign country based in SA</label>
-                    <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="govt_business" x-model="pep.domestic_pep"> Chairperson of board, chairperson of audit committee, executive officer or CFO of a company doing significant business with government</label>
+                {{-- b) Domestic PEP --}}
+                <div style="margin-bottom: 1.25rem;">
+                    <label class="fica-label">Do you now occupy, or have you in the past 12 months occupied, any prominent public position in South Africa? <span class="req">*</span></label>
+                    <div class="fica-radio-group">
+                        <label class="fica-radio-label"><input type="radio" name="pep[is_domestic_pep]" value="yes" required x-model="pep.is_domestic_pep"> Yes</label>
+                        <label class="fica-radio-label"><input type="radio" name="pep[is_domestic_pep]" value="no" x-model="pep.is_domestic_pep"> No</label>
+                    </div>
+                </div>
+                <div x-show="pep.is_domestic_pep === 'yes'" x-cloak style="margin-bottom: 1.25rem; padding-left: 1rem; border-left: 2px solid #0d9488;">
+                    <p class="fica-hint" style="margin-bottom: 0.5rem;">Please indicate which position(s):</p>
+                    <div class="fica-checkbox-group">
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="president" x-model="pep.domestic_pep"> President or Deputy President of South Africa</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="cabinet_minister" x-model="pep.domestic_pep"> Cabinet Minister or Deputy Minister</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="premier" x-model="pep.domestic_pep"> Premier of a province</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="mec" x-model="pep.domestic_pep"> MEC of a province</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="mayor" x-model="pep.domestic_pep"> Mayor of a municipality</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="political_leader" x-model="pep.domestic_pep"> Leader of a political party</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="royal_family" x-model="pep.domestic_pep"> Member of a royal family</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="traditional_leader" x-model="pep.domestic_pep"> Senior traditional leader</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="dept_head" x-model="pep.domestic_pep"> Head, accounting officer or CFO of a national or provincial department</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="municipal_manager" x-model="pep.domestic_pep"> Manager or CFO of a municipality</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="public_entity" x-model="pep.domestic_pep"> Chairperson, CEO, accounting authority, CFO or chief investment officer of a public entity</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="judge" x-model="pep.domestic_pep"> Judge</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="ambassador" x-model="pep.domestic_pep"> Ambassador, high commissioner or other senior representative of a foreign country based in SA</label>
+                        <label class="fica-checkbox-label"><input type="checkbox" name="pep[domestic_pep][]" value="govt_business" x-model="pep.domestic_pep"> Chairperson of board, chairperson of audit committee, executive officer or CFO of a company doing significant business with government</label>
+                    </div>
                 </div>
 
-                {{-- Family / Associate --}}
-                <h3 class="fica-subsection-title">Family Member or Close Associate</h3>
+                {{-- c) Family / Associate --}}
                 <div style="margin-bottom: 1rem;">
-                    <label class="fica-label">Are you a family member or close associate of any person in the above categories? <span class="req">*</span></label>
+                    <label class="fica-label">Are you a family member or close associate of any person described above? <span class="req">*</span></label>
                     <div class="fica-radio-group">
                         <label class="fica-radio-label"><input type="radio" name="pep[is_family_associate]" value="yes" required x-model="pep.is_family_associate"> Yes</label>
                         <label class="fica-radio-label"><input type="radio" name="pep[is_family_associate]" value="no" x-model="pep.is_family_associate"> No</label>
                     </div>
                 </div>
-                <div x-show="pep.is_family_associate === 'yes'" x-cloak>
+                <div x-show="pep.is_family_associate === 'yes'" x-cloak style="margin-bottom: 1rem;">
                     <label class="fica-label">Name the person and indicate their position <span class="req">*</span></label>
                     <textarea name="pep[family_associate_details]" class="fica-input" rows="2" x-model="pep.family_associate_details"></textarea>
                 </div>
 
-                {{-- Source of Wealth --}}
-                <div x-show="pep.foreign_pep.length > 0 || pep.domestic_pep.length > 0 || pep.is_family_associate === 'yes'" x-cloak style="margin-top: 1.25rem;">
+                {{-- d) Source of Wealth — only if any PEP answer is YES --}}
+                <div x-show="pep.is_foreign_pep === 'yes' || pep.is_domestic_pep === 'yes' || pep.is_family_associate === 'yes'" x-cloak style="margin-top: 1.25rem;">
                     <h3 class="fica-subsection-title">Source of Wealth</h3>
                     <label class="fica-label">Please indicate your source of wealth <span class="req">*</span></label>
                     <textarea name="pep[source_of_wealth]" class="fica-input" rows="3" x-model="pep.source_of_wealth"></textarea>
@@ -616,11 +631,12 @@
             {{-- ═══════════ SECTION 8 — DOCUMENT UPLOADS ═══════════ --}}
             <div class="fica-card" x-show="entityType" x-cloak x-transition>
                 <h2 class="fica-section-title"><span x-text="entityType === 'natural' ? '8' : '6'"></span>. Document Uploads</h2>
-                <p class="fica-hint" style="margin-top: -0.75rem; margin-bottom: 1rem;">PDF, JPG, PNG, or HEIC. Maximum 10MB per file.</p>
+                <p class="fica-hint" style="margin-top: -0.75rem; margin-bottom: 0.5rem;">PDF, JPG, PNG, or HEIC. Maximum 10MB per file.</p>
+                <p class="fica-hint" style="margin-bottom: 1rem; color: #64748b; font-style: italic;">Upload if available — your agent may already have these on file.</p>
 
                 <template x-for="docType in computedUploadTypes" :key="docType.key">
                     <div style="margin-bottom: 1.25rem;" x-show="docType.show">
-                        <label class="fica-label"><span x-text="docType.label"></span> <span class="req" x-show="docType.required">*</span></label>
+                        <label class="fica-label"><span x-text="docType.label"></span></label>
                         <template x-if="docType.tooltip">
                             <div class="fica-tooltip"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg><span x-text="docType.tooltip"></span></div>
                         </template>
@@ -745,7 +761,9 @@
             },
 
             pep: {
+                is_foreign_pep: '',
                 foreign_pep: [],
+                is_domestic_pep: '',
                 domestic_pep: [],
                 is_family_associate: '',
                 family_associate_details: '',
@@ -756,39 +774,39 @@
 
             get computedUploadTypes() {
                 const t = [
-                    { key: 'id_copy', label: 'Certified ID Copy / Passport of person completing form', required: true, show: true, tooltip: null },
-                    { key: 'proof_of_address', label: 'Proof of residential address (less than 2 months old)', required: true, show: true, tooltip: addressTooltip },
+                    { key: 'id_copy', label: 'Copy of ID document / Passport of person completing form', show: true, tooltip: null },
+                    { key: 'proof_of_address', label: 'Proof of residential address (less than 2 months old)', show: true, tooltip: addressTooltip },
                 ];
                 if (this.principal.acting_on_behalf === 'yes' && this.entityType === 'natural') {
-                    t.push({ key: 'principal_id', label: "Principal's ID Copy / Passport", required: true, show: true, tooltip: null });
-                    t.push({ key: 'principal_address', label: "Principal's proof of address", required: true, show: true, tooltip: addressTooltip });
-                    t.push({ key: 'principal_authority', label: 'Authority document (to act on behalf of principal)', required: true, show: true, tooltip: null });
+                    t.push({ key: 'principal_id', label: "Principal's copy of ID document / Passport", show: true, tooltip: null });
+                    t.push({ key: 'principal_address', label: "Principal's proof of address", show: true, tooltip: addressTooltip });
+                    t.push({ key: 'principal_authority', label: 'Authority document (to act on behalf of principal)', show: true, tooltip: null });
                 }
                 if (this.representative.has_representative === 'yes' && this.entityType === 'natural') {
-                    t.push({ key: 'representative_authority', label: "Representative's authority document", required: true, show: true, tooltip: null });
+                    t.push({ key: 'representative_authority', label: "Representative's authority document", show: true, tooltip: null });
                 }
                 if (this.entityType === 'company') {
-                    t.push({ key: 'company_registration', label: 'Proof of company/CC existence — registration document', required: true, show: true, tooltip: null });
-                    t.push({ key: 'company_authority', label: 'Authority document to act on behalf of company', required: true, show: true, tooltip: null });
-                    t.push({ key: 'beneficial_owner_ids', label: 'ID copies of all beneficial owners', required: true, show: true, tooltip: null });
-                    t.push({ key: 'beneficial_owner_addresses', label: 'Proof of address of all beneficial owners', required: true, show: true, tooltip: addressTooltip });
+                    t.push({ key: 'company_registration', label: 'Proof of company/CC existence — registration document', show: true, tooltip: null });
+                    t.push({ key: 'company_authority', label: 'Authority document to act on behalf of company', show: true, tooltip: null });
+                    t.push({ key: 'beneficial_owner_ids', label: 'Copy of ID documents of all beneficial owners', show: true, tooltip: null });
+                    t.push({ key: 'beneficial_owner_addresses', label: 'Proof of address of all beneficial owners', show: true, tooltip: addressTooltip });
                 }
                 if (this.entityType === 'trust') {
-                    t.push({ key: 'trust_deed', label: 'Trust deed or letters of authority', required: true, show: true, tooltip: null });
-                    t.push({ key: 'trust_authority', label: 'Authority document — trust resolution etc', required: true, show: true, tooltip: null });
-                    t.push({ key: 'donor_id', label: "Donor's ID copy", required: true, show: true, tooltip: null });
-                    t.push({ key: 'donor_address', label: "Donor's proof of address", required: true, show: true, tooltip: addressTooltip });
-                    t.push({ key: 'trustee_ids', label: 'ID copies of all trustees', required: true, show: true, tooltip: null });
-                    t.push({ key: 'trustee_addresses', label: 'Proof of address of all trustees', required: true, show: true, tooltip: addressTooltip });
+                    t.push({ key: 'trust_deed', label: 'Trust deed or letters of authority', show: true, tooltip: null });
+                    t.push({ key: 'trust_authority', label: 'Authority document — trust resolution etc', show: true, tooltip: null });
+                    t.push({ key: 'donor_id', label: "Donor's copy of ID document", show: true, tooltip: null });
+                    t.push({ key: 'donor_address', label: "Donor's proof of address", show: true, tooltip: addressTooltip });
+                    t.push({ key: 'trustee_ids', label: 'Copy of ID documents of all trustees', show: true, tooltip: null });
+                    t.push({ key: 'trustee_addresses', label: 'Proof of address of all trustees', show: true, tooltip: addressTooltip });
                     if (this.entity.has_named_beneficiaries === 'yes') {
-                        t.push({ key: 'beneficiary_ids', label: 'ID copies of named beneficiaries', required: true, show: true, tooltip: null });
-                        t.push({ key: 'beneficiary_addresses', label: 'Proof of address of named beneficiaries', required: true, show: true, tooltip: addressTooltip });
+                        t.push({ key: 'beneficiary_ids', label: 'Copy of ID documents of named beneficiaries', show: true, tooltip: null });
+                        t.push({ key: 'beneficiary_addresses', label: 'Proof of address of named beneficiaries', show: true, tooltip: addressTooltip });
                     }
                 }
                 if (this.entityType === 'partnership') {
-                    t.push({ key: 'partnership_authority', label: 'Authority document', required: true, show: true, tooltip: null });
-                    t.push({ key: 'partner_ids', label: 'ID copies of all partners', required: true, show: true, tooltip: null });
-                    t.push({ key: 'partner_addresses', label: 'Proof of address of all partners', required: true, show: true, tooltip: addressTooltip });
+                    t.push({ key: 'partnership_authority', label: 'Authority document', show: true, tooltip: null });
+                    t.push({ key: 'partner_ids', label: 'Copy of ID documents of all partners', show: true, tooltip: null });
+                    t.push({ key: 'partner_addresses', label: 'Proof of address of all partners', show: true, tooltip: addressTooltip });
                 }
                 return t;
             },
@@ -843,8 +861,6 @@
                     if (!has) { alert('Please provide your signature before submitting.'); return; }
                     this.signatureDataUrl = c.toDataURL('image/png');
                 }
-                const req = this.computedUploadTypes.filter(t => t.required && t.show);
-                for (const u of req) { if (!this.uploads[u.key] || this.uploads[u.key].status !== 'done') { alert('Please upload: ' + u.label); return; } }
                 this.submitting = true;
                 this.$nextTick(() => document.getElementById('ficaForm').submit());
             }

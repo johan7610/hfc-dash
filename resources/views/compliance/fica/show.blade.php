@@ -20,16 +20,16 @@
         </p>
 
         {{-- Recipient Form Link --}}
-        <div class="mt-3 flex items-center gap-2" x-data="{ copied: false }">
+        <div class="mt-3 flex items-center gap-2">
             <span class="text-xs font-semibold text-slate-500 whitespace-nowrap">Recipient Form Link:</span>
             <input type="text" value="{{ url('/fica/' . $submission->token) }}" readonly
                    class="flex-1 px-2 py-1 border border-slate-200 bg-slate-50 text-xs text-slate-700 select-all focus:outline-none focus:border-teal-500"
                    id="ficaLinkInput">
-            <button type="button"
-                    @click="navigator.clipboard.writeText('{{ url('/fica/' . $submission->token) }}'); copied = true; setTimeout(() => copied = false, 2000)"
+            <button type="button" id="ficaCopyBtn"
+                    onclick="ficaCopyToClipboard('{{ url('/fica/' . $submission->token) }}', this)"
                     class="inline-flex items-center gap-1 px-2.5 py-1 border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition whitespace-nowrap">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.5a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m0 0a2.625 2.625 0 1 1 5.25 0" /></svg>
-                <span x-text="copied ? 'Copied' : 'Copy Link'"></span>
+                <span>Copy Link</span>
             </button>
         </div>
     </div>
@@ -441,6 +441,19 @@
                 consistent: '',
             }
         };
+    }
+
+    function ficaCopyToClipboard(text, btn) {
+        var textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        var span = btn.querySelector('span');
+        if (span) { span.textContent = 'Copied!'; setTimeout(function() { span.textContent = 'Copy Link'; }, 2000); }
     }
 </script>
 @endsection

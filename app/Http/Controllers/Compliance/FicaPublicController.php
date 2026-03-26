@@ -57,8 +57,10 @@ class FicaPublicController extends Controller
             'service.cash_over_50k'       => 'required|in:yes,no',
 
             // Section 7 — PEP
+            'pep.is_foreign_pep'           => 'required|in:yes,no',
             'pep.foreign_pep'              => 'nullable|array',
             'pep.foreign_pep.*'            => 'string|max:50',
+            'pep.is_domestic_pep'          => 'required|in:yes,no',
             'pep.domestic_pep'             => 'nullable|array',
             'pep.domestic_pep.*'           => 'string|max:50',
             'pep.is_family_associate'      => 'required|in:yes,no',
