@@ -355,6 +355,33 @@
                 </div>
             </div>
 
+            {{-- FICA Compliance Officers --}}
+            @permission('access_settings')
+            <div>
+                <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">FICA Compliance Officers</h3>
+                <div class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
+                    <div class="text-xs font-semibold mb-2" style="color:var(--text-secondary);">Select users who can perform final FICA compliance approval</div>
+                    <form method="POST" action="{{ route('corex.settings.compliance-officers') }}">
+                        @csrf
+                        @php
+                            $allUsers = \App\Models\User::orderBy('name')->whereNull('deleted_at')->get(['id', 'name', 'role']);
+                            $currentOfficerIds = \App\Models\FicaComplianceOfficer::pluck('user_id')->toArray();
+                        @endphp
+                        <div class="space-y-1 max-h-48 overflow-y-auto mb-3" style="border:1px solid var(--border); padding:0.5rem; border-radius:4px; background:var(--surface);">
+                            @foreach($allUsers as $u)
+                            <label class="flex items-center gap-2 py-1 px-1 text-sm cursor-pointer hover:bg-white/5 rounded">
+                                <input type="checkbox" name="officer_ids[]" value="{{ $u->id }}" {{ in_array($u->id, $currentOfficerIds) ? 'checked' : '' }} style="accent-color: #0d9488;">
+                                <span style="color:var(--text-primary);">{{ $u->name }}</span>
+                                <span class="text-xs" style="color:var(--text-muted);">{{ $u->role }}</span>
+                            </label>
+                            @endforeach
+                        </div>
+                        <button type="submit" class="px-4 py-1.5 text-xs font-semibold rounded-md transition-all" style="background:var(--brand); color:#fff;">Save Compliance Officers</button>
+                    </form>
+                </div>
+            </div>
+            @endpermission
+
             {{-- Designations (inline) --}}
             @permission('manage_designations')
             <div>

@@ -551,7 +551,11 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::get('/create', [\App\Http\Controllers\Compliance\FicaController::class, 'create'])->name('create');
         Route::post('/', [\App\Http\Controllers\Compliance\FicaController::class, 'store'])->name('store');
         Route::get('/{submission}', [\App\Http\Controllers\Compliance\FicaController::class, 'show'])->name('show');
-        Route::post('/{submission}/approve', [\App\Http\Controllers\Compliance\FicaController::class, 'approve'])->name('approve');
+        Route::get('/{submission}/pdf', [\App\Http\Controllers\Compliance\FicaController::class, 'downloadPdf'])->name('pdf');
+        Route::post('/{submission}/agent-approve', [\App\Http\Controllers\Compliance\FicaController::class, 'agentApprove'])->name('agent-approve');
+        Route::get('/{submission}/compliance-review', [\App\Http\Controllers\Compliance\FicaController::class, 'complianceReview'])->name('compliance-review');
+        Route::post('/{submission}/compliance-approve', [\App\Http\Controllers\Compliance\FicaController::class, 'complianceApprove'])->name('compliance-approve');
+        Route::post('/{submission}/compliance-reject', [\App\Http\Controllers\Compliance\FicaController::class, 'complianceReject'])->name('compliance-reject');
         Route::post('/{submission}/reject', [\App\Http\Controllers\Compliance\FicaController::class, 'reject'])->name('reject');
         Route::post('/{submission}/request-corrections', [\App\Http\Controllers\Compliance\FicaController::class, 'requestCorrections'])->name('request-corrections');
     });
@@ -569,6 +573,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::post('/settings/matches-enabled', [CoreXSettingsController::class, 'updateMatchesEnabled'])->middleware('permission:access_settings')->name('corex.settings.matches-enabled');
     Route::post('/settings/matches-wa-message', [CoreXSettingsController::class, 'updateMatchesWaMessage'])->middleware('permission:access_settings')->name('corex.settings.matches-wa-message');
     Route::post('/settings/matches-show-on-properties', [CoreXSettingsController::class, 'updateMatchesShowOnProperties'])->middleware('permission:access_settings')->name('corex.settings.matches-show-on-properties');
+    Route::post('/settings/compliance-officers', [\App\Http\Controllers\Compliance\FicaController::class, 'saveComplianceOfficers'])->middleware('permission:access_settings')->name('corex.settings.compliance-officers');
     Route::put('/settings/agency', [CoreXSettingsController::class, 'updateAgency'])->middleware('permission:access_settings')->name('corex.settings.agency.update');
     Route::get('/settings/preview-header', [CoreXSettingsController::class, 'previewHeader'])->middleware('permission:access_settings')->name('corex.settings.preview-header');
     Route::get('/settings/preview-signature', [CoreXSettingsController::class, 'previewSignature'])->middleware('permission:access_settings')->name('corex.settings.preview-signature');

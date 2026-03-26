@@ -5,11 +5,14 @@ namespace App\Http\Controllers\Compliance;
 use App\Http\Controllers\Controller;
 use App\Mail\FicaRequestMail;
 use App\Models\Contact;
+use App\Models\FicaComplianceOfficer;
 use App\Models\FicaSubmission;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class FicaController extends Controller
@@ -19,8 +22,11 @@ class FicaController extends Controller
      */
     public function index(Request $request)
     {
-        $query = FicaSubmission::with(['contact', 'requestedBy', 'verifiedBy'])
-            ->where('agency_id', Auth::user()->agency_id)
+        $agencyId = Auth::user()->effectiveAgencyId();
+        $isCO = Auth::user()->isComplianceOfficer();
+
+        $query = FicaSubmission::with(['contact', 'requestedBy', 'verifiedBy', 'agentVerifiedBy', 'coVerifiedBy'])
+            ->where('agency_id', $agencyId)
             ->latest();
 
         if ($status = $request->query('status')) {
@@ -40,13 +46,14 @@ class FicaController extends Controller
         $submissions = $query->paginate(20)->withQueryString();
 
         $counts = [
-            'all'       => FicaSubmission::where('agency_id', Auth::user()->agency_id)->count(),
-            'submitted' => FicaSubmission::where('agency_id', Auth::user()->agency_id)->where('status', 'submitted')->count(),
-            'approved'  => FicaSubmission::where('agency_id', Auth::user()->agency_id)->where('status', 'approved')->count(),
-            'pending'   => FicaSubmission::where('agency_id', Auth::user()->agency_id)->whereIn('status', ['draft', 'corrections_requested'])->count(),
+            'all'            => FicaSubmission::where('agency_id', $agencyId)->count(),
+            'submitted'      => FicaSubmission::where('agency_id', $agencyId)->where('status', 'submitted')->count(),
+            'agent_approved' => FicaSubmission::where('agency_id', $agencyId)->where('status', 'agent_approved')->count(),
+            'approved'       => FicaSubmission::where('agency_id', $agencyId)->where('status', 'approved')->count(),
+            'pending'        => FicaSubmission::where('agency_id', $agencyId)->whereIn('status', ['draft', 'corrections_requested'])->count(),
         ];
 
-        return view('compliance.fica.index', compact('submissions', 'counts'));
+        return view('compliance.fica.index', compact('submissions', 'counts', 'isCO'));
     }
 
     /**
@@ -78,7 +85,7 @@ class FicaController extends Controller
 
         $submission = FicaSubmission::create([
             'contact_id'       => $contact->id,
-            'agency_id'        => Auth::user()->agency_id,
+            'agency_id'        => Auth::user()->effectiveAgencyId(),
             'requested_by'     => Auth::id(),
             'token'            => Str::random(64),
             'token_expires_at' => now()->addDays(14),
@@ -94,21 +101,21 @@ class FicaController extends Controller
     }
 
     /**
-     * Staff review screen.
+     * Staff review screen (agent).
      */
     public function show(FicaSubmission $submission)
     {
         $this->authorizeAgency($submission);
 
-        $submission->load(['contact', 'requestedBy', 'verifiedBy', 'documents']);
+        $submission->load(['contact', 'requestedBy', 'verifiedBy', 'agentVerifiedBy', 'coVerifiedBy', 'documents']);
 
         return view('compliance.fica.show', compact('submission'));
     }
 
     /**
-     * Approve submission.
+     * Agent approves — sets status to agent_approved, awaiting CO review.
      */
-    public function approve(Request $request, FicaSubmission $submission)
+    public function agentApprove(Request $request, FicaSubmission $submission)
     {
         $this->authorizeAgency($submission);
 
@@ -116,26 +123,130 @@ class FicaController extends Controller
             'risk_rating'         => 'required|integer|in:1,2,3',
             'verification_method' => 'required|array|min:1',
             'reviewer_notes'      => 'nullable|string|max:2000',
+            'checklist'           => 'nullable|array',
         ]);
 
         $submission->update([
-            'status'              => 'approved',
-            'risk_rating'         => $validated['risk_rating'],
-            'verification_method' => $validated['verification_method'],
-            'reviewer_notes'      => $validated['reviewer_notes'] ?? null,
-            'verified_by'         => Auth::id(),
-            'verified_at'         => now(),
+            'status'                  => 'agent_approved',
+            'risk_rating'             => $validated['risk_rating'],
+            'verification_method'     => $validated['verification_method'],
+            'agent_verified_by'       => Auth::id(),
+            'agent_verified_at'       => now(),
+            'agent_verification_data' => $validated['checklist'] ?? null,
+            'agent_notes'             => $validated['reviewer_notes'] ?? null,
         ]);
 
-        // Update linked contact with form data (only fill blank fields)
-        $this->updateContactFromSubmission($submission);
+        Log::info('FICA agent approved', [
+            'submission_id' => $submission->id,
+            'agent_id'      => Auth::id(),
+        ]);
 
         return redirect()->route('compliance.fica.show', $submission)
-            ->with('success', 'FICA submission approved.');
+            ->with('success', 'Agent approval recorded. Awaiting compliance officer review.');
     }
 
     /**
-     * Reject submission.
+     * Compliance officer review screen.
+     */
+    public function complianceReview(FicaSubmission $submission)
+    {
+        $this->authorizeAgency($submission);
+        abort_unless(Auth::user()->isComplianceOfficer(), 403, 'Only compliance officers can access this page.');
+
+        $submission->load(['contact', 'requestedBy', 'agentVerifiedBy', 'coVerifiedBy', 'documents']);
+
+        return view('compliance.fica.compliance-review', compact('submission'));
+    }
+
+    /**
+     * Compliance officer final approval.
+     */
+    public function complianceApprove(Request $request, FicaSubmission $submission)
+    {
+        $this->authorizeAgency($submission);
+        abort_unless(Auth::user()->isComplianceOfficer(), 403);
+
+        $validated = $request->validate([
+            'risk_rating'        => 'required|integer|in:1,2,3',
+            'co_checklist'       => 'nullable|array',
+            'co_notes'           => 'nullable|string|max:2000',
+            'co_signature_data'  => 'required|string',
+            'tfs_screening'      => 'required|in:yes,no',
+        ]);
+
+        $coChecklistData = $validated['co_checklist'] ?? [];
+        $coChecklistData['tfs_screening'] = $validated['tfs_screening'];
+
+        $submission->update([
+            'status'               => 'approved',
+            'risk_rating'          => $validated['risk_rating'],
+            'verified_by'          => Auth::id(),
+            'verified_at'          => now(),
+            'co_verified_by'       => Auth::id(),
+            'co_verified_at'       => now(),
+            'co_verification_data' => $coChecklistData,
+            'co_notes'             => $validated['co_notes'] ?? null,
+            'co_signature_data'    => $validated['co_signature_data'],
+        ]);
+
+        // NOW update the contact
+        $this->updateContactFromSubmission($submission);
+
+        Log::info('FICA compliance officer approved', [
+            'submission_id' => $submission->id,
+            'co_id'         => Auth::id(),
+            'contact_id'    => $submission->contact_id,
+        ]);
+
+        return redirect()->route('compliance.fica.show', $submission)
+            ->with('success', 'FICA submission approved by compliance officer. Contact record updated.');
+    }
+
+    /**
+     * Compliance officer rejects or returns to agent.
+     */
+    public function complianceReject(Request $request, FicaSubmission $submission)
+    {
+        $this->authorizeAgency($submission);
+        abort_unless(Auth::user()->isComplianceOfficer(), 403);
+
+        $validated = $request->validate([
+            'action'         => 'required|in:reject,return_to_agent',
+            'reviewer_notes' => 'required|string|max:2000',
+        ]);
+
+        if ($validated['action'] === 'return_to_agent') {
+            $submission->update([
+                'status'        => 'submitted',
+                'co_notes'      => $validated['reviewer_notes'],
+                'co_verified_by' => Auth::id(),
+                // Clear agent approval so agent must re-review
+                'agent_verified_by'       => null,
+                'agent_verified_at'       => null,
+                'agent_verification_data' => null,
+                'agent_notes'             => null,
+            ]);
+
+            return redirect()->route('compliance.fica.show', $submission)
+                ->with('success', 'Returned to agent for re-review.');
+        }
+
+        $submission->update([
+            'status'         => 'rejected',
+            'reviewer_notes' => $validated['reviewer_notes'],
+            'co_verified_by' => Auth::id(),
+            'co_verified_at' => now(),
+            'co_notes'       => $validated['reviewer_notes'],
+            'verified_by'    => Auth::id(),
+            'verified_at'    => now(),
+        ]);
+
+        return redirect()->route('compliance.fica.show', $submission)
+            ->with('success', 'FICA submission rejected.');
+    }
+
+    /**
+     * Reject submission (agent).
      */
     public function reject(Request $request, FicaSubmission $submission)
     {
@@ -174,7 +285,6 @@ class FicaController extends Controller
             'token_expires_at' => now()->addDays(14),
         ]);
 
-        // Re-send email with new token
         if ($submission->contact && $submission->contact->email) {
             Mail::to($submission->contact->email)->send(
                 new FicaRequestMail($submission, Auth::user())
@@ -186,8 +296,47 @@ class FicaController extends Controller
     }
 
     /**
+     * Download PDF certificate for an approved submission.
+     */
+    public function downloadPdf(FicaSubmission $submission)
+    {
+        $this->authorizeAgency($submission);
+        abort_unless($submission->status === 'approved', 404, 'PDF only available for approved submissions.');
+
+        $submission->load(['contact', 'agency', 'requestedBy', 'agentVerifiedBy', 'coVerifiedBy', 'documents']);
+
+        // Return the HTML template as a printable page (Puppeteer rendering is a server-side concern)
+        return view('compliance.fica.pdf', compact('submission'));
+    }
+
+    /**
+     * Save compliance officers (from settings).
+     */
+    public function saveComplianceOfficers(Request $request)
+    {
+        $validated = $request->validate([
+            'officer_ids'   => 'nullable|array',
+            'officer_ids.*' => 'exists:users,id',
+        ]);
+
+        $officerIds = $validated['officer_ids'] ?? [];
+
+        // Remove officers not in the new list
+        FicaComplianceOfficer::whereNotIn('user_id', $officerIds)->delete();
+
+        // Add new officers
+        foreach ($officerIds as $userId) {
+            FicaComplianceOfficer::firstOrCreate(
+                ['user_id' => $userId],
+                ['assigned_by' => Auth::id(), 'assigned_at' => now()]
+            );
+        }
+
+        return back()->with('success', 'Compliance officers updated.')->with('tab', 'user');
+    }
+
+    /**
      * Update the linked contact record with FICA form data.
-     * Only fills fields that are currently empty on the contact.
      */
     private function updateContactFromSubmission(FicaSubmission $submission): void
     {
@@ -217,10 +366,10 @@ class FicaController extends Controller
         if (! empty($updated)) {
             $contact->save();
             Log::info('FICA approval updated contact fields', [
-                'contact_id'    => $contact->id,
-                'submission_id' => $submission->id,
+                'contact_id'     => $contact->id,
+                'submission_id'  => $submission->id,
                 'fields_updated' => $updated,
-                'approved_by'   => Auth::id(),
+                'approved_by'    => Auth::id(),
             ]);
         }
     }
@@ -230,6 +379,6 @@ class FicaController extends Controller
      */
     private function authorizeAgency(FicaSubmission $submission): void
     {
-        abort_unless($submission->agency_id === Auth::user()->agency_id, 403);
+        abort_unless($submission->agency_id === Auth::user()->effectiveAgencyId(), 403);
     }
 }

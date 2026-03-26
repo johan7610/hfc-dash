@@ -832,11 +832,20 @@
                                 </p>
                             </div>
                         </div>
-                        <a href="{{ route('compliance.fica.show', $sub) }}"
-                           class="text-xs font-semibold px-3 py-1.5 rounded-md transition-all"
-                           style="color:var(--brand-icon); border:1px solid color-mix(in srgb, var(--brand-icon) 30%, transparent);">
-                            View
-                        </a>
+                        <div class="flex items-center gap-2">
+                            @if($sub->status === 'approved')
+                            <a href="{{ route('compliance.fica.pdf', $sub) }}" target="_blank"
+                               class="text-xs font-semibold px-3 py-1.5 rounded-md transition-all"
+                               style="color:var(--text-muted); border:1px solid var(--border);" title="Download PDF">
+                                PDF
+                            </a>
+                            @endif
+                            <a href="{{ route('compliance.fica.show', $sub) }}"
+                               class="text-xs font-semibold px-3 py-1.5 rounded-md transition-all"
+                               style="color:var(--brand-icon); border:1px solid color-mix(in srgb, var(--brand-icon) 30%, transparent);">
+                                View
+                            </a>
+                        </div>
                     </div>
                     @endforeach
                 </div>
