@@ -93,6 +93,14 @@ class FicaController extends Controller
     }
 
     /**
+     * Display the RMCP document.
+     */
+    public function rmcp()
+    {
+        return view('compliance.fica.rmcp');
+    }
+
+    /**
      * Show form to pick a contact and send FICA request.
      */
     public function create()
