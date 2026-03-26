@@ -92,7 +92,13 @@
                                 <span class="text-slate-300">—</span>
                             @endif
                         </td>
-                        <td class="px-4 py-3 text-right">
+                        <td class="px-4 py-3 text-right" x-data="{ copied: false }">
+                            <button type="button" title="Copy form link"
+                                    @click="navigator.clipboard.writeText('{{ url('/fica/' . $sub->token) }}'); copied = true; setTimeout(() => copied = false, 1500)"
+                                    class="inline-flex items-center justify-center w-6 h-6 text-slate-400 hover:text-teal-600 transition mr-1">
+                                <svg x-show="!copied" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /></svg>
+                                <svg x-show="copied" x-cloak xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 text-emerald-500"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                            </button>
                             <a href="{{ route('compliance.fica.show', $sub) }}" class="text-teal-600 hover:text-teal-800 font-medium text-xs">Review</a>
                         </td>
                     </tr>
