@@ -84,7 +84,7 @@ class Contact extends Model
     }
 
     /**
-     * Get FICA documents for this contact.
+     * Get FICA documents for this contact (legacy e-sign pivot).
      */
     public function ficaDocuments(): BelongsToMany
     {
@@ -94,16 +94,39 @@ class Contact extends Model
     }
 
     /**
+     * FICA submissions linked to this contact (new standalone FICA form system).
+     */
+    public function ficaSubmissions(): HasMany
+    {
+        return $this->hasMany(FicaSubmission::class)->latest();
+    }
+
+    /**
      * Check FICA compliance status.
+     * Checks both legacy e-sign FICA docs AND the new fica_submissions table.
      * Returns: 'complete', 'expiring', 'incomplete'
      */
     public function ficaStatus(): string
     {
+        // Check new FICA submission system first
+        $approvedSubmission = $this->ficaSubmissions()
+            ->where('status', 'approved')
+            ->orderByDesc('verified_at')
+            ->first();
+
+        if ($approvedSubmission) {
+            $verifiedAt = $approvedSubmission->verified_at;
+            if ($verifiedAt && $verifiedAt->diffInMonths(now()) >= 11) {
+                return 'expiring';
+            }
+            return 'complete';
+        }
+
+        // Fall back to legacy e-sign FICA documents
         $ficaDocs = $this->ficaDocuments()->get();
         if ($ficaDocs->isEmpty()) {
             return 'incomplete';
         }
-        // Check if most recent FICA is within 12 months
         $latest = $ficaDocs->sortByDesc('pivot.signed_at')->first();
         if ($latest && $latest->pivot->signed_at) {
             $signedAt = \Carbon\Carbon::parse($latest->pivot->signed_at);

@@ -750,6 +750,11 @@
                     ->wherePivot('is_signed', true)
                     ->orderByPivot('signed_at', 'desc')
                     ->get();
+                $ficaSubmissions = $contact->ficaSubmissions()
+                    ->whereIn('status', ['approved', 'submitted', 'under_review'])
+                    ->with('verifiedBy')
+                    ->get();
+                $approvedFicaSubs = $ficaSubmissions->where('status', 'approved');
                 $allSignedDocs = $contact->signedDocuments()
                     ->wherePivot('is_signed', true)
                     ->orderByPivot('signed_at', 'desc')
@@ -765,9 +770,14 @@
                         <div>
                             <h3 class="text-base font-bold" style="color:var(--text-primary);">FICA Complete</h3>
                             <p class="text-sm" style="color:var(--text-secondary);">
-                                {{ $ficaDocs->count() }} FICA document{{ $ficaDocs->count() !== 1 ? 's' : '' }} on file.
-                                @if($ficaDocs->first()?->pivot?->signed_at)
-                                    Latest signed {{ \Carbon\Carbon::parse($ficaDocs->first()->pivot->signed_at)->format('d M Y') }}.
+                                @if($approvedFicaSubs->isNotEmpty())
+                                    {{ $approvedFicaSubs->count() }} approved FICA submission{{ $approvedFicaSubs->count() !== 1 ? 's' : '' }}.
+                                    Latest approved {{ $approvedFicaSubs->first()->verified_at?->format('d M Y') }}.
+                                @elseif($ficaDocs->isNotEmpty())
+                                    {{ $ficaDocs->count() }} FICA document{{ $ficaDocs->count() !== 1 ? 's' : '' }} on file.
+                                    @if($ficaDocs->first()?->pivot?->signed_at)
+                                        Latest signed {{ \Carbon\Carbon::parse($ficaDocs->first()->pivot->signed_at)->format('d M Y') }}.
+                                    @endif
                                 @endif
                             </p>
                         </div>
@@ -791,10 +801,52 @@
                 </div>
             </div>
 
-            {{-- FICA documents --}}
+            {{-- FICA submissions (new system) --}}
+            @if($ficaSubmissions->isNotEmpty())
+            <div>
+                <h4 class="text-sm font-bold uppercase tracking-wide mb-3" style="color:var(--text-muted);">FICA Submissions</h4>
+                <div class="space-y-2">
+                    @foreach($ficaSubmissions as $sub)
+                    @php
+                        $subColors = ['approved' => ['bg' => '#dcfce7', 'text' => '#166534'], 'submitted' => ['bg' => '#dbeafe', 'text' => '#1e40af'], 'under_review' => ['bg' => '#fef3c7', 'text' => '#92400e']];
+                        $sc = $subColors[$sub->status] ?? ['bg' => '#f1f5f9', 'text' => '#475569'];
+                    @endphp
+                    <div class="flex items-center justify-between p-3 rounded-lg" style="background:var(--surface); border:1px solid var(--border);">
+                        <div class="flex items-center gap-3">
+                            <svg class="w-5 h-5 flex-shrink-0" style="color:var(--brand-icon);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+                            </svg>
+                            <div>
+                                <p class="text-sm font-semibold" style="color:var(--text-primary);">
+                                    FICA Form — {{ ucfirst($sub->entity_type) }}
+                                    <span class="ml-1 text-xs px-1.5 py-0.5 rounded-md" style="background:{{ $sc['bg'] }}; color:{{ $sc['text'] }};">{{ $sub->status_label }}</span>
+                                </p>
+                                <p class="text-xs" style="color:var(--text-muted);">
+                                    Submitted {{ $sub->signed_at?->format('d M Y') }}
+                                    @if($sub->status === 'approved' && $sub->verifiedBy)
+                                        &middot; Approved by {{ $sub->verifiedBy->name }} on {{ $sub->verified_at?->format('d M Y') }}
+                                        @if($sub->risk_rating)
+                                            &middot; Risk: {{ [1 => 'Low', 2 => 'Medium', 3 => 'High'][$sub->risk_rating] ?? '' }}
+                                        @endif
+                                    @endif
+                                </p>
+                            </div>
+                        </div>
+                        <a href="{{ route('compliance.fica.show', $sub) }}"
+                           class="text-xs font-semibold px-3 py-1.5 rounded-md transition-all"
+                           style="color:var(--brand-icon); border:1px solid color-mix(in srgb, var(--brand-icon) 30%, transparent);">
+                            View
+                        </a>
+                    </div>
+                    @endforeach
+                </div>
+            </div>
+            @endif
+
+            {{-- Legacy FICA documents (e-sign system) --}}
             @if($ficaDocs->isNotEmpty())
             <div>
-                <h4 class="text-sm font-bold uppercase tracking-wide mb-3" style="color:var(--text-muted);">FICA Documents</h4>
+                <h4 class="text-sm font-bold uppercase tracking-wide mb-3" style="color:var(--text-muted);">FICA Documents (E-Sign)</h4>
                 <div class="space-y-2">
                     @foreach($ficaDocs as $doc)
                     <div class="flex items-center justify-between p-3 rounded-lg" style="background:var(--surface); border:1px solid var(--border);">

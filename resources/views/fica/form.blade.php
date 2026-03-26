@@ -540,7 +540,10 @@
                 <div style="margin-bottom: 1.25rem;">
                     <label class="fica-label">How will payments be financed? <span class="req">*</span></label>
                     <textarea name="service[payment_method]" class="fica-input" rows="2" required x-model="service.payment_method"></textarea>
-                    <div class="fica-tooltip"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg><span>This refers to how the property transaction is funded (mortgage bond, cash purchase, savings), not payments to the agency. All sale proceeds flow through the transferring attorney.</span></div>
+                    <div class="fica-tooltip" style="transition: opacity 0.15s;">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg>
+                        <span x-text="paymentTooltip"></span>
+                    </div>
                 </div>
 
                 <div>
@@ -549,7 +552,10 @@
                         <label class="fica-radio-label"><input type="radio" name="service[cash_over_50k]" value="yes" required x-model="service.cash_over_50k"> Yes</label>
                         <label class="fica-radio-label"><input type="radio" name="service[cash_over_50k]" value="no" x-model="service.cash_over_50k"> No</label>
                     </div>
-                    <div class="fica-tooltip"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg><span>Cash means physical paper money, coins, or traveller's cheques only. EFT/bank transfers are NOT cash. Home Finders Coastal does not accept physical cash — if unsure, answer 'No'.</span></div>
+                    <div class="fica-tooltip" style="transition: opacity 0.15s;">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg>
+                        <span x-text="cashTooltip"></span>
+                    </div>
                 </div>
             </div>
 
@@ -771,6 +777,35 @@
             },
 
             declaration: { signed_at_location: '' },
+
+            get paymentTooltip() {
+                switch (this.service.transaction_purpose) {
+                    case 'sell':
+                        return 'As a seller, agency commission is paid by the transferring attorney from the proceeds of the sale — you do not pay the agency directly. A typical answer would be: \'Agency commission will be paid by the transferring attorney from the proceeds of the sale.\'';
+                    case 'purchase':
+                        return 'Describe how the purchase price will be funded. Examples: \'Mortgage bond through [bank name]\', \'Own funds transferred via EFT from savings/investments\', \'Combination of mortgage bond and own funds via EFT\', \'Proceeds from sale of existing property (handled by transferring attorney)\'. Note: Even if you are paying the full amount without a bond (often called a \'cash purchase\'), this is not considered \'cash\' under FICA — it is an electronic funds transfer.';
+                    case 'let_out':
+                        return 'As a landlord, agency management fees are deducted from your rental income managed through the Reos trust account — you do not pay the agency directly. A typical answer would be: \'Agency fees are deducted from rental income managed through Reos.\'';
+                    case 'rent':
+                        return 'As a tenant, your deposit and monthly rental are paid via EFT to the Reos trust account — cash is never accepted. A typical answer would be: \'Deposit and monthly rental paid via EFT to the Reos trust account.\'';
+                    default:
+                        return 'Describe how any payments related to this transaction will be financed. Home Finders Coastal does not accept cash — all funds are processed through the transferring attorney (sales) or Reos trust account (rentals).';
+                }
+            },
+
+            get cashTooltip() {
+                switch (this.service.transaction_purpose) {
+                    case 'sell':
+                    case 'let_out':
+                        return 'As a seller/landlord, you do not make payments to the agency or buyer/tenant directly. All funds flow through the transferring attorney or Reos. The answer is almost certainly \'No\'.';
+                    case 'purchase':
+                        return 'Cash means physical paper money, coins, or traveller\'s cheques — NOT EFT or bank transfers. Will any part of the purchase price be paid in physical cash exceeding R50,000? If paying via bond or EFT, the answer is \'No\'.';
+                    case 'rent':
+                        return 'Cash means physical paper money, coins, or traveller\'s cheques — NOT EFT. Home Finders Coastal does not accept cash payments. All deposits and rent are paid via EFT to the Reos trust account. The answer is almost certainly \'No\'.';
+                    default:
+                        return 'Cash means physical paper money, coins, or traveller\'s cheques only. EFT/bank transfers are NOT cash. Home Finders Coastal does not accept physical cash — if unsure, answer \'No\'.';
+                }
+            },
 
             get computedUploadTypes() {
                 const t = [
