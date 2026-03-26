@@ -189,6 +189,54 @@
             <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
             <div x-ref="pageContainer" style="position:relative; max-width:100%; margin:0 auto;">
                 <div x-ref="webDocContent">{!! $webTemplateHtml !!}</div>
+
+                {{-- Floating signature markers — same as PDF path but for web templates.
+                     Markers come from zones drawn in setup (expanded into DB markers).
+                     Positioned with absolute % values relative to the paginated container. --}}
+                <template x-for="marker in markers" :key="'wm-' + marker.id">
+                    <div class="absolute flex items-center justify-center select-none transition-all duration-200"
+                         :id="'marker-' + marker.id"
+                         :style="`left:${marker.x_position}%;top:${marker.y_position}%;width:${marker.width}%;height:40px;max-width:200px;z-index:10;`"
+                         :class="markerDisplayClasses(marker)"
+                         @click="handleMarkerClick(marker)">
+
+                        {{-- Unsigned agent marker (clickable) --}}
+                        <template x-if="marker.assigned_party === 'agent' && !marker.signed">
+                            <div class="flex flex-col items-center justify-center w-full h-full px-1">
+                                <span class="text-xs font-bold leading-tight truncate" x-text="markerActionLabel(marker)"></span>
+                                <span class="text-[10px] leading-tight opacity-70 truncate" x-text="marker.label || markerTypeLabel(marker)"></span>
+                            </div>
+                        </template>
+
+                        {{-- Signed agent marker (shows signature/value) --}}
+                        <template x-if="marker.assigned_party === 'agent' && marker.signed">
+                            <div class="flex flex-col items-center justify-center w-full h-full relative">
+                                <template x-if="marker.signature_data && marker.type !== 'date' && marker.type !== 'text'">
+                                    <img :src="marker.signature_data"
+                                         class="w-full h-full object-contain p-0.5"
+                                         alt="Signature">
+                                </template>
+                                <template x-if="marker.type === 'date'">
+                                    <span class="text-xs font-medium" x-text="marker.text_value || marker.date_value || formatDate(new Date())"></span>
+                                </template>
+                                <template x-if="marker.type === 'text'">
+                                    <span class="text-xs font-medium truncate px-1" x-text="marker.text_value || ''"></span>
+                                </template>
+                                <span class="absolute -bottom-0.5 right-0.5 text-[9px] text-emerald-700 font-semibold" x-text="marker.type === 'text' ? 'Done' : 'Signed'"></span>
+                            </div>
+                        </template>
+
+                        {{-- Other party's marker (greyed out) --}}
+                        <template x-if="marker.assigned_party !== 'agent'">
+                            <div class="flex flex-col items-center justify-center w-full h-full px-1 opacity-60">
+                                <svg class="w-3.5 h-3.5 mb-0.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
+                                <span class="text-[10px] leading-tight capitalize truncate" x-text="marker.assigned_party"></span>
+                            </div>
+                        </template>
+                    </div>
+                </template>
             </div>
         </div>
 
@@ -978,8 +1026,16 @@ function signDocument() {
                 return top;
             }
 
-            // Unsigned agent signature elements
+            // Unsigned agent DB markers (works for both PDF and web templates)
+            this.markers.forEach(m => {
+                if (m.assigned_party === 'agent' && !m.signed) {
+                    const el = document.getElementById('marker-' + m.id);
+                    items.push({ el, label: m.label || m.type, type: 'marker', party: 'agent' });
+                }
+            });
+
             if (this.isWebTemplate) {
+                // Also include unsigned web template HTML-based elements
                 this.webSigElements.forEach(entry => {
                     if (entry.isMine && !entry.signed) {
                         items.push({ el: entry.el, label: 'Signature', type: 'sig', party: entry.partyRole });
@@ -989,13 +1045,6 @@ function signDocument() {
                 (this.webInitialElements || []).forEach(entry => {
                     if (entry.isMine && !entry.signed) {
                         items.push({ el: entry.el, label: 'Page Initial', type: 'initial', party: entry.partyRole });
-                    }
-                });
-            } else {
-                this.markers.forEach(m => {
-                    if (m.assigned_party === 'agent' && !m.signed) {
-                        const el = document.getElementById('marker-' + m.id);
-                        items.push({ el, label: m.label || m.type, type: 'marker', party: 'agent' });
                     }
                 });
             }
@@ -1037,22 +1086,30 @@ function signDocument() {
             let total = 0;
             let incomplete = 0;
 
+            // Always count agent's DB markers (works for both PDF and web templates)
+            this.markers.forEach(m => {
+                if (m.assigned_party === 'agent') {
+                    total++;
+                    if (!m.signed) incomplete++;
+                }
+            });
+
             if (this.isWebTemplate) {
-                // 1. Signature blocks (mine)
+                // Also count web template HTML-based elements (from inline @include sigs)
                 this.webSigElements.forEach(entry => {
                     if (entry.isMine) {
                         total++;
                         if (!entry.signed) incomplete++;
                     }
                 });
-                // 2. Initial blocks (mine)
+                // Initial blocks (mine)
                 (this.webInitialElements || []).forEach(entry => {
                     if (entry.isMine) {
                         total++;
                         if (!entry.signed) incomplete++;
                     }
                 });
-                // 3. Ceremony fields — ALL count in total, only empty ones are incomplete
+                // Ceremony fields — ALL count in total, only empty ones are incomplete
                 const container = this.$refs.webDocContent;
                 if (container) {
                     container.querySelectorAll('input[data-ceremony-field="true"]').forEach(inp => {
@@ -1064,14 +1121,6 @@ function signDocument() {
                         if (!btn.textContent || !btn.textContent.trim()) incomplete++;
                     });
                 }
-            } else {
-                // PDF marker-based: count agent's markers
-                this.markers.forEach(m => {
-                    if (m.assigned_party === 'agent') {
-                        total++;
-                        if (!m.signed) incomplete++;
-                    }
-                });
             }
 
             this.totalAgent = total;
@@ -1666,7 +1715,7 @@ function signDocument() {
 
         // ── Complete signing (with guided navigation if unsigned markers remain) ──
         async handleComplete() {
-            // Web template flow: check all incomplete items (sigs + ceremony fields)
+            // Web template flow: check all incomplete items (sigs + ceremony fields + markers)
             if (this.isWebTemplate) {
                 this._updateIncompleteCount();
                 const incomplete = this._computeIncompleteItems();
@@ -1674,6 +1723,34 @@ function signDocument() {
                     const labels = [...new Set(incomplete.map(i => i.label))];
                     alert(`Please complete all fields: ${labels.join(', ')} (${incomplete.length} remaining)`);
                     this.scrollToNextIncomplete();
+                    return;
+                }
+
+                // If only DB markers were used (no inline HTML signatures), use the
+                // standard signComplete POST — marker signatures are already saved per-capture.
+                const hasWebSignatures = Object.keys(this.webSignatures || {}).length > 0;
+                const hasAgentMarkers = this.markers.some(m => m.assigned_party === 'agent');
+                if (!hasWebSignatures && hasAgentMarkers) {
+                    // Marker-only web template: use PDF-style completion
+                    if (this.completingForm) return;
+                    this.completingForm = true;
+
+                    const agentFields = (this.documentFields || []).filter(f => f.assignedTo === 'agent');
+                    if (agentFields.length > 0) {
+                        const saved = await this.saveAgentFields();
+                        if (!saved) { this.completingForm = false; return; }
+                    }
+
+                    this.completionDone = true;
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = @json(route('docuperfect.signatures.signComplete', $document));
+                    const csrf = document.createElement('input');
+                    csrf.type = 'hidden'; csrf.name = '_token';
+                    csrf.value = @json(csrf_token());
+                    form.appendChild(csrf);
+                    document.body.appendChild(form);
+                    form.submit();
                     return;
                 }
 

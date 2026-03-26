@@ -411,6 +411,66 @@
                         <div x-ref="pageContainer"
                              style="position:relative; max-width:100%; margin:0 auto;">
                             <div x-ref="webDocContent" x-html="webTemplateHtml"></div>
+
+                            {{-- Floating signature markers — from zones drawn in setup.
+                                 Positioned with absolute % values relative to the paginated container. --}}
+                            <template x-for="marker in markers" :key="'wm-' + marker.id">
+                                <div x-show="!hasFlattened || (marker.is_mine && !marker.signed)"
+                                     class="absolute flex items-center justify-center select-none transition-all duration-200"
+                                     :id="'marker-' + marker.id"
+                                     :style="`left:${marker.x_position}%;top:${marker.y_position}%;width:${marker.width}%;height:40px;max-width:200px;z-index:10;`"
+                                     :class="markerDisplayClasses(marker)"
+                                     @click="handleMarkerClick(marker)">
+
+                                    {{-- My unsigned marker (clickable) --}}
+                                    <template x-if="marker.is_mine && !marker.signed">
+                                        <div class="flex flex-col items-center justify-center w-full h-full px-1">
+                                            <span class="text-xs font-bold leading-tight truncate" x-text="markerActionLabel(marker)"></span>
+                                            <span class="text-[10px] leading-tight opacity-70 truncate" x-text="marker.label || markerTypeLabel(marker)"></span>
+                                        </div>
+                                    </template>
+
+                                    {{-- My signed marker --}}
+                                    <template x-if="marker.is_mine && marker.signed && !hasFlattened">
+                                        <div class="flex flex-col items-center justify-center w-full h-full relative">
+                                            <template x-if="marker.signature_data && marker.type !== 'date' && marker.type !== 'text'">
+                                                <img :src="marker.signature_data"
+                                                     class="w-full h-full object-contain p-0.5"
+                                                     alt="Signature">
+                                            </template>
+                                            <template x-if="marker.type === 'date'">
+                                                <span class="text-xs font-medium" x-text="marker.text_value || marker.date_value || formatDate(new Date())"></span>
+                                            </template>
+                                            <template x-if="marker.type === 'text'">
+                                                <span class="text-xs font-medium truncate px-1" x-text="marker.text_value || ''"></span>
+                                            </template>
+                                            <span class="absolute -bottom-0.5 right-0.5 text-[9px] text-emerald-700 font-semibold" x-text="marker.type === 'text' ? 'Done' : 'Signed'"></span>
+                                        </div>
+                                    </template>
+
+                                    {{-- Other party's marker --}}
+                                    <template x-if="!marker.is_mine">
+                                        <div class="flex flex-col items-center justify-center w-full h-full px-1 opacity-60">
+                                            <template x-if="marker.signed">
+                                                <div class="flex flex-col items-center">
+                                                    <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                    <span class="text-[10px] leading-tight capitalize truncate" x-text="marker.assigned_party + ' (signed)'"></span>
+                                                </div>
+                                            </template>
+                                            <template x-if="!marker.signed">
+                                                <div class="flex flex-col items-center">
+                                                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                    </svg>
+                                                    <span class="text-[10px] leading-tight capitalize truncate" x-text="marker.assigned_party"></span>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
                         </div>
                     </div>
                 </template>
@@ -1562,7 +1622,15 @@ function externalSign() {
             const items = [];
             const container = this.$refs.webDocContent || null;
 
-            // 1. Unsigned signature elements
+            // 0. Unsigned DB markers (from zones drawn in setup)
+            this.markers.forEach(m => {
+                if (m.is_mine && !m.signed) {
+                    const el = document.getElementById('marker-' + m.id);
+                    items.push({ el, label: m.label || m.type || 'Signature' });
+                }
+            });
+
+            // 1. Unsigned signature elements (from inline HTML)
             if (container) {
                 container.querySelectorAll('.web-sig-interactive').forEach(el => {
                     if (el.getAttribute('data-signed') !== 'true') {
@@ -1635,7 +1703,15 @@ function externalSign() {
             let total = 0;
             let incomplete = 0;
 
-            // 1. Signature blocks (mine — marked with .web-sig-interactive)
+            // 0. DB markers (from zones drawn in setup — works for web templates too)
+            this.markers.forEach(m => {
+                if (m.is_mine) {
+                    total++;
+                    if (!m.signed) incomplete++;
+                }
+            });
+
+            // 1. Signature blocks (mine — marked with .web-sig-interactive from inline HTML)
             if (container) {
                 container.querySelectorAll('.web-sig-interactive').forEach(el => {
                     total++;
