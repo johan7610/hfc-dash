@@ -3,15 +3,19 @@
 namespace App\Models\Docuperfect;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class SignatureZone extends Model
 {
+    use SoftDeletes;
+
     protected $table = 'signature_zones';
 
     protected $fillable = [
         'signature_template_id',
         'zone_type',
         'party_role',
+        'assigned_parties',
         'page_number',
         'x_position',
         'y_position',
@@ -29,6 +33,7 @@ class SignatureZone extends Model
         'width' => 'decimal:4',
         'height' => 'decimal:4',
         'is_auto_placed' => 'boolean',
+        'assigned_parties' => 'array',
     ];
 
     const TYPE_SIGNATURE = 'signature';

@@ -655,6 +655,8 @@ class SignatureController extends Controller
         $request->validate([
             'zone_type' => 'required|in:signature,initial',
             'party_role' => 'required|string|max:50',
+            'assigned_parties' => 'nullable|array',
+            'assigned_parties.*' => 'string|max:50',
             'page_number' => 'required|integer|min:1',
             'x_position' => 'required|numeric|min:0|max:100',
             'y_position' => 'required|numeric|min:0|max:100',
@@ -664,7 +666,7 @@ class SignatureController extends Controller
         ]);
 
         $zone = $this->signatureService->saveZone($template, $request->only([
-            'zone_type', 'party_role', 'page_number',
+            'zone_type', 'party_role', 'assigned_parties', 'page_number',
             'x_position', 'y_position', 'width', 'height', 'label',
         ]));
 
@@ -686,6 +688,7 @@ class SignatureController extends Controller
                 'id' => $zone->id,
                 'zone_type' => $zone->zone_type,
                 'party_role' => $zone->party_role,
+                'assigned_parties' => $zone->assigned_parties ?? [$zone->party_role],
                 'page_number' => $zone->page_number,
                 'x_position' => (float) $zone->x_position,
                 'y_position' => (float) $zone->y_position,

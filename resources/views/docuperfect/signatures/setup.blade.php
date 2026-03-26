@@ -495,16 +495,28 @@
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-medium text-slate-500 mb-1">Party Role</label>
-                                    <select x-model="zoneRole" class="w-full text-xs border-slate-200 rounded-lg px-2 py-1.5 focus:ring-indigo-500 focus:border-indigo-500">
-                                        <option value="agent">Agent</option>
-                                        <option value="seller">Seller</option>
-                                        <option value="buyer">Buyer</option>
-                                        <option value="landlord">Landlord</option>
-                                        <option value="tenant">Tenant</option>
-                                        <option value="witness">Witness</option>
-                                        <option value="supervisor">Supervisor</option>
-                                    </select>
+                                    <label class="block text-[10px] font-medium text-slate-500 mb-1">Assigned Parties</label>
+                                    <div class="space-y-1">
+                                        @php
+                                            $zonePartyOptions = [
+                                                'agent' => 'Agent',
+                                                'seller' => 'Seller',
+                                                'buyer' => 'Buyer',
+                                                'landlord' => 'Landlord',
+                                                'tenant' => 'Tenant',
+                                                'witness' => 'Witness',
+                                                'supervisor' => 'Supervisor',
+                                            ];
+                                        @endphp
+                                        @foreach($zonePartyOptions as $val => $lbl)
+                                        <label class="flex items-center gap-1.5 text-xs cursor-pointer">
+                                            <input type="checkbox" value="{{ $val }}"
+                                                   x-model="zoneRoles"
+                                                   class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5">
+                                            {{ $lbl }}
+                                        </label>
+                                        @endforeach
+                                    </div>
                                 </div>
                             </div>
                         </template>
@@ -707,6 +719,7 @@
             'id' => $z->id,
             'zone_type' => $z->zone_type,
             'party_role' => $z->party_role,
+            'assigned_parties' => $z->assigned_parties ?? [$z->party_role],
             'page_number' => $z->page_number,
             'x_position' => (float) $z->x_position,
             'y_position' => (float) $z->y_position,
@@ -746,6 +759,7 @@
             zoneDrawMode: false,
             zoneType: 'signature',
             zoneRole: 'seller',
+            zoneRoles: ['agent'],
             parties: @json($parties),
 
             get partyOptions() {
@@ -980,6 +994,14 @@
                 // Minimum size check — ignore tiny accidental clicks
                 if (s.w < 3 || s.h < 2) return;
 
+                // Must have at least one party selected
+                if (!this.zoneRoles || this.zoneRoles.length === 0) {
+                    this.saveMessage = 'Select at least one party for the zone.';
+                    this.saveError = true;
+                    setTimeout(() => { this.saveMessage = ''; }, 3000);
+                    return;
+                }
+
                 // Create zone via API
                 try {
                     const resp = await fetch(@json(route('docuperfect.signatures.storeZone', $document)), {
@@ -991,7 +1013,8 @@
                         },
                         body: JSON.stringify({
                             zone_type: this.zoneType,
-                            party_role: this.zoneRole,
+                            party_role: this.zoneRoles[0],
+                            assigned_parties: this.zoneRoles,
                             page_number: this.currentPage,
                             x_position: Math.round(s.x * 100) / 100,
                             y_position: Math.round(s.y * 100) / 100,
@@ -1152,7 +1175,11 @@
                 this.saveMessage = '';
                 this.saveError = false;
 
-                const payload = this.markers.map((m, i) => ({
+                // Only send manually-placed markers (not zone-expanded ones).
+                // Zone-expanded markers (from_zone_id set) are managed by the zone system
+                // and preserved by the server.
+                const manualMarkers = this.markers.filter(m => !m.from_zone_id);
+                const payload = manualMarkers.map((m, i) => ({
                     page_number: m.page_number,
                     x_position: m.x_position,
                     y_position: m.y_position,

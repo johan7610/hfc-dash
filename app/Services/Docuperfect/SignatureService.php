@@ -204,7 +204,9 @@ class SignatureService
         }
 
         return DB::transaction(function () use ($template, $markers) {
-            $template->markers()->delete();
+            // Only delete manually-placed markers (not zone-expanded ones).
+            // Zone-expanded markers (from_zone_id IS NOT NULL) are managed by the zone system.
+            $template->markers()->whereNull('from_zone_id')->delete();
 
             $count = 0;
             foreach ($markers as $i => $data) {
@@ -224,6 +226,9 @@ class SignatureService
                 ]);
                 $count++;
             }
+
+            // Include zone-expanded markers in the total count
+            $count += $template->markers()->whereNotNull('from_zone_id')->count();
 
             return $count;
         });
@@ -259,6 +264,11 @@ class SignatureService
         $sortOrder = $sigTemplate->markers()->max('sort_order') ?? -1;
 
         foreach ($zones as $zone) {
+            // Skip zones with no real position (template author didn't position them)
+            if ((float) $zone->x_position == 0 && (float) $zone->y_position == 0) {
+                continue;
+            }
+
             $parties = $zone->assigned_parties ?? [];
 
             foreach ($parties as $partyIndex => $party) {
@@ -568,8 +578,18 @@ class SignatureService
         // Remove existing markers from this zone
         $sigTemplate->markers()->where('from_zone_id', $zone->id)->forceDelete();
 
-        // Get parties matching this zone's role
-        $matchingParties = $this->getPartiesForRole($zone->party_role, $parties);
+        // Get parties matching the zone's assigned roles.
+        // assigned_parties (JSON array) supports multi-party zones (e.g. ["agent", "seller"]).
+        // Falls back to single party_role for backward compatibility.
+        $assignedRoles = $zone->assigned_parties ?? [$zone->party_role];
+        if (empty($assignedRoles)) {
+            $assignedRoles = [$zone->party_role];
+        }
+
+        $matchingParties = [];
+        foreach ($assignedRoles as $role) {
+            $matchingParties = array_merge($matchingParties, $this->getPartiesForRole($role, $parties));
+        }
 
         if (empty($matchingParties)) {
             return 0;
@@ -605,10 +625,16 @@ class SignatureService
      */
     public function saveZone(SignatureTemplate $sigTemplate, array $data): SignatureZone
     {
+        // Build assigned_parties: use explicit array if provided, else wrap party_role
+        $assignedParties = $data['assigned_parties'] ?? [$data['party_role']];
+        // Primary party_role remains the first assigned party (for backward compat)
+        $primaryRole = $assignedParties[0] ?? $data['party_role'];
+
         $zone = SignatureZone::create([
             'signature_template_id' => $sigTemplate->id,
             'zone_type' => $data['zone_type'] ?? 'signature',
-            'party_role' => $data['party_role'],
+            'party_role' => $primaryRole,
+            'assigned_parties' => $assignedParties,
             'page_number' => $data['page_number'],
             'x_position' => $data['x_position'],
             'y_position' => $data['y_position'],
@@ -616,7 +642,7 @@ class SignatureService
             'height' => $data['height'],
             'is_auto_placed' => $data['is_auto_placed'] ?? false,
             'source' => $data['source'] ?? SignatureZone::SOURCE_SETUP,
-            'label' => $data['label'] ?? (ucfirst($data['party_role']) . ' ' . ucfirst($data['zone_type'] ?? 'signature') . ' Zone'),
+            'label' => $data['label'] ?? (ucfirst($primaryRole) . ' ' . ucfirst($data['zone_type'] ?? 'signature') . ' Zone'),
             'sort_order' => $sigTemplate->zones()->max('sort_order') + 1,
         ]);
 
@@ -633,7 +659,7 @@ class SignatureService
     public function updateZone(SignatureZone $zone, array $data): SignatureZone
     {
         $zone->update(array_intersect_key($data, array_flip([
-            'zone_type', 'party_role', 'page_number',
+            'zone_type', 'party_role', 'assigned_parties', 'page_number',
             'x_position', 'y_position', 'width', 'height', 'label',
         ])));
 

@@ -1095,7 +1095,7 @@ function signDocument() {
             });
 
             if (this.isWebTemplate) {
-                // Also count web template HTML-based elements (from inline @include sigs)
+                // Also count web template HTML-based elements (from inline signature-block includes)
                 this.webSigElements.forEach(entry => {
                     if (entry.isMine) {
                         total++;
