@@ -491,6 +491,10 @@
                                 </button>
                                 <button type="button" x-show="status === 'deactivated'" @click.stop="reactivateListing()" :disabled="loading"
                                         class="px-3 py-2 rounded-md text-xs font-semibold" style="background:rgba(59,130,246,0.10); color:#3b82f6; border:1px solid rgba(59,130,246,0.25);">Reactivate</button>
+                                <button type="button" x-show="status === 'submitted' || status === 'active'" @click.stop="refreshListing()" :disabled="loading"
+                                        class="px-3 py-2 rounded-md text-xs font-semibold" style="background:rgba(59,130,246,0.10); color:#3b82f6; border:1px solid rgba(59,130,246,0.25);">
+                                    <span x-text="loading ? 'Syncing...' : 'Refresh'"></span>
+                                </button>
                                 <button type="button" x-show="status === 'submitted' || status === 'active'" @click.stop="deactivateListing()" :disabled="loading"
                                         class="px-3 py-2 rounded-md text-xs font-semibold" style="background:rgba(239,68,68,0.10); color:#ef4444; border:1px solid rgba(239,68,68,0.25);">Deactivate</button>
                             </div>
@@ -3436,7 +3440,7 @@ function p24Syndication(config) {
         },
         p24ListingUrl() {
             const domain = this.isSandbox ? 'www.exdev.property24-test.com' : 'www.property24.com';
-            return 'https://' + domain + '/property-for-sale/listing-' + this.p24Ref;
+            return 'https://' + domain + '/for-sale/-/-/-/-/' + this.p24Ref;
         },
         showMessage(msg, type = 'success') { this.message = msg; this.messageType = type; setTimeout(() => { this.message = ''; }, 5000); },
         async toggleEnabled() {
@@ -3455,6 +3459,15 @@ function p24Syndication(config) {
                 const data = await res.json();
                 if (data.success) { this.status = data.p24_syndication_status || 'submitted'; this.p24Ref = data.p24_ref || this.p24Ref; this.lastSubmitted = new Date().toLocaleDateString('en-ZA', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); this.lastError = ''; this.debugErrors = []; this.showDebug = false; this.showMessage(data.message || 'Submitted to P24'); }
                 else { this.status = data.p24_syndication_status || 'error'; this.lastError = data.message || 'Submission failed'; this.debugErrors = []; if (data.errors && data.errors.length > 0) { data.errors.forEach(e => this.debugErrors.push(typeof e === 'string' ? e : e.label || JSON.stringify(e))); } if (data.message) { this.debugErrors.push(data.message); } this.showDebug = true; }
+            } catch (e) { this.debugErrors = ['Network error: ' + e.message]; this.showDebug = true; } finally { this.loading = false; }
+        },
+        async refreshListing() {
+            this.loading = true; this.debugErrors = []; this.showDebug = false;
+            try {
+                const res = await fetch(`/corex/properties/${this.propertyId}/p24-syndication/submit`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify({}) });
+                const data = await res.json();
+                if (data.success) { this.status = data.p24_syndication_status || 'active'; this.p24Ref = data.p24_ref || this.p24Ref; this.lastSubmitted = new Date().toLocaleDateString('en-ZA', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); this.lastError = ''; this.showMessage('Listing synced to P24'); }
+                else { this.lastError = data.message || 'Sync failed'; this.debugErrors = data.errors || [data.message]; this.showDebug = true; }
             } catch (e) { this.debugErrors = ['Network error: ' + e.message]; this.showDebug = true; } finally { this.loading = false; }
         },
         async deactivateListing() {
