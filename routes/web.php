@@ -195,6 +195,12 @@ Route::prefix('admin/knowledge')->middleware(['auth', 'permission:access_knowled
     Route::post('/categories/reorder', [\App\Http\Controllers\Admin\KnowledgeController::class, 'reorderCategories'])->name('admin.knowledge.reorderCategories');
 });
 
+// ===== FAULT REPORTS =====
+Route::middleware(['auth'])->group(function () {
+    Route::get('/admin/fault-reports', [\App\Http\Controllers\FaultReportController::class, 'index'])
+        ->name('admin.fault-reports');
+});
+
 // ===== LISTING IMPORT =====
 Route::middleware(['auth','permission:import_listings'])->group(function () {
     Route::get('/admin/listings/import', [\App\Http\Controllers\Admin\ListingImportController::class, 'index'])
