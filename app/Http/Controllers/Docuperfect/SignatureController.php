@@ -1367,11 +1367,13 @@ class SignatureController extends Controller
                 $webData['ceremony_values'] = array_merge($webData['ceremony_values'] ?? [], $ceremonyValues);
             }
 
-            // Embed agent signature images into merged_html so next signer sees them
+            // Embed agent signature images and initials into merged_html so next signer sees them
             if (!empty($webData['merged_html'])) {
                 $html = $webData['merged_html'];
                 $html = $this->embedSignaturesIntoHtml($html, $signatures, $partyRole, $user->name);
-                // Also embed ceremony values into the HTML
+                if (!empty($initials)) {
+                    $html = $this->embedInitialsIntoHtml($html, $initials, $partyRole, $user->name);
+                }
                 if (!empty($ceremonyValues)) {
                     $html = $this->embedCeremonyValuesIntoHtml($html, $ceremonyValues);
                 }
@@ -1544,6 +1546,81 @@ class SignatureController extends Controller
         $label->setAttribute('style', 'font-size:8px;color:#059669;text-align:center;font-weight:600;');
         $label->textContent = 'Signed by ' . ($signerName ?: ucfirst($partyRole));
         $el->appendChild($label);
+    }
+
+    /**
+     * Embed initial images into HTML elements that have data-marker-type="initial".
+     * Initials are keyed as "{party}-init-{index}" from the frontend.
+     *
+     * @param string $html       The merged HTML
+     * @param array  $initials   Keyed as "{party}-init-{N}" => base64 data URI
+     * @param string $partyRole  The signer's party role
+     * @param string $signerName The signer's display name
+     */
+    public function embedInitialsIntoHtml(string $html, array $initials, string $partyRole, string $signerName = ''): string
+    {
+        if (empty($initials)) return $html;
+
+        try {
+            $dom = new \DOMDocument();
+            @$dom->loadHTML('<?xml encoding="utf-8"?>' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NOERROR);
+            $xpath = new \DOMXPath($dom);
+
+            // Map party role to possible aliases (same as embedSignaturesIntoHtml)
+            $agentAliases = ['agent', 'property_practitioner'];
+            $ownerAliases = ['owner_party', 'lessor', 'seller', 'landlord', 'owner'];
+            $acquiringAliases = ['acquiring_party', 'lessee', 'buyer', 'tenant', 'purchaser'];
+
+            $partyAliases = match (true) {
+                in_array($partyRole, $agentAliases) => $agentAliases,
+                in_array($partyRole, $ownerAliases) => $ownerAliases,
+                in_array($partyRole, $acquiringAliases) => $acquiringAliases,
+                default => [$partyRole],
+            };
+
+            // Find all initial elements with a party attribute
+            $initialElements = $xpath->query('//*[@data-marker-type="initial"][@data-marker-party]');
+            $partyCounters = [];
+
+            foreach ($initialElements as $el) {
+                if ($el->getAttribute('data-signed') === 'true') continue;
+
+                $elParty = strtolower($el->getAttribute('data-marker-party'));
+                if (!in_array($elParty, $partyAliases) && $elParty !== $partyRole) continue;
+
+                // Build the key to match frontend format: "{party}-init-{N}"
+                if (!isset($partyCounters[$elParty])) $partyCounters[$elParty] = 0;
+                $initKey = $elParty . '-init-' . $partyCounters[$elParty];
+                $partyCounters[$elParty]++;
+
+                $initData = $initials[$initKey] ?? null;
+                if (!$initData) continue;
+
+                // Clear placeholder content and embed the initial image
+                while ($el->firstChild) {
+                    $el->removeChild($el->firstChild);
+                }
+                $img = $dom->createElement('img');
+                $img->setAttribute('src', $initData);
+                $img->setAttribute('class', 'web-sig-signed-img');
+                $img->setAttribute('alt', 'Initial');
+                $img->setAttribute('style', 'display:block;max-height:28px;margin:1px auto;object-fit:contain;');
+                $el->appendChild($img);
+                $el->setAttribute('data-signed', 'true');
+                $el->classList !== null && $el->setAttribute('class', ($el->getAttribute('class') ?: '') . ' initial-signed');
+            }
+
+            $result = $dom->saveHTML();
+            $result = preg_replace('/^<\?xml encoding="utf-8"\?>/', '', $result);
+            return trim($result);
+        } catch (\Throwable $e) {
+            \Log::error('EMBED_INITIALS_HTML_FAILED', [
+                'party_role' => $partyRole,
+                'init_count' => count($initials),
+                'error' => $e->getMessage(),
+            ]);
+            return $html;
+        }
     }
 
     /**

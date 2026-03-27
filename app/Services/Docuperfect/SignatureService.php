@@ -1719,26 +1719,21 @@ class SignatureService
             $contact = \App\Models\Contact::where('email', $request->signer_email)->first();
             if (!$contact) continue;
 
-            // Link if not already linked
-            $exists = \Illuminate\Support\Facades\DB::table('document_contact')
-                ->where('document_id', $document->id)
-                ->where('contact_id', $contact->id)
-                ->where('party_role', $request->party_role)
-                ->exists();
-
-            if (!$exists) {
-                \Illuminate\Support\Facades\DB::table('document_contact')->insert([
+            // Link or update — atomic to prevent duplicate entry on concurrent requests
+            \Illuminate\Support\Facades\DB::table('document_contact')->updateOrInsert(
+                [
                     'document_id' => $document->id,
                     'contact_id' => $contact->id,
                     'party_role' => $request->party_role,
+                ],
+                [
                     'document_type' => $documentType,
                     'is_signed' => true,
                     'signed_at' => $request->completed_at ?? now(),
                     'signed_pdf_path' => $pdfPaths['client'] ?? null,
-                    'created_at' => now(),
                     'updated_at' => now(),
-                ]);
-            }
+                ]
+            );
         }
     }
 

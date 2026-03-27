@@ -1082,17 +1082,27 @@ class SigningController extends Controller
                 $initials[$key] = $value;
             }
         }
+        // Also capture page-break initials sent as separate 'initials' input
+        $pageBreakInitials = $request->input('initials', []);
+        if (!empty($pageBreakInitials)) {
+            $initials = array_merge($initials, $pageBreakInitials);
+        }
         if (!empty($initials)) {
             $existingInitials = $webData['signed_initials'] ?? [];
             $existingInitials[$partyRole] = $initials;
             $webData['signed_initials'] = $existingInitials;
         }
 
-        // Embed this signer's signatures and ceremony values into merged_html
-        if (!empty($webData['merged_html']) && !empty($signatures)) {
+        // Embed this signer's signatures, initials, and ceremony values into merged_html
+        if (!empty($webData['merged_html']) && (!empty($signatures) || !empty($pageBreakInitials) || !empty($ceremonyValues))) {
             $sigController = app(SignatureController::class);
             $html = $webData['merged_html'];
-            $html = $sigController->embedSignaturesIntoHtml($html, $signatures, $signingRequest->party_role, $signingRequest->signer_name ?? '');
+            if (!empty($signatures)) {
+                $html = $sigController->embedSignaturesIntoHtml($html, $signatures, $signingRequest->party_role, $signingRequest->signer_name ?? '');
+            }
+            if (!empty($pageBreakInitials)) {
+                $html = $sigController->embedInitialsIntoHtml($html, $pageBreakInitials, $signingRequest->party_role, $signingRequest->signer_name ?? '');
+            }
             if (!empty($ceremonyValues)) {
                 $html = $sigController->embedCeremonyValuesIntoHtml($html, $ceremonyValues);
             }

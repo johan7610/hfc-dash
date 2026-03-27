@@ -1269,8 +1269,17 @@ function esignWizard() {
     function detectSalesContextFromName(templateName) {
         if (!templateName) return false;
         const n = templateName.toLowerCase();
-        return n.includes('sell') || n.includes('sale') || n.includes('authority')
+        // Exclude rental authority patterns before checking sales patterns
+        if (n.includes('letting') || n.includes('let ') || n.includes('rental') || n.includes('lease')) return false;
+        return n.includes('sell') || n.includes('sale') || n.includes('authority to sell')
             || n.includes('otp') || n.includes('purchase') || n.includes('mandate to sell');
+    }
+
+    // Detect context from template category (explicit admin-set value)
+    function detectContextFromCategory(category) {
+        if (category === 'sales') return 'sales';
+        if (category === 'rentals') return 'rental';
+        return null;
     }
 
     // Detect context from signing_parties: only explicit concrete roles determine context.
@@ -1294,19 +1303,24 @@ function esignWizard() {
         return null;
     }
 
-    // Layered context detection: signing_parties > property source > template name
-    function detectSalesContext(templateName, signingParties, propertySource) {
+    // Layered context detection: signing_parties > category > property source > template name
+    function detectSalesContext(templateName, signingParties, propertySource, templateCategory) {
         // Layer 1: explicit roles in signing_parties
         const fromParties = detectContextFromSigningParties(signingParties);
         if (fromParties === 'sales') return true;
         if (fromParties === 'rental') return false;
 
-        // Layer 2: property source table
+        // Layer 2: template category (admin-set Sales/Rentals on template)
+        const fromCategory = detectContextFromCategory(templateCategory);
+        if (fromCategory === 'sales') return true;
+        if (fromCategory === 'rental') return false;
+
+        // Layer 3: property source table
         const fromProp = detectContextFromPropertySource(propertySource);
         if (fromProp === 'sales') return true;
         if (fromProp === 'rental') return false;
 
-        // Layer 3: template name pattern matching (fallback)
+        // Layer 4: template name pattern matching (last resort fallback)
         return detectSalesContextFromName(templateName);
     }
 
@@ -1364,13 +1378,16 @@ function esignWizard() {
 
         // Template signing parties (from DB config)
         templateSigningParties: serverTemplate?.signing_parties || [],
+        // Template category (admin-set: 'sales' or 'rentals')
+        templateCategory: serverTemplate?.category || null,
 
-        // Document context detection (sales vs rental) — layered: signing_parties > property source > name
+        // Document context detection — layered: signing_parties > category > property source > name
         get isSalesContext() {
             const name = this.templateName || serverTemplate?.name || '';
             const sigParties = this.templateSigningParties;
             const propSource = this.property?._property_source || serverStepData?.property?._property_source || null;
-            return detectSalesContext(name, sigParties, propSource);
+            const category = this.templateCategory;
+            return detectSalesContext(name, sigParties, propSource, category);
         },
         get ownerPartyLabel() {
             return this.isSalesContext ? 'Seller' : 'Landlord';
@@ -1775,6 +1792,7 @@ function esignWizard() {
         selectTemplate(t) {
             this.selectedTemplateId = t.id;
             this.templateName = t.name;
+            this.templateCategory = t.category || null;
             this.selectedPackId = null;
             this.selectedPackName = '';
             this.selectedPdfPackId = null;
