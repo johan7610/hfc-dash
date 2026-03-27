@@ -435,6 +435,11 @@
                                 'activatedAt'     => $property->p24_activated_at ? $property->p24_activated_at->format('d M Y H:i') : '',
                                 'csrfToken'       => csrf_token(),
                                 'isSandbox'       => (bool) config('services.property24_syndication.sandbox'),
+                                'suburb'          => $property->suburb ?? '',
+                                'city'            => $property->town ?? $property->city ?? '',
+                                'province'        => $property->province ?? 'kwazulu-natal',
+                                'suburbId'        => $property->pp_suburb_id ? (\App\Models\P24Suburb::find($property->pp_suburb_id)?->p24_id ?? '') : (\App\Models\P24Suburb::lookup($property->suburb ?? '')?->p24_id ?? ''),
+                                'listingType'     => strtolower($property->listing_type ?? 'sale'),
                                 'missingFields'   => $p24MissingFields ?? [],
                             ];
                         @endphp
@@ -3426,6 +3431,7 @@ function p24Syndication(config) {
         propertyId: config.propertyId, enabled: config.enabled, status: config.status || '',
         p24Ref: config.p24Ref || '', lastSubmitted: config.lastSubmitted || '',
         lastError: config.lastError || '', csrfToken: config.csrfToken, isSandbox: config.isSandbox ?? true,
+        suburb: config.suburb || '', city: config.city || '', province: config.province || '', suburbId: config.suburbId || '', listingType: config.listingType || 'sale',
         missingFields: config.missingFields || [],
         loading: false, message: '', messageType: 'success', debugErrors: [], showDebug: false,
         statusLabel() {
@@ -3440,7 +3446,9 @@ function p24Syndication(config) {
         },
         p24ListingUrl() {
             const domain = this.isSandbox ? 'www.exdev.property24-test.com' : 'www.property24.com';
-            return 'https://' + domain + '/for-sale/-/-/-/-/' + this.p24Ref;
+            const slug = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || '-';
+            const section = this.listingType === 'rental' ? 'to-rent' : 'for-sale';
+            return `https://${domain}/${section}/${slug(this.suburb)}/${slug(this.city)}/${slug(this.province)}/${this.suburbId || '0'}/${this.p24Ref}`;
         },
         showMessage(msg, type = 'success') { this.message = msg; this.messageType = type; setTimeout(() => { this.message = ''; }, 5000); },
         async toggleEnabled() {

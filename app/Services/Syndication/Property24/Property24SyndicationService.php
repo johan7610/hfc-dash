@@ -5,6 +5,7 @@ namespace App\Services\Syndication\Property24;
 use App\Models\Property;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class Property24SyndicationService
 {
@@ -195,14 +196,16 @@ class Property24SyndicationService
             'countryId'       => 1, // South Africa
         ];
 
-        // Check if agent already exists on P24 by checking cached agent list
+        // Check if agent already exists on P24
         $existingResult = $this->client->getAgents();
         if ($existingResult['success']) {
             foreach ($existingResult['data'] ?? [] as $existing) {
                 $ref = $existing['sourceReference'] ?? '';
                 if ($ref === 'CoreX-Agent-' . $user->id) {
-                    // Agent already registered — use their P24 ID
-                    $this->log('info', "Agent #{$user->id} already registered on P24 as #{$existing['id']}");
+                    $p24AgentId = (int) $existing['id'];
+                    $this->log('info', "Agent #{$user->id} already registered on P24 as #{$p24AgentId}");
+                    // Upload photo if agent has one and P24 might not
+                    $this->uploadAgentPhotoIfAvailable($user, $p24AgentId);
                     return true;
                 }
             }
@@ -215,6 +218,12 @@ class Property24SyndicationService
         if (!$result['success']) {
             $this->log('error', "Agent registration failed for #{$user->id}", ['result' => $result]);
             return $result['message'] ?? 'Unknown agent registration error';
+        }
+
+        // Upload agent photo after successful registration
+        $p24AgentId = $result['data']['id'] ?? $result['data']['Id'] ?? null;
+        if ($p24AgentId) {
+            $this->uploadAgentPhotoIfAvailable($user, (int) $p24AgentId);
         }
 
         $this->log('info', "Agent #{$user->id} registered on P24", ['result' => $result['data'] ?? []]);
@@ -236,6 +245,43 @@ class Property24SyndicationService
         }
 
         return null;
+    }
+
+    /**
+     * Upload the agent's profile photo to P24 if they have one in CoreX.
+     */
+    private function uploadAgentPhotoIfAvailable(User $user, int $p24AgentId): void
+    {
+        if (empty($user->agent_photo_path)) return;
+
+        // Convert Storage::url() path to disk path
+        $photoPath = $user->agent_photo_path;
+        if (str_contains($photoPath, '/storage/')) {
+            $photoPath = substr($photoPath, strpos($photoPath, '/storage/') + 9);
+        }
+
+        if (!Storage::disk('public')->exists($photoPath)) {
+            $this->log('warning', "Agent #{$user->id} photo not found on disk: {$photoPath}");
+            return;
+        }
+
+        $bytes = Storage::disk('public')->get($photoPath);
+        if (empty($bytes)) return;
+
+        $mime = Storage::disk('public')->mimeType($photoPath) ?: 'image/jpeg';
+
+        $imageData = [
+            'bytes'           => base64_encode($bytes),
+            'mimeContentType' => $mime,
+        ];
+
+        $result = $this->client->uploadAgentPhoto($p24AgentId, $imageData);
+
+        if ($result['success']) {
+            $this->log('info', "Agent photo uploaded for #{$user->id} (P24 agent #{$p24AgentId})");
+        } else {
+            $this->log('warning', "Agent photo upload failed for #{$user->id}: " . ($result['message'] ?? 'Unknown'));
+        }
     }
 
     private function log(string $level, string $message, array $context = []): void

@@ -117,6 +117,14 @@ class Property24ApiClient
     }
 
     /**
+     * Upload an agent's profile picture.
+     */
+    public function uploadAgentPhoto(int $agentId, array $imageData): array
+    {
+        return $this->request('PUT', "/agents/{$agentId}/profile-picture", $imageData, null, 'upload_agent_photo');
+    }
+
+    /**
      * Get a specific agent by ID.
      */
     public function getAgent(int $agentId): array
