@@ -19,7 +19,7 @@ class DashboardController extends Controller
             ->visibleTo($user)
             ->with(['template', 'owner'])
             ->orderByDesc('updated_at')
-            ->get();
+            ->paginate(20)->withQueryString();
 
         return view('docuperfect.dashboard', compact('documents', 'user'));
     }

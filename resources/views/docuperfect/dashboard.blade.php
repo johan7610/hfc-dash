@@ -58,6 +58,9 @@
                 </tbody>
             </table>
         </div>
+        <div class="mt-4">
+            {{ $documents->links() }}
+        </div>
     @endif
 
 </div>
