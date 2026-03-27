@@ -88,7 +88,7 @@ class Property24ListingMapper
     private function buildPropertyFeatures(Property $property): array
     {
         $features = [
-            'garages'         => (int) ($property->garages ?? 0),
+            'garages'         => (float) ($property->garages ?? 0),
             'garden'          => false,
             'pool'            => false,
             'flatlet'         => false,
@@ -96,7 +96,7 @@ class Property24ListingMapper
             'furnishedStatus' => 'No',
         ];
 
-        if ($property->beds) $features['bedrooms'] = (int) $property->beds;
+        if ($property->beds) $features['bedrooms'] = (float) $property->beds;
         if ($property->baths) $features['bathrooms'] = ['bathrooms' => (float) $property->baths];
 
         return $features;

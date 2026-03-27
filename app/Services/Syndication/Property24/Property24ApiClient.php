@@ -225,6 +225,10 @@ class Property24ApiClient
 
         if (!empty($data['raw']) && strlen($data['raw']) < 500) return $data['raw'];
 
+        // Last resort: dump the entire response so the error is visible
+        $dump = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($dump && strlen($dump) < 1000) return "HTTP {$statusCode}: {$dump}";
+
         return "HTTP {$statusCode} — check P24 syndication log for full response";
     }
 
