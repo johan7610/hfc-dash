@@ -116,7 +116,7 @@ class AgentCapPeriod extends Model
      */
     public function checkCap(): bool
     {
-        return $this->is_capped || bccomp($this->company_dollar_paid, $this->cap_amount, 2) >= 0;
+        return $this->is_capped || bccomp((string) ($this->company_dollar_paid ?? '0'), (string) ($this->cap_amount ?? '0'), 2) >= 0;
     }
 
     /**
