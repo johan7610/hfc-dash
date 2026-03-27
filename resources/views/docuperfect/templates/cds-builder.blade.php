@@ -66,7 +66,8 @@
                             <svg class="w-4 h-4 text-emerald-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg>
                             <span x-text="'All ' + totalTagCount + ' fields linked — ready to save'"></span>
                         </div>
-                        <form x-ref="generateForm" method="POST" action="{{ route('docuperfect.cds.generate') }}" class="inline">
+                        <form x-ref="generateForm" method="POST" action="{{ route('docuperfect.cds.generate') }}" class="inline"
+                              @submit.prevent="saveAndGenerate($el)">
                             @csrf
                             <input type="hidden" name="draft_id" :value="draftId">
                             <input type="hidden" name="template_name" :value="templateName">
@@ -75,6 +76,8 @@
                             <input type="hidden" name="allowed_delivery_modes" :value="deliveryModes.join(',')">
                             <input type="hidden" name="security_tier" :value="securityTier">
                             <input type="hidden" name="signing_parties" :value="JSON.stringify(templateSigningParties)">
+                            <input type="hidden" name="category" :value="templateCategory">
+                            <input type="hidden" name="document_type_id" :value="templateDocumentTypeId">
                             <button type="submit"
                                     class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-4 py-2 rounded-lg transition-colors font-semibold">
                                 Save Template &rarr;
@@ -87,7 +90,8 @@
                 <template x-if="totalTagCount === 0">
                     <div class="flex items-center gap-3">
                         <span class="text-sm text-gray-400">No fields tagged yet</span>
-                        <form x-ref="generateForm" method="POST" action="{{ route('docuperfect.cds.generate') }}" class="inline">
+                        <form x-ref="generateFormEmpty" method="POST" action="{{ route('docuperfect.cds.generate') }}" class="inline"
+                              @submit.prevent="saveAndGenerate($el)">
                             @csrf
                             <input type="hidden" name="draft_id" :value="draftId">
                             <input type="hidden" name="template_name" :value="templateName">
@@ -96,6 +100,8 @@
                             <input type="hidden" name="allowed_delivery_modes" :value="deliveryModes.join(',')">
                             <input type="hidden" name="security_tier" :value="securityTier">
                             <input type="hidden" name="signing_parties" :value="JSON.stringify(templateSigningParties)">
+                            <input type="hidden" name="category" :value="templateCategory">
+                            <input type="hidden" name="document_type_id" :value="templateDocumentTypeId">
                             <button type="submit"
                                     class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-4 py-2 rounded-lg transition-colors font-semibold">
                                 Save Template &rarr;
@@ -158,13 +164,13 @@
         <div class="w-[30%] h-full overflow-y-auto bg-white border-l border-gray-200" id="link-pane">
             <div class="p-4">
 
-                {{-- ===== SIGNING PARTIES (collapsible) ===== --}}
+                {{-- ===== SIGNATURE BLOCK PARTIES (collapsible) ===== --}}
                 <div class="mb-4 border border-gray-200 rounded-lg overflow-hidden">
                     {{-- Collapsed header --}}
                     <button type="button" @click="partiesExpanded = !partiesExpanded"
                             class="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors text-left">
                         <span class="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
-                            <span>&#128101;</span> Signing Parties
+                            <span>&#128101;</span> Signature Block Parties
                             <span class="text-gray-400" x-text="'(' + signingParties.length + ')'"></span>
                         </span>
                         <span class="text-xs text-gray-500" x-text="partiesExpanded ? 'Done &#9650;' : 'Manage &#9660;'"></span>
@@ -225,7 +231,7 @@
                                 </template>
                             </div>
 
-                            <p class="text-[10px] text-gray-400 pt-1">Saved for your agency</p>
+                            <p class="text-[10px] text-gray-400 pt-1">Agency-wide list of party names used on signature and initial blocks</p>
                         </div>
                     </div>
                 </div>
@@ -241,6 +247,29 @@
                     </button>
 
                     <div x-show="settingsExpanded" x-transition class="border-t border-gray-200 p-3 space-y-3">
+                        {{-- Category --}}
+                        <div>
+                            <label class="text-[10px] font-semibold text-gray-500 uppercase block mb-1">Category</label>
+                            <select x-model="templateCategory"
+                                    class="w-full text-xs border border-gray-300 rounded px-2 py-1.5 bg-white text-gray-700 focus:ring-teal-400 focus:border-teal-400">
+                                <option value="">Select category...</option>
+                                <option value="sales">Sales</option>
+                                <option value="rentals">Rentals</option>
+                            </select>
+                        </div>
+
+                        {{-- Document Type --}}
+                        <div>
+                            <label class="text-[10px] font-semibold text-gray-500 uppercase block mb-1">Document Type</label>
+                            <select x-model="templateDocumentTypeId"
+                                    class="w-full text-xs border border-gray-300 rounded px-2 py-1.5 bg-white text-gray-700 focus:ring-teal-400 focus:border-teal-400">
+                                <option value="">Select document type...</option>
+                                @foreach(\App\Models\Docuperfect\DocumentType::orderBy('sort_order')->get() as $dt)
+                                <option value="{{ $dt->id }}">{{ $dt->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
                         {{-- Delivery Modes --}}
                         <div>
                             <label class="text-[10px] font-semibold text-gray-500 uppercase block mb-1">Delivery Modes</label>
@@ -288,9 +317,9 @@
                             <span class="text-xs text-gray-700">Eligible for E-Signature</span>
                         </div>
 
-                        {{-- Signing Parties --}}
+                        {{-- Document Signing Roles --}}
                         <div>
-                            <label class="text-[10px] font-semibold text-gray-500 uppercase block mb-1">Signing Parties</label>
+                            <label class="text-[10px] font-semibold text-gray-500 uppercase block mb-1">Document Signing Roles</label>
                             <p class="text-[10px] text-gray-400 mb-2">Select which parties must sign this document</p>
                             <div class="space-y-1.5">
                                 <label class="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
@@ -385,6 +414,7 @@
 
                                     {{-- Type dropdown — single fields + field groups --}}
                                     <select class="w-full text-xs border border-gray-300 rounded px-2 py-1.5 mb-1.5 bg-white"
+                                            x-init="$nextTick(() => { $el.value = getMapping(tag.id).typeKey || '' })"
                                             :value="getMapping(tag.id).typeKey"
                                             @change="setType(tag.id, $event.target.value)">
                                         <option value="">Select type...</option>
@@ -859,6 +889,8 @@ function cdsEditor() {
         deliveryModes: ['esign', 'wet_ink', 'download'],
         securityTier: 'enhanced',
         templateSigningParties: ['owner_party', 'agent'],
+        templateCategory: '',
+        templateDocumentTypeId: '',
         settingsExpanded: false,
 
         get isSalesContext() {
@@ -962,6 +994,12 @@ function cdsEditor() {
             await this._doSaveDraft(true);
         },
 
+        async saveAndGenerate(formEl) {
+            // Pre-save draft so cdsGenerate reads fresh data
+            await this._doSaveDraft(false);
+            formEl.submit();
+        },
+
         async _doSaveDraft(showToast) {
             this.draftSaving = true;
             try {
@@ -984,6 +1022,8 @@ function cdsEditor() {
                             allowed_delivery_modes: this.deliveryModes.join(','),
                             security_tier: this.securityTier,
                             signing_parties: this.templateSigningParties,
+                            category: this.templateCategory || null,
+                            document_type_id: this.templateDocumentTypeId || null,
                         },
                     }),
                 });
@@ -1067,6 +1107,17 @@ function cdsEditor() {
                         if (this.savedSettings.signing_parties && Array.isArray(this.savedSettings.signing_parties)) {
                             this.templateSigningParties = this.savedSettings.signing_parties;
                         }
+                        if (this.savedSettings.category) this.templateCategory = this.savedSettings.category;
+                        if (this.savedSettings.document_type_id) this.templateDocumentTypeId = String(this.savedSettings.document_type_id);
+                    }
+
+                    // Fallback to source template values if draft settings don't have category/document_type_id
+                    if (!this.templateCategory) {
+                        this.templateCategory = @json($sourceTemplate->category ?? '');
+                    }
+                    if (!this.templateDocumentTypeId) {
+                        const fallbackDocTypeId = @json($sourceTemplate->document_type_id ?? null);
+                        if (fallbackDocTypeId) this.templateDocumentTypeId = String(fallbackDocTypeId);
                     }
 
                     this._startAutoSave();

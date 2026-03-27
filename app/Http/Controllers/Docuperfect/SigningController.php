@@ -9,6 +9,7 @@ use App\Models\Docuperfect\SignatureAuditLog;
 use App\Models\Docuperfect\SignatureMarker;
 use App\Models\Docuperfect\SignatureRequest;
 use App\Models\Docuperfect\SignatureTemplate;
+use App\Models\FicaSubmission;
 use App\Services\Docuperfect\DocumentFlattener;
 use App\Services\Docuperfect\SignatureService;
 use App\Services\WebTemplateFieldPartyMap;
@@ -74,6 +75,13 @@ class SigningController extends Controller
             ]);
         }
 
+        // Not yet their turn — sequential signing gate
+        if ($signingRequest->status === SignatureRequest::STATUS_WAITING) {
+            return view('docuperfect.signatures.external.waiting', [
+                'request' => $signingRequest,
+            ]);
+        }
+
         // Gateway gate — signer must verify ID AND accept consent before seeing documents
         if (!empty($signingRequest->signer_id_number)) {
             if (!session("signing_verified_{$token}")) {
@@ -81,6 +89,46 @@ class SigningController extends Controller
             }
             if (!session("esign_consent_{$signingRequest->id}")) {
                 return redirect()->route('signatures.external.showConsent', ['token' => $token]);
+            }
+        }
+
+        // FICA gate — external signers must have submitted FICA before signing
+        if ($signingRequest->fica_required && $signingRequest->contact_id) {
+            $ficaApproved = FicaSubmission::where('contact_id', $signingRequest->contact_id)
+                ->whereIn('status', ['submitted', 'under_review', 'agent_approved', 'approved'])
+                ->exists();
+
+            if (! $ficaApproved) {
+                $ficaSub = $signingRequest->fica_submission_id
+                    ? FicaSubmission::find($signingRequest->fica_submission_id)
+                    : FicaSubmission::where('contact_id', $signingRequest->contact_id)
+                        ->whereIn('status', ['draft', 'submitted', 'under_review', 'agent_approved'])
+                        ->first();
+
+                $signingUrl = route('signatures.external', $token);
+                $ficaUrl = $ficaSub
+                    ? route('fica.form', $ficaSub->token) . '?return_url=' . urlencode($signingUrl)
+                    : null;
+
+                // Determine FICA status for gate display
+                $ficaStatus = 'none';
+                if ($ficaSub) {
+                    $ficaStatus = in_array($ficaSub->status, ['submitted', 'under_review', 'agent_approved'])
+                        ? 'pending_review'
+                        : 'needs_form';
+                }
+
+                $branding = $this->getAgencyBranding($signingRequest);
+
+                return view('docuperfect.signatures.external.fica-gate', [
+                    'request'     => $signingRequest,
+                    'ficaUrl'     => $ficaUrl,
+                    'ficaStatus'  => $ficaStatus,
+                    'signingUrl'  => $signingUrl,
+                    'agencyName'  => $branding['name'],
+                    'agencyLogo'  => $branding['logo'],
+                    'agencyColor' => $branding['color'],
+                ]);
             }
         }
 
@@ -241,6 +289,11 @@ class SigningController extends Controller
                 ->toArray();
         }
 
+        $signingParties = collect($template->parties_json ?? [])->map(fn($p) => [
+            'role' => $p['role'] ?? 'unknown',
+            'label' => ucfirst(str_replace('_', ' ', $p['role_label'] ?? $p['role'] ?? 'unknown')),
+        ])->values()->toArray();
+
         return view('docuperfect.signatures.external.sign', [
             'request' => $signingRequest,
             'template' => $template,
@@ -262,6 +315,8 @@ class SigningController extends Controller
             'token' => $token,
             'sections' => $sections,
             'sectionAcceptances' => $sectionAcceptances,
+            'signingParties' => $signingParties,
+            'storedInitials' => $webTemplateData['signed_initials'] ?? [],
         ]);
     }
 
@@ -716,6 +771,11 @@ class SigningController extends Controller
             return response()->json(['ok' => false, 'error' => 'Signing link has expired.'], 410);
         }
 
+        // Sequential signing gate
+        if ($signingRequest->status === SignatureRequest::STATUS_WAITING) {
+            return response()->json(['ok' => false, 'error' => 'It is not your turn to sign yet.'], 403);
+        }
+
         // Verify session
         if (!session("signing_verified_{$token}")) {
             return response()->json(['ok' => false, 'error' => 'Identity not verified.'], 403);
@@ -942,6 +1002,11 @@ class SigningController extends Controller
             return response()->json(['ok' => false, 'error' => 'Signing link has expired.'], 410);
         }
 
+        // Sequential signing gate — reject if not this signer's turn
+        if ($signingRequest->status === SignatureRequest::STATUS_WAITING) {
+            return response()->json(['ok' => false, 'error' => 'It is not your turn to sign yet. Please wait for notification.'], 403);
+        }
+
         // Validate consent
         if (!$request->input('consented')) {
             return response()->json(['message' => 'Consent is required to sign electronically.'], 422);
@@ -987,11 +1052,61 @@ class SigningController extends Controller
             );
         }
 
+        // Save ceremony values (location, day, month, year, time, am_pm per party)
+        $ceremonyValues = $request->input('ceremony_values', []);
+        if (!empty($ceremonyValues)) {
+            $webData['ceremony_values'] = array_merge($webData['ceremony_values'] ?? [], $ceremonyValues);
+        }
+
+        // Save clause flags (concerns raised by signer)
+        $clauseFlags = $request->input('clause_flags', []);
+        if (!empty($clauseFlags)) {
+            $existingFlags = $webData['clause_flags'] ?? [];
+            $webData['clause_flags'] = array_merge($existingFlags, [
+                $signingRequest->party_role => $clauseFlags,
+            ]);
+        }
+
         // Save signatures (base64 data URIs keyed by block ID)
         $signatures = $request->input('signatures', []);
         if (!empty($signatures)) {
             $existingSigs = $webData['signatures'] ?? [];
             $webData['signatures'] = array_merge($existingSigs, $signatures);
+        }
+
+        // Separate initials into signed_initials so review/print can restore them
+        $partyRole = $signingRequest->party_role;
+        $initials = [];
+        foreach ($signatures as $key => $value) {
+            if (str_contains($key, '-init-')) {
+                $initials[$key] = $value;
+            }
+        }
+        // Also capture page-break initials sent as separate 'initials' input
+        $pageBreakInitials = $request->input('initials', []);
+        if (!empty($pageBreakInitials)) {
+            $initials = array_merge($initials, $pageBreakInitials);
+        }
+        if (!empty($initials)) {
+            $existingInitials = $webData['signed_initials'] ?? [];
+            $existingInitials[$partyRole] = $initials;
+            $webData['signed_initials'] = $existingInitials;
+        }
+
+        // Embed this signer's signatures, initials, and ceremony values into merged_html
+        if (!empty($webData['merged_html']) && (!empty($signatures) || !empty($pageBreakInitials) || !empty($ceremonyValues))) {
+            $sigController = app(SignatureController::class);
+            $html = $webData['merged_html'];
+            if (!empty($signatures)) {
+                $html = $sigController->embedSignaturesIntoHtml($html, $signatures, $signingRequest->party_role, $signingRequest->signer_name ?? '');
+            }
+            if (!empty($pageBreakInitials)) {
+                $html = $sigController->embedInitialsIntoHtml($html, $pageBreakInitials, $signingRequest->party_role, $signingRequest->signer_name ?? '');
+            }
+            if (!empty($ceremonyValues)) {
+                $html = $sigController->embedCeremonyValuesIntoHtml($html, $ceremonyValues);
+            }
+            $webData['merged_html'] = $html;
         }
 
         $document->update(['web_template_data' => $webData]);
@@ -1067,6 +1182,11 @@ class SigningController extends Controller
             ->doesntExist();
 
         if ($allRoleComplete) {
+            // All co-owners for this role signed — run approval gate
+            $this->signatureService->handlePartyCompletion($template, $party, $signingRequest);
+        } else {
+            // More co-owners still need to sign — still require agent approval before next co-owner
+            $template->update(['status' => SignatureTemplate::STATUS_PENDING_AGENT_APPROVAL]);
             $this->signatureService->handlePartyCompletion($template, $party, $signingRequest);
         }
 
@@ -1135,6 +1255,11 @@ class SigningController extends Controller
 
         if ($signingRequest->isExpired()) {
             return response()->json(['ok' => false, 'error' => 'Signing link has expired.'], 410);
+        }
+
+        // Sequential signing gate — reject if not this signer's turn
+        if ($signingRequest->status === SignatureRequest::STATUS_WAITING) {
+            return response()->json(['ok' => false, 'error' => 'It is not your turn to sign yet. Please wait for notification.'], 403);
         }
 
         $template = $signingRequest->template;
@@ -1387,6 +1512,14 @@ class SigningController extends Controller
         $document = $signatureTemplate->document;
         $docTemplate = $document->template ?? null;
 
+        // Web template with merged_html: redirect to print view (no dompdf — it hangs)
+        $webTemplateData = $document->web_template_data ?? [];
+        $mergedHtml = $webTemplateData['merged_html'] ?? '';
+
+        if (!empty($mergedHtml) && $docTemplate && $docTemplate->render_type === 'web') {
+            return redirect()->route('signatures.external.print', $token);
+        }
+
         $flattenedPages = $signatureTemplate->flattened_pages_json ?? [];
         if (!$docTemplate && empty($flattenedPages)) {
             return redirect()->route('signatures.external', $token)
@@ -1465,11 +1598,8 @@ class SigningController extends Controller
         $pdf->setOption('isRemoteEnabled', true);
         $pdf->setOption('isHtml5ParserEnabled', true);
 
-        // Update signing method
-        $signingRequest->update([
-            'signing_method' => 'wet_ink',
-            'wet_ink_status' => $signingRequest->wet_ink_status ?: SignatureRequest::WET_INK_PENDING_UPLOAD,
-        ]);
+        // Do NOT set signing_method to wet_ink here — downloading does not commit to wet ink.
+        // The signing method is set when the signer explicitly chooses via chooseMethod().
 
         $filename = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', $document->name) . ' - For Signing.pdf';
 
@@ -1481,6 +1611,414 @@ class SigningController extends Controller
         }
 
         return $response;
+    }
+
+    /**
+     * Generate a printable PDF from a web template's merged_html.
+     * Used when the external signer chooses "Download, Print & Sign".
+     */
+    private function downloadWebTemplateAsPdf(SignatureRequest $signingRequest, $document, string $mergedHtml)
+    {
+        // Load corex-document.css inline for dompdf (it cannot resolve external URLs)
+        $cssPath = public_path('css/corex-document.css');
+        $css = file_exists($cssPath) ? file_get_contents($cssPath) : '';
+
+        // Build a complete HTML document for dompdf
+        $html = '<!DOCTYPE html><html><head><meta charset="utf-8">'
+            . '<style>' . $css . '</style>'
+            . '<style>'
+            // Overrides for PDF rendering: remove screen-only styling
+            . 'body { margin: 0; padding: 0; background: white; font-family: "Plus Jakarta Sans", Arial, Helvetica, sans-serif; font-size: 10.5pt; }'
+            . '.corex-document-wrapper { max-width: none; padding: 0; background: white; }'
+            . '.corex-page { box-shadow: none; margin: 0; width: auto; min-height: auto; }'
+            // Ensure page breaks work at corex-page-break markers
+            . '.corex-page-break { page-break-before: always; border-top: none; margin: 4pt 0; padding: 4pt 0; }'
+            // Hide interactive UI elements that shouldn't appear in print
+            . '.web-sig-prompt { display: none; }'
+            . '.web-sig-interactive { border: 1px solid #ccc !important; background: transparent !important; }'
+            . '.web-sig-other-party { opacity: 1; }'
+            // Signature images should be visible
+            . '.web-sig-signed-img { display: block; max-height: 50px; }'
+            . '.corex-page-initials .initial-placeholder { font-size: 8px; color: #666; }'
+            . '</style>'
+            . '</head><body>';
+
+        $html .= $mergedHtml;
+        $html .= '</body></html>';
+
+        $pdf = Pdf::loadHTML($html);
+        $pdf->setPaper('a4', 'portrait');
+        $pdf->setOption('isRemoteEnabled', true);
+        $pdf->setOption('isHtml5ParserEnabled', true);
+
+        // Do NOT set signing_method to wet_ink here — downloading does not commit to wet ink.
+        // The signing method is set when the signer explicitly chooses via chooseMethod().
+
+        $filename = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', $document->name) . ' - For Signing.pdf';
+
+        return $pdf->download($filename);
+    }
+
+    /**
+     * Render the document as a clean printable HTML page.
+     * Opens in a new tab — recipient uses browser Print / Save as PDF.
+     * Primary path for "Download, Print & Sign" (faster and more reliable than dompdf).
+     */
+    public function printView($token)
+    {
+        $signingRequest = SignatureRequest::where('token', $token)
+            ->with(['template.document.template'])
+            ->firstOrFail();
+
+        if ($signingRequest->isExpired()) {
+            return redirect()->route('signatures.external', $token)
+                ->with('error', 'Signing link has expired.');
+        }
+
+        $signatureTemplate = $signingRequest->template;
+        $document = $signatureTemplate->document;
+        $docTemplate = $document->template ?? null;
+        $webTemplateData = $document->web_template_data ?? [];
+        $mergedHtml = $webTemplateData['merged_html'] ?? '';
+
+        if (empty($mergedHtml)) {
+            // Fallback to dompdf download for PDF templates
+            return redirect()->route('signatures.external.download', $token);
+        }
+
+        // Do NOT set signing_method here — viewing/printing does not commit to wet ink.
+
+        $signingParties = collect($signatureTemplate->parties_json ?? [])->map(fn($p) => [
+            'role' => $p['role'] ?? 'unknown',
+            'label' => ucfirst(str_replace('_', ' ', $p['role_label'] ?? $p['role'] ?? 'unknown')),
+        ])->values()->toArray();
+
+        return view('docuperfect.signatures.external.print', [
+            'document' => $document,
+            'mergedHtml' => $mergedHtml,
+            'signerName' => $signingRequest->signer_name,
+            'token' => $token,
+            'signingParties' => $signingParties,
+            'storedInitials' => $webTemplateData['signed_initials'] ?? [],
+            'signingMethod' => $signingRequest->signing_method,
+        ]);
+    }
+
+    /**
+     * Generate and download a proper PDF for web template documents via Puppeteer.
+     * Uses html-to-pdf.mjs to produce A4-formatted PDF with correct margins.
+     */
+    public function downloadWebPdf($token)
+    {
+        set_time_limit(120);
+
+        $signingRequest = SignatureRequest::where('token', $token)
+            ->with(['template.document.template'])
+            ->firstOrFail();
+
+        if ($signingRequest->isExpired()) {
+            return response()->json(['error' => 'Signing link has expired.'], 410);
+        }
+
+        $signatureTemplate = $signingRequest->template;
+        $document = $signatureTemplate->document;
+        $webTemplateData = $document->web_template_data ?? [];
+        $mergedHtml = $webTemplateData['merged_html'] ?? '';
+
+        if (empty($mergedHtml)) {
+            return response()->json(['error' => 'Document content not available for PDF generation.'], 404);
+        }
+
+        try {
+            $outputPath = $this->generatePdfFromHtml($mergedHtml, $document->id);
+        } catch (\Throwable $e) {
+            Log::error('downloadWebPdf — exception during PDF generation', [
+                'document_id' => $document->id,
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json(['error' => 'PDF generation failed: ' . $e->getMessage()], 500);
+        }
+
+        if (!$outputPath || !file_exists($outputPath) || filesize($outputPath) === 0) {
+            Log::error('downloadWebPdf — PDF generation failed', ['document_id' => $document->id]);
+            @unlink($outputPath);
+            return response()->json(['error' => 'PDF generation failed.'], 500);
+        }
+
+        $docName = $document->name ?? 'Document';
+        $safeDocName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $docName);
+        $filename = $safeDocName . '_' . date('Y-m-d') . '.pdf';
+
+        return response()->download($outputPath, $filename)->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Generate a PDF from merged HTML using Puppeteer html-to-pdf.mjs.
+     *
+     * @return string|null Path to generated PDF, or null on failure
+     */
+    public function generatePdfFromHtml(string $mergedHtml, int $documentId): ?string
+    {
+        $tempDir = storage_path('app/temp');
+        if (!is_dir($tempDir)) {
+            mkdir($tempDir, 0755, true);
+        }
+
+        $timestamp = time();
+        $htmlPath = $tempDir . '/doc_' . $documentId . '_' . $timestamp . '.html';
+        $pdfPath = $tempDir . '/doc_' . $documentId . '_' . $timestamp . '.pdf';
+
+        // Wrap merged_html in a full HTML document shell matching WebTemplatePdfService::wrapHtml()
+        $fullHtml = $this->wrapHtmlForPdf($mergedHtml);
+        file_put_contents($htmlPath, $fullHtml);
+
+        $startTime = time();
+
+        // Puppeteer (Chromium) — primary PDF generator on all platforms
+        // Build command — same pattern as WebTemplatePdfService::runPuppeteerFlatten()
+        $scriptPath = base_path('scripts/html-to-pdf.mjs');
+        $browserPath = env('PUPPETEER_BROWSER_PATH', '');
+        $isWindows = DIRECTORY_SEPARATOR === '\\';
+
+        // Resolve full node path — proc_open may not have PATH on Windows
+        $nodePath = 'node';
+        if ($isWindows) {
+            $candidates = [
+                'C:\\Program Files\\nodejs\\node.exe',
+                'C:\\Program Files (x86)\\nodejs\\node.exe',
+                trim(shell_exec('where node 2>NUL') ?? ''),
+            ];
+            foreach ($candidates as $candidate) {
+                $candidate = trim($candidate);
+                if ($candidate && file_exists($candidate)) {
+                    $nodePath = $candidate;
+                    break;
+                }
+            }
+        }
+
+        $nodeArg = escapeshellarg(str_replace('\\', '/', $nodePath));
+        $scriptArg = escapeshellarg(str_replace('\\', '/', $scriptPath));
+        $htmlArg = escapeshellarg(str_replace('\\', '/', $htmlPath));
+        $outArg = escapeshellarg(str_replace('\\', '/', $pdfPath));
+
+        $envPrefix = '';
+        if (!$isWindows) {
+            $envPrefix = 'HOME=/tmp';
+            if ($browserPath) {
+                $envPrefix .= sprintf(' PUPPETEER_BROWSER_PATH=%s', escapeshellarg($browserPath));
+            }
+            $envPrefix .= ' ';
+        }
+
+        $command = sprintf('%s%s %s %s %s', $envPrefix, $nodeArg, $scriptArg, $htmlArg, $outArg);
+
+        Log::info('PDF generation starting (Puppeteer)', ['doc_id' => $documentId, 'command' => $command]);
+
+        $logPath = $tempDir . DIRECTORY_SEPARATOR . 'pdf_gen_' . $documentId . '.log';
+
+        // Synchronous call with output redirected to file
+        // Output redirect prevents PHP from waiting for Chrome child processes
+        $fullCommand = $command . ' > ' . escapeshellarg(str_replace('/', DIRECTORY_SEPARATOR, $logPath)) . ' 2>&1';
+
+        Log::info('PDF executing', ['command' => $fullCommand]);
+
+        // shell_exec with output redirect — PHP waits for the main process
+        // but Chrome children detach on their own
+        $result = shell_exec($fullCommand);
+
+        // Read the log to check result
+        $logContent = file_exists($logPath) ? file_get_contents($logPath) : '';
+        @unlink($logPath);
+
+        Log::info('PDF execution done', [
+            'doc_id' => $documentId,
+            'seconds' => time() - $startTime,
+            'log' => substr($logContent, 0, 500),
+        ]);
+
+        // Check if PDF was created
+        clearstatcache();
+        $normalizedOutput = str_replace('/', DIRECTORY_SEPARATOR, $pdfPath);
+
+        if (!file_exists($normalizedOutput) || filesize($normalizedOutput) === 0) {
+            @unlink($htmlPath);
+            throw new \RuntimeException('PDF not generated. Log: ' . substr($logContent, 0, 200));
+        }
+
+        $pdfPath = $normalizedOutput;
+        @unlink($htmlPath);
+
+        Log::info('PDF generation complete', [
+            'doc_id' => $documentId,
+            'seconds' => time() - $startTime,
+            'path' => $pdfPath,
+            'size' => filesize($pdfPath),
+        ]);
+
+        return $pdfPath;
+    }
+
+    /**
+     * Wrap merged HTML in a full document shell for Puppeteer PDF generation.
+     * Mirrors WebTemplatePdfService::wrapHtml() structure with additional
+     * CSS for clean PDF output (no interactive UI elements).
+     */
+    public function wrapHtmlForPdf(string $mergedHtml): string
+    {
+        // Load the full CDS stylesheet — this is what makes web documents look correct
+        $cdsStylesheet = '';
+        $cssPath = public_path('css/corex-document.css');
+        if (file_exists($cssPath)) {
+            $cdsStylesheet = file_get_contents($cssPath);
+        }
+
+        $cleanupCss = $this->getPdfCleanupCss();
+
+        $pdfStyles = <<<CSS
+/* === CDS Document Stylesheet (inlined from corex-document.css) === */
+{$cdsStylesheet}
+
+/* === PDF: page setup === */
+@page {
+    size: A4;
+    margin: 18mm 20mm;
+    @bottom-center {
+        content: "Page " counter(page) " of " counter(pages);
+        font-size: 9pt;
+        color: #94a3b8;
+    }
+}
+
+/* === PDF: basic resets === */
+body { margin: 0; padding: 0; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+/* === PDF: scale + screen → print container resets === */
+.corex-document-wrapper {
+    zoom: 0.82;
+    max-width: 100% !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+.corex-page, .page {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+    box-shadow: none !important;
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+}
+.corex-a4-page {
+    min-height: auto;
+    box-shadow: none;
+    margin: 0;
+    padding: 0;
+}
+.corex-page-gap { display: none; }
+
+/* === PDF: page-break rules === */
+.corex-clause, .corex-clause-indent-1, .corex-clause-indent-2, .corex-clause-indent-3 {
+    page-break-inside: avoid;
+}
+.corex-h1, .corex-h2, .corex-h3, .corex-section-heading {
+    page-break-after: avoid;
+}
+.corex-signature-section, .corex-signature-grid, .corex-signature-block,
+.corex-ceremony-section,
+[class*="thus-done"],
+[class*="signature-block"] {
+    page-break-inside: avoid !important;
+}
+.corex-header, .corex-title-banner {
+    page-break-inside: avoid;
+    page-break-after: avoid;
+}
+.corex-table tr, .corex-disclosure-table tr {
+    page-break-inside: avoid;
+}
+
+/* === PDF: hide interactive elements === */
+{$cleanupCss}
+CSS;
+
+        // If it already has a DOCTYPE or <html> tag, inject all styles before </head>
+        if (preg_match('/<!DOCTYPE|<html/i', $mergedHtml)) {
+            $styleTag = '<style>' . $pdfStyles . '</style>';
+            if (preg_match('/<\/head>/i', $mergedHtml)) {
+                return preg_replace('/<\/head>/i', $styleTag . '</head>', $mergedHtml, 1);
+            }
+            return $mergedHtml;
+        }
+
+        return <<<HTML
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Dancing+Script:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        {$pdfStyles}
+    </style>
+</head>
+<body>
+{$mergedHtml}
+</body>
+</html>
+HTML;
+    }
+
+    /**
+     * CSS rules to hide interactive UI elements from PDF output.
+     */
+    private function getPdfCleanupCss(): string
+    {
+        return <<<'CSS'
+/* Hide interactive signing UI elements */
+.web-sig-prompt { display: none !important; }
+.init-prompt { display: none !important; }
+.web-sig-interactive {
+    border: 1px solid #94a3b8 !important;
+    background: transparent !important;
+    min-height: 28pt;
+}
+.web-sig-signed-img {
+    display: block;
+    max-height: 50px;
+    object-fit: contain;
+}
+/* Hide marker overlays, toolbars, panels */
+[class*="marker-overlay"],
+[class*="sig-marker"],
+.signature-toolbar,
+.signing-panel,
+.print-toolbar,
+.clause-flag-icon,
+.clause-flag-comment {
+    display: none !important;
+}
+/* Radio placeholders */
+.corex-radio-placeholder {
+    display: inline-block;
+    font-size: 14pt;
+    line-height: 1;
+}
+/* Hide input borders — show values only */
+.field-editable,
+input[data-ceremony-field="true"] {
+    border: none !important;
+    background: transparent !important;
+    outline: none !important;
+    padding: 0 !important;
+    font: inherit !important;
+    color: inherit !important;
+}
+CSS;
     }
 
     /**
@@ -1862,16 +2400,12 @@ class SigningController extends Controller
             $template->loadMissing(['document', 'creator']);
             $agent = $template->creator;
 
-            if ($agent && $agent->email) {
-                Mail::raw(
-                    "{$signingRequest->signer_name} has rejected section \"{$sectionLabel}\" on document \"{$template->document->name}\".\n\n" .
-                    "Reason: {$reason}\n\n" .
-                    "Please review and take action.",
-                    function ($message) use ($agent, $template) {
-                        $message->to($agent->email)
-                            ->subject("Section Rejected — {$template->document->name}");
-                    }
-                );
+            if ($agent) {
+                $reviewUrl = url("/docuperfect/documents/{$template->document_id}/signatures/review");
+                $agent->notify(\App\Notifications\SignatureActivityNotification::sectionRejected(
+                    $signingRequest->signer_name, $template->document->name ?? 'Document',
+                    $template->document_id, $reviewUrl,
+                ));
             }
         } catch (\Exception $e) {
             Log::error('Failed to send section rejection notification', ['error' => $e->getMessage()]);

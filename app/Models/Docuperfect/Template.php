@@ -17,6 +17,7 @@ class Template extends Model
         'name',
         'template_type',
         'document_type_id',
+        'category',
         'page_count',
         'fields_json',
         'is_global',
@@ -113,8 +114,28 @@ class Template extends Model
         return $this->party_mode === 'per_party';
     }
 
-    public function isSalesDocument(): bool
+    /**
+     * Detect if this is a sales-context document.
+     * Layered: explicit signing_parties roles > name pattern matching.
+     * Accepts optional $propertySource ('properties' or 'rental_properties') for step-data context.
+     */
+    public function isSalesDocument(?string $propertySource = null): bool
     {
+        // Layer 1: check signing_parties for explicit sales/rental roles
+        $parties = $this->signing_parties ?? [];
+        if (is_array($parties) && !empty($parties)) {
+            $roles = array_map('strtolower', $parties);
+            $hasSales = !empty(array_intersect($roles, ['seller', 'buyer']));
+            $hasRental = !empty(array_intersect($roles, ['landlord', 'tenant', 'lessor', 'lessee']));
+            if ($hasSales && !$hasRental) return true;
+            if ($hasRental && !$hasSales) return false;
+        }
+
+        // Layer 2: property source table
+        if ($propertySource === 'properties') return true;
+        if ($propertySource === 'rental_properties') return false;
+
+        // Layer 3: template name pattern matching (fallback)
         $name = strtolower($this->name ?? '');
         return str_contains($name, 'sell') || str_contains($name, 'sale')
             || str_contains($name, 'authority') || str_contains($name, 'otp')

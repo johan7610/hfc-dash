@@ -32,10 +32,10 @@
         {{-- Week strip (left half) --}}
         @if(isset($agentDailyWeek) && isset($agentDailyWeek['days']))
             <div class="rounded-md px-3 py-2.5 flex items-center" style="background: var(--surface); border: 1px solid var(--border);">
-                <div class="flex flex-wrap gap-1.5 w-full">
+                <div class="flex flex-wrap gap-1 w-full">
                     @foreach($agentDailyWeek['days'] as $d)
                         <a href="{{ route('agent.daily', ['date' => $d['date']]) }}"
-                           class="flex-1 text-center px-2 py-1.5 rounded-md text-xs font-medium transition-all duration-300"
+                           class="text-center px-1.5 py-1.5 rounded-md text-[10px] font-medium transition-all duration-300 whitespace-nowrap"
                            style="{{ $d['is_selected']
                                ? 'background: var(--brand-default, #0b2a4a); color: #fff;'
                                : 'background: var(--surface-2); color: var(--text-primary);' }}"

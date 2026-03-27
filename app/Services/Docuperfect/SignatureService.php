@@ -20,6 +20,7 @@ use App\Models\Docuperfect\SignatureZone;
 use App\Models\Docuperfect\TemplateSignatureZone;
 use App\Models\Docuperfect\WetInkInspection;
 use App\Models\User;
+use App\Notifications\SignatureActivityNotification;
 use App\Services\CandidatePractitionerService;
 use App\Services\Docuperfect\SignaturePdfService;
 use Illuminate\Http\UploadedFile;
@@ -203,7 +204,9 @@ class SignatureService
         }
 
         return DB::transaction(function () use ($template, $markers) {
-            $template->markers()->delete();
+            // Only delete manually-placed markers (not zone-expanded ones).
+            // Zone-expanded markers (from_zone_id IS NOT NULL) are managed by the zone system.
+            $template->markers()->whereNull('from_zone_id')->delete();
 
             $count = 0;
             foreach ($markers as $i => $data) {
@@ -223,6 +226,9 @@ class SignatureService
                 ]);
                 $count++;
             }
+
+            // Include zone-expanded markers in the total count
+            $count += $template->markers()->whereNotNull('from_zone_id')->count();
 
             return $count;
         });
@@ -258,6 +264,11 @@ class SignatureService
         $sortOrder = $sigTemplate->markers()->max('sort_order') ?? -1;
 
         foreach ($zones as $zone) {
+            // Skip zones with no real position (template author didn't position them)
+            if ((float) $zone->x_position == 0 && (float) $zone->y_position == 0) {
+                continue;
+            }
+
             $parties = $zone->assigned_parties ?? [];
 
             foreach ($parties as $partyIndex => $party) {
@@ -383,12 +394,11 @@ class SignatureService
     // ──────────────────────────────────────────────
 
     /**
-     * Create dynamic signature zones from web template HTML by scanning
-     * data-marker-party and data-marker-type attributes.
+     * Create estimated signature zones for PDF templates.
      *
-     * Groups detected positions by role+type into zones. Creates zone records
-     * on the SignatureTemplate, then expands them into individual markers
-     * using SignatureZoneRenderer.
+     * NOTE: For web/CDS templates, zones are created client-side from actual
+     * DOM positions of data-marker-party elements. This method is only used
+     * for PDF templates where no DOM positions are available.
      *
      * @param  SignatureTemplate  $sigTemplate
      * @param  array  $parties  Parties from the signing chain (with role, name, email)
@@ -443,6 +453,27 @@ class SignatureService
                 ];
             }
         }
+
+        // Sort zones: inline zones first (earlier in doc), then final zones,
+        // agent always last (agent signs at the final signature section).
+        usort($zonePlacements, function ($a, $b) {
+            // Agent final zones always sort last
+            $aIsAgentFinal = ($a['baseRole'] === 'agent' && $a['isFinal']);
+            $bIsAgentFinal = ($b['baseRole'] === 'agent' && $b['isFinal']);
+            if ($aIsAgentFinal !== $bIsAgentFinal) {
+                return $aIsAgentFinal ? 1 : -1;
+            }
+            // Inline zones before final zones
+            if ($a['isFinal'] !== $b['isFinal']) {
+                return $a['isFinal'] ? 1 : -1;
+            }
+            // Within same category, preserve role order then location index
+            $roleOrder = strcmp($a['baseRole'], $b['baseRole']);
+            if ($roleOrder !== 0) {
+                return $roleOrder;
+            }
+            return $a['locationIndex'] <=> $b['locationIndex'];
+        });
 
         // Distribute zones through the signature area of the document.
         // Inline sigs start around 50%, final sigs around 85-92%.
@@ -547,8 +578,18 @@ class SignatureService
         // Remove existing markers from this zone
         $sigTemplate->markers()->where('from_zone_id', $zone->id)->forceDelete();
 
-        // Get parties matching this zone's role
-        $matchingParties = $this->getPartiesForRole($zone->party_role, $parties);
+        // Get parties matching the zone's assigned roles.
+        // assigned_parties (JSON array) supports multi-party zones (e.g. ["agent", "seller"]).
+        // Falls back to single party_role for backward compatibility.
+        $assignedRoles = $zone->assigned_parties ?? [$zone->party_role];
+        if (empty($assignedRoles)) {
+            $assignedRoles = [$zone->party_role];
+        }
+
+        $matchingParties = [];
+        foreach ($assignedRoles as $role) {
+            $matchingParties = array_merge($matchingParties, $this->getPartiesForRole($role, $parties));
+        }
 
         if (empty($matchingParties)) {
             return 0;
@@ -584,10 +625,16 @@ class SignatureService
      */
     public function saveZone(SignatureTemplate $sigTemplate, array $data): SignatureZone
     {
+        // Build assigned_parties: use explicit array if provided, else wrap party_role
+        $assignedParties = $data['assigned_parties'] ?? [$data['party_role']];
+        // Primary party_role remains the first assigned party (for backward compat)
+        $primaryRole = $assignedParties[0] ?? $data['party_role'];
+
         $zone = SignatureZone::create([
             'signature_template_id' => $sigTemplate->id,
             'zone_type' => $data['zone_type'] ?? 'signature',
-            'party_role' => $data['party_role'],
+            'party_role' => $primaryRole,
+            'assigned_parties' => $assignedParties,
             'page_number' => $data['page_number'],
             'x_position' => $data['x_position'],
             'y_position' => $data['y_position'],
@@ -595,7 +642,7 @@ class SignatureService
             'height' => $data['height'],
             'is_auto_placed' => $data['is_auto_placed'] ?? false,
             'source' => $data['source'] ?? SignatureZone::SOURCE_SETUP,
-            'label' => $data['label'] ?? (ucfirst($data['party_role']) . ' ' . ucfirst($data['zone_type'] ?? 'signature') . ' Zone'),
+            'label' => $data['label'] ?? (ucfirst($primaryRole) . ' ' . ucfirst($data['zone_type'] ?? 'signature') . ' Zone'),
             'sort_order' => $sigTemplate->zones()->max('sort_order') + 1,
         ]);
 
@@ -612,7 +659,7 @@ class SignatureService
     public function updateZone(SignatureZone $zone, array $data): SignatureZone
     {
         $zone->update(array_intersect_key($data, array_flip([
-            'zone_type', 'party_role', 'page_number',
+            'zone_type', 'party_role', 'assigned_parties', 'page_number',
             'x_position', 'y_position', 'width', 'height', 'label',
         ])));
 
@@ -769,7 +816,10 @@ class SignatureService
         string $signerEmail,
         ?string $signerIdNumber = null,
         ?string $message = null,
-        ?User $sentBy = null
+        ?User $sentBy = null,
+        bool $ficaRequired = false,
+        ?int $contactId = null,
+        ?int $ficaSubmissionId = null
     ): SignatureRequest {
         $token = $this->generateToken();
 
@@ -791,6 +841,9 @@ class SignatureService
             'status' => SignatureRequest::STATUS_WAITING,
             'sent_by' => $sentBy?->id,
             'message' => $message,
+            'fica_required' => $ficaRequired,
+            'contact_id' => $contactId,
+            'fica_submission_id' => $ficaSubmissionId,
         ]);
 
         SignatureAuditLog::log(
@@ -1631,7 +1684,10 @@ class SignatureService
         // 4. Link document to contacts via pivot (for FICA tracking / compliance)
         $this->linkDocumentToContacts($template, $pdfPaths);
 
-        // 5. Extract lease data if this is a lease/rental document
+        // 5. Auto-file signed document to Contact Drive and Property Drive
+        $this->autoFileSignedDocument($template, $pdfPaths);
+
+        // 6. Extract lease data if this is a lease/rental document
         if ($this->isLeaseDocument($template)) {
             $this->createLeaseRecord($template);
         }
@@ -1663,26 +1719,277 @@ class SignatureService
             $contact = \App\Models\Contact::where('email', $request->signer_email)->first();
             if (!$contact) continue;
 
-            // Link if not already linked
-            $exists = \Illuminate\Support\Facades\DB::table('document_contact')
-                ->where('document_id', $document->id)
-                ->where('contact_id', $contact->id)
-                ->where('party_role', $request->party_role)
-                ->exists();
-
-            if (!$exists) {
-                \Illuminate\Support\Facades\DB::table('document_contact')->insert([
+            // Link or update — atomic to prevent duplicate entry on concurrent requests
+            \Illuminate\Support\Facades\DB::table('document_contact')->updateOrInsert(
+                [
                     'document_id' => $document->id,
                     'contact_id' => $contact->id,
                     'party_role' => $request->party_role,
+                ],
+                [
                     'document_type' => $documentType,
                     'is_signed' => true,
                     'signed_at' => $request->completed_at ?? now(),
                     'signed_pdf_path' => $pdfPaths['client'] ?? null,
-                    'created_at' => now(),
                     'updated_at' => now(),
-                ]);
+                ]
+            );
+        }
+    }
+
+    /**
+     * Auto-file signed document to Contact Drive and Property Drive.
+     * Creates ONE Document record, links to all signing contacts and property via pivots.
+     */
+    private function autoFileSignedDocument(SignatureTemplate $template, ?array $pdfPaths): void
+    {
+        if (!$pdfPaths || empty($pdfPaths['client'])) return;
+
+        $document = $template->document;
+        if (!$document) return;
+
+        $webTemplateData = $document->web_template_data ?? [];
+        $templateIds = $webTemplateData['template_ids'] ?? [];
+        $mergedHtml = $webTemplateData['merged_html'] ?? '';
+        $propertyId = $document->property_id;
+
+        // Resolve signing contacts once (shared across all filed documents)
+        $contactLinks = $this->resolveSigningContacts($template);
+
+        // Pack flow: split into individual documents per template
+        if (count($templateIds) > 1 && $mergedHtml) {
+            $this->filePackDocuments($template, $document, $templateIds, $mergedHtml, $propertyId, $contactLinks, $pdfPaths);
+            return;
+        }
+
+        // Single template: file one document using the merged PDF
+        $this->fileSingleDocument($template, $document, $pdfPaths['client'], $propertyId, $contactLinks);
+    }
+
+    /**
+     * File a single document (non-pack or single-template pack).
+     */
+    private function fileSingleDocument(
+        SignatureTemplate $template,
+        $document,
+        string $pdfPath,
+        ?int $propertyId,
+        array $contactLinks,
+    ): void {
+        // Avoid duplicate filings
+        if (\App\Models\Document::where('storage_path', $pdfPath)->where('source_type', 'esign')->exists()) {
+            return;
+        }
+
+        $docTemplate = $document->template;
+        $docName = ($document->name ?? 'Signed Document') . ' (Signed).pdf';
+
+        $filedDoc = \App\Models\Document::create([
+            'original_name'    => $docName,
+            'storage_path'     => $pdfPath,
+            'disk'             => 'local',
+            'mime_type'        => 'application/pdf',
+            'size'             => file_exists(storage_path("app/{$pdfPath}")) ? filesize(storage_path("app/{$pdfPath}")) : 0,
+            'document_type_id' => $docTemplate?->document_type_id,
+            'source_type'      => 'esign',
+            'source_id'        => $template->id,
+            'uploaded_by'      => $template->created_by,
+        ]);
+
+        $this->linkFiledDocumentToContactsAndProperty($filedDoc, $contactLinks, $propertyId);
+
+        Log::info('Auto-filed signed document', [
+            'filed_doc_id' => $filedDoc->id,
+            'document_name' => $docName,
+            'document_type_id' => $docTemplate?->document_type_id,
+            'property_id' => $propertyId,
+            'contact_count' => count($contactLinks),
+        ]);
+    }
+
+    /**
+     * File individual documents for each template in a web pack.
+     * Splits the merged HTML, generates individual PDFs, creates one Document record per template.
+     */
+    private function filePackDocuments(
+        SignatureTemplate $template,
+        $document,
+        array $templateIds,
+        string $mergedHtml,
+        ?int $propertyId,
+        array $contactLinks,
+        array $pdfPaths,
+    ): void {
+        $htmlFragments = $this->splitMergedHtml($mergedHtml, count($templateIds));
+
+        if (count($htmlFragments) !== count($templateIds)) {
+            Log::warning('Auto-file pack: HTML fragment count does not match template_ids count, filing merged PDF as fallback', [
+                'template_id' => $template->id,
+                'template_ids' => $templateIds,
+                'fragments' => count($htmlFragments),
+                'expected' => count($templateIds),
+            ]);
+            $this->fileSingleDocument($template, $document, $pdfPaths['client'], $propertyId, $contactLinks);
+            return;
+        }
+
+        $signingController = app(\App\Http\Controllers\Docuperfect\SigningController::class);
+        $baseDir = "docuperfect/signed-documents/{$template->id}/individual";
+        $targetDir = storage_path("app/{$baseDir}");
+        if (!is_dir($targetDir)) {
+            mkdir($targetDir, 0755, true);
+        }
+
+        foreach ($templateIds as $idx => $tplId) {
+            $tpl = \App\Models\Docuperfect\Template::find($tplId);
+            if (!$tpl) continue;
+
+            $individualPdfPath = "{$baseDir}/{$tplId}_client.pdf";
+            $fullStoragePath = storage_path("app/{$individualPdfPath}");
+
+            // Dedup check
+            if (\App\Models\Document::where('storage_path', $individualPdfPath)->where('source_type', 'esign')->exists()) {
+                continue;
             }
+
+            // Generate individual PDF from this template's HTML fragment
+            $fragmentHtml = $htmlFragments[$idx];
+            try {
+                $tempPdfPath = $signingController->generatePdfFromHtml($fragmentHtml, $document->id);
+                if ($tempPdfPath && file_exists($tempPdfPath)) {
+                    rename($tempPdfPath, $fullStoragePath);
+                } else {
+                    Log::warning('Auto-file pack: Individual PDF generation failed', [
+                        'template_id' => $template->id,
+                        'pack_template_id' => $tplId,
+                        'template_name' => $tpl->name,
+                    ]);
+                    continue;
+                }
+            } catch (\Throwable $e) {
+                Log::error('Auto-file pack: Individual PDF exception', [
+                    'template_id' => $template->id,
+                    'pack_template_id' => $tplId,
+                    'error' => $e->getMessage(),
+                ]);
+                continue;
+            }
+
+            $docName = ($tpl->name ?? 'Document') . ' (Signed).pdf';
+            $fileSize = file_exists($fullStoragePath) ? filesize($fullStoragePath) : 0;
+
+            $filedDoc = \App\Models\Document::create([
+                'original_name'    => $docName,
+                'storage_path'     => $individualPdfPath,
+                'disk'             => 'local',
+                'mime_type'        => 'application/pdf',
+                'size'             => $fileSize,
+                'document_type_id' => $tpl->document_type_id,
+                'source_type'      => 'esign',
+                'source_id'        => $template->id,
+                'uploaded_by'      => $template->created_by,
+            ]);
+
+            $this->linkFiledDocumentToContactsAndProperty($filedDoc, $contactLinks, $propertyId);
+
+            Log::info('Auto-filed individual pack document', [
+                'filed_doc_id' => $filedDoc->id,
+                'pack_template_id' => $tplId,
+                'template_name' => $tpl->name,
+                'document_type_id' => $tpl->document_type_id,
+                'property_id' => $propertyId,
+                'contact_count' => count($contactLinks),
+                'pdf_size' => $fileSize,
+            ]);
+        }
+    }
+
+    /**
+     * Split merged pack HTML into individual template fragments.
+     * Each fragment contains the style blocks + one .corex-document-wrapper div.
+     */
+    private function splitMergedHtml(string $mergedHtml, int $expectedCount): array
+    {
+        // Extract all <style> blocks (shared across all templates)
+        $styles = '';
+        if (preg_match_all('/<style[^>]*>.*?<\/style>/si', $mergedHtml, $styleMatches)) {
+            $styles = implode("\n", $styleMatches[0]);
+        }
+
+        // Split at .corex-document-wrapper boundaries
+        // Pattern: find each <div class="corex-document-wrapper">...</div> (outermost closing)
+        $fragments = [];
+        $offset = 0;
+        $wrapperTag = '<div class="corex-document-wrapper"';
+
+        while (($pos = strpos($mergedHtml, $wrapperTag, $offset)) !== false) {
+            // Find the matching closing </div> — count nested divs
+            $depth = 0;
+            $searchPos = $pos;
+            $endPos = null;
+
+            while ($searchPos < strlen($mergedHtml)) {
+                $nextOpen = strpos($mergedHtml, '<div', $searchPos);
+                $nextClose = strpos($mergedHtml, '</div>', $searchPos);
+
+                if ($nextClose === false) break;
+
+                if ($nextOpen !== false && $nextOpen < $nextClose) {
+                    $depth++;
+                    $searchPos = $nextOpen + 4;
+                } else {
+                    $depth--;
+                    if ($depth === 0) {
+                        $endPos = $nextClose + 6; // length of '</div>'
+                        break;
+                    }
+                    $searchPos = $nextClose + 6;
+                }
+            }
+
+            if ($endPos !== null) {
+                $wrapperHtml = substr($mergedHtml, $pos, $endPos - $pos);
+                $fragments[] = $styles . "\n" . $wrapperHtml;
+                $offset = $endPos;
+            } else {
+                break;
+            }
+        }
+
+        return $fragments;
+    }
+
+    /**
+     * Resolve signing contacts from signature requests (excluding agent).
+     * Returns array of [contact_id => party_role] for linking.
+     */
+    private function resolveSigningContacts(SignatureTemplate $template): array
+    {
+        $links = [];
+        foreach ($template->requests as $request) {
+            if (!$request->signer_email || $request->party_role === 'agent') continue;
+
+            $contact = \App\Models\Contact::where('email', $request->signer_email)->first();
+            if (!$contact) continue;
+
+            $links[$contact->id] = $request->party_role;
+        }
+        return $links;
+    }
+
+    /**
+     * Link a filed Document to contacts and property via pivots.
+     */
+    private function linkFiledDocumentToContactsAndProperty(\App\Models\Document $filedDoc, array $contactLinks, ?int $propertyId): void
+    {
+        foreach ($contactLinks as $contactId => $partyRole) {
+            $filedDoc->contacts()->syncWithoutDetaching([
+                $contactId => ['party_role' => $partyRole],
+            ]);
+        }
+
+        if ($propertyId) {
+            $filedDoc->properties()->syncWithoutDetaching([$propertyId]);
         }
     }
 
@@ -2364,13 +2671,10 @@ class SignatureService
             $documentName = $template->document->name ?? 'Document';
             $inspectUrl = url("/docuperfect/documents/{$template->document_id}/signatures/inspect/{$request->id}");
 
-            Mail::to($agent->email)->send(
-                new WetInkUploadedNotification(
-                    signerName: $request->signer_name,
-                    documentName: $documentName,
-                    inspectUrl: $inspectUrl,
-                )
-            );
+            // In-app notification only — no email to agents
+            $agent->notify(SignatureActivityNotification::wetInkUploaded(
+                $request->signer_name, $documentName, $template->document_id, $inspectUrl,
+            ));
         } catch (\Throwable $e) {
             Log::error('Failed to send wet ink uploaded notification', [
                 'request_id' => $request->id,
@@ -2395,15 +2699,14 @@ class SignatureService
             $documentName = $template->document->name ?? 'Document';
             $reviewUrl = url("/docuperfect/documents/{$template->document_id}/signatures/review");
 
-            Mail::to($agent->email)->send(
-                new \App\Mail\Signatures\PartySignedNotificationMail(
-                    agentName: $agent->name,
-                    partyRole: $completedParty,
-                    partyName: $request?->signer_name ?? ucfirst($completedParty),
-                    documentName: $documentName,
-                    reviewUrl: $reviewUrl,
-                )
-            );
+            // In-app notification only — no email to agents
+            $agent->notify(SignatureActivityNotification::partySigned(
+                $request?->signer_name ?? ucfirst($completedParty),
+                $completedParty,
+                $documentName,
+                $template->document_id,
+                $reviewUrl,
+            ));
         } catch (\Throwable $e) {
             Log::error('Failed to send agent approval notification', [
                 'template_id' => $template->id,
@@ -2439,20 +2742,20 @@ class SignatureService
 
             $pdfFilename = "Signed - {$documentName}.pdf";
 
-            // Notify each signer — attach client copy (no audit trail)
-            // External signers (non-agent) do NOT get a link to Nexus — only the PDF attachment
+            // Email external signers only — attach client copy (no audit trail)
             foreach ($template->requests as $request) {
                 if ($request->status !== SignatureRequest::STATUS_COMPLETED) {
                     continue;
                 }
-
-                // Only agent gets the Nexus link; external parties cannot access it
-                $signerUrl = $request->party_role === 'agent' ? $viewUrl : null;
+                // Skip agent — agents get in-app notification only
+                if ($request->party_role === 'agent') {
+                    continue;
+                }
 
                 $mail = (new SignedDocumentMail(
                     recipientName: $request->signer_name,
                     documentName: $documentName,
-                    envelopeUrl: $signerUrl,
+                    envelopeUrl: null, // External parties cannot access Nexus
                     progress: $progress,
                     pdfPath: $clientPdfPath,
                     pdfFilename: $clientPdfPath ? $pdfFilename : null,
@@ -2475,32 +2778,11 @@ class SignatureService
                 );
             }
 
-            // Notify the agent — attach internal copy (with audit trail)
+            // In-app notification to agent — no email
             if ($agent) {
-                Mail::to($agent->email)->send(
-                    new SignedDocumentMail(
-                        recipientName: $agent->name,
-                        documentName: $documentName,
-                        envelopeUrl: $viewUrl,
-                        progress: $progress,
-                        pdfPath: $internalPdfPath,
-                        pdfFilename: $internalPdfPath ? $pdfFilename : null,
-                    )
-                );
-
-                SignatureAuditLog::log(
-                    $template,
-                    SignatureAuditLog::ACTION_SIGNED_PDF_EMAILED,
-                    SignatureAuditLog::ACTOR_SYSTEM,
-                    'System',
-                    metadata: [
-                        'recipient_role' => 'agent',
-                        'recipient_name' => $agent->name,
-                        'recipient_email' => $agent->email,
-                        'pdf_attached' => $internalPdfPath !== null,
-                        'pdf_version' => 'internal',
-                    ],
-                );
+                $agent->notify(SignatureActivityNotification::documentCompleted(
+                    $documentName, $template->document_id, $viewUrl,
+                ));
             }
         } catch (\Throwable $e) {
             Log::error('Failed to send completion emails', [
@@ -2886,19 +3168,10 @@ class SignatureService
             $documentName = $template->document->name ?? 'Document';
             $reviewUrl = route('docuperfect.signatures.review', $template->document_id);
 
-            $messageMap = [
-                'detected' => "{$amendingRequest->signer_name} has added conditions to \"{$documentName}\". Review the amendments.",
-                'rejected' => "{$amendingRequest->signer_name} has rejected an amendment on \"{$documentName}\". Your mediation is required.",
-            ];
-
-            Mail::to($agentUser->email)->send(
-                new SigningRequestMail(
-                    signerName: $agentUser->name,
-                    documentName: "[Amendment] {$documentName}",
-                    signingUrl: $reviewUrl,
-                    personalMessage: $messageMap[$type] ?? $messageMap['detected'],
-                )
-            );
+            // In-app notification only — no email to agents
+            $agentUser->notify(SignatureActivityNotification::amendmentDetected(
+                $documentName, $template->document_id, $reviewUrl,
+            ));
         } catch (\Throwable $e) {
             Log::error('Failed to send agent amendment notification', [
                 'template_id' => $template->id,

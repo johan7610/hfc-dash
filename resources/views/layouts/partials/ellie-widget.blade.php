@@ -1,5 +1,5 @@
 <!-- ELLIE_WIDGET_2026 -->
-<div id="ellie-root" style="position: fixed; bottom: 24px; right: 24px; z-index: 9999;">
+<div id="ellie-root" style="position: fixed; bottom: 90px; right: 24px; z-index: 9999;">
     <!-- Button -->
     <button id="ellie-btn" type="button" aria-label="Open Ellie" style="
         width: 84px; height: 84px; border-radius: 9999px;

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADDENDUM B</title>
+    <link href="/css/corex-document.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="corex-document-wrapper">
+<div class="corex-page">
+
+@include("docuperfect.web-templates.components.company-header")
+
+<div class="corex-h1">ADDENDUM B</div>
+<div class="corex-disclosure-checklist" data-section-type="disclosure_checklist"><table class="corex-disclosure-table"><thead><tr><th class="corex-disclosure-statement">Statement</th><th class="corex-disclosure-option">YES</th><th class="corex-disclosure-option">NO</th><th class="corex-disclosure-option">N/A</th></tr></thead><tbody><tr class="corex-disclosure-row" data-item-index="0"><td class="corex-disclosure-statement">Are there registered building plans for the whole property, all improvements and solid roof structures (e.g. carport, pools, etc)</td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="0" data-value="yes">&#9675;</span></td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="0" data-value="no">&#9675;</span></td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="0" data-value="na">&#9675;</span></td></tr><tr class="corex-disclosure-row" data-item-index="1"><td class="corex-disclosure-statement">Are you in possession of a valid Certificate of Compliance for the following:</td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="1" data-value="yes">&#9675;</span></td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="1" data-value="no">&#9675;</span></td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="1" data-value="na">&#9675;</span></td></tr><tr class="corex-disclosure-row" data-item-index="2"><td class="corex-disclosure-statement">Electrical Compliance Certificate – If Yes, when was it issued?<br><span class="corex-disclosure-date-field" data-conditional="yes"><span class="text-xs text-gray-400">Date: ________________</span></span></td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="2" data-value="yes">&#9675;</span></td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="2" data-value="no">&#9675;</span></td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="2" data-value="na">&#9675;</span></td></tr><tr class="corex-disclosure-row" data-item-index="3"><td class="corex-disclosure-statement">Electrical Fence Certificate – If Yes, when was it issued?<br><span class="corex-disclosure-date-field" data-conditional="yes"><span class="text-xs text-gray-400">Date: ________________</span></span></td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="3" data-value="yes">&#9675;</span></td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="3" data-value="no">&#9675;</span></td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="3" data-value="na">&#9675;</span></td></tr><tr class="corex-disclosure-row" data-item-index="4"><td class="corex-disclosure-statement">Gas Compliance Certificate – If Yes, when was it issued?<br><span class="corex-disclosure-date-field" data-conditional="yes"><span class="text-xs text-gray-400">Date: ________________</span></span></td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="4" data-value="yes">&#9675;</span></td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="4" data-value="no">&#9675;</span></td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="4" data-value="na">&#9675;</span></td></tr><tr class="corex-disclosure-row" data-item-index="5"><td class="corex-disclosure-statement">Entomology Certificate – If Yes, when was it issued?<br><span class="corex-disclosure-date-field" data-conditional="yes"><span class="text-xs text-gray-400">Date: ________________</span></span></td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="5" data-value="yes">&#9675;</span></td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="5" data-value="no">&#9675;</span></td><td class="corex-disclosure-option"><span class="corex-radio-placeholder" data-item="5" data-value="na">&#9675;</span></td></tr></tbody></table></div>@include("docuperfect.web-templates.components.signature-line", ['party' => 'agent'])</div>
+
+@include("docuperfect.web-templates.components.signature-block", ["parties" => ["Seller", "Agent", "Buyer"]])
+
+</div>
+</div>
+
+</body>
+</html>

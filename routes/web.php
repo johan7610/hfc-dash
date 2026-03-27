@@ -29,6 +29,11 @@ Route::get('/dashboard', function () {
 
 Route::middleware('auth')->group(function () {
 
+    // Notification API
+    Route::get('/api/notifications', [\App\Http\Controllers\Api\NotificationController::class, 'index']);
+    Route::post('/api/notifications/{id}/read', [\App\Http\Controllers\Api\NotificationController::class, 'markRead']);
+    Route::post('/api/notifications/mark-all-read', [\App\Http\Controllers\Api\NotificationController::class, 'markAllRead']);
+
     Route::get('/evaluation', function () {
         return view('evaluation.index');
     })->middleware('permission:access_evaluation')->name('evaluation.index');
@@ -261,12 +266,17 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/tools/pdf-splitter/thumb/{page}', [PdfSplitterController::class, 'serveThumb'])->middleware('permission:access_pdf_splitter')->name('tools.pdf_splitter.thumb')->where('page', '[0-9]+');
     Route::get('/tools/pdf-splitter/download', [PdfSplitterController::class, 'downloadLastZip'])->middleware('permission:access_pdf_splitter')->name('tools.pdf_splitter.download');
 
-    // Splitter Doc Type Admin
+    // Splitter Doc Type Admin (legacy routes — kept so PDF Splitter links still work)
     Route::get('/admin/splitter/doc-types', [\App\Http\Controllers\Admin\SplitterDocTypeController::class, 'index'])->middleware('permission:access_pdf_splitter')->name('admin.splitter.doc-types.index');
     Route::post('/admin/splitter/doc-types', [\App\Http\Controllers\Admin\SplitterDocTypeController::class, 'store'])->middleware('permission:access_pdf_splitter')->name('admin.splitter.doc-types.store');
     Route::put('/admin/splitter/doc-types/{doc_type}', [\App\Http\Controllers\Admin\SplitterDocTypeController::class, 'update'])->middleware('permission:access_pdf_splitter')->name('admin.splitter.doc-types.update');
     Route::delete('/admin/splitter/doc-types/{doc_type}', [\App\Http\Controllers\Admin\SplitterDocTypeController::class, 'destroy'])->middleware('permission:access_pdf_splitter')->name('admin.splitter.doc-types.destroy');
     Route::post('/admin/splitter/doc-types/bulk-save', [\App\Http\Controllers\Admin\SplitterDocTypeController::class, 'bulkSave'])->middleware('permission:access_pdf_splitter')->name('admin.splitter.doc-types.bulk-save');
+
+    // Document Types Settings (unified — same controller, new URL)
+    Route::get('/admin/settings/document-types', [\App\Http\Controllers\Admin\SplitterDocTypeController::class, 'index'])->middleware('permission:access_settings')->name('admin.settings.document-types.index');
+    Route::post('/admin/settings/document-types', [\App\Http\Controllers\Admin\SplitterDocTypeController::class, 'store'])->middleware('permission:access_settings')->name('admin.settings.document-types.store');
+    Route::post('/admin/settings/document-types/bulk-save', [\App\Http\Controllers\Admin\SplitterDocTypeController::class, 'bulkSave'])->middleware('permission:access_settings')->name('admin.settings.document-types.bulk-save');
 
       // BM: My Agent Dashboard (BM's own numbers)
       Route::get('/bm/my-dashboard', [\App\Http\Controllers\BM\MyDashboardController::class, 'index'])->middleware('permission:view_performance')->name('bm.my.dashboard');
@@ -535,7 +545,22 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::get('/', [CoreXDashboardController::class, 'index'])->middleware('permission:view_dashboard')->name('corex.dashboard');
 
     Route::get('/documents', [CoreXPlaceholderController::class, 'show'])->defaults('section', 'documents')->middleware('permission:access_docuperfect')->name('corex.documents');
-    Route::get('/compliance', [CoreXPlaceholderController::class, 'show'])->defaults('section', 'compliance')->middleware('permission:access_compliance')->name('corex.compliance');
+    // ── Compliance / FICA ──
+    Route::get('/compliance/rmcp', [\App\Http\Controllers\Compliance\FicaController::class, 'rmcp'])->middleware('permission:access_compliance')->name('compliance.rmcp');
+    Route::middleware('permission:access_compliance')->prefix('compliance/fica')->name('compliance.fica.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Compliance\FicaController::class, 'index'])->name('index');
+        Route::get('/create', [\App\Http\Controllers\Compliance\FicaController::class, 'create'])->name('create');
+        Route::post('/', [\App\Http\Controllers\Compliance\FicaController::class, 'store'])->name('store');
+        Route::get('/{submission}', [\App\Http\Controllers\Compliance\FicaController::class, 'show'])->name('show');
+        Route::get('/{submission}/pdf', [\App\Http\Controllers\Compliance\FicaController::class, 'downloadPdf'])->name('pdf');
+        Route::post('/{submission}/agent-approve', [\App\Http\Controllers\Compliance\FicaController::class, 'agentApprove'])->name('agent-approve');
+        Route::get('/{submission}/compliance-review', [\App\Http\Controllers\Compliance\FicaController::class, 'complianceReview'])->name('compliance-review');
+        Route::post('/{submission}/compliance-approve', [\App\Http\Controllers\Compliance\FicaController::class, 'complianceApprove'])->name('compliance-approve');
+        Route::post('/{submission}/compliance-reject', [\App\Http\Controllers\Compliance\FicaController::class, 'complianceReject'])->name('compliance-reject');
+        Route::post('/{submission}/reject', [\App\Http\Controllers\Compliance\FicaController::class, 'reject'])->name('reject');
+        Route::post('/{submission}/request-corrections', [\App\Http\Controllers\Compliance\FicaController::class, 'requestCorrections'])->name('request-corrections');
+    });
+
     Route::get('/supervision', [CoreXPlaceholderController::class, 'show'])->defaults('section', 'supervision')->middleware('permission:access_supervision')->name('corex.supervision');
     Route::get('/training', [CoreXPlaceholderController::class, 'show'])->defaults('section', 'training')->middleware('permission:access_training')->name('corex.training');
     Route::get('/communication', [CoreXPlaceholderController::class, 'show'])->defaults('section', 'communication')->middleware('permission:access_communication')->name('corex.communication');
@@ -549,6 +574,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::post('/settings/matches-enabled', [CoreXSettingsController::class, 'updateMatchesEnabled'])->middleware('permission:access_settings')->name('corex.settings.matches-enabled');
     Route::post('/settings/matches-wa-message', [CoreXSettingsController::class, 'updateMatchesWaMessage'])->middleware('permission:access_settings')->name('corex.settings.matches-wa-message');
     Route::post('/settings/matches-show-on-properties', [CoreXSettingsController::class, 'updateMatchesShowOnProperties'])->middleware('permission:access_settings')->name('corex.settings.matches-show-on-properties');
+    Route::post('/settings/compliance-officers', [\App\Http\Controllers\Compliance\FicaController::class, 'saveComplianceOfficers'])->middleware('permission:access_settings')->name('corex.settings.compliance-officers');
     Route::put('/settings/agency', [CoreXSettingsController::class, 'updateAgency'])->middleware('permission:access_settings')->name('corex.settings.agency.update');
     Route::get('/settings/preview-header', [CoreXSettingsController::class, 'previewHeader'])->middleware('permission:access_settings')->name('corex.settings.preview-header');
     Route::get('/settings/preview-signature', [CoreXSettingsController::class, 'previewSignature'])->middleware('permission:access_settings')->name('corex.settings.preview-signature');
@@ -596,9 +622,10 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         // Notes
         Route::post('/{property}/notes',                [\App\Http\Controllers\CoreX\PropertyNoteController::class, 'store'])->name('notes.store');
         Route::delete('/{property}/notes/{note}',       [\App\Http\Controllers\CoreX\PropertyNoteController::class, 'destroy'])->name('notes.destroy');
-        // Files (Drive)
-        Route::post('/{property}/files',                [\App\Http\Controllers\CoreX\PropertyFileController::class, 'store'])->name('files.store');
-        Route::delete('/{property}/files/{file}',       [\App\Http\Controllers\CoreX\PropertyFileController::class, 'destroy'])->name('files.destroy');
+        // Files (Drive) — now uses unified Document model
+        Route::post('/{property}/files',                    [\App\Http\Controllers\CoreX\PropertyFileController::class, 'store'])->name('files.store');
+        Route::put('/{property}/files/{document}/tag',      [\App\Http\Controllers\CoreX\PropertyFileController::class, 'updateTag'])->name('files.tag');
+        Route::delete('/{property}/files/{document}',       [\App\Http\Controllers\CoreX\PropertyFileController::class, 'destroy'])->name('files.destroy');
         // Contacts
         Route::get('/{property}/contacts/search',       [\App\Http\Controllers\CoreX\PropertyContactController::class, 'search'])->name('contacts.search');
         Route::post('/{property}/contacts/link',        [\App\Http\Controllers\CoreX\PropertyContactController::class, 'link'])->name('contacts.link');
@@ -659,6 +686,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         // Documents (Drive)
         Route::post('/{contact}/documents',                    [\App\Http\Controllers\CoreX\ContactDocumentController::class, 'store'])->name('documents.store');
         Route::get('/{contact}/documents/{document}/download', [\App\Http\Controllers\CoreX\ContactDocumentController::class, 'download'])->name('documents.download');
+        Route::put('/{contact}/documents/{document}/tag',      [\App\Http\Controllers\CoreX\ContactDocumentController::class, 'updateTag'])->name('documents.tag');
         Route::delete('/{contact}/documents/{document}',       [\App\Http\Controllers\CoreX\ContactDocumentController::class, 'destroy'])->name('documents.destroy');
         // Properties
         Route::get('/{contact}/properties/search',    [\App\Http\Controllers\CoreX\ContactPropertyController::class, 'search'])->name('properties.search');
@@ -975,6 +1003,7 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
     Route::post('/api/pack-instance-values', [\App\Http\Controllers\Docuperfect\PackInstanceValueController::class, 'save'])->name('docuperfect.api.packInstanceValuesSave');
 
     // ===== E-SIGN WIZARD =====
+    Route::get('/esign/my-documents', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'myDocuments'])->name('docuperfect.esign.myDocuments');
     Route::get('/esign/test-render/{templateId}', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'testRender'])->name('docuperfect.esign.testRender');
     Route::get('/esign/create', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'create'])->name('docuperfect.esign.create');
     Route::post('/esign/store', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'store'])->name('docuperfect.esign.store');
@@ -988,7 +1017,10 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
     Route::post('/esign/{flow}/prepare-wet-ink', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'prepareWetInk'])->name('docuperfect.esign.prepareWetInk');
     Route::get('/esign/{flow}/signing-complete', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'signingComplete'])->name('docuperfect.esign.signingComplete');
     Route::get('/esign/{flow}/wet-ink-confirmation', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'wetInkConfirmation'])->name('docuperfect.esign.wetInkConfirmation');
+    Route::post('/esign/wet-ink/{document}/upload', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'wetInkAgentUpload'])->name('docuperfect.esign.wetInkAgentUpload');
+    Route::post('/esign/wet-ink/{document}/approve', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'wetInkAgentApprove'])->name('docuperfect.esign.wetInkAgentApprove');
     Route::get('/esign/download/{document}', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'downloadDocument'])->name('docuperfect.esign.downloadDocument');
+    Route::get('/esign/download/{document}/pdf', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'downloadDocumentPdf'])->name('docuperfect.esign.downloadDocumentPdf');
     Route::get('/esign/api/properties', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'searchProperties'])->name('docuperfect.esign.api.properties');
     Route::get('/esign/api/contacts', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'searchContacts'])->name('docuperfect.esign.api.contacts');
     Route::get('/esign/api/template/{templateId}/pages', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'templatePages'])->name('docuperfect.esign.api.templatePages');
@@ -998,6 +1030,7 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
     Route::post('/esign/{flow}/next-pack-doc', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'nextPackDocument'])->name('docuperfect.esign.nextPackDoc');
     Route::get('/esign/{flow}/pack-status', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'packStatus'])->name('docuperfect.esign.packStatus');
     Route::post('/esign/{flow}/duplicate-fica', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'duplicateFicaPerParty'])->name('docuperfect.esign.duplicateFica');
+    Route::post('/esign/documents/{signatureTemplate}/cancel', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'cancelDocument'])->name('docuperfect.esign.cancelDocument');
 
     // ===== DOCUMENT IMPORTER =====
     Route::get('/import', [\App\Http\Controllers\Docuperfect\DocumentImporterController::class, 'index'])->name('docuperfect.import.index');
@@ -1057,7 +1090,7 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
 
     // ===== RENTAL DOCUMENTS (redirect to new Rental Division) =====
     Route::get('/rental', function () {
-        return redirect()->route('rental.signatures');
+        return redirect()->route('docuperfect.esign.myDocuments');
     })->name('docuperfect.rental');
 
     // Rental Upload & Send (standalone signing flow)
@@ -1069,6 +1102,7 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
     // Agent approval gate
     Route::get('/documents/{document}/signatures/review', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'review'])->name('docuperfect.signatures.review');
     Route::post('/documents/{document}/signatures/approve-and-advance', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'approveAndAdvance'])->name('docuperfect.signatures.approveAndAdvance');
+    Route::get('/documents/{document}/signatures/authorise-signing', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'authoriseSigning'])->name('docuperfect.signatures.authoriseSigning');
     Route::post('/documents/{document}/signatures/return-to-candidate', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'returnToCandidate'])->name('docuperfect.signatures.returnToCandidate');
 
     // Dashboard polling
@@ -1096,6 +1130,7 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
     Route::post('/documents/{document}/save-agent-fields', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'saveAgentFields'])->name('docuperfect.signatures.saveAgentFields');
     Route::post('/documents/{document}/save-agent-web-fields', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'saveAgentWebFields'])->name('docuperfect.signatures.saveAgentWebFields');
     Route::post('/documents/{document}/sign-complete', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'signComplete'])->name('docuperfect.signatures.signComplete');
+    Route::post('/documents/{document}/web-sign-complete', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'webSignComplete'])->name('docuperfect.signatures.webSignComplete');
 
     // Send + reminders
     Route::get('/documents/{document}/send-confirmation', [\App\Http\Controllers\Docuperfect\SignatureController::class, 'sendConfirmation'])->name('docuperfect.signatures.sendConfirmation');
@@ -1213,6 +1248,8 @@ Route::prefix('sign')->group(function () {
     Route::get('/{token}/completed', [\App\Http\Controllers\Docuperfect\SigningController::class, 'completed'])->name('signatures.external.completed');
     Route::post('/{token}/upload', [\App\Http\Controllers\Docuperfect\SigningController::class, 'uploadWetInk'])->name('signatures.external.upload');
     Route::get('/{token}/download', [\App\Http\Controllers\Docuperfect\SigningController::class, 'downloadForSigning'])->name('signatures.external.download');
+    Route::get('/{token}/print', [\App\Http\Controllers\Docuperfect\SigningController::class, 'printView'])->name('signatures.external.print');
+    Route::get('/{token}/download-pdf', [\App\Http\Controllers\Docuperfect\SigningController::class, 'downloadWebPdf'])->name('signing.download-pdf');
     Route::get('/{token}/wet-ink-portal', [\App\Http\Controllers\Docuperfect\SigningController::class, 'wetInkPortal'])->name('signatures.external.wetInkPortal');
     Route::post('/{token}/decline', [\App\Http\Controllers\Docuperfect\SigningController::class, 'decline'])->name('signatures.external.decline');
     Route::get('/{token}/flattened-page/{page}', [\App\Http\Controllers\Docuperfect\SigningController::class, 'flattenedPageImage'])->name('signatures.external.flattenedPage');
@@ -1261,6 +1298,14 @@ Route::middleware(['auth', 'permission:access_prospecting'])->prefix('prospectin
     Route::post('/{listing}/feedback', [\App\Http\Controllers\ProspectingController::class, 'feedback'])->name('feedback');
     Route::post('/{listing}/release', [\App\Http\Controllers\ProspectingController::class, 'release'])->name('release');
     Route::get('/{listing}', [\App\Http\Controllers\ProspectingController::class, 'show'])->name('show');
+});
+
+// ===== FICA PUBLIC FORM (no auth, token-based) =====
+Route::prefix('fica')->group(function () {
+    Route::get('/{token}', [\App\Http\Controllers\Compliance\FicaPublicController::class, 'form'])->name('fica.form');
+    Route::post('/{token}', [\App\Http\Controllers\Compliance\FicaPublicController::class, 'submit'])->name('fica.submit');
+    Route::post('/{token}/upload', [\App\Http\Controllers\Compliance\FicaPublicController::class, 'uploadDocument'])->name('fica.upload');
+    Route::get('/{token}/confirmation', [\App\Http\Controllers\Compliance\FicaPublicController::class, 'confirmation'])->name('fica.confirmation');
 });
 
 // Portal capture ingest endpoint (outside presentation prefix — extension posts here)

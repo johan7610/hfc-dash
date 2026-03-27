@@ -2,6 +2,7 @@
 @extends('layouts.corex')
 
 @section('corex-content')
+@include('docuperfect.signatures.partials.a4-page-styles')
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
 
     @php
@@ -272,7 +273,8 @@
             <div class="flex-1 ds-status-card p-4 overflow-hidden flex flex-col">
 
                 @if($isWebTemplate ?? false)
-                {{-- Web template: direct DOM injection (not iframe) so CSS applies and markers can detect data-marker-party attributes --}}
+                {{-- Web template: document preview — signature elements are visible in the HTML --}}
+                {{-- Zone/marker overlays render after the HTML content for ad-hoc markers --}}
                 <div class="flex-1 overflow-y-auto" style="background:#f1f5f9;">
                     <link href="/css/corex-document.css" rel="stylesheet">
                     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -280,15 +282,29 @@
                         #webDocContent .corex-page {
                             min-height: auto !important;
                         }
+                        /* Highlight signature areas in setup preview */
+                        #webDocContent [data-marker-party][data-marker-type="signature"] {
+                            border: 2px dashed #94a3b8 !important;
+                            background: rgba(148,163,184,0.08) !important;
+                            min-height: 28pt;
+                        }
                     </style>
-                    <div class="relative" style="max-width:100%; margin:0 auto;"
+                    @php
+                        $setupParties = collect($parties ?? [])->map(function($p) {
+                            return [
+                                'role' => $p['role'] ?? 'unknown',
+                                'label' => ucfirst(str_replace('_', ' ', $p['role_label'] ?? $p['role'] ?? 'unknown')),
+                            ];
+                        })->values()->toArray();
+                    @endphp
+                    <div class="relative" style="width:210mm; max-width:100%; margin:0 auto;"
                          x-ref="pageContainer"
+                         x-init="pageLoaded = true; $nextTick(() => paginateDocument(document.getElementById('webDocContent'), {{ Js::from($setupParties) }}))"
                          @dragover.prevent="$event.dataTransfer.dropEffect = 'copy'"
                          @drop.prevent="handleDrop($event)"
-                         @mousedown.prevent="startZoneDrawOnPage($event)"
-                         x-init="pageLoaded = true; setupWebTemplateObserver()">
+                         @mousedown.prevent="startZoneDrawOnPage($event)">
 
-                        <div id="webDocContent" style="pointer-events:none;">
+                        <div id="webDocContent">
                             {!! $webTemplateHtml ?? '' !!}
                         </div>
                 @else
@@ -380,10 +396,10 @@
                         </template>
                         @endif
 
-                        {{-- Render dynamic signature zones for current page --}}
+                        {{-- Render dynamic signature zones for current page (all template types) --}}
                         <template x-for="zone in zonesForCurrentPage()" :key="'zone_' + zone.id">
                             <div class="absolute select-none"
-                                 :style="`left:${zone.x_position}%;top:${zone.y_position}%;width:${zone.width}%;height:${zone.height}%;z-index:5;`"
+                                 :style="`left:${zone.x_position}%;top:${zone.y_position}%;width:${zone.width}%;height:50px;z-index:5;`"
                                  style="border:2px dashed rgba(99,102,241,0.6); background:rgba(99,102,241,0.05); cursor:grab;"
                                  @mousedown.prevent="startZoneDrag($event, zone)">
 
@@ -419,16 +435,16 @@
                             </div>
                         </template>
 
-                        {{-- Render markers for current page --}}
+                        {{-- Render markers for current page (PDF only) --}}
                         <template x-for="(marker, idx) in markersForCurrentPage()" :key="marker._id">
                             <div class="absolute flex items-center justify-center text-xs font-medium select-none"
-                                 :style="`left:${marker.x_position}%;top:${marker.y_position}%;width:${marker.width}%;height:${marker.height}%;opacity:0.7;z-index:10;`"
+                                 :style="`left:${marker.x_position}%;top:${marker.y_position}%;width:${Math.min(marker.width, 50)}%;height:40px;max-width:200px;opacity:0.7;z-index:10;`"
                                  :class="markerClasses(marker)"
                                  @mousedown.prevent="startDrag($event, marker)"
                                  style="cursor:grab;">
 
                                 {{-- Label --}}
-                                <span class="truncate px-1 pointer-events-none" x-text="markerLabel(marker)"></span>
+                                <span class="truncate px-1 pointer-events-none" style="font-size:9px;line-height:1.2;" x-text="markerLabel(marker)"></span>
                                 <template x-if="marker.auto_placed">
                                     <span class="absolute -top-2 -left-1 px-1 py-0 rounded text-[8px] font-bold bg-indigo-500 text-white pointer-events-none" style="line-height:1.3;">Auto</span>
                                 </template>
@@ -452,7 +468,7 @@
                 </div>
             </div>
 
-            {{-- RIGHT: Toolbar --}}
+            {{-- RIGHT: Toolbar — identical for web and PDF templates --}}
             <div class="w-72 flex-shrink-0 ds-status-card flex flex-col">
                 {{-- Scrollable content area --}}
                 <div class="flex-1 overflow-y-auto p-4 min-h-0">
@@ -479,16 +495,28 @@
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-medium text-slate-500 mb-1">Party Role</label>
-                                    <select x-model="zoneRole" class="w-full text-xs border-slate-200 rounded-lg px-2 py-1.5 focus:ring-indigo-500 focus:border-indigo-500">
-                                        <option value="agent">Agent</option>
-                                        <option value="seller">Seller</option>
-                                        <option value="buyer">Buyer</option>
-                                        <option value="landlord">Landlord</option>
-                                        <option value="tenant">Tenant</option>
-                                        <option value="witness">Witness</option>
-                                        <option value="supervisor">Supervisor</option>
-                                    </select>
+                                    <label class="block text-[10px] font-medium text-slate-500 mb-1">Assigned Parties</label>
+                                    <div class="space-y-1">
+                                        @php
+                                            $zonePartyOptions = [
+                                                'agent' => 'Agent',
+                                                'seller' => 'Seller',
+                                                'buyer' => 'Buyer',
+                                                'landlord' => 'Landlord',
+                                                'tenant' => 'Tenant',
+                                                'witness' => 'Witness',
+                                                'supervisor' => 'Supervisor',
+                                            ];
+                                        @endphp
+                                        @foreach($zonePartyOptions as $val => $lbl)
+                                        <label class="flex items-center gap-1.5 text-xs cursor-pointer">
+                                            <input type="checkbox" value="{{ $val }}"
+                                                   x-model="zoneRoles"
+                                                   class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5">
+                                            {{ $lbl }}
+                                        </label>
+                                        @endforeach
+                                    </div>
                                 </div>
                             </div>
                         </template>
@@ -609,10 +637,10 @@
                         <span x-show="!saving">Save Markers</span>
                         <span x-show="saving" x-cloak>Saving...</span>
                     </button>
-                    <button @click="showSummary = true"
-                            :disabled="markers.length === 0 || !saved"
+                    <button @click="isWebTemplate && markers.length === 0 ? (window.location.href = '{{ route('docuperfect.signatures.sign', $document) }}') : showSummary = true"
+                            :disabled="!isWebTemplate && (markers.length === 0 || !saved)"
                             class="w-full rounded-lg px-4 py-2.5 text-sm font-medium transition-colors"
-                            :class="markers.length === 0 || !saved ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'">
+                            :class="!isWebTemplate && (markers.length === 0 || !saved) ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-700'">
                         Preview & Continue
                     </button>
                 </div>
@@ -676,7 +704,7 @@
             'x_position' => (float) $m->x_position,
             'y_position' => (float) $m->y_position,
             'width' => (float) $m->width,
-            'height' => (float) $m->height,
+            'height' => min((float) $m->height, 8.0),
             'type' => $m->type,
             'assigned_party' => $m->assigned_party,
             'label' => $m->label,
@@ -691,6 +719,7 @@
             'id' => $z->id,
             'zone_type' => $z->zone_type,
             'party_role' => $z->party_role,
+            'assigned_parties' => $z->assigned_parties ?? [$z->party_role],
             'page_number' => $z->page_number,
             'x_position' => (float) $z->x_position,
             'y_position' => (float) $z->y_position,
@@ -718,7 +747,7 @@
             selectedType: 'signature',
             selectedParty: '{{ $parties[0]['role'] ?? 'agent' }}',
             saving: false,
-            saved: {{ $markers->count() > 0 ? 'true' : 'false' }},
+            saved: {{ ($markers->count() > 0 || ($isWebTemplate ?? false)) ? 'true' : 'false' }},
             saveMessage: '',
             saveError: false,
             showSummary: false,
@@ -730,6 +759,7 @@
             zoneDrawMode: false,
             zoneType: 'signature',
             zoneRole: 'seller',
+            zoneRoles: ['agent'],
             parties: @json($parties),
 
             get partyOptions() {
@@ -749,218 +779,16 @@
             },
 
             setupWebTemplateObserver() {
-                if (!this.isWebTemplate) return;
-
-                // DOM-sourced zones were already created from real positions — keep them.
-                const hasDomZones = this.zones.some(z => z.source === 'dom');
-                if (hasDomZones) return;
-
-                // Server-created template zones use hardcoded y-positions that don't
-                // match where signature elements actually render. Delete them and
-                // re-create from DOM positions so each signature LOCATION gets its own
-                // zone (e.g. seller has inline sigs at 49% and 65% plus final sig at 85%
-                // = 3 separate zones, not one giant zone spanning 49-93%).
-                const serverZones = this.zones.filter(z => z.is_auto_placed && z.source !== 'dom');
-                if (serverZones.length > 0) {
-                    const deletePromises = serverZones.map(z => {
-                        const url = '/docuperfect/documents/' + @json($document->id) + '/signatures/zones/' + z.id;
-                        return fetch(url, {
-                            method: 'DELETE',
-                            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': @json(csrf_token()) },
-                        }).catch(err => console.error('Zone delete failed:', err));
-                    });
-                    // Clear local state
-                    this.zones = this.zones.filter(z => !z.is_auto_placed || z.source === 'dom');
-                    this.markers = this.markers.filter(m => !serverZones.some(z => z.id === m.from_zone_id));
-                    // After deletes complete, fall through to DOM-based creation
-                    Promise.all(deletePromises).then(() => this._createZonesFromDOM());
-                    return;
-                }
-
-                // No zones at all — create from DOM
-                this._createZonesFromDOM();
+                // No-op for web templates. Signature positions are defined by
+                // the template HTML — no overlay zones needed.
+                // The document preview shows signature areas via CSS highlighting.
             },
 
             /**
-             * Create zones from actual DOM signature element positions.
-             * Groups by role + vertical position so each signature LOCATION
-             * gets its own zone (inline at 49%, inline at 65%, final at 85%
-             * = 3 separate zones, NOT one giant zone spanning the full range).
+             * No-op — web templates define signature positions in the HTML.
+             * Zone creation from DOM is no longer needed.
              */
-            _createZonesFromDOM() {
-                // Clear any existing individual markers — zones will create new ones
-                this.markers = [];
-
-                const container = this.$refs.pageContainer;
-                if (!container) return;
-
-                const self = this;
-                const partyRoleMap = {
-                    'owner': 'landlord', 'owner_party': 'landlord',
-                    'landlord': 'landlord', 'lessor': 'landlord',
-                    'seller': 'seller',
-                    'tenant': 'tenant', 'lessee': 'tenant',
-                    'buyer': 'buyer', 'acquiring_party': 'buyer',
-                    'agent': 'agent',
-                };
-
-                const tryCreateZonesFromDOM = async () => {
-                    const sigElements = container.querySelectorAll('[data-marker-party][data-marker-type="signature"]');
-                    if (sigElements.length === 0) return false;
-
-                    // Reset scroll so getBoundingClientRect is accurate
-                    container.scrollTop = 0;
-                    const containerRect = container.getBoundingClientRect();
-                    const scrollH = container.scrollHeight;
-                    const scrollW = container.scrollWidth;
-
-                    // Group signature elements by: baseRole + context (inline vs final sig block)
-                    // For final sig block: one zone per role wrapping all that role's sig cells
-                    // For inline: one zone per inline occurrence group
-                    const groups = {};
-                    sigElements.forEach(el => {
-                        const partyLabel = (el.dataset.markerParty || '').toLowerCase();
-                        const baseRole = partyRoleMap[partyLabel] || partyLabel;
-                        const isInFinalSig = el.closest('.sig-section') !== null;
-
-                        // For inline sigs at different positions, group by approximate Y
-                        // so separate inline occurrences get separate zones
-                        let groupKey;
-                        if (isInFinalSig) {
-                            groupKey = baseRole + ':final';
-                        } else {
-                            const elRect = el.getBoundingClientRect();
-                            const yApprox = Math.round((elRect.top - containerRect.top + container.scrollTop) / 50) * 50;
-                            groupKey = baseRole + ':inline:' + yApprox;
-                        }
-
-                        if (!groups[groupKey]) {
-                            groups[groupKey] = {
-                                baseRole,
-                                isFinal: isInFinalSig,
-                                elements: [],
-                            };
-                        }
-                        groups[groupKey].elements.push(el);
-                    });
-
-                    // Build zone definitions from DOM bounding boxes
-                    const zoneDefs = [];
-                    for (const [groupKey, group] of Object.entries(groups)) {
-                        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-                        group.elements.forEach(el => {
-                            const rect = el.getBoundingClientRect();
-                            const relLeft = rect.left - containerRect.left;
-                            const relTop = rect.top - containerRect.top + container.scrollTop;
-                            const relRight = relLeft + rect.width;
-                            const relBottom = relTop + rect.height;
-
-                            minX = Math.min(minX, relLeft);
-                            minY = Math.min(minY, relTop);
-                            maxX = Math.max(maxX, relRight);
-                            maxY = Math.max(maxY, relBottom);
-                        });
-
-                        // Convert to percentage of container
-                        const xPct = (minX / scrollW) * 100;
-                        const yPct = (minY / scrollH) * 100;
-                        const wPct = ((maxX - minX) / scrollW) * 100;
-                        const hPct = ((maxY - minY) / scrollH) * 100;
-
-                        // Add padding: 5px above/below for signature drawing space
-                        const padPx = 5;
-                        const padYPct = (padPx / scrollH) * 100;
-                        const padXPct = (padPx / scrollW) * 100;
-
-                        const roleLabel = group.baseRole.charAt(0).toUpperCase() + group.baseRole.slice(1);
-                        const label = group.isFinal
-                            ? roleLabel + ' Signature Zone'
-                            : roleLabel + ' Inline Signature';
-
-                        zoneDefs.push({
-                            zone_type: 'signature',
-                            party_role: group.baseRole,
-                            page_number: 1,
-                            x_position: Math.round(Math.max(0, xPct - padXPct) * 100) / 100,
-                            y_position: Math.round(Math.max(0, yPct - padYPct) * 100) / 100,
-                            width: Math.round(Math.min(wPct + padXPct * 2, 100) * 100) / 100,
-                            height: Math.round(Math.min(hPct + padYPct * 2, 100) * 100) / 100,
-                            label: label,
-                        });
-                    }
-
-                    if (zoneDefs.length === 0) return true;
-
-                    // Batch-create zones via API
-                    try {
-                        const resp = await fetch(@json(route('docuperfect.signatures.batchStoreZones', $document)), {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Accept': 'application/json',
-                                'X-CSRF-TOKEN': @json(csrf_token()),
-                            },
-                            body: JSON.stringify({ zones: zoneDefs }),
-                        });
-
-                        const data = await resp.json();
-                        if (data.ok) {
-                            // Add zones to local state
-                            (data.zones || []).forEach(z => {
-                                self.zones.push(z);
-                            });
-
-                            // Add expanded markers from zones to local state
-                            (data.markers || []).forEach(m => {
-                                self.markers.push({
-                                    _id: 'zone_' + self._nextId++,
-                                    id: m.id,
-                                    page_number: m.page_number,
-                                    x_position: m.x_position,
-                                    y_position: m.y_position,
-                                    width: m.width,
-                                    height: m.height,
-                                    type: m.type,
-                                    assigned_party: m.assigned_party,
-                                    label: m.label,
-                                    required: true,
-                                    from_zone_id: m.from_zone_id || null,
-                                });
-                            });
-
-                            self.saved = false;
-                            self.saveMessage = data.zones.length + ' zones created from document layout.';
-                            self.saveError = false;
-                            setTimeout(() => { self.saveMessage = ''; }, 4000);
-                        }
-                    } catch (err) {
-                        console.error('Failed to create zones from DOM:', err);
-                        self.saveMessage = 'Failed to auto-create zones.';
-                        self.saveError = true;
-                        setTimeout(() => { self.saveMessage = ''; }, 4000);
-                    }
-
-                    return true;
-                };
-
-                // Try immediately first (DOM may already be ready)
-                if (tryCreateZonesFromDOM()) return;
-
-                // Use MutationObserver to wait for DOM content to render
-                const observer = new MutationObserver(() => {
-                    const els = container.querySelectorAll('[data-marker-party][data-marker-type="signature"]');
-                    if (els.length === 0) return;
-                    observer.disconnect();
-                    // Wait one frame for layout to settle
-                    requestAnimationFrame(() => tryCreateZonesFromDOM());
-                });
-
-                observer.observe(container, { childList: true, subtree: true });
-
-                // Safety timeout — disconnect after 5s
-                setTimeout(() => observer.disconnect(), 5000);
-            },
+            _createZonesFromDOM() { /* no-op */ },
 
             prevPage() { if (this.currentPage > 1) this.currentPage--; },
             nextPage() { if (this.currentPage < this.totalPages) this.currentPage++; },
@@ -1166,6 +994,14 @@
                 // Minimum size check — ignore tiny accidental clicks
                 if (s.w < 3 || s.h < 2) return;
 
+                // Must have at least one party selected
+                if (!this.zoneRoles || this.zoneRoles.length === 0) {
+                    this.saveMessage = 'Select at least one party for the zone.';
+                    this.saveError = true;
+                    setTimeout(() => { this.saveMessage = ''; }, 3000);
+                    return;
+                }
+
                 // Create zone via API
                 try {
                     const resp = await fetch(@json(route('docuperfect.signatures.storeZone', $document)), {
@@ -1177,7 +1013,8 @@
                         },
                         body: JSON.stringify({
                             zone_type: this.zoneType,
-                            party_role: this.zoneRole,
+                            party_role: this.zoneRoles[0],
+                            assigned_parties: this.zoneRoles,
                             page_number: this.currentPage,
                             x_position: Math.round(s.x * 100) / 100,
                             y_position: Math.round(s.y * 100) / 100,
@@ -1298,7 +1135,7 @@
                                 x_position: m.x_position,
                                 y_position: m.y_position,
                                 width: m.width,
-                                height: m.height,
+                                height: Math.min(m.height, 8),
                                 type: m.type,
                                 assigned_party: m.assigned_party,
                                 label: m.label,
@@ -1338,7 +1175,11 @@
                 this.saveMessage = '';
                 this.saveError = false;
 
-                const payload = this.markers.map((m, i) => ({
+                // Only send manually-placed markers (not zone-expanded ones).
+                // Zone-expanded markers (from_zone_id set) are managed by the zone system
+                // and preserved by the server.
+                const manualMarkers = this.markers.filter(m => !m.from_zone_id);
+                const payload = manualMarkers.map((m, i) => ({
                     page_number: m.page_number,
                     x_position: m.x_position,
                     y_position: m.y_position,

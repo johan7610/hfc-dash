@@ -178,6 +178,11 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
                 Download Extension
             </a>
+            <a href="/downloads/portal-capture-extension.zip"
+               style="display:inline-flex; align-items:center; gap:8px; padding:10px 20px; border-radius:6px; border:none; background:#7c3aed; color:#fff; font-size:0.85rem; font-weight:600; text-decoration:none; transition:all 300ms;" download>
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+                Portal Capture Extension
+            </a>
             <button @click="showInstructions = !showInstructions"
                     style="display:inline-flex; align-items:center; gap:6px; padding:10px 16px; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--text-secondary); font-size:0.8rem; font-weight:500; cursor:pointer; transition:all 300ms;">
                 <span x-text="showInstructions ? 'Hide Instructions' : 'How to Install'"></span>

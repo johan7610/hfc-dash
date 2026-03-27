@@ -125,7 +125,7 @@ class SlidingScaleService
             ->where('deal_user.user_id', $userId)
             ->where('deals.accepted_status', 'G')
             ->whereNotNull('deals.granted_at')
-            ->whereRaw("strftime('%Y-%m', deals.deal_date) = ?", [$monthKey])
+            ->whereRaw("DATE_FORMAT(deals.deal_date, '%Y-%m') = ?", [$monthKey])
             ->select('deals.id', 'deals.granted_at', 'deals.commission_status')
             ->distinct()
             ->orderBy('deals.granted_at')
@@ -209,7 +209,7 @@ class SlidingScaleService
             ->where('deal_user.user_id', $userId)
             ->where('deals.accepted_status', 'G')
             ->whereNotNull('deals.granted_at')
-            ->whereRaw("strftime('%Y-%m', deals.deal_date) = ?", [$monthKey])
+            ->whereRaw("DATE_FORMAT(deals.deal_date, '%Y-%m') = ?", [$monthKey])
             ->select('deal_user.deal_id', 'deal_user.side', 'deals.commission_status')
             ->get();
     }

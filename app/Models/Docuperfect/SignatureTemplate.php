@@ -32,6 +32,9 @@ class SignatureTemplate extends Model
         'document_version',
         'other_conditions_text',
         'amendment_status',
+        'cancellation_reason',
+        'cancelled_by',
+        'cancelled_at',
     ];
 
     protected $casts = [
@@ -42,6 +45,7 @@ class SignatureTemplate extends Model
         'is_candidate_flow' => 'boolean',
         'completed_at' => 'datetime',
         'rejected_at' => 'datetime',
+        'cancelled_at' => 'datetime',
     ];
 
     // Status constants
@@ -63,6 +67,7 @@ class SignatureTemplate extends Model
     const STATUS_PARTIAL = 'partial';
     const STATUS_AWAITING_DEFERRED = 'awaiting_deferred';
     const STATUS_AMENDMENT_REVIEW = 'amendment_review';
+    const STATUS_CANCELLED = 'cancelled';
 
     // --- Relationships ---
 

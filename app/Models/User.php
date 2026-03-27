@@ -117,6 +117,13 @@ class User extends Authenticatable
         return $this->agency_id ? (int) $this->agency_id : null;
     }
 
+    // ── Compliance Officer check ──
+
+    public function isComplianceOfficer(): bool
+    {
+        return FicaComplianceOfficer::where('user_id', $this->id)->exists();
+    }
+
     // ── Owner role checks (the ONLY hardcoded concept) ──
 
     /**

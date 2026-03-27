@@ -285,7 +285,11 @@
                  class="corex-nav-children">
                 @permission('create_docuperfect_docs')
                 <a href="{{ route('docuperfect.create') }}" class="corex-nav-subitem {{ request()->routeIs('docuperfect.create') ? 'active' : '' }}">Create Document</a>
-                <a href="{{ route('docuperfect.esign.create') }}" class="corex-nav-subitem {{ request()->routeIs('docuperfect.esign.*') ? 'active' : '' }}">E-Sign Document</a>
+                <a href="{{ route('docuperfect.esign.create') }}" class="corex-nav-subitem {{ request()->routeIs('docuperfect.esign.create') ? 'active' : '' }}">E-Sign Document</a>
+                <a href="{{ route('docuperfect.esign.myDocuments') }}" class="corex-nav-subitem {{ request()->routeIs('docuperfect.esign.myDocuments') ? 'active' : '' }}">My E-Sign Documents</a>
+                @if(app(\App\Services\CandidatePractitionerService::class)->canAuthorise(auth()->user()))
+                <a href="{{ route('docuperfect.esign.myDocuments', ['filter' => 'authorisation']) }}" class="corex-nav-subitem {{ request()->query('filter') === 'authorisation' ? 'active' : '' }}">Authorise Documents</a>
+                @endif
                 @endpermission
                 @permission('access_docuperfect')
                 <a href="{{ route('docuperfect.dashboard') }}" class="corex-nav-subitem {{ request()->routeIs('docuperfect.dashboard') ? 'active' : '' }}">My Documents</a>
@@ -345,12 +349,13 @@
 
         {{-- Compliance --}}
         @permission('access_compliance')
-        <a href="{{ route('corex.compliance') }}" class="corex-nav-item {{ request()->routeIs('corex.compliance') ? 'active' : '' }}">
+        <a href="{{ route('compliance.fica.index') }}" class="corex-nav-item {{ request()->routeIs('compliance.fica.*') || request()->routeIs('compliance.rmcp') ? 'active' : '' }}">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
             </svg>
             <span>Compliance</span>
         </a>
+        <a href="{{ route('compliance.rmcp') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.rmcp') ? 'active' : '' }}" style="margin-left: 2.25rem;">RMCP</a>
         @endpermission
 
         {{-- Supervision --}}
