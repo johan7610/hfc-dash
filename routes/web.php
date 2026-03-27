@@ -197,6 +197,12 @@ Route::prefix('admin/knowledge')->middleware(['auth', 'permission:access_knowled
 
 // ===== FAULT REPORTS =====
 Route::middleware(['auth'])->group(function () {
+    Route::post('/admin/fault-reports/manual', [\App\Http\Controllers\FaultReportController::class, 'manualReport'])
+        ->name('admin.fault-reports.manual');
+    Route::get('/admin/fault-reports/{id}', [\App\Http\Controllers\FaultReportController::class, 'show'])
+        ->name('admin.fault-reports.show');
+    Route::post('/admin/fault-reports/{id}/status', [\App\Http\Controllers\FaultReportController::class, 'updateStatus'])
+        ->name('admin.fault-reports.update-status');
     Route::get('/admin/fault-reports', [\App\Http\Controllers\FaultReportController::class, 'index'])
         ->name('admin.fault-reports');
 });
