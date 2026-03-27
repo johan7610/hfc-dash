@@ -7,6 +7,7 @@ use App\Models\Branch;
 use App\Models\ContactMatch;
 use App\Models\Property;
 use App\Models\PropertyAdTemplate;
+use App\Models\DocumentType;
 use App\Models\PropertySettingItem;
 use App\Models\User;
 use App\Services\PermissionService;
@@ -156,8 +157,13 @@ class PropertyController extends Controller
             ? app(PrivatePropertyListingMapper::class)->checkReadiness($property)
             : [];
 
+        // Drive tab: all documents linked to this property
+        $allDriveDocs = $property->documents()->with(['documentType', 'contacts'])->get();
+        $documentTypes = DocumentType::orderBy('name')->get();
+
         return view('corex.properties.show', compact(
-            'property', 'settingItems', 'branches', 'agents', 'activeTab', 'coreMatches', 'ppMissingFields'
+            'property', 'settingItems', 'branches', 'agents', 'activeTab', 'coreMatches', 'ppMissingFields',
+            'allDriveDocs', 'documentTypes'
         ));
     }
 
