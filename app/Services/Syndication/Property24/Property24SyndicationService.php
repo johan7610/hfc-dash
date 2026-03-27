@@ -20,6 +20,8 @@ class Property24SyndicationService
 
     public function submitListing(Property $property): array
     {
+        $this->log('info', "submitListing called for property #{$property->id}, agent_id={$property->agent_id}");
+
         // Ensure the listing agent is registered on P24 before submitting
         $agentResult = $this->ensureAgentRegistered($property);
         if ($agentResult !== true) {
@@ -180,6 +182,8 @@ class Property24SyndicationService
         if (!$user) {
             return 'No agent assigned to this property';
         }
+
+        $this->log('info', "ensureAgentRegistered for user #{$user->id} ({$user->name}), agent_photo_path=" . ($user->agent_photo_path ?? 'NULL'));
 
         $agencyId = (int) config('services.property24_syndication.agency_id');
         $parts    = explode(' ', trim($user->name), 2);
