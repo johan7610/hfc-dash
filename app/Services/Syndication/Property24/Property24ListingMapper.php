@@ -75,11 +75,11 @@ class Property24ListingMapper
         ];
 
         if ($property->stand_number) $info['standNumber'] = $property->stand_number;
-        if ($property->erf_size_m2) $info['erf'] = ['measurement' => 'SquareMetres', 'size' => (float) $property->erf_size_m2];
-        if ($property->size_m2) $info['floorArea'] = ['measurement' => 'SquareMetres', 'size' => (float) $property->size_m2];
+        if ($property->erf_size_m2) $info['erf'] = ['areaUnit' => 'SquareMetres', 'size' => (float) $property->erf_size_m2];
+        if ($property->size_m2) $info['floorArea'] = ['areaUnit' => 'SquareMetres', 'size' => (float) $property->size_m2];
         if ($property->floor_number) $info['floorNumber'] = (int) $property->floor_number;
-        if ($property->rates_taxes) $info['municipalRatesAndTaxes'] = ['amount' => (float) $property->rates_taxes, 'period' => 'Monthly'];
-        if ($property->levy) $info['monthlyLevy'] = ['amount' => (float) $property->levy, 'period' => 'Monthly'];
+        if ($property->rates_taxes) $info['municipalRatesAndTaxes'] = ['amount' => (float) $property->rates_taxes, 'unit' => 'TotalPrice'];
+        if ($property->levy) $info['monthlyLevy'] = ['amount' => (float) $property->levy, 'unit' => 'TotalPrice'];
         if ($property->special_levy) $info['specialLevy'] = (float) $property->special_levy;
 
         return $info;
@@ -93,11 +93,11 @@ class Property24ListingMapper
             'pool'            => false,
             'flatlet'         => false,
             'petsAllowed'     => 'No',
-            'furnishedStatus' => 'Unfurnished',
+            'furnishedStatus' => 'No',
         ];
 
         if ($property->beds) $features['bedrooms'] = (int) $property->beds;
-        if ($property->baths) $features['bathrooms'] = ['full' => (int) $property->baths];
+        if ($property->baths) $features['bathrooms'] = ['bathrooms' => (float) $property->baths];
 
         return $features;
     }
