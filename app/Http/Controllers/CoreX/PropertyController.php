@@ -159,7 +159,7 @@ class PropertyController extends Controller
 
         // Drive tab: all documents linked to this property
         $allDriveDocs = $property->documents()->with(['documentType', 'contacts'])->get();
-        $documentTypes = DocumentType::orderBy('name')->get();
+        $documentTypes = DocumentType::ordered()->get();
 
         return view('corex.properties.show', compact(
             'property', 'settingItems', 'branches', 'agents', 'activeTab', 'coreMatches', 'ppMissingFields',
