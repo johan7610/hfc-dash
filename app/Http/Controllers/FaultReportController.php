@@ -86,6 +86,70 @@ class FaultReportController extends Controller
     }
 
     /**
+     * Show a single fault report detail.
+     */
+    public function show(int $id)
+    {
+        $report = FaultReport::with(['user', 'resolvedBy'])->findOrFail($id);
+
+        return view('admin.fault-reports.show', compact('report'));
+    }
+
+    /**
+     * Update fault report status and/or notes.
+     */
+    public function updateStatus(Request $request, int $id)
+    {
+        $report = FaultReport::findOrFail($id);
+
+        $validated = $request->validate([
+            'status' => 'sometimes|in:new,investigating,fixed,ignored',
+            'notes' => 'nullable|string|max:5000',
+        ]);
+
+        if (isset($validated['status'])) {
+            $report->status = $validated['status'];
+            if ($validated['status'] === 'fixed' || $validated['status'] === 'ignored') {
+                $report->resolved_by = auth()->id();
+                $report->resolved_at = now();
+            }
+        }
+        if (array_key_exists('notes', $validated)) {
+            $report->notes = $validated['notes'];
+        }
+
+        $report->save();
+
+        return back()->with('success', 'Fault report updated.');
+    }
+
+    /**
+     * Create a manual fault report from the "Report Issue" modal.
+     */
+    public function manualReport(Request $request)
+    {
+        $validated = $request->validate([
+            'description' => 'required|string|max:2000',
+            'url' => 'nullable|string|max:1000',
+        ]);
+
+        FaultReport::create([
+            'type' => 'manual',
+            'severity' => 'info',
+            'title' => mb_substr($validated['description'], 0, 500),
+            'message' => $validated['description'],
+            'url' => $validated['url'],
+            'user_id' => auth()->id(),
+            'user_agent' => $request->userAgent(),
+            'ip_address' => $request->ip(),
+            'first_seen_at' => now(),
+            'last_seen_at' => now(),
+        ]);
+
+        return back()->with('success', 'Issue reported. Thank you!');
+    }
+
+    /**
      * Strip sensitive fields from request data before storing.
      */
     private function sanitiseRequestData(?array $data): ?array
