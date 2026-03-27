@@ -3,6 +3,7 @@
 namespace App\Services\Syndication\Property24;
 
 use App\Models\Property;
+use App\Models\User;
 use Illuminate\Support\Facades\Log;
 
 class Property24SyndicationService
@@ -18,6 +19,13 @@ class Property24SyndicationService
 
     public function submitListing(Property $property): array
     {
+        // Ensure the listing agent is registered on P24 before submitting
+        $agentResult = $this->ensureAgentRegistered($property);
+        if ($agentResult !== true) {
+            $property->update(['p24_syndication_status' => 'error', 'p24_last_error' => 'Agent registration failed: ' . $agentResult]);
+            return ['success' => false, 'message' => 'Agent registration failed: ' . $agentResult];
+        }
+
         $payload = $this->mapper->map($property);
 
         $errors = $this->mapper->validate($payload);
@@ -159,6 +167,75 @@ class Property24SyndicationService
 
         $this->log('info', "P24 activation sync complete: {$synced} synced, {$errors} errors");
         return ['synced' => $synced, 'errors' => $errors, 'total' => $properties->count()];
+    }
+
+    /**
+     * Ensure the property's listing agent is registered on P24.
+     * Returns true on success, or an error string on failure.
+     */
+    private function ensureAgentRegistered(Property $property): string|bool
+    {
+        $user = $property->agent ?? User::find($property->agent_id);
+        if (!$user) {
+            return 'No agent assigned to this property';
+        }
+
+        $agencyId = (int) config('services.property24_syndication.agency_id');
+        $parts    = explode(' ', trim($user->name), 2);
+
+        $agentData = [
+            'agencyId'        => $agencyId,
+            'firstname'       => $parts[0] ?? '',
+            'lastname'        => $parts[1] ?? $parts[0] ?? '',
+            'emailAddress'    => $user->email ?? '',
+            'mobileNumber'    => $user->cell ?? $user->phone ?? '',
+            'sourceReference' => 'CoreX-Agent-' . $user->id,
+            'published'       => true,
+            'receiveStatsMail' => false,
+            'countryId'       => 1, // South Africa
+        ];
+
+        // Check if agent already exists on P24 by checking cached agent list
+        $existingResult = $this->client->getAgents();
+        if ($existingResult['success']) {
+            foreach ($existingResult['data'] ?? [] as $existing) {
+                $ref = $existing['sourceReference'] ?? '';
+                if ($ref === 'CoreX-Agent-' . $user->id) {
+                    // Agent already registered — use their P24 ID
+                    $this->log('info', "Agent #{$user->id} already registered on P24 as #{$existing['id']}");
+                    return true;
+                }
+            }
+        }
+
+        // Register new agent
+        $this->log('info', "Registering agent #{$user->id} ({$user->name}) on P24");
+        $result = $this->client->createAgent($agentData);
+
+        if (!$result['success']) {
+            $this->log('error', "Agent registration failed for #{$user->id}", ['result' => $result]);
+            return $result['message'] ?? 'Unknown agent registration error';
+        }
+
+        $this->log('info', "Agent #{$user->id} registered on P24", ['result' => $result['data'] ?? []]);
+        return true;
+    }
+
+    /**
+     * Get the P24 agent ID for a CoreX user. Returns null if not found.
+     */
+    public function getP24AgentId(User $user): ?int
+    {
+        $result = $this->client->getAgents();
+        if (!$result['success']) return null;
+
+        foreach ($result['data'] ?? [] as $agent) {
+            if (($agent['sourceReference'] ?? '') === 'CoreX-Agent-' . $user->id) {
+                return (int) $agent['id'];
+            }
+        }
+
+        return null;
     }
 
     private function log(string $level, string $message, array $context = []): void

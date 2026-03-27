@@ -101,6 +101,30 @@ class Property24ApiClient
     }
 
     /**
+     * Register a new agent on P24.
+     */
+    public function createAgent(array $agentData): array
+    {
+        return $this->request('POST', '/agents', $agentData, null, 'create_agent');
+    }
+
+    /**
+     * Update an existing agent on P24.
+     */
+    public function updateAgent(array $agentData): array
+    {
+        return $this->request('PUT', '/agents', $agentData, null, 'update_agent');
+    }
+
+    /**
+     * Get a specific agent by ID.
+     */
+    public function getAgent(int $agentId): array
+    {
+        return $this->request('GET', "/agents/{$agentId}", [], null, 'fetch_agent');
+    }
+
+    /**
      * Get agency details.
      */
     public function getAgency(): array
