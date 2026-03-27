@@ -487,6 +487,8 @@ class ESignWizardController extends Controller
         if (!$hasNonAgent && $step >= 3) {
             $propertyId = $stepData['property']['property_id'] ?? null;
             $propertySource = $stepData['property']['_property_source'] ?? null;
+
+            // Load contacts from properties table (rental_properties has no contacts relationship)
             if ($propertyId && $propertySource === 'properties') {
                 $prop = Property::with(['contacts' => fn($q) => $q->withPivot('role')])->find($propertyId);
                 if ($prop) {
@@ -495,11 +497,21 @@ class ESignWizardController extends Controller
                     $defaultOwnerRole = collect($signingParties)->first(fn($r) => $r !== 'agent' && $r !== 'creator')
                         ?? ($template->isSalesDocument($propertySource) ? 'seller' : 'landlord');
 
+                    // Build allowed esign_roles from template's signing_parties
+                    $allowedEsignRoles = $this->buildAllowedEsignRoles($signingParties);
+
                     // Agent is always first recipient (added by JS), so just add linked contacts
                     foreach ($prop->contacts as $contact) {
                         // Role comes from the contact's contact_type (source of truth)
-                        $contactType = DB::table('contact_types')->where('id', $contact->contact_type_id)->value('name');
-                        $recipientRole = strtolower(trim($contactType ?? ''));
+                        $ctRow = DB::table('contact_types')->where('id', $contact->contact_type_id)->first();
+                        $recipientRole = strtolower(trim($ctRow->name ?? ''));
+                        $esignRole = $ctRow->esign_role ?? null;
+
+                        // Filter by esign_role if template has signing_parties set
+                        if (!empty($allowedEsignRoles) && (empty($esignRole) || !in_array($esignRole, $allowedEsignRoles))) {
+                            continue; // Skip: contact type doesn't match template's required roles
+                        }
+
                         if (empty($recipientRole)) {
                             $recipientRole = $defaultOwnerRole;
                         }
@@ -945,18 +957,29 @@ class ESignWizardController extends Controller
                 ->orWhere('phone', 'like', "%{$q}%");
         });
 
-        // Filter by contact type role if provided
+        // Filter by contact type role if provided — uses esign_role from contact_types
         $role = $request->input('role');
         if ($role) {
-            $roleMap = [
-                'landlord' => 'Lessor', 'lessor' => 'Lessor',
-                'tenant' => 'Lessee', 'lessee' => 'Lessee',
-                'buyer' => 'Buyer', 'seller' => 'Seller',
-                'witness' => 'Witness', 'spouse' => 'Spouse',
+            // Map incoming role to esign_role values
+            $esignRoleMap = [
+                'seller'   => ['seller'],
+                'buyer'    => ['buyer'],
+                'landlord' => ['lessor'],
+                'lessor'   => ['lessor'],
+                'tenant'   => ['lessee'],
+                'lessee'   => ['lessee'],
+                'owner_party'     => ['seller', 'lessor'],
+                'acquiring_party' => ['buyer', 'lessee'],
             ];
-            $typeName = $roleMap[strtolower($role)] ?? null;
-            if ($typeName) {
-                $typeId = DB::table('contact_types')->where('name', $typeName)->value('id');
+            $esignRoles = $esignRoleMap[strtolower($role)] ?? null;
+            if ($esignRoles) {
+                $typeIds = DB::table('contact_types')->whereIn('esign_role', $esignRoles)->pluck('id');
+                if ($typeIds->isNotEmpty()) {
+                    $query->whereIn('contact_type_id', $typeIds);
+                }
+            } else {
+                // Fallback: match by contact_type name directly (for witness, spouse, etc.)
+                $typeId = DB::table('contact_types')->where('name', 'like', '%' . $role . '%')->value('id');
                 if ($typeId) {
                     $query->where('contact_type_id', $typeId);
                 }
@@ -1950,6 +1973,39 @@ class ESignWizardController extends Controller
      * Uses source_type/source_column/source_contact_type from
      * docuperfect_named_fields to resolve each field's value.
      */
+
+    /**
+     * Map template signing_parties to allowed esign_role values on contact_types.
+     * Returns empty array if signing_parties is null/empty (= show all contacts, legacy fallback).
+     */
+    private function buildAllowedEsignRoles(array $signingParties): array
+    {
+        if (empty($signingParties)) return [];
+
+        $roleMap = [
+            'owner_party' => ['seller', 'lessor'],
+            'seller'      => ['seller'],
+            'buyer'       => ['buyer'],
+            'landlord'    => ['lessor'],
+            'lessor'      => ['lessor'],
+            'tenant'      => ['lessee'],
+            'lessee'      => ['lessee'],
+        ];
+
+        $allowed = [];
+        foreach ($signingParties as $party) {
+            $party = strtolower(trim($party));
+            if ($party === 'agent' || $party === 'creator') continue;
+            if ($party === 'acquiring_party') {
+                $allowed = array_merge($allowed, ['buyer', 'lessee']);
+            } elseif (isset($roleMap[$party])) {
+                $allowed = array_merge($allowed, $roleMap[$party]);
+            }
+        }
+
+        return array_unique($allowed);
+    }
+
     private function autoFillFields(array $fields, array $stepData): array
     {
         // Load named field source mappings (non-manual for auto-resolve)
