@@ -257,7 +257,7 @@ class Property24SyndicationService
     private function uploadAgentPhotoIfAvailable(User $user, int $p24AgentId): void
     {
         if (empty($user->agent_photo_path)) {
-            $this->log('info', "Agent #{$user->id} has no photo in CoreX — skipping P24 upload");
+            $this->log('info', "Agent #{$user->id} has no agent_photo_path — skipping P24 photo upload");
             return;
         }
 
@@ -265,33 +265,61 @@ class Property24SyndicationService
         $bytes = null;
         $mime = 'image/jpeg';
 
-        // Try reading from public disk first (works on server)
+        // Strategy 1: Read from public storage disk directly
         if (Storage::disk('public')->exists($photoPath)) {
+            $this->log('info', "Reading agent photo from disk: {$photoPath}");
             $bytes = Storage::disk('public')->get($photoPath);
             $mime = Storage::disk('public')->mimeType($photoPath) ?: 'image/jpeg';
-        } else {
-            // Fallback: try fetching from the public URL (works for local dev pointing at server)
-            $imageBaseUrl = config('services.property24_syndication.image_base_url') ?: config('app.url');
-            $url = rtrim($imageBaseUrl, '/') . '/storage/' . ltrim($photoPath, '/');
+        }
 
-            $this->log('info', "Agent photo not on local disk, trying URL: {$url}");
+        // Strategy 2: Fetch via public URL (works when disk path doesn't match or on different server)
+        if (empty($bytes)) {
+            $baseUrl = config('app.url');
+            $url = rtrim($baseUrl, '/') . '/storage/' . ltrim($photoPath, '/');
+            $this->log('info', "Agent photo not on disk, fetching URL: {$url}");
 
             try {
-                $response = \Illuminate\Support\Facades\Http::timeout(15)->get($url);
-                if ($response->successful()) {
+                $response = \Illuminate\Support\Facades\Http::withoutVerifying()->timeout(15)->get($url);
+                if ($response->successful() && strlen($response->body()) > 100) {
                     $bytes = $response->body();
                     $contentType = $response->header('Content-Type');
                     if ($contentType && str_starts_with($contentType, 'image/')) {
                         $mime = $contentType;
                     }
+                    $this->log('info', "Downloaded agent photo from URL: " . strlen($bytes) . " bytes");
+                } else {
+                    $this->log('warning', "Agent photo URL returned: HTTP " . $response->status());
                 }
             } catch (\Exception $e) {
-                $this->log('warning', "Failed to download agent photo from URL: {$e->getMessage()}");
+                $this->log('warning', "Failed to download agent photo: {$e->getMessage()}");
+            }
+        }
+
+        // Strategy 3: Try the image_base_url (production domain)
+        if (empty($bytes)) {
+            $imageBaseUrl = config('services.property24_syndication.image_base_url');
+            if ($imageBaseUrl) {
+                $url = rtrim($imageBaseUrl, '/') . '/storage/' . ltrim($photoPath, '/');
+                $this->log('info', "Trying image_base_url: {$url}");
+
+                try {
+                    $response = \Illuminate\Support\Facades\Http::withoutVerifying()->timeout(15)->get($url);
+                    if ($response->successful() && strlen($response->body()) > 100) {
+                        $bytes = $response->body();
+                        $contentType = $response->header('Content-Type');
+                        if ($contentType && str_starts_with($contentType, 'image/')) {
+                            $mime = $contentType;
+                        }
+                        $this->log('info', "Downloaded agent photo from image_base_url: " . strlen($bytes) . " bytes");
+                    }
+                } catch (\Exception $e) {
+                    $this->log('warning', "Failed from image_base_url: {$e->getMessage()}");
+                }
             }
         }
 
         if (empty($bytes)) {
-            $this->log('warning', "Agent #{$user->id} photo could not be read: {$photoPath}");
+            $this->log('warning', "Agent #{$user->id} photo could not be read from any source: {$photoPath}");
             return;
         }
 
