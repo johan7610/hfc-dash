@@ -22,11 +22,19 @@ class Property24SyndicationService
     {
         $this->log('info', "submitListing called for property #{$property->id}, agent_id={$property->agent_id}");
 
-        // Ensure the listing agent is registered on P24 before submitting
+        // Ensure the listing agent(s) are registered on P24 before submitting
         $agentResult = $this->ensureAgentRegistered($property);
         if ($agentResult !== true) {
             $property->update(['p24_syndication_status' => 'error', 'p24_last_error' => 'Agent registration failed: ' . $agentResult]);
             return ['success' => false, 'message' => 'Agent registration failed: ' . $agentResult];
+        }
+
+        // Register second agent if assigned
+        if ($property->pp_second_agent_id) {
+            $secondAgent = User::find($property->pp_second_agent_id);
+            if ($secondAgent) {
+                $this->ensureAgentRegisteredByUser($secondAgent);
+            }
         }
 
         $payload = $this->mapper->map($property);
@@ -183,6 +191,15 @@ class Property24SyndicationService
             return 'No agent assigned to this property';
         }
 
+        return $this->ensureAgentRegisteredByUser($user);
+    }
+
+    /**
+     * Register a specific user as an agent on P24.
+     * Returns true on success, or an error string on failure.
+     */
+    private function ensureAgentRegisteredByUser(User $user): string|bool
+    {
         $this->log('info', "ensureAgentRegistered for user #{$user->id} ({$user->name}), agent_photo_path=" . ($user->agent_photo_path ?? 'NULL'));
 
         $agencyId = (int) config('services.property24_syndication.agency_id');

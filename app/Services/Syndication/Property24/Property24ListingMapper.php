@@ -221,21 +221,37 @@ class Property24ListingMapper
 
     private function resolveContactAgentIds(Property $property, int $agencyId): array
     {
-        // Look up the P24 agent ID by matching sourceReference in registered agents
         $client = app(Property24ApiClient::class);
         $result = $client->getAgents();
 
-        if ($result['success']) {
+        if (!$result['success']) return [];
+
+        $agents = $result['data'] ?? [];
+        $ids = [];
+
+        // Primary agent
+        if ($property->agent_id) {
             $sourceRef = 'CoreX-Agent-' . $property->agent_id;
-            foreach ($result['data'] ?? [] as $agent) {
+            foreach ($agents as $agent) {
                 if (($agent['sourceReference'] ?? '') === $sourceRef) {
-                    return [(int) $agent['id']];
+                    $ids[] = (int) $agent['id'];
+                    break;
                 }
             }
         }
 
-        // Fallback: if no agent found, return empty (P24 will use agency default)
-        return [];
+        // Second agent
+        if ($property->pp_second_agent_id) {
+            $sourceRef = 'CoreX-Agent-' . $property->pp_second_agent_id;
+            foreach ($agents as $agent) {
+                if (($agent['sourceReference'] ?? '') === $sourceRef) {
+                    $ids[] = (int) $agent['id'];
+                    break;
+                }
+            }
+        }
+
+        return $ids;
     }
 
     private function mapListingType(?string $type): string
