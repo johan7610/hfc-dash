@@ -467,11 +467,21 @@
                                 </div>
                             </div>
                             <div x-show="status && status !== ''" x-cloak class="text-[11px] px-1" style="color:var(--text-secondary);">
-                                <template x-if="p24Ref"><span>P24 Ref: <a :href="p24ListingUrl()" target="_blank" class="font-semibold no-underline" style="color:#3b82f6;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'" x-text="p24Ref"></a> &mdash; <span x-text="statusLabel()"></span></span></template>
+                                <template x-if="p24Ref"><span>P24 Ref: <strong x-text="p24Ref" style="color:var(--text-primary);"></strong> &mdash; <span x-text="statusLabel()"></span></span></template>
                                 <template x-if="!p24Ref && status === 'submitted'"><span>Submitted, awaiting activation...</span></template>
                                 <template x-if="!p24Ref && status === 'pending'"><span>Ready to submit</span></template>
                                 <template x-if="status === 'error'"><span style="color:#ef4444;" x-text="'Error: ' + lastError"></span></template>
                                 <template x-if="status === 'deactivated'"><span style="color:var(--text-muted);">Deactivated</span></template>
+                            </div>
+                            {{-- View on P24 link --}}
+                            <div x-show="p24Ref && (status === 'active' || status === 'submitted')" x-cloak class="px-1">
+                                <a :href="p24ListingUrl()" target="_blank"
+                                   class="inline-flex items-center gap-1.5 text-[11px] font-semibold no-underline"
+                                   style="color:#3b82f6;"
+                                   onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+                                    View on Property24
+                                </a>
                             </div>
                             {{-- Missing fields warning --}}
                             <div x-show="enabled && missingFields.length > 0" x-cloak
@@ -2109,6 +2119,90 @@
                 </div>
             </div>
         @endif {{-- /!$isNew gallery --}}
+
+            {{-- ── PORTAL AGENTS SECTION ─────────────────────────────────────── --}}
+            @if(!$isNew)
+            <div>
+                <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Portal Agents</h3>
+                <p class="text-[11px] mb-4" style="color:var(--text-muted);">These agents appear on portal listings (Property24, Private Property). Their profile photo is synced to the portals when a listing is submitted.</p>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {{-- Primary Agent --}}
+                    @if($property->agent)
+                    <div class="rounded-md p-4 flex items-start gap-4" style="background:var(--surface-2); border:1px solid var(--border);">
+                        @if($property->agent->agent_photo_path)
+                        <img src="{{ asset('storage/' . $property->agent->agent_photo_path) }}" alt="{{ $property->agent->name }}"
+                             class="w-16 h-20 rounded-md object-cover flex-shrink-0"
+                             style="border:1px solid var(--border);">
+                        @else
+                        <div class="w-16 h-20 rounded-md flex items-center justify-center flex-shrink-0 text-sm font-bold text-white"
+                             style="background:linear-gradient(135deg,#1e3a5f,#0ea5e9);">
+                            {{ strtoupper(substr($property->agent->name, 0, 2)) }}
+                        </div>
+                        @endif
+                        <div class="min-w-0 flex-1 space-y-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-bold truncate" style="color:var(--text-primary);">{{ $property->agent->name }}</span>
+                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide"
+                                      style="background:rgba(59,130,246,0.12); color:#3b82f6;">Primary</span>
+                            </div>
+                            @if($property->agent->email)
+                            <div class="text-xs truncate" style="color:var(--text-secondary);">{{ $property->agent->email }}</div>
+                            @endif
+                            @if($property->agent->cell ?? $property->agent->phone ?? null)
+                            <div class="text-xs" style="color:var(--text-secondary);">{{ $property->agent->cell ?? $property->agent->phone }}</div>
+                            @endif
+                            @if(!$property->agent->agent_photo_path)
+                            <div class="flex items-center gap-1.5 mt-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="#f59e0b" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
+                                <span class="text-[10px]" style="color:#f59e0b;">No photo — upload via Admin &gt; Users to sync to portals</span>
+                            </div>
+                            @endif
+                        </div>
+                    </div>
+                    @endif
+
+                    {{-- Second Agent (if assigned) --}}
+                    @if($property->pp_second_agent_id)
+                    @php $secondAgent = \App\Models\User::find($property->pp_second_agent_id); @endphp
+                    @if($secondAgent)
+                    <div class="rounded-md p-4 flex items-start gap-4" style="background:var(--surface-2); border:1px solid var(--border);">
+                        @if($secondAgent->agent_photo_path)
+                        <img src="{{ asset('storage/' . $secondAgent->agent_photo_path) }}" alt="{{ $secondAgent->name }}"
+                             class="w-16 h-20 rounded-md object-cover flex-shrink-0"
+                             style="border:1px solid var(--border);">
+                        @else
+                        <div class="w-16 h-20 rounded-md flex items-center justify-center flex-shrink-0 text-sm font-bold text-white"
+                             style="background:linear-gradient(135deg,#1e3a5f,#0ea5e9);">
+                            {{ strtoupper(substr($secondAgent->name, 0, 2)) }}
+                        </div>
+                        @endif
+                        <div class="min-w-0 flex-1 space-y-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-bold truncate" style="color:var(--text-primary);">{{ $secondAgent->name }}</span>
+                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide"
+                                      style="background:var(--surface-3); color:var(--text-muted);">Second</span>
+                            </div>
+                            @if($secondAgent->email)
+                            <div class="text-xs truncate" style="color:var(--text-secondary);">{{ $secondAgent->email }}</div>
+                            @endif
+                            @if($secondAgent->cell ?? $secondAgent->phone ?? null)
+                            <div class="text-xs" style="color:var(--text-secondary);">{{ $secondAgent->cell ?? $secondAgent->phone }}</div>
+                            @endif
+                            @if(!$secondAgent->agent_photo_path)
+                            <div class="flex items-center gap-1.5 mt-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="#f59e0b" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
+                                <span class="text-[10px]" style="color:#f59e0b;">No photo — upload via Admin &gt; Users</span>
+                            </div>
+                            @endif
+                        </div>
+                    </div>
+                    @endif
+                    @endif
+                </div>
+            </div>
+            @endif
+
         </div>
 
         {{-- ── CONTACTS TAB ─────────────────────────────────────────────────── --}}
@@ -3446,7 +3540,7 @@ function p24Syndication(config) {
         },
         p24ListingUrl() {
             const domain = this.isSandbox ? 'www.exdev.property24-test.com' : 'www.property24.com';
-            const slug = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || '-';
+            const slug = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'property';
             const section = this.listingType === 'rental' ? 'to-rent' : 'for-sale';
             return `https://${domain}/${section}/${slug(this.suburb)}/${slug(this.city)}/${slug(this.province)}/${this.suburbId || '0'}/${this.p24Ref}`;
         },
