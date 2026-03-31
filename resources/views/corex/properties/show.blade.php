@@ -187,7 +187,7 @@
 
     {{-- Syndication bar --}}
     @if(!$isNew)
-    <div class="flex items-center justify-end px-4 py-2"
+    <div class="flex items-center justify-end gap-2 px-4 py-2"
          style="border-bottom:1px solid var(--border);"
          x-data="{ synOpen: false, synStep: 'main' }">
         <div class="relative">
@@ -216,11 +216,12 @@
                  x-transition:leave="transition ease-in duration-100"
                  x-transition:leave-start="opacity-100 translate-y-0"
                  x-transition:leave-end="opacity-0 translate-y-1"
-                 class="absolute right-0 top-full mt-2 z-50 rounded-md shadow-2xl overflow-hidden"
-                 style="width:260px; background:var(--surface); border:1px solid var(--border);">
+                 class="absolute right-0 top-full mt-2 z-50 rounded-md shadow-2xl"
+                 style="width:380px; max-height:80vh; overflow-y:auto; background:var(--surface); border:1px solid var(--border);">
 
                 {{-- Step: main --}}
-                <div x-show="synStep === 'main'" class="p-4 space-y-3">
+                <div x-show="synStep === 'main'" class="p-4 space-y-4">
+                    {{-- Website publish section --}}
                     <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--text-muted);">Publish to Website</p>
 
                     @if(!$property->isPublished())
@@ -250,8 +251,6 @@
                     </div>
                     @endif
 
-                    <div style="border-top:1px solid var(--border);"></div>
-
                     <button type="button"
                             @click="synStep = 'preview'"
                             class="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold"
@@ -260,6 +259,314 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.641 0-8.58-3.007-9.964-7.178Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
                         Live Preview
                     </button>
+
+                    {{-- Portal Syndication section --}}
+                    <div style="border-top:1px solid var(--border); margin-top:4px; padding-top:12px;">
+                        <p class="text-[10px] font-bold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Portal Syndication</p>
+
+                        @php
+                            $ppConfig = [
+                                'propertyId'      => $property->id,
+                                'enabled'         => (bool) $property->pp_syndication_enabled,
+                                'status'          => $property->pp_syndication_status ?? '',
+                                'ppRef'           => $property->pp_ref ?? '',
+                                'lastSubmitted'   => $property->pp_last_submitted_at ? $property->pp_last_submitted_at->format('d M Y H:i') : '',
+                                'lastError'       => $property->pp_last_error ?? '',
+                                'exclusiveDays'   => (int) ($property->pp_exclusive_days ?? 0),
+                                'mandateType'     => $property->mandate_type ?? '',
+                                'activatedAt'     => $property->pp_activated_at ? $property->pp_activated_at->format('d M Y H:i') : '',
+                                'csrfToken'       => csrf_token(),
+                                'missingFields'   => $ppMissingFields ?? [],
+                                'hideStreetName'  => (bool) ($property->pp_hide_street_name ?? false),
+                                'hideStreetNumber'=> (bool) ($property->pp_hide_street_number ?? false),
+                                'hideComplexName' => (bool) ($property->pp_hide_complex_name ?? false),
+                                'hideUnitNumber'  => (bool) ($property->pp_hide_unit_number ?? false),
+                            ];
+                        @endphp
+                        <div x-data="ppSyndication({{ Js::from($ppConfig) }})" @click.stop class="space-y-3">
+
+                            {{-- Private Property toggle row --}}
+                            <div class="flex items-center justify-between gap-3 px-3 py-2 rounded-md cursor-pointer"
+                                 style="background:var(--surface-2); border:1px solid var(--border);"
+                                 @click="toggleEnabled()"
+                                 :style="enabled ? 'background:rgba(0,212,170,0.06); border-color:rgba(0,212,170,0.25);' : 'background:var(--surface-2); border-color:var(--border);'">
+                                <div class="flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" :style="enabled ? 'color:#00d4aa' : 'color:var(--text-muted)'">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418" />
+                                    </svg>
+                                    <span class="text-xs font-semibold" style="color:var(--text-primary);">Private Property</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    {{-- Toggle switch --}}
+                                    <div class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full transition-colors duration-200"
+                                         :style="enabled ? 'background:#00d4aa' : 'background:var(--surface-3,#374151)'"
+                                         role="switch"
+                                         :aria-checked="enabled">
+                                        <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-sm transition-transform duration-200"
+                                              style="background:#fff; margin-top:2px;"
+                                              :style="enabled ? 'transform:translateX(18px); margin-left:1px;' : 'transform:translateX(2px); margin-left:1px;'"></span>
+                                    </div>
+                                    {{-- Status badge --}}
+                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide"
+                                          :style="statusBadgeStyle()" x-text="statusLabel()"></span>
+                                </div>
+                            </div>
+
+                            {{-- Status line --}}
+                            <div x-show="status && status !== ''" x-cloak class="text-[11px] px-1" style="color:var(--text-secondary);">
+                                <template x-if="ppRef">
+                                    <span>PP Ref: <strong x-text="ppRef" style="color:var(--text-primary);"></strong> &mdash; <span x-text="statusLabel()"></span></span>
+                                </template>
+                                <template x-if="!ppRef && status === 'submitted'">
+                                    <span>Submitted, awaiting activation...</span>
+                                </template>
+                                <template x-if="!ppRef && status === 'pending'">
+                                    <span>Ready to submit</span>
+                                </template>
+                                <template x-if="status === 'error'">
+                                    <span style="color:#ef4444;" x-text="'Error: ' + lastError"></span>
+                                </template>
+                                <template x-if="status === 'deactivated'">
+                                    <span style="color:var(--text-muted);">Deactivated</span>
+                                </template>
+                            </div>
+
+                            {{-- Missing fields warning --}}
+                            <div x-show="enabled && missingFields.length > 0" x-cloak
+                                 class="rounded-md px-3 py-2.5 space-y-1.5"
+                                 style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25);">
+                                <p class="text-[11px] font-semibold" style="color:#f59e0b;">Cannot submit — missing required fields:</p>
+                                <ul class="space-y-0.5 m-0 pl-3" style="list-style:disc;">
+                                    <template x-for="(f, idx) in missingFields" :key="idx">
+                                        <li class="text-[11px]" style="color:#f59e0b;">
+                                            <span x-text="f.label"></span>
+                                            <span class="opacity-60" x-text="'(' + f.tab + ' tab)'"></span>
+                                        </li>
+                                    </template>
+                                </ul>
+                            </div>
+
+                            {{-- Exclusive days auto-calculated from Listed Date → Expiry Date for sole mandates --}}
+                            @if(in_array(strtolower($property->mandate_type ?? ''), ['sole', 'sole mandate']) && ($property->listing_type ?? 'sale') === 'sale' && $property->listed_date && $property->expiry_date)
+                            <div x-show="enabled" x-cloak class="flex items-center gap-2">
+                                <span class="text-[11px]" style="color:var(--text-secondary);">Exclusive:</span>
+                                <span class="text-[11px] font-medium" style="color:var(--text-primary);">{{ $property->listed_date->diffInDays($property->expiry_date) }} days</span>
+                                <span class="text-[10px]" style="color:var(--text-muted);">({{ $property->listed_date->format('d M') }} – {{ $property->expiry_date->format('d M Y') }})</span>
+                            </div>
+                            @endif
+
+                            {{-- Action buttons --}}
+                            <div x-show="enabled" x-cloak class="flex flex-wrap gap-2">
+                                <button type="button"
+                                        @click.stop="submitListing()"
+                                        :disabled="loading || missingFields.length > 0"
+                                        class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
+                                        :style="missingFields.length > 0 ? 'background:#374151; color:#6b7280; cursor:not-allowed;' : 'background:#00d4aa; color:#fff;'"
+                                        :class="missingFields.length === 0 ? 'hover:opacity-85' : ''">
+                                    <svg x-show="!loading" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
+                                    <svg x-show="loading" x-cloak class="w-3.5 h-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                                    <span x-text="loading ? 'Submitting...' : 'Submit to PP'"></span>
+                                </button>
+                                {{-- Reactivate button (for deactivated listings) --}}
+                                <button type="button"
+                                        x-show="status === 'deactivated'"
+                                        @click.stop="reactivateListing()"
+                                        :disabled="loading"
+                                        class="px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
+                                        style="background:rgba(0,212,170,0.10); color:#00d4aa; border:1px solid rgba(0,212,170,0.25);"
+                                        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+                                    Reactivate
+                                </button>
+                                {{-- Deactivate button --}}
+                                <button type="button"
+                                        x-show="status === 'submitted' || status === 'active'"
+                                        @click.stop="deactivateListing()"
+                                        :disabled="loading"
+                                        class="px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
+                                        style="background:rgba(239,68,68,0.10); color:#ef4444; border:1px solid rgba(239,68,68,0.25);"
+                                        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+                                    Deactivate
+                                </button>
+                            </div>
+
+                            {{-- Last submitted timestamp --}}
+                            <div x-show="lastSubmitted" x-cloak class="text-[10px]" style="color:var(--text-muted);">
+                                Last submitted: <span x-text="lastSubmitted"></span>
+                            </div>
+
+                            {{-- Toast message (success only) --}}
+                            <div x-show="message && messageType === 'success'" x-cloak
+                                 x-transition
+                                 class="px-3 py-2 rounded-md text-[11px] font-medium"
+                                 style="background:rgba(0,212,170,0.10); color:#00d4aa; border:1px solid rgba(0,212,170,0.25);"
+                                 x-text="message"></div>
+
+                            {{-- Debug error panel --}}
+                            <div x-show="showDebug && debugErrors.length > 0" x-cloak
+                                 x-transition
+                                 class="rounded-md space-y-2"
+                                 style="background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.25); padding:10px 12px;">
+                                <div class="flex items-center justify-between">
+                                    <p class="text-[11px] font-bold" style="color:#ef4444;">Submission Failed</p>
+                                    <button type="button" @click.stop="showDebug = false; debugErrors = []"
+                                            class="text-[10px] px-1.5 py-0.5 rounded"
+                                            style="color:var(--text-muted); background:var(--surface-2);">
+                                        Dismiss
+                                    </button>
+                                </div>
+                                <ul class="space-y-1 m-0 pl-3" style="list-style:disc;">
+                                    <template x-for="(err, i) in debugErrors" :key="i">
+                                        <li class="text-[11px] break-words" style="color:#f87171; word-break:break-word;"
+                                            x-text="err"></li>
+                                    </template>
+                                </ul>
+                            </div>
+                        </div>
+
+                        {{-- Property24 Syndication Panel --}}
+                        @php
+                            $p24Config = [
+                                'propertyId'      => $property->id,
+                                'enabled'         => (bool) $property->p24_syndication_enabled,
+                                'status'          => $property->p24_syndication_status ?? '',
+                                'p24Ref'          => $property->p24_ref ?? '',
+                                'lastSubmitted'   => $property->p24_last_submitted_at ? $property->p24_last_submitted_at->format('d M Y H:i') : '',
+                                'lastError'       => $property->p24_last_error ?? '',
+                                'activatedAt'     => $property->p24_activated_at ? $property->p24_activated_at->format('d M Y H:i') : '',
+                                'csrfToken'       => csrf_token(),
+                                'isSandbox'       => (bool) config('services.property24_syndication.sandbox'),
+                                'suburb'          => $property->suburb ?? '',
+                                'city'            => $property->town ?? $property->city ?? '',
+                                'province'        => $property->province ?? 'kwazulu-natal',
+                                'suburbId'        => $property->pp_suburb_id ? (\App\Models\P24Suburb::find($property->pp_suburb_id)?->p24_id ?? '') : (\App\Models\P24Suburb::lookup($property->suburb ?? '')?->p24_id ?? ''),
+                                'listingType'     => strtolower($property->listing_type ?? 'sale'),
+                                'missingFields'   => $p24MissingFields ?? [],
+                            ];
+                        @endphp
+                        <div x-data="p24Syndication({{ Js::from($p24Config) }})" @click.stop class="space-y-3 mt-2">
+                            <div class="flex items-center justify-between gap-3 px-3 py-2 rounded-md cursor-pointer"
+                                 style="background:var(--surface-2); border:1px solid var(--border);"
+                                 @click="toggleEnabled()"
+                                 :style="enabled ? 'background:rgba(59,130,246,0.06); border-color:rgba(59,130,246,0.25);' : 'background:var(--surface-2); border-color:var(--border);'">
+                                <div class="flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" :style="enabled ? 'color:#3b82f6' : 'color:var(--text-muted)'">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418" />
+                                    </svg>
+                                    <span class="text-xs font-semibold" style="color:var(--text-primary);">Property24</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <div class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full transition-colors duration-200"
+                                         :style="enabled ? 'background:#3b82f6' : 'background:var(--surface-3,#374151)'"
+                                         role="switch" :aria-checked="enabled">
+                                        <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-sm transition-transform duration-200"
+                                              style="background:#fff; margin-top:2px;"
+                                              :style="enabled ? 'transform:translateX(18px); margin-left:1px;' : 'transform:translateX(2px); margin-left:1px;'"></span>
+                                    </div>
+                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide"
+                                          :style="statusBadgeStyle()" x-text="statusLabel()"></span>
+                                </div>
+                            </div>
+                            {{-- Status line --}}
+                            <div x-show="status && status !== ''" x-cloak class="text-[11px] px-1" style="color:var(--text-secondary);">
+                                <template x-if="p24Ref"><span>P24 Ref: <strong x-text="p24Ref" style="color:var(--text-primary);"></strong> &mdash; <span x-text="statusLabel()"></span></span></template>
+                                <template x-if="!p24Ref && status === 'submitted'"><span>Submitted, awaiting activation...</span></template>
+                                <template x-if="!p24Ref && status === 'pending'"><span>Ready to submit</span></template>
+                                <template x-if="status === 'error'"><span style="color:#ef4444;" x-text="'Error: ' + lastError"></span></template>
+                                <template x-if="status === 'deactivated'"><span style="color:var(--text-muted);">Deactivated</span></template>
+                            </div>
+
+                            {{-- Missing fields warning --}}
+                            <div x-show="enabled && !p24Ref && missingFields.length > 0" x-cloak
+                                 class="rounded-md px-3 py-2.5 space-y-1.5"
+                                 style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25);">
+                                <p class="text-[11px] font-semibold" style="color:#f59e0b;">Cannot submit — missing required fields:</p>
+                                <ul class="space-y-0.5 m-0 pl-3" style="list-style:disc;">
+                                    <template x-for="(f, idx) in missingFields" :key="idx">
+                                        <li class="text-[11px]" style="color:#f59e0b;" x-text="f.label"></li>
+                                    </template>
+                                </ul>
+                            </div>
+
+                            {{-- Submit button — only shown before first successful submission --}}
+                            <div x-show="enabled && !p24Ref && status !== 'active' && status !== 'submitted'" x-cloak class="flex flex-wrap gap-2">
+                                <button type="button"
+                                        @click.stop="submitListing()"
+                                        :disabled="loading || missingFields.length > 0"
+                                        class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
+                                        :style="missingFields.length > 0 ? 'background:#374151; color:#6b7280; cursor:not-allowed;' : 'background:#3b82f6; color:#fff;'"
+                                        :class="missingFields.length === 0 ? 'hover:opacity-85' : ''">
+                                    <svg x-show="!loading" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
+                                    <svg x-show="loading" x-cloak class="w-3.5 h-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                                    <span x-text="loading ? 'Submitting...' : 'Submit to P24'"></span>
+                                </button>
+                                {{-- Reactivate (for deactivated, no ref yet edge case) --}}
+                                <button type="button" x-show="status === 'deactivated'" @click.stop="reactivateListing()" :disabled="loading"
+                                        class="px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
+                                        style="background:rgba(59,130,246,0.10); color:#3b82f6; border:1px solid rgba(59,130,246,0.25);"
+                                        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+                                    Reactivate
+                                </button>
+                            </div>
+
+                            {{-- Active listing actions: View · Refresh · Deactivate --}}
+                            <div x-show="enabled && p24Ref && (status === 'active' || status === 'submitted')" x-cloak class="flex flex-wrap gap-2">
+                                <a :href="p24ListingUrl()" target="_blank"
+                                   class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold no-underline transition-opacity hover:opacity-85"
+                                   style="background:#3b82f6; color:#fff;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+                                    View on P24
+                                </a>
+                                <button type="button" @click.stop="refreshListing()" :disabled="loading"
+                                        class="px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
+                                        style="background:rgba(59,130,246,0.10); color:#3b82f6; border:1px solid rgba(59,130,246,0.25);"
+                                        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+                                    <span x-text="loading ? 'Syncing...' : 'Refresh'"></span>
+                                </button>
+                                <button type="button" @click.stop="deactivateListing()" :disabled="loading"
+                                        class="px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
+                                        style="background:rgba(239,68,68,0.10); color:#ef4444; border:1px solid rgba(239,68,68,0.25);"
+                                        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+                                    Deactivate
+                                </button>
+                            </div>
+
+                            {{-- Deactivated listing actions: Reactivate --}}
+                            <div x-show="enabled && p24Ref && status === 'deactivated'" x-cloak class="flex flex-wrap gap-2">
+                                <button type="button" @click.stop="reactivateListing()" :disabled="loading"
+                                        class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
+                                        style="background:rgba(59,130,246,0.10); color:#3b82f6; border:1px solid rgba(59,130,246,0.25);"
+                                        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+                                    Reactivate
+                                </button>
+                            </div>
+
+                            {{-- Last submitted timestamp --}}
+                            <div x-show="lastSubmitted" x-cloak class="text-[10px]" style="color:var(--text-muted);">
+                                Last submitted: <span x-text="lastSubmitted"></span>
+                            </div>
+
+                            {{-- Toast message --}}
+                            <div x-show="message && messageType === 'success'" x-cloak x-transition
+                                 class="px-3 py-2 rounded-md text-[11px] font-medium"
+                                 style="background:rgba(59,130,246,0.10); color:#3b82f6; border:1px solid rgba(59,130,246,0.25);"
+                                 x-text="message"></div>
+
+                            {{-- Error panel --}}
+                            <div x-show="showDebug && debugErrors.length > 0" x-cloak x-transition
+                                 class="rounded-md space-y-2"
+                                 style="background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.25); padding:10px 12px;">
+                                <div class="flex items-center justify-between">
+                                    <p class="text-[11px] font-bold" style="color:#ef4444;">Submission Failed</p>
+                                    <button type="button" @click.stop="showDebug = false; debugErrors = []" class="text-[10px] px-1.5 py-0.5 rounded" style="color:var(--text-muted); background:var(--surface-2);">Dismiss</button>
+                                </div>
+                                <ul class="space-y-1 m-0 pl-3" style="list-style:disc;">
+                                    <template x-for="(err, i) in debugErrors" :key="i">
+                                        <li class="text-[11px] break-words" style="color:#f87171; word-break:break-word;" x-text="err"></li>
+                                    </template>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 {{-- Step: preview agent choice --}}
@@ -502,6 +809,13 @@
                                 @endforeach
                             </select>
                         </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Listing Type</label>
+                            <select name="listing_type" class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                <option value="sale" {{ old('listing_type', $property->listing_type ?? 'sale') === 'sale' ? 'selected' : '' }}>For Sale</option>
+                                <option value="rental" {{ old('listing_type', $property->listing_type ?? 'sale') === 'rental' ? 'selected' : '' }}>For Rental</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -515,12 +829,23 @@
                                    class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
                         </div>
-                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            <div>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3" x-data="{ showPriceModal: false }">
+                            <div class="relative">
                                 <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Price (ZAR) <span class="text-red-400">*</span></label>
-                                <input type="number" name="price" value="{{ old('price', $property->price) }}" required min="0"
-                                       class="w-full rounded-md px-3 py-2 text-sm"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                <div class="flex">
+                                    <input type="number" name="price" value="{{ old('price', $property->price) }}" required min="0"
+                                           class="w-full rounded-l-md px-3 py-2 text-sm"
+                                           style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); border-right:none;">
+                                    <button type="button" @click="showPriceModal = true"
+                                            class="px-2 rounded-r-md flex items-center justify-center transition-colors hover:opacity-80"
+                                            style="background:var(--brand-button, #0ea5e9); border:1px solid var(--brand-button, #0ea5e9);"
+                                            title="Pricing details">
+                                        <svg class="w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+                                    </button>
+                                </div>
+                                @if($property->price_on_application)
+                                <span class="text-[10px] mt-0.5 block font-medium" style="color:var(--brand-icon, #0ea5e9);">Price on Application</span>
+                                @endif
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Rates & Taxes</label>
@@ -543,6 +868,160 @@
                                        class="w-full rounded-md px-3 py-2 text-sm"
                                        style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
                             </div>
+
+                            {{-- Price Details Modal --}}
+                            <template x-teleport="body">
+                                <div x-show="showPriceModal" x-cloak
+                                     class="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+                                     @keydown.escape.window="showPriceModal = false">
+                                    <div class="absolute inset-0" style="background:rgba(0,0,0,0.6);" @click="showPriceModal = false"></div>
+                                    <div class="relative w-full max-w-lg rounded-lg shadow-xl overflow-hidden"
+                                         style="background:var(--surface); border:1px solid var(--border);"
+                                         @click.stop>
+                                        {{-- Header --}}
+                                        <div class="px-5 py-3 flex items-center justify-between" style="background:var(--surface-2); border-bottom:1px solid var(--border);">
+                                            <h3 class="text-sm font-bold uppercase tracking-wider" style="color:var(--text-primary);">Pricing Details</h3>
+                                            <button type="button" @click="showPriceModal = false" class="p-1 rounded-md hover:opacity-70" style="color:var(--text-muted);">
+                                                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                                            </button>
+                                        </div>
+
+                                        {{-- Body --}}
+                                        <div class="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+
+                                            {{-- Price per Month --}}
+                                            <div class="flex items-center justify-between gap-3">
+                                                <label class="text-xs font-semibold whitespace-nowrap" style="color:var(--text-secondary);">Price per Month</label>
+                                                <div class="flex items-center gap-2">
+                                                    <span class="text-xs" style="color:var(--text-muted);">ZAR</span>
+                                                    <span class="text-sm font-bold tabular-nums" style="color:var(--text-primary);">{{ number_format($property->price ?? 0, 0, '.', ',') }}</span>
+                                                </div>
+                                            </div>
+
+                                            {{-- Price On Application --}}
+                                            <div class="flex items-center justify-between gap-3">
+                                                <label class="text-xs font-semibold" style="color:var(--text-secondary);">Price On Application</label>
+                                                <label class="relative inline-flex items-center cursor-pointer">
+                                                    <input type="checkbox" name="price_on_application" value="1"
+                                                           {{ old('price_on_application', $property->price_on_application) ? 'checked' : '' }}
+                                                           class="sr-only peer">
+                                                    <div class="w-9 h-5 rounded-full peer transition-colors"
+                                                         style="background:var(--surface-2); border:1px solid var(--border);"
+                                                         :class="{ '!bg-[var(--brand-button)]': $el.previousElementSibling.checked }"></div>
+                                                    <div class="absolute left-[2px] top-[2px] bg-white w-4 h-4 rounded-full transition-transform peer-checked:translate-x-full shadow-sm"></div>
+                                                </label>
+                                            </div>
+
+                                            {{-- Has Deposit --}}
+                                            <div class="flex items-center justify-between gap-3">
+                                                <label class="text-xs font-semibold" style="color:var(--text-secondary);">Has Deposit</label>
+                                                <label class="relative inline-flex items-center cursor-pointer">
+                                                    <input type="checkbox" name="has_deposit" value="1"
+                                                           {{ old('has_deposit', $property->has_deposit) ? 'checked' : '' }}
+                                                           class="sr-only peer">
+                                                    <div class="w-9 h-5 rounded-full peer transition-colors"
+                                                         style="background:var(--surface-2); border:1px solid var(--border);"></div>
+                                                    <div class="absolute left-[2px] top-[2px] bg-white w-4 h-4 rounded-full transition-transform peer-checked:translate-x-full shadow-sm"></div>
+                                                </label>
+                                            </div>
+
+                                            <div style="border-top:1px solid var(--border);"></div>
+
+                                            {{-- Lease Period --}}
+                                            <div class="flex items-center justify-between gap-3">
+                                                <label class="text-xs font-semibold" style="color:var(--text-secondary);">Lease Period</label>
+                                                <input type="text" name="lease_period" value="{{ old('lease_period', $property->lease_period) }}"
+                                                       placeholder="e.g. 12 Months"
+                                                       class="w-40 rounded-md px-3 py-1.5 text-xs text-right"
+                                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                            </div>
+
+                                            {{-- Price per m2 (auto-calculated) --}}
+                                            <div class="flex items-center justify-between gap-3">
+                                                <label class="text-xs font-semibold" style="color:var(--text-secondary);">Price per m&sup2;</label>
+                                                <span class="text-xs font-medium tabular-nums" style="color:var(--text-muted);">
+                                                    @if($property->price && $property->size_m2 && $property->size_m2 > 0)
+                                                        R {{ number_format($property->price / $property->size_m2, 2, '.', ',') }}
+                                                        <span class="text-[10px] opacity-60">(auto)</span>
+                                                    @else
+                                                        —
+                                                    @endif
+                                                </span>
+                                            </div>
+
+                                            <div style="border-top:1px solid var(--border);"></div>
+
+                                            {{-- Optional pricing rows --}}
+                                            @foreach([
+                                                ['price_per_day',  'Price per Day',  'optional'],
+                                                ['price_per_week', 'Price per Week', 'optional'],
+                                                ['price_per_year', 'Price per Year', 'optional'],
+                                            ] as [$field, $label, $hint])
+                                            <div class="flex items-center justify-between gap-3">
+                                                <label class="text-xs font-semibold" style="color:var(--text-secondary);">{{ $label }}</label>
+                                                <div class="flex items-center gap-1">
+                                                    <input type="number" name="{{ $field }}" value="{{ old($field, $property->$field) }}"
+                                                           placeholder="{{ $hint }}" min="0" step="0.01"
+                                                           class="w-32 rounded-md px-3 py-1.5 text-xs text-right"
+                                                           style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                                </div>
+                                            </div>
+                                            @endforeach
+
+                                            <div style="border-top:1px solid var(--border);"></div>
+
+                                            {{-- Lease Type --}}
+                                            <div class="flex items-center justify-between gap-3">
+                                                <label class="text-xs font-semibold" style="color:var(--text-secondary);">Lease Type</label>
+                                                <select name="lease_type" class="w-40 rounded-md px-3 py-1.5 text-xs"
+                                                        style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                                    <option value="">— Select —</option>
+                                                    @foreach(['N Triple Net', 'Gross', 'Modified Gross', 'Percentage'] as $lt)
+                                                    <option value="{{ $lt }}" {{ old('lease_type', $property->lease_type) === $lt ? 'selected' : '' }}>{{ $lt }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+
+                                            {{-- Gross / Net / Yard --}}
+                                            @foreach([
+                                                ['gross_price', 'Gross Price', 'optional'],
+                                                ['net_price',   'Net Price',   'optional'],
+                                                ['yard_price',  'Yard Price',  'optional'],
+                                            ] as [$field, $label, $hint])
+                                            <div class="flex items-center justify-between gap-3">
+                                                <label class="text-xs font-semibold" style="color:var(--text-secondary);">{{ $label }}</label>
+                                                <input type="number" name="{{ $field }}" value="{{ old($field, $property->$field) }}"
+                                                       placeholder="{{ $hint }}" min="0" step="0.01"
+                                                       class="w-32 rounded-md px-3 py-1.5 text-xs text-right"
+                                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                            </div>
+                                            @endforeach
+
+                                            <div style="border-top:1px solid var(--border);"></div>
+
+                                            {{-- Show / Primary Display --}}
+                                            <div class="flex items-center justify-between gap-3">
+                                                <label class="text-xs font-semibold" style="color:var(--text-secondary);">Show</label>
+                                                <select name="primary_price_display" class="w-48 rounded-md px-3 py-1.5 text-xs"
+                                                        style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                                    @foreach(['monthly' => 'Monthly Price as Primary', 'daily' => 'Daily Price as Primary', 'weekly' => 'Weekly Price as Primary', 'yearly' => 'Yearly Price as Primary'] as $val => $lbl)
+                                                    <option value="{{ $val }}" {{ old('primary_price_display', $property->primary_price_display ?? 'monthly') === $val ? 'selected' : '' }}>{{ $lbl }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {{-- Footer --}}
+                                        <div class="px-5 py-3 flex justify-end" style="background:var(--surface-2); border-top:1px solid var(--border);">
+                                            <button type="button" @click="showPriceModal = false"
+                                                    class="px-4 py-2 rounded-md text-xs font-semibold text-white transition-opacity hover:opacity-80"
+                                                    style="background:var(--brand-button, #0ea5e9);">
+                                                Done
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
                         </div>
 
                         <div class="grid grid-cols-3 gap-3">
@@ -685,11 +1164,13 @@
                                 <template x-for="feat in featureCategories[featureCategoryTab].features" :key="feat">
                                     <button type="button"
                                             @click="toggleGlobalFeature(featureCategoryTab, feat)"
-                                            class="text-xs px-2.5 py-1 rounded-full transition-colors"
+                                            class="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full transition-colors"
                                             :style="features[featureCategoryTab] && features[featureCategoryTab].includes(feat)
                                                 ? 'background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 15%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 35%, transparent);'
-                                                : 'background:var(--surface); color:var(--text-secondary); border:1px solid var(--border);'"
-                                            x-text="feat">
+                                                : 'background:var(--surface); color:var(--text-secondary); border:1px solid var(--border);'">
+                                        <span x-text="feat"></span>
+                                        <svg x-show="features[featureCategoryTab] && features[featureCategoryTab].includes(feat)"
+                                             xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                                     </button>
                                 </template>
                             </div>
@@ -707,9 +1188,13 @@
                         <div class="flex flex-wrap gap-1.5 rounded-md p-3 min-h-[44px]" style="border:1px solid var(--border); background:var(--surface-2);">
                             <span x-show="allFeaturesFlat.length === 0" class="text-xs italic" style="color:var(--text-muted);">No features selected yet</span>
                             <template x-for="feat in allFeaturesFlat" :key="feat">
-                                <span class="text-xs px-2.5 py-1 rounded-full font-medium"
-                                      style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 10%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 20%, transparent);"
-                                      x-text="feat"></span>
+                                <button type="button"
+                                        @click="removeFeatureByName(feat)"
+                                        class="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium transition-opacity hover:opacity-75 cursor-pointer"
+                                        style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 10%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 20%, transparent);">
+                                    <span x-text="feat"></span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
                             </template>
                         </div>
                     </div>
@@ -971,37 +1456,276 @@
                     </div>
                 </div>
 
-                {{-- Address --}}
-                <div>
-                    <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Address</h3>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div class="sm:col-span-2">
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Full Address</label>
-                            <input type="text" name="address" value="{{ old('address', $property->address) }}"
-                                   placeholder="e.g. 21 Dee Road"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                {{-- Property Address --}}
+                <div x-data="propertyAddress({{ Js::from([
+                    'streetNumber' => old('street_number', $property->street_number ?? ''),
+                    'streetName' => old('street_name', $property->street_name ?? ''),
+                    'complexName' => old('complex_name', $property->complex_name ?? ''),
+                    'unitNumber' => old('unit_number', $property->unit_number ?? ''),
+                    'suburb' => old('suburb', $property->suburb ?? ''),
+                    'city' => old('city', $property->city ?? ''),
+                    'province' => old('province', $property->province ?? 'KwaZulu-Natal'),
+                    'hideStreetName' => (bool) old('pp_hide_street_name', $property->pp_hide_street_name ?? false),
+                    'hideStreetNumber' => (bool) old('pp_hide_street_number', $property->pp_hide_street_number ?? false),
+                    'hideComplexName' => (bool) old('pp_hide_complex_name', $property->pp_hide_complex_name ?? false),
+                    'hideUnitNumber' => (bool) old('pp_hide_unit_number', $property->pp_hide_unit_number ?? false),
+                ]) }})">
+                    <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Property Address</h3>
+
+                    {{-- Summary rows — Internal & Public --}}
+                    <div class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
+                        {{-- Internal row --}}
+                        <div class="flex items-center cursor-pointer transition-colors"
+                             style="border-bottom:1px solid var(--border);"
+                             @click="openModal = 'internal'"
+                             @mouseenter="$el.style.background='var(--surface-2)'" @mouseleave="$el.style.background=''">
+                            <div class="px-3 py-2.5 flex items-center gap-1.5 flex-shrink-0" style="width:100px;">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" style="color:#c97a2e;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                                <span class="text-xs font-semibold" style="color:#c97a2e;">Internal</span>
+                            </div>
+                            <div class="flex-1 px-3 py-2.5 text-right text-xs truncate" style="color:var(--text-primary);" x-text="internalAddress || 'Click to set address'"></div>
                         </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Suburb <span class="text-red-400">*</span></label>
-                            <input type="text" name="suburb" value="{{ old('suburb', $property->suburb) }}" required
-                                   placeholder="e.g. Uvongo"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                        {{-- Public row --}}
+                        <div class="flex items-center cursor-pointer transition-colors"
+                             @click="openModal = 'public'"
+                             @mouseenter="$el.style.background='var(--surface-2)'" @mouseleave="$el.style.background=''">
+                            <div class="px-3 py-2.5 flex items-center gap-1.5 flex-shrink-0" style="width:100px;">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" style="color:#c93434;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418"/></svg>
+                                <span class="text-xs font-semibold" style="color:#c93434;">Public</span>
+                            </div>
+                            <div class="flex-1 px-3 py-2.5 text-right text-xs truncate" style="color:var(--text-primary);" x-text="publicAddress || 'Click to configure'"></div>
                         </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">City</label>
-                            <input type="text" name="city" value="{{ old('city', $property->city) }}"
-                                   placeholder="e.g. Margate"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                    </div>
+
+                    {{-- Hidden inputs that always submit with the form --}}
+                    <input type="hidden" name="address" value="{{ old('address', $property->address) }}">
+
+                    {{-- ===== INTERNAL MODAL ===== --}}
+                    <div x-show="openModal === 'internal'" x-cloak
+                         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                         @keydown.escape.window="openModal = null">
+                        <div class="absolute inset-0 bg-black/60" @click="openModal = null"></div>
+                        <div class="relative w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-lg shadow-2xl"
+                             style="background:var(--surface); border:1px solid var(--border);" @click.stop>
+
+                            <div class="sticky top-0 z-10 flex items-center justify-between px-5 py-3 rounded-t-lg"
+                                 style="background:var(--brand-default,#0b2a4a); color:#fff;">
+                                <div class="flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" style="color:#c97a2e;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                                    <span class="text-sm font-bold">Internal Address</span>
+                                </div>
+                                <button type="button" @click="openModal = null" class="p-1 rounded hover:bg-white/10">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+                                </button>
+                            </div>
+
+                            <div class="p-5 space-y-5">
+                                {{-- Complex or Estate --}}
+                                <div>
+                                    <div class="text-[10px] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default,#0b2a4a); color:#fff;">Complex or Estate</div>
+                                    <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Unit Number</label>
+                                                <input type="text" name="unit_number" x-model="unitNumber" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            </div>
+                                            <div>
+                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Floor Number</label>
+                                                <input type="text" name="floor_number" value="{{ old('floor_number', $property->floor_number) }}" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Name of Unit, Section or Block</label>
+                                            <input type="text" name="unit_section_block" value="{{ old('unit_section_block', $property->unit_section_block) }}" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Name of Complex or Estate</label>
+                                            <input type="text" name="complex_name" x-model="complexName" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- Street --}}
+                                <div>
+                                    <div class="text-[10px] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default,#0b2a4a); color:#fff;">Street</div>
+                                    <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
+                                        <div>
+                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Street Number</label>
+                                            <input type="text" name="street_number" x-model="streetNumber" placeholder="e.g. 1046-2" class="w-40 rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Street Name</label>
+                                            <input type="text" name="street_name" x-model="streetName" placeholder="e.g. Clarendon Road" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- City or Suburb --}}
+                                <div>
+                                    <div class="text-[10px] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default,#0b2a4a); color:#fff;">City or Suburb</div>
+                                    <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
+                                        <div>
+                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Suburb <span class="text-red-400">*</span></label>
+                                            <input type="text" name="suburb" x-model="suburb" required placeholder="e.g. Uvongo Beach" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">City / Town</label>
+                                                <input type="text" name="city" x-model="city" placeholder="e.g. Margate" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            </div>
+                                            <div>
+                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Province</label>
+                                                <select name="province" x-model="province" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                                    @foreach(['KwaZulu-Natal','Gauteng','Western Cape','Eastern Cape','Free State','Limpopo','Mpumalanga','North West','Northern Cape'] as $prov)
+                                                    <option value="{{ $prov }}">{{ $prov }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- More Info --}}
+                                <div>
+                                    <div class="text-[10px] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default,#0b2a4a); color:#fff;">More Info</div>
+                                    <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Property / Erf Number</label>
+                                                <input type="text" name="property_number" value="{{ old('property_number', $property->property_number) }}" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            </div>
+                                            <div>
+                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Stand Number</label>
+                                                <input type="text" name="stand_number" value="{{ old('stand_number', $property->stand_number) }}" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            </div>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Zone Type</label>
+                                                <select name="zone_type" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                                    <option value="">-- None --</option>
+                                                    @foreach(['Residential','Commercial','Industrial','Agricultural','Mixed Use'] as $zt)
+                                                    <option value="{{ $zt }}" {{ old('zone_type', $property->zone_type) === $zt ? 'selected' : '' }}>{{ $zt }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">District / Municipality</label>
+                                                <input type="text" name="district" value="{{ old('district', $property->district) }}" placeholder="e.g. Ray Nkonyeni" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Region</label>
+                                            <input type="text" name="region" value="{{ old('region', $property->region) }}" placeholder="KZN South Coast" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Internal Note</label>
+                                            <textarea name="address_internal_note" rows="2" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">{{ old('address_internal_note', $property->address_internal_note) }}</textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="sticky bottom-0 px-5 py-3 rounded-b-lg flex justify-end" style="background:var(--surface); border-top:1px solid var(--border);">
+                                <button type="button" @click="openModal = null" class="px-4 py-2 rounded-md text-xs font-semibold text-white" style="background:#00d4aa;">Done</button>
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Region</label>
-                            <input type="text" name="region" value="{{ old('region', $property->region) }}"
-                                   placeholder="KZN South Coast"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                    </div>
+
+                    {{-- ===== PUBLIC MODAL ===== --}}
+                    <div x-show="openModal === 'public'" x-cloak
+                         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                         @keydown.escape.window="openModal = null">
+                        <div class="absolute inset-0 bg-black/60" @click="openModal = null"></div>
+                        <div class="relative w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-lg shadow-2xl"
+                             style="background:var(--surface); border:1px solid var(--border);" @click.stop>
+
+                            <div class="sticky top-0 z-10 flex items-center justify-between px-5 py-3 rounded-t-lg"
+                                 style="background:#c93434; color:#fff;">
+                                <div class="flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3"/></svg>
+                                    <span class="text-sm font-bold">Public Address &mdash; Portal Feeds</span>
+                                </div>
+                                <button type="button" @click="openModal = null" class="p-1 rounded hover:bg-white/10">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+                                </button>
+                            </div>
+
+                            <div class="p-5 space-y-5">
+                                <p class="text-[11px]" style="color:var(--text-muted);">
+                                    This controls what is shown on portal feeds (Private Property, Property24, website). Unchecked fields are <strong>hidden</strong> from the public.
+                                </p>
+
+                                {{-- Public preview --}}
+                                <div class="rounded-md px-4 py-3" style="background:var(--surface-2); border:1px solid var(--border);">
+                                    <p class="text-[10px] font-bold uppercase tracking-wider mb-2" style="color:var(--text-muted);">Feed Preview</p>
+                                    <p class="text-sm font-semibold" style="color:var(--text-primary);" x-text="publicAddress"></p>
+                                </div>
+
+                                {{-- Visibility toggles --}}
+                                <div class="space-y-0" style="border:1px solid var(--border); border-radius:6px; overflow:hidden;">
+                                    <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid var(--border);">
+                                        <div>
+                                            <p class="text-xs font-semibold" style="color:var(--text-primary);">Street Number</p>
+                                            <p class="text-[11px]" style="color:var(--text-muted);" x-text="streetNumber || '(not set)'"></p>
+                                        </div>
+                                        <label class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200"
+                                               :style="!hideStreetNumber ? 'background:#00d4aa' : 'background:var(--surface-3,#374151)'">
+                                            <input type="checkbox" name="pp_hide_street_number" value="1" :checked="hideStreetNumber" @change="hideStreetNumber = $el.checked" class="sr-only">
+                                            <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-sm transition-transform duration-200"
+                                                  style="background:#fff; margin-top:2px;"
+                                                  :style="!hideStreetNumber ? 'transform:translateX(18px); margin-left:1px;' : 'transform:translateX(2px); margin-left:1px;'"></span>
+                                        </label>
+                                    </div>
+                                    <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid var(--border);">
+                                        <div>
+                                            <p class="text-xs font-semibold" style="color:var(--text-primary);">Street Name</p>
+                                            <p class="text-[11px]" style="color:var(--text-muted);" x-text="streetName || '(not set)'"></p>
+                                        </div>
+                                        <label class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200"
+                                               :style="!hideStreetName ? 'background:#00d4aa' : 'background:var(--surface-3,#374151)'">
+                                            <input type="checkbox" name="pp_hide_street_name" value="1" :checked="hideStreetName" @change="hideStreetName = $el.checked" class="sr-only">
+                                            <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-sm transition-transform duration-200"
+                                                  style="background:#fff; margin-top:2px;"
+                                                  :style="!hideStreetName ? 'transform:translateX(18px); margin-left:1px;' : 'transform:translateX(2px); margin-left:1px;'"></span>
+                                        </label>
+                                    </div>
+                                    <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid var(--border);">
+                                        <div>
+                                            <p class="text-xs font-semibold" style="color:var(--text-primary);">Complex Name</p>
+                                            <p class="text-[11px]" style="color:var(--text-muted);" x-text="complexName || '(not set)'"></p>
+                                        </div>
+                                        <label class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200"
+                                               :style="!hideComplexName ? 'background:#00d4aa' : 'background:var(--surface-3,#374151)'">
+                                            <input type="checkbox" name="pp_hide_complex_name" value="1" :checked="hideComplexName" @change="hideComplexName = $el.checked" class="sr-only">
+                                            <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-sm transition-transform duration-200"
+                                                  style="background:#fff; margin-top:2px;"
+                                                  :style="!hideComplexName ? 'transform:translateX(18px); margin-left:1px;' : 'transform:translateX(2px); margin-left:1px;'"></span>
+                                        </label>
+                                    </div>
+                                    <div class="flex items-center justify-between px-4 py-3">
+                                        <div>
+                                            <p class="text-xs font-semibold" style="color:var(--text-primary);">Unit Number</p>
+                                            <p class="text-[11px]" style="color:var(--text-muted);" x-text="unitNumber || '(not set)'"></p>
+                                        </div>
+                                        <label class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200"
+                                               :style="!hideUnitNumber ? 'background:#00d4aa' : 'background:var(--surface-3,#374151)'">
+                                            <input type="checkbox" name="pp_hide_unit_number" value="1" :checked="hideUnitNumber" @change="hideUnitNumber = $el.checked" class="sr-only">
+                                            <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-sm transition-transform duration-200"
+                                                  style="background:#fff; margin-top:2px;"
+                                                  :style="!hideUnitNumber ? 'transform:translateX(18px); margin-left:1px;' : 'transform:translateX(2px); margin-left:1px;'"></span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <p class="text-[10px]" style="color:var(--text-muted);">
+                                    Toggle ON (green) = visible on feeds. Toggle OFF = hidden. Changes apply when you save the property.
+                                </p>
+                            </div>
+
+                            <div class="sticky bottom-0 px-5 py-3 rounded-b-lg flex justify-end" style="background:var(--surface); border-top:1px solid var(--border);">
+                                <button type="button" @click="openModal = null" class="px-4 py-2 rounded-md text-xs font-semibold text-white" style="background:#00d4aa;">Done</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1037,17 +1761,139 @@
                         </div>
                         @endif
                     </div>
+
+                    {{-- Showday Events --}}
+                    @if(!$isNew)
+                    @php $existingShowdays = $property->activeShowdays()->get(); @endphp
+                    <div x-data="{
+                        showForm: false,
+                        sdStart: '', sdEnd: '', sdDesc: '', sdLoading: false, sdMsg: '',
+                        showdays: {{ Js::from($existingShowdays->map(fn($s) => [
+                            'id' => $s->id,
+                            'start_date' => $s->start_date->format('d M Y H:i'),
+                            'end_date' => $s->end_date->format('d M Y H:i'),
+                            'description' => $s->description,
+                        ])) }},
+                        async createShowday() {
+                            if (!this.sdStart || !this.sdEnd) return;
+                            this.sdLoading = true; this.sdMsg = '';
+                            try {
+                                const res = await fetch('/corex/properties/{{ $property->id }}/syndication/showday', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'X-Requested-With': 'XMLHttpRequest' },
+                                    body: JSON.stringify({ start_date: this.sdStart, end_date: this.sdEnd, description: this.sdDesc || 'Open Showday' }),
+                                });
+                                const d = await res.json();
+                                if (d.success) {
+                                    this.showdays = d.showdays;
+                                    this.sdStart = ''; this.sdEnd = ''; this.sdDesc = '';
+                                    this.showForm = false;
+                                    this.sdMsg = 'Showday created';
+                                    setTimeout(() => this.sdMsg = '', 3000);
+                                } else { this.sdMsg = d.message || 'Failed'; }
+                            } catch { this.sdMsg = 'Network error'; }
+                            finally { this.sdLoading = false; }
+                        },
+                        async removeShowday(id) {
+                            if (!confirm('Remove this showday?')) return;
+                            try {
+                                const res = await fetch('/corex/properties/{{ $property->id }}/syndication/showday/' + id, {
+                                    method: 'DELETE',
+                                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'X-Requested-With': 'XMLHttpRequest' },
+                                });
+                                const d = await res.json();
+                                if (d.success) this.showdays = d.showdays;
+                            } catch {}
+                        }
+                    }" class="mt-5">
+                        <div class="flex items-center justify-between mb-3">
+                            <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--text-muted);">Showday Events</p>
+                            <button type="button" @click="showForm = !showForm"
+                                    class="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md transition-colors"
+                                    style="background:rgba(0,212,170,0.08); color:#00d4aa; border:1px solid rgba(0,212,170,0.2);">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                                <span x-text="showForm ? 'Cancel' : 'Add Showday'"></span>
+                            </button>
+                        </div>
+
+                        {{-- Existing showdays --}}
+                        <template x-if="showdays.length > 0">
+                            <div class="space-y-2 mb-3">
+                                <template x-for="sd in showdays" :key="sd.id">
+                                    <div class="flex items-center justify-between px-3 py-2 rounded-md text-xs"
+                                         style="background:var(--surface-2); border:1px solid var(--border);">
+                                        <div class="flex items-center gap-3">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 flex-shrink-0" style="color:#00d4aa;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+                                            <div>
+                                                <span style="color:var(--text-primary);" x-text="sd.start_date + ' — ' + sd.end_date"></span>
+                                                <span class="ml-2" style="color:var(--text-muted);" x-text="sd.description"></span>
+                                            </div>
+                                        </div>
+                                        <button type="button" @click="removeShowday(sd.id)"
+                                                class="p-1 rounded hover:bg-red-500/10 transition-colors flex-shrink-0"
+                                                style="color:#ef4444;" title="Remove showday">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                        <template x-if="showdays.length === 0 && !showForm">
+                            <p class="text-[11px] mb-3" style="color:var(--text-muted);">No showdays scheduled</p>
+                        </template>
+
+                        {{-- Create form --}}
+                        <div x-show="showForm" x-cloak x-transition class="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Start</label>
+                                <input type="datetime-local" x-model="sdStart"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary); color-scheme: light dark;">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">End</label>
+                                <input type="datetime-local" x-model="sdEnd"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary); color-scheme: light dark;">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Description</label>
+                                <input type="text" x-model="sdDesc" placeholder="Open Showday"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                            </div>
+                            <div class="sm:col-span-3 flex items-center gap-3">
+                                <button type="button" @click="createShowday()"
+                                        :disabled="sdLoading || !sdStart || !sdEnd"
+                                        class="px-4 py-2 rounded-md text-xs font-semibold text-white"
+                                        style="background:#00d4aa;">
+                                    <span x-text="sdLoading ? 'Creating...' : 'Create Showday'"></span>
+                                </button>
+                                <span x-show="sdMsg" x-text="sdMsg" class="text-xs" style="color:#00d4aa;"></span>
+                            </div>
+                        </div>
+                    </div>
+                    @endif
                 </div>
 
                 {{-- Agent / Branch --}}
                 <div>
                     <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Assignment</h3>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Agent <span class="text-red-400">*</span></label>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Primary Agent <span class="text-red-400">*</span></label>
                             <select name="agent_id" class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
                                 @foreach($agents as $agent)
                                 <option value="{{ $agent->id }}" {{ (int) old('agent_id', $property->agent_id) === $agent->id ? 'selected' : '' }}>{{ $agent->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Second Agent</label>
+                            <select name="pp_second_agent_id" class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                <option value="">— None —</option>
+                                @foreach($agents as $agent)
+                                <option value="{{ $agent->id }}" {{ (int) old('pp_second_agent_id', $property->pp_second_agent_id ?? '') === $agent->id ? 'selected' : '' }}>{{ $agent->name }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -1075,89 +1921,65 @@
                     </div>
                 </div>
 
-                {{-- Rental & Lease Details (collapsible) --}}
-                <div x-data="{ open: {{ ($property->rental_amount || $property->property_number || $property->complex_name || $property->unit_number || $property->district || $property->deposit_amount || $property->commission_percent || $property->admin_fee || $property->marketing_fee || $property->lease_start_date || $property->lease_end_date) ? 'true' : 'false' }} }">
-                    <button type="button" @click="open = !open" class="flex items-center gap-2 w-full text-left mb-4">
-                        <h3 class="text-xs font-bold uppercase tracking-wider" style="color:var(--text-muted);">Rental & Lease Details</h3>
-                        <svg :class="open ? 'rotate-180' : ''" class="w-4 h-4 transition-transform" style="color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
-                    </button>
-                    <div x-show="open" x-cloak class="space-y-4">
-                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                            <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Property / Erf Number</label>
-                                <input type="text" name="property_number" value="{{ old('property_number', $property->property_number) }}"
-                                       placeholder="e.g. Erf 789"
-                                       class="w-full rounded-md px-3 py-2 text-sm"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Complex Name</label>
-                                <input type="text" name="complex_name" value="{{ old('complex_name', $property->complex_name) }}"
-                                       placeholder="e.g. Ocean View"
-                                       class="w-full rounded-md px-3 py-2 text-sm"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Unit Number</label>
-                                <input type="text" name="unit_number" value="{{ old('unit_number', $property->unit_number) }}"
-                                       placeholder="e.g. 14"
-                                       class="w-full rounded-md px-3 py-2 text-sm"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">District / Municipality</label>
-                                <input type="text" name="district" value="{{ old('district', $property->district) }}"
-                                       placeholder="e.g. Ray Nkonyeni"
-                                       class="w-full rounded-md px-3 py-2 text-sm"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Monthly Rental (R)</label>
-                                <input type="number" name="rental_amount" value="{{ old('rental_amount', $property->rental_amount) }}"
-                                       placeholder="0.00" min="0" step="0.01"
-                                       class="w-full rounded-md px-3 py-2 text-sm"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Deposit (R)</label>
-                                <input type="number" name="deposit_amount" value="{{ old('deposit_amount', $property->deposit_amount) }}"
-                                       placeholder="0.00" min="0" step="0.01"
-                                       class="w-full rounded-md px-3 py-2 text-sm"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Commission (%)</label>
-                                <input type="number" name="commission_percent" value="{{ old('commission_percent', $property->commission_percent) }}"
-                                       placeholder="0.00" min="0" max="100" step="0.01"
-                                       class="w-full rounded-md px-3 py-2 text-sm"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Admin Fee (R)</label>
-                                <input type="number" name="admin_fee" value="{{ old('admin_fee', $property->admin_fee) }}"
-                                       placeholder="0.00" min="0" step="0.01"
-                                       class="w-full rounded-md px-3 py-2 text-sm"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Marketing Fee (R)</label>
-                                <input type="number" name="marketing_fee" value="{{ old('marketing_fee', $property->marketing_fee) }}"
-                                       placeholder="0.00" min="0" step="0.01"
-                                       class="w-full rounded-md px-3 py-2 text-sm"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Lease Start Date</label>
-                                <input type="date" name="lease_start_date" value="{{ old('lease_start_date', $property->lease_start_date?->format('Y-m-d')) }}"
-                                       class="w-full rounded-md px-3 py-2 text-sm"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); color-scheme: light dark;">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Lease End Date</label>
-                                <input type="date" name="lease_end_date" value="{{ old('lease_end_date', $property->lease_end_date?->format('Y-m-d')) }}"
-                                       class="w-full rounded-md px-3 py-2 text-sm"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); color-scheme: light dark;">
-                            </div>
+                {{-- Fees & Lease Details — always visible --}}
+                <div>
+                    <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Fees & Lease</h3>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Price Type (PP Feed)</label>
+                            <select name="rental_price_type" class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                <option value="">— Not Set —</option>
+                                @foreach(['per month' => 'Per Month', 'per sqm' => 'Per Sqm', 'per day' => 'Per Day', 'per week' => 'Per Week', 'per year' => 'Per Year'] as $val => $lbl)
+                                <option value="{{ $val }}" {{ old('rental_price_type', $property->rental_price_type) === $val ? 'selected' : '' }}>{{ $lbl }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Deposit (R)</label>
+                            <input type="number" name="deposit_amount" value="{{ old('deposit_amount', $property->deposit_amount) }}"
+                                   placeholder="0.00" min="0" step="0.01"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
+                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Monthly Rental (R)</label>
+                            <input type="number" name="rental_amount" value="{{ old('rental_amount', $property->rental_amount) }}"
+                                   placeholder="0.00" min="0" step="0.01"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
+                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Commission (%)</label>
+                            <input type="number" name="commission_percent" value="{{ old('commission_percent', $property->commission_percent) }}"
+                                   placeholder="0.00" min="0" max="100" step="0.01"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
+                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Admin Fee (R)</label>
+                            <input type="number" name="admin_fee" value="{{ old('admin_fee', $property->admin_fee) }}"
+                                   placeholder="0.00" min="0" step="0.01"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
+                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Marketing Fee (R)</label>
+                            <input type="number" name="marketing_fee" value="{{ old('marketing_fee', $property->marketing_fee) }}"
+                                   placeholder="0.00" min="0" step="0.01"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
+                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Lease Start Date</label>
+                            <input type="date" name="lease_start_date" value="{{ old('lease_start_date', $property->lease_start_date?->format('Y-m-d')) }}"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
+                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); color-scheme: light dark;">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Lease End Date</label>
+                            <input type="date" name="lease_end_date" value="{{ old('lease_end_date', $property->lease_end_date?->format('Y-m-d')) }}"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
+                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); color-scheme: light dark;">
                         </div>
                     </div>
                 </div>
@@ -1342,6 +2164,90 @@
                 </div>
             </div>
         @endif {{-- /!$isNew gallery --}}
+
+            {{-- ── PORTAL AGENTS SECTION ─────────────────────────────────────── --}}
+            @if(!$isNew)
+            <div>
+                <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Portal Agents</h3>
+                <p class="text-[11px] mb-4" style="color:var(--text-muted);">These agents appear on portal listings (Property24, Private Property). Their profile photo is synced to the portals when a listing is submitted.</p>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {{-- Primary Agent --}}
+                    @if($property->agent)
+                    <div class="rounded-md p-4 flex items-start gap-4" style="background:var(--surface-2); border:1px solid var(--border);">
+                        @if($property->agent->agent_photo_path)
+                        <img src="{{ asset('storage/' . $property->agent->agent_photo_path) }}" alt="{{ $property->agent->name }}"
+                             class="w-16 h-20 rounded-md object-cover flex-shrink-0"
+                             style="border:1px solid var(--border);">
+                        @else
+                        <div class="w-16 h-20 rounded-md flex items-center justify-center flex-shrink-0 text-sm font-bold text-white"
+                             style="background:linear-gradient(135deg,#1e3a5f,#0ea5e9);">
+                            {{ strtoupper(substr($property->agent->name, 0, 2)) }}
+                        </div>
+                        @endif
+                        <div class="min-w-0 flex-1 space-y-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-bold truncate" style="color:var(--text-primary);">{{ $property->agent->name }}</span>
+                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide"
+                                      style="background:rgba(59,130,246,0.12); color:#3b82f6;">Primary</span>
+                            </div>
+                            @if($property->agent->email)
+                            <div class="text-xs truncate" style="color:var(--text-secondary);">{{ $property->agent->email }}</div>
+                            @endif
+                            @if($property->agent->cell ?? $property->agent->phone ?? null)
+                            <div class="text-xs" style="color:var(--text-secondary);">{{ $property->agent->cell ?? $property->agent->phone }}</div>
+                            @endif
+                            @if(!$property->agent->agent_photo_path)
+                            <div class="flex items-center gap-1.5 mt-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="#f59e0b" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
+                                <span class="text-[10px]" style="color:#f59e0b;">No photo — upload via Admin &gt; Users to sync to portals</span>
+                            </div>
+                            @endif
+                        </div>
+                    </div>
+                    @endif
+
+                    {{-- Second Agent (if assigned) --}}
+                    @if($property->pp_second_agent_id)
+                    @php $secondAgent = \App\Models\User::find($property->pp_second_agent_id); @endphp
+                    @if($secondAgent)
+                    <div class="rounded-md p-4 flex items-start gap-4" style="background:var(--surface-2); border:1px solid var(--border);">
+                        @if($secondAgent->agent_photo_path)
+                        <img src="{{ asset('storage/' . $secondAgent->agent_photo_path) }}" alt="{{ $secondAgent->name }}"
+                             class="w-16 h-20 rounded-md object-cover flex-shrink-0"
+                             style="border:1px solid var(--border);">
+                        @else
+                        <div class="w-16 h-20 rounded-md flex items-center justify-center flex-shrink-0 text-sm font-bold text-white"
+                             style="background:linear-gradient(135deg,#1e3a5f,#0ea5e9);">
+                            {{ strtoupper(substr($secondAgent->name, 0, 2)) }}
+                        </div>
+                        @endif
+                        <div class="min-w-0 flex-1 space-y-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-bold truncate" style="color:var(--text-primary);">{{ $secondAgent->name }}</span>
+                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide"
+                                      style="background:var(--surface-3); color:var(--text-muted);">Second</span>
+                            </div>
+                            @if($secondAgent->email)
+                            <div class="text-xs truncate" style="color:var(--text-secondary);">{{ $secondAgent->email }}</div>
+                            @endif
+                            @if($secondAgent->cell ?? $secondAgent->phone ?? null)
+                            <div class="text-xs" style="color:var(--text-secondary);">{{ $secondAgent->cell ?? $secondAgent->phone }}</div>
+                            @endif
+                            @if(!$secondAgent->agent_photo_path)
+                            <div class="flex items-center gap-1.5 mt-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="#f59e0b" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
+                                <span class="text-[10px]" style="color:#f59e0b;">No photo — upload via Admin &gt; Users</span>
+                            </div>
+                            @endif
+                        </div>
+                    </div>
+                    @endif
+                    @endif
+                </div>
+            </div>
+            @endif
+
         </div>
 
         {{-- ── CONTACTS TAB ─────────────────────────────────────────────────── --}}
@@ -2278,6 +3184,22 @@ function spacesAndFeaturesManager(initSpaces, initFeatures, initBeds, initBaths)
             const arr = this.features[catKey]; const i = arr.indexOf(feat);
             if (i >= 0) arr.splice(i, 1); else arr.push(feat);
         },
+        removeFeatureByName(feat) {
+            // Remove from global feature categories
+            for (const [catKey, arr] of Object.entries(this.features)) {
+                const i = arr.indexOf(feat);
+                if (i >= 0) { arr.splice(i, 1); return; }
+            }
+            // Remove from space features
+            for (const sp of this.spaces) {
+                let i = (sp.featuresAll || []).indexOf(feat);
+                if (i >= 0) { sp.featuresAll.splice(i, 1); return; }
+                for (const u of (sp.units || [])) {
+                    i = (u.features || []).indexOf(feat);
+                    if (i >= 0) { u.features.splice(i, 1); return; }
+                }
+            }
+        },
         getSpaceFeatures(type)    { return _SPACE_FEATURES[type] || _DEFAULT_SPACE_FEATURES; },
         getSpaceIconSvg(type)     { return _SPACE_SVG[type] || _SPACE_SVG['_default']; },
         getFeatureCatIconSvg(key) { return _FEAT_CAT_SVG[key] || _FEAT_CAT_SVG['theProperty']; },
@@ -2376,6 +3298,363 @@ document.addEventListener('keydown', function(e) {
         });
     }
 })();
+
+// Property Address modal component
+function propertyAddress(config) {
+    return {
+        openModal: null,
+        streetNumber: config.streetNumber || '',
+        streetName: config.streetName || '',
+        complexName: config.complexName || '',
+        unitNumber: config.unitNumber || '',
+        suburb: config.suburb || '',
+        city: config.city || '',
+        province: config.province || 'KwaZulu-Natal',
+        hideStreetName: config.hideStreetName || false,
+        hideStreetNumber: config.hideStreetNumber || false,
+        hideComplexName: config.hideComplexName || false,
+        hideUnitNumber: config.hideUnitNumber || false,
+
+        get internalAddress() {
+            let street = [this.streetNumber, this.streetName].filter(Boolean).join(' ');
+            let location = [this.suburb, this.city, this.province].filter(Boolean).join(', ');
+            return [street, location].filter(Boolean).join(', ');
+        },
+
+        get publicAddress() {
+            let parts = [];
+            if (!this.hideStreetNumber && this.streetNumber) parts.push(this.streetNumber);
+            if (!this.hideStreetName && this.streetName) {
+                if (parts.length > 0) {
+                    parts[parts.length - 1] += ' ' + this.streetName;
+                } else {
+                    parts.push(this.streetName);
+                }
+            }
+            if (!this.hideComplexName && this.complexName) parts.push(this.complexName);
+            if (!this.hideUnitNumber && this.unitNumber) parts.push('Unit ' + this.unitNumber);
+            parts.push(...[this.suburb, this.city, this.province].filter(Boolean));
+            return parts.join(', ') || 'No public address configured';
+        },
+    };
+}
+
+// Private Property Syndication Alpine component
+function ppSyndication(config) {
+    return {
+        propertyId: config.propertyId,
+        enabled: config.enabled,
+        status: config.status || '',
+        ppRef: config.ppRef || '',
+        lastSubmitted: config.lastSubmitted || '',
+        lastError: config.lastError || '',
+        exclusiveDays: config.exclusiveDays || 0,
+        mandateType: config.mandateType || '',
+        activatedAt: config.activatedAt || '',
+        csrfToken: config.csrfToken,
+        missingFields: config.missingFields || [],
+        loading: false,
+        message: '',
+        messageType: 'success',
+        debugErrors: [],
+        showDebug: false,
+        // Address visibility
+        hideStreetName: config.hideStreetName || false,
+        hideStreetNumber: config.hideStreetNumber || false,
+        hideComplexName: config.hideComplexName || false,
+        hideUnitNumber: config.hideUnitNumber || false,
+        // Showday
+        showShowdayForm: false,
+        showdayStart: '',
+        showdayEnd: '',
+        showdayDescription: '',
+
+        statusLabel() {
+            const labels = {
+                '': 'Disabled',
+                'pending': 'Pending',
+                'submitted': 'Submitted',
+                'active': 'Active',
+                'error': 'Error',
+                'deactivated': 'Deactivated',
+            };
+            if (!this.enabled && !this.status) return 'Disabled';
+            return labels[this.status] || 'Disabled';
+        },
+
+        statusBadgeStyle() {
+            const styles = {
+                '': 'background:var(--surface-2); color:var(--text-muted);',
+                'pending': 'background:rgba(245,158,11,0.12); color:#f59e0b;',
+                'submitted': 'background:rgba(245,158,11,0.12); color:#f59e0b;',
+                'active': 'background:rgba(0,212,170,0.12); color:#00d4aa;',
+                'error': 'background:rgba(239,68,68,0.12); color:#ef4444;',
+                'deactivated': 'background:var(--surface-2); color:var(--text-muted);',
+            };
+            if (!this.enabled && !this.status) return styles[''];
+            return styles[this.status] || styles[''];
+        },
+
+        showMessage(msg, type = 'success') {
+            this.message = msg;
+            this.messageType = type;
+            setTimeout(() => { this.message = ''; }, 5000);
+        },
+
+        async toggleEnabled() {
+            this.loading = true;
+            try {
+                const res = await fetch(`/corex/properties/${this.propertyId}/syndication/toggle`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
+                });
+                const data = await res.json();
+                if (data.success) {
+                    this.enabled = data.pp_syndication_enabled;
+                    this.status = data.pp_syndication_status || '';
+                    this.showMessage(this.enabled ? 'PP syndication enabled' : 'PP syndication disabled');
+                    // Refresh readiness when enabling so warnings show immediately
+                    if (this.enabled) {
+                        await this.refreshReadiness();
+                    }
+                } else {
+                    this.showMessage(data.message || 'Toggle failed', 'error');
+                }
+            } catch (e) {
+                this.showMessage('Network error', 'error');
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async refreshReadiness() {
+            try {
+                const res = await fetch(`/corex/properties/${this.propertyId}/syndication/readiness`, {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                });
+                const data = await res.json();
+                this.missingFields = data.missing_fields || [];
+            } catch (e) { /* silent */ }
+        },
+
+        async submitListing() {
+            // Double-check readiness before submitting
+            await this.refreshReadiness();
+            if (this.missingFields.length > 0) {
+                this.showMessage('Cannot submit — fill in the required fields first', 'error');
+                return;
+            }
+
+            this.loading = true;
+            this.debugErrors = [];
+            this.showDebug = false;
+            try {
+                const res = await fetch(`/corex/properties/${this.propertyId}/syndication/submit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
+                    body: JSON.stringify({}),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    this.status = data.pp_syndication_status || 'submitted';
+                    this.ppRef = data.pp_ref || this.ppRef;
+                    this.lastSubmitted = new Date().toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                    this.lastError = '';
+                    this.debugErrors = [];
+                    this.showDebug = false;
+                    this.showMessage(data.message || 'Submitted to PP');
+                } else {
+                    if (data.missing_fields && data.missing_fields.length > 0) {
+                        this.missingFields = data.missing_fields;
+                    }
+                    this.status = data.pp_syndication_status || 'error';
+                    this.lastError = data.message || 'Submission failed';
+
+                    // Build debug info from all available error data
+                    this.debugErrors = [];
+                    if (data.errors && data.errors.length > 0) {
+                        data.errors.forEach(e => this.debugErrors.push(typeof e === 'string' ? e : e.label || JSON.stringify(e)));
+                    }
+                    if (data.message) {
+                        this.debugErrors.push(data.message);
+                    }
+                    this.showDebug = true;
+                }
+            } catch (e) {
+                this.debugErrors = ['Network error: ' + e.message];
+                this.showDebug = true;
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async deactivateListing() {
+            if (!confirm('Deactivate this listing on Private Property?')) return;
+            this.loading = true;
+            try {
+                const res = await fetch(`/corex/properties/${this.propertyId}/syndication/deactivate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
+                });
+                const data = await res.json();
+                if (data.success) {
+                    this.status = data.pp_syndication_status || 'deactivated';
+                    this.showMessage('Listing deactivated on PP');
+                } else {
+                    this.showMessage(data.message || 'Deactivation failed', 'error');
+                }
+            } catch (e) {
+                this.showMessage('Network error', 'error');
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async reactivateListing() {
+            if (!confirm('Reactivate this listing on Private Property?')) return;
+            this.loading = true;
+            try {
+                const res = await fetch(`/corex/properties/${this.propertyId}/syndication/reactivate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
+                });
+                const data = await res.json();
+                if (data.success) {
+                    this.status = data.pp_syndication_status || 'submitted';
+                    this.showMessage('Listing reactivated on PP');
+                } else {
+                    this.debugErrors = [data.message || 'Reactivation failed'];
+                    this.showDebug = true;
+                }
+            } catch (e) {
+                this.showMessage('Network error', 'error');
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async submitShowday() {
+            if (!this.showdayStart || !this.showdayEnd) return;
+            this.loading = true;
+            try {
+                const res = await fetch(`/corex/properties/${this.propertyId}/syndication/showday`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
+                    body: JSON.stringify({
+                        start_date: this.showdayStart,
+                        end_date: this.showdayEnd,
+                        description: this.showdayDescription || 'Open Showday',
+                    }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    this.showMessage('Showday event submitted to PP');
+                    this.showShowdayForm = false;
+                    this.showdayStart = '';
+                    this.showdayEnd = '';
+                    this.showdayDescription = '';
+                } else {
+                    this.debugErrors = [data.message || 'Showday submission failed'];
+                    this.showDebug = true;
+                }
+            } catch (e) {
+                this.showMessage('Network error', 'error');
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async saveVisibility() {
+            try {
+                await fetch(`/corex/properties/${this.propertyId}/syndication/visibility`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
+                    body: JSON.stringify({
+                        hide_street_name: this.hideStreetName,
+                        hide_street_number: this.hideStreetNumber,
+                        hide_complex_name: this.hideComplexName,
+                        hide_unit_number: this.hideUnitNumber,
+                    }),
+                });
+            } catch (e) { /* silent save */ }
+        },
+    };
+}
+
+function p24Syndication(config) {
+    return {
+        propertyId: config.propertyId, enabled: config.enabled, status: config.status || '',
+        p24Ref: config.p24Ref || '', lastSubmitted: config.lastSubmitted || '',
+        lastError: config.lastError || '', csrfToken: config.csrfToken, isSandbox: config.isSandbox ?? true,
+        suburb: config.suburb || '', city: config.city || '', province: config.province || '', suburbId: config.suburbId || '', listingType: config.listingType || 'sale',
+        missingFields: config.missingFields || [],
+        loading: false, message: '', messageType: 'success', debugErrors: [], showDebug: false,
+        statusLabel() {
+            const labels = {'':'Disabled','pending':'Pending','submitted':'Submitted','active':'Active','error':'Error','rejected':'Rejected','deactivated':'Deactivated'};
+            if (!this.enabled && !this.status) return 'Disabled';
+            return labels[this.status] || 'Disabled';
+        },
+        statusBadgeStyle() {
+            const styles = {'':'background:var(--surface-2);color:var(--text-muted);','pending':'background:rgba(245,158,11,0.12);color:#f59e0b;','submitted':'background:rgba(245,158,11,0.12);color:#f59e0b;','active':'background:rgba(59,130,246,0.12);color:#3b82f6;','error':'background:rgba(239,68,68,0.12);color:#ef4444;','rejected':'background:rgba(239,68,68,0.12);color:#ef4444;','deactivated':'background:var(--surface-2);color:var(--text-muted);'};
+            if (!this.enabled && !this.status) return styles[''];
+            return styles[this.status] || styles[''];
+        },
+        p24ListingUrl() {
+            const domain = this.isSandbox ? 'www.exdev.property24-test.com' : 'www.property24.com';
+            const slug = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'property';
+            const section = this.listingType === 'rental' ? 'to-rent' : 'for-sale';
+            return `https://${domain}/${section}/${slug(this.suburb)}/${slug(this.city)}/${slug(this.province)}/${this.suburbId || '0'}/${this.p24Ref}`;
+        },
+        showMessage(msg, type = 'success') { this.message = msg; this.messageType = type; setTimeout(() => { this.message = ''; }, 5000); },
+        async toggleEnabled() {
+            this.loading = true;
+            try {
+                const res = await fetch(`/corex/properties/${this.propertyId}/p24-syndication/toggle`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'X-Requested-With': 'XMLHttpRequest' } });
+                const data = await res.json();
+                if (data.success) { this.enabled = data.p24_syndication_enabled; this.status = data.p24_syndication_status || ''; this.showMessage(this.enabled ? 'P24 syndication enabled' : 'P24 syndication disabled'); }
+                else { this.showMessage(data.message || 'Toggle failed', 'error'); }
+            } catch (e) { this.showMessage('Network error', 'error'); } finally { this.loading = false; }
+        },
+        async submitListing() {
+            this.loading = true; this.debugErrors = []; this.showDebug = false;
+            try {
+                const res = await fetch(`/corex/properties/${this.propertyId}/p24-syndication/submit`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify({}) });
+                const data = await res.json();
+                if (data.success) { this.status = data.p24_syndication_status || 'submitted'; this.p24Ref = data.p24_ref || this.p24Ref; this.lastSubmitted = new Date().toLocaleDateString('en-ZA', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); this.lastError = ''; this.debugErrors = []; this.showDebug = false; this.showMessage(data.message || 'Submitted to P24'); }
+                else { this.status = data.p24_syndication_status || 'error'; this.lastError = data.message || 'Submission failed'; this.debugErrors = []; if (data.errors && data.errors.length > 0) { data.errors.forEach(e => this.debugErrors.push(typeof e === 'string' ? e : e.label || JSON.stringify(e))); } if (data.message) { this.debugErrors.push(data.message); } this.showDebug = true; }
+            } catch (e) { this.debugErrors = ['Network error: ' + e.message]; this.showDebug = true; } finally { this.loading = false; }
+        },
+        async refreshListing() {
+            this.loading = true; this.debugErrors = []; this.showDebug = false;
+            try {
+                const res = await fetch(`/corex/properties/${this.propertyId}/p24-syndication/submit`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify({}) });
+                const data = await res.json();
+                if (data.success) { this.status = data.p24_syndication_status || 'active'; this.p24Ref = data.p24_ref || this.p24Ref; this.lastSubmitted = new Date().toLocaleDateString('en-ZA', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); this.lastError = ''; this.showMessage('Listing synced to P24'); }
+                else { this.lastError = data.message || 'Sync failed'; this.debugErrors = data.errors || [data.message]; this.showDebug = true; }
+            } catch (e) { this.debugErrors = ['Network error: ' + e.message]; this.showDebug = true; } finally { this.loading = false; }
+        },
+        async deactivateListing() {
+            if (!confirm('Deactivate this listing on Property24?')) return;
+            this.loading = true;
+            try {
+                const res = await fetch(`/corex/properties/${this.propertyId}/p24-syndication/deactivate`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'X-Requested-With': 'XMLHttpRequest' } });
+                const data = await res.json();
+                if (data.success) { this.status = data.p24_syndication_status || 'deactivated'; this.showMessage('Listing deactivated on P24'); }
+                else { this.showMessage(data.message || 'Deactivation failed', 'error'); }
+            } catch (e) { this.showMessage('Network error', 'error'); } finally { this.loading = false; }
+        },
+        async reactivateListing() {
+            if (!confirm('Reactivate this listing on Property24?')) return;
+            this.loading = true;
+            try {
+                const res = await fetch(`/corex/properties/${this.propertyId}/p24-syndication/reactivate`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'X-Requested-With': 'XMLHttpRequest' } });
+                const data = await res.json();
+                if (data.success) { this.status = data.p24_syndication_status || 'submitted'; this.showMessage('Listing reactivated on P24'); }
+                else { this.debugErrors = [data.message || 'Reactivation failed']; this.showDebug = true; }
+            } catch (e) { this.showMessage('Network error', 'error'); } finally { this.loading = false; }
+        },
+    };
+}
 </script>
 @endpush
 @endsection

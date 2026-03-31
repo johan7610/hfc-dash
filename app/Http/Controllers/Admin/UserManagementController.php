@@ -31,7 +31,9 @@ class UserManagementController extends Controller
             ->orderBy('name')
             ->get();
 
-        $branches = Branch::when($agencyId, fn ($q) => $q->where('agency_id', $agencyId))
+        $branches = Branch::when($agencyId, fn ($q) => $q->where(function ($q2) use ($agencyId) {
+                $q2->where('agency_id', $agencyId)->orWhereNull('agency_id');
+            }))
             ->orderBy('name')
             ->get(['id','name']);
         $designations = DB::table('designations')
@@ -49,7 +51,9 @@ class UserManagementController extends Controller
 
         $agencyId = auth()->user()->effectiveAgencyId();
 
-        $branches = Branch::when($agencyId, fn ($q) => $q->where('agency_id', $agencyId))
+        $branches = Branch::when($agencyId, fn ($q) => $q->where(function ($q2) use ($agencyId) {
+                $q2->where('agency_id', $agencyId)->orWhereNull('agency_id');
+            }))
             ->orderBy('name')->get(['id','name']);
         $designations = DB::table('designations')
             ->where('is_enabled', 1)->orderBy('sort_order')->orderBy('name')->get(['id','name']);
@@ -72,7 +76,7 @@ class UserManagementController extends Controller
             'surname'       => ['required', 'string', 'max:255'],
             'email'         => ['required', 'email', 'max:255', Rule::unique('users', 'email')->whereNull('deleted_at')],
             'phone'         => ['nullable', 'string', 'max:50'],
-            'cell'          => ['nullable', 'string', 'max:50'],
+            'cell'          => ['required', 'string', 'max:50'],
             'fax'           => ['nullable', 'string', 'max:50'],
             'ffc_number'    => ['nullable', 'string', 'max:100'],
             'website'       => ['nullable', 'string', 'max:255'],
@@ -156,7 +160,9 @@ class UserManagementController extends Controller
 
         $agencyId = auth()->user()->effectiveAgencyId();
 
-        $branches = Branch::when($agencyId, fn ($q) => $q->where('agency_id', $agencyId))
+        $branches = Branch::when($agencyId, fn ($q) => $q->where(function ($q2) use ($agencyId) {
+                $q2->where('agency_id', $agencyId)->orWhereNull('agency_id');
+            }))
             ->orderBy('name')->get(['id','name']);
         $designations = DB::table('designations')
             ->where('is_enabled', 1)->orderBy('sort_order')->orderBy('name')->get(['id','name']);
@@ -174,7 +180,7 @@ class UserManagementController extends Controller
             'surname'       => ['required', 'string', 'max:255'],
             'email'         => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'phone'         => ['nullable', 'string', 'max:50'],
-            'cell'          => ['nullable', 'string', 'max:50'],
+            'cell'          => ['required', 'string', 'max:50'],
             'fax'           => ['nullable', 'string', 'max:50'],
             'ffc_number'    => ['nullable', 'string', 'max:100'],
             'website'       => ['nullable', 'string', 'max:255'],
@@ -344,7 +350,7 @@ class UserManagementController extends Controller
         // ---- Contact fields ----
         $contact = $request->validate([
             'phone' => ['nullable','string','max:50'],
-            'cell' => ['nullable','string','max:50'],
+            'cell' => ['required','string','max:50'],
             'fax' => ['nullable','string','max:50'],
             'ffc_number' => ['nullable','string','max:100'],
             'website' => ['nullable','string','max:255'],

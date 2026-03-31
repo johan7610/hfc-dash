@@ -18,6 +18,17 @@ class Property extends Model
         'excerpt',
         'description',
         'price',
+        'price_on_application',
+        'has_deposit',
+        'lease_period',
+        'price_per_day',
+        'price_per_week',
+        'price_per_year',
+        'lease_type',
+        'gross_price',
+        'net_price',
+        'yard_price',
+        'primary_price_display',
         'rates_taxes',
         'levy',
         'special_levy',
@@ -42,6 +53,7 @@ class Property extends Model
         'property_type',
         'category',
         'mandate_type',
+        'listing_type',
         'status',
         'features_json',
         'spaces_json',
@@ -58,6 +70,44 @@ class Property extends Model
         'expiry_date',
         'lease_start_date',
         'lease_end_date',
+        'headline',
+        'street_name',
+        'street_number',
+        'province',
+        'town',
+        'latitude',
+        'longitude',
+        'pp_suburb_id',
+        'pp_syndication_enabled',
+        'pp_syndication_status',
+        'pp_ref',
+        'pp_listing_feed_ref',
+        'pp_last_submitted_at',
+        'pp_activated_at',
+        'pp_exclusive_days',
+        'pp_delay_until',
+        'pp_last_error',
+        'pp_images_last_synced_at',
+        'pp_listing_last_synced_at',
+        'floor_number',
+        'unit_section_block',
+        'stand_number',
+        'zone_type',
+        'address_internal_note',
+        'pp_second_agent_id',
+        'pp_hide_street_name',
+        'pp_hide_street_number',
+        'pp_hide_complex_name',
+        'pp_hide_unit_number',
+        'rental_price_type',
+        'p24_syndication_enabled',
+        'p24_syndication_status',
+        'p24_ref',
+        'p24_last_submitted_at',
+        'p24_activated_at',
+        'p24_last_error',
+        'p24_images_last_synced_at',
+        'p24_listing_last_synced_at',
     ];
 
     protected $casts = [
@@ -70,6 +120,14 @@ class Property extends Model
         'spaces_json'         => 'array',
         'published_at'        => 'datetime',
         'price'               => 'integer',
+        'price_on_application' => 'boolean',
+        'has_deposit'         => 'boolean',
+        'price_per_day'       => 'float',
+        'price_per_week'      => 'float',
+        'price_per_year'      => 'float',
+        'gross_price'         => 'float',
+        'net_price'           => 'float',
+        'yard_price'          => 'float',
         'rates_taxes'         => 'integer',
         'levy'                => 'integer',
         'special_levy'        => 'integer',
@@ -82,6 +140,25 @@ class Property extends Model
         'commission_percent'  => 'float',
         'admin_fee'           => 'float',
         'marketing_fee'       => 'float',
+        'latitude'                => 'decimal:7',
+        'longitude'               => 'decimal:7',
+        'pp_suburb_id'            => 'integer',
+        'pp_syndication_enabled'  => 'boolean',
+        'pp_last_submitted_at'    => 'datetime',
+        'pp_activated_at'         => 'datetime',
+        'pp_exclusive_days'       => 'integer',
+        'pp_delay_until'          => 'datetime',
+        'pp_images_last_synced_at'  => 'datetime',
+        'pp_listing_last_synced_at' => 'datetime',
+        'pp_hide_street_name'       => 'boolean',
+        'pp_hide_street_number'     => 'boolean',
+        'pp_hide_complex_name'      => 'boolean',
+        'pp_hide_unit_number'       => 'boolean',
+        'p24_syndication_enabled'     => 'boolean',
+        'p24_last_submitted_at'       => 'datetime',
+        'p24_activated_at'            => 'datetime',
+        'p24_images_last_synced_at'   => 'datetime',
+        'p24_listing_last_synced_at'  => 'datetime',
     ];
 
     protected static function boot(): void
@@ -103,6 +180,16 @@ class Property extends Model
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    public function showdays(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(PropertyShowday::class)->orderBy('start_date');
+    }
+
+    public function activeShowdays(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(PropertyShowday::class)->where('active', true)->where('end_date', '>=', now())->orderBy('start_date');
     }
 
     public function agency(): BelongsTo

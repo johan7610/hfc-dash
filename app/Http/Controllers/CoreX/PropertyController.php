@@ -5,12 +5,14 @@ namespace App\Http\Controllers\CoreX;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\ContactMatch;
-use App\Models\DocumentType;
 use App\Models\Property;
 use App\Models\PropertyAdTemplate;
+use App\Models\DocumentType;
 use App\Models\PropertySettingItem;
 use App\Models\User;
 use App\Services\PermissionService;
+use App\Services\PrivateProperty\PrivatePropertyListingMapper;
+use App\Services\Syndication\Property24\Property24ListingMapper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -109,7 +111,7 @@ class PropertyController extends Controller
     public function show(Property $property)
     {
         $this->authorizeProperty($property);
-        $property->load(['agent', 'branch', 'notes.user', 'files.user', 'documents.uploader', 'documents.documentType', 'documents.contacts', 'contacts.type']);
+        $property->load(['agent', 'branch', 'notes.user', 'files.user', 'contacts.type']);
 
         $settingItems = [
             'categories'   => PropertySettingItem::group('category')->get(),
@@ -151,13 +153,23 @@ class PropertyController extends Controller
             })
             ->values();
 
-        $documentTypes = DocumentType::active()->ordered()->get();
+        // PP feed readiness check for syndication panel
+        $ppMissingFields = $property->exists
+            ? app(PrivatePropertyListingMapper::class)->checkReadiness($property)
+            : [];
 
-        // Property drive uses unified documents table
-        $allDriveDocs = $property->documents;
+        // P24 feed readiness check for syndication panel
+        $p24MissingFields = $property->exists
+            ? app(Property24ListingMapper::class)->checkReadiness($property)
+            : [];
+
+        // Drive tab: all documents linked to this property
+        $allDriveDocs = $property->documents()->with(['documentType', 'contacts'])->get();
+        $documentTypes = DocumentType::ordered()->get();
 
         return view('corex.properties.show', compact(
-            'property', 'settingItems', 'branches', 'agents', 'activeTab', 'coreMatches', 'documentTypes', 'allDriveDocs'
+            'property', 'settingItems', 'branches', 'agents', 'activeTab', 'coreMatches', 'ppMissingFields', 'p24MissingFields',
+            'allDriveDocs', 'documentTypes'
         ));
     }
 
@@ -192,6 +204,17 @@ class PropertyController extends Controller
             'excerpt'          => 'nullable|string|max:500',
             'description'      => 'nullable|string',
             'price'            => 'required|integer|min:0',
+            'price_on_application' => 'nullable|boolean',
+            'has_deposit'      => 'nullable|boolean',
+            'lease_period'     => 'nullable|string|max:100',
+            'price_per_day'    => 'nullable|numeric|min:0',
+            'price_per_week'   => 'nullable|numeric|min:0',
+            'price_per_year'   => 'nullable|numeric|min:0',
+            'lease_type'       => 'nullable|string|max:100',
+            'gross_price'      => 'nullable|numeric|min:0',
+            'net_price'        => 'nullable|numeric|min:0',
+            'yard_price'       => 'nullable|numeric|min:0',
+            'primary_price_display' => 'nullable|string|in:monthly,daily,weekly,yearly',
             'rates_taxes'      => 'nullable|integer|min:0',
             'levy'             => 'nullable|integer|min:0',
             'special_levy'     => 'nullable|integer|min:0',
@@ -207,6 +230,7 @@ class PropertyController extends Controller
             'property_type'    => 'nullable|string|max:50',
             'category'         => 'nullable|string|max:100',
             'mandate_type'     => 'nullable|string|max:50',
+            'listing_type'     => 'nullable|string|in:sale,rental',
             'status'           => 'nullable|string|max:100',
             'features'         => 'nullable|array',
             'features.*'       => 'string|max:100',
@@ -214,6 +238,14 @@ class PropertyController extends Controller
             'property_number'  => 'nullable|string|max:100',
             'complex_name'     => 'nullable|string|max:255',
             'unit_number'      => 'nullable|string|max:100',
+            'floor_number'     => 'nullable|string|max:50',
+            'unit_section_block' => 'nullable|string|max:255',
+            'stand_number'     => 'nullable|string|max:100',
+            'zone_type'        => 'nullable|string|max:100',
+            'address_internal_note' => 'nullable|string|max:2000',
+            'street_name'      => 'nullable|string|max:255',
+            'street_number'    => 'nullable|string|max:50',
+            'province'         => 'nullable|string|max:100',
             'district'         => 'nullable|string|max:255',
             'rental_amount'    => 'nullable|numeric|min:0',
             'deposit_amount'   => 'nullable|numeric|min:0',
@@ -226,6 +258,12 @@ class PropertyController extends Controller
             'lease_end_date'   => 'nullable|date',
             'branch_id'        => 'nullable|exists:branches,id',
             'agent_id'         => 'nullable|exists:users,id',
+            'pp_second_agent_id' => 'nullable|exists:users,id',
+            'rental_price_type'  => 'nullable|string|max:50',
+            'pp_hide_street_name'   => 'nullable|boolean',
+            'pp_hide_street_number' => 'nullable|boolean',
+            'pp_hide_complex_name'  => 'nullable|boolean',
+            'pp_hide_unit_number'   => 'nullable|boolean',
             'publish'          => 'nullable|boolean',
             'dawn_images'               => 'nullable|array',
             'dawn_images.*'             => 'image|max:5120',
@@ -284,16 +322,13 @@ class PropertyController extends Controller
         if ($request->hasFile('drive_files')) {
             foreach ($request->file('drive_files') as $file) {
                 $path = $file->store("properties/{$property->id}/files", 'public');
-                $doc = \App\Models\Document::create([
-                    'original_name'  => $file->getClientOriginalName(),
-                    'storage_path'   => $path,
-                    'disk'           => 'public',
-                    'mime_type'      => $file->getMimeType(),
-                    'size'           => $file->getSize(),
-                    'source_type'    => 'upload',
-                    'uploaded_by'    => auth()->id(),
+                $property->files()->create([
+                    'user_id'   => auth()->id(),
+                    'name'      => $file->getClientOriginalName(),
+                    'path'      => $path,
+                    'size'      => $file->getSize(),
+                    'mime_type' => $file->getMimeType(),
                 ]);
-                $doc->properties()->attach($property->id);
             }
         }
 
@@ -339,6 +374,17 @@ class PropertyController extends Controller
             'excerpt'          => 'nullable|string|max:500',
             'description'      => 'nullable|string',
             'price'            => 'required|integer|min:0',
+            'price_on_application' => 'nullable|boolean',
+            'has_deposit'      => 'nullable|boolean',
+            'lease_period'     => 'nullable|string|max:100',
+            'price_per_day'    => 'nullable|numeric|min:0',
+            'price_per_week'   => 'nullable|numeric|min:0',
+            'price_per_year'   => 'nullable|numeric|min:0',
+            'lease_type'       => 'nullable|string|max:100',
+            'gross_price'      => 'nullable|numeric|min:0',
+            'net_price'        => 'nullable|numeric|min:0',
+            'yard_price'       => 'nullable|numeric|min:0',
+            'primary_price_display' => 'nullable|string|in:monthly,daily,weekly,yearly',
             'rates_taxes'      => 'nullable|integer|min:0',
             'levy'             => 'nullable|integer|min:0',
             'special_levy'     => 'nullable|integer|min:0',
@@ -354,6 +400,7 @@ class PropertyController extends Controller
             'property_type'    => 'nullable|string|max:50',
             'category'         => 'nullable|string|max:100',
             'mandate_type'     => 'nullable|string|max:50',
+            'listing_type'     => 'nullable|string|in:sale,rental',
             'status'           => 'nullable|string|max:100',
             'features'         => 'nullable|array',
             'features.*'       => 'string|max:100',
@@ -361,6 +408,14 @@ class PropertyController extends Controller
             'property_number'  => 'nullable|string|max:100',
             'complex_name'     => 'nullable|string|max:255',
             'unit_number'      => 'nullable|string|max:100',
+            'floor_number'     => 'nullable|string|max:50',
+            'unit_section_block' => 'nullable|string|max:255',
+            'stand_number'     => 'nullable|string|max:100',
+            'zone_type'        => 'nullable|string|max:100',
+            'address_internal_note' => 'nullable|string|max:2000',
+            'street_name'      => 'nullable|string|max:255',
+            'street_number'    => 'nullable|string|max:50',
+            'province'         => 'nullable|string|max:100',
             'district'         => 'nullable|string|max:255',
             'rental_amount'    => 'nullable|numeric|min:0',
             'deposit_amount'   => 'nullable|numeric|min:0',
@@ -373,6 +428,12 @@ class PropertyController extends Controller
             'lease_end_date'   => 'nullable|date',
             'branch_id'        => 'nullable|exists:branches,id',
             'agent_id'         => 'nullable|exists:users,id',
+            'pp_second_agent_id' => 'nullable|exists:users,id',
+            'rental_price_type'  => 'nullable|string|max:50',
+            'pp_hide_street_name'   => 'nullable|boolean',
+            'pp_hide_street_number' => 'nullable|boolean',
+            'pp_hide_complex_name'  => 'nullable|boolean',
+            'pp_hide_unit_number'   => 'nullable|boolean',
             'publish'          => 'nullable|boolean',
             'dawn_images'      => 'nullable|array',
             'dawn_images.*'    => 'image|max:5120',
@@ -383,6 +444,12 @@ class PropertyController extends Controller
             'gallery_images'   => 'nullable|array',
             'gallery_images.*' => 'image|max:5120',
         ]);
+
+        // Checkboxes that aren't checked don't submit — ensure they're explicitly set to false
+        $data['pp_hide_street_name']   = $request->boolean('pp_hide_street_name');
+        $data['pp_hide_street_number'] = $request->boolean('pp_hide_street_number');
+        $data['pp_hide_complex_name']  = $request->boolean('pp_hide_complex_name');
+        $data['pp_hide_unit_number']   = $request->boolean('pp_hide_unit_number');
 
         $data = $this->processSpacesJson($data);
 

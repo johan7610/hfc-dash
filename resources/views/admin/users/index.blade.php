@@ -308,8 +308,11 @@
                                     <img src="{{ asset('storage/'.$u->agent_photo_path) }}" alt="Photo"
                                          class="w-10 h-10 rounded-lg object-cover flex-shrink-0"
                                          style="border:1px solid var(--border);">
-                                    <button type="button" class="text-xs text-red-600 hover:text-red-700"
-                                            onclick="if(confirm('Remove agent photo?')){let f=document.createElement('form');f.method='POST';f.action='{{ route('admin.users.remove-file', $u) }}';f.innerHTML='@csrf<input name=field value=agent_photo>';document.body.appendChild(f);f.submit();}">Remove</button>
+                                    <form method="POST" action="{{ route('admin.users.remove-file', $u) }}" class="inline" onsubmit="return confirm('Remove agent photo?')">
+                                        @csrf
+                                        <input type="hidden" name="field" value="agent_photo">
+                                        <button type="submit" class="text-xs text-red-600 hover:text-red-700">Remove</button>
+                                    </form>
                                 </div>
                                 @endif
                                 <input type="file" name="agent_photo" accept="image/jpeg,image/png,image/webp"
@@ -327,8 +330,11 @@
                                        class="text-xs text-blue-400 hover:text-blue-300 truncate flex-1">
                                         {{ basename($u->ffc_certificate_path) }}
                                     </a>
-                                    <button type="button" class="text-xs text-red-600 hover:text-red-700 flex-shrink-0"
-                                            onclick="if(confirm('Remove FFC certificate?')){let f=document.createElement('form');f.method='POST';f.action='{{ route('admin.users.remove-file', $u) }}';f.innerHTML='@csrf<input name=field value=ffc_certificate>';document.body.appendChild(f);f.submit();}">Remove</button>
+                                    <form method="POST" action="{{ route('admin.users.remove-file', $u) }}" class="inline" onsubmit="return confirm('Remove FFC certificate?')">
+                                        @csrf
+                                        <input type="hidden" name="field" value="ffc_certificate">
+                                        <button type="submit" class="text-xs text-red-600 hover:text-red-700 flex-shrink-0">Remove</button>
+                                    </form>
                                 </div>
                                 @endif
                                 <input type="file" name="ffc_certificate" accept=".pdf,.jpg,.jpeg,.png"

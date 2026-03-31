@@ -63,4 +63,23 @@ return [
         'key' => env('ANTHROPIC_API_KEY'),
     ],
 
+    'property24_syndication' => [
+        'api_url'        => env('P24_EXDEV_API_URL', 'https://api.exdev.property24-test.com'),
+        'username'       => env('P24_EXDEV_USERNAME'),
+        'password'       => env('P24_EXDEV_PASSWORD'),
+        'agency_id'      => env('P24_EXDEV_AGENCY_ID'),
+        'sandbox'        => env('P24_EXDEV_SANDBOX', true),
+        'image_base_url' => env('P24_EXDEV_IMAGE_BASE_URL', ''),
+        'api_version'    => 'v53',
+    ],
+
+    'private_property' => [
+        'username'       => env('PP_USERNAME'),
+        'password'       => env('PP_PASSWORD'),
+        'branch_guid'    => env('PP_BRANCH_GUID'),
+        'wsdl'           => env('PP_WSDL', 'https://services.sandbox.pp.co.za/AgentImport/AgentImport.asmx?WSDL'),
+        'sandbox'        => env('PP_SANDBOX', true),
+        'image_base_url' => env('PP_IMAGE_BASE_URL', ''),  // Override APP_URL for image URLs (useful for local dev against sandbox)
+    ],
+
 ];
