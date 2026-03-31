@@ -693,6 +693,7 @@
             </div>
 
             {{-- ── QUICK ACTIONS ─────────────────────────────────────────────── --}}
+            @if(!$isNew)
             <div>
                 <h3 class="text-xs font-bold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Quick Actions</h3>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2"
@@ -734,8 +735,10 @@
                     </div>
                 </div>
             </div>
+            @endif
 
             {{-- ── UPCOMING SHOWDAYS ─────────────────────────────────────────── --}}
+            @if(!$isNew)
             <div>
                 <h3 class="text-xs font-bold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Upcoming Showdays</h3>
                 @php $upcomingShowdays = $property->showdays()->where('active', true)->where('end_date', '>=', now())->orderBy('start_date')->take(3)->get(); @endphp
@@ -760,6 +763,7 @@
                 </div>
                 @endif
             </div>
+            @endif
 
             {{-- ── ACTIVITY TIMELINE ─────────────────────────────────────────── --}}
             @if(isset($activityTimeline) && $activityTimeline->count())

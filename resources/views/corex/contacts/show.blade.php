@@ -89,8 +89,8 @@
                 </div>
             </div>
 
-            {{-- Create Listing from Contact --}}
-            @if(auth()->user()->hasPermission('access_properties'))
+            {{-- Create Listing from Contact (only if no linked properties) --}}
+            @if(auth()->user()->hasPermission('access_properties') && $contact->properties()->count() === 0)
             <a href="{{ route('corex.properties.create') }}?contact_id={{ $contact->id }}"
                class="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md no-underline transition-all duration-300"
                style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 12%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 25%, transparent);"

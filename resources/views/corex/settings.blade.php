@@ -987,11 +987,23 @@
             </div>{{-- /rentals --}}
 
             {{-- CONTACTS section --}}
-            <div x-show="featureSection === 'contacts'" x-cloak class="space-y-6">
+            <div x-show="featureSection === 'contacts'" x-cloak class="space-y-3">
 
-                <div>
-                    <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Contact Types</h3>
-                    <p class="text-xs mb-4" style="color:var(--text-muted);">Types appear in the contact form when creating or editing a contact.</p>
+                {{-- ── Contact Types (accordion) ── --}}
+                <div x-data="{ open: false }" class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
+                    <button type="button" @click="open = !open"
+                            class="w-full flex items-center justify-between px-4 py-3 transition-colors"
+                            style="background:var(--surface-2);"
+                            onmouseover="this.style.background='rgba(0,180,216,0.04)'" onmouseout="this.style.background='var(--surface-2)'">
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm font-semibold" style="color:var(--text-primary);">Contact Types</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full font-medium" style="background:rgba(0,180,216,0.12); color:#00b4d8;">{{ count($contactTypes) }}</span>
+                        </div>
+                        <svg class="w-4 h-4 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--text-muted);"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <div x-show="open" x-cloak style="border-top:1px solid var(--border);">
+                    <div class="p-4 space-y-4">
+                    <p class="text-xs" style="color:var(--text-muted);">Types appear in the contact form when creating or editing a contact.</p>
 
                     {{-- Add Contact Type --}}
                     <div class="p-4 rounded-md mb-3" style="background:var(--surface-2); border:1px solid var(--border);">
@@ -1121,10 +1133,25 @@
                     </div>
                 </div>
 
-                {{-- ── Contact Sources ── --}}
-                <div>
-                    <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Contact Sources</h3>
-                    <p class="text-xs mb-4" style="color:var(--text-muted);">Sources track where contacts come from (e.g. Property24, Walk-in, Referral). New sources are auto-created during imports.</p>
+                    </div>
+                    </div>
+                </div>
+
+                {{-- ── Contact Sources (accordion) ── --}}
+                <div x-data="{ open: false }" class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
+                    <button type="button" @click="open = !open"
+                            class="w-full flex items-center justify-between px-4 py-3 transition-colors"
+                            style="background:var(--surface-2);"
+                            onmouseover="this.style.background='rgba(0,180,216,0.04)'" onmouseout="this.style.background='var(--surface-2)'">
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm font-semibold" style="color:var(--text-primary);">Contact Sources</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full font-medium" style="background:rgba(0,180,216,0.12); color:#00b4d8;">{{ count($contactSources) }}</span>
+                        </div>
+                        <svg class="w-4 h-4 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--text-muted);"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <div x-show="open" x-cloak style="border-top:1px solid var(--border);">
+                    <div class="p-4 space-y-4">
+                    <p class="text-xs" style="color:var(--text-muted);">Sources track where contacts come from (e.g. Property24, Walk-in, Referral). New sources are auto-created during imports.</p>
 
                     {{-- Add Source --}}
                     <div class="p-4 rounded-md mb-3" style="background:var(--surface-2); border:1px solid var(--border);">
@@ -1225,10 +1252,25 @@
                     </div>
                 </div>
 
-                {{-- ── Contact Tags ── --}}
-                <div>
-                    <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Contact Tags</h3>
-                    <p class="text-xs mb-4" style="color:var(--text-muted);">Tags help categorise contacts (e.g. VIP, Hot Lead, Investor). Tags can be assigned to multiple contacts and are auto-created during imports.</p>
+                    </div>
+                    </div>
+                </div>
+
+                {{-- ── Contact Tags (accordion) ── --}}
+                <div x-data="{ open: false }" class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
+                    <button type="button" @click="open = !open"
+                            class="w-full flex items-center justify-between px-4 py-3 transition-colors"
+                            style="background:var(--surface-2);"
+                            onmouseover="this.style.background='rgba(0,180,216,0.04)'" onmouseout="this.style.background='var(--surface-2)'">
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm font-semibold" style="color:var(--text-primary);">Contact Tags</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full font-medium" style="background:rgba(0,180,216,0.12); color:#00b4d8;">{{ count($contactTags) }}</span>
+                        </div>
+                        <svg class="w-4 h-4 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--text-muted);"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <div x-show="open" x-cloak style="border-top:1px solid var(--border);">
+                    <div class="p-4 space-y-4">
+                    <p class="text-xs" style="color:var(--text-muted);">Tags help categorise contacts (e.g. VIP, Hot Lead, Investor). Tags can be assigned to multiple contacts and are auto-created during imports.</p>
 
                     {{-- Add Tag --}}
                     <div class="p-4 rounded-md mb-3" style="background:var(--surface-2); border:1px solid var(--border);">
@@ -1326,6 +1368,8 @@
                             <div class="p-5 text-sm" style="color:var(--text-muted);">No contact tags yet. Add one above or import contacts to auto-create them.</div>
                             @endforelse
                         </div>
+                    </div>
+                    </div>
                     </div>
                 </div>
 
