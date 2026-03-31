@@ -1245,6 +1245,11 @@ class ESignWizardController extends Controller
 
         $template = $flow->template;
 
+        // Auto-flag template as e-sign capable when used via the wizard
+        if (!$template->is_esign) {
+            $template->update(['is_esign' => true]);
+        }
+
         // HARD BLOCK: Sale agreements cannot enter the e-sign pipeline (Alienation of Land Act)
         if ($template->isEsignBlocked()) {
             return redirect()->route('docuperfect.esign.step', [$flowId, 6])
@@ -3454,6 +3459,11 @@ class ESignWizardController extends Controller
      */
     private function prepareDownloadOnly(Request $request, Flow $flow, Template $template)
     {
+        // Auto-flag template as e-sign capable when used via the wizard
+        if (!$template->is_esign) {
+            $template->update(['is_esign' => true]);
+        }
+
         $user = $request->user();
         $stepData = $flow->step_data ?? [];
         $fields = $stepData['fields'] ?? ($template->fields_json ?? []);
@@ -3620,6 +3630,12 @@ class ESignWizardController extends Controller
         $flow->load('template');
 
         $template = $flow->template;
+
+        // Auto-flag template as e-sign capable when used via the wizard
+        if (!$template->is_esign) {
+            $template->update(['is_esign' => true]);
+        }
+
         $stepData = $flow->step_data ?? [];
         $fields = $stepData['fields'] ?? ($template->fields_json ?? []);
         $renderType = $template->render_type ?? 'pdf';
@@ -4095,17 +4111,10 @@ class ESignWizardController extends Controller
     {
         $user = $request->user();
 
-        // Only e-sign wizard documents — exclude rental flow documents
+        // All e-sign documents for this user (rental exclusion removed — all document types shown)
         $allTemplates = SignatureTemplate::with(['document.template', 'requests', 'creator'])
             ->where('created_by', $user->id)
-            ->whereHas('document', function ($q) {
-                $q->whereNotIn('document_type', ['rental', 'rental_upload_send', 'lease_agreement'])
-                  ->where(function ($q2) {
-                      $q2->whereDoesntHave('template', function ($tq) {
-                          $tq->where('template_type', 'rental');
-                      })->orWhereDoesntHave('template');
-                  });
-            })
+            ->whereHas('document')
             ->orderByDesc('created_at')
             ->get();
 
