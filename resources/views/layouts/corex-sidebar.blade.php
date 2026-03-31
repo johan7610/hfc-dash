@@ -55,6 +55,8 @@
         $activeGroup = 'documents';
     } elseif (request()->routeIs('rental.*')) {
         $activeGroup = 'rentals';
+    } elseif (request()->routeIs('compliance.*')) {
+        $activeGroup = 'compliance';
     }
 @endphp
 
@@ -423,24 +425,35 @@
              NON-GROUPED TOP-LEVEL ITEMS
              ═══════════════════════════════════════════ --}}
 
-        {{-- Compliance --}}
+        {{-- Compliance (expandable group) --}}
         @permission('access_compliance')
-        <a href="{{ route('compliance.fica.index') }}" class="corex-nav-item {{ request()->routeIs('compliance.fica.*') || request()->routeIs('compliance.rmcp') || request()->routeIs('compliance.agents') ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-            </svg>
-            <span>Compliance</span>
-        </a>
-        <a href="{{ route('compliance.rmcp') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.rmcp') ? 'active' : '' }}" style="margin-left: 2.25rem;">RMCP</a>
-        @if($isOwner || $effectiveRole === 'super_admin')
-        @php $nonCompliantAgents = \App\Models\User::where('is_active', true)->whereNull('deleted_at')->whereNull('ffc_number')->count(); @endphp
-        <a href="{{ route('compliance.agents') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.agents') ? 'active' : '' }}" style="margin-left: 2.25rem;">
-            Agent Compliance
-            @if($nonCompliantAgents > 0)
-            <span class="ml-auto w-2 h-2 rounded-full bg-red-500 flex-shrink-0 inline-block"></span>
-            @endif
-        </a>
-        @endif
+        <div>
+            <button type="button" @click="toggle('compliance')"
+                    class="corex-nav-item corex-nav-group-toggle {{ $activeGroup === 'compliance' ? 'active' : '' }}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+                </svg>
+                <span>Compliance</span>
+                <svg class="corex-chevron transition-transform duration-200" :class="openGroup === 'compliance' && 'rotate-90'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+            </button>
+
+            <div x-show="openGroup === 'compliance'" @unless($activeGroup === 'compliance') x-cloak @endunless
+                 x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                 x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+                 class="corex-nav-children">
+                <a href="{{ route('compliance.fica.index') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.fica.*') ? 'active' : '' }}">FICA</a>
+                <a href="{{ route('compliance.rmcp') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.rmcp') ? 'active' : '' }}">RMCP</a>
+                @if($isOwner || $effectiveRole === 'super_admin')
+                @php $nonCompliantAgents = \App\Models\User::where('is_active', true)->whereNull('deleted_at')->whereNull('ffc_number')->count(); @endphp
+                <a href="{{ route('compliance.agents') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.agents') ? 'active' : '' }}">
+                    Agent Compliance
+                    @if($nonCompliantAgents > 0)
+                    <span class="ml-auto w-2 h-2 rounded-full bg-red-500 flex-shrink-0 inline-block"></span>
+                    @endif
+                </a>
+                @endif
+            </div>
+        </div>
         @endpermission
 
         {{-- Supervision --}}

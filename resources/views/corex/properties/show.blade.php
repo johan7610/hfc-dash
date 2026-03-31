@@ -1981,8 +1981,10 @@
                     </div>
                 </div>
 
-                {{-- Pricing & Costs --}}
-                <div>
+                {{-- Pricing & Costs — only visible for rentals --}}
+                <div x-data="{ isRentalCosts: document.querySelector('[name=listing_type]')?.value === 'Rental' }"
+                     x-init="document.querySelector('[name=listing_type]')?.addEventListener('change', e => isRentalCosts = e.target.value === 'Rental')"
+                     x-show="isRentalCosts || '{{ strtolower($property->listing_type ?? '') }}' === 'rental'" x-cloak>
                     <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Pricing & Costs</h3>
                     <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
                         <div>
