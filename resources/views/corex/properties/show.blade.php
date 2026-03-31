@@ -694,6 +694,7 @@
 
             {{-- ── QUICK ACTIONS ─────────────────────────────────────────────── --}}
             @if(!$isNew)
+            @php $quickUpdateUrl = route('corex.properties.update', $property); @endphp
             <div>
                 <h3 class="text-xs font-bold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Quick Actions</h3>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2"
@@ -702,7 +703,7 @@
                     <div class="rounded-md p-3 space-y-2" style="background:var(--surface-2); border:1px solid var(--border);">
                         <label class="text-[10px] font-semibold" style="color:var(--text-muted);">Change Price</label>
                         <input type="number" x-model="qPrice" class="w-full rounded px-2 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                        <button type="button" @click="qSaving=true; fetch('{{ route('corex.properties.update', $property) }}', {method:'POST',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({_method:'PUT',price:qPrice,title:'{{ addslashes($property->title) }}',suburb:'{{ addslashes($property->suburb ?? '') }}',beds:{{ $property->beds ?? 0 }},baths:{{ $property->baths ?? 0 }},garages:{{ $property->garages ?? 0 }},status:qStatus})}).then(()=>location.reload())"
+                        <button type="button" @click="qSaving=true; fetch('{{ $quickUpdateUrl }}', {method:'POST',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({_method:'PUT',price:qPrice,title:'{{ addslashes($property->title) }}',suburb:'{{ addslashes($property->suburb ?? '') }}',beds:{{ $property->beds ?? 0 }},baths:{{ $property->baths ?? 0 }},garages:{{ $property->garages ?? 0 }},status:qStatus})}).then(()=>location.reload())"
                                 class="w-full text-[10px] font-semibold py-1.5 rounded" style="background:var(--brand-button,#0ea5e9); color:#fff;">
                             Update
                         </button>
@@ -716,7 +717,7 @@
                             <option value="{{ $val }}">{{ $item->name }}</option>
                             @endforeach
                         </select>
-                        <button type="button" @click="qSaving=true; fetch('{{ route('corex.properties.update', $property) }}', {method:'POST',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({_method:'PUT',status:qStatus,title:'{{ addslashes($property->title) }}',suburb:'{{ addslashes($property->suburb ?? '') }}',price:qPrice,beds:{{ $property->beds ?? 0 }},baths:{{ $property->baths ?? 0 }},garages:{{ $property->garages ?? 0 }}})}).then(()=>location.reload())"
+                        <button type="button" @click="qSaving=true; fetch('{{ $quickUpdateUrl }}', {method:'POST',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({_method:'PUT',status:qStatus,title:'{{ addslashes($property->title) }}',suburb:'{{ addslashes($property->suburb ?? '') }}',price:qPrice,beds:{{ $property->beds ?? 0 }},baths:{{ $property->baths ?? 0 }},garages:{{ $property->garages ?? 0 }}})}).then(()=>location.reload())"
                                 class="w-full text-[10px] font-semibold py-1.5 rounded" style="background:var(--brand-button,#0ea5e9); color:#fff;">
                             Update
                         </button>
