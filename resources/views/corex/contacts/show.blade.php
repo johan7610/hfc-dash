@@ -560,7 +560,7 @@
                         <div class="text-xs mt-0.5 flex flex-wrap gap-2" style="color:var(--text-muted);">
                             <span style="color:{{ $propSc }};">{{ ucfirst($prop->status) }}</span>
                             <span>{{ $prop->formattedPrice() }}</span>
-                            @if($prop->address)<span>{{ $prop->address }}{{ $prop->suburb ? ', '.$prop->suburb : '' }}</span>@elseif($prop->suburb)<span>{{ $prop->suburb }}</span>@endif
+                            <span>{{ $prop->buildDisplayAddress() }}</span>
                             @if($prop->pivot->role)<span class="font-semibold" style="color:var(--brand-icon, #0ea5e9);">{{ ucfirst($prop->pivot->role) }}</span>@endif
                         </div>
                     </div>

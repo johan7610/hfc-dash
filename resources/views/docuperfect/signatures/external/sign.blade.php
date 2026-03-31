@@ -2272,11 +2272,13 @@ function externalSign() {
             if (success) {
                 this.showSignModal = false;
 
-                const remainingSigMarkers = this.markers.filter(m =>
-                    m.is_mine && !m.signed && m.type === 'signature'
+                // Offer apply-to-all for remaining markers of the same type (signature or initial)
+                const currentType = this.activeMarker.type;
+                const remainingMarkers = this.markers.filter(m =>
+                    m.is_mine && !m.signed && m.type === currentType
                 );
 
-                if (!this.firstSignatureDone && this.activeMarker.type === 'signature' && remainingSigMarkers.length > 0) {
+                if (!this.firstSignatureDone && (currentType === 'signature' || currentType === 'initial') && remainingMarkers.length > 0) {
                     this.lastSignatureData = signatureData;
                     this.lastSignatureType = signatureType;
                     this.showApplyAll = true;
@@ -2331,12 +2333,14 @@ function externalSign() {
             }
         },
 
-        // ── Apply to all ──
+        // ── Apply to all (signatures or initials) ──
         async applyToAllSignatureMarkers() {
             this.applyingAll = true;
 
+            // Apply to remaining markers of the same type as the one that triggered the prompt
+            const applyType = this.activeMarker?.type || 'signature';
             const remaining = this.markers.filter(m =>
-                m.is_mine && !m.signed && m.type === 'signature'
+                m.is_mine && !m.signed && (m.type === applyType || m.type === 'signature')
             );
 
             for (const marker of remaining) {
@@ -2350,7 +2354,8 @@ function externalSign() {
         },
 
         get remainingSignatureCount() {
-            return this.markers.filter(m => m.is_mine && !m.signed && m.type === 'signature').length;
+            const t = this.activeMarker?.type || 'signature';
+            return this.markers.filter(m => m.is_mine && !m.signed && (m.type === t || m.type === 'signature')).length;
         },
         set remainingSignatureCount(v) {},
 
@@ -2393,6 +2398,12 @@ function externalSign() {
             }
 
             try {
+                // Include ceremony values (date, location, time) collected during signing
+                const payload = {};
+                if (this.webCeremonyValues && Object.keys(this.webCeremonyValues).length > 0) {
+                    payload.ceremony_values = this.webCeremonyValues;
+                }
+
                 const resp = await fetch('/sign/' + this.token + '/complete', {
                     method: 'POST',
                     headers: {
@@ -2400,6 +2411,7 @@ function externalSign() {
                         'Accept': 'application/json',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                     },
+                    body: JSON.stringify(payload),
                 });
                 const data = await resp.json();
                 if (data.ok && data.redirect) {

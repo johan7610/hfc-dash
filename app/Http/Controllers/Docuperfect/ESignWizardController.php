@@ -698,6 +698,98 @@ class ESignWizardController extends Controller
         $stepData = $flow->step_data ?? [];
         $stepData[$stepKey] = $data;
 
+        // Sort recipients by SA signing convention when saving step 3
+        if ($stepKey === 'recipients' && !empty($data['recipients'])) {
+            $sorted = $this->sortRecipientsBySigningOrder($data['recipients']);
+
+            // Auto-create contact records for manually entered recipients
+            $propertyId = $stepData['property']['property_id'] ?? null;
+            $propertySource = $stepData['property']['_property_source'] ?? 'properties';
+
+            foreach ($sorted as &$r) {
+                // Skip agents and recipients that already have a contact linked
+                if (($r['role'] ?? '') === 'agent' || ($r['readonly'] ?? false)) {
+                    continue;
+                }
+                if (!empty($r['_contact_id'])) {
+                    continue;
+                }
+
+                // Must have at least a name to create a contact
+                $name = trim($r['name'] ?? '');
+                if ($name === '') {
+                    continue;
+                }
+
+                $email = trim($r['email'] ?? '');
+                $idNumber = trim($r['id_number'] ?? '');
+
+                // Check for existing contact by email or id_number (prevent duplicates)
+                $existing = null;
+                if ($email !== '') {
+                    $existing = Contact::where('email', $email)->first();
+                }
+                if (!$existing && $idNumber !== '') {
+                    $existing = Contact::where('id_number', $idNumber)->first();
+                }
+
+                if ($existing) {
+                    $r['_contact_id'] = $existing->id;
+                } else {
+                    // Split name: first space separates first_name from last_name
+                    $nameParts = explode(' ', $name, 2);
+                    $firstName = $nameParts[0];
+                    $lastName = $nameParts[1] ?? '';
+
+                    // Derive contact_type_id from recipient role via esign_role mapping
+                    $roleToEsignRole = [
+                        'tenant' => 'lessee', 'lessee' => 'lessee',
+                        'buyer' => 'buyer', 'purchaser' => 'buyer',
+                        'landlord' => 'lessor', 'lessor' => 'lessor',
+                        'seller' => 'seller', 'owner' => 'seller',
+                        'witness' => null,
+                    ];
+                    $esignRole = $roleToEsignRole[strtolower($r['role'] ?? '')] ?? null;
+                    $contactTypeId = null;
+                    if ($esignRole) {
+                        $contactTypeId = \App\Models\ContactType::where('esign_role', $esignRole)->value('id');
+                    }
+                    if (!$contactTypeId) {
+                        // Try matching by name (for witness, spouse, etc.)
+                        $contactTypeId = \App\Models\ContactType::where('name', 'like', '%' . ($r['role'] ?? '') . '%')->value('id');
+                    }
+
+                    $contact = Contact::create([
+                        'first_name' => $firstName,
+                        'last_name' => $lastName,
+                        'email' => $email ?: null,
+                        'id_number' => $idNumber ?: null,
+                        'contact_type_id' => $contactTypeId,
+                        'created_by_user_id' => $request->user()?->id,
+                    ]);
+
+                    $r['_contact_id'] = $contact->id;
+
+                    // Link contact to property if one is selected
+                    if ($propertyId && $propertySource === 'properties') {
+                        $pivotRoleMap = [
+                            'tenant' => 'tenant', 'lessee' => 'tenant',
+                            'buyer' => 'buyer',
+                            'landlord' => 'lessor', 'lessor' => 'lessor',
+                            'seller' => 'owner', 'owner' => 'owner',
+                        ];
+                        $pivotRole = $pivotRoleMap[strtolower($r['role'] ?? '')] ?? null;
+                        $contact->properties()->syncWithoutDetaching([
+                            $propertyId => ['role' => $pivotRole],
+                        ]);
+                    }
+                }
+            }
+            unset($r);
+
+            $stepData['recipients']['recipients'] = $sorted;
+        }
+
         // For step 5 (fill_review): merge field values and party overrides back into the main fields array
         if ($stepKey === 'fill_review') {
             $fields = $stepData['fields'] ?? [];
@@ -737,9 +829,10 @@ class ESignWizardController extends Controller
                 $flow->property_id = $data['property_id'];
             }
         }
-        if ($stepKey === 'recipients' && !empty($data['recipients'])) {
-            // Link first non-agent recipient's contact_id
-            foreach ($data['recipients'] as $r) {
+        if ($stepKey === 'recipients') {
+            // Link first non-agent recipient's contact_id (use processed recipients with auto-created IDs)
+            $processedRecipients = $stepData['recipients']['recipients'] ?? $data['recipients'] ?? [];
+            foreach ($processedRecipients as $r) {
                 if (!empty($r['_contact_id']) && ($r['role'] ?? '') !== 'agent') {
                     $flow->contact_id = $r['_contact_id'];
                     break;
@@ -857,27 +950,34 @@ class ESignWizardController extends Controller
         $results = [];
 
         // 1. Search main properties table
-        $properties = Property::where(function ($query) use ($q) {
-            $query->where('address', 'like', "%{$q}%")
-                ->orWhere('suburb', 'like', "%{$q}%")
-                ->orWhere('title', 'like', "%{$q}%")
-                ->orWhere('property_number', 'like', "%{$q}%")
-                ->orWhere('complex_name', 'like', "%{$q}%");
-        })
+        $properties = Property::searchAddress($q)
             ->limit(10)
             ->get();
 
         foreach ($properties as $p) {
-            // Get linked contacts (lessor/landlord) via pivot
+            // Get linked contacts (lessor/landlord) — scoped to this property
+            // Primary: match by pivot role
             $lessor = $p->contacts()
-                ->wherePivot('role', 'lessor')
-                ->orWherePivot('role', 'landlord')
+                ->where(function ($q) {
+                    $q->where('contact_property.role', 'lessor')
+                      ->orWhere('contact_property.role', 'landlord')
+                      ->orWhere('contact_property.role', 'owner');
+                })
                 ->first();
+
+            // Fallback: match by contact_type esign_role (for NULL pivot roles)
+            if (!$lessor) {
+                $lessor = $p->contacts()
+                    ->whereHas('type', function ($q) {
+                        $q->whereIn('esign_role', ['seller', 'lessor']);
+                    })
+                    ->first();
+            }
 
             $results[] = [
                 'id'                => $p->id,
                 'source'            => 'properties',
-                'address'           => $p->address ?: $p->title,
+                'address'           => $p->buildDisplayAddress(),
                 'suburb'            => $p->suburb ?? '',
                 'erf_no'            => $p->property_number ?? '',
                 'complex_name'      => $p->complex_name ?? '',
@@ -894,7 +994,7 @@ class ESignWizardController extends Controller
                 'lessor_id'         => $lessor?->id,
                 'beds'              => $p->beds,
                 'baths'             => $p->baths,
-                'display'           => trim(($p->address ?: $p->title) . ', ' . ($p->suburb ?? ''), ', '),
+                'display'           => $p->buildDisplayAddress(),
             ];
         }
 
@@ -909,11 +1009,15 @@ class ESignWizardController extends Controller
             ->get();
 
         foreach ($rentalProps as $rp) {
-            // Avoid duplicating if already found in properties by address match
+            $rpAddr = $rp->full_address ?: $rp->address_line_1;
+            if (!empty($rp->suburb) && $rpAddr && !str_contains($rpAddr, $rp->suburb)) {
+                $rpAddr .= ', ' . $rp->suburb;
+            }
+
             $results[] = [
                 'id'                => $rp->id,
                 'source'            => 'rental_properties',
-                'address'           => $rp->full_address ?: $rp->address_line_1,
+                'address'           => $rpAddr,
                 'suburb'            => $rp->suburb ?? '',
                 'erf_no'            => '',
                 'complex_name'      => '',
@@ -929,7 +1033,7 @@ class ESignWizardController extends Controller
                 'lessor_id'         => null,
                 'beds'              => null,
                 'baths'             => null,
-                'display'           => $rp->full_address ?: $rp->address_line_1,
+                'display'           => $rpAddr,
             ];
         }
 
@@ -999,6 +1103,7 @@ class ESignWizardController extends Controller
                 'id_number'           => $c->id_number ?? '',
                 'address'             => $c->address ?? '',
                 'contact_type'        => $c->type?->name ?? '',
+                'esign_role'          => $c->type?->esign_role ?? null,
                 'bank_name'           => $c->bank_name ?? '',
                 'bank_account_name'   => $c->bank_account_name ?? '',
                 'bank_account_number' => $c->bank_account_number ?? '',
@@ -1228,6 +1333,11 @@ class ESignWizardController extends Controller
 
         $template = $flow->template;
 
+        // Auto-flag template as e-sign capable when used via the wizard
+        if (!$template->is_esign) {
+            $template->update(['is_esign' => true]);
+        }
+
         // HARD BLOCK: Sale agreements cannot enter the e-sign pipeline (Alienation of Land Act)
         if ($template->isEsignBlocked()) {
             return redirect()->route('docuperfect.esign.step', [$flowId, 6])
@@ -1284,6 +1394,8 @@ class ESignWizardController extends Controller
         }
 
         $recipients = $stepData['recipients']['recipients'] ?? [];
+        // Sort recipients by SA signing convention: Agent → Tenant/Buyer → Landlord/Seller → Witness
+        $recipients = $this->sortRecipientsBySigningOrder($recipients);
         // Support both old format (array of entries) and new format ({delivery_mode, parties: [...]})
         $signingSetupRaw = $stepData['signing_setup'] ?? [];
         $signingSetup = isset($signingSetupRaw['parties']) ? $signingSetupRaw['parties'] : $signingSetupRaw;
@@ -1978,9 +2090,16 @@ class ESignWizardController extends Controller
      * Map template signing_parties to allowed esign_role values on contact_types.
      * Returns empty array if signing_parties is null/empty (= show all contacts, legacy fallback).
      */
-    private function buildAllowedEsignRoles(array $signingParties): array
+    private function buildAllowedEsignRoles(array|string|null $signingParties): array
     {
         if (empty($signingParties)) return [];
+
+        // Handle JSON string (legacy or un-cast data)
+        if (is_string($signingParties)) {
+            $signingParties = json_decode($signingParties, true) ?? [];
+        }
+
+        if (!is_array($signingParties)) return [];
 
         $roleMap = [
             'owner_party' => ['seller', 'lessor'],
@@ -2748,6 +2867,38 @@ class ESignWizardController extends Controller
         return $field;
     }
 
+    /**
+     * Sort recipients by signing order: Agent → Acquiring party → Owner party → Witness.
+     * In SA practice, tenant/buyer always signs before landlord/seller.
+     */
+    private function sortRecipientsBySigningOrder(array $recipients): array
+    {
+        $rolePriority = [
+            'agent' => 1,
+            // Acquiring party signs first among external parties
+            'tenant' => 10, 'lessee' => 10, 'buyer' => 10, 'purchaser' => 10, 'co_buyer' => 10,
+            // Owner party signs after acquiring party
+            'landlord' => 20, 'lessor' => 20, 'seller' => 20, 'owner' => 20, 'co_seller' => 20, 'spouse' => 20,
+            // Witnesses always last
+            'witness' => 90,
+        ];
+
+        usort($recipients, function ($a, $b) use ($rolePriority) {
+            $roleA = strtolower(trim($a['role'] ?? 'other'));
+            $roleB = strtolower(trim($b['role'] ?? 'other'));
+            $priorityA = $rolePriority[$roleA] ?? 50;
+            $priorityB = $rolePriority[$roleB] ?? 50;
+            return $priorityA <=> $priorityB;
+        });
+
+        foreach ($recipients as $i => &$r) {
+            $r['signing_order'] = $i + 1;
+        }
+        unset($r);
+
+        return $recipients;
+    }
+
     private function stepKey(int $step): string
     {
         return match ($step) {
@@ -3396,6 +3547,11 @@ class ESignWizardController extends Controller
      */
     private function prepareDownloadOnly(Request $request, Flow $flow, Template $template)
     {
+        // Auto-flag template as e-sign capable when used via the wizard
+        if (!$template->is_esign) {
+            $template->update(['is_esign' => true]);
+        }
+
         $user = $request->user();
         $stepData = $flow->step_data ?? [];
         $fields = $stepData['fields'] ?? ($template->fields_json ?? []);
@@ -3562,6 +3718,12 @@ class ESignWizardController extends Controller
         $flow->load('template');
 
         $template = $flow->template;
+
+        // Auto-flag template as e-sign capable when used via the wizard
+        if (!$template->is_esign) {
+            $template->update(['is_esign' => true]);
+        }
+
         $stepData = $flow->step_data ?? [];
         $fields = $stepData['fields'] ?? ($template->fields_json ?? []);
         $renderType = $template->render_type ?? 'pdf';
@@ -3590,6 +3752,7 @@ class ESignWizardController extends Controller
         }
 
         $recipients = $stepData['recipients']['recipients'] ?? [];
+        $recipients = $this->sortRecipientsBySigningOrder($recipients);
         $signingSetupRaw = $stepData['signing_setup'] ?? [];
         $signingSetup = isset($signingSetupRaw['parties']) ? $signingSetupRaw['parties'] : $signingSetupRaw;
         $propertyAddress = $stepData['property']['address'] ?? $stepData['property']['title'] ?? '';
@@ -4036,17 +4199,10 @@ class ESignWizardController extends Controller
     {
         $user = $request->user();
 
-        // Only e-sign wizard documents — exclude rental flow documents
+        // All e-sign documents for this user (rental exclusion removed — all document types shown)
         $allTemplates = SignatureTemplate::with(['document.template', 'requests', 'creator'])
             ->where('created_by', $user->id)
-            ->whereHas('document', function ($q) {
-                $q->whereNotIn('document_type', ['rental', 'rental_upload_send', 'lease_agreement'])
-                  ->where(function ($q2) {
-                      $q2->whereDoesntHave('template', function ($tq) {
-                          $tq->where('template_type', 'rental');
-                      })->orWhereDoesntHave('template');
-                  });
-            })
+            ->whereHas('document')
             ->orderByDesc('created_at')
             ->get();
 
