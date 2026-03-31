@@ -30,74 +30,7 @@
         @endif
     </div>
 
-    {{-- ── READINESS BAR ──────────────────────────────────────────────── --}}
-    @if(!$isNew)
-    @php
-        $readiness = [
-            'basic'   => !empty($property->title) && !empty($property->price) && !empty($property->property_type) && !empty($property->status),
-            'address' => !empty($property->suburb) && (!empty($property->street_name) || !empty($property->address)),
-            'desc'    => !empty($property->description),
-            'photos'  => count($property->allImages()) > 0,
-            'agent'   => !empty($property->agent_id),
-        ];
-        $photoCount = count($property->allImages());
-        $completeParts = array_filter($readiness);
-        $completenessScore = count($readiness) > 0 ? round((count($completeParts) / count($readiness)) * 100) : 0;
-        $scoreColor = $completenessScore >= 80 ? '#22c55e' : ($completenessScore >= 50 ? '#f59e0b' : '#ef4444');
-    @endphp
-    <div class="rounded-md" style="background:var(--surface); border:1px solid var(--border);">
-        {{-- Progress bar --}}
-        <div class="h-1 rounded-t-md overflow-hidden" style="background:var(--surface-2);">
-            <div class="h-full rounded-t-md transition-all duration-500" style="width:{{ $completenessScore }}%; background:{{ $scoreColor }};"></div>
-        </div>
-        <div class="flex items-center gap-3 px-4 py-2 flex-wrap">
-            {{-- Score --}}
-            <span class="text-xs font-bold flex-shrink-0" style="color:{{ $scoreColor }};">{{ $completenessScore }}%</span>
-
-            {{-- Checklist --}}
-            <div class="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
-                @foreach([
-                    ['key' => 'basic',   'label' => 'Basic',   'tab' => 'info'],
-                    ['key' => 'address', 'label' => 'Address', 'tab' => 'info'],
-                    ['key' => 'desc',    'label' => 'Desc',    'tab' => 'info'],
-                    ['key' => 'photos',  'label' => $photoCount > 0 ? "Photos ({$photoCount})" : 'Photos', 'tab' => 'gallery'],
-                    ['key' => 'agent',   'label' => 'Agent',   'tab' => 'info'],
-                ] as $item)
-                <button type="button" @click="activeTab = '{{ $item['tab'] }}'"
-                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold cursor-pointer"
-                        style="{{ $readiness[$item['key']]
-                            ? 'color:#22c55e;'
-                            : 'color:#ef4444;' }}">
-                    @if($readiness[$item['key']])
-                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
-                    @else
-                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                    @endif
-                    {{ $item['label'] }}
-                </button>
-                @endforeach
-
-                <span class="text-[10px]" style="color:var(--border);">|</span>
-
-                {{-- Portal status --}}
-                <span class="text-[10px] font-semibold" style="color:{{ $property->isPublished() ? '#22c55e' : 'var(--text-muted)' }};">Web</span>
-                @if($property->pp_syndication_enabled)
-                <span class="text-[10px] font-semibold" style="color:{{ $property->pp_syndication_status === 'active' ? '#00d4aa' : '#f59e0b' }};">PP</span>
-                @endif
-                @if($property->p24_syndication_enabled)
-                <span class="text-[10px] font-semibold" style="color:{{ $property->p24_syndication_status === 'active' ? '#3b82f6' : '#f59e0b' }};">P24</span>
-                @endif
-            </div>
-
-            {{-- Save --}}
-            <button type="submit" form="prop-update-form"
-                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold text-white flex-shrink-0 transition-opacity hover:opacity-90"
-                    style="background:var(--brand-button,#0ea5e9);">
-                Save
-            </button>
-        </div>
-    </div>
-    @endif
+    {{-- Readiness bar removed --}}
 
     {{-- Two-column layout on large screens --}}
     <div class="flex gap-5 items-start" style="min-height:0;">
