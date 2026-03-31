@@ -19,22 +19,17 @@ class ContactPropertyController extends Controller
             ->limit(10);
 
         if ($q !== '') {
-            $query->where(function ($qb) use ($q) {
-                $qb->where('address', 'like', "%{$q}%")
-                   ->orWhere('title',  'like', "%{$q}%")
-                   ->orWhere('suburb', 'like', "%{$q}%");
-            });
+            $query->searchAddress($q);
         }
 
         return response()->json(
-            $query->get(['id', 'title', 'address', 'suburb', 'city', 'price', 'status'])
-                  ->map(fn ($p) => [
-                      'id'      => $p->id,
-                      'title'   => $p->title,
-                      'address' => trim(implode(', ', array_filter([$p->address, $p->suburb, $p->city]))),
-                      'price'   => $p->formattedPrice(),
-                      'status'  => $p->status,
-                  ])
+            $query->get()->map(fn ($p) => [
+                'id'      => $p->id,
+                'title'   => $p->title,
+                'address' => $p->buildDisplayAddress(),
+                'price'   => $p->formattedPrice(),
+                'status'  => $p->status,
+            ])
         );
     }
 

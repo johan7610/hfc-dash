@@ -74,11 +74,7 @@ class PropertyController extends Controller
         }
 
         if ($search !== '') {
-            $query->where(function ($q) use ($search) {
-                $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('suburb', 'like', "%{$search}%")
-                  ->orWhere('city', 'like', "%{$search}%");
-            });
+            $query->searchAddress($search);
         }
 
         $properties = $query->orderByDesc('created_at')->get();

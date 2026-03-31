@@ -222,7 +222,66 @@ class Property extends Model
                     ->withTimestamps();
     }
 
+    // ── Address Helpers ──
+
+    /**
+     * Build the best human-readable address from available fields.
+     * Priority: street_number + street_name > address > title (last resort).
+     */
+    public function buildDisplayAddress(): string
+    {
+        $parts = [];
+
+        if (!empty($this->unit_number)) {
+            $parts[] = 'Unit ' . $this->unit_number;
+        }
+        if (!empty($this->complex_name)) {
+            $parts[] = $this->complex_name;
+        }
+
+        // Prefer street_number + street_name over legacy address field
+        if (!empty($this->street_number) && !empty($this->street_name)) {
+            $parts[] = $this->street_number . ' ' . $this->street_name;
+        } elseif (!empty($this->street_name)) {
+            $parts[] = $this->street_name;
+        } elseif (!empty($this->address)) {
+            $parts[] = $this->address;
+        }
+
+        if (!empty($this->suburb)) {
+            $parts[] = $this->suburb;
+        }
+
+        if (!empty($this->city) && strtolower($this->city) !== strtolower($this->suburb ?? '')) {
+            $parts[] = $this->city;
+        }
+
+        if (empty($parts)) {
+            return $this->title ?? 'Unknown Property';
+        }
+
+        return implode(', ', $parts);
+    }
+
     // ── Scopes ──
+
+    /**
+     * Scope: search across all address-related fields.
+     */
+    public function scopeSearchAddress($query, string $term)
+    {
+        return $query->where(function ($q) use ($term) {
+            $q->where('address', 'like', "%{$term}%")
+              ->orWhere('street_name', 'like', "%{$term}%")
+              ->orWhere('street_number', 'like', "%{$term}%")
+              ->orWhere('title', 'like', "%{$term}%")
+              ->orWhere('suburb', 'like', "%{$term}%")
+              ->orWhere('city', 'like', "%{$term}%")
+              ->orWhere('complex_name', 'like', "%{$term}%")
+              ->orWhere('unit_number', 'like', "%{$term}%")
+              ->orWhere('property_number', 'like', "%{$term}%");
+        });
+    }
 
     public function scopeVisibleTo($query, \App\Models\User $user)
     {

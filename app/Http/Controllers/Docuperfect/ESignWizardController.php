@@ -861,58 +861,8 @@ class ESignWizardController extends Controller
 
         $results = [];
 
-        // Build a proper street address from available property fields
-        $buildAddress = function ($p): string {
-            $parts = [];
-
-            if (!empty($p->unit_number)) {
-                $parts[] = 'Unit ' . $p->unit_number;
-            }
-            if (!empty($p->complex_name)) {
-                $parts[] = $p->complex_name;
-            }
-
-            // Prefer street_number + street_name, fall back to address field
-            $street = '';
-            if (!empty($p->street_number) && !empty($p->street_name)) {
-                $street = $p->street_number . ' ' . $p->street_name;
-            } elseif (!empty($p->street_name)) {
-                $street = $p->street_name;
-            } elseif (!empty($p->address)) {
-                $street = $p->address;
-            }
-            if ($street) {
-                $parts[] = $street;
-            }
-
-            if (!empty($p->suburb)) {
-                $parts[] = $p->suburb;
-            }
-
-            if (empty($parts)) {
-                return $p->title ?? 'Unknown Property';
-            }
-
-            return implode(', ', $parts);
-        };
-
         // 1. Search main properties table
-        $properties = Property::where(function ($query) use ($q) {
-            $query->where('address', 'like', "%{$q}%")
-                ->orWhere('suburb', 'like', "%{$q}%")
-                ->orWhere('title', 'like', "%{$q}%")
-                ->orWhere('property_number', 'like', "%{$q}%")
-                ->orWhere('complex_name', 'like', "%{$q}%")
-                ->orWhere('unit_number', 'like', "%{$q}%");
-
-            // These columns exist on staging/production but may not on local
-            if (\Illuminate\Support\Facades\Schema::hasColumn('properties', 'street_name')) {
-                $query->orWhere('street_name', 'like', "%{$q}%");
-            }
-            if (\Illuminate\Support\Facades\Schema::hasColumn('properties', 'street_number')) {
-                $query->orWhere('street_number', 'like', "%{$q}%");
-            }
-        })
+        $properties = Property::searchAddress($q)
             ->limit(10)
             ->get();
 
@@ -923,12 +873,10 @@ class ESignWizardController extends Controller
                 ->orWherePivot('role', 'landlord')
                 ->first();
 
-            $resolvedAddress = $buildAddress($p);
-
             $results[] = [
                 'id'                => $p->id,
                 'source'            => 'properties',
-                'address'           => $resolvedAddress,
+                'address'           => $p->buildDisplayAddress(),
                 'suburb'            => $p->suburb ?? '',
                 'erf_no'            => $p->property_number ?? '',
                 'complex_name'      => $p->complex_name ?? '',
@@ -945,7 +893,7 @@ class ESignWizardController extends Controller
                 'lessor_id'         => $lessor?->id,
                 'beds'              => $p->beds,
                 'baths'             => $p->baths,
-                'display'           => $resolvedAddress,
+                'display'           => $p->buildDisplayAddress(),
             ];
         }
 
