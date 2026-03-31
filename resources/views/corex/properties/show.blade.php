@@ -809,7 +809,7 @@
         {{-- ── INFO TAB ───────────────────────────────────────────────────── --}}
         <div x-show="activeTab === 'info'" {{ $isNew ? '' : 'x-cloak' }} class="p-6">
             <form id="prop-update-form" method="POST" enctype="multipart/form-data"
-                  action="{{ $isNew ? route('corex.properties.store') : route('corex.properties.update', $property) }}"
+                  action="@if($isNew){{ route('corex.properties.store') }}@else{{ route('corex.properties.update', $property) }}@endif"
                   class="space-y-6">
                 @csrf
                 @if(!$isNew) @method('PUT') @endif
