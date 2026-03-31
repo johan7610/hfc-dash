@@ -1966,18 +1966,7 @@
                                 @endforeach
                             </select>
                         </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Publish to Website</label>
-                            <div class="flex items-center gap-2 mt-1">
-                                <input type="hidden" name="publish" value="0">
-                                <input type="checkbox" name="publish" value="1" id="publish_toggle"
-                                       {{ $property->isPublished() ? 'checked disabled' : '' }}
-                                       class="w-4 h-4 rounded" style="accent-color:var(--brand-icon,#0ea5e9);">
-                                <label for="publish_toggle" class="text-xs" style="color:var(--text-secondary);">
-                                    {{ $property->isPublished() ? 'Published '.$property->published_at->diffForHumans() : 'Publish now' }}
-                                </label>
-                            </div>
-                        </div>
+                        {{-- Publish to Website moved to syndication panel in sidebar --}}
                     </div>
                 </div>
 
