@@ -775,7 +775,7 @@ function roleManager() {
     return {
         dark: document.documentElement.classList.contains('dark'),
         activeTab: 'permissions',
-        selectedRole: rolesData.find(r => !r.is_owner)?.name || rolesData[0]?.name || 'admin',
+        selectedRole: new URLSearchParams(window.location.search).get('role') || rolesData.find(r => !r.is_owner)?.name || rolesData[0]?.name || 'admin',
         matrix: matrix,
         scopeMatrix: scopeMatrix,
         dirty: false,

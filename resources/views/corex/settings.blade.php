@@ -656,6 +656,13 @@
                         style="background:transparent;">
                     Matches
                 </button>
+                <button type="button"
+                        @click="featureSection = 'dashboard'"
+                        :class="featureSection === 'dashboard' ? 'bg-[#00b4d8]/10 text-[#00b4d8] border-[#00b4d8]/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
+                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
+                        style="background:transparent;">
+                    Dashboard
+                </button>
             </div>
 
             {{-- DOCUMENTS section --}}
@@ -1252,10 +1259,6 @@
                     </div>
                 </div>
 
-                    </div>
-                    </div>
-                </div>
-
                 {{-- ── Contact Tags (accordion) ── --}}
                 <div x-data="{ open: false }" class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
                     <button type="button" @click="open = !open"
@@ -1714,6 +1717,159 @@
                 </div>
 
             </div>{{-- /matches --}}
+
+            {{-- ════════════════════════════════════════════════════════════════
+                 DASHBOARD SETTINGS section
+                 Controls whether agents use individual or agency-wide settings
+                 ════════════════════════════════════════════════════════════════ --}}
+            <div x-show="featureSection === 'dashboard'" x-cloak class="space-y-6"
+                 x-data="{ settingsMode: '{{ $dashboardSettingsMode ?? 'user' }}' }">
+
+                <div>
+                    <h3 class="text-xs font-bold uppercase tracking-widest mb-1" style="color:var(--text-muted);">Dashboard & Command Center</h3>
+                    <p class="text-xs" style="color:var(--text-muted);">Control how dashboard reminder and alert settings work for agents in this agency.</p>
+                </div>
+
+                {{-- Mode selector --}}
+                <div class="p-5 rounded-md space-y-4" style="background:var(--surface-2); border:1px solid var(--border);">
+                    <h4 class="text-sm font-semibold" style="color:var(--text-primary);">Settings Mode</h4>
+                    <p class="text-xs" style="color:var(--text-muted);">Choose whether each agent can personalise their own dashboard settings, or if the agency enforces one set of settings for everyone.</p>
+
+                    <form method="POST" action="{{ route('corex.settings.dashboard.mode') }}">
+                        @csrf @method('PUT')
+                        <div class="flex flex-col sm:flex-row gap-4 mt-3">
+                            <label class="flex-1 p-4 rounded-md cursor-pointer transition-all border-2"
+                                   :class="settingsMode === 'user' ? 'border-[#00b4d8]' : 'border-transparent'"
+                                   style="background:var(--surface);"
+                                   @click="settingsMode = 'user'">
+                                <input type="radio" name="dashboard_settings_mode" value="user" class="sr-only"
+                                       {{ ($dashboardSettingsMode ?? 'user') === 'user' ? 'checked' : '' }}>
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-md flex items-center justify-center" style="background:rgba(14,165,233,0.15);">
+                                        <svg class="w-4 h-4" style="color:#0ea5e9;" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-semibold" style="color:var(--text-primary);">Individual Settings</p>
+                                        <p class="text-xs mt-0.5" style="color:var(--text-muted);">Each agent customises their own reminders, alerts, and calendar preferences</p>
+                                    </div>
+                                </div>
+                            </label>
+
+                            <label class="flex-1 p-4 rounded-md cursor-pointer transition-all border-2"
+                                   :class="settingsMode === 'agency' ? 'border-[#00b4d8]' : 'border-transparent'"
+                                   style="background:var(--surface);"
+                                   @click="settingsMode = 'agency'">
+                                <input type="radio" name="dashboard_settings_mode" value="agency" class="sr-only"
+                                       {{ ($dashboardSettingsMode ?? 'user') === 'agency' ? 'checked' : '' }}>
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-md flex items-center justify-center" style="background:rgba(245,158,11,0.15);">
+                                        <svg class="w-4 h-4" style="color:#f59e0b;" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" /></svg>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-semibold" style="color:var(--text-primary);">Agency Settings</p>
+                                        <p class="text-xs mt-0.5" style="color:var(--text-muted);">All agents follow one set of settings managed by admin. User settings page is hidden.</p>
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div class="mt-4 flex justify-end">
+                            <button type="submit" class="px-4 py-2 rounded-md text-sm font-semibold text-white" style="background:var(--brand-button);">Save Mode</button>
+                        </div>
+                    </form>
+                </div>
+
+                {{-- Agency-wide settings form (only visible when mode = agency) --}}
+                <div x-show="settingsMode === 'agency'" x-cloak>
+                    <div class="p-5 rounded-md space-y-5" style="background:var(--surface-2); border:1px solid var(--border);">
+                        <h4 class="text-sm font-semibold" style="color:var(--text-primary);">Agency-Wide Dashboard Settings</h4>
+                        <p class="text-xs" style="color:var(--text-muted);">These settings apply to all agents in this agency when Agency mode is active.</p>
+
+                        <form method="POST" action="{{ route('corex.settings.dashboard.agency') }}">
+                            @csrf @method('PUT')
+
+                            <div class="space-y-4">
+                                {{-- Idle alerts --}}
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div>
+                                        <label class="flex items-center gap-2 text-sm mb-2" style="color:var(--text-secondary);">
+                                            <input type="hidden" name="idle_alerts_enabled" value="0">
+                                            <input type="checkbox" name="idle_alerts_enabled" value="1" {{ ($agencyDashboardSettings->idle_alerts_enabled ?? true) ? 'checked' : '' }} class="rounded">
+                                            Property idle alerts
+                                        </label>
+                                        <input type="number" name="idle_threshold_days" value="{{ $agencyDashboardSettings->idle_threshold_days ?? 14 }}" min="1"
+                                               class="w-full px-3 py-2 rounded-md text-sm border" style="background:var(--surface); border-color:var(--border-default); color:var(--text-primary);"
+                                               placeholder="Days">
+                                        <p class="text-[10px] mt-1" style="color:var(--text-muted);">Days idle before alert</p>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium mb-1" style="color:var(--text-secondary);">Alert day</label>
+                                        <select name="idle_alert_day" class="w-full px-3 py-2 rounded-md text-sm border" style="background:var(--surface); border-color:var(--border-default); color:var(--text-primary);">
+                                            <option value="">Every day</option>
+                                            @foreach(['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] as $day)
+                                                <option value="{{ $day }}" {{ ($agencyDashboardSettings->idle_alert_day ?? '') === $day ? 'selected' : '' }}>{{ ucfirst($day) }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium mb-1" style="color:var(--text-secondary);">Alert time</label>
+                                        <input type="time" name="idle_alert_time" value="{{ $agencyDashboardSettings->idle_alert_time ?? '08:00' }}"
+                                               class="w-full px-3 py-2 rounded-md text-sm border" style="background:var(--surface); border-color:var(--border-default); color:var(--text-primary);">
+                                    </div>
+                                </div>
+
+                                {{-- Toggles --}}
+                                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                    @foreach([
+                                        'doc_reminders_enabled'  => 'Document reminders',
+                                        'lease_expiry_reminders' => 'Lease expiry reminders',
+                                        'fica_reminders'         => 'FICA reminders',
+                                        'ffc_reminders'          => 'FFC reminders',
+                                        'task_due_reminders'     => 'Task due reminders',
+                                        'overdue_daily_digest'   => 'Daily overdue digest',
+                                        'notify_in_app'          => 'In-app notifications',
+                                        'notify_email'           => 'Email notifications',
+                                    ] as $field => $label)
+                                        <label class="flex items-center gap-2 text-sm" style="color:var(--text-secondary);">
+                                            <input type="hidden" name="{{ $field }}" value="0">
+                                            <input type="checkbox" name="{{ $field }}" value="1" {{ ($agencyDashboardSettings->$field ?? true) ? 'checked' : '' }} class="rounded">
+                                            {{ $label }}
+                                        </label>
+                                    @endforeach
+                                </div>
+
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium mb-1" style="color:var(--text-secondary);">Digest time</label>
+                                        <input type="time" name="digest_time" value="{{ $agencyDashboardSettings->digest_time ?? '08:00' }}"
+                                               class="w-full px-3 py-2 rounded-md text-sm border" style="background:var(--surface); border-color:var(--border-default); color:var(--text-primary);">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium mb-1" style="color:var(--text-secondary);">Default calendar view</label>
+                                        <select name="default_calendar_view" class="w-full px-3 py-2 rounded-md text-sm border" style="background:var(--surface); border-color:var(--border-default); color:var(--text-primary);">
+                                            @foreach(['month' => 'Month', 'week' => 'Week', 'day' => 'Day', 'agenda' => 'Agenda'] as $v => $l)
+                                                <option value="{{ $v }}" {{ ($agencyDashboardSettings->default_calendar_view ?? 'month') === $v ? 'selected' : '' }}>{{ $l }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div class="flex items-end pb-2">
+                                        <label class="flex items-center gap-2 text-sm" style="color:var(--text-secondary);">
+                                            <input type="hidden" name="weekend_visible" value="0">
+                                            <input type="checkbox" name="weekend_visible" value="1" {{ ($agencyDashboardSettings->weekend_visible ?? false) ? 'checked' : '' }} class="rounded">
+                                            Show weekends
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mt-4 flex justify-end">
+                                <button type="submit" class="px-4 py-2 rounded-md text-sm font-semibold text-white" style="background:var(--brand-button);">Save Agency Settings</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+            </div>{{-- /dashboard --}}
 
         </div>
 

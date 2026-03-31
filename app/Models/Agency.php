@@ -34,6 +34,7 @@ class Agency extends Model
         'email_disclaimer',
         'popi_url',
         'is_active',
+        'dashboard_settings_mode',
     ];
 
     protected $casts = [

@@ -61,3 +61,17 @@ Schedule::job(new \App\Jobs\SyncPrivatePropertyActivations())->everyFifteenMinut
 
 // Property24 ExDev activation polling — runs every 15 minutes
 Schedule::job(new \App\Jobs\SyncProperty24Activations())->everyFifteenMinutes()->withoutOverlapping();
+
+// ── Command Center ──
+
+// Process calendar reminders — runs every 15 minutes
+Schedule::command('command-center:reminders')->everyFifteenMinutes()->withoutOverlapping();
+
+// Calculate property health scores — runs nightly at 02:00
+Schedule::command('command-center:health')->dailyAt('02:00')->withoutOverlapping();
+
+// Calculate agent scorecards — runs nightly at 02:30
+Schedule::command('command-center:scorecards')->dailyAt('02:30')->withoutOverlapping();
+
+// Flag idle properties — runs daily at 07:00
+Schedule::command('command-center:flag-idle')->dailyAt('07:00')->withoutOverlapping();

@@ -5,6 +5,7 @@ namespace App\Observers;
 use App\Jobs\SubmitListingToProperty24;
 use App\Jobs\SyncPropertyToWebsite;
 use App\Models\Property;
+use App\Services\CommandCenter\AutoEventService;
 use App\Services\Syndication\Property24\Property24ApiClient;
 use App\Services\Syndication\Property24\Property24ListingMapper;
 use Illuminate\Support\Facades\Log;
@@ -12,11 +13,32 @@ use Illuminate\Support\Facades\Log;
 class PropertyObserver
 {
     /**
+     * Fired when a property is first created.
+     * Auto-generates document expectation tasks via Command Center.
+     */
+    public function created(Property $property): void
+    {
+        try {
+            app(AutoEventService::class)->onPropertyCreated($property);
+        } catch (\Throwable $e) {
+            Log::warning("Command Center auto-event failed on property create #{$property->id}: {$e->getMessage()}");
+        }
+    }
+
+    /**
      * Fired after create or update.
      * Only sync if the property has been published.
      */
     public function saved(Property $property): void
     {
+        // Update last_activity_at for Command Center health tracking
+        try {
+            if ($property->wasRecentlyCreated === false) {
+                app(AutoEventService::class)->onPropertyUpdated($property);
+            }
+        } catch (\Throwable $e) {
+            Log::warning("Command Center activity update failed for property #{$property->id}: {$e->getMessage()}");
+        }
         if ($property->isPublished()) {
             SyncPropertyToWebsite::dispatchSync($property, 'upsert');
         }

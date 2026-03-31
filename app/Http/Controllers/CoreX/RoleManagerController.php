@@ -249,7 +249,7 @@ class RoleManagerController extends Controller
 
         PermissionService::clearCache();
 
-        return back()->with('success', 'Permissions saved successfully.');
+        return redirect()->route('corex.role-manager', ['role' => $role])->with('success', 'Permissions saved successfully.');
     }
 
     public function updateUserRole(Request $request)
@@ -271,7 +271,7 @@ class RoleManagerController extends Controller
 
         PermissionService::clearCache();
 
-        return back()->with('success', "Role updated for {$user->name}.");
+        return redirect()->route('corex.role-manager', ['role' => $request->role])->with('success', "Role updated for {$user->name}.");
     }
 
     /**
@@ -291,7 +291,7 @@ class RoleManagerController extends Controller
         $targets = collect($request->input('target_roles'))->reject(fn($r) => $r === $source)->unique()->values();
 
         if ($targets->isEmpty()) {
-            return back()->withErrors(['target_roles' => 'Select at least one target role that is different from the source.']);
+            return redirect()->route('corex.role-manager', ['role' => $source])->withErrors(['target_roles' => 'Select at least one target role that is different from the source.']);
         }
 
         $sourcePerms = RolePermission::where('role', $source)->get(['permission_key', 'scope']);
@@ -326,7 +326,7 @@ class RoleManagerController extends Controller
         $targetLabels = Role::whereIn('name', $targets)->pluck('label')->implode(', ');
         $sourceLabel  = Role::where('name', $source)->value('label');
 
-        return back()->with('success', "Copied {$sourcePerms->count()} permissions from {$sourceLabel} to {$targetLabels}.");
+        return redirect()->route('corex.role-manager', ['role' => $source])->with('success', "Copied {$sourcePerms->count()} permissions from {$sourceLabel} to {$targetLabels}.");
     }
 
     // ── Role CRUD ──
@@ -345,7 +345,7 @@ class RoleManagerController extends Controller
 
         // Ensure uniqueness of auto-generated slug
         if (Role::withTrashed()->where('name', $name)->exists()) {
-            return back()->withErrors(['name' => "The role slug '{$name}' is already taken."]);
+            return redirect()->route('corex.role-manager')->withErrors(['name' => "The role slug '{$name}' is already taken."]);
         }
 
         $role = Role::create([
@@ -375,7 +375,7 @@ class RoleManagerController extends Controller
         Role::clearCache();
         PermissionService::clearCache();
 
-        return back()->with('success', "Role '{$role->label}' created with agent permissions as default.");
+        return redirect()->route('corex.role-manager', ['role' => $role->name])->with('success', "Role '{$role->label}' created with agent permissions as default.");
     }
 
     public function updateRole(Request $request, Role $role)
@@ -396,7 +396,7 @@ class RoleManagerController extends Controller
 
         Role::clearCache();
 
-        return back()->with('success', "Role '{$role->label}' updated.");
+        return redirect()->route('corex.role-manager', ['role' => $role->name])->with('success', "Role '{$role->label}' updated.");
     }
 
     public function destroyRole(Request $request, Role $role)
@@ -419,7 +419,7 @@ class RoleManagerController extends Controller
             $reassignRole = $request->reassign_to;
 
             if ($reassignRole === $role->name) {
-                return back()->withErrors(['reassign_to' => 'Cannot reassign users to the role being deleted.']);
+                return redirect()->route('corex.role-manager', ['role' => $role->name])->withErrors(['reassign_to' => 'Cannot reassign users to the role being deleted.']);
             }
 
             User::where('role', $role->name)->update(['role' => $reassignRole]);
@@ -430,6 +430,6 @@ class RoleManagerController extends Controller
         Role::clearCache();
         PermissionService::clearCache();
 
-        return back()->with('success', "Role '{$role->label}' deleted." . ($activeUserCount > 0 ? " {$activeUserCount} user(s) moved to '{$request->reassign_to}'." : ''));
+        return redirect()->route('corex.role-manager')->with('success', "Role '{$role->label}' deleted." . ($activeUserCount > 0 ? " {$activeUserCount} user(s) moved to '{$request->reassign_to}'." : ''));
     }
 }

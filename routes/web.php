@@ -619,11 +619,46 @@ Route::middleware(['auth', 'permission:access_filing_register'])->group(function
 // ===== NEXUS OS ROUTES =====
 use App\Http\Controllers\CoreX\DashboardController as CoreXDashboardController;
 use App\Http\Controllers\CoreX\PlaceholderController as CoreXPlaceholderController;
+use App\Http\Controllers\CommandCenter\DashboardController as CommandCenterDashboardController;
+use App\Http\Controllers\CommandCenter\CalendarController as CommandCenterCalendarController;
+use App\Http\Controllers\CommandCenter\TaskController as CommandCenterTaskController;
+use App\Http\Controllers\CommandCenter\SettingsController as CommandCenterSettingsController;
+use App\Http\Controllers\CommandCenter\UserSettingsController as CommandCenterUserSettingsController;
 use App\Http\Controllers\CoreX\SettingsController as CoreXSettingsController;
 use App\Http\Controllers\CoreX\RoleManagerController as CoreXRoleManagerController;
 
 Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
-    Route::get('/', [CoreXDashboardController::class, 'index'])->middleware('permission:view_dashboard')->name('corex.dashboard');
+    Route::get('/', [CommandCenterDashboardController::class, 'index'])->middleware('permission:view_dashboard')->name('corex.dashboard');
+
+    // ── Command Center ──
+    Route::prefix('command-center')->group(function () {
+        Route::get('/calendar', [CommandCenterCalendarController::class, 'index'])->name('command-center.calendar');
+        Route::get('/calendar/events', [CommandCenterCalendarController::class, 'events'])->name('command-center.calendar.events');
+        Route::post('/calendar', [CommandCenterCalendarController::class, 'store'])->name('command-center.calendar.store');
+        Route::put('/calendar/{calendarEvent}', [CommandCenterCalendarController::class, 'update'])->name('command-center.calendar.update');
+        Route::delete('/calendar/{calendarEvent}', [CommandCenterCalendarController::class, 'destroy'])->name('command-center.calendar.destroy');
+        Route::post('/calendar/{calendarEvent}/complete', [CommandCenterCalendarController::class, 'complete'])->name('command-center.calendar.complete');
+        Route::post('/calendar/{calendarEvent}/dismiss', [CommandCenterCalendarController::class, 'dismiss'])->name('command-center.calendar.dismiss');
+
+        Route::post('/resolve-task/{task}', [CommandCenterDashboardController::class, 'resolveTask'])->name('command-center.resolve-task');
+        Route::post('/resolve-event/{calendarEvent}', [CommandCenterDashboardController::class, 'resolveEvent'])->name('command-center.resolve-event');
+
+        Route::get('/tasks', [CommandCenterTaskController::class, 'index'])->name('command-center.tasks');
+        Route::post('/tasks', [CommandCenterTaskController::class, 'store'])->name('command-center.tasks.store');
+        Route::put('/tasks/{task}', [CommandCenterTaskController::class, 'update'])->name('command-center.tasks.update');
+        Route::delete('/tasks/{task}', [CommandCenterTaskController::class, 'destroy'])->name('command-center.tasks.destroy');
+        Route::post('/tasks/{task}/complete', [CommandCenterTaskController::class, 'complete'])->name('command-center.tasks.complete');
+        Route::patch('/tasks/{task}/status', [CommandCenterTaskController::class, 'updateStatus'])->name('command-center.tasks.update-status');
+
+        Route::get('/settings', [CommandCenterSettingsController::class, 'index'])->name('command-center.settings');
+        Route::patch('/settings/rules/{rule}/toggle', [CommandCenterSettingsController::class, 'toggleRule'])->name('command-center.settings.toggle-rule');
+        Route::post('/settings/expectations', [CommandCenterSettingsController::class, 'storeExpectation'])->name('command-center.settings.store-expectation');
+        Route::delete('/settings/expectations/{expectation}', [CommandCenterSettingsController::class, 'destroyExpectation'])->name('command-center.settings.destroy-expectation');
+        Route::post('/settings/reminders', [CommandCenterSettingsController::class, 'storeReminderDefault'])->name('command-center.settings.store-reminder');
+
+        Route::get('/user-settings', [CommandCenterUserSettingsController::class, 'index'])->name('command-center.user-settings');
+        Route::put('/user-settings', [CommandCenterUserSettingsController::class, 'update'])->name('command-center.user-settings.update');
+    });
 
     // ── Agent Portal ──
     Route::get('/my-portal', [\App\Http\Controllers\Agent\AgentPortalController::class, 'index'])
@@ -710,6 +745,10 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::put('/settings/agency', [CoreXSettingsController::class, 'updateAgency'])->middleware('permission:access_settings')->name('corex.settings.agency.update');
     Route::get('/settings/preview-header', [CoreXSettingsController::class, 'previewHeader'])->middleware('permission:access_settings')->name('corex.settings.preview-header');
     Route::get('/settings/preview-signature', [CoreXSettingsController::class, 'previewSignature'])->middleware('permission:access_settings')->name('corex.settings.preview-signature');
+
+    // Dashboard Settings (Feature Settings > Dashboard)
+    Route::put('/settings/dashboard/mode', [CoreXSettingsController::class, 'updateDashboardMode'])->middleware('permission:access_settings')->name('corex.settings.dashboard.mode');
+    Route::put('/settings/dashboard/agency', [CoreXSettingsController::class, 'updateAgencyDashboardSettings'])->middleware('permission:access_settings')->name('corex.settings.dashboard.agency');
 
     // Commission & Revenue Share Settings
     Route::get('/settings/commission', [\App\Http\Controllers\Commission\CommissionSettingsController::class, 'edit'])

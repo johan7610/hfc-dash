@@ -16,6 +16,8 @@ use App\Models\Rental\RentalDocumentType;
 use App\Models\Rental\RentalReminderSetting;
 use App\Models\Branch;
 use App\Models\User;
+use App\Models\CommandCenter\AgencyDashboardSetting;
+use App\Models\CommandCenter\UserDashboardSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -87,6 +89,12 @@ class SettingsController extends Controller
         // Agents list for email signature preview selector
         $data['agents'] = User::where('is_active', true)->orderBy('name')->get(['id', 'name']);
 
+        // Feature Settings tab: Dashboard — settings mode + agency dashboard settings
+        $data['dashboardSettingsMode'] = $data['agency']->dashboard_settings_mode ?? 'user';
+        $data['agencyDashboardSettings'] = $data['agency']
+            ? AgencyDashboardSetting::firstOrNew(['agency_id' => $data['agency']->id], UserDashboardSetting::defaults())
+            : new AgencyDashboardSetting(UserDashboardSetting::defaults());
+
         return view('corex.settings', $data);
     }
 
@@ -103,7 +111,7 @@ class SettingsController extends Controller
             $data['sort_order'] = (PropertySettingItem::where('group', $data['group'])->max('sort_order') ?? 0) + 1;
         }
         PropertySettingItem::create($data);
-        return back()->with('success', 'Item added.')->with('tab', 'feature')->with('fsec', 'properties');
+        return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('success', 'Item added.');
     }
 
     public function updatePropertySettingItem(Request $request, PropertySettingItem $item)
@@ -113,7 +121,7 @@ class SettingsController extends Controller
             'sort_order' => 'nullable|integer|min:0',
         ]);
         $item->update($data);
-        return back()->with('success', 'Item updated.')->with('tab', 'feature')->with('fsec', 'properties');
+        return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('success', 'Item updated.');
     }
 
     public function reorderPropertySettingItems(Request $request)
@@ -135,7 +143,7 @@ class SettingsController extends Controller
     {
         $allowed = ['category', 'property_type', 'property_status', 'mandate_type'];
         if (! in_array($group, $allowed)) {
-            return back()->with('error', 'Invalid group.');
+            return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('error', 'Invalid group.');
         }
 
         $enabledIds = array_map('intval', $request->input('enabled_ids', []));
@@ -145,52 +153,50 @@ class SettingsController extends Controller
             ->get()
             ->each(fn($item) => $item->update(['active' => in_array($item->id, $enabledIds)]));
 
-        return back()->with('success', 'Updated successfully.')
-            ->with('tab', 'feature')
-            ->with('fsec', 'properties');
+        return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('success', 'Updated successfully.');
     }
 
     public function togglePropertySettingItem(PropertySettingItem $item)
     {
         $item->update(['active' => ! $item->active]);
-        return back()->with('success', 'Item updated.')->with('tab', 'feature')->with('fsec', 'properties');
+        return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('success', 'Item updated.');
     }
 
     public function destroyPropertySettingItem(PropertySettingItem $item)
     {
         if ($item->is_default) {
-            return back()->with('error', 'Default items cannot be deleted — use the toggle to disable them instead.');
+            return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('error', 'Default items cannot be deleted — use the toggle to disable them instead.');
         }
         $item->delete();
-        return back()->with('success', 'Item deleted.')->with('tab', 'feature')->with('fsec', 'properties');
+        return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('success', 'Item deleted.');
     }
 
     public function updateMarketingEnabled(Request $request)
     {
         $enabled = $request->boolean('marketing_enabled');
         PerformanceSetting::updateOrCreate(['key' => 'marketing_enabled'], ['value' => $enabled ? 1 : 0]);
-        return back()->with('success', 'Marketing setting updated.')->with('tab', 'feature')->with('fsec', 'properties');
+        return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('success', 'Marketing setting updated.');
     }
 
     public function updateMatchesEnabled(Request $request)
     {
         $enabled = $request->boolean('matches_enabled');
         PerformanceSetting::updateOrCreate(['key' => 'matches_enabled'], ['value' => $enabled ? 1 : 0]);
-        return back()->with('success', 'Core Matches setting updated.')->with('tab', 'feature')->with('fsec', 'matches');
+        return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'matches'])->with('success', 'Core Matches setting updated.');
     }
 
     public function updateMatchesShowOnProperties(Request $request)
     {
         $enabled = $request->boolean('matches_show_on_properties');
         PerformanceSetting::updateOrCreate(['key' => 'matches_show_on_properties'], ['value' => $enabled ? 1 : 0]);
-        return back()->with('success', 'Setting updated.')->with('tab', 'feature')->with('fsec', 'matches');
+        return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'matches'])->with('success', 'Setting updated.');
     }
 
     public function updateMatchesWaMessage(Request $request)
     {
         $message = substr($request->input('matches_wa_message', ''), 0, 1000);
         PerformanceSetting::updateOrCreate(['key' => 'matches_wa_message'], ['value' => $message]);
-        return back()->with('success', 'WhatsApp message template saved.')->with('tab', 'feature')->with('fsec', 'matches');
+        return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'matches'])->with('success', 'WhatsApp message template saved.');
     }
 
     public function generateApiToken(Request $request)
@@ -346,5 +352,63 @@ class SettingsController extends Controller
             . '</style></head><body>' . $html . '</body></html>';
 
         return response($shell)->header('Content-Type', 'text/html');
+    }
+
+    // ── Dashboard Settings Mode ────────────────────────────────────────
+
+    public function updateDashboardMode(Request $request)
+    {
+        $request->validate([
+            'dashboard_settings_mode' => 'required|in:user,agency',
+        ]);
+
+        $user     = auth()->user();
+        $agencyId = $user?->effectiveAgencyId();
+        $agency   = $agencyId ? Agency::find($agencyId) : Agency::first();
+
+        if (!$agency) {
+            return back()->with('error', 'No agency found.');
+        }
+
+        $agency->update(['dashboard_settings_mode' => $request->dashboard_settings_mode]);
+
+        return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'dashboard'])
+            ->with('success', 'Dashboard settings mode updated to "' . ucfirst($request->dashboard_settings_mode) . '".');
+    }
+
+    public function updateAgencyDashboardSettings(Request $request)
+    {
+        $user     = auth()->user();
+        $agencyId = $user?->effectiveAgencyId();
+        $agency   = $agencyId ? Agency::find($agencyId) : Agency::first();
+
+        if (!$agency) {
+            return back()->with('error', 'No agency found.');
+        }
+
+        $boolFields = [
+            'idle_alerts_enabled', 'doc_reminders_enabled', 'lease_expiry_reminders',
+            'fica_reminders', 'ffc_reminders', 'task_due_reminders', 'overdue_daily_digest',
+            'weekend_visible', 'notify_in_app', 'notify_email',
+        ];
+
+        $data = $request->only([
+            'idle_alerts_enabled', 'idle_threshold_days', 'idle_alert_day', 'idle_alert_time',
+            'doc_reminders_enabled', 'lease_expiry_reminders', 'fica_reminders', 'ffc_reminders',
+            'task_due_reminders', 'overdue_daily_digest', 'digest_time',
+            'default_calendar_view', 'weekend_visible', 'notify_in_app', 'notify_email',
+        ]);
+
+        foreach ($boolFields as $bf) {
+            $data[$bf] = $request->boolean($bf);
+        }
+
+        AgencyDashboardSetting::updateOrCreate(
+            ['agency_id' => $agency->id],
+            $data
+        );
+
+        return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'dashboard'])
+            ->with('success', 'Agency dashboard settings saved.');
     }
 }

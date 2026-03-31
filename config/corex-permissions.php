@@ -310,6 +310,25 @@ return [
         ['key' => 'manage_system',               'label' => 'Manage System',               'section' => 'data-scope',       'type' => 'access',  'module' => 'data_scope',       'sort_order' => 4],
         ['key' => 'manage_branch',               'label' => 'Manage Branch',               'section' => 'data-scope',       'type' => 'access',  'module' => 'data_scope',       'sort_order' => 5],
         ['key' => 'manage_agency_switching',     'label' => 'Switch Between Agencies',     'section' => 'data-scope',       'type' => 'access',  'module' => 'data_scope',       'sort_order' => 6],
+
+        // ── Command Center ──
+        ['key' => 'command_center.view',             'label' => 'View Command Center',          'section' => 'command-center',   'type' => 'access',  'module' => 'command_center',   'sort_order' => 1],
+        ['key' => 'command_center.calendar.view',    'label' => 'View Calendar',                'section' => 'command-center',   'type' => 'access',  'module' => 'command_center',   'sort_order' => 2],
+        ['key' => 'command_center.calendar.create',  'label' => 'Create Calendar Events',       'section' => 'command-center',   'type' => 'action',  'module' => 'command_center',   'sort_order' => 3],
+        ['key' => 'command_center.calendar.edit',    'label' => 'Edit Calendar Events',         'section' => 'command-center',   'type' => 'action',  'module' => 'command_center',   'sort_order' => 4],
+        ['key' => 'command_center.calendar.delete',  'label' => 'Delete Calendar Events',       'section' => 'command-center',   'type' => 'action',  'module' => 'command_center',   'sort_order' => 5],
+        ['key' => 'command_center.tasks.view',       'label' => 'View Task Board',              'section' => 'command-center',   'type' => 'access',  'module' => 'command_center',   'sort_order' => 6],
+        ['key' => 'command_center.tasks.create',     'label' => 'Create Tasks',                 'section' => 'command-center',   'type' => 'action',  'module' => 'command_center',   'sort_order' => 7],
+        ['key' => 'command_center.tasks.edit',       'label' => 'Edit Tasks',                   'section' => 'command-center',   'type' => 'action',  'module' => 'command_center',   'sort_order' => 8],
+        ['key' => 'command_center.tasks.assign',     'label' => 'Assign Tasks to Others',       'section' => 'command-center',   'type' => 'action',  'module' => 'command_center',   'sort_order' => 9],
+        ['key' => 'command_center.tasks.delete',     'label' => 'Delete Tasks',                 'section' => 'command-center',   'type' => 'action',  'module' => 'command_center',   'sort_order' => 10],
+        ['key' => 'command_center.health.view',      'label' => 'View Property Health',         'section' => 'command-center',   'type' => 'access',  'module' => 'command_center',   'sort_order' => 11],
+        ['key' => 'command_center.scorecards.own',   'label' => 'View Own Scorecard',           'section' => 'command-center',   'type' => 'access',  'module' => 'command_center',   'sort_order' => 12],
+        ['key' => 'command_center.scorecards.branch','label' => 'View Branch Scorecards',       'section' => 'command-center',   'type' => 'access',  'module' => 'command_center',   'sort_order' => 13],
+        ['key' => 'command_center.scorecards.all',   'label' => 'View All Scorecards',          'section' => 'command-center',   'type' => 'access',  'module' => 'command_center',   'sort_order' => 14],
+        ['key' => 'command_center.automation.view',  'label' => 'View Automation Rules',        'section' => 'command-center',   'type' => 'access',  'module' => 'command_center',   'sort_order' => 15],
+        ['key' => 'command_center.automation.manage','label' => 'Manage Automation Rules',      'section' => 'command-center',   'type' => 'action',  'module' => 'command_center',   'sort_order' => 16],
+        ['key' => 'command_center.settings',         'label' => 'Manage Command Center Settings','section' => 'command-center',  'type' => 'access',  'module' => 'command_center',   'sort_order' => 17],
     ],
 
     // ──────────────────────────────────────────────────────────
