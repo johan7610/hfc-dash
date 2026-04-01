@@ -2710,58 +2710,96 @@
                 </form>
             </div>
 
-            {{-- Grouped files list --}}
-            <div>
-                <h3 class="text-xs font-bold uppercase tracking-wider mb-3" style="color:var(--text-muted);">
-                    Files ({{ $allDriveDocs->count() }})
+            {{-- Document folders by type --}}
+            <div class="space-y-3">
+                <h3 class="text-xs font-bold uppercase tracking-wider" style="color:var(--text-muted);">
+                    Document Folders ({{ $allDriveDocs->count() }} file{{ $allDriveDocs->count() === 1 ? '' : 's' }})
                 </h3>
 
-                @if($allDriveDocs->isNotEmpty())
                 @php
-                    // Group: contact-linked vs property-only using Document model's contacts pivot
-                    $contactDocs = collect();
-                    $propertyOnlyDocs = collect();
-                    foreach ($allDriveDocs as $driveDoc) {
-                        $grouping = $driveDoc->documentType->grouping ?? 'shared';
-                        $firstContact = $driveDoc->contacts->first();
-                        if ($firstContact && in_array($grouping, ['contact', 'shared'])) {
-                            $contactDocs->push($driveDoc);
-                        } else {
-                            $propertyOnlyDocs->push($driveDoc);
-                        }
+                    // Group uploaded docs by document_type_id
+                    $docsByType = $allDriveDocs->groupBy('document_type_id');
+                    // Docs with no type go to "Unfiled"
+                    $unfiledDocs = $docsByType->pull('') ?? collect();
+                    if ($docsByType->has(null)) {
+                        $unfiledDocs = $unfiledDocs->merge($docsByType->pull(null));
                     }
-                    $byContact = $contactDocs->groupBy(fn($d) => $d->contacts->first()?->id);
                 @endphp
 
-                {{-- Contact groups --}}
-                @foreach($byContact as $contactId => $docs)
-                @php $linkedContact = $docs->first()->contacts->first(); @endphp
-                <div class="mb-3" style="border:1px solid var(--border); border-radius:6px; overflow:hidden;">
-                    <div class="px-4 py-2.5 flex items-center gap-2" style="background:var(--surface-2); border-bottom:1px solid var(--border);">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 opacity-50"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
-                        <span class="text-xs font-semibold" style="color:var(--text-primary);">{{ $linkedContact?->name ?? ($linkedContact?->first_name ? $linkedContact->first_name.' '.$linkedContact->last_name : 'Unknown Contact') }}</span>
+                {{-- Folder for each applicable document type --}}
+                @foreach(($driveFolders ?? $documentTypes) as $folder)
+                @php $folderDocs = $docsByType->get($folder->id, collect()); @endphp
+                <div x-data="{ open: {{ $folderDocs->isNotEmpty() ? 'true' : 'false' }} }"
+                     class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
+                    <button type="button" @click="open = !open"
+                            class="w-full flex items-center justify-between px-4 py-2.5 transition-colors"
+                            style="background:var(--surface-2);"
+                            onmouseover="this.style.background='rgba(14,165,233,0.04)'" onmouseout="this.style.background='var(--surface-2)'">
+                        <div class="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4" style="color:var(--brand-icon, #0ea5e9);"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" /></svg>
+                            <span class="text-xs font-semibold" style="color:var(--text-primary);">{{ $folder->label }}</span>
+                            <span class="text-xs px-1.5 py-0.5 rounded-full font-medium"
+                                  style="background:{{ $folderDocs->isNotEmpty() ? 'rgba(14,165,233,0.12)' : 'var(--surface)' }}; color:{{ $folderDocs->isNotEmpty() ? 'var(--brand-icon, #0ea5e9)' : 'var(--text-muted)' }};">{{ $folderDocs->count() }}</span>
+                        </div>
+                        <svg class="w-3.5 h-3.5 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--text-muted);"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <div x-show="open" x-cloak style="border-top:1px solid var(--border);">
+                        @if($folderDocs->isNotEmpty())
+                            @foreach($folderDocs as $doc)
+                            @include('corex.properties._drive-row', ['doc' => $doc, 'property' => $property, 'documentTypes' => $documentTypes])
+                            @endforeach
+                        @else
+                            <div class="px-4 py-4 flex items-center justify-between">
+                                <span class="text-xs italic" style="color:var(--text-muted);">No files uploaded</span>
+                            </div>
+                        @endif
                     </div>
-                    @foreach($docs as $doc)
-                    @include('corex.properties._drive-row', ['doc' => $doc, 'property' => $property, 'documentTypes' => $documentTypes])
-                    @endforeach
                 </div>
                 @endforeach
 
-                {{-- Property Documents group --}}
-                @if($propertyOnlyDocs->isNotEmpty())
-                <div class="mb-3" style="border:1px solid var(--border); border-radius:6px; overflow:hidden;">
-                    <div class="px-4 py-2.5" style="background:var(--surface-2); border-bottom:1px solid var(--border);">
-                        <span class="text-xs font-semibold" style="color:var(--text-muted);">Property Documents</span>
+                {{-- Unfiled documents --}}
+                @if($unfiledDocs->isNotEmpty())
+                <div x-data="{ open: true }" class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
+                    <button type="button" @click="open = !open"
+                            class="w-full flex items-center justify-between px-4 py-2.5 transition-colors"
+                            style="background:var(--surface-2);">
+                        <div class="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4" style="color:var(--text-muted);"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+                            <span class="text-xs font-semibold" style="color:var(--text-muted);">Unfiled</span>
+                            <span class="text-xs px-1.5 py-0.5 rounded-full font-medium" style="background:var(--surface); color:var(--text-muted);">{{ $unfiledDocs->count() }}</span>
+                        </div>
+                        <svg class="w-3.5 h-3.5 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--text-muted);"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <div x-show="open" x-cloak style="border-top:1px solid var(--border);">
+                        @foreach($unfiledDocs as $doc)
+                        @include('corex.properties._drive-row', ['doc' => $doc, 'property' => $property, 'documentTypes' => $documentTypes])
+                        @endforeach
                     </div>
-                    @foreach($propertyOnlyDocs as $doc)
-                    @include('corex.properties._drive-row', ['doc' => $doc, 'property' => $property, 'documentTypes' => $documentTypes])
-                    @endforeach
                 </div>
                 @endif
 
-                @else
-                <div class="rounded-md p-6 text-center" style="background:var(--surface-2); border:1px dashed var(--border-hover);">
-                    <div class="text-sm" style="color:var(--text-secondary);">No files uploaded yet.</div>
+                {{-- Remaining docs that belong to types NOT in driveFolders --}}
+                @php
+                    $folderIds = ($driveFolders ?? $documentTypes)->pluck('id')->toArray();
+                    $otherDocs = $docsByType->filter(fn($docs, $typeId) => !in_array($typeId, $folderIds))->flatten();
+                @endphp
+                @if($otherDocs->isNotEmpty())
+                <div x-data="{ open: true }" class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
+                    <button type="button" @click="open = !open"
+                            class="w-full flex items-center justify-between px-4 py-2.5 transition-colors"
+                            style="background:var(--surface-2);">
+                        <div class="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4" style="color:var(--text-muted);"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" /></svg>
+                            <span class="text-xs font-semibold" style="color:var(--text-muted);">Other Documents</span>
+                            <span class="text-xs px-1.5 py-0.5 rounded-full font-medium" style="background:var(--surface); color:var(--text-muted);">{{ $otherDocs->count() }}</span>
+                        </div>
+                        <svg class="w-3.5 h-3.5 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--text-muted);"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <div x-show="open" x-cloak style="border-top:1px solid var(--border);">
+                        @foreach($otherDocs as $doc)
+                        @include('corex.properties._drive-row', ['doc' => $doc, 'property' => $property, 'documentTypes' => $documentTypes])
+                        @endforeach
+                    </div>
                 </div>
                 @endif
             </div>

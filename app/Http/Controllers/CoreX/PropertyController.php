@@ -202,9 +202,30 @@ class PropertyController extends Controller
             $documentTypes = collect();
         }
 
+        // Drive folders: document types applicable to this property's type
+        try {
+            $propertyTypeItem = $property->property_type
+                ? \App\Models\PropertySettingItem::where('group', 'property_type')
+                    ->where('name', $property->property_type)->first()
+                : null;
+
+            if ($propertyTypeItem) {
+                // Get doc types assigned to this property type, OR doc types with no assignments (universal)
+                $driveFolders = DocumentType::active()->ordered()
+                    ->where(function ($q) use ($propertyTypeItem) {
+                        $q->whereHas('propertyTypes', fn($sub) => $sub->where('property_setting_items.id', $propertyTypeItem->id))
+                          ->orWhereDoesntHave('propertyTypes');
+                    })->get();
+            } else {
+                $driveFolders = DocumentType::active()->ordered()->get();
+            }
+        } catch (\Exception $e) {
+            $driveFolders = $documentTypes;
+        }
+
         return view('corex.properties.show', compact(
             'property', 'settingItems', 'branches', 'agents', 'activeTab', 'coreMatches', 'ppMissingFields', 'p24MissingFields',
-            'allDriveDocs', 'documentTypes', 'activityTimeline'
+            'allDriveDocs', 'documentTypes', 'driveFolders', 'activityTimeline'
         ));
     }
 

@@ -26,6 +26,16 @@ class DocumentType extends Model
         return $this->label;
     }
 
+    public function propertyTypes()
+    {
+        return $this->belongsToMany(
+            PropertySettingItem::class,
+            'document_type_property_type',
+            'document_type_id',
+            'property_type_id'
+        );
+    }
+
     public function scopeActive($query)
     {
         return $query->where('is_active', true);
