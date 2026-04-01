@@ -29,13 +29,22 @@ class DocumentType extends Model
 
     /**
      * Check if this document type applies to a given listing type (sale/rental).
-     * Null or empty listing_types means it applies to all.
+     * Only shows on Drive if listing_types has been explicitly assigned.
+     * Empty/null listing_types = not assigned to any listing type = won't appear as a Drive folder.
      */
     public function appliesToListingType(?string $listingType): bool
     {
         $types = $this->listing_types;
-        if (empty($types)) return true;
+        if (empty($types)) return false;
         return in_array($listingType, $types);
+    }
+
+    /**
+     * Scope: only doc types that have at least one listing type assigned.
+     */
+    public function scopeWithListingType($query)
+    {
+        return $query->whereNotNull('listing_types')->where('listing_types', '!=', '[]');
     }
 
     public function scopeActive($query)
