@@ -52,38 +52,7 @@ class MobilePropertyController extends Controller
         $this->authorizeProperty($request->user(), $property);
 
         return response()->json([
-            'property' => [
-                'id'              => $property->id,
-                'title'           => $property->title,
-                'address'         => $property->buildDisplayAddress(),
-                'street_number'   => $property->street_number,
-                'street_name'     => $property->street_name,
-                'suburb'          => $property->suburb,
-                'city'            => $property->city,
-                'complex_name'    => $property->complex_name,
-                'unit_number'     => $property->unit_number,
-                'beds'            => $property->beds,
-                'baths'           => $property->baths,
-                'garages'         => $property->garages,
-                'size_m2'         => $property->size_m2,
-                'erf_size_m2'     => $property->erf_size_m2,
-                'status'          => $property->status,
-                'property_type'   => $property->property_type,
-                'category'        => $property->category,
-                'listing_type'    => $property->listing_type,
-                'mandate_type'    => $property->mandate_type,
-                'price'           => $property->price,
-                'price_display'   => $property->formattedPrice(),
-                'description'     => $property->description,
-                'features'        => $property->features_json ?? [],
-                'spaces'          => $property->spaces_json ?? [],
-                'gallery_images'  => $property->gallery_images_json ?? [],
-                'gallery_categories' => $property->gallery_categories_json ?? ['categories' => [], 'unsorted' => []],
-                'agent_id'        => $property->agent_id,
-                'agent_name'      => $property->agent?->name,
-                'published_at'    => $property->published_at?->toIso8601String(),
-                'updated_at'      => $property->updated_at?->toIso8601String(),
-            ],
+            'property' => $this->fullPropertyResponse($property),
         ]);
     }
 
@@ -127,10 +96,10 @@ class MobilePropertyController extends Controller
         }
 
         $property = Property::create($data);
+        $property->refresh();
 
         return response()->json([
-            'message'     => 'Property created.',
-            'property_id' => $property->id,
+            'property' => $this->fullPropertyResponse($property),
         ], 201);
     }
 
@@ -169,8 +138,11 @@ class MobilePropertyController extends Controller
         }
 
         $property->update($data);
+        $property->refresh();
 
-        return response()->json(['message' => 'Property updated.']);
+        return response()->json([
+            'property' => $this->fullPropertyResponse($property),
+        ]);
     }
 
     // ── POST /api/mobile/properties/{id}/images ─────────────────
@@ -226,6 +198,61 @@ class MobilePropertyController extends Controller
             'url'       => $url,
             'room_tag'  => $roomTag,
         ], 201);
+    }
+
+    // ── Response helpers ───────────────────────────────────────
+    private function fullPropertyResponse(Property $property): array
+    {
+        $galleryImages = $property->gallery_images_json ?? [];
+
+        return [
+            'id'              => $property->id,
+            'title'           => $property->title,
+            'address'         => $property->buildDisplayAddress(),
+            'street_number'   => $property->street_number,
+            'street_name'     => $property->street_name,
+            'suburb'          => $property->suburb,
+            'city'            => $property->city,
+            'complex_name'    => $property->complex_name,
+            'unit_number'     => $property->unit_number,
+            'beds'            => $property->beds,
+            'baths'           => $property->baths,
+            'garages'         => $property->garages,
+            'size_m2'         => $property->size_m2,
+            'erf_size_m2'     => $property->erf_size_m2,
+            'status'          => $property->status,
+            'property_type'   => $property->property_type,
+            'category'        => $property->category,
+            'listing_type'    => $property->listing_type,
+            'mandate_type'    => $property->mandate_type,
+            'price'           => $property->price,
+            'price_display'   => $property->formattedPrice(),
+            'description'     => $property->description,
+            'features'        => $property->features_json ?? [],
+            'gallery_images'  => $galleryImages,
+            'gallery_categories' => $this->buildGalleryCategories($property),
+            'thumbnail'       => $galleryImages[0] ?? null,
+            'agent_id'        => $property->agent_id,
+            'agent_name'      => $property->agent?->name,
+            'published_at'    => $property->published_at?->toIso8601String(),
+            'updated_at'      => $property->updated_at?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * Transform the internal gallery_categories_json (array of {name, images})
+     * into the mobile-friendly format: { "categories": { "Kitchen": [...], "Lounge": [...] } }
+     */
+    private function buildGalleryCategories(Property $property): array
+    {
+        $raw = $property->gallery_categories_json ?? ['categories' => [], 'unsorted' => []];
+        $mapped = [];
+
+        foreach ($raw['categories'] ?? [] as $cat) {
+            $mapped[$cat['name']] = $cat['images'] ?? [];
+        }
+
+        return ['categories' => (object) $mapped];
     }
 
     // ── Authorization ───────────────────────────────────────────
