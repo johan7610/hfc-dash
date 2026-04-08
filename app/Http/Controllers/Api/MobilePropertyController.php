@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Property;
 use App\Models\User;
-use App\Services\PermissionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -18,7 +17,7 @@ class MobilePropertyController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $properties = Property::visibleTo($user)
+        $properties = Property::where('agent_id', $user->id)
             ->orderByDesc('updated_at')
             ->get([
                 'id', 'title', 'address', 'street_number', 'street_name',
@@ -258,12 +257,8 @@ class MobilePropertyController extends Controller
     // ── Authorization ───────────────────────────────────────────
     private function authorizeProperty(User $user, Property $property): void
     {
-        $scope = PermissionService::getDataScope($user, 'properties');
-
-        if ($scope === 'all') return;
-        if ($scope === 'branch' && (int) $property->branch_id === (int) $user->effectiveBranchId()) return;
-        if ($scope === 'own' && (int) $property->agent_id === (int) $user->id) return;
-
-        abort(403, 'You do not have access to this property.');
+        if ((int) $property->agent_id !== (int) $user->id) {
+            abort(403, 'You do not have access to this property.');
+        }
     }
 }
