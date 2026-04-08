@@ -12,7 +12,7 @@ use Illuminate\Console\Command;
 class PpManage extends Command
 {
     protected $signature = 'pp:manage
-        {action : Action to perform: submit, reactivate, deactivate, status, showday, register-agent, deactivate-agent, agent-image, list-agents, list-active, summary}
+        {action : Action to perform: submit, reactivate, deactivate, status, showday, register-agent, deactivate-agent, agent-image, submit-agent-images, list-agents, list-active, summary}
         {--property= : Property ID (for listing actions)}
         {--user= : User ID (for agent actions)}
         {--image-url= : Image URL (for agent-image action)}
@@ -39,6 +39,7 @@ class PpManage extends Command
             'register-agent'   => $this->registerAgent($service),
             'deactivate-agent' => $this->deactivateAgent($service),
             'agent-image'      => $this->uploadAgentImage($service),
+            'submit-agent-images' => $this->submitAgentImages($service),
             'list-agents'      => $this->listAgents($client),
             'list-active'      => $this->listActive($client),
             default            => $this->error("Unknown action: {$action}") ?? 1,
@@ -187,10 +188,10 @@ class PpManage extends Command
             $override  = config('services.private_property.image_base_url');
             $baseUrl   = rtrim(!empty($override) ? $override : config('app.url'), '/');
 
-            if ($user->profile_photo_path) {
-                $imageUrl = $baseUrl . '/storage/' . $user->profile_photo_path;
+            if ($user->agent_photo_path) {
+                $imageUrl = $baseUrl . '/storage/' . $user->agent_photo_path;
             } else {
-                $this->error('No --image-url provided and user has no profile_photo_path');
+                $this->error('No --image-url provided and user has no agent_photo_path');
                 return 1;
             }
         }
@@ -200,6 +201,41 @@ class PpManage extends Command
 
         $this->outputResult($result);
         return $result['success'] ? 0 : 1;
+    }
+
+    private function submitAgentImages(PrivatePropertySyndicationService $service): int
+    {
+        $property = $this->getProperty();
+        if (!$property) return 1;
+
+        $this->info("Submitting agent images for property #{$property->id}...");
+        $result = $service->submitAgentImages($property);
+
+        if (!empty($result['submitted'])) {
+            $this->info('Submitted:');
+            foreach ($result['submitted'] as $entry) {
+                $this->line("  ✓ Agent #{$entry['user_id']} ({$entry['name']}) — {$entry['url']}");
+            }
+        }
+
+        if (!empty($result['skipped'])) {
+            $this->warn('Skipped (no photo):');
+            foreach ($result['skipped'] as $entry) {
+                $this->line("  - Agent #{$entry['user_id']} ({$entry['name']}) — {$entry['reason']}");
+            }
+        }
+
+        if (!empty($result['errors'])) {
+            $this->error('Errors:');
+            foreach ($result['errors'] as $entry) {
+                $this->line("  ✗ Agent #{$entry['user_id']} ({$entry['name']}) — {$entry['message']}");
+            }
+        }
+
+        $total = count($result['submitted'] ?? []);
+        $this->info("Done. {$total} agent image(s) submitted.");
+
+        return empty($result['errors']) ? 0 : 1;
     }
 
     private function listAgents(PrivatePropertySoapClient $client): int

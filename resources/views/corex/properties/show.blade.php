@@ -367,8 +367,8 @@
                             </div>
                             @endif
 
-                            {{-- Action buttons --}}
-                            <div x-show="enabled" x-cloak class="flex flex-wrap gap-2">
+                            {{-- Submit button — only shown before first successful submission --}}
+                            <div x-show="enabled && !ppRef && status !== 'active' && status !== 'submitted'" x-cloak class="flex flex-wrap gap-2">
                                 <button type="button"
                                         @click.stop="submitListing()"
                                         :disabled="loading || missingFields.length > 0"
@@ -379,25 +379,44 @@
                                     <svg x-show="loading" x-cloak class="w-3.5 h-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
                                     <span x-text="loading ? 'Submitting...' : 'Submit to PP'"></span>
                                 </button>
-                                {{-- Reactivate button (for deactivated listings) --}}
-                                <button type="button"
-                                        x-show="status === 'deactivated'"
-                                        @click.stop="reactivateListing()"
-                                        :disabled="loading"
+                                {{-- Reactivate (for deactivated, no ref yet edge case) --}}
+                                <button type="button" x-show="status === 'deactivated'" @click.stop="reactivateListing()" :disabled="loading"
                                         class="px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
                                         style="background:rgba(0,212,170,0.10); color:#00d4aa; border:1px solid rgba(0,212,170,0.25);"
                                         onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
                                     Reactivate
                                 </button>
-                                {{-- Deactivate button --}}
-                                <button type="button"
-                                        x-show="status === 'submitted' || status === 'active'"
-                                        @click.stop="deactivateListing()"
-                                        :disabled="loading"
+                            </div>
+
+                            {{-- Active listing actions: View · Refresh · Deactivate --}}
+                            <div x-show="enabled && ppRef && (status === 'active' || status === 'submitted')" x-cloak class="flex flex-wrap gap-2">
+                                <a :href="ppListingUrl()" target="_blank"
+                                   class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold no-underline transition-opacity hover:opacity-85"
+                                   style="background:#00d4aa; color:#fff;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+                                    View on PP
+                                </a>
+                                <button type="button" @click.stop="refreshListing()" :disabled="loading"
+                                        class="px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
+                                        style="background:rgba(0,212,170,0.10); color:#00d4aa; border:1px solid rgba(0,212,170,0.25);"
+                                        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+                                    <span x-text="loading ? 'Syncing...' : 'Refresh'"></span>
+                                </button>
+                                <button type="button" @click.stop="deactivateListing()" :disabled="loading"
                                         class="px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
                                         style="background:rgba(239,68,68,0.10); color:#ef4444; border:1px solid rgba(239,68,68,0.25);"
                                         onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
                                     Deactivate
+                                </button>
+                            </div>
+
+                            {{-- Deactivated listing actions: Reactivate --}}
+                            <div x-show="enabled && ppRef && status === 'deactivated'" x-cloak class="flex flex-wrap gap-2">
+                                <button type="button" @click.stop="reactivateListing()" :disabled="loading"
+                                        class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
+                                        style="background:rgba(0,212,170,0.10); color:#00d4aa; border:1px solid rgba(0,212,170,0.25);"
+                                        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+                                    Reactivate
                                 </button>
                             </div>
 
@@ -3582,6 +3601,10 @@ function ppSyndication(config) {
             return styles[this.status] || styles[''];
         },
 
+        ppListingUrl() {
+            return this.ppRef ? `https://www.privateproperty.co.za/search?q=${this.ppRef}` : '#';
+        },
+
         showMessage(msg, type = 'success') {
             this.message = msg;
             this.messageType = type;
@@ -3665,6 +3688,36 @@ function ppSyndication(config) {
                     if (data.message) {
                         this.debugErrors.push(data.message);
                     }
+                    this.showDebug = true;
+                }
+            } catch (e) {
+                this.debugErrors = ['Network error: ' + e.message];
+                this.showDebug = true;
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async refreshListing() {
+            this.loading = true;
+            this.debugErrors = [];
+            this.showDebug = false;
+            try {
+                const res = await fetch(`/corex/properties/${this.propertyId}/syndication/submit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
+                    body: JSON.stringify({}),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    this.status = data.pp_syndication_status || 'active';
+                    this.ppRef = data.pp_ref || this.ppRef;
+                    this.lastSubmitted = new Date().toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                    this.lastError = '';
+                    this.showMessage('Listing synced to PP');
+                } else {
+                    this.lastError = data.message || 'Sync failed';
+                    this.debugErrors = data.errors || [data.message];
                     this.showDebug = true;
                 }
             } catch (e) {

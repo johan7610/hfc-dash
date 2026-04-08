@@ -314,6 +314,64 @@ class PrivatePropertySyndicationService
     }
 
     /**
+     * Submit agent images for all agents assigned to a property.
+     */
+    public function submitAgentImages(Property $property): array
+    {
+        $submitted = [];
+        $skipped   = [];
+        $errors    = [];
+
+        // Collect all agent user IDs for this property
+        $agentIds = array_filter([
+            $property->agent_id,
+            $property->pp_second_agent_id,
+        ]);
+
+        $override = config('services.private_property.image_base_url');
+        $baseUrl  = rtrim(!empty($override) ? $override : config('app.url'), '/');
+
+        foreach ($agentIds as $agentId) {
+            $user = User::find($agentId);
+            if (!$user) {
+                $skipped[] = ['user_id' => $agentId, 'name' => '(not found)', 'reason' => 'User not found'];
+                continue;
+            }
+
+            if (empty($user->agent_photo_path)) {
+                $skipped[] = ['user_id' => $user->id, 'name' => $user->name, 'reason' => 'No agent_photo_path set'];
+                continue;
+            }
+
+            $imageUrl = $baseUrl . '/storage/' . $user->agent_photo_path;
+
+            if (!str_starts_with($imageUrl, 'https://')) {
+                $skipped[] = ['user_id' => $user->id, 'name' => $user->name, 'reason' => "Image URL is not HTTPS: {$imageUrl}"];
+                $this->log('warning', "Skipping agent image for #{$user->id} — not HTTPS: {$imageUrl}");
+                continue;
+            }
+
+            // Check file size if stored locally
+            $localPath = storage_path('app/public/' . $user->agent_photo_path);
+            if (file_exists($localPath) && filesize($localPath) > 1048576) {
+                $skipped[] = ['user_id' => $user->id, 'name' => $user->name, 'reason' => 'Image exceeds 1MB limit'];
+                $this->log('warning', "Skipping agent image for #{$user->id} — exceeds 1MB");
+                continue;
+            }
+
+            $result = $this->uploadAgentImage($user, $imageUrl);
+
+            if ($result['success']) {
+                $submitted[] = ['user_id' => $user->id, 'name' => $user->name, 'url' => $imageUrl];
+            } else {
+                $errors[] = ['user_id' => $user->id, 'name' => $user->name, 'message' => $result['message']];
+            }
+        }
+
+        return compact('submitted', 'skipped', 'errors');
+    }
+
+    /**
      * Register the property's agent on PP if not already done.
      * Returns true on success, or an error string on failure.
      */
