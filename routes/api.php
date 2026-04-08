@@ -5,6 +5,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use App\Http\Controllers\Api\CommandCenterApiController;
 use App\Http\Controllers\Api\ProspectingApiController;
+use App\Http\Controllers\Api\MobilePropertyController;
 use App\Http\Controllers\Api\PropertyPullController;
 use App\Http\Controllers\FaultReportController;
 use Illuminate\Support\Facades\Route;
@@ -65,6 +66,15 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/properties/pull-from-portal', [PropertyPullController::class, 'pullFromPortal']);
     Route::get('/properties/{propertyId}/pull-status', [PropertyPullController::class, 'pullStatus']);
+
+    // ── Mobile Properties ────────────────────────────────────────
+    Route::prefix('mobile/properties')->group(function () {
+        Route::get('/',         [MobilePropertyController::class, 'index']);
+        Route::post('/',        [MobilePropertyController::class, 'store']);
+        Route::get('/{property}',  [MobilePropertyController::class, 'show']);
+        Route::put('/{property}',  [MobilePropertyController::class, 'update']);
+        Route::post('/{property}/images', [MobilePropertyController::class, 'uploadImage']);
+    });
 
     // ── Command Center ────────────────────────────────────────────
     Route::prefix('command-center')->group(function () {
