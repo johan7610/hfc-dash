@@ -2267,9 +2267,13 @@
                         </div>
                     </div>
                     <div class="flex flex-wrap gap-1.5">
-                        <template x-for="tag in availableTags" :key="tag">
+                        <template x-for="(tag, tIdx) in availableTags" :key="tag">
                             <button type="button" @click="tagSelected(tag)"
-                                    class="text-[10px] font-semibold px-2.5 py-1 rounded-full transition-colors"
+                                    draggable="true"
+                                    @dragstart="tagDragStart(tIdx, $event)"
+                                    @dragover.prevent="tagDragOver(tIdx, $event)"
+                                    @drop.prevent="tagDragDrop()"
+                                    class="text-[10px] font-semibold px-2.5 py-1 rounded-full transition-colors cursor-grab"
                                     :style="activeTag === tag ? 'background:var(--brand-icon,#0ea5e9); color:#fff;' : 'background:var(--surface); color:var(--text-secondary); border:1px solid var(--border);'"
                                     x-text="tag"></button>
                         </template>
@@ -3475,10 +3479,22 @@ function smartGallery(initImages, initTags, propertyId, csrfToken, availableTags
             }
             this.dirty = true;
             this.selected = [];
-            // Keep tag mode on so they can continue tagging more
+            // Auto-save after tagging
+            this.save();
         },
 
-        // Sort images by category order
+        // Drag reorder tags
+        _dragTagIdx: null,
+        tagDragStart(idx, e) { this._dragTagIdx = idx; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', ''); },
+        tagDragOver(idx, e) {
+            if (this._dragTagIdx === null || this._dragTagIdx === idx) return;
+            const item = this.availableTags.splice(this._dragTagIdx, 1)[0];
+            this.availableTags.splice(idx, 0, item);
+            this._dragTagIdx = idx;
+        },
+        tagDragDrop() { this._dragTagIdx = null; },
+
+        // Sort images by category order (uses current tag button order)
         sortByCategory() {
             const order = {};
             this.availableTags.forEach((t, i) => order[t] = i);
@@ -3487,6 +3503,7 @@ function smartGallery(initImages, initTags, propertyId, csrfToken, availableTags
             tagged.sort((a, b) => (order[this.tags[a]] ?? 999) - (order[this.tags[b]] ?? 999));
             this.images = [...tagged, ...untagged];
             this.dirty = true;
+            this.save();
         },
 
         // Drag to reorder
