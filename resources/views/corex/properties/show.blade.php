@@ -2057,9 +2057,9 @@
                         <h3 class="text-xs font-bold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Video & Virtual Tour</h3>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">YouTube Video ID <span class="opacity-60">(11 chars)</span></label>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">YouTube Video <span class="opacity-60">(URL or ID)</span></label>
                                 <input type="text" name="youtube_video_id" value="{{ old('youtube_video_id', $property->youtube_video_id) }}"
-                                       maxlength="11" placeholder="e.g. dQw4w9WgXcQ"
+                                       placeholder="https://www.youtube.com/watch?v=... or video ID"
                                        class="w-full rounded-md px-3 py-2 text-sm font-mono"
                                        style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
                             </div>

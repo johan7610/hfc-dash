@@ -26,7 +26,7 @@ class PropertyPpController extends Controller
         $this->authorizeProperty($property);
 
         $request->validate([
-            'youtube_video_id' => 'nullable|string|size:11',
+            'youtube_video_id' => 'nullable|string|max:500',
             'matterport_id'    => 'nullable|string|max:100',
         ]);
 
@@ -37,8 +37,11 @@ class PropertyPpController extends Controller
             ], 422);
         }
 
+        // Extract 11-char ID from full YouTube URL
+        $youtubeId = $request->youtube_video_id ? self::extractYoutubeId($request->youtube_video_id) : null;
+
         $property->update([
-            'youtube_video_id' => $request->youtube_video_id ?: null,
+            'youtube_video_id' => $youtubeId,
             'matterport_id'    => $request->matterport_id ?: null,
         ]);
 
@@ -79,5 +82,13 @@ class PropertyPpController extends Controller
         if ($scope === 'own' && (int) $property->agent_id === (int) $user->id) return;
 
         abort(403);
+    }
+
+    private static function extractYoutubeId(string $input): string
+    {
+        $input = trim($input);
+        if (preg_match('/^[a-zA-Z0-9_-]{11}$/', $input)) return $input;
+        if (preg_match('/(?:youtube\.com\/(?:watch\?.*v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/', $input, $m)) return $m[1];
+        return substr($input, 0, 11);
     }
 }

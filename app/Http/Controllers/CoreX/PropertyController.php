@@ -328,7 +328,7 @@ class PropertyController extends Controller
             'pp_second_agent_id' => 'nullable|exists:users,id',
             'pp_agent_image'           => 'nullable|image|max:1024',
             'pp_second_agent_image'    => 'nullable|image|max:1024',
-            'youtube_video_id'   => 'nullable|string|max:11',
+            'youtube_video_id'   => 'nullable|string|max:500',
             'matterport_id'      => 'nullable|string|max:100',
             'rental_price_type'  => 'nullable|string|max:50',
             'pp_hide_street_name'   => 'nullable|boolean',
@@ -354,6 +354,11 @@ class PropertyController extends Controller
         ]);
 
         $data = $this->processSpacesJson($data);
+
+        // Extract YouTube video ID from full URL if pasted
+        if (!empty($data['youtube_video_id'])) {
+            $data['youtube_video_id'] = self::extractYoutubeId($data['youtube_video_id']);
+        }
 
         $storeScope = PermissionService::getDataScope($user, 'properties');
         if (! in_array($storeScope, ['all', 'branch']) || empty($data['agent_id'])) {
@@ -511,7 +516,7 @@ class PropertyController extends Controller
             'pp_second_agent_id' => 'nullable|exists:users,id',
             'pp_agent_image'           => 'nullable|image|max:1024',
             'pp_second_agent_image'    => 'nullable|image|max:1024',
-            'youtube_video_id'   => 'nullable|string|max:11',
+            'youtube_video_id'   => 'nullable|string|max:500',
             'matterport_id'      => 'nullable|string|max:100',
             'rental_price_type'  => 'nullable|string|max:50',
             'pp_hide_street_name'   => 'nullable|boolean',
@@ -535,6 +540,11 @@ class PropertyController extends Controller
         }
         if ($request->hasFile('pp_second_agent_image')) {
             $data['pp_second_agent_image_path'] = $request->file('pp_second_agent_image')->store("properties/{$property->id}/agents", 'public');
+        }
+
+        // Extract YouTube video ID from full URL if pasted
+        if (!empty($data['youtube_video_id'])) {
+            $data['youtube_video_id'] = self::extractYoutubeId($data['youtube_video_id']);
         }
 
         // Checkboxes that aren't checked don't submit — ensure they're explicitly set to false
@@ -818,5 +828,26 @@ class PropertyController extends Controller
         $record = Property::onlyTrashed()->findOrFail($id);
         $record->restore();
         return redirect()->back()->with('success', 'Record restored.');
+    }
+
+    /**
+     * Extract the 11-char YouTube video ID from a full URL or return as-is if already an ID.
+     */
+    private static function extractYoutubeId(string $input): string
+    {
+        $input = trim($input);
+
+        // Already an 11-char ID
+        if (preg_match('/^[a-zA-Z0-9_-]{11}$/', $input)) {
+            return $input;
+        }
+
+        // youtube.com/watch?v=ID or youtube.com/embed/ID or youtu.be/ID
+        if (preg_match('/(?:youtube\.com\/(?:watch\?.*v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/', $input, $m)) {
+            return $m[1];
+        }
+
+        // Fallback: return first 11 chars if longer, or as-is
+        return substr($input, 0, 11);
     }
 }
