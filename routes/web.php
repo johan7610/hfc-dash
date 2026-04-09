@@ -125,6 +125,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/admin/users/{user}/role', [App\Http\Controllers\Admin\UserManagementController::class, 'updateRole'])->middleware('permission:manage_users')->name('admin.users.role.update');
     Route::post('/admin/users/{user}/resend-invite', [App\Http\Controllers\Admin\UserManagementController::class, 'resendInvite'])->middleware('permission:manage_users')->name('admin.users.resend-invite');
     Route::post('/admin/users/{user}/remove-file', [App\Http\Controllers\Admin\UserManagementController::class, 'removeAgentFile'])->middleware('permission:manage_users')->name('admin.users.remove-file');
+    // PP Agent ownership
+    Route::post('/admin/users/{user}/pp/sync', [\App\Http\Controllers\PrivateProperty\AgentPpController::class, 'sync'])->middleware('permission:manage_users')->name('admin.users.pp.sync');
+    Route::post('/admin/users/{user}/pp/update-id', [\App\Http\Controllers\PrivateProperty\AgentPpController::class, 'updateId'])->middleware('permission:manage_users')->name('admin.users.pp.update-id');
 
     Route::get('/admin/listing-targets', [ListingTargetController::class, 'index'])
         ->middleware('permission:manage_targets')->name('admin.listing-targets');
@@ -826,6 +829,9 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/syndication/agent/register',        [\App\Http\Controllers\PrivateProperty\SyndicationController::class, 'registerAgent'])->name('syndication.agent.register');
         Route::post('/syndication/agent/deactivate',      [\App\Http\Controllers\PrivateProperty\SyndicationController::class, 'deactivateAgent'])->name('syndication.agent.deactivate');
         Route::post('/syndication/agent/image',           [\App\Http\Controllers\PrivateProperty\SyndicationController::class, 'uploadAgentImage'])->name('syndication.agent.image');
+        // PP Video/Matterport & Listing Ownership
+        Route::post('/{property}/syndication/video',     [\App\Http\Controllers\PrivateProperty\PropertyPpController::class, 'video'])->name('syndication.video');
+        Route::post('/{property}/syndication/update-id',  [\App\Http\Controllers\PrivateProperty\PropertyPpController::class, 'updateId'])->name('syndication.update-id');
         // Property24 ExDev Syndication
         Route::post('/{property}/p24-syndication/toggle',     [\App\Http\Controllers\Property24\P24SyndicationController::class, 'toggle'])->name('p24-syndication.toggle');
         Route::post('/{property}/p24-syndication/submit',     [\App\Http\Controllers\Property24\P24SyndicationController::class, 'submit'])->name('p24-syndication.submit');

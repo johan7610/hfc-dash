@@ -382,6 +382,112 @@ class PrivatePropertySyndicationService
     }
 
     /**
+     * Push YouTube video ID and/or Matterport ID to PP for an active listing.
+     */
+    public function pushVideoOrMatterport(Property $property): array
+    {
+        if (empty($property->pp_ref)) {
+            return [
+                'success' => false,
+                'message' => 'Listing has no PP Ref — must be active on PP before video/Matterport can be added.',
+            ];
+        }
+
+        $youtube    = $property->youtube_video_id ?? null;
+        $matterport = $property->matterport_id ?? null;
+
+        if (empty($youtube) && empty($matterport)) {
+            return [
+                'success' => false,
+                'message' => 'No YouTube ID or Matterport ID stored on this property. Add one first.',
+            ];
+        }
+
+        $listingType = in_array(strtolower($property->listing_type ?? ''), ['rental']) ? 'Rental' : 'Sale';
+
+        $result = $this->client->updateListingVideoOrMatterport(
+            $property->pp_ref,
+            $listingType,
+            $youtube,
+            $matterport
+        );
+
+        if (isset($result['error']) && $result['error'] === true) {
+            return [
+                'success' => false,
+                'message' => $result['message'] ?? 'Video/Matterport update failed',
+            ];
+        }
+
+        $this->log('info', "Video/Matterport pushed for property #{$property->id}", [
+            'pp_ref'    => $property->pp_ref,
+            'youtube'   => $youtube,
+            'matterport' => $matterport,
+        ]);
+
+        return [
+            'success' => true,
+            'message' => 'Video/Matterport updated on Private Property',
+            'result'  => $result,
+        ];
+    }
+
+    /**
+     * Claim PP ownership of an agent by updating their unique agent ID.
+     */
+    public function updateUniqueAgentId(User $user, string $ppAgentId): array
+    {
+        $result = $this->client->updateUniqueAgentId($ppAgentId, (string) $user->id);
+
+        if (isset($result['error']) && $result['error'] === true) {
+            return [
+                'success' => false,
+                'message' => $result['message'] ?? 'UpdateUniqueAgentID failed',
+            ];
+        }
+
+        $user->update(['pp_unique_agent_id' => $ppAgentId]);
+
+        $this->log('info', "PP ownership claimed for agent #{$user->id}", [
+            'pp_unique_agent_id' => $ppAgentId,
+        ]);
+
+        return [
+            'success'            => true,
+            'message'            => 'PP agent ownership updated',
+            'pp_unique_agent_id' => $ppAgentId,
+            'result'             => $result,
+        ];
+    }
+
+    /**
+     * Claim PP ownership of a listing by updating its unique listing ID.
+     */
+    public function updateUniqueListingId(Property $property, string $ppListingId): array
+    {
+        $listingType = in_array(strtolower($property->listing_type ?? ''), ['rental']) ? 'Rental' : 'Sale';
+
+        $result = $this->client->updateUniqueListingId($ppListingId, (string) $property->id, $listingType);
+
+        if (isset($result['error']) && $result['error'] === true) {
+            return [
+                'success' => false,
+                'message' => $result['message'] ?? 'UpdateUniqueListingID failed',
+            ];
+        }
+
+        $this->log('info', "PP listing ownership claimed for property #{$property->id}", [
+            'pp_listing_id' => $ppListingId,
+        ]);
+
+        return [
+            'success' => true,
+            'message' => 'PP listing ownership updated',
+            'result'  => $result,
+        ];
+    }
+
+    /**
      * Register the property's agent on PP if not already done.
      * Returns true on success, or an error string on failure.
      */

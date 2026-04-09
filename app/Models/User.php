@@ -53,6 +53,9 @@ class User extends Authenticatable
         'ffc_number',
         'website',
         'theme',
+
+        // Private Property integration
+        'pp_unique_agent_id',
     ];
 
     protected $hidden = [

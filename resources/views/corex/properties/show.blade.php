@@ -293,6 +293,10 @@
                                 'hideStreetNumber'=> (bool) ($property->pp_hide_street_number ?? false),
                                 'hideComplexName' => (bool) ($property->pp_hide_complex_name ?? false),
                                 'hideUnitNumber'  => (bool) ($property->pp_hide_unit_number ?? false),
+                                'youtubeVideoId'  => $property->youtube_video_id ?? '',
+                                'matterportId'    => $property->matterport_id ?? '',
+                                'ppDelayUntil'    => $property->pp_delay_until ? $property->pp_delay_until->format('d M Y') : '',
+                                'ppDelayUntilRaw' => $property->pp_delay_until ? $property->pp_delay_until->toIso8601String() : '',
                             ];
                         @endphp
                         <div x-data="ppSyndication({{ Js::from($ppConfig) }})" @click.stop class="space-y-3">
@@ -341,6 +345,18 @@
                                 <template x-if="status === 'deactivated'">
                                     <span style="color:var(--text-muted);">Deactivated</span>
                                 </template>
+                            </div>
+
+                            {{-- PP Exclusive listing warning --}}
+                            <div x-show="isPpExclusiveActive()" x-cloak
+                                 class="rounded-md px-3 py-2.5 space-y-1"
+                                 style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25);">
+                                <p class="text-[11px] font-semibold" style="color:#f59e0b;">
+                                    PP Exclusive listing — do not publish elsewhere until <span x-text="ppDelayUntil"></span>
+                                </p>
+                                <p class="text-[10px]" style="color:#d97706;">
+                                    <span x-text="ppDelayDaysRemaining()"></span> days remaining
+                                </p>
                             </div>
 
                             {{-- Missing fields warning --}}
@@ -452,6 +468,62 @@
                                     </template>
                                 </ul>
                             </div>
+
+                            {{-- ── VIDEO & VIRTUAL TOUR ─── (only when active on PP) --}}
+                            <div x-show="status === 'active'" x-cloak class="rounded-md p-3 space-y-2"
+                                 style="background:var(--surface-2); border:1px solid var(--border);">
+                                <h4 class="text-[11px] font-bold uppercase tracking-wider" style="color:var(--text-secondary);">Video & Virtual Tour</h4>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="block text-[10px] font-medium mb-0.5" style="color:var(--text-muted);">YouTube Video ID (11 chars)</label>
+                                        <input type="text" x-model="youtubeVideoId" maxlength="11" placeholder="e.g. dQw4w9WgXcQ"
+                                               class="w-full rounded-md px-2 py-1.5 text-xs font-mono"
+                                               style="background:var(--surface-3); border:1px solid var(--border); color:var(--text-primary);"
+                                               @click.stop>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] font-medium mb-0.5" style="color:var(--text-muted);">Matterport ID</label>
+                                        <input type="text" x-model="matterportId" placeholder="Matterport scan ID"
+                                               class="w-full rounded-md px-2 py-1.5 text-xs font-mono"
+                                               style="background:var(--surface-3); border:1px solid var(--border); color:var(--text-primary);"
+                                               @click.stop>
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <button type="button" @click.stop="pushVideo()" :disabled="videoLoading"
+                                            class="px-3 py-1.5 rounded-md text-[11px] font-medium text-white transition-colors"
+                                            style="background:var(--brand-button, #0ea5e9);">
+                                        <span x-show="!videoLoading">Push to Private Property</span>
+                                        <span x-show="videoLoading" x-cloak>Pushing...</span>
+                                    </button>
+                                    <span x-show="videoMsg" x-cloak class="text-[10px] font-medium"
+                                          :style="videoOk ? 'color:#22c55e' : 'color:#ef4444'" x-text="videoMsg"></span>
+                                </div>
+                            </div>
+
+                            {{-- ── PP LISTING OWNERSHIP ─── (only when pp_ref exists) --}}
+                            <div x-show="ppRef" x-cloak class="rounded-md p-3 space-y-2"
+                                 style="background:var(--surface-2); border:1px solid var(--border);">
+                                <h4 class="text-[11px] font-bold uppercase tracking-wider" style="color:var(--text-secondary);">PP Listing Ownership</h4>
+                                <div class="text-[10px]" style="color:var(--text-muted);">PP Ref: <span class="font-mono" x-text="ppRef" style="color:var(--text-primary);"></span></div>
+                                <div class="flex items-end gap-2">
+                                    <div class="flex-1">
+                                        <label class="block text-[10px] font-medium mb-0.5" style="color:var(--text-muted);">PP Encrypted Listing ID</label>
+                                        <input type="text" x-model="ppListingId" placeholder="Paste ID supplied by PP"
+                                               class="w-full rounded-md px-2 py-1.5 text-xs font-mono"
+                                               style="background:var(--surface-3); border:1px solid var(--border); color:var(--text-primary);"
+                                               @click.stop>
+                                    </div>
+                                    <button type="button" @click.stop="claimListingOwnership()" :disabled="listingIdLoading"
+                                            class="px-3 py-1.5 rounded-md text-[11px] font-medium text-white transition-colors flex-shrink-0"
+                                            style="background:var(--brand-button, #0ea5e9);">
+                                        <span x-show="!listingIdLoading">Claim Ownership</span>
+                                        <span x-show="listingIdLoading" x-cloak>Updating...</span>
+                                    </button>
+                                </div>
+                                <span x-show="listingIdMsg" x-cloak class="text-[10px] font-medium"
+                                      :style="listingIdOk ? 'color:#22c55e' : 'color:#ef4444'" x-text="listingIdMsg"></span>
+                            </div>
                         </div>
 
                         {{-- Property24 Syndication Panel --}}
@@ -472,12 +544,21 @@
                                 'suburbId'        => $property->pp_suburb_id ? (\App\Models\P24Suburb::find($property->pp_suburb_id)?->p24_id ?? '') : (\App\Models\P24Suburb::lookup($property->suburb ?? '')?->p24_id ?? ''),
                                 'listingType'     => strtolower($property->listing_type ?? 'sale'),
                                 'missingFields'   => $p24MissingFields ?? [],
+                                'ppDelayUntilRaw' => $property->pp_delay_until ? $property->pp_delay_until->toIso8601String() : '',
+                                'ppDelayUntil'    => $property->pp_delay_until ? $property->pp_delay_until->format('d M Y') : '',
                             ];
                         @endphp
                         <div x-data="p24Syndication({{ Js::from($p24Config) }})" @click.stop class="space-y-3 mt-2">
-                            <div class="flex items-center justify-between gap-3 px-3 py-2 rounded-md cursor-pointer"
+                            {{-- P24 exclusive lock warning --}}
+                            <div x-show="isPpExclusiveLocked()" x-cloak
+                                 class="rounded-md px-3 py-2 text-[11px] font-medium"
+                                 style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); color:#f59e0b;">
+                                Cannot enable P24 syndication during PP exclusive period (until <span x-text="ppDelayUntil"></span>)
+                            </div>
+                            <div class="flex items-center justify-between gap-3 px-3 py-2 rounded-md"
                                  style="background:var(--surface-2); border:1px solid var(--border);"
-                                 @click="toggleEnabled()"
+                                 :class="isPpExclusiveLocked() ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'"
+                                 @click="!isPpExclusiveLocked() && toggleEnabled()"
                                  :style="enabled ? 'background:rgba(59,130,246,0.06); border-color:rgba(59,130,246,0.25);' : 'background:var(--surface-2); border-color:var(--border);'">
                                 <div class="flex items-center gap-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" :style="enabled ? 'color:#3b82f6' : 'color:var(--text-muted)'">
@@ -3638,6 +3719,16 @@ function ppSyndication(config) {
         hideStreetNumber: config.hideStreetNumber || false,
         hideComplexName: config.hideComplexName || false,
         hideUnitNumber: config.hideUnitNumber || false,
+        // Video / Matterport
+        youtubeVideoId: config.youtubeVideoId || '',
+        matterportId: config.matterportId || '',
+        videoLoading: false, videoMsg: '', videoOk: null,
+        // Listing ownership
+        ppListingId: '',
+        listingIdLoading: false, listingIdMsg: '', listingIdOk: null,
+        // Exclusive delay
+        ppDelayUntil: config.ppDelayUntil || '',
+        ppDelayUntilRaw: config.ppDelayUntilRaw || '',
         // Showday
         showShowdayForm: false,
         showdayStart: '',
@@ -3873,6 +3964,51 @@ function ppSyndication(config) {
             }
         },
 
+        async pushVideo() {
+            if (!this.youtubeVideoId && !this.matterportId) { this.videoOk = false; this.videoMsg = 'Enter a YouTube ID or Matterport ID'; return; }
+            if (this.youtubeVideoId && this.youtubeVideoId.length !== 11) { this.videoOk = false; this.videoMsg = 'YouTube ID must be exactly 11 characters'; return; }
+            this.videoLoading = true; this.videoMsg = '';
+            try {
+                const res = await fetch(`/corex/properties/${this.propertyId}/syndication/video`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
+                    body: JSON.stringify({ youtube_video_id: this.youtubeVideoId || null, matterport_id: this.matterportId || null }),
+                });
+                const data = await res.json();
+                this.videoOk = data.success;
+                this.videoMsg = data.message;
+            } catch (e) { this.videoOk = false; this.videoMsg = 'Network error'; }
+            this.videoLoading = false;
+        },
+
+        async claimListingOwnership() {
+            if (!this.ppListingId.trim()) { this.listingIdOk = false; this.listingIdMsg = 'Enter PP Encrypted Listing ID'; return; }
+            if (!confirm('This will permanently claim PP ownership of this listing. Continue?')) return;
+            this.listingIdLoading = true; this.listingIdMsg = '';
+            try {
+                const res = await fetch(`/corex/properties/${this.propertyId}/syndication/update-id`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
+                    body: JSON.stringify({ pp_listing_id: this.ppListingId }),
+                });
+                const data = await res.json();
+                this.listingIdOk = data.success;
+                this.listingIdMsg = data.message;
+                if (data.success) this.ppListingId = '';
+            } catch (e) { this.listingIdOk = false; this.listingIdMsg = 'Network error'; }
+            this.listingIdLoading = false;
+        },
+
+        ppDelayDaysRemaining() {
+            if (!this.ppDelayUntilRaw) return 0;
+            const diff = new Date(this.ppDelayUntilRaw) - new Date();
+            return Math.max(0, Math.ceil(diff / 86400000));
+        },
+
+        isPpExclusiveActive() {
+            return this.ppDelayDaysRemaining() > 0;
+        },
+
         async saveVisibility() {
             try {
                 await fetch(`/corex/properties/${this.propertyId}/syndication/visibility`, {
@@ -3897,7 +4033,12 @@ function p24Syndication(config) {
         lastError: config.lastError || '', csrfToken: config.csrfToken, isSandbox: config.isSandbox ?? true,
         suburb: config.suburb || '', city: config.city || '', province: config.province || '', suburbId: config.suburbId || '', listingType: config.listingType || 'sale',
         missingFields: config.missingFields || [],
+        ppDelayUntilRaw: config.ppDelayUntilRaw || '', ppDelayUntil: config.ppDelayUntil || '',
         loading: false, message: '', messageType: 'success', debugErrors: [], showDebug: false,
+        isPpExclusiveLocked() {
+            if (!this.ppDelayUntilRaw) return false;
+            return new Date(this.ppDelayUntilRaw) > new Date();
+        },
         statusLabel() {
             const labels = {'':'Disabled','pending':'Pending','submitted':'Submitted','active':'Active','error':'Error','rejected':'Rejected','deactivated':'Deactivated'};
             if (!this.enabled && !this.status) return 'Disabled';

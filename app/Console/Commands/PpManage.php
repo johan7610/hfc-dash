@@ -12,10 +12,14 @@ use Illuminate\Console\Command;
 class PpManage extends Command
 {
     protected $signature = 'pp:manage
-        {action : Action to perform: submit, reactivate, deactivate, status, showday, register-agent, deactivate-agent, agent-image, submit-agent-images, list-agents, list-active, summary}
+        {action : Action to perform: submit, reactivate, deactivate, status, showday, register-agent, deactivate-agent, agent-image, submit-agent-images, list-agents, list-active, summary, update-agent-id, update-listing-id, add-video}
         {--property= : Property ID (for listing actions)}
         {--user= : User ID (for agent actions)}
         {--image-url= : Image URL (for agent-image action)}
+        {--pp-agent-id= : PP encrypted agent ID (for update-agent-id)}
+        {--pp-listing-id= : PP encrypted listing ID (for update-listing-id)}
+        {--youtube= : YouTube video ID, exactly 11 chars (for add-video)}
+        {--matterport= : Matterport ID (for add-video)}
         {--start= : Showday start datetime (Y-m-d H:i)}
         {--end= : Showday end datetime (Y-m-d H:i)}
         {--description= : Showday description}';
@@ -42,6 +46,9 @@ class PpManage extends Command
             'submit-agent-images' => $this->submitAgentImages($service),
             'list-agents'      => $this->listAgents($client),
             'list-active'      => $this->listActive($client),
+            'update-agent-id'  => $this->updateAgentId($service),
+            'update-listing-id'=> $this->updateListingId($service),
+            'add-video'        => $this->addVideo($service),
             default            => $this->error("Unknown action: {$action}") ?? 1,
         };
     }
@@ -252,6 +259,74 @@ class PpManage extends Command
         $result = $client->getActiveListings();
         $this->line(json_encode($result, JSON_PRETTY_PRINT));
         return 0;
+    }
+
+    private function updateAgentId(PrivatePropertySyndicationService $service): int
+    {
+        $user = $this->getUser();
+        if (!$user) return 1;
+
+        $ppAgentId = $this->option('pp-agent-id');
+        if (!$ppAgentId) {
+            $this->error('--pp-agent-id is required');
+            return 1;
+        }
+
+        $this->info("Updating PP agent ID for user #{$user->id} ({$user->name})...");
+        $result = $service->updateUniqueAgentId($user, $ppAgentId);
+
+        $this->outputResult($result);
+        return $result['success'] ? 0 : 1;
+    }
+
+    private function updateListingId(PrivatePropertySyndicationService $service): int
+    {
+        $property = $this->getProperty();
+        if (!$property) return 1;
+
+        $ppListingId = $this->option('pp-listing-id');
+        if (!$ppListingId) {
+            $this->error('--pp-listing-id is required');
+            return 1;
+        }
+
+        $this->info("Updating PP listing ID for property #{$property->id}...");
+        $result = $service->updateUniqueListingId($property, $ppListingId);
+
+        $this->outputResult($result);
+        return $result['success'] ? 0 : 1;
+    }
+
+    private function addVideo(PrivatePropertySyndicationService $service): int
+    {
+        $property = $this->getProperty();
+        if (!$property) return 1;
+
+        $youtube   = $this->option('youtube');
+        $matterport = $this->option('matterport');
+
+        if (!$youtube && !$matterport) {
+            $this->error('At least one of --youtube or --matterport is required');
+            return 1;
+        }
+
+        if ($youtube && strlen($youtube) !== 11) {
+            $this->error("YouTube ID must be exactly 11 characters. Got: " . strlen($youtube));
+            return 1;
+        }
+
+        // Save to property record
+        $property->update(array_filter([
+            'youtube_video_id' => $youtube,
+            'matterport_id'    => $matterport,
+        ], fn($v) => $v !== null));
+        $property->refresh();
+
+        $this->info("Pushing video/Matterport for property #{$property->id}...");
+        $result = $service->pushVideoOrMatterport($property);
+
+        $this->outputResult($result);
+        return $result['success'] ? 0 : 1;
     }
 
     private function getProperty(): ?Property

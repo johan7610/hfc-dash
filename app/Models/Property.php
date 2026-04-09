@@ -102,6 +102,8 @@ class Property extends Model
         'pp_hide_street_number',
         'pp_hide_complex_name',
         'pp_hide_unit_number',
+        'youtube_video_id',
+        'matterport_id',
         'rental_price_type',
         'p24_syndication_enabled',
         'p24_syndication_status',
