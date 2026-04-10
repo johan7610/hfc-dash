@@ -855,7 +855,8 @@
         <div x-show="activeTab === 'info'" {{ $isNew ? '' : 'x-cloak' }} class="p-6">
             <form id="prop-update-form" method="POST" enctype="multipart/form-data"
                   action="@if($isNew){{ route('corex.properties.store') }}@else{{ route('corex.properties.update', $property) }}@endif"
-                  class="space-y-6">
+                  class="space-y-6"
+                  novalidate>
                 @csrf
                 @if(!$isNew) @method('PUT') @endif
 
@@ -886,8 +887,8 @@
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Property Type</label>
-                            <select name="property_type" class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Property Type <span class="text-red-400">*</span></label>
+                            <select name="property_type" required class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
                                 <option value="">— None —</option>
                                 @foreach($settingItems['types'] as $item)
                                 <option value="{{ $item->name }}" {{ old('property_type', $property->property_type) === $item->name ? 'selected' : '' }}>
@@ -4063,6 +4064,144 @@ function p24Syndication(config) {
         },
     };
 }
+
+// ── Property form: required-fields modal ────────────────────────────────
+(function() {
+    var form     = document.getElementById('prop-update-form');
+    var modal    = document.getElementById('prop-required-modal');
+    if (!form || !modal) return;
+
+    var listEl   = document.getElementById('prop-required-list');
+    var closeBtn = document.getElementById('prop-required-close');
+    var gotoBtn  = document.getElementById('prop-required-goto');
+    var firstMissingEl = null;
+
+    function labelFor(field) {
+        // Look up the closest wrapping div, find its label
+        var wrap = field.closest('div');
+        while (wrap) {
+            var lbl = wrap.querySelector('label');
+            if (lbl && lbl.textContent.trim()) {
+                return lbl.textContent.replace(/\*/g, '').trim();
+            }
+            wrap = wrap.parentElement && wrap.parentElement.closest('div');
+            if (!wrap) break;
+        }
+        return field.name || 'Required field';
+    }
+
+    function activateTabFor(el) {
+        // Walk up looking for x-show="activeTab === '...'" and switch the root Alpine tab
+        var node = el.parentElement;
+        while (node && node !== document.body) {
+            var attr = node.getAttribute('x-show');
+            if (attr) {
+                var m = attr.match(/activeTab\s*===\s*['"]([^'"]+)['"]/);
+                if (m) {
+                    try {
+                        var root = node.closest('[x-data]');
+                        while (root) {
+                            var data = window.Alpine && Alpine.$data ? Alpine.$data(root) : null;
+                            if (data && 'activeTab' in data) { data.activeTab = m[1]; break; }
+                            root = root.parentElement && root.parentElement.closest('[x-data]');
+                        }
+                    } catch (e) {}
+                    break;
+                }
+            }
+            node = node.parentElement;
+        }
+    }
+
+    function showModal(missing) {
+        listEl.innerHTML = '';
+        missing.forEach(function(item) {
+            var li = document.createElement('li');
+            li.textContent = item.label;
+            listEl.appendChild(li);
+        });
+        firstMissingEl = missing.length ? missing[0].el : null;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+
+    function hideModal() {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+
+    form.addEventListener('submit', function(e) {
+        var missing = [];
+        var seen = {};
+        form.querySelectorAll('[required]').forEach(function(f) {
+            // Skip duplicate hidden inputs sharing a name
+            if (f.type === 'hidden') return;
+            if (seen[f.name]) return;
+            var val = (f.value || '').trim();
+            if (!val) {
+                seen[f.name] = true;
+                missing.push({ el: f, label: labelFor(f) });
+            }
+        });
+        if (missing.length) {
+            e.preventDefault();
+            showModal(missing);
+        }
+    });
+
+    closeBtn.addEventListener('click', hideModal);
+    gotoBtn.addEventListener('click', function() {
+        hideModal();
+        if (firstMissingEl) {
+            activateTabFor(firstMissingEl);
+            setTimeout(function() {
+                firstMissingEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                try { firstMissingEl.focus({ preventScroll: true }); } catch (e) { firstMissingEl.focus(); }
+            }, 80);
+        }
+    });
+    modal.addEventListener('click', function(e) { if (e.target === modal) hideModal(); });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) hideModal();
+    });
+})();
 </script>
 @endpush
+
+{{-- ── Required Fields Modal ───────────────────────────────────────────── --}}
+<div id="prop-required-modal"
+     class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4"
+     role="dialog" aria-modal="true" aria-labelledby="prop-required-title">
+    <div class="rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
+         style="background:var(--surface,#fff); border:1px solid var(--border);">
+        <div class="px-6 py-4 flex items-start gap-3" style="border-bottom:1px solid var(--border);">
+            <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center" style="background:rgba(220,38,38,0.12);">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" style="color:#dc2626;" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                </svg>
+            </div>
+            <div class="flex-1">
+                <h3 id="prop-required-title" class="text-base font-bold" style="color:var(--text-primary);">Missing Required Fields</h3>
+                <p class="text-xs mt-0.5" style="color:var(--text-muted);">Please complete the following before saving:</p>
+            </div>
+        </div>
+        <div class="px-6 py-4 max-h-64 overflow-y-auto">
+            <ul id="prop-required-list" class="list-disc list-inside space-y-1 text-sm" style="color:var(--text-primary);"></ul>
+        </div>
+        <div class="px-6 py-4 flex items-center justify-end gap-2" style="background:var(--surface-2); border-top:1px solid var(--border);">
+            <button type="button" id="prop-required-close"
+                    class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                    style="color:var(--text-secondary); border:1px solid var(--border);"
+                    onmouseover="this.style.background='var(--surface-3)'" onmouseout="this.style.background='transparent'">
+                Close
+            </button>
+            <button type="button" id="prop-required-goto"
+                    class="px-4 py-2 rounded-md text-sm font-semibold text-white transition-colors"
+                    style="background:var(--brand-default,#0b2a4a);"
+                    onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+                Take Me There
+            </button>
+        </div>
+    </div>
+</div>
 @endsection
