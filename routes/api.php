@@ -71,9 +71,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('mobile/properties')->group(function () {
         Route::get('/',         [MobilePropertyController::class, 'index']);
         Route::post('/',        [MobilePropertyController::class, 'store']);
+
+        // Static catalog (must be defined BEFORE /{property} so it isn't
+        // treated as a property id by the route binding).
+        Route::get('/spaces/catalog', [MobilePropertyController::class, 'spacesCatalog']);
+
         Route::get('/{property}',  [MobilePropertyController::class, 'show']);
         Route::put('/{property}',  [MobilePropertyController::class, 'update']);
         Route::post('/{property}/images', [MobilePropertyController::class, 'uploadImage']);
+
+        // Spaces & features (Bedroom, Bathroom, Kitchen, …)
+        Route::get('/{property}/spaces', [MobilePropertyController::class, 'spacesShow']);
+        Route::put('/{property}/spaces', [MobilePropertyController::class, 'spacesUpdate']);
     });
 
     // ── Command Center ────────────────────────────────────────────

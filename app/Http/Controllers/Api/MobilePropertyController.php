@@ -144,6 +144,146 @@ class MobilePropertyController extends Controller
         ]);
     }
 
+    // ── GET /api/mobile/properties/spaces/catalog ──────────────────
+    // Returns the full static catalog: every space type the user can add,
+    // plus the feature options grouped per space type. Mobile clients call
+    // this once on app start (or cache it) to render the dropdown / picker.
+    public function spacesCatalog(Request $request): JsonResponse
+    {
+        $cfg = config('property-spaces');
+
+        return response()->json([
+            'all_space_types'        => $cfg['all_space_types'],
+            'half_unit_spaces'       => $cfg['half_unit_spaces'],
+            'space_features'         => $cfg['space_features'],
+            'default_space_features' => $cfg['default_space_features'],
+            'feature_categories'     => $cfg['feature_categories'],
+        ]);
+    }
+
+    // ── GET /api/mobile/properties/{id}/spaces ─────────────────────
+    // Returns the property's current spaces & global features in the
+    // same shape the web stores in `spaces_json`.
+    public function spacesShow(Request $request, Property $property): JsonResponse
+    {
+        $this->authorizeProperty($request->user(), $property);
+
+        return response()->json([
+            'property_id' => $property->id,
+            'spaces_json' => $this->normalizeSpacesPayload($property->spaces_json ?? []),
+            'beds'        => $property->beds,
+            'baths'       => $property->baths,
+            'garages'     => $property->garages,
+        ]);
+    }
+
+    // ── PUT /api/mobile/properties/{id}/spaces ─────────────────────
+    // Replaces the entire spaces_json for a property. Mobile sends the
+    // full { spaces: [...], features: {...} } object back. We also keep
+    // the legacy beds/baths/garages columns in sync so the rest of the
+    // web UI (search, listings, syndication) stays correct.
+    public function spacesUpdate(Request $request, Property $property): JsonResponse
+    {
+        $this->authorizeProperty($request->user(), $property);
+
+        $data = $request->validate([
+            'spaces'                       => 'required|array',
+            'spaces.*.type'                => 'required|string|max:100',
+            'spaces.*.count'               => 'required|numeric|min:0|max:100',
+            'spaces.*.featuresAll'         => 'nullable|array',
+            'spaces.*.featuresAll.*'       => 'string|max:255',
+            'spaces.*.descriptionAll'      => 'nullable|string|max:5000',
+            'spaces.*.units'               => 'nullable|array',
+            'spaces.*.units.*.label'      => 'nullable|string|max:255',
+            'spaces.*.units.*.features'   => 'nullable|array',
+            'spaces.*.units.*.features.*' => 'string|max:255',
+
+            'features'                       => 'nullable|array',
+            'features.theProperty'           => 'nullable|array',
+            'features.theProperty.*'         => 'string|max:255',
+            'features.security'              => 'nullable|array',
+            'features.security.*'            => 'string|max:255',
+            'features.connectivity'          => 'nullable|array',
+            'features.connectivity.*'        => 'string|max:255',
+            'features.sustainability'        => 'nullable|array',
+            'features.sustainability.*'      => 'string|max:255',
+        ]);
+
+        $payload = $this->normalizeSpacesPayload([
+            'spaces'   => $data['spaces'],
+            'features' => $data['features'] ?? [],
+        ]);
+
+        $property->spaces_json = $payload;
+
+        // Keep legacy columns in sync — web UI, search, and syndication
+        // still read these directly off the property row.
+        $bedSpace   = collect($payload['spaces'])->firstWhere('type', 'Bedroom');
+        $bathSpace  = collect($payload['spaces'])->firstWhere('type', 'Bathroom');
+        $garSpace   = collect($payload['spaces'])->firstWhere('type', 'Garage');
+
+        if ($bedSpace)  $property->beds    = (int) floor($bedSpace['count']);
+        if ($bathSpace) $property->baths   = (int) floor($bathSpace['count']);
+        if ($garSpace)  $property->garages = (int) floor($garSpace['count']);
+
+        $property->save();
+        $property->refresh();
+
+        return response()->json([
+            'property_id' => $property->id,
+            'spaces_json' => $property->spaces_json,
+            'beds'        => $property->beds,
+            'baths'       => $property->baths,
+            'garages'     => $property->garages,
+        ]);
+    }
+
+    // Normalize an incoming spaces payload to the canonical shape so the
+    // web reader and the mobile reader always agree.
+    private function normalizeSpacesPayload(array $raw): array
+    {
+        $spaces = $raw['spaces'] ?? [];
+        // Tolerate the legacy shape where the JSON was just a list of spaces
+        if (empty($spaces) && isset($raw[0]['type'])) {
+            $spaces = $raw;
+        }
+
+        $normalized = [];
+        foreach ($spaces as $sp) {
+            $type  = (string) ($sp['type'] ?? '');
+            if ($type === '') continue;
+            $count = (float) ($sp['count'] ?? 0);
+
+            $units = [];
+            $ceil  = (int) ceil($count);
+            $rawUnits = $sp['units'] ?? [];
+            for ($i = 0; $i < $ceil; $i++) {
+                $units[] = [
+                    'label'    => $rawUnits[$i]['label']    ?? ($type . ' ' . ($i + 1)),
+                    'features' => array_values($rawUnits[$i]['features'] ?? []),
+                ];
+            }
+
+            $normalized[] = [
+                'type'           => $type,
+                'count'          => $count,
+                'featuresAll'    => array_values($sp['featuresAll']    ?? []),
+                'descriptionAll' => (string) ($sp['descriptionAll']    ?? ''),
+                'units'          => $units,
+            ];
+        }
+
+        return [
+            'spaces'   => $normalized,
+            'features' => [
+                'theProperty'    => array_values($raw['features']['theProperty']    ?? []),
+                'security'       => array_values($raw['features']['security']       ?? []),
+                'connectivity'   => array_values($raw['features']['connectivity']   ?? []),
+                'sustainability' => array_values($raw['features']['sustainability'] ?? []),
+            ],
+        ];
+    }
+
     // ── POST /api/mobile/properties/{id}/images ─────────────────
     public function uploadImage(Request $request, Property $property): JsonResponse
     {
@@ -228,6 +368,7 @@ class MobilePropertyController extends Controller
             'price_display'   => $property->formattedPrice(),
             'description'     => $property->description,
             'features'        => $property->features_json ?? [],
+            'spaces_json'     => $this->normalizeSpacesPayload($property->spaces_json ?? []),
             'gallery_images'  => $galleryImages,
             'gallery_categories' => $this->buildGalleryCategories($property),
             'thumbnail'       => $galleryImages[0] ?? null,
