@@ -2249,27 +2249,8 @@
                 if (empty($spacesList) && !empty($spacesData) && isset($spacesData[0]['type'])) {
                     $spacesList = $spacesData;
                 }
-                // Build tags ONLY from features the user has actually added.
-                // Nothing is hardcoded — empty property = empty tag list.
-                $availableTags = [];
-                if (empty($spacesList)) {
-                    for ($i = 1; $i <= (int)($property->beds ?? 0); $i++) $availableTags[] = 'Bedroom ' . $i;
-                    for ($i = 1; $i <= (int)($property->baths ?? 0); $i++) $availableTags[] = 'Bathroom ' . $i;
-                    if (($property->garages ?? 0) > 0) $availableTags[] = 'Garage';
-                } else {
-                    foreach ($spacesList as $sp) {
-                        $type  = $sp['type'] ?? '';
-                        $count = (int)($sp['count'] ?? 0);
-                        if ($count < 1) continue; // skip default zero-count spaces
-                        if (in_array($type, ['Bedroom','Bathroom','Kitchen','Lounge','Dining Room','Study','Patio','Garden','Pool','Flatlet','Garage'])) {
-                            if ($count > 1) {
-                                for ($i = 1; $i <= $count; $i++) $availableTags[] = $type . ' ' . $i;
-                            } else {
-                                $availableTags[] = $type;
-                            }
-                        }
-                    }
-                }
+                // Single source of truth — see Property::getAvailableGalleryTags()
+                $availableTags = $property->getAvailableGalleryTags();
             @endphp
 
             <div x-data="smartGallery({{ Js::from($galleryImages) }}, {{ Js::from($tagMap) }}, {{ $property->id }}, '{{ csrf_token() }}', {{ Js::from($availableTags) }})" class="space-y-4">

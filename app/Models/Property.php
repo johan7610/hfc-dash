@@ -310,6 +310,55 @@ class Property extends Model
         return 'R ' . number_format((int) $this->price, 0, '.', ' ');
     }
 
+    /**
+     * The list of gallery tags currently available on this property.
+     *
+     * Tags are derived from the property's `spaces_json` (preferred) or
+     * the legacy beds/baths/garages columns. ONLY spaces the user has
+     * actually added (count >= 1) produce tags — no hardcoded defaults.
+     *
+     * Used by:
+     *   - Web gallery tagger (resources/views/corex/properties/show.blade.php)
+     *   - Mobile API (App\Http\Controllers\Api\MobilePropertyController)
+     *
+     * @return string[]
+     */
+    public function getAvailableGalleryTags(): array
+    {
+        $allowed = ['Bedroom','Bathroom','Kitchen','Lounge','Dining Room','Study','Patio','Garden','Pool','Flatlet','Garage'];
+
+        // Prefer spaces_json — it's the canonical source after the
+        // user has touched the Spaces editor.
+        $spacesData = $this->spaces_json ?? [];
+        $spacesList = $spacesData['spaces'] ?? [];
+        if (empty($spacesList) && !empty($spacesData) && isset($spacesData[0]['type'])) {
+            $spacesList = $spacesData; // legacy flat shape
+        }
+
+        $tags = [];
+
+        if (!empty($spacesList)) {
+            foreach ($spacesList as $sp) {
+                $type  = $sp['type'] ?? '';
+                $count = (int) ($sp['count'] ?? 0);
+                if ($count < 1 || !in_array($type, $allowed, true)) continue;
+
+                if ($count > 1) {
+                    for ($i = 1; $i <= $count; $i++) $tags[] = $type . ' ' . $i;
+                } else {
+                    $tags[] = $type;
+                }
+            }
+        } else {
+            // Fallback: derive from legacy columns
+            for ($i = 1; $i <= (int) ($this->beds ?? 0); $i++)  $tags[] = 'Bedroom ' . $i;
+            for ($i = 1; $i <= (int) ($this->baths ?? 0); $i++) $tags[] = 'Bathroom ' . $i;
+            if ((int) ($this->garages ?? 0) > 0) $tags[] = 'Garage';
+        }
+
+        return $tags;
+    }
+
     /** All images flattened into one array for convenience */
     public function allImages(): array
     {

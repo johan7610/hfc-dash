@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Property;
+use App\Models\PropertySettingItem;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -141,6 +142,60 @@ class MobilePropertyController extends Controller
 
         return response()->json([
             'property' => $this->fullPropertyResponse($property),
+        ]);
+    }
+
+    // ── GET /api/mobile/properties/options ─────────────────────────
+    // Returns every dropdown option the mobile create/edit screen needs:
+    // categories, property types, statuses, mandate types, and the
+    // fixed listing-type enum. Pulls from `property_setting_items` so
+    // the agency admins can manage these from the web settings UI and
+    // the mobile picks up changes automatically.
+    public function options(Request $request): JsonResponse
+    {
+        $map = function (PropertySettingItem $item) {
+            return [
+                'id'         => $item->id,
+                'name'       => $item->name,
+                'sort_order' => $item->sort_order,
+                'is_default' => (bool) $item->is_default,
+            ];
+        };
+
+        $statuses = PropertySettingItem::group(PropertySettingItem::GROUP_STATUS)
+            ->get()
+            ->map(function (PropertySettingItem $item) {
+                // Web stores status as a slug (strtolower + spaces→underscores).
+                // Mobile must send the slug back as `status` on create/update.
+                return [
+                    'id'         => $item->id,
+                    'name'       => $item->name,                                              // "For Sale"
+                    'value'      => strtolower(str_replace(' ', '_', $item->name)),           // "for_sale"
+                    'sort_order' => $item->sort_order,
+                    'is_default' => (bool) $item->is_default,
+                ];
+            })
+            ->values();
+
+        return response()->json([
+            'categories' => PropertySettingItem::group(PropertySettingItem::GROUP_CATEGORY)
+                ->get()->map($map)->values(),
+
+            'property_types' => PropertySettingItem::group(PropertySettingItem::GROUP_TYPE)
+                ->where('active', true)
+                ->get()->map($map)->values(),
+
+            'statuses' => $statuses,
+
+            'mandate_types' => PropertySettingItem::group(PropertySettingItem::GROUP_MANDATE_TYPE)
+                ->get()->map($map)->values(),
+
+            // Fixed enum on the web — mobile must send one of these as
+            // `listing_type` when creating/updating a property.
+            'listing_types' => [
+                ['value' => 'sale',   'label' => 'For Sale'],
+                ['value' => 'rental', 'label' => 'For Rental'],
+            ],
         ]);
     }
 
@@ -284,7 +339,42 @@ class MobilePropertyController extends Controller
         ];
     }
 
+    // ── GET /api/mobile/properties/{id}/gallery/tags ───────────────
+    // Returns ONLY the gallery tags currently valid for this property,
+    // i.e. derived from the spaces the agent has actually added. Mobile
+    // calls this right before opening the upload sheet so the dropdown
+    // can never offer a tag that doesn't exist on the property — no more
+    // "Pool" tag on a property without a pool.
+    public function galleryTags(Request $request, Property $property): JsonResponse
+    {
+        $this->authorizeProperty($request->user(), $property);
+
+        $tags = $property->getAvailableGalleryTags();
+
+        // Also send back the tag → image mapping so the mobile UI can
+        // show how many photos already live under each tag.
+        $cats   = $property->gallery_categories_json ?? ['categories' => [], 'unsorted' => []];
+        $counts = [];
+        foreach ($cats['categories'] ?? [] as $cat) {
+            $counts[$cat['name']] = count($cat['images'] ?? []);
+        }
+
+        return response()->json([
+            'property_id'    => $property->id,
+            'available_tags' => $tags,
+            'tag_counts'     => (object) $counts,
+            'untagged_count' => count($cats['unsorted'] ?? []),
+        ]);
+    }
+
     // ── POST /api/mobile/properties/{id}/images ─────────────────
+    // Uploads ONE image. `room_tag` is optional:
+    //   - omit it     → image lands in the "unsorted" bucket
+    //   - provide it  → image is filed under that tag
+    // If a tag is provided, it MUST be in the property's current
+    // available_tags list (use GET /gallery/tags to fetch). 422 otherwise,
+    // so the mobile can't accidentally create a tag for a space that
+    // doesn't exist on the property.
     public function uploadImage(Request $request, Property $property): JsonResponse
     {
         $this->authorizeProperty($request->user(), $property);
@@ -293,6 +383,19 @@ class MobilePropertyController extends Controller
             'image'    => 'required|image|max:10240',
             'room_tag' => 'nullable|string|max:100',
         ]);
+
+        $roomTag = $request->input('room_tag');
+
+        if ($roomTag !== null && $roomTag !== '') {
+            $available = $property->getAvailableGalleryTags();
+            if (!in_array($roomTag, $available, true)) {
+                return response()->json([
+                    'message' => "Tag '{$roomTag}' is not available on this property. Add the matching space first.",
+                    'errors'  => ['room_tag' => ["Tag '{$roomTag}' is not on this property's space list."]],
+                    'available_tags' => $available,
+                ], 422);
+            }
+        }
 
         $file = $request->file('image');
         $path = $file->store("properties/{$property->id}", 'public');
@@ -304,7 +407,6 @@ class MobilePropertyController extends Controller
         $property->gallery_images_json = $gallery;
 
         // Tag into category if room_tag provided
-        $roomTag = $request->input('room_tag');
         if ($roomTag) {
             $cats  = $property->gallery_categories_json ?? ['categories' => [], 'unsorted' => []];
             $found = false;
@@ -371,6 +473,7 @@ class MobilePropertyController extends Controller
             'spaces_json'     => $this->normalizeSpacesPayload($property->spaces_json ?? []),
             'gallery_images'  => $galleryImages,
             'gallery_categories' => $this->buildGalleryCategories($property),
+            'gallery_tags'    => $property->getAvailableGalleryTags(),
             'thumbnail'       => $galleryImages[0] ?? null,
             'agent_id'        => $property->agent_id,
             'agent_name'      => $property->agent?->name,
