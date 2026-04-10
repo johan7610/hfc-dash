@@ -141,6 +141,7 @@ class Property extends Model
         'expiry_date'         => 'date',
         'lease_start_date'    => 'date',
         'lease_end_date'      => 'date',
+        'baths'               => 'decimal:1',
         'rental_amount'       => 'float',
         'deposit_amount'      => 'float',
         'commission_percent'  => 'float',

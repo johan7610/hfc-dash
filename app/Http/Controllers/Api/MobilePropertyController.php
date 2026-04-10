@@ -522,33 +522,61 @@ class MobilePropertyController extends Controller
 
         return [
             'id'              => $property->id,
+
+            // Core
             'title'           => $property->title,
+            'excerpt'         => $property->excerpt,
+            'description'     => $property->description,
+            'price'           => $property->price,
+            'price_display'   => $property->formattedPrice(),
+
+            // Address
             'address'         => $property->buildDisplayAddress(),
             'street_number'   => $property->street_number,
             'street_name'     => $property->street_name,
             'suburb'          => $property->suburb,
             'city'            => $property->city,
+            'province'        => $property->province,
+            'region'          => $property->region,
+            'district'        => $property->district,
             'complex_name'    => $property->complex_name,
             'unit_number'     => $property->unit_number,
+
+            // Counts & sizes
             'beds'            => $property->beds,
             'baths'           => $property->baths,
             'garages'         => $property->garages,
             'size_m2'         => $property->size_m2,
             'erf_size_m2'     => $property->erf_size_m2,
+
+            // Classification
             'status'          => $property->status,
             'property_type'   => $property->property_type,
             'category'        => $property->category,
             'listing_type'    => $property->listing_type,
             'mandate_type'    => $property->mandate_type,
-            'price'           => $property->price,
-            'price_display'   => $property->formattedPrice(),
-            'description'     => $property->description,
+
+            // Rental block (always present so the mobile edit form can
+            // bind even if the property is currently a sale listing)
+            'rental_amount'    => $property->rental_amount,
+            'deposit_amount'   => $property->deposit_amount,
+            'lease_start_date' => $property->lease_start_date?->toDateString(),
+            'lease_end_date'   => $property->lease_end_date?->toDateString(),
+
+            // Commission / fees
+            'commission_percent' => $property->commission_percent,
+            'admin_fee'          => $property->admin_fee,
+            'marketing_fee'      => $property->marketing_fee,
+
+            // Features, spaces, gallery
             'features'        => $property->features_json ?? [],
             'spaces_json'     => $this->normalizeSpacesPayload($property->spaces_json ?? []),
             'gallery_images'  => $galleryImages,
             'gallery_categories' => $this->buildGalleryCategories($property),
             'gallery_tags'    => $property->getAvailableGalleryTags(),
             'thumbnail'       => $galleryImages[0] ?? null,
+
+            // Audit
             'agent_id'        => $property->agent_id,
             'agent_name'      => $property->agent?->name,
             'published_at'    => $property->published_at?->toIso8601String(),
