@@ -348,11 +348,39 @@ class Property24ListingMapper
         }
         if (!$property->suburb) return null;
 
+        // 1. Exact/slug match
         $suburb = P24Suburb::lookup($property->suburb);
         if ($suburb && $suburb->p24_id) return (int) $suburb->p24_id;
 
-        // Auto-resolve via P24 API — creates/updates a P24Suburb row on success.
+        // 2. Fuzzy match against existing p24_suburbs (handles trailing "Beach", punctuation,
+        //    extra whitespace, etc. — avoids a P24 roundtrip for suburbs we already have).
+        $fuzzy = $this->fuzzyLocalMatch((string) $property->suburb);
+        if ($fuzzy && $fuzzy->p24_id) return (int) $fuzzy->p24_id;
+
+        // 3. Auto-resolve via P24 API — creates/updates a P24Suburb row on success.
         return $this->autoResolveSuburbFromP24($property);
+    }
+
+    /**
+     * Loose match against p24_suburbs using LIKE on the normalised name.
+     * Returns the best single match or null.
+     */
+    private function fuzzyLocalMatch(string $suburbName): ?P24Suburb
+    {
+        $normalised = strtolower(preg_replace('/[^a-z0-9 ]+/i', '', trim($suburbName)));
+        if ($normalised === '') return null;
+
+        $candidates = P24Suburb::whereRaw('LOWER(name) LIKE ?', ['%' . $normalised . '%'])
+            ->orWhereRaw('? LIKE CONCAT(\'%\', LOWER(name), \'%\')', [$normalised])
+            ->limit(5)->get();
+
+        if ($candidates->isEmpty()) return null;
+
+        // Prefer the exact lowercase equality, else shortest name (most specific root token)
+        foreach ($candidates as $c) {
+            if (strtolower($c->name) === $normalised) return $c;
+        }
+        return $candidates->sortBy(fn ($c) => strlen($c->name))->first();
     }
 
     /**
@@ -371,26 +399,41 @@ class Property24ListingMapper
             $province = 'KwaZulu-Natal';
         }
 
-        try {
-            $client = app(Property24ApiClient::class);
-            $result = $client->findSuburb($suburbName, $city, $province);
-        } catch (\Throwable $e) {
-            Log::channel('property24')->warning('auto suburb lookup threw', ['error' => $e->getMessage()]);
-            return null;
+        $client = app(Property24ApiClient::class);
+
+        // Try several qualifier combinations — P24 is strict about name variants.
+        $attempts = [];
+        $attempts[] = ['name' => $suburbName,                 'city' => $city,     'province' => $province];
+        // Variant without "Beach" / "Bay" suffixes (common KZN pattern)
+        $stripped = trim(preg_replace('/\b(beach|bay|park|heights|on sea)\b/i', '', $suburbName));
+        if ($stripped !== '' && strcasecmp($stripped, $suburbName) !== 0) {
+            $attempts[] = ['name' => $stripped, 'city' => $city, 'province' => $province];
+        }
+        // Fall back to province-only (city can be wrong / empty)
+        $attempts[] = ['name' => $suburbName,                 'city' => '',        'province' => $province];
+
+        $p24Id = null; $remote = null; $lastMsg = null;
+        foreach ($attempts as $a) {
+            try {
+                $result = $client->findSuburb($a['name'], $a['city'], $a['province']);
+            } catch (\Throwable $e) {
+                $lastMsg = $e->getMessage();
+                continue;
+            }
+            $lastMsg = $result['message'] ?? null;
+            if (!($result['success'] ?? false)) continue;
+
+            $data = $result['data'] ?? [];
+            $found = $data['found'] ?? ($data['Found'] ?? false);
+            $remote = $data['suburb'] ?? ($data['Suburb'] ?? null);
+            $id = $remote['id'] ?? ($remote['Id'] ?? null);
+            if ($found && $id) { $p24Id = (int) $id; break; }
         }
 
-        if (!($result['success'] ?? false)) {
-            Log::channel('property24')->warning('auto suburb lookup failed', ['suburb' => $suburbName, 'msg' => $result['message'] ?? null]);
-            return null;
-        }
-
-        $data = $result['data'] ?? [];
-        $found = $data['found'] ?? ($data['Found'] ?? false);
-        $remote = $data['suburb'] ?? ($data['Suburb'] ?? null);
-        $p24Id = $remote['id'] ?? ($remote['Id'] ?? null);
-
-        if (!$found || !$p24Id) {
-            Log::channel('property24')->info('P24 did not find suburb', ['suburb' => $suburbName, 'city' => $city, 'province' => $province]);
+        if (!$p24Id) {
+            Log::channel('property24')->warning('auto suburb lookup exhausted', [
+                'suburb' => $suburbName, 'city' => $city, 'province' => $province, 'last' => $lastMsg,
+            ]);
             return null;
         }
 
