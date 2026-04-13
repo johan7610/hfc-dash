@@ -73,7 +73,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/>
                 </svg>
                 <input type="text" name="search" value="{{ $search }}"
-                       placeholder="Search title, suburb..."
+                       placeholder="Search title, suburb, or P24 ref..."
                        class="w-full pl-10 pr-3 py-2 text-sm rounded-md transition-all duration-300"
                        style="border:1px solid var(--border);background:var(--surface-2);color:var(--text-primary);outline:none;">
             </div>
@@ -471,6 +471,16 @@
                     @if($property->size_m2)<span>{{ number_format($property->size_m2) }} m²</span>@endif
                 </div>
 
+                @if($property->p24_ref)
+                <div class="mt-1.5">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold"
+                          style="background:rgba(14,165,233,0.12); color:#0284c7; border:1px solid rgba(14,165,233,0.3);"
+                          title="Property24 listing number">
+                        P24: {{ $property->p24_ref }}
+                    </span>
+                </div>
+                @endif
+
                 <div class="flex-1"></div>
 
                 {{-- Footer --}}
@@ -537,6 +547,9 @@
                         <a href="{{ route('corex.properties.show', $property) }}" class="font-semibold text-sm transition-all duration-300" style="color:var(--text-primary);" onmouseover="this.style.color='var(--brand-icon,#0ea5e9)'" onmouseout="this.style.color='var(--text-primary)'">
                             {{ Str::limit($property->title, 35) }}
                         </a>
+                        @if($property->p24_ref)
+                        <div class="text-[10px] font-mono mt-0.5" style="color:#0284c7;" title="Property24 listing number">P24: {{ $property->p24_ref }}</div>
+                        @endif
                     </td>
                     <td class="px-4 py-2.5 text-xs" style="color:var(--text-secondary);">
                         {{ $property->buildDisplayAddress() }}

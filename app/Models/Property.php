@@ -286,7 +286,8 @@ class Property extends Model
               ->orWhere('city', 'like', "%{$term}%")
               ->orWhere('complex_name', 'like', "%{$term}%")
               ->orWhere('unit_number', 'like', "%{$term}%")
-              ->orWhere('property_number', 'like', "%{$term}%");
+              ->orWhere('property_number', 'like', "%{$term}%")
+              ->orWhere('p24_ref', 'like', "%{$term}%");
         });
     }
 
