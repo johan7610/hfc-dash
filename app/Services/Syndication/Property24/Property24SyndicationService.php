@@ -198,7 +198,7 @@ class Property24SyndicationService
      * Register a specific user as an agent on P24.
      * Returns true on success, or an error string on failure.
      */
-    private function ensureAgentRegisteredByUser(User $user): string|bool
+    public function ensureAgentRegisteredByUser(User $user): string|bool
     {
         $this->log('info', "ensureAgentRegistered for user #{$user->id} ({$user->name}), agent_photo_path=" . ($user->agent_photo_path ?? 'NULL'));
 

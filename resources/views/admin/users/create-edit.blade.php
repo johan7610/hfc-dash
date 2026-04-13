@@ -520,6 +520,16 @@
                    onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
                     Cancel
                 </a>
+                @if(!$isEdit)
+                <button type="submit"
+                        name="test_agent" value="1"
+                        class="px-5 py-2.5 rounded-md text-sm font-semibold transition-colors"
+                        style="background:rgba(245,158,11,0.15); color:#b45309; border:1px solid rgba(245,158,11,0.35);"
+                        onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'"
+                        title="Create without sending an invite email. Registers the agent on Property24 immediately.">
+                    Test Agent
+                </button>
+                @endif
                 <button type="submit"
                         class="px-6 py-2.5 rounded-md text-sm font-semibold text-white transition-colors"
                         style="background:var(--brand-button, #0ea5e9);"

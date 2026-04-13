@@ -7,7 +7,10 @@ use App\Mail\UserInviteMail;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\Branch;
+use App\Services\Syndication\Property24\Property24ApiClient;
+use App\Services\Syndication\Property24\Property24SyndicationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -16,7 +19,7 @@ use Illuminate\Validation\Rule;
 
 class UserManagementController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
 
@@ -42,7 +45,38 @@ class UserManagementController extends Controller
             ->orderBy('name')
             ->get(['id','name']);
 
-        return view('admin.users.index', compact('users','branches','designations'));
+        $p24AgentMap = $this->fetchP24AgentMap($request->boolean('refresh_p24'));
+
+        return view('admin.users.index', compact('users','branches','designations','p24AgentMap'));
+    }
+
+    /**
+     * Build map of [user_id => P24 agent id] from the P24 agent list.
+     * Cached for 10 minutes; pass refresh=true to bust the cache.
+     */
+    private function fetchP24AgentMap(bool $refresh = false): array
+    {
+        $cacheKey = 'p24:agent-map:by-source-ref';
+        if ($refresh) Cache::forget($cacheKey);
+
+        return Cache::remember($cacheKey, 600, function () {
+            try {
+                $client = app(Property24ApiClient::class);
+                $result = $client->getAgents();
+                if (!($result['success'] ?? false)) return [];
+
+                $map = [];
+                foreach ($result['data'] ?? [] as $agent) {
+                    $ref = $agent['sourceReference'] ?? '';
+                    if (preg_match('/^CoreX-Agent-(\d+)$/', $ref, $m)) {
+                        $map[(int) $m[1]] = (int) ($agent['id'] ?? 0);
+                    }
+                }
+                return $map;
+            } catch (\Throwable $e) {
+                return [];
+            }
+        });
     }
 
     public function create()
@@ -94,7 +128,10 @@ class UserManagementController extends Controller
             'counts_for_branch_split'     => ['nullable', 'in:0,1'],
             'agent_photo'     => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'ffc_certificate' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'test_agent'      => ['nullable', 'in:0,1'],
         ]);
+
+        $isTestAgent = ($request->input('test_agent') === '1');
 
         $fullName = trim($data['name'] . ' ' . $data['surname']);
 
@@ -111,7 +148,7 @@ class UserManagementController extends Controller
             'designation'                 => $data['designation'] ?: null,
             'is_active'                   => true,
             'is_admin'                    => in_array($data['role'], ['admin', 'super_admin']) ? 1 : 0,
-            'email_verified_at'           => null,
+            'email_verified_at'           => $isTestAgent ? now() : null,
             'agent_cut_percent'           => $data['agent_cut_percent'] ?? 50,
             'paye_method'                 => $data['paye_method'] ?? 'percentage',
             'paye_value'                  => $data['paye_value'] ?? 0,
@@ -146,6 +183,26 @@ class UserManagementController extends Controller
             $ext = $request->file('ffc_certificate')->getClientOriginalExtension();
             $path = $request->file('ffc_certificate')->storeAs("agents/{$user->id}", "ffc.{$ext}", 'public');
             $user->update(['ffc_certificate_path' => $path]);
+        }
+
+        if ($isTestAgent) {
+            // Test-agent flow: no invitation email. Register on P24 sandbox right away.
+            $p24Note = '';
+            try {
+                $p24 = app(Property24SyndicationService::class);
+                $result = $p24->ensureAgentRegisteredByUser($user->fresh());
+                if ($result === true) {
+                    $agentId = $p24->getP24AgentId($user->fresh());
+                    Cache::forget('p24:agent-map:by-source-ref');
+                    $p24Note = $agentId ? " P24 agentId: {$agentId}." : ' Registered on P24.';
+                } else {
+                    $p24Note = ' P24 registration failed: ' . (is_string($result) ? $result : 'unknown');
+                }
+            } catch (\Throwable $e) {
+                $p24Note = ' P24 registration error: ' . $e->getMessage();
+            }
+
+            return redirect()->route('admin.users')->with('status', "Test agent \"{$fullName}\" created (no invite email sent).{$p24Note}");
         }
 
         // Send invitation email
