@@ -284,6 +284,8 @@ class Property24SyndicationService
         $agencyId = (int) config('services.property24_syndication.agency_id');
         $parts    = explode(' ', trim($user->name), 2);
 
+        $isActive = (bool) $user->is_active && !$user->trashed();
+
         $payload = [
             'id'              => $p24AgentId,
             'agencyId'        => $agencyId,
@@ -292,7 +294,8 @@ class Property24SyndicationService
             'emailAddress'    => $user->email ?? '',
             'mobileNumber'    => $this->normaliseSaPhone($user->cell ?? $user->phone),
             'sourceReference' => 'CoreX-Agent-' . $user->id,
-            'published'       => true,
+            'published'       => $isActive,   // hides the profile from P24 portal when deactivated
+            'status'          => $isActive ? 'Active' : 'Inactive',
             'receiveStatsMail' => false,
             'countryId'       => 1,
             'jobTitle'        => $user->designation ?: 'Sales Agent',

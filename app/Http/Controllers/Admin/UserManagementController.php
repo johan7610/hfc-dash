@@ -628,7 +628,10 @@ class UserManagementController extends Controller
             'is_active' => !$user->is_active
         ]);
 
-        return back();
+        $p24Note = $this->pushUserToP24($user->fresh());
+        $state = $user->fresh()->is_active ? 'activated' : 'deactivated';
+
+        return back()->with('status', "{$user->name} {$state}.{$p24Note}");
     }
 
     public function delete(User $user)
@@ -644,8 +647,12 @@ class UserManagementController extends Controller
         DB::table('branch_assignments')->where('user_id', $user->id)->delete();
 
         $user->update(['is_active' => false]);
+
+        // Mark inactive on P24 BEFORE soft-deleting so we still have the user to push.
+        $p24Note = $this->pushUserToP24($user->fresh());
+
         $user->delete(); // soft delete (sets deleted_at)
 
-        return redirect()->route('admin.users')->with('status', "User \"{$name}\" has been deleted.");
+        return redirect()->route('admin.users')->with('status', "User \"{$name}\" has been deleted.{$p24Note}");
     }
 }
