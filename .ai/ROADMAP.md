@@ -65,6 +65,9 @@ These items have been identified and scoped. Each requires a full spec in `/.ai/
 | Role Manager | ✅ Live | Andre's implementation |
 | Core Matches | ✅ Live | Andre's implementation, `contact_matches` table |
 | Presentations | ✅ Live (partial) | Puppeteer rendering — photo display + P24 data pending |
+| Multi-Tenancy Isolation | ✅ Live (2026-04-14) | `BelongsToAgency` trait + `AgencyScope` — see `.ai/specs/multi-tenancy.md` |
+| Company Settings (standalone) | ✅ Live (2026-04-14) | Moved out of tabbed settings into `/admin/company-settings` — mirrors Branch Assignments pattern |
+| Agency Delete | ✅ Live (2026-04-14) | Soft-delete with guard: refuses if agency has branches/users or is the last agency |
 
 ---
 

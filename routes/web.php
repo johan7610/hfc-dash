@@ -802,7 +802,20 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/',             [\App\Http\Controllers\Admin\AgencyController::class, 'store'])->name('store');
         Route::get('/{agency}/edit', [\App\Http\Controllers\Admin\AgencyController::class, 'edit'])->name('edit');
         Route::put('/{agency}',      [\App\Http\Controllers\Admin\AgencyController::class, 'update'])->name('update');
+        Route::delete('/{agency}',   [\App\Http\Controllers\Admin\AgencyController::class, 'destroy'])->name('destroy');
+        Route::post('/{agency}/restore', [\App\Http\Controllers\Admin\AgencyController::class, 'restore'])
+            ->name('restore')->withTrashed();
     });
+
+    // Company Settings (standalone admin page — separate from tabbed settings)
+    Route::get('/admin/company-settings',
+        [\App\Http\Controllers\Admin\CompanySettingsController::class, 'index'])
+        ->middleware('permission:manage_performance_settings')
+        ->name('admin.company-settings');
+    Route::put('/admin/company-settings/{agency}',
+        [\App\Http\Controllers\Admin\CompanySettingsController::class, 'update'])
+        ->middleware('permission:manage_performance_settings')
+        ->name('admin.company-settings.update');
 
     // Properties — listing sync to website
     Route::prefix('properties')->middleware('permission:access_properties')->name('corex.properties.')->group(function () {

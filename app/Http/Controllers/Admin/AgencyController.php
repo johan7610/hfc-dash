@@ -126,4 +126,45 @@ class AgencyController extends Controller
 
         return redirect()->route('agencies.index')->with('success', "Agency \"{$agency->name}\" updated.");
     }
+
+    /**
+     * Soft-delete an agency. Refuses to delete the last remaining agency
+     * or one that still has branches/users attached — those need to be
+     * moved or removed first, otherwise their tenancy context vanishes.
+     */
+    public function destroy(Agency $agency)
+    {
+        $branchCount = $agency->branches()->count();
+        $userCount   = $agency->users()->count();
+
+        if ($branchCount > 0 || $userCount > 0) {
+            return redirect()->route('agencies.index')->with(
+                'error',
+                "Cannot delete \"{$agency->name}\": it still has {$branchCount} branch(es) and {$userCount} user(s). Re-assign or remove them first."
+            );
+        }
+
+        if (Agency::count() <= 1) {
+            return redirect()->route('agencies.index')->with(
+                'error',
+                'You cannot delete the last remaining agency.'
+            );
+        }
+
+        if (session('active_agency_id') == $agency->id) {
+            session()->forget('active_agency_id');
+        }
+
+        $agency->delete();
+
+        return redirect()->route('agencies.index')->with('success', "Agency \"{$agency->name}\" deleted.");
+    }
+
+    public function restore($id)
+    {
+        $agency = Agency::onlyTrashed()->findOrFail($id);
+        $agency->restore();
+
+        return redirect()->route('agencies.index')->with('success', "Agency \"{$agency->name}\" restored.");
+    }
 }
