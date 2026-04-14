@@ -76,25 +76,28 @@ class ProcessImporterRunJob implements ShouldQueue
                     return;
                 }
 
-                $attrs = [
-                    'name'             => $mapped['name'] ?? $email,
-                    'email'            => $email,
-                    'phone'            => $mapped['phone'] ?? null,
-                    'cell'             => $mapped['cell'] ?? null,
-                    'role'             => 'agent',
-                    'is_active'        => false,
-                    'agency_id'        => $run->agency_id,
-                    'p24_agent_id'     => $mapped['p24_agent_id'] ?? null,
-                    'source_reference' => $mapped['source_reference'] ?? null,
-                    'designation'      => $mapped['designation'] ?? null,
-                ];
-
                 if (!$user) {
-                    $attrs['password'] = Hash::make(Str::random(48));
-                    $user = User::create($attrs);
+                    $user = User::create([
+                        'name'             => $mapped['name'] ?? $email,
+                        'email'            => $email,
+                        'phone'            => $mapped['phone'] ?? null,
+                        'cell'             => $mapped['cell'] ?? null,
+                        'role'             => 'agent',
+                        'is_active'        => false,
+                        'agency_id'        => $run->agency_id,
+                        'p24_agent_id'     => $mapped['p24_agent_id'] ?? null,
+                        'source_reference' => $mapped['source_reference'] ?? null,
+                        'designation'      => $mapped['designation'] ?? null,
+                        'password'         => Hash::make(Str::random(48)),
+                    ]);
                     $row->action = 'create';
                 } else {
-                    $user->fill($attrs)->save();
+                    // Existing user — only touch P24 linkage fields; never overwrite role, is_active,
+                    // name, password, or agency assignment (preserves owner / super_admin accounts).
+                    $user->forceFill([
+                        'p24_agent_id'     => $mapped['p24_agent_id'] ?? $user->p24_agent_id,
+                        'source_reference' => $mapped['source_reference'] ?? $user->source_reference,
+                    ])->save();
                     $row->action = 'update';
                 }
 
