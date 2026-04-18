@@ -111,12 +111,12 @@ class OnboardingPortalController extends Controller
         ]);
     }
 
-    public function confirmRow(Request $request, int $rowId)
+    public function confirmRow(Request $request, $rowId)
     {
         $portal = $this->portal($request);
         $this->guardActive($portal);
 
-        $row = $this->findOwnedRow($portal, $rowId);
+        $row = $this->findOwnedRow($portal, (int) $rowId);
         abort_unless(in_array($row->status, ['pending', 'error'], true), 422, 'Row is not confirmable.');
 
         $row->update([
@@ -143,12 +143,12 @@ class OnboardingPortalController extends Controller
         ]);
     }
 
-    public function excludeRow(Request $request, int $rowId)
+    public function excludeRow(Request $request, $rowId)
     {
         $portal = $this->portal($request);
         $this->guardActive($portal);
 
-        $row = $this->findOwnedRow($portal, $rowId);
+        $row = $this->findOwnedRow($portal, (int) $rowId);
         $row->update([
             'status'                 => 'excluded',
             'excluded_at'            => now(),
@@ -164,7 +164,7 @@ class OnboardingPortalController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    public function reassignAgent(Request $request, int $rowId)
+    public function reassignAgent(Request $request, $rowId)
     {
         $portal = $this->portal($request);
         $this->guardActive($portal);
@@ -176,7 +176,7 @@ class OnboardingPortalController extends Controller
             ->first();
         abort_unless($agent, 422, 'Agent is not valid for this agency.');
 
-        $row = $this->findOwnedRow($portal, $rowId);
+        $row = $this->findOwnedRow($portal, (int) $rowId);
         $prev = $row->resolved_agent_id;
         $row->update([
             'resolved_agent_id' => $agent->id,
