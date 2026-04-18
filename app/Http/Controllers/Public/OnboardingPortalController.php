@@ -285,19 +285,52 @@ class OnboardingPortalController extends Controller
     {
         $row = $portal->rowsQuery()->where('p24_import_rows.id', $rowId)->first();
         if (!$row) {
-            // Diagnose: does the row exist at all? Why isn't it in this portal's scope?
+            // Deep diagnostics — same model, raw PDO, raw SQL, both connections.
             $rawRow = P24ImportRow::withTrashed()->find($rowId);
+            $runFromRow = $rawRow?->run_id ? \App\Models\P24ImportRun::withTrashed()->find($rawRow->run_id) : null;
+
+            $connName   = \Illuminate\Support\Facades\DB::connection()->getName();
+            $dbName     = \Illuminate\Support\Facades\DB::connection()->getDatabaseName();
+            $driver     = \Illuminate\Support\Facades\DB::connection()->getDriverName();
+
+            $raw = \Illuminate\Support\Facades\DB::selectOne('SELECT id, external_id, status, run_id, deleted_at FROM p24_import_rows WHERE id = ?', [$rowId]);
+            $tableCount  = \Illuminate\Support\Facades\DB::selectOne('SELECT COUNT(*) AS c FROM p24_import_rows')->c;
+            $agencyCount = \Illuminate\Support\Facades\DB::selectOne(
+                'SELECT COUNT(*) AS c FROM p24_import_rows WHERE row_type = ? AND run_id IN (SELECT id FROM p24_import_runs WHERE agency_id = ?)',
+                ['listing', $portal->agency_id]
+            )->c;
+
+            $runScoped = null;
+            if (!empty($portal->run_ids_json)) {
+                $in = implode(',', array_map('intval', $portal->run_ids_json));
+                $runScoped = \Illuminate\Support\Facades\DB::selectOne("SELECT COUNT(*) AS c FROM p24_import_rows WHERE run_id IN ({$in})")->c;
+            }
+
+            // What does the portal's query think?
+            $portalSqlCount = $portal->rowsQuery()->count();
+
+            // Compiled SQL for the failing query
+            $q = $portal->rowsQuery()->where('p24_import_rows.id', $rowId);
+            $sql = $q->toSql();
+            $bindings = $q->getBindings();
+
             $diag = [
-                'row_exists'    => (bool) $rawRow,
-                'row_type'      => $rawRow?->row_type,
-                'row_status'    => $rawRow?->status,
-                'row_run_id'    => $rawRow?->run_id,
-                'row_trashed'   => $rawRow?->trashed(),
-                'run_exists'    => $rawRow?->run_id ? (bool) \App\Models\P24ImportRun::withTrashed()->find($rawRow->run_id) : null,
-                'run_trashed'   => $rawRow?->run_id ? (\App\Models\P24ImportRun::withTrashed()->find($rawRow->run_id)?->trashed()) : null,
-                'run_agency_id' => $rawRow?->run_id ? (\App\Models\P24ImportRun::withTrashed()->find($rawRow->run_id)?->agency_id) : null,
-                'portal_agency' => $portal->agency_id,
-                'portal_runs'   => $portal->run_ids_json,
+                'rowId_type'       => gettype($rowId),
+                'rowId_value'      => $rowId,
+                'connection'       => $connName,
+                'database'         => $dbName,
+                'driver'           => $driver,
+                'model_find'       => $rawRow ? ['id' => $rawRow->id, 'run_id' => $rawRow->run_id, 'status' => $rawRow->status, 'row_type' => $rawRow->row_type, 'trashed' => $rawRow->trashed()] : null,
+                'raw_pdo_find'     => $raw,
+                'total_rows_in_table'   => $tableCount,
+                'rows_for_portal_agency' => $agencyCount,
+                'rows_for_portal_runs'   => $runScoped,
+                'portal_query_count'     => $portalSqlCount,
+                'portal_agency'    => $portal->agency_id,
+                'portal_runs'      => $portal->run_ids_json,
+                'failing_sql'      => $sql,
+                'failing_bindings' => $bindings,
+                'run_from_row'     => $runFromRow ? ['id' => $runFromRow->id, 'agency_id' => $runFromRow->agency_id, 'trashed' => $runFromRow->trashed()] : null,
             ];
             Log::warning('Portal confirm: row not found in scope', [
                 'portal_id' => $portal->id,
