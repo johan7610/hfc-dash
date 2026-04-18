@@ -9,7 +9,7 @@
             </svg>
         </div>
         <h1 class="text-2xl font-bold mb-1">Review submitted</h1>
-        <p class="text-sm text-muted mb-6">Thank you, {{ $agency->name }}. Home Finders Coastal has been notified.</p>
+        <p class="text-sm text-muted mb-6">Thank you, CoreX has been notified.</p>
 
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 my-6 text-left">
             <div class="rounded-md bg-surface-2 p-3 text-center">

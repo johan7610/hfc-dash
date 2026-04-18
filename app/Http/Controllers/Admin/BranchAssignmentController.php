@@ -107,9 +107,15 @@ class BranchAssignmentController extends Controller
             'vat_no'       => ['nullable', 'string', 'max:255'],
             'ffc_no'       => ['nullable', 'string', 'max:255'],
             'fic_no'       => ['nullable', 'string', 'max:255'],
+            'p24_agency_id' => ['nullable', 'string', 'max:32'],
             'logo'         => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'remove_logo'  => ['nullable', 'boolean'],
         ]);
+
+        // Empty-string → null so "blank means inherit from agency" semantics hold.
+        if (array_key_exists('p24_agency_id', $data) && $data['p24_agency_id'] === '') {
+            $data['p24_agency_id'] = null;
+        }
 
         $removeLogo = $data['remove_logo'] ?? false;
         unset($data['logo'], $data['remove_logo']);

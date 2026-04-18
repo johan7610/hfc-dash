@@ -63,6 +63,8 @@ class AgencyController extends Controller
             'vat_no'           => 'nullable|string|max:255',
             'ffc_no'           => 'nullable|string|max:255',
             'fic_no'           => 'nullable|string|max:255',
+            'p24_agency_id'    => 'nullable|string|max:32',
+            'p24_agency_label' => 'nullable|string|max:100',
             'logo'             => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
@@ -113,6 +115,8 @@ class AgencyController extends Controller
             'vat_no'          => 'nullable|string|max:255',
             'ffc_no'          => 'nullable|string|max:255',
             'fic_no'          => 'nullable|string|max:255',
+            'p24_agency_id'   => 'nullable|string|max:32',
+            'p24_agency_label' => 'nullable|string|max:100',
             'logo'            => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
             'remove_logo'     => 'nullable|boolean',
         ]);

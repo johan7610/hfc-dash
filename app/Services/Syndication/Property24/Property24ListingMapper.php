@@ -2,6 +2,7 @@
 
 namespace App\Services\Syndication\Property24;
 
+use App\Exceptions\Property24ConfigurationException;
 use App\Models\P24Suburb;
 use App\Models\Property;
 use Illuminate\Support\Facades\Log;
@@ -12,10 +13,13 @@ class Property24ListingMapper
 {
     /**
      * Map a CoreX Property to a P24 Listing payload matching the v53 API schema.
+     *
+     * @throws Property24ConfigurationException when the property's branch/agency
+     *         has no P24 agency ID configured.
      */
     public function map(Property $property, bool $includePhotos = true): array
     {
-        $agencyId       = (int) config('services.property24_syndication.agency_id');
+        $agencyId       = $this->resolveP24AgencyId($property);
         $suburbId       = $this->resolveSuburbId($property);
         $propertyTypeId = $this->resolvePropertyTypeId($property->property_type);
 
@@ -251,7 +255,7 @@ class Property24ListingMapper
     public function validate(array $payload): array
     {
         $errors = [];
-        if (empty($payload['agencyId'])) $errors[] = 'Agency ID is not configured (P24_EXDEV_AGENCY_ID)';
+        if (empty($payload['agencyId'])) $errors[] = 'No Property24 agency ID resolved — set it on the agency or branch.';
         if (empty($payload['description'])) $errors[] = 'Description is required';
         if (empty($payload['propertyInfo']['suburbId'])) $errors[] = 'Suburb ID is required — map the suburb in P24 Suburb Settings';
         if (empty($payload['propertyInfo']['propertyTypeId'])) $errors[] = 'Property type could not be mapped to a P24 type ID';
@@ -273,7 +277,32 @@ class Property24ListingMapper
         if (empty($property->price) && !$property->price_on_application) $missing[] = ['field' => 'price', 'label' => 'Price (or enable Price On Application)'];
         if (empty($property->allImages())) $missing[] = ['field' => 'images', 'label' => 'At least one photo'];
         if (empty($property->listing_type) && empty($property->mandate_type)) $missing[] = ['field' => 'listing_type', 'label' => 'Listing Type (Sale/Rental)'];
+        if (empty($property->resolveP24AgencyId())) {
+            $missing[] = [
+                'field' => 'p24_agency_id',
+                'label' => 'Property24 agency ID not configured on branch or agency',
+            ];
+        }
         return $missing;
+    }
+
+    /**
+     * Resolve the P24 agency ID for a property. Branch override > agency default.
+     * Throws when neither is set so submission fails loudly rather than
+     * silently routing to the wrong profile (or the wrong tenant).
+     */
+    private function resolveP24AgencyId(Property $property): int
+    {
+        $resolved = $property->resolveP24AgencyId();
+        if ($resolved === null || $resolved === '') {
+            $branchName = $property->branch?->name ?? '(no branch)';
+            $agencyName = $property->agency?->name ?? $property->branch?->agency?->name ?? '(no agency)';
+            throw new Property24ConfigurationException(
+                "Property #{$property->id} cannot be syndicated: no Property24 agency ID on "
+                . "branch '{$branchName}' or agency '{$agencyName}'."
+            );
+        }
+        return (int) $resolved;
     }
 
     private function buildPhotos(Property $property): array

@@ -30,6 +30,7 @@ class Branch extends Model
         'ffc_no',
         'fic_no',
         'logo_path',
+        'p24_agency_id',
     ];
 
     /**
@@ -39,6 +40,19 @@ class Branch extends Model
     public function contactDetail(string $field): ?string
     {
         return $this->{$field} ?? $this->agency->{$field} ?? null;
+    }
+
+    /**
+     * Resolve the Property24 agency ID for this branch: branch override,
+     * else parent agency's default. Null = neither configured.
+     */
+    public function resolveP24AgencyId(): ?string
+    {
+        if (!empty($this->p24_agency_id)) {
+            return (string) $this->p24_agency_id;
+        }
+        $parent = $this->agency?->p24_agency_id;
+        return $parent !== null && $parent !== '' ? (string) $parent : null;
     }
 
     public function agency(): BelongsTo

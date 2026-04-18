@@ -155,6 +155,27 @@
                         </div>
                     </div>
 
+                    {{-- Property24 Agency ID Override --}}
+                    @php $parentP24 = $branch->agency?->p24_agency_id; @endphp
+                    <div class="border-t border-slate-200 dark:border-slate-800 pt-4">
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-2">Property24 Syndication</div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs text-slate-600 dark:text-slate-300 mb-1">P24 Agency ID Override</label>
+                                <input class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm font-mono"
+                                       name="p24_agency_id" value="{{ old('p24_agency_id', $branch->p24_agency_id) }}"
+                                       placeholder="{{ $parentP24 ? 'inherits ' . $parentP24 : 'e.g. 31358' }}">
+                                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                                    @if($parentP24)
+                                        Leave blank to use agency default: <span class="font-mono">{{ $parentP24 }}</span>.
+                                    @else
+                                        Agency has no default set. Enter this branch's P24 agency ID.
+                                    @endif
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
                     {{-- Logo --}}
                     <div class="border-t border-slate-200 dark:border-slate-800 pt-4 space-y-3">
                         <div class="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Branch Logo</div>
