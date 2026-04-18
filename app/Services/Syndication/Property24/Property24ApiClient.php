@@ -96,11 +96,17 @@ class Property24ApiClient
     }
 
     /**
-     * Fetch agents for the agency.
+     * Fetch agents for the given P24 agency (defaults to the configured one
+     * in .env). Always pass an explicit agency ID when operating under a
+     * CoreX tenant other than the config default, otherwise the result is
+     * scoped to the wrong P24 profile and sourceReference lookups fail.
      */
-    public function getAgents(): array
+    public function getAgents(?string $agencyIdOverride = null): array
     {
-        return $this->request('GET', "/agencies/{$this->agencyId}/agents", [], null, 'fetch_agents');
+        $agencyId = $agencyIdOverride !== null && $agencyIdOverride !== ''
+            ? $agencyIdOverride
+            : $this->agencyId;
+        return $this->request('GET', "/agencies/{$agencyId}/agents", [], null, 'fetch_agents');
     }
 
     /**

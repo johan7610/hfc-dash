@@ -550,7 +550,9 @@ class Property24ListingMapper
     private function resolveContactAgentIds(Property $property, int $agencyId): array
     {
         $client = app(Property24ApiClient::class);
-        $result = $client->getAgents();
+        // Scope the lookup to the property's resolved agency — otherwise a
+        // property under agency B would pull agents from agency A's feed.
+        $result = $client->getAgents((string) $agencyId);
 
         if (!$result['success']) return [];
 

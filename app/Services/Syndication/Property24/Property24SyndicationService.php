@@ -225,6 +225,7 @@ class Property24SyndicationService
         if ($agencyId === null) {
             return "User's branch or agency has no Property24 agency ID configured.";
         }
+        $agencyIdStr = (string) $agencyId;
         $parts = explode(' ', trim($user->name), 2);
 
         $agentData = [
@@ -239,14 +240,17 @@ class Property24SyndicationService
             'countryId'       => 1, // South Africa
         ];
 
-        // Check if agent already exists on P24
-        $existingResult = $this->client->getAgents();
+        // Check if agent already exists on P24 *under this agency*. Scoping to
+        // the right agency is critical — P24 enforces firstname+lastname
+        // uniqueness per agency, so a lookup against the wrong agency would
+        // miss the existing agent and trigger a duplicate-name error on create.
+        $existingResult = $this->client->getAgents($agencyIdStr);
         if ($existingResult['success']) {
             foreach ($existingResult['data'] ?? [] as $existing) {
                 $ref = $existing['sourceReference'] ?? '';
                 if ($ref === 'CoreX-Agent-' . $user->id) {
                     $p24AgentId = (int) $existing['id'];
-                    $this->log('info', "Agent #{$user->id} already registered on P24 as #{$p24AgentId}");
+                    $this->log('info', "Agent #{$user->id} already registered on P24 agency {$agencyIdStr} as #{$p24AgentId}");
                     // Upload photo if agent has one and P24 might not
                     $this->uploadAgentPhotoIfAvailable($user, $p24AgentId);
                     return true;
@@ -255,10 +259,31 @@ class Property24SyndicationService
         }
 
         // Register new agent
-        $this->log('info', "Registering agent #{$user->id} ({$user->name}) on P24");
+        $this->log('info', "Registering agent #{$user->id} ({$user->name}) on P24 agency {$agencyIdStr}");
         $result = $this->client->createAgent($agentData);
 
         if (!$result['success']) {
+            // P24 enforces firstname+lastname uniqueness per agency and returns
+            // "An agent named X already exists (AgentId N)". When this happens
+            // under the correct agency, the agent was created earlier (e.g. by
+            // the admin UI's direct registration flow) and our sourceReference
+            // just isn't set. Adopt that agent by PUT-updating it with our
+            // sourceReference so future lookups find it.
+            if ($adoptedId = $this->extractExistingAgentId($result['message'] ?? '')) {
+                $this->log('info', "Adopting existing P24 agent #{$adoptedId} for CoreX user #{$user->id}");
+                $adoptPayload = array_merge($agentData, [
+                    'id'     => $adoptedId,
+                    'status' => 'Active',
+                ]);
+                $adoptResult = $this->client->updateAgent($adoptPayload);
+                if ($adoptResult['success'] ?? false) {
+                    $this->uploadAgentPhotoIfAvailable($user, $adoptedId);
+                    return true;
+                }
+                $this->log('error', "Failed to adopt existing P24 agent #{$adoptedId}", ['result' => $adoptResult]);
+                return $adoptResult['message'] ?? 'Failed to adopt existing agent';
+            }
+
             $this->log('error', "Agent registration failed for #{$user->id}", ['result' => $result]);
             return $result['message'] ?? 'Unknown agent registration error';
         }
@@ -274,11 +299,14 @@ class Property24SyndicationService
     }
 
     /**
-     * Get the P24 agent ID for a CoreX user. Returns null if not found.
+     * Get the P24 agent ID for a CoreX user. Scopes the lookup to the user's
+     * resolved P24 agency so we don't miss agents registered under a
+     * non-default agency. Returns null if not found.
      */
-    public function getP24AgentId(User $user): ?int
+    public function getP24AgentId(User $user, ?int $p24AgencyId = null): ?int
     {
-        $result = $this->client->getAgents();
+        $agencyId = $p24AgencyId ?? $this->resolveAgencyIdForUser($user);
+        $result   = $this->client->getAgents($agencyId !== null ? (string) $agencyId : null);
         if (!$result['success']) return null;
 
         foreach ($result['data'] ?? [] as $agent) {
@@ -302,7 +330,7 @@ class Property24SyndicationService
             return "User's branch or agency has no Property24 agency ID configured.";
         }
 
-        $p24AgentId = $this->getP24AgentId($user);
+        $p24AgentId = $this->getP24AgentId($user, $agencyId);
         if (!$p24AgentId) {
             // Not registered yet — create them; that flow also uploads the photo.
             return $this->ensureAgentRegisteredByUser($user, $agencyId);
@@ -469,6 +497,19 @@ class Property24SyndicationService
      * caller returns a readable error rather than registering them under
      * the wrong P24 profile.
      */
+    /**
+     * P24's duplicate-name error carries the existing agent's ID:
+     *   "Validation errors — An agent named X already exists (AgentId 77843)"
+     * Pull the numeric ID out so we can adopt the record.
+     */
+    private function extractExistingAgentId(string $errorMessage): ?int
+    {
+        if (preg_match('/AgentId\s+(\d+)/i', $errorMessage, $m)) {
+            return (int) $m[1];
+        }
+        return null;
+    }
+
     private function resolveAgencyIdForUser(User $user): ?int
     {
         $branchId = method_exists($user, 'effectiveBranchId') ? $user->effectiveBranchId() : $user->branch_id;
