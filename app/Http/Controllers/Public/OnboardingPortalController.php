@@ -65,6 +65,7 @@ class OnboardingPortalController extends Controller
         $status = $request->get('status', 'pending');
         $type   = $request->get('listing_type', 'all');
         $search = trim((string) $request->get('search', ''));
+        $sort   = (string) $request->get('sort', 'id_desc');
 
         $q = $portal->rowsQuery()->with('resolvedAgent');
 
@@ -78,11 +79,18 @@ class OnboardingPortalController extends Controller
             $s = '%' . $search . '%';
             $q->where(function ($qq) use ($s) {
                 $qq->where('external_id', 'like', $s)
-                   ->orWhereRaw("JSON_EXTRACT(mapped_json, '$.address') LIKE ?", [$s]);
+                   ->orWhereRaw("JSON_EXTRACT(mapped_json, '$.address') LIKE ?", [$s])
+                   ->orWhereRaw("JSON_EXTRACT(mapped_json, '$.headline') LIKE ?", [$s]);
             });
         }
 
-        $rows = $q->orderByDesc('id')->paginate(30)->withQueryString();
+        match ($sort) {
+            'status_asc'  => $q->orderByRaw("JSON_EXTRACT(mapped_json, '$.status') ASC")->orderByDesc('id'),
+            'status_desc' => $q->orderByRaw("JSON_EXTRACT(mapped_json, '$.status') DESC")->orderByDesc('id'),
+            default       => $q->orderByDesc('id'),
+        };
+
+        $rows = $q->paginate(30)->withQueryString();
         $agency = $portal->agency;
         $counts = $this->counts($portal);
         $agents = User::withoutGlobalScopes()
@@ -91,7 +99,7 @@ class OnboardingPortalController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        return view('onboarding.portal.review', compact('portal', 'agency', 'rows', 'counts', 'agents', 'status', 'type', 'search'));
+        return view('onboarding.portal.review', compact('portal', 'agency', 'rows', 'counts', 'agents', 'status', 'type', 'search', 'sort'));
     }
 
     public function status(Request $request)

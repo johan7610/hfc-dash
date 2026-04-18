@@ -17,8 +17,9 @@
                 <option value="Sale" @selected($type === 'Sale')>Sale</option>
                 <option value="Rental" @selected($type === 'Rental')>Rental</option>
             </select>
-            <input type="text" name="search" value="{{ $search }}" placeholder="Search address / listing #"
+            <input type="text" name="search" value="{{ $search }}" placeholder="Search address / listing # / headline"
                    class="rounded-md bg-surface-2 border border-subtle px-2 py-1.5 text-sm">
+            <input type="hidden" name="sort" value="{{ $sort }}">
             <button type="submit" class="rounded-md px-3 py-1.5 text-xs bg-surface-2 border border-subtle">Apply</button>
         </div>
         <div class="flex items-center justify-between mt-3 flex-wrap gap-2">
@@ -71,18 +72,34 @@
     <div class="rounded-md bg-surface border border-subtle/30">
         <div class="overflow-x-auto">
         <table class="w-full text-sm">
+            @php
+                $baseSortParams = array_filter([
+                    'status'       => $status !== 'pending' ? $status : null,
+                    'listing_type' => $type !== 'all' ? $type : null,
+                    'search'       => $search !== '' ? $search : null,
+                ]);
+                $nextStatusSort = $sort === 'status_asc' ? 'status_desc' : 'status_asc';
+                $statusSortUrl  = route('onboarding.portal.review', $portal->token) . '?' . http_build_query(array_merge($baseSortParams, ['sort' => $nextStatusSort]));
+                $sortArrow = $sort === 'status_asc' ? '↑' : ($sort === 'status_desc' ? '↓' : '↕');
+            @endphp
             <thead class="text-xs uppercase text-muted border-b border-subtle">
                 <tr>
                     <th class="px-2 py-2"><input type="checkbox" @change="toggleAll($event)"></th>
                     <th class="px-2 py-2 text-left">Photo</th>
                     <th class="px-2 py-2 text-left">Listing #</th>
+                    <th class="px-2 py-2 text-left">Headline</th>
                     <th class="px-2 py-2 text-left">Address</th>
                     <th class="px-2 py-2 text-left">Type</th>
+                    <th class="px-2 py-2 text-left">
+                        <a href="{{ $statusSortUrl }}" class="hover:text-primary">
+                            Listing Status <span class="text-[10px] opacity-60">{{ $sortArrow }}</span>
+                        </a>
+                    </th>
                     <th class="px-2 py-2 text-left">Price</th>
                     <th class="px-2 py-2 text-left">Beds/Baths</th>
                     <th class="px-2 py-2 text-left">Agent</th>
                     <th class="px-2 py-2 text-left">Photos</th>
-                    <th class="px-2 py-2 text-left">Status</th>
+                    <th class="px-2 py-2 text-left">Review</th>
                     <th class="px-2 py-2 text-right">Actions</th>
                 </tr>
             </thead>
@@ -113,8 +130,24 @@
                         @endif
                     </td>
                     <td class="px-2 py-2 font-mono text-xs">{{ $row->external_id }}</td>
+                    <td class="px-2 py-2 max-w-[260px]">
+                        @php $headline = $m['headline'] ?? $m['title'] ?? null; @endphp
+                        @if ($headline)
+                            <span class="block truncate" title="{{ $headline }}">{{ $headline }}</span>
+                        @else
+                            <span class="text-muted">—</span>
+                        @endif
+                    </td>
                     <td class="px-2 py-2">{{ $m['address'] ?? '—' }}</td>
                     <td class="px-2 py-2">{{ $m['listing_type'] ?? '' }}</td>
+                    <td class="px-2 py-2 text-xs">
+                        @php $listingStatus = $m['status'] ?? null; @endphp
+                        @if ($listingStatus)
+                            <span class="px-2 py-0.5 rounded-md bg-surface-2 border border-subtle/40">{{ $listingStatus }}</span>
+                        @else
+                            <span class="text-muted">—</span>
+                        @endif
+                    </td>
                     <td class="px-2 py-2">
                         @if (!empty($m['price'])) R {{ number_format((float)$m['price'], 0, '.', ',') }}
                         @elseif (!empty($m['rental_amount'])) R {{ number_format((float)$m['rental_amount'], 0, '.', ',') }} /m
@@ -166,7 +199,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="11" class="py-10 text-center text-muted">No listings match your filters.</td></tr>
+                <tr><td colspan="13" class="py-10 text-center text-muted">No listings match your filters.</td></tr>
             @endforelse
             </tbody>
         </table>
