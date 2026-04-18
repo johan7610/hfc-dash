@@ -212,10 +212,36 @@ class ImporterController extends Controller
             return back()->withErrors(['listings_csv' => 'Parse failed: ' . $e->getMessage()]);
         }
 
+        // Each listings upload gets its own portal so prior runs stay isolated.
+        $agency = Agency::find($agencyId);
+        $label  = ($agency?->name ?? 'Agency') . ' · ' . now()->format('Y-m-d H:i');
+        $portal = P24OnboardingPortal::create([
+            'agency_id'    => $agencyId,
+            'token'        => P24OnboardingPortal::generateToken(),
+            'slug'         => P24OnboardingPortal::generateSlug(($agency?->name ?? 'agency') . '-' . now()->format('YmdHis')),
+            'label'        => $label,
+            'created_by'   => auth()->id(),
+            'expires_at'   => now()->addDays(30),
+            'run_ids_json' => [$run->id],
+        ]);
+        P24PortalEvent::log([
+            'portal_id'   => $portal->id,
+            'agency_id'   => $portal->agency_id,
+            'actor_type'  => 'admin',
+            'actor_label' => auth()->user()?->name ?? 'admin',
+            'event'       => 'portal.created',
+            'meta_json'   => ['auto' => true, 'run_id' => $run->id, 'rows' => $counts['listings'] ?? null],
+            'ip'          => $request->ip(),
+        ]);
+
         if ($request->ajax() || $request->expectsJson()) {
-            return response()->json(['redirect' => route('admin.importer.review', ['run_id' => $run->id])]);
+            return response()->json([
+                'redirect'   => route('admin.importer.review', ['run_id' => $run->id]),
+                'portal_url' => $portal->publicUrl(),
+            ]);
         }
-        return redirect()->route('admin.importer.review', ['run_id' => $run->id]);
+        return redirect()->route('admin.importer.review', ['run_id' => $run->id])
+            ->with('status', 'Upload complete. Review link: ' . $portal->publicUrl());
     }
 
     /**
