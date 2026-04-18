@@ -261,7 +261,7 @@ Shipped as a follow-up to Phase 1 based on agent feedback.
 - Added `pillarTag()` on `CommandTask` and `CalendarEvent` models. Returns `'property' | 'deal' | 'contact' | null`. Priority: `property_id` → `deal` (by `deal_id` or `event_type`) → `contact_id`.
 - Timeline rows render a colored chip (Property orange / Deal blue / Contact purple) next to priority and kind.
 - Tasks kanban + list cards render the same chip, matching colour.
-- A new "Group by" toggle on the Tasks kanban switches columns from **Status** (default) to **Pillar** (Property / Deal / Contact / Other). Same cards, different grouping.
+- Tasks kanban stays grouped by Status (To Do / In Progress / Awaiting / Done) — no pillar-group mode.
 
 ### 10.5.3 Archive Done + Archived view
 - **Clear Done button** (manual) on Tasks page header → soft-deletes all current Done-column tasks for the user, with a confirm dialog.

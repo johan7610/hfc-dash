@@ -38,20 +38,6 @@
                 @endforeach
             </div>
 
-            {{-- Group by (kanban only) --}}
-            @if($currentView === 'kanban')
-                <div class="inline-flex rounded-md overflow-hidden" style="background:var(--surface-2);">
-                    @php $group = request('group', 'status'); @endphp
-                    @foreach(['status' => 'Status', 'pillar' => 'Pillar'] as $gKey => $gLabel)
-                        <a href="{{ route('command-center.tasks', array_merge(request()->query(), ['group' => $gKey])) }}"
-                           class="px-2.5 py-1 text-xs font-medium"
-                           style="{{ $group === $gKey ? 'background:var(--brand-button); color:#fff;' : 'color:var(--text-secondary);' }}">
-                            {{ $gLabel }}
-                        </a>
-                    @endforeach
-                </div>
-            @endif
-
             <a href="{{ route('command-center.tasks.archived') }}"
                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium"
                style="background:var(--surface-2); color:var(--text-secondary);">
@@ -80,76 +66,36 @@
     </div>
 
     @if($currentView === 'kanban')
-        @php
-            $group  = request('group', 'status');
-            $allOpen = collect($columns)->flatten(1);
-        @endphp
-
-        @if($group === 'pillar')
-            {{-- ══════ GROUPED BY PILLAR ══════ --}}
-            @php
-                $pillarGroups = [
-                    'property' => $allOpen->filter(fn($t) => $t->pillarTag() === 'property')->values(),
-                    'deal'     => $allOpen->filter(fn($t) => $t->pillarTag() === 'deal')->values(),
-                    'contact'  => $allOpen->filter(fn($t) => $t->pillarTag() === 'contact')->values(),
-                    'other'    => $allOpen->filter(fn($t) => $t->pillarTag() === null)->values(),
-                ];
-            @endphp
-            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-                @foreach($pillarGroups as $pKey => $pTasks)
-                    @php
-                        $pStyle = $pillarStyle[$pKey] ?? ['bg' => 'var(--surface-2)', 'fg' => 'var(--text-muted)', 'label' => 'Other'];
-                    @endphp
-                    <div class="flex flex-col">
-                        <div class="flex items-center justify-between px-2.5 py-1.5 rounded-t-md" style="background:{{ $pStyle['bg'] }};">
-                            <div class="flex items-center gap-1.5">
-                                <span class="w-2 h-2 rounded-full" style="background:{{ $pStyle['fg'] }};"></span>
-                                <span class="text-xs font-semibold" style="color:var(--text-primary);">{{ $pStyle['label'] }}</span>
-                            </div>
-                            <span class="text-[10px] px-1.5 py-0.5 rounded-full" style="background:var(--surface-2); color:var(--text-muted);">{{ $pTasks->count() }}</span>
+        {{-- ══════ KANBAN BOARD — COMPACT ══════ --}}
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+            @foreach(['todo' => 'To Do', 'in_progress' => 'In Progress', 'awaiting' => 'Awaiting', 'done' => 'Done'] as $statusKey => $statusLabel)
+                @php
+                    $colTasks = $columns[$statusKey] ?? collect();
+                    $headerColors = [
+                        'todo' => '#6b7280',
+                        'in_progress' => '#3b82f6',
+                        'awaiting' => '#f59e0b',
+                        'done' => '#10b981',
+                    ];
+                @endphp
+                <div class="flex flex-col">
+                    <div class="flex items-center justify-between px-2.5 py-1.5 rounded-t-md" style="background:{{ $headerColors[$statusKey] }}15;">
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full" style="background:{{ $headerColors[$statusKey] }};"></span>
+                            <span class="text-xs font-semibold" style="color:var(--text-primary);">{{ $statusLabel }}</span>
                         </div>
-                        <div class="flex-1 space-y-1.5 p-1.5 rounded-b-md min-h-[8rem]" style="background:var(--surface-2); border:1px solid var(--border-default); border-top:none;">
-                            @forelse($pTasks as $task)
-                                @include('command-center.partials.task-card', ['task' => $task, 'compact' => true, 'showPillar' => false, 'pillarStyle' => $pillarStyle, 'statusKey' => $task->status])
-                            @empty
-                                <div class="py-4 text-center text-[11px]" style="color:var(--text-muted);">No tasks</div>
-                            @endforelse
-                        </div>
+                        <span class="text-[10px] px-1.5 py-0.5 rounded-full" style="background:var(--surface-2); color:var(--text-muted);">{{ $colTasks->count() }}</span>
                     </div>
-                @endforeach
-            </div>
-        @else
-            {{-- ══════ KANBAN BOARD (BY STATUS) — COMPACT ══════ --}}
-            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-                @foreach(['todo' => 'To Do', 'in_progress' => 'In Progress', 'awaiting' => 'Awaiting', 'done' => 'Done'] as $statusKey => $statusLabel)
-                    @php
-                        $colTasks = $columns[$statusKey] ?? collect();
-                        $headerColors = [
-                            'todo' => '#6b7280',
-                            'in_progress' => '#3b82f6',
-                            'awaiting' => '#f59e0b',
-                            'done' => '#10b981',
-                        ];
-                    @endphp
-                    <div class="flex flex-col">
-                        <div class="flex items-center justify-between px-2.5 py-1.5 rounded-t-md" style="background:{{ $headerColors[$statusKey] }}15;">
-                            <div class="flex items-center gap-1.5">
-                                <span class="w-2 h-2 rounded-full" style="background:{{ $headerColors[$statusKey] }};"></span>
-                                <span class="text-xs font-semibold" style="color:var(--text-primary);">{{ $statusLabel }}</span>
-                            </div>
-                            <span class="text-[10px] px-1.5 py-0.5 rounded-full" style="background:var(--surface-2); color:var(--text-muted);">{{ $colTasks->count() }}</span>
-                        </div>
-                        <div class="flex-1 space-y-1.5 p-1.5 rounded-b-md min-h-[8rem]" style="background:var(--surface-2); border:1px solid var(--border-default); border-top:none;">
-                            @forelse($colTasks as $task)
-                                @include('command-center.partials.task-card', ['task' => $task, 'compact' => true, 'showPillar' => true, 'pillarStyle' => $pillarStyle, 'statusKey' => $statusKey])
-                            @empty
-                                <div class="py-4 text-center text-[11px]" style="color:var(--text-muted);">No tasks</div>
-                            @endforelse
-                        </div>
+                    <div class="flex-1 space-y-1.5 p-1.5 rounded-b-md min-h-[8rem]" style="background:var(--surface-2); border:1px solid var(--border-default); border-top:none;">
+                        @forelse($colTasks as $task)
+                            @include('command-center.partials.task-card', ['task' => $task, 'compact' => true, 'showPillar' => true, 'pillarStyle' => $pillarStyle, 'statusKey' => $statusKey])
+                        @empty
+                            <div class="py-4 text-center text-[11px]" style="color:var(--text-muted);">No tasks</div>
+                        @endforelse
                     </div>
-                @endforeach
-            </div>
-        @endif
+                </div>
+            @endforeach
+        </div>
     @else
         {{-- ══════ LIST VIEW ══════ --}}
         <div class="corex-panel">
