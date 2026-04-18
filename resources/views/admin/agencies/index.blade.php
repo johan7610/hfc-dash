@@ -78,7 +78,7 @@
                                     Edit
                                 </a>
                                 <form method="POST" action="{{ route('agencies.destroy', $agency) }}"
-                                      onsubmit="return confirm('PERMANENTLY delete agency &quot;{{ $agency->name }}&quot;? This cannot be undone. Branches and users must be moved or removed first.');"
+                                      onsubmit="return confirm('Delete agency &quot;{{ $agency->name }}&quot;? This archives every user, branch, property, contact, deal, presentation and document in this agency (recoverable via deleted_at). The agency itself is permanently removed.');"
                                       class="inline">
                                     @csrf
                                     @method('DELETE')

@@ -40,9 +40,13 @@
                     <div x-show="open && search.length >= 2" x-cloak
                          class="absolute z-10 mt-1 w-full bg-white border border-slate-200 shadow-lg max-h-60 overflow-y-auto">
                         @foreach($contacts as $c)
+                            @php
+                                $haystack = strtolower(trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '') . ' ' . ($c->email ?? '')));
+                                $label    = trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '')) . ($c->email ? ' (' . $c->email . ')' : '');
+                            @endphp
                             <button type="button"
-                                    x-show="'{{ strtolower($c->first_name . ' ' . $c->last_name . ' ' . $c->email) }}'.includes(search.toLowerCase())"
-                                    @click="selected = {{ $c->id }}; selectedName = '{{ addslashes($c->first_name . ' ' . $c->last_name) }} ({{ $c->email }})'; open = false"
+                                    x-show="{{ \Illuminate\Support\Js::from($haystack) }}.includes(search.toLowerCase())"
+                                    @click="selected = {{ (int) $c->id }}; selectedName = {{ \Illuminate\Support\Js::from($label) }}; open = false"
                                     class="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 border-b border-slate-100">
                                 <div class="font-medium text-slate-900">{{ $c->first_name }} {{ $c->last_name }}</div>
                                 <div class="text-xs text-slate-400">{{ $c->email ?? 'No email' }} {{ $c->phone ? '/ ' . $c->phone : '' }}</div>

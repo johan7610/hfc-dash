@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -128,42 +131,16 @@ class AgencyController extends Controller
     }
 
     /**
-     * Permanently delete an agency. Unlike operational data (contacts,
-     * deals, documents) agencies are tenant definitions, and the `slug`
-     * column is uniquely indexed — a soft-deleted row keeps the slug
-     * reserved and blocks the admin from re-creating an agency with the
-     * same identifier. So this is a hard delete, guarded by:
-     *   - no remaining branches,
-     *   - no remaining users,
-     *   - never the last agency in the platform.
-     * The branch/user guard also prevents us from orphaning operational
-     * rows that still point at this agency_id.
+     * Delete an agency. Soft-archives every tenant-owned row in the agency
+     * first (users, branches, properties, contacts, deals, presentations,
+     * documents) so they disappear from the UI but remain recoverable via
+     * `deleted_at`. The agency row itself is force-deleted so its unique
+     * `slug` is freed for re-use.
+     *
+     * Guarded against deleting the last remaining agency in the platform.
      */
     public function destroy(Agency $agency)
     {
-        $branchCount       = $agency->branches()->count();
-        $userCount         = $agency->users()->count();
-        $propertyCount     = \DB::table('properties')->where('agency_id', $agency->id)->whereNull('deleted_at')->count();
-        $contactCount      = \DB::table('contacts')->where('agency_id', $agency->id)->whereNull('deleted_at')->count();
-        $dealCount         = \DB::table('deals')->where('agency_id', $agency->id)->whereNull('deleted_at')->count();
-        $presentationCount = \DB::table('presentations')->where('agency_id', $agency->id)->whereNull('deleted_at')->count();
-
-        $blockers = array_filter([
-            $branchCount       ? "{$branchCount} branch(es)"          : null,
-            $userCount         ? "{$userCount} user(s)"               : null,
-            $propertyCount     ? "{$propertyCount} property(ies)"     : null,
-            $contactCount      ? "{$contactCount} contact(s)"         : null,
-            $dealCount         ? "{$dealCount} deal(s)"               : null,
-            $presentationCount ? "{$presentationCount} presentation(s)" : null,
-        ]);
-
-        if (!empty($blockers)) {
-            return redirect()->route('agencies.index')->with(
-                'error',
-                "Cannot delete \"{$agency->name}\": it still has " . implode(', ', $blockers) . ". Re-assign or remove them first."
-            );
-        }
-
         if (Agency::count() <= 1) {
             return redirect()->route('agencies.index')->with(
                 'error',
@@ -171,16 +148,65 @@ class AgencyController extends Controller
             );
         }
 
-        if (session('active_agency_id') == $agency->id) {
+        $agencyId   = $agency->id;
+        $agencyName = $agency->name;
+
+        // Tables with agency_id + deleted_at that we soft-cascade.
+        $cascadeTables = [
+            'users',
+            'branches',
+            'properties',
+            'contacts',
+            'deals',
+            'presentations',
+            'documents',
+        ];
+
+        $counts = [];
+        DB::transaction(function () use ($cascadeTables, $agencyId, &$counts, $agency) {
+            $now = now();
+
+            foreach ($cascadeTables as $table) {
+                if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'agency_id')) {
+                    continue;
+                }
+
+                $query = DB::table($table)->where('agency_id', $agencyId);
+
+                if (Schema::hasColumn($table, 'deleted_at')) {
+                    $query->whereNull('deleted_at');
+                    $counts[$table] = $query->update(['deleted_at' => $now]);
+                } else {
+                    $counts[$table] = $query->delete();
+                }
+            }
+
+            if ($agency->logo_path) {
+                Storage::disk('public')->delete($agency->logo_path);
+            }
+
+            $agency->forceDelete();
+        });
+
+        if (session('active_agency_id') == $agencyId) {
             session()->forget('active_agency_id');
         }
 
-        if ($agency->logo_path) {
-            Storage::disk('public')->delete($agency->logo_path);
-        }
+        Log::info('Agency cascade-deleted', [
+            'agency_id'   => $agencyId,
+            'agency_name' => $agencyName,
+            'cascade'     => $counts,
+            'deleted_by'  => auth()->id(),
+        ]);
 
-        $agency->forceDelete();
+        $summary = collect($counts)
+            ->filter(fn ($n) => $n > 0)
+            ->map(fn ($n, $t) => "{$n} {$t}")
+            ->implode(', ');
 
-        return redirect()->route('agencies.index')->with('success', "Agency \"{$agency->name}\" permanently deleted.");
+        $message = "Agency \"{$agencyName}\" deleted."
+            . ($summary ? " Archived: {$summary}." : '');
+
+        return redirect()->route('agencies.index')->with('success', $message);
     }
 }
