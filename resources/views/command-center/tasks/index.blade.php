@@ -59,20 +59,31 @@
                     {{-- Task cards --}}
                     <div class="flex-1 space-y-2 p-2 rounded-b-md min-h-[12rem]" style="background:var(--surface-2); border:1px solid var(--border-default); border-top:none;">
                         @forelse($colTasks as $task)
+                            @php
+                                $taskLink = $task->property ? route('corex.properties.show', $task->property)
+                                          : ($task->contact  ? route('corex.contacts.show',  $task->contact)
+                                          : ($task->deal_id  ? route('deals-v2.show',        $task->deal_id) : null));
+                            @endphp
                             <div class="corex-panel transition-shadow hover:shadow-md" style="margin:0;">
                                 <div class="p-3 space-y-2">
                                     {{-- Title --}}
-                                    <p class="text-sm font-medium leading-snug" style="color:var(--text-primary);">{{ $task->title }}</p>
+                                    @if($taskLink)
+                                        <a href="{{ $taskLink }}" class="block text-sm font-medium leading-snug hover:underline" style="color:var(--text-primary);">{{ $task->title }}</a>
+                                    @else
+                                        <p class="text-sm font-medium leading-snug" style="color:var(--text-primary);">{{ $task->title }}</p>
+                                    @endif
 
                                     {{-- Property / Contact link --}}
                                     @if($task->property)
-                                        <p class="text-xs truncate" style="color:var(--text-muted);">
+                                        <a href="{{ route('corex.properties.show', $task->property) }}"
+                                           class="block text-xs truncate hover:underline" style="color:var(--text-muted);">
                                             {{ $task->property->buildDisplayAddress() ?: ($task->property->title ?: '') }}
-                                        </p>
+                                        </a>
                                     @elseif($task->contact)
-                                        <p class="text-xs truncate" style="color:var(--text-muted);">
+                                        <a href="{{ route('corex.contacts.show', $task->contact) }}"
+                                           class="block text-xs truncate hover:underline" style="color:var(--text-muted);">
                                             {{ $task->contact->first_name }} {{ $task->contact->last_name }}
-                                        </p>
+                                        </a>
                                     @endif
 
                                     {{-- Footer: priority, due date, actions --}}
@@ -153,10 +164,17 @@
                                     'todo' => '#6b7280', 'in_progress' => '#3b82f6',
                                     'awaiting' => '#f59e0b', 'done' => '#10b981', 'dismissed' => '#9ca3af',
                                 ];
+                                $taskLink = $task->property ? route('corex.properties.show', $task->property)
+                                          : ($task->contact  ? route('corex.contacts.show',  $task->contact)
+                                          : ($task->deal_id  ? route('deals-v2.show',        $task->deal_id) : null));
                             @endphp
                             <tr class="border-b hover:bg-white/5 transition-colors" style="border-color:var(--border-default);">
                                 <td class="py-2.5 px-3" style="color:var(--text-primary);">
-                                    <span class="{{ $task->status === 'done' ? 'line-through opacity-60' : '' }}">{{ $task->title }}</span>
+                                    @if($taskLink)
+                                        <a href="{{ $taskLink }}" class="hover:underline {{ $task->status === 'done' ? 'line-through opacity-60' : '' }}">{{ $task->title }}</a>
+                                    @else
+                                        <span class="{{ $task->status === 'done' ? 'line-through opacity-60' : '' }}">{{ $task->title }}</span>
+                                    @endif
                                 </td>
                                 <td class="py-2.5 px-3">
                                     <span class="text-xs px-2 py-0.5 rounded-full font-medium" style="background:{{ $statusColors[$task->status] ?? '#6b7280' }}20; color:{{ $statusColors[$task->status] ?? '#6b7280' }};">
@@ -176,7 +194,13 @@
                                     {{ $task->due_date ? $task->due_date->format('d M Y') : '—' }}
                                 </td>
                                 <td class="py-2.5 px-3 text-xs truncate max-w-[12rem]" style="color:var(--text-muted);">
-                                    {{ $task->property ? $task->property->buildDisplayAddress() : '—' }}
+                                    @if($task->property)
+                                        <a href="{{ route('corex.properties.show', $task->property) }}" class="hover:underline">{{ $task->property->buildDisplayAddress() }}</a>
+                                    @elseif($task->contact)
+                                        <a href="{{ route('corex.contacts.show', $task->contact) }}" class="hover:underline">{{ $task->contact->first_name }} {{ $task->contact->last_name }}</a>
+                                    @else
+                                        —
+                                    @endif
                                 </td>
                                 <td class="py-2.5 px-3">
                                     @if($task->status !== 'done')

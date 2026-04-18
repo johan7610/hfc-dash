@@ -2,6 +2,16 @@
     /** @var object $item */
     $model       = $item->model;
     $routeName   = $item->kind === 'event' ? 'command-center.calendar.complete' : 'command-center.tasks.complete';
+
+    // Resolve the pillar link: property → contact → deal (tasks only)
+    $titleLink = null;
+    if ($item->property) {
+        $titleLink = route('corex.properties.show', $item->property);
+    } elseif (isset($model->contact) && $model->contact) {
+        $titleLink = route('corex.contacts.show', $model->contact);
+    } elseif ($item->kind === 'task' && !empty($model->deal_id)) {
+        $titleLink = route('deals-v2.show', $model->deal_id);
+    }
 @endphp
 <div class="flex items-start gap-3 py-2 px-2 rounded-md group hover:bg-white/5 transition-colors">
     <div class="flex-shrink-0 text-xs font-mono pt-0.5 tabular-nums" style="color:var(--text-muted); min-width:3.25rem;">
@@ -10,9 +20,15 @@
     <div class="flex-shrink-0 w-1 rounded-full self-stretch" style="background:{{ $item->colour }}; min-height:2.25rem;"></div>
     <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
-            <p class="text-sm font-medium truncate" style="color:var(--text-primary);">
-                {{ $item->title }}
-            </p>
+            @if($titleLink)
+                <a href="{{ $titleLink }}" class="text-sm font-medium truncate hover:underline" style="color:var(--text-primary);">
+                    {{ $item->title }}
+                </a>
+            @else
+                <p class="text-sm font-medium truncate" style="color:var(--text-primary);">
+                    {{ $item->title }}
+                </p>
+            @endif
             @if($item->priority === 'critical')
                 <span class="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded" style="background:rgba(239,68,68,0.15); color:#ef4444;">crit</span>
             @elseif($item->priority === 'high')
@@ -24,9 +40,17 @@
             </span>
         </div>
         @if($item->property)
-            <p class="text-xs mt-0.5 truncate" style="color:var(--text-muted);">
+            <a href="{{ route('corex.properties.show', $item->property) }}"
+               class="block text-xs mt-0.5 truncate hover:underline"
+               style="color:var(--text-muted);">
                 {{ $item->property->buildDisplayAddress() }}
-            </p>
+            </a>
+        @elseif(isset($model->contact) && $model->contact)
+            <a href="{{ route('corex.contacts.show', $model->contact) }}"
+               class="block text-xs mt-0.5 truncate hover:underline"
+               style="color:var(--text-muted);">
+                {{ $model->contact->first_name }} {{ $model->contact->last_name }}
+            </a>
         @endif
     </div>
     <div class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
