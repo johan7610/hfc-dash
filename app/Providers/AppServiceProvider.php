@@ -9,9 +9,11 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
+use App\Models\CommandCenter\CommandTask;
 use App\Models\Deal;
 use App\Models\DealSettlement;
 use App\Models\Property;
+use App\Observers\CommandTaskObserver;
 use App\Observers\DealObserver;
 use App\Observers\DealSettlementObserver;
 use App\Observers\PropertyObserver;
@@ -28,6 +30,7 @@ class AppServiceProvider extends ServiceProvider
         Deal::observe(DealObserver::class);
         DealSettlement::observe(DealSettlementObserver::class);
         Property::observe(PropertyObserver::class);
+        CommandTask::observe(CommandTaskObserver::class);
 
         // Auto-sync DocuPerfect named fields after every migration run
         Event::listen(MigrationsEnded::class, function () {

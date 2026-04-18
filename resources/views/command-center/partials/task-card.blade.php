@@ -75,6 +75,13 @@
                         <svg class="w-3 h-3 text-green-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
                     </button>
                 </form>
+            @elseif($statusKey === 'done')
+                <form method="POST" action="{{ route('command-center.tasks.destroy', $task) }}">
+                    @csrf @method('DELETE')
+                    <button type="submit" class="p-1 rounded hover:bg-white/10" title="Archive">
+                        <svg class="w-3 h-3" style="color:var(--text-muted);" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5-1.5 11.645a1.125 1.125 0 0 1-.964.544H4.214a1.125 1.125 0 0 1-.965-.544L1.5 7.5m18.75 0h-18m18.75 0A1.125 1.125 0 0 0 22.5 6.375v-1.5A1.125 1.125 0 0 0 21.375 3.75H2.625A1.125 1.125 0 0 0 1.5 4.875v1.5A1.125 1.125 0 0 0 2.625 7.5" /></svg>
+                    </button>
+                </form>
             @endif
         </div>
     </div>
