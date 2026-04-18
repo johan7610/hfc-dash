@@ -118,14 +118,21 @@ class OnboardingPortalController extends Controller
             'confirmed_by_portal_id' => $portal->id,
         ]);
 
-        ConfirmP24PropertyRowJob::dispatch($row->id, null);
+        ConfirmP24PropertyRowJob::dispatchSync($row->id, null);
+        $row->refresh();
 
         $this->logEvent($portal, $request, 'portal.row.confirmed', [
             'target_row_id'      => $row->id,
             'target_external_id' => $row->external_id,
         ]);
 
-        return response()->json(['ok' => true, 'row_id' => $row->id, 'status' => 'processing']);
+        return response()->json([
+            'ok'     => $row->status === 'confirmed',
+            'row_id' => $row->id,
+            'status' => $row->status,
+            'errors' => (array) ($row->errors_json ?? []),
+            'counts' => $this->counts($portal),
+        ]);
     }
 
     public function excludeRow(Request $request, int $rowId)

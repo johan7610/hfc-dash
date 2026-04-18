@@ -2,8 +2,7 @@
 
 @section('portal-content')
 <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4"
-     x-data="portalReview('{{ $portal->token }}')"
-     x-init="startPolling()">
+     x-data="portalReview('{{ $portal->token }}')">
 
     {{-- Filters --}}
     <form method="GET" class="rounded-md bg-surface p-4 border border-subtle/30 sticky top-0 z-10">
@@ -45,6 +44,20 @@
         </div>
     </form>
 
+    {{-- Progress bar --}}
+    <div x-show="progress.active" x-cloak class="rounded-md bg-surface p-3 border border-subtle/30">
+        <div class="flex items-center justify-between text-xs mb-2">
+            <span x-text="progress.label + ' — ' + progress.done + ' of ' + progress.total"></span>
+            <span x-text="progress.total ? Math.round((progress.done / progress.total) * 100) + '%' : '0%'"></span>
+        </div>
+        <div class="w-full bg-surface-2 rounded-md h-2 overflow-hidden">
+            <div class="h-full transition-all duration-200"
+                 :style="'width: ' + (progress.total ? (progress.done / progress.total) * 100 : 0) + '%; background: var(--brand-button);'"></div>
+        </div>
+        <div x-show="progress.errors > 0" class="mt-2 text-xs text-red-500"
+             x-text="progress.errors + ' listing(s) failed — check the Errors tab'"></div>
+    </div>
+
     {{-- Summary --}}
     <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
         <div class="rounded-md bg-surface p-2 text-center"><span class="text-muted">Pending</span> <span x-text="counts.pending" class="font-semibold ml-1">{{ $counts['pending'] }}</span></div>
@@ -61,6 +74,7 @@
             <thead class="text-xs uppercase text-muted border-b border-subtle">
                 <tr>
                     <th class="px-2 py-2"><input type="checkbox" @change="toggleAll($event)"></th>
+                    <th class="px-2 py-2 text-left">Photo</th>
                     <th class="px-2 py-2 text-left">Listing #</th>
                     <th class="px-2 py-2 text-left">Address</th>
                     <th class="px-2 py-2 text-left">Type</th>
@@ -78,11 +92,24 @@
                     $m = $row->mapped_json ?? [];
                     $errs = (array) ($row->errors_json ?? []);
                     $isProcessing = $row->isProcessing();
+                    $imgs = (array) $row->image_urls_json;
+                    $firstImg = $imgs[0] ?? null;
                 @endphp
-                <tr class="border-b border-subtle/40" :class="processing[{{ $row->id }}] ? 'opacity-60' : ''" data-row="{{ $row->id }}">
+                <tr class="border-b border-subtle/40"
+                    :class="{'opacity-60': rowState[{{ $row->id }}]?.busy, 'hidden': rowState[{{ $row->id }}]?.hidden}"
+                    data-row="{{ $row->id }}">
                     <td class="px-2 py-2">
-                        @if ($row->status === 'pending' && !$isProcessing)
-                            <input type="checkbox" value="{{ $row->id }}" @change="toggleRow({{ $row->id }}, $event)">
+                        <template x-if="canSelect({{ $row->id }}, '{{ $row->status }}', {{ $isProcessing ? 'true' : 'false' }})">
+                            <input type="checkbox" value="{{ $row->id }}" @change="toggleRow({{ $row->id }}, $event)" :checked="selected.includes({{ $row->id }})">
+                        </template>
+                    </td>
+                    <td class="px-2 py-2">
+                        @if ($firstImg)
+                            <img src="{{ $firstImg }}" alt="" loading="lazy"
+                                 class="w-16 h-12 object-cover rounded-md border border-subtle/40 bg-surface-2"
+                                 onerror="this.style.display='none'">
+                        @else
+                            <div class="w-16 h-12 rounded-md border border-subtle/40 bg-surface-2 flex items-center justify-center text-muted text-[10px]">no image</div>
                         @endif
                     </td>
                     <td class="px-2 py-2 font-mono text-xs">{{ $row->external_id }}</td>
@@ -103,27 +130,43 @@
                             @endforeach
                         </select>
                     </td>
-                    <td class="px-2 py-2 text-xs">{{ count((array)$row->image_urls_json) }}</td>
+                    <td class="px-2 py-2 text-xs">{{ count($imgs) }}</td>
                     <td class="px-2 py-2">
-                        @if ($isProcessing)
-                            <span class="px-2 py-0.5 rounded-md text-xs bg-amber-500/20 text-amber-700">processing…</span>
-                        @elseif (!empty($errs))
-                            <span class="px-2 py-0.5 rounded-md text-xs bg-red-500/20 text-red-700" title="{{ implode('; ', $errs) }}">error</span>
-                        @else
-                            <span class="px-2 py-0.5 rounded-md text-xs bg-surface-2">{{ $row->status }}</span>
-                        @endif
+                        <template x-if="rowState[{{ $row->id }}]?.status">
+                            <span class="px-2 py-0.5 rounded-md text-xs"
+                                  :class="{
+                                      'bg-amber-500/20 text-amber-700': rowState[{{ $row->id }}].status === 'processing',
+                                      'bg-emerald-500/20 text-emerald-700': rowState[{{ $row->id }}].status === 'confirmed',
+                                      'bg-red-500/20 text-red-700': rowState[{{ $row->id }}].status === 'error',
+                                      'bg-surface-2': ['excluded'].includes(rowState[{{ $row->id }}].status),
+                                  }"
+                                  x-text="rowState[{{ $row->id }}].status === 'processing' ? 'processing…' : rowState[{{ $row->id }}].status"></span>
+                        </template>
+                        <template x-if="!rowState[{{ $row->id }}]?.status">
+                            @if ($isProcessing)
+                                <span class="px-2 py-0.5 rounded-md text-xs bg-amber-500/20 text-amber-700">processing…</span>
+                            @elseif (!empty($errs))
+                                <span class="px-2 py-0.5 rounded-md text-xs bg-red-500/20 text-red-700" title="{{ implode('; ', $errs) }}">error</span>
+                            @else
+                                <span class="px-2 py-0.5 rounded-md text-xs bg-surface-2">{{ $row->status }}</span>
+                            @endif
+                        </template>
                     </td>
                     <td class="px-2 py-2 text-right whitespace-nowrap">
-                        @if (in_array($row->status, ['pending','error']) && !$isProcessing)
-                            <button type="button" @click="confirmRow({{ $row->id }})"
-                                    class="portal-accent text-xs mr-2 font-semibold" :disabled="processing[{{ $row->id }}]">Confirm</button>
-                            <button type="button" @click="excludeRow({{ $row->id }})"
-                                    class="text-xs text-red-500">Exclude</button>
-                        @endif
+                        <template x-if="canAct({{ $row->id }}, '{{ $row->status }}', {{ $isProcessing ? 'true' : 'false' }})">
+                            <span>
+                                <button type="button" @click="confirmRow({{ $row->id }})"
+                                        class="portal-accent text-xs mr-2 font-semibold"
+                                        :disabled="rowState[{{ $row->id }}]?.busy">Confirm</button>
+                                <button type="button" @click="excludeRow({{ $row->id }})"
+                                        class="text-xs text-red-500"
+                                        :disabled="rowState[{{ $row->id }}]?.busy">Exclude</button>
+                            </span>
+                        </template>
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="10" class="py-10 text-center text-muted">No listings match your filters.</td></tr>
+                <tr><td colspan="11" class="py-10 text-center text-muted">No listings match your filters.</td></tr>
             @endforelse
             </tbody>
         </table>
@@ -136,14 +179,29 @@
 function portalReview(token) {
     return {
         selected: [],
-        processing: {},
+        rowState: {},
         counts: @json($counts),
-        pollTimer: null,
+        progress: { active: false, total: 0, done: 0, errors: 0, label: '' },
         csrf: document.querySelector('meta[name=csrf-token]')?.content ?? '',
 
+        canSelect(id, status, isProcessing) {
+            const st = this.rowState[id];
+            if (st?.hidden) return false;
+            const current = st?.status ?? status;
+            return (current === 'pending' || current === 'error') && !(st?.busy) && !isProcessing;
+        },
+        canAct(id, status, isProcessing) {
+            const st = this.rowState[id];
+            if (st?.hidden) return false;
+            const current = st?.status ?? status;
+            return (current === 'pending' || current === 'error') && !isProcessing;
+        },
         toggleRow(id, e) {
-            if (e.target.checked) this.selected.push(id);
-            else this.selected = this.selected.filter(x => x !== id);
+            if (e.target.checked) {
+                if (!this.selected.includes(id)) this.selected.push(id);
+            } else {
+                this.selected = this.selected.filter(x => x !== id);
+            }
         },
         toggleAll(e) {
             const boxes = document.querySelectorAll('tbody input[type=checkbox]');
@@ -163,57 +221,91 @@ function portalReview(token) {
                 },
                 body: JSON.stringify(body),
             });
-            return res.json();
+            let data = null;
+            try { data = await res.json(); } catch (e) {}
+            return { ok: res.ok, status: res.status, data };
+        },
+        setRow(id, patch) {
+            this.rowState = { ...this.rowState, [id]: { ...(this.rowState[id] ?? {}), ...patch } };
+        },
+        async confirmSingle(id) {
+            this.setRow(id, { busy: true, status: 'processing' });
+            const r = await this.post(`/onboarding/${token}/rows/${id}/confirm`);
+            if (r.ok && r.data?.status === 'confirmed') {
+                this.setRow(id, { busy: false, status: 'confirmed' });
+                if (r.data.counts) this.counts = r.data.counts;
+                this.selected = this.selected.filter(x => x !== id);
+                return { ok: true };
+            }
+            const msg = r.data?.errors?.join?.('; ') || ('HTTP ' + r.status);
+            this.setRow(id, { busy: false, status: 'error', error: msg });
+            return { ok: false, error: msg };
         },
         async confirmRow(id) {
-            this.processing[id] = true;
-            await this.post(`/onboarding/${token}/rows/${id}/confirm`);
-            this.startPolling();
+            await this.confirmSingle(id);
         },
         async excludeRow(id) {
             if (!confirm('Exclude this listing from going live?')) return;
-            await this.post(`/onboarding/${token}/rows/${id}/exclude`);
-            location.reload();
+            this.setRow(id, { busy: true });
+            const r = await this.post(`/onboarding/${token}/rows/${id}/exclude`);
+            if (r.ok) {
+                this.setRow(id, { busy: false, status: 'excluded', hidden: true });
+                this.selected = this.selected.filter(x => x !== id);
+                await this.refreshCounts();
+            } else {
+                this.setRow(id, { busy: false });
+                alert('Could not exclude this listing.');
+            }
         },
         async reassignAgent(id, userId) {
             if (!userId) return;
             const r = await this.post(`/onboarding/${token}/rows/${id}/reassign`, {user_id: parseInt(userId)});
             if (!r.ok) alert('Could not reassign agent.');
         },
+        async runBatch(ids, label) {
+            if (!ids.length) return;
+            this.progress = { active: true, total: ids.length, done: 0, errors: 0, label };
+            for (const id of ids) {
+                const r = await this.confirmSingle(id);
+                this.progress.done += 1;
+                if (!r.ok) this.progress.errors += 1;
+            }
+            setTimeout(() => { this.progress = { active: false, total: 0, done: 0, errors: 0, label: '' }; }, 1500);
+        },
         async bulkConfirm() {
-            if (!this.selected.length) return;
+            if (!this.selected.length) {
+                alert('Select at least one listing first.');
+                return;
+            }
             if (!confirm(`Confirm ${this.selected.length} listings?`)) return;
-            this.selected.forEach(id => this.processing[id] = true);
-            await this.post(`/onboarding/${token}/rows/bulk/confirm`, {ids: this.selected});
-            this.selected = [];
-            this.startPolling();
+            const ids = [...this.selected];
+            await this.runBatch(ids, 'Confirming selected');
         },
         async bulkExclude() {
-            if (!this.selected.length) return;
+            if (!this.selected.length) {
+                alert('Select at least one listing first.');
+                return;
+            }
             if (!confirm(`Exclude ${this.selected.length} listings?`)) return;
-            await this.post(`/onboarding/${token}/rows/bulk/exclude`, {ids: this.selected});
-            location.reload();
+            const ids = [...this.selected];
+            for (const id of ids) {
+                await this.excludeRow(id);
+            }
         },
         async confirmAllPending() {
-            if (!confirm('Confirm every pending listing? This cannot be undone easily.')) return;
-            await this.post(`/onboarding/${token}/rows/confirm-all`);
-            this.startPolling();
+            const boxes = document.querySelectorAll('tbody input[type=checkbox]');
+            const ids = [];
+            boxes.forEach(b => { const v = parseInt(b.value); if (v) ids.push(v); });
+            if (!ids.length) { alert('No pending listings on this page.'); return; }
+            if (!confirm(`Confirm ${ids.length} pending listings on this page?`)) return;
+            await this.runBatch(ids, 'Confirming all pending');
         },
-        startPolling() {
-            if (this.pollTimer) return;
-            this.pollTimer = setInterval(async () => {
+        async refreshCounts() {
+            try {
                 const res = await fetch(`/onboarding/${token}/status`, {headers:{Accept:'application/json'}});
                 const data = await res.json();
-                this.counts = data.counts;
-                if (data.counts.processing === 0) {
-                    clearInterval(this.pollTimer);
-                    this.pollTimer = null;
-                    // Reflect finished work in the table
-                    if (Object.keys(this.processing).length) {
-                        location.reload();
-                    }
-                }
-            }, 3000);
+                if (data?.counts) this.counts = data.counts;
+            } catch (e) {}
         },
     };
 }

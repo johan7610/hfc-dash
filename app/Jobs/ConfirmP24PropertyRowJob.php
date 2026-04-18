@@ -4,7 +4,6 @@ namespace App\Jobs;
 
 use App\Models\P24ImportRow;
 use App\Models\Property;
-use App\Services\Importer\P24ImageDownloader;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -26,7 +25,7 @@ class ConfirmP24PropertyRowJob implements ShouldQueue
 
     public function __construct(public int $rowId, public ?int $userId = null) {}
 
-    public function handle(P24ImageDownloader $downloader): void
+    public function handle(): void
     {
         $row = P24ImportRow::with('run')->find($this->rowId);
         if (!$row || $row->row_type !== 'listing') return;
@@ -34,9 +33,11 @@ class ConfirmP24PropertyRowJob implements ShouldQueue
 
         $mapped = $row->mapped_json ?? [];
         $run = $row->run;
+        $propertyId = null;
+        $imageUrls = [];
 
         try {
-            DB::transaction(function () use ($row, $mapped, $run) {
+            DB::transaction(function () use ($row, $mapped, $run, &$propertyId, &$imageUrls) {
                 $listingNumber = $mapped['p24_listing_number'] ?? $row->external_id;
 
                 $existing = Property::withoutGlobalScopes()
@@ -66,31 +67,21 @@ class ConfirmP24PropertyRowJob implements ShouldQueue
                 } else {
                     $property = Property::create($attrs);
                 }
+
                 $row->target_id = $property->id;
-
-                // Images
-                $urls = $row->image_urls_json ?? [];
-                $storedPaths = [];
-                if (!empty($urls)) {
-                    $downloader = app(P24ImageDownloader::class);
-                    foreach ($urls as $idx => $url) {
-                        $ordinal = $idx + 1;
-                        $dest = "properties/{$property->id}/{$ordinal}.jpg";
-                        $stored = $downloader->download($url, $dest);
-                        if ($stored) {
-                            $storedPaths[] = $stored;
-                        }
-                    }
-                    $property->images_json = $storedPaths;
-                    $property->save();
-                }
-
                 $row->status = 'confirmed';
                 $row->confirmed_at = now();
                 $row->processing_at = null;
                 if ($this->userId) $row->confirmed_by = $this->userId;
                 $row->save();
+
+                $propertyId = $property->id;
+                $imageUrls = array_values(array_filter((array) ($row->image_urls_json ?? [])));
             });
+
+            if ($propertyId && !empty($imageUrls)) {
+                DownloadP24RowImagesJob::dispatch($propertyId, $imageUrls);
+            }
         } catch (\Throwable $e) {
             Log::error('ConfirmP24PropertyRowJob failed', ['row_id' => $row->id, 'error' => $e->getMessage()]);
             $row->update([
