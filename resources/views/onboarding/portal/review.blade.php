@@ -77,6 +77,18 @@
                                 </template>
                             </ul>
                         </template>
+                        <template x-if="err.diagnostics">
+                            <details class="mt-2">
+                                <summary class="cursor-pointer text-muted text-[11px] underline">diagnostics</summary>
+                                <pre class="mt-1 text-[10px] leading-tight whitespace-pre-wrap" x-text="JSON.stringify(err.diagnostics, null, 2)"></pre>
+                            </details>
+                        </template>
+                        <template x-if="err.raw && !err.diagnostics && !err.serverErrors?.length">
+                            <details class="mt-2">
+                                <summary class="cursor-pointer text-muted text-[11px] underline">raw server response</summary>
+                                <pre class="mt-1 text-[10px] leading-tight whitespace-pre-wrap" x-text="JSON.stringify(err.raw, null, 2)"></pre>
+                            </details>
+                        </template>
                     </div>
                 </template>
                 <div x-show="!errorModal.errors.length" class="text-muted text-sm">No errors.</div>
@@ -282,6 +294,8 @@ function portalReview(token) {
                 message: r?.data?.message || r?.error || ('HTTP ' + (r?.status ?? '—')),
                 serverErrors: (r?.data?.errors && Array.isArray(r.data.errors)) ? r.data.errors
                               : (r?.data?.errors ? Object.values(r.data.errors).flat() : []),
+                diagnostics: r?.data?.diagnostics ?? null,
+                raw: r?.data ?? null,
                 at: Date.now(),
             });
             this.errorModal.open = true;

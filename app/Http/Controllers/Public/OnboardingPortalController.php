@@ -9,6 +9,7 @@ use App\Models\P24OnboardingPortal;
 use App\Models\P24PortalEvent;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class OnboardingPortalController extends Controller
 {
@@ -283,7 +284,33 @@ class OnboardingPortalController extends Controller
     private function findOwnedRow(P24OnboardingPortal $portal, int $rowId): P24ImportRow
     {
         $row = $portal->rowsQuery()->where('p24_import_rows.id', $rowId)->first();
-        abort_unless($row, 404);
+        if (!$row) {
+            // Diagnose: does the row exist at all? Why isn't it in this portal's scope?
+            $rawRow = P24ImportRow::withTrashed()->find($rowId);
+            $diag = [
+                'row_exists'    => (bool) $rawRow,
+                'row_type'      => $rawRow?->row_type,
+                'row_status'    => $rawRow?->status,
+                'row_run_id'    => $rawRow?->run_id,
+                'row_trashed'   => $rawRow?->trashed(),
+                'run_exists'    => $rawRow?->run_id ? (bool) \App\Models\P24ImportRun::withTrashed()->find($rawRow->run_id) : null,
+                'run_trashed'   => $rawRow?->run_id ? (\App\Models\P24ImportRun::withTrashed()->find($rawRow->run_id)?->trashed()) : null,
+                'run_agency_id' => $rawRow?->run_id ? (\App\Models\P24ImportRun::withTrashed()->find($rawRow->run_id)?->agency_id) : null,
+                'portal_agency' => $portal->agency_id,
+                'portal_runs'   => $portal->run_ids_json,
+            ];
+            Log::warning('Portal confirm: row not found in scope', [
+                'portal_id' => $portal->id,
+                'row_id'    => $rowId,
+                'diag'      => $diag,
+            ]);
+            abort(response()->json([
+                'message'      => 'Listing row not found in this portal.',
+                'row_id'       => $rowId,
+                'portal_id'    => $portal->id,
+                'diagnostics'  => $diag,
+            ], 404));
+        }
         return $row;
     }
 
