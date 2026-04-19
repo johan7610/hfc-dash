@@ -64,11 +64,27 @@ class CommandCenterApiController extends Controller
         // Scorecard
         $scorecard = AgentScorecard::forUser($user->id)->currentWeek()->first();
 
-        // Overdue popup
+        // Inbox items (overdue tasks + events + candidate docs)
         $overduePopupTasks = CommandTask::forUser($user->id)->overdue()->whereNull('resolution')
             ->with(['property', 'contact'])->orderBy('due_date')->limit(20)->get();
         $overduePopupEvents = CalendarEvent::forUser($user->id)->where('status', 'overdue')->whereNull('resolution')
             ->with(['property', 'contact'])->orderBy('event_date')->limit(20)->get();
+
+        // Candidate documents awaiting authorisation (supervisors only)
+        $candidateService = new CandidatePractitionerService();
+        $candidateDocs    = collect();
+        if ($candidateService->canAuthorise($user)) {
+            $candidateDocs = SignatureTemplate::with(['document', 'creator'])
+                ->where('is_candidate_flow', true)
+                ->whereIn('status', [
+                    SignatureTemplate::STATUS_AWAITING_SUPERVISOR,
+                    SignatureTemplate::STATUS_AWAITING_SUPERVISOR_FINAL,
+                ])
+                ->orderBy('created_at', 'desc')
+                ->get();
+        }
+
+        $inboxTotal = $overduePopupTasks->count() + $overduePopupEvents->count() + $candidateDocs->count();
 
         return response()->json([
             'user'                => ['id' => $user->id, 'name' => $user->name],
@@ -100,8 +116,22 @@ class CommandCenterApiController extends Controller
                 'events_total'        => $scorecard->events_total,
                 'documents_uploaded'  => $scorecard->documents_uploaded,
             ] : null,
+            // Legacy keys (kept for backwards compatibility; same data as inbox_*)
             'overdue_popup_tasks'  => $this->formatTasks($overduePopupTasks),
             'overdue_popup_events' => $this->formatEvents($overduePopupEvents),
+            // Cockpit Inbox payload (preferred for new mobile cockpit)
+            'inbox_overdue_tasks'  => $this->formatTasks($overduePopupTasks),
+            'inbox_overdue_events' => $this->formatEvents($overduePopupEvents),
+            'inbox_candidate_docs' => $candidateDocs->map(fn ($d) => [
+                'id'              => $d->id,
+                'document_id'     => $d->document_id,
+                'document_name'   => $d->document->name ?? 'Untitled Document',
+                'creator_name'    => $d->creator->name ?? 'Unknown',
+                'status'          => $d->status,
+                'review_url'      => route('docuperfect.signatures.review', $d->document_id),
+                'created_at'      => $d->created_at?->toIso8601String(),
+            ])->values(),
+            'inbox_total'          => $inboxTotal,
         ]);
     }
 
@@ -230,6 +260,64 @@ class CommandCenterApiController extends Controller
         return response()->json($this->formatTask($task->load('property')));
     }
 
+    /**
+     * Archive a single task (soft-delete).
+     */
+    public function tasksDestroy(CommandTask $task): JsonResponse
+    {
+        $task->delete();
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Archive all Done tasks for the user (bulk).
+     */
+    public function tasksArchiveDone(Request $request): JsonResponse
+    {
+        $tasks = CommandTask::forUser($request->user()->id)
+            ->where('status', CommandTask::STATUS_DONE)
+            ->get();
+
+        $count = $tasks->count();
+        $tasks->each(fn ($t) => $t->delete());
+
+        return response()->json(['ok' => true, 'archived' => $count]);
+    }
+
+    /**
+     * List archived (soft-deleted) tasks for the user, grouped by the day archived.
+     */
+    public function tasksArchived(Request $request): JsonResponse
+    {
+        $tasks = CommandTask::onlyTrashed()
+            ->where('assigned_to', $request->user()->id)
+            ->with(['property', 'contact'])
+            ->orderByDesc('deleted_at')
+            ->get();
+
+        $groups = $tasks->groupBy(fn ($t) => optional($t->deleted_at)->toDateString())
+            ->map(fn ($day, $date) => [
+                'date'  => $date,
+                'tasks' => $this->formatTasks($day),
+            ])
+            ->values();
+
+        return response()->json([
+            'total'  => $tasks->count(),
+            'groups' => $groups,
+        ]);
+    }
+
+    /**
+     * Restore a soft-deleted task back to the Done column.
+     */
+    public function tasksRestore(int $taskId): JsonResponse
+    {
+        $task = CommandTask::onlyTrashed()->findOrFail($taskId);
+        $task->restore();
+        return response()->json($this->formatTask($task->load('property')));
+    }
+
     // ── Resolve Overdue ───────────────────────────────────────────
 
     public function resolveTask(Request $request, CommandTask $task): JsonResponse
@@ -310,6 +398,7 @@ class CommandCenterApiController extends Controller
             'lease_expiry_reminders', 'lease_reminder_days_before',
             'fica_reminders', 'ffc_reminders',
             'task_due_reminders', 'task_reminder_hours_before', 'event_reminder_hours_before',
+            'auto_archive_done_days',
             'default_calendar_view', 'weekend_visible', 'working_hours_start', 'working_hours_end',
             'notify_in_app', 'notify_email',
         ]);
@@ -342,6 +431,7 @@ class CommandCenterApiController extends Controller
             'task_due_reminders'          => 'nullable|boolean',
             'task_reminder_hours_before'  => 'required|integer|min:1|max:168',
             'event_reminder_hours_before' => 'required|integer|min:1|max:168',
+            'auto_archive_done_days'      => 'nullable|integer|min:0|max:365',
             'default_calendar_view'       => 'required|in:month,week,day,agenda',
             'weekend_visible'             => 'nullable|boolean',
             'working_hours_start'         => 'required|date_format:H:i',
@@ -356,6 +446,10 @@ class CommandCenterApiController extends Controller
             'weekend_visible', 'notify_in_app', 'notify_email',
         ] as $bf) {
             $validated[$bf] = $request->boolean($bf);
+        }
+
+        if (array_key_exists('auto_archive_done_days', $validated) && $validated['auto_archive_done_days'] === '') {
+            $validated['auto_archive_done_days'] = null;
         }
 
         UserDashboardSetting::updateOrCreate(['user_id' => $user->id], $validated);
@@ -388,6 +482,8 @@ class CommandCenterApiController extends Controller
             'property_id'      => $e->property_id,
             'property_address' => $e->property?->buildDisplayAddress() ?? null,
             'contact_id'       => $e->contact_id,
+            'contact_name'     => $e->contact ? trim("{$e->contact->first_name} {$e->contact->last_name}") : null,
+            'pillar_tag'       => $e->pillarTag(),
         ];
     }
 
@@ -408,11 +504,14 @@ class CommandCenterApiController extends Controller
             'due_date'         => $t->due_date?->toIso8601String(),
             'started_at'       => $t->started_at?->toIso8601String(),
             'completed_at'     => $t->completed_at?->toIso8601String(),
+            'deleted_at'       => $t->deleted_at?->toIso8601String(),
             'resolution'       => $t->resolution,
             'property_id'      => $t->property_id,
             'property_address' => $t->property?->buildDisplayAddress() ?? null,
             'contact_id'       => $t->contact_id,
             'contact_name'     => $t->contact ? "{$t->contact->first_name} {$t->contact->last_name}" : null,
+            'deal_id'          => $t->deal_id,
+            'pillar_tag'       => $t->pillarTag(),
             'is_overdue'       => $t->isOverdue(),
         ];
     }

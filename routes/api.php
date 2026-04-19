@@ -99,9 +99,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/calendar/{calendarEvent}/dismiss', [CommandCenterApiController::class, 'calendarDismiss']);
 
         Route::get('/tasks', [CommandCenterApiController::class, 'tasksIndex']);
+        Route::get('/tasks/archived', [CommandCenterApiController::class, 'tasksArchived']);
+        Route::post('/tasks/archive-done', [CommandCenterApiController::class, 'tasksArchiveDone']);
+        Route::post('/tasks/{taskId}/restore', [CommandCenterApiController::class, 'tasksRestore']);
         Route::post('/tasks', [CommandCenterApiController::class, 'tasksStore']);
         Route::post('/tasks/{task}/complete', [CommandCenterApiController::class, 'tasksComplete']);
         Route::patch('/tasks/{task}/status', [CommandCenterApiController::class, 'tasksUpdateStatus']);
+        Route::delete('/tasks/{task}', [CommandCenterApiController::class, 'tasksDestroy']);
 
         Route::post('/resolve-task/{task}', [CommandCenterApiController::class, 'resolveTask']);
         Route::post('/resolve-event/{calendarEvent}', [CommandCenterApiController::class, 'resolveEvent']);
