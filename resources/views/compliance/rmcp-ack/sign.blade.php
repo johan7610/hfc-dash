@@ -49,8 +49,8 @@
 
                 {{-- Mode tabs --}}
                 <div class="flex gap-2 mb-4">
-                    <button type="button" @click="mode = 'typed'" class="px-4 py-2 text-xs font-semibold transition" :style="mode === 'typed' ? 'background:#00d4aa; color:#0f172a; border-radius:3px;' : 'background:var(--surface-alt, #f8fafc); color:#64748b; border-radius:3px;'">Type</button>
-                    <button type="button" @click="mode = 'drawn'; $nextTick(() => initSignaturePad())" class="px-4 py-2 text-xs font-semibold transition" :style="mode === 'drawn' ? 'background:#00d4aa; color:#0f172a; border-radius:3px;' : 'background:var(--surface-alt, #f8fafc); color:#64748b; border-radius:3px;'">Draw</button>
+                    <button type="button" @click="switchMode('typed')" class="px-4 py-2 text-xs font-semibold transition" :style="mode === 'typed' ? 'background:#00d4aa; color:#0f172a; border-radius:3px;' : 'background:var(--surface-alt, #f8fafc); color:#64748b; border-radius:3px;'">Type</button>
+                    <button type="button" @click="switchMode('drawn')" class="px-4 py-2 text-xs font-semibold transition" :style="mode === 'drawn' ? 'background:#00d4aa; color:#0f172a; border-radius:3px;' : 'background:var(--surface-alt, #f8fafc); color:#64748b; border-radius:3px;'">Draw</button>
                 </div>
 
                 {{-- Type mode --}}
@@ -100,8 +100,13 @@
                         data-sign-submit
                         @click="submitSignature()"
                         :disabled="!canSubmit || isSubmitting"
-                        class="px-6 py-3 text-sm font-bold transition"
-                        :style="canSubmit && !isSubmitting ? 'background:#00d4aa; color:#0f172a; border-radius:3px; cursor:pointer;' : 'background:#e5e7eb; color:#94a3b8; border-radius:3px; cursor:not-allowed;'">
+                        class="px-6 py-3 text-sm font-semibold transition shadow-sm"
+                        :class="canSubmit && !isSubmitting
+                            ? 'hover:opacity-90'
+                            : 'cursor-not-allowed'"
+                        :style="canSubmit && !isSubmitting
+                            ? 'background:#00d4aa; color:#0f172a; border-radius:3px;'
+                            : 'background:#e2e8f0; color:#94a3b8; border-radius:3px;'">
                     <span x-show="!isSubmitting">Sign and Complete</span>
                     <span x-show="isSubmitting" x-cloak>Submitting...</span>
                 </button>
@@ -118,6 +123,7 @@ function rmcpSign() {
         typedName: '',
         declarationAcknowledged: false,
         signaturePad: null,
+        hasDrawnSignature: false,
         isSubmitting: false,
         errorMessage: '',
 
@@ -128,7 +134,6 @@ function rmcpSign() {
                 }
             });
 
-            // Auto-scroll to submit button when form becomes complete
             this.$watch('canSubmit', (val) => {
                 if (val) {
                     this.$nextTick(() => {
@@ -139,9 +144,17 @@ function rmcpSign() {
             });
         },
 
+        switchMode(newMode) {
+            this.mode = newMode;
+            if (newMode === 'drawn') {
+                this.$nextTick(() => this.initSignaturePad());
+            }
+        },
+
         initSignaturePad() {
             const canvas = this.$refs.sigCanvas;
             if (!canvas) return;
+            if (this.signaturePad) return;
 
             const ratio = Math.max(window.devicePixelRatio || 1, 1);
             canvas.width = canvas.offsetWidth * ratio;
@@ -154,6 +167,12 @@ function rmcpSign() {
                 minWidth: 1.5,
                 maxWidth: 3,
             });
+
+            // Track drawing state reactively for Alpine
+            const self = this;
+            this.signaturePad.addEventListener('endStroke', () => {
+                self.hasDrawnSignature = !self.signaturePad.isEmpty();
+            });
         },
 
         resizeCanvas() {
@@ -165,15 +184,19 @@ function rmcpSign() {
             canvas.height = 180 * ratio;
             canvas.getContext('2d').scale(ratio, ratio);
             this.signaturePad.clear();
+            this.hasDrawnSignature = false;
         },
 
         clearSig() {
-            if (this.signaturePad) this.signaturePad.clear();
+            if (this.signaturePad) {
+                this.signaturePad.clear();
+                this.hasDrawnSignature = false;
+            }
         },
 
         get hasSignature() {
             if (this.mode === 'typed') return this.typedName.trim().length > 0;
-            if (this.mode === 'drawn') return this.signaturePad && !this.signaturePad.isEmpty();
+            if (this.mode === 'drawn') return this.hasDrawnSignature;
             return false;
         },
 
