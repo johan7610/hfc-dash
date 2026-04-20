@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\PrivateProperty;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\PollPrivatePropertyActivation;
 use App\Models\Property;
 use App\Models\User;
 use App\Services\PermissionService;
@@ -98,11 +99,19 @@ class SyndicationController extends Controller
 
         $result = $this->syndicationService->submitListing($property);
 
+        $fresh = $property->fresh();
+
+        // If submission succeeded but PP didn't return a ref yet (the common async case),
+        // queue an auto-poll so the badge flips to "active" without the user clicking Refresh.
+        if ($result['success'] && $fresh->pp_syndication_status === 'submitted' && empty($fresh->pp_ref)) {
+            PollPrivatePropertyActivation::start($property->id);
+        }
+
         return response()->json([
             'success'               => $result['success'],
             'message'               => $result['message'],
-            'pp_syndication_status' => $property->fresh()->pp_syndication_status,
-            'pp_ref'                => $property->fresh()->pp_ref,
+            'pp_syndication_status' => $fresh->pp_syndication_status,
+            'pp_ref'                => $fresh->pp_ref,
             'errors'                => $result['errors'] ?? [],
         ], $result['success'] ? 200 : 422);
     }
@@ -169,10 +178,16 @@ class SyndicationController extends Controller
 
         $result = $this->syndicationService->reactivateListing($property);
 
+        $fresh = $property->fresh();
+
+        if ($result['success'] && $fresh->pp_syndication_status === 'submitted' && empty($fresh->pp_ref)) {
+            PollPrivatePropertyActivation::start($property->id);
+        }
+
         return response()->json([
             'success'               => $result['success'],
             'message'               => $result['message'],
-            'pp_syndication_status' => $property->fresh()->pp_syndication_status,
+            'pp_syndication_status' => $fresh->pp_syndication_status,
         ], $result['success'] ? 200 : 422);
     }
 
