@@ -42,6 +42,9 @@ class User extends Authenticatable
         // Agent document uploads
         'agent_photo_path',
         'ffc_certificate_path',
+        'id_document_path',
+        'pi_insurance_path',
+        'tax_clearance_path',
 
         // Flags
         'can_capture_rentals',
@@ -52,6 +55,11 @@ class User extends Authenticatable
         'cell',
         'fax',
         'ffc_number',
+        'ffc_expiry_date',
+        'id_number',
+        'ppra_status',
+        'pi_insurance_expiry',
+        'tax_clearance_expiry',
         'website',
         'theme',
 
@@ -81,6 +89,10 @@ class User extends Authenticatable
         'sliding_tier1_cut_percent' => 'decimal:2',
         'sliding_tier2_cut_percent' => 'decimal:2',
         'sliding_tier3_cut_percent' => 'decimal:2',
+
+        'ffc_expiry_date' => 'date',
+        'pi_insurance_expiry' => 'date',
+        'tax_clearance_expiry' => 'date',
     ];
 
     // --- View-As support (session override) ---
