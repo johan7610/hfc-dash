@@ -697,7 +697,12 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/resolve-task/{task}', [CommandCenterDashboardController::class, 'resolveTask'])->name('command-center.resolve-task');
         Route::post('/resolve-event/{calendarEvent}', [CommandCenterDashboardController::class, 'resolveEvent'])->name('command-center.resolve-event');
 
+        Route::get('/performance', [CommandCenterDashboardController::class, 'performance'])->middleware('permission:view_dashboard')->name('command-center.performance');
+
         Route::get('/tasks', [CommandCenterTaskController::class, 'index'])->name('command-center.tasks');
+        Route::get('/tasks/archived', [CommandCenterTaskController::class, 'archived'])->name('command-center.tasks.archived');
+        Route::post('/tasks/archive-done', [CommandCenterTaskController::class, 'archiveDone'])->name('command-center.tasks.archive-done');
+        Route::post('/tasks/{taskId}/restore', [CommandCenterTaskController::class, 'restore'])->name('command-center.tasks.restore');
         Route::post('/tasks', [CommandCenterTaskController::class, 'store'])->name('command-center.tasks.store');
         Route::put('/tasks/{task}', [CommandCenterTaskController::class, 'update'])->name('command-center.tasks.update');
         Route::delete('/tasks/{task}', [CommandCenterTaskController::class, 'destroy'])->name('command-center.tasks.destroy');
@@ -833,6 +838,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/',             [\App\Http\Controllers\Admin\AgencyController::class, 'store'])->name('store');
         Route::get('/{agency}/edit', [\App\Http\Controllers\Admin\AgencyController::class, 'edit'])->name('edit');
         Route::put('/{agency}',      [\App\Http\Controllers\Admin\AgencyController::class, 'update'])->name('update');
+        Route::post('/{agency}/toggle-active', [\App\Http\Controllers\Admin\AgencyController::class, 'toggleActive'])->name('toggle-active');
         Route::delete('/{agency}',   [\App\Http\Controllers\Admin\AgencyController::class, 'destroy'])->name('destroy');
     });
 
@@ -852,6 +858,15 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::get('/create',                  [\App\Http\Controllers\CoreX\PropertyController::class, 'create'])->name('create');
         Route::post('/',                       [\App\Http\Controllers\CoreX\PropertyController::class, 'store'])->name('store');
         Route::get('/contacts/search',         [\App\Http\Controllers\CoreX\PropertyContactController::class, 'searchGlobal'])->name('contacts.search-global');
+        // Upload Wizard (parallel path — does not replace /create)
+        Route::get ('/wizard',                          [\App\Http\Controllers\CoreX\PropertyWizardController::class, 'start'])->name('wizard');
+        Route::post('/wizard/draft',                    [\App\Http\Controllers\CoreX\PropertyWizardController::class, 'createDraft'])->name('wizard.draft');
+        Route::post('/wizard/{property}/photos',        [\App\Http\Controllers\CoreX\PropertyWizardController::class, 'uploadPhotos'])->name('wizard.photos');
+        Route::post('/wizard/{property}/photos/reorder',[\App\Http\Controllers\CoreX\PropertyWizardController::class, 'reorderPhotos'])->name('wizard.photos.reorder');
+        Route::post('/wizard/{property}/photos/remove', [\App\Http\Controllers\CoreX\PropertyWizardController::class, 'removePhoto'])->name('wizard.photos.remove');
+        Route::post('/wizard/{property}/step',          [\App\Http\Controllers\CoreX\PropertyWizardController::class, 'saveStep'])->name('wizard.step');
+        Route::post('/wizard/{property}/finalize',      [\App\Http\Controllers\CoreX\PropertyWizardController::class, 'finalize'])->name('wizard.finalize');
+        Route::delete('/wizard/{property}',             [\App\Http\Controllers\CoreX\PropertyWizardController::class, 'discardDraft'])->name('wizard.discard');
         Route::get('/{property}',              [\App\Http\Controllers\CoreX\PropertyController::class, 'show'])->name('show');
         Route::get('/{property}/edit',         [\App\Http\Controllers\CoreX\PropertyController::class, 'edit'])->name('edit');
         Route::get('/{property}/ad',           [\App\Http\Controllers\CoreX\PropertyController::class, 'ad'])->name('ad');

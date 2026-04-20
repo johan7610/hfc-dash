@@ -35,6 +35,8 @@ class Agency extends Model
         'popi_url',
         'is_active',
         'dashboard_settings_mode',
+        'p24_agency_id',
+        'p24_agency_label',
     ];
 
     protected $casts = [

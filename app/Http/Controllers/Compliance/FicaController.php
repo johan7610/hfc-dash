@@ -127,9 +127,15 @@ class FicaController extends Controller
             return back()->withErrors(['contact_id' => 'This contact does not have an email address.'])->withInput();
         }
 
+        $agencyId = Auth::user()->effectiveAgencyId() ?? $contact->agency_id;
+
+        if (! $agencyId) {
+            return back()->withErrors(['contact_id' => 'Cannot determine the agency for this FICA request. Pick an active agency in the switcher and try again.'])->withInput();
+        }
+
         $submission = FicaSubmission::create([
             'contact_id'       => $contact->id,
-            'agency_id'        => Auth::user()->effectiveAgencyId(),
+            'agency_id'        => $agencyId,
             'requested_by'     => Auth::id(),
             'token'            => Str::random(64),
             'token_expires_at' => now()->addDays(14),

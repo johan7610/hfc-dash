@@ -9,7 +9,7 @@
             </svg>
         </div>
         <h1 class="text-2xl font-bold mb-1">Review submitted</h1>
-        <p class="text-sm text-muted mb-6">Thank you, {{ $agency->name }}. Home Finders Coastal has been notified.</p>
+        <p class="text-sm text-muted mb-6">Thank you, CoreX has been notified.</p>
 
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 my-6 text-left">
             <div class="rounded-md bg-surface-2 p-3 text-center">
@@ -34,7 +34,7 @@
             <p class="text-xs text-muted">
                 {{ $counts['pending'] + $counts['error'] }} listings still need attention. You can reopen this link any time until it expires.
             </p>
-            <a href="{{ route('onboarding.portal.review', $portal->token) }}"
+            <a href="{{ route('onboarding.portal.review', $portal->urlKey()) }}"
                class="inline-block mt-4 rounded-md px-4 py-2 text-xs border border-subtle">
                 ← Back to review
             </a>

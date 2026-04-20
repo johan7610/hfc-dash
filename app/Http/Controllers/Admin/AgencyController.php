@@ -5,11 +5,31 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class AgencyController extends Controller
 {
+    private const DESTROY_PASSWORD = 'Delete@corex@confirm!!';
+
+    public function toggleActive(Agency $agency)
+    {
+        $agency->update(['is_active' => !$agency->is_active]);
+
+        Log::info('Agency active toggled', [
+            'agency_id'  => $agency->id,
+            'is_active'  => $agency->is_active,
+            'changed_by' => auth()->id(),
+        ]);
+
+        $state = $agency->is_active ? 'enabled' : 'disabled';
+        return redirect()->route('agencies.index')->with('success', "Agency \"{$agency->name}\" {$state}.");
+    }
+
+
     public function index()
     {
         $agencies = Agency::withCount(['branches', 'users'])->orderBy('name')->get();
@@ -43,6 +63,8 @@ class AgencyController extends Controller
             'vat_no'           => 'nullable|string|max:255',
             'ffc_no'           => 'nullable|string|max:255',
             'fic_no'           => 'nullable|string|max:255',
+            'p24_agency_id'    => 'nullable|string|max:32',
+            'p24_agency_label' => 'nullable|string|max:100',
             'logo'             => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
@@ -93,6 +115,8 @@ class AgencyController extends Controller
             'vat_no'          => 'nullable|string|max:255',
             'ffc_no'          => 'nullable|string|max:255',
             'fic_no'          => 'nullable|string|max:255',
+            'p24_agency_id'   => 'nullable|string|max:32',
+            'p24_agency_label' => 'nullable|string|max:100',
             'logo'            => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
             'remove_logo'     => 'nullable|boolean',
         ]);
@@ -128,39 +152,18 @@ class AgencyController extends Controller
     }
 
     /**
-     * Permanently delete an agency. Unlike operational data (contacts,
-     * deals, documents) agencies are tenant definitions, and the `slug`
-     * column is uniquely indexed — a soft-deleted row keeps the slug
-     * reserved and blocks the admin from re-creating an agency with the
-     * same identifier. So this is a hard delete, guarded by:
-     *   - no remaining branches,
-     *   - no remaining users,
-     *   - never the last agency in the platform.
-     * The branch/user guard also prevents us from orphaning operational
-     * rows that still point at this agency_id.
+     * Permanently delete an agency and every tenant-owned row belonging to it
+     * (users, branches, properties, contacts, deals, presentations, documents,
+     * and any other table with an agency_id column). Password-gated.
+     *
+     * Guarded against deleting the last remaining agency in the platform.
      */
-    public function destroy(Agency $agency)
+    public function destroy(Request $request, Agency $agency)
     {
-        $branchCount       = $agency->branches()->count();
-        $userCount         = $agency->users()->count();
-        $propertyCount     = \DB::table('properties')->where('agency_id', $agency->id)->whereNull('deleted_at')->count();
-        $contactCount      = \DB::table('contacts')->where('agency_id', $agency->id)->whereNull('deleted_at')->count();
-        $dealCount         = \DB::table('deals')->where('agency_id', $agency->id)->whereNull('deleted_at')->count();
-        $presentationCount = \DB::table('presentations')->where('agency_id', $agency->id)->whereNull('deleted_at')->count();
-
-        $blockers = array_filter([
-            $branchCount       ? "{$branchCount} branch(es)"          : null,
-            $userCount         ? "{$userCount} user(s)"               : null,
-            $propertyCount     ? "{$propertyCount} property(ies)"     : null,
-            $contactCount      ? "{$contactCount} contact(s)"         : null,
-            $dealCount         ? "{$dealCount} deal(s)"               : null,
-            $presentationCount ? "{$presentationCount} presentation(s)" : null,
-        ]);
-
-        if (!empty($blockers)) {
+        if (!hash_equals(self::DESTROY_PASSWORD, (string) $request->input('delete_password'))) {
             return redirect()->route('agencies.index')->with(
                 'error',
-                "Cannot delete \"{$agency->name}\": it still has " . implode(', ', $blockers) . ". Re-assign or remove them first."
+                'Incorrect delete password — agency was not deleted.'
             );
         }
 
@@ -171,16 +174,75 @@ class AgencyController extends Controller
             );
         }
 
-        if (session('active_agency_id') == $agency->id) {
+        $agencyId   = $agency->id;
+        $agencyName = $agency->name;
+
+        $ownerRoleNames = DB::table('roles')->where('is_owner', true)->pluck('name')->all();
+
+        // Find every table in the DB that has an agency_id column so we don't
+        // leave orphaned tenant rows behind on hard-delete.
+        $driver = DB::connection()->getDriverName();
+        $tables = match ($driver) {
+            'mysql', 'mariadb' => array_map(fn($r) => array_values((array)$r)[0], DB::select('SHOW TABLES')),
+            'sqlite' => array_column(DB::select("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"), 'name'),
+            default  => [],
+        };
+        $cascadeTables = array_values(array_filter(
+            $tables,
+            fn ($t) => Schema::hasColumn($t, 'agency_id')
+        ));
+
+        $counts = [];
+        DB::transaction(function () use ($cascadeTables, $agencyId, $ownerRoleNames, &$counts, $agency) {
+            foreach ($cascadeTables as $table) {
+                $query = DB::table($table)->where('agency_id', $agencyId);
+                if ($table === 'users' && !empty($ownerRoleNames)) {
+                    $query->whereNotIn('role', $ownerRoleNames);
+                }
+                try {
+                    $counts[$table] = $query->delete();
+                } catch (\Throwable $e) {
+                    Log::error("Agency hard-delete failed on {$table}", [
+                        'agency_id' => $agencyId,
+                        'error'     => $e->getMessage(),
+                    ]);
+                    throw $e;
+                }
+            }
+
+            if (!empty($ownerRoleNames)) {
+                DB::table('users')
+                    ->where('agency_id', $agencyId)
+                    ->whereIn('role', $ownerRoleNames)
+                    ->update(['agency_id' => null, 'branch_id' => null]);
+            }
+
+            if ($agency->logo_path) {
+                Storage::disk('public')->delete($agency->logo_path);
+            }
+
+            $agency->forceDelete();
+        });
+
+        if (session('active_agency_id') == $agencyId) {
             session()->forget('active_agency_id');
         }
 
-        if ($agency->logo_path) {
-            Storage::disk('public')->delete($agency->logo_path);
-        }
+        Log::warning('Agency permanently deleted', [
+            'agency_id'   => $agencyId,
+            'agency_name' => $agencyName,
+            'cascade'     => $counts,
+            'deleted_by'  => auth()->id(),
+        ]);
 
-        $agency->forceDelete();
+        $summary = collect($counts)
+            ->filter(fn ($n) => $n > 0)
+            ->map(fn ($n, $t) => "{$n} {$t}")
+            ->implode(', ');
 
-        return redirect()->route('agencies.index')->with('success', "Agency \"{$agency->name}\" permanently deleted.");
+        $message = "Agency \"{$agencyName}\" permanently deleted."
+            . ($summary ? " Removed: {$summary}." : '');
+
+        return redirect()->route('agencies.index')->with('success', $message);
     }
 }

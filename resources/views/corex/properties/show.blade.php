@@ -473,6 +473,8 @@
 
                         {{-- Property24 Syndication Panel --}}
                         @php
+                            $resolvedP24AgencyId    = $property->resolveP24AgencyId();
+                            $resolvedP24AgencyLabel = $property->agency?->p24_agency_label;
                             $p24Config = [
                                 'propertyId'      => $property->id,
                                 'enabled'         => (bool) $property->p24_syndication_enabled,
@@ -491,6 +493,8 @@
                                 'missingFields'   => $p24MissingFields ?? [],
                                 'ppDelayUntilRaw' => $property->pp_delay_until ? $property->pp_delay_until->toIso8601String() : '',
                                 'ppDelayUntil'    => $property->pp_delay_until ? $property->pp_delay_until->format('d M Y') : '',
+                                'resolvedP24AgencyId'    => $resolvedP24AgencyId ?? '',
+                                'resolvedP24AgencyLabel' => $resolvedP24AgencyLabel ?? '',
                             ];
                         @endphp
                         <div x-data="p24Syndication({{ Js::from($p24Config) }})" @click.stop class="space-y-3 mt-2">
@@ -530,6 +534,15 @@
                                 <template x-if="!p24Ref && status === 'pending'"><span>Ready to submit</span></template>
                                 <template x-if="status === 'error'"><span style="color:#ef4444;" x-text="'Error: ' + lastError"></span></template>
                                 <template x-if="status === 'deactivated'"><span style="color:var(--text-muted);">Deactivated</span></template>
+                            </div>
+
+                            {{-- Resolved P24 agency — shows which profile this listing will be submitted under --}}
+                            <div x-show="resolvedP24AgencyId" x-cloak class="text-[11px] px-1" style="color:var(--text-muted);">
+                                Publishing to P24 agency
+                                <span class="font-mono" style="color:var(--text-primary);" x-text="resolvedP24AgencyId"></span><template x-if="resolvedP24AgencyLabel"><span x-text="' (' + resolvedP24AgencyLabel + ')'"></span></template>
+                            </div>
+                            <div x-show="enabled && !resolvedP24AgencyId" x-cloak class="text-[11px] px-1" style="color:#f59e0b;">
+                                No Property24 agency ID configured on branch or agency.
                             </div>
 
                             {{-- Missing fields warning --}}
@@ -2083,36 +2096,6 @@
                             <option value="{{ $branch->id }}" {{ (int) old('branch_id', $property->branch_id) === $branch->id ? 'selected' : '' }}>{{ $branch->name }}</option>
                             @endforeach
                         </select>
-                    </div>
-                </div>
-
-                {{-- Pricing & Costs — only visible for rentals --}}
-                <div x-data="{ isRentalCosts: document.querySelector('[name=listing_type]')?.value === 'Rental' }"
-                     x-init="document.querySelector('[name=listing_type]')?.addEventListener('change', e => isRentalCosts = e.target.value === 'Rental')"
-                     x-show="isRentalCosts || '{{ strtolower($property->listing_type ?? '') }}' === 'rental'" x-cloak>
-                    <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Pricing & Costs</h3>
-                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Commission (%)</label>
-                            <input type="number" name="commission_percent" value="{{ old('commission_percent', $property->commission_percent) }}"
-                                   placeholder="0.00" min="0" max="100" step="0.01"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Admin Fee (R)</label>
-                            <input type="number" name="admin_fee" value="{{ old('admin_fee', $property->admin_fee) }}"
-                                   placeholder="0.00" min="0" step="0.01"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Marketing Fee (R)</label>
-                            <input type="number" name="marketing_fee" value="{{ old('marketing_fee', $property->marketing_fee) }}"
-                                   placeholder="0.00" min="0" step="0.01"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                        </div>
                     </div>
                 </div>
 
@@ -3979,6 +3962,7 @@ function p24Syndication(config) {
         suburb: config.suburb || '', city: config.city || '', province: config.province || '', suburbId: config.suburbId || '', listingType: config.listingType || 'sale',
         missingFields: config.missingFields || [],
         ppDelayUntilRaw: config.ppDelayUntilRaw || '', ppDelayUntil: config.ppDelayUntil || '',
+        resolvedP24AgencyId: config.resolvedP24AgencyId || '', resolvedP24AgencyLabel: config.resolvedP24AgencyLabel || '',
         loading: false, message: '', messageType: 'success', debugErrors: [], showDebug: false,
         isPpExclusiveLocked() {
             if (!this.ppDelayUntilRaw) return false;

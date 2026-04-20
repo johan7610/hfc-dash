@@ -4,7 +4,6 @@ namespace App\Jobs;
 
 use App\Models\P24ImportRow;
 use App\Models\Property;
-use App\Services\Importer\P24ImageDownloader;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -26,7 +25,7 @@ class ConfirmP24PropertyRowJob implements ShouldQueue
 
     public function __construct(public int $rowId, public ?int $userId = null) {}
 
-    public function handle(P24ImageDownloader $downloader): void
+    public function handle(): void
     {
         $row = P24ImportRow::with('run')->find($this->rowId);
         if (!$row || $row->row_type !== 'listing') return;
@@ -34,9 +33,11 @@ class ConfirmP24PropertyRowJob implements ShouldQueue
 
         $mapped = $row->mapped_json ?? [];
         $run = $row->run;
+        $propertyId = null;
+        $imageUrls = [];
 
         try {
-            DB::transaction(function () use ($row, $mapped, $run) {
+            DB::transaction(function () use ($row, $mapped, $run, &$propertyId, &$imageUrls) {
                 $listingNumber = $mapped['p24_listing_number'] ?? $row->external_id;
 
                 $existing = Property::withoutGlobalScopes()
@@ -48,10 +49,14 @@ class ConfirmP24PropertyRowJob implements ShouldQueue
                     'external_id', 'title', 'headline', 'description',
                     'listing_type', 'status', 'price', 'rental_amount',
                     'address', 'street_name', 'street_number',
+                    'stand_number', 'unit_number',
                     'beds', 'baths', 'garages', 'erf_size_m2', 'size_m2',
-                    'property_type', 'expiry_date',
-                    'levy', 'rates_taxes', 'latitude', 'longitude',
-                    'features_json', 'lease_period', 'p24_listing_number',
+                    'property_type', 'category', 'expiry_date',
+                    'levy', 'special_levy', 'rates_taxes',
+                    'latitude', 'longitude',
+                    'youtube_video_id', 'matterport_id',
+                    'features_json', 'spaces_json', 'pet_friendly',
+                    'lease_period', 'p24_listing_number',
                 ];
                 $attrs = [];
                 foreach ($fillable as $k) {
@@ -60,37 +65,39 @@ class ConfirmP24PropertyRowJob implements ShouldQueue
                 $attrs['agent_id']  = $row->resolved_agent_id;
                 $attrs['agency_id'] = $run->agency_id;
 
+                // These columns are NOT NULL with DEFAULT 0 in the schema, but
+                // the P24 CSV legitimately carries null for rentals (price) or
+                // land listings (beds/baths/garages). Drop nulls so the column
+                // default applies instead of triggering a NOT NULL violation.
+                foreach (['price', 'beds', 'baths', 'garages'] as $notNull) {
+                    if (array_key_exists($notNull, $attrs) && $attrs[$notNull] === null) {
+                        unset($attrs[$notNull]);
+                    }
+                }
+
                 if ($existing) {
                     $existing->fill($attrs)->save();
                     $property = $existing;
                 } else {
                     $property = Property::create($attrs);
                 }
+
                 $row->target_id = $property->id;
-
-                // Images
-                $urls = $row->image_urls_json ?? [];
-                $storedPaths = [];
-                if (!empty($urls)) {
-                    $downloader = app(P24ImageDownloader::class);
-                    foreach ($urls as $idx => $url) {
-                        $ordinal = $idx + 1;
-                        $dest = "properties/{$property->id}/{$ordinal}.jpg";
-                        $stored = $downloader->download($url, $dest);
-                        if ($stored) {
-                            $storedPaths[] = $stored;
-                        }
-                    }
-                    $property->images_json = $storedPaths;
-                    $property->save();
-                }
-
                 $row->status = 'confirmed';
                 $row->confirmed_at = now();
                 $row->processing_at = null;
                 if ($this->userId) $row->confirmed_by = $this->userId;
                 $row->save();
+
+                $propertyId = $property->id;
+                $imageUrls = array_values(array_filter((array) ($row->image_urls_json ?? [])));
             });
+
+            if ($propertyId && !empty($imageUrls)) {
+                // Run inline so the confirm response only returns once images
+                // are on disk. Keeps things working without a queue worker.
+                DownloadP24RowImagesJob::dispatchSync($propertyId, $imageUrls);
+            }
         } catch (\Throwable $e) {
             Log::error('ConfirmP24PropertyRowJob failed', ['row_id' => $row->id, 'error' => $e->getMessage()]);
             $row->update([

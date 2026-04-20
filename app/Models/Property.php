@@ -58,6 +58,7 @@ class Property extends Model
         'listing_type',
         'status',
         'features_json',
+        'pet_friendly',
         'spaces_json',
         'images_json',
         'dawn_images_json',
@@ -125,6 +126,7 @@ class Property extends Model
         'gallery_images_json' => 'array',
         'gallery_categories_json' => 'array',
         'features_json'       => 'array',
+        'pet_friendly'        => 'boolean',
         'spaces_json'         => 'array',
         'published_at'        => 'datetime',
         'price'               => 'integer',
@@ -204,6 +206,23 @@ class Property extends Model
     public function agency(): BelongsTo
     {
         return $this->belongsTo(Agency::class);
+    }
+
+    /**
+     * Resolve the Property24 agency ID this listing should be submitted under.
+     * Branch override wins; falls back to the agency default. Null when neither
+     * is configured — callers must treat null as "not syndicatable".
+     */
+    public function resolveP24AgencyId(): ?string
+    {
+        if ($this->branch) {
+            $resolved = $this->branch->resolveP24AgencyId();
+            if ($resolved !== null) {
+                return $resolved;
+            }
+        }
+        $agencyId = $this->agency?->p24_agency_id;
+        return $agencyId !== null && $agencyId !== '' ? (string) $agencyId : null;
     }
 
     public function notes(): \Illuminate\Database\Eloquent\Relations\HasMany

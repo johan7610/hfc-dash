@@ -22,7 +22,7 @@ class DashboardController extends Controller
         $user   = $request->user();
         $period = now()->format('Y-m');
 
-        // ── Activity Points (preserved from original dashboard) ──
+        // ── Activity Points (for footer strip) ──
         $defIds = DB::table('activity_definitions')
             ->where('is_enabled', 1)
             ->where('scope', 'global')
@@ -40,7 +40,7 @@ class DashboardController extends Controller
             ->where('period', $period)
             ->value('points_target') ?? 0);
 
-        // ── Candidate Documents (preserved) ──
+        // ── Candidate Documents (moved into Inbox as action cards) ──
         $candidateService = new CandidatePractitionerService();
         $candidateDocs    = collect();
         if ($candidateService->canAuthorise($user)) {
@@ -58,40 +58,26 @@ class DashboardController extends Controller
         $calendarService = new CalendarEventService();
         $todayEvents     = $calendarService->getTodayEvents($user);
         $overdueEvents   = $calendarService->getOverdueEvents($user);
-        $weekSummary     = $calendarService->getWeekSummary($user);
 
         // ── Tasks ──
         $taskService   = new TaskService();
-        $myTasks       = $taskService->getOpenTasks($user, 8);
-        $overdueTasks  = $taskService->getOverdueTasks($user, 5);
+        $overdueTasks  = $taskService->getOverdueTasks($user, 20);
         $taskSummary   = $taskService->getSummary($user);
 
-        // ── Property Health ──
-        $healthCalc   = new PropertyHealthCalculator();
-        $propsNeedingAttention = $healthCalc->getNeedingAttention($user->id, null, 5);
-        $propHealthSummary = [
-            'critical'  => PropertyHealthScore::critical()->whereHas('property', fn ($q) => $q->where('agent_id', $user->id))->count(),
-            'attention' => PropertyHealthScore::where('grade', 'attention')->whereHas('property', fn ($q) => $q->where('agent_id', $user->id))->count(),
-            'good'      => PropertyHealthScore::whereIn('grade', ['good', 'excellent'])->whereHas('property', fn ($q) => $q->where('agent_id', $user->id))->count(),
-        ];
+        // ── Tasks due today (for Timeline) ──
+        $tasksToday = CommandTask::forUser($user->id)
+            ->open()
+            ->dueToday()
+            ->with(['property', 'contact'])
+            ->orderBy('due_date')
+            ->get();
 
-        // ── Agent Scorecard ──
+        // ── Scorecard summary (footer strip) ──
         $scorecard = AgentScorecard::forUser($user->id)->currentWeek()->first();
 
-        // ── Mini Calendar (current month events by date) ──
-        $monthStart  = now()->startOfMonth();
-        $monthEnd    = now()->endOfMonth();
-        $monthEvents = CalendarEvent::forUser($user->id)
-            ->inDateRange($monthStart, $monthEnd)
-            ->where('status', 'pending')
-            ->get()
-            ->groupBy(fn ($e) => $e->event_date->toDateString());
-
-        // ── Overall overdue count (events + tasks) ──
-        $totalOverdue = $overdueEvents->count() + $overdueTasks->count();
-
-        // ── Overdue popup items (unresolved past-due tasks + events) ──
-        $overduePopupTasks = CommandTask::forUser($user->id)
+        // ── Inbox items: overdue tasks + overdue events + candidate docs ──
+        // Unresolved overdue, ordered by urgency (oldest first)
+        $inboxOverdueTasks = CommandTask::forUser($user->id)
             ->overdue()
             ->whereNull('resolution')
             ->with(['property', 'contact'])
@@ -99,7 +85,7 @@ class DashboardController extends Controller
             ->limit(20)
             ->get();
 
-        $overduePopupEvents = CalendarEvent::forUser($user->id)
+        $inboxOverdueEvents = CalendarEvent::forUser($user->id)
             ->where('status', 'overdue')
             ->whereNull('resolution')
             ->with(['property', 'contact'])
@@ -107,25 +93,88 @@ class DashboardController extends Controller
             ->limit(20)
             ->get();
 
+        $inboxTotal = $inboxOverdueTasks->count() + $inboxOverdueEvents->count() + $candidateDocs->count();
+
         return view('command-center.dashboard', [
+            'user'                => $user,
+            'period'              => $period,
+            'mtdPoints'           => $mtdPoints,
+            'monthlyTarget'       => $monthlyTarget,
+            'candidateDocs'       => $candidateDocs,
+            'todayEvents'         => $todayEvents,
+            'tasksToday'          => $tasksToday,
+            'overdueEvents'       => $overdueEvents,
+            'overdueTasks'        => $overdueTasks,
+            'taskSummary'         => $taskSummary,
+            'scorecard'           => $scorecard,
+            'inboxOverdueTasks'   => $inboxOverdueTasks,
+            'inboxOverdueEvents'  => $inboxOverdueEvents,
+            'inboxTotal'          => $inboxTotal,
+        ]);
+    }
+
+    /**
+     * Performance page — scorecard, property health, candidate docs review.
+     * Moved here from the dashboard to keep the cockpit action-first.
+     */
+    public function performance(Request $request)
+    {
+        $user   = $request->user();
+        $period = now()->format('Y-m');
+
+        // Activity points + target
+        $defIds = DB::table('activity_definitions')
+            ->where('is_enabled', 1)
+            ->where('scope', 'global')
+            ->pluck('id');
+
+        $mtdPoints = (int) DB::table('daily_activity_entries as e')
+            ->join('activity_definitions as d', 'd.id', '=', 'e.activity_definition_id')
+            ->where('e.user_id', $user->id)
+            ->where('e.period', $period)
+            ->whereIn('e.activity_definition_id', $defIds)
+            ->sum(DB::raw('e.value * d.weight'));
+
+        $monthlyTarget = (int) (DB::table('targets')
+            ->where('user_id', $user->id)
+            ->where('period', $period)
+            ->value('points_target') ?? 0);
+
+        // Scorecard
+        $scorecard = AgentScorecard::forUser($user->id)->currentWeek()->first();
+
+        // Property health
+        $healthCalc   = new PropertyHealthCalculator();
+        $propsNeedingAttention = $healthCalc->getNeedingAttention($user->id, null, 20);
+        $propHealthSummary = [
+            'critical'  => PropertyHealthScore::critical()->whereHas('property', fn ($q) => $q->where('agent_id', $user->id))->count(),
+            'attention' => PropertyHealthScore::where('grade', 'attention')->whereHas('property', fn ($q) => $q->where('agent_id', $user->id))->count(),
+            'good'      => PropertyHealthScore::whereIn('grade', ['good', 'excellent'])->whereHas('property', fn ($q) => $q->where('agent_id', $user->id))->count(),
+        ];
+
+        // Candidate docs (supervisors only)
+        $candidateService = new CandidatePractitionerService();
+        $candidateDocs    = collect();
+        if ($candidateService->canAuthorise($user)) {
+            $candidateDocs = SignatureTemplate::with(['document', 'creator'])
+                ->where('is_candidate_flow', true)
+                ->whereIn('status', [
+                    SignatureTemplate::STATUS_AWAITING_SUPERVISOR,
+                    SignatureTemplate::STATUS_AWAITING_SUPERVISOR_FINAL,
+                ])
+                ->orderBy('created_at', 'desc')
+                ->get();
+        }
+
+        return view('command-center.performance', [
             'user'                  => $user,
             'period'                => $period,
             'mtdPoints'             => $mtdPoints,
             'monthlyTarget'         => $monthlyTarget,
-            'candidateDocs'         => $candidateDocs,
-            'todayEvents'           => $todayEvents,
-            'overdueEvents'         => $overdueEvents,
-            'weekSummary'           => $weekSummary,
-            'myTasks'               => $myTasks,
-            'overdueTasks'          => $overdueTasks,
-            'taskSummary'           => $taskSummary,
+            'scorecard'             => $scorecard,
             'propsNeedingAttention' => $propsNeedingAttention,
             'propHealthSummary'     => $propHealthSummary,
-            'scorecard'             => $scorecard,
-            'monthEvents'           => $monthEvents,
-            'totalOverdue'          => $totalOverdue,
-            'overduePopupTasks'     => $overduePopupTasks,
-            'overduePopupEvents'    => $overduePopupEvents,
+            'candidateDocs'         => $candidateDocs,
         ]);
     }
 

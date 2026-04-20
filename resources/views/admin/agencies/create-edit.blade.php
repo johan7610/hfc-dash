@@ -272,6 +272,31 @@
             </div>
         </div>
 
+        {{-- Syndication (Property24) --}}
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
+            <div>
+                <div class="text-sm font-bold uppercase tracking-wider mb-1" style="color:var(--brand-primary, #0b2a4a);">Syndication</div>
+                <p class="text-xs text-slate-400">Where this agency's listings are published on Property24. Each branch can override this default.</p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold mb-1" style="color:var(--brand-primary, #0b2a4a);">Property24 Agency ID</label>
+                    <input type="text" name="p24_agency_id" value="{{ old('p24_agency_id', $agency?->p24_agency_id) }}"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:outline-none"
+                           placeholder="e.g. 31357">
+                    <p class="text-xs text-slate-400 mt-1">The numeric ID P24 assigns to your agency profile. Leave blank if this agency does not syndicate to P24.</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1" style="color:var(--brand-primary, #0b2a4a);">Property24 Label</label>
+                    <input type="text" name="p24_agency_label" value="{{ old('p24_agency_label', $agency?->p24_agency_label) }}"
+                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none"
+                           placeholder="e.g. Home Finders Coastal — HFC1">
+                    <p class="text-xs text-slate-400 mt-1">Human-readable label shown in the admin UI only. Not sent to Property24.</p>
+                </div>
+            </div>
+        </div>
+
         {{-- Logo --}}
         <div class="rounded-2xl border border-slate-200 bg-white p-6 space-y-6" x-data="{ removelogo: false }">
             <div>

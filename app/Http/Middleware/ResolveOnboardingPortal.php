@@ -17,14 +17,30 @@ class ResolveOnboardingPortal
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $token = $request->route('token');
-        $portal = P24OnboardingPortal::where('token', $token)->first();
+        $key = $request->route('token');
+        $portal = P24OnboardingPortal::where('slug', $key)
+            ->orWhere('token', $key)
+            ->first();
 
         if (!$portal) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'message' => 'Portal not found for URL key.',
+                    'url_key' => $key,
+                ], 404);
+            }
             abort(404);
         }
 
         if ($portal->revoked_at || ($portal->expires_at && $portal->expires_at->isPast())) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'message'     => 'This onboarding link has been revoked or has expired.',
+                    'portal_id'   => $portal->id,
+                    'revoked_at'  => $portal->revoked_at,
+                    'expires_at'  => $portal->expires_at,
+                ], 410);
+            }
             return response()->view('onboarding.portal.expired', [
                 'portal' => $portal,
             ], 410);

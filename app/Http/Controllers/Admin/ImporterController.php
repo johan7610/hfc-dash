@@ -81,9 +81,15 @@ class ImporterController extends Controller
             $run->update(['status' => 'pending_confirm', 'counts_json' => $counts]);
         } catch (\Throwable $e) {
             $run->update(['status' => 'failed', 'error_message' => $e->getMessage()]);
+            if ($request->ajax() || $request->expectsJson()) {
+                return response()->json(['errors' => ['agents_csv' => ['Parse failed: ' . $e->getMessage()]]], 422);
+            }
             return back()->withErrors(['agents_csv' => 'Parse failed: ' . $e->getMessage()]);
         }
 
+        if ($request->ajax() || $request->expectsJson()) {
+            return response()->json(['redirect' => route('admin.importer.preview', $run)]);
+        }
         return redirect()->route('admin.importer.preview', $run);
     }
 
@@ -137,6 +143,9 @@ class ImporterController extends Controller
             ->whereIn('status', ['completed', 'pending_confirm'])
             ->exists();
         if (!$hasAgentsRun) {
+            if ($request->ajax() || $request->expectsJson()) {
+                return response()->json(['errors' => ['listings_csv' => ['Import agents for this agency first so listings can be linked.']]], 422);
+            }
             return back()->withErrors(['listings_csv' => 'Import agents for this agency first so listings can be linked.']);
         }
 
@@ -197,10 +206,42 @@ class ImporterController extends Controller
             $run->update(['status' => 'pending_confirm', 'counts_json' => $counts]);
         } catch (\Throwable $e) {
             $run->update(['status' => 'failed', 'error_message' => $e->getMessage()]);
+            if ($request->ajax() || $request->expectsJson()) {
+                return response()->json(['errors' => ['listings_csv' => ['Parse failed: ' . $e->getMessage()]]], 422);
+            }
             return back()->withErrors(['listings_csv' => 'Parse failed: ' . $e->getMessage()]);
         }
 
-        return redirect()->route('admin.importer.review', ['run_id' => $run->id]);
+        // Each listings upload gets its own portal so prior runs stay isolated.
+        $agency = Agency::find($agencyId);
+        $label  = ($agency?->name ?? 'Agency') . ' · ' . now()->format('Y-m-d H:i');
+        $portal = P24OnboardingPortal::create([
+            'agency_id'    => $agencyId,
+            'token'        => P24OnboardingPortal::generateToken(),
+            'slug'         => P24OnboardingPortal::generateSlug(($agency?->name ?? 'agency') . '-' . now()->format('YmdHis')),
+            'label'        => $label,
+            'created_by'   => auth()->id(),
+            'expires_at'   => now()->addDays(30),
+            'run_ids_json' => [$run->id],
+        ]);
+        P24PortalEvent::log([
+            'portal_id'   => $portal->id,
+            'agency_id'   => $portal->agency_id,
+            'actor_type'  => 'admin',
+            'actor_label' => auth()->user()?->name ?? 'admin',
+            'event'       => 'portal.created',
+            'meta_json'   => ['auto' => true, 'run_id' => $run->id, 'rows' => $counts['listings'] ?? null],
+            'ip'          => $request->ip(),
+        ]);
+
+        if ($request->ajax() || $request->expectsJson()) {
+            return response()->json([
+                'redirect'   => route('admin.importer.review', ['run_id' => $run->id]),
+                'portal_url' => $portal->publicUrl(),
+            ]);
+        }
+        return redirect()->route('admin.importer.review', ['run_id' => $run->id])
+            ->with('status', 'Upload complete. Review link: ' . $portal->publicUrl());
     }
 
     /**
@@ -280,9 +321,11 @@ class ImporterController extends Controller
             ]);
         }
 
+        $label = $data['label'] ?? (Agency::find($data['agency_id'])?->name);
         $portal = P24OnboardingPortal::create([
             'agency_id'    => $data['agency_id'],
             'token'        => P24OnboardingPortal::generateToken(),
+            'slug'         => P24OnboardingPortal::generateSlug($label),
             'label'        => $data['label'] ?? null,
             'created_by'   => auth()->id(),
             'expires_at'   => now()->addDays((int) ($data['expires_in_days'] ?? 30)),
