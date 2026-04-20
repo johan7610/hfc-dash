@@ -775,7 +775,45 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     // ── Compliance / FICA ──
     Route::get('/compliance/agents', [\App\Http\Controllers\Compliance\AgentComplianceController::class, 'dashboard'])
         ->name('compliance.agents');
-    Route::get('/compliance/rmcp', [\App\Http\Controllers\Compliance\FicaController::class, 'rmcp'])->middleware('permission:access_compliance')->name('compliance.rmcp');
+    // Old RMCP route — redirect to new structured RMCP
+    Route::get('/compliance/rmcp', function () {
+        return redirect()->route('compliance.rmcp.index');
+    })->middleware('permission:access_compliance')->name('compliance.rmcp');
+
+    // ── RMCP (structured) ──
+    Route::prefix('compliance/rmcp-manager')->name('compliance.rmcp.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Compliance\RmcpController::class, 'index'])
+            ->name('index')->middleware('permission:access_rmcp');
+        Route::get('/variables', [\App\Http\Controllers\Compliance\RmcpController::class, 'variables'])
+            ->name('variables')->middleware('permission:edit_rmcp');
+        Route::patch('/variables/{variable}', [\App\Http\Controllers\Compliance\RmcpController::class, 'updateVariable'])
+            ->name('variables.update')->middleware('permission:edit_rmcp');
+        Route::get('/create', [\App\Http\Controllers\Compliance\RmcpController::class, 'create'])
+            ->name('create')->middleware('permission:edit_rmcp');
+        Route::get('/{version}', [\App\Http\Controllers\Compliance\RmcpController::class, 'show'])
+            ->name('show')->middleware('permission:access_rmcp');
+        Route::get('/{version}/edit', [\App\Http\Controllers\Compliance\RmcpController::class, 'edit'])
+            ->name('edit')->middleware('permission:edit_rmcp');
+        Route::patch('/{version}', [\App\Http\Controllers\Compliance\RmcpController::class, 'update'])
+            ->name('update')->middleware('permission:edit_rmcp');
+        Route::get('/{version}/approve', [\App\Http\Controllers\Compliance\RmcpController::class, 'approveForm'])
+            ->name('approve.form')->middleware('permission:approve_rmcp');
+        Route::post('/{version}/approve', [\App\Http\Controllers\Compliance\RmcpController::class, 'approve'])
+            ->name('approve')->middleware('permission:approve_rmcp');
+        Route::get('/{version}/pdf', [\App\Http\Controllers\Compliance\RmcpController::class, 'downloadPdf'])
+            ->name('pdf')->middleware('permission:access_rmcp');
+    });
+
+    // ── RMCP Compliance Officer ──
+    Route::prefix('compliance/officer')->name('compliance.officer.')->middleware('permission:manage_compliance_officer')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Compliance\RmcpComplianceOfficerController::class, 'index'])->name('index');
+        Route::get('/create', [\App\Http\Controllers\Compliance\RmcpComplianceOfficerController::class, 'create'])->name('create');
+        Route::post('/', [\App\Http\Controllers\Compliance\RmcpComplianceOfficerController::class, 'store'])->name('store');
+        Route::get('/{officer}/edit', [\App\Http\Controllers\Compliance\RmcpComplianceOfficerController::class, 'edit'])->name('edit');
+        Route::patch('/{officer}', [\App\Http\Controllers\Compliance\RmcpComplianceOfficerController::class, 'update'])->name('update');
+        Route::post('/{officer}/end', [\App\Http\Controllers\Compliance\RmcpComplianceOfficerController::class, 'end'])->name('end');
+    });
+
     Route::middleware('permission:access_compliance')->prefix('compliance/fica')->name('compliance.fica.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Compliance\FicaController::class, 'index'])->name('index');
         Route::get('/create', [\App\Http\Controllers\Compliance\FicaController::class, 'create'])->name('create');

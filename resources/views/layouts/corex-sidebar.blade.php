@@ -461,7 +461,12 @@
                  x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
                  class="corex-nav-children">
                 <a href="{{ route('compliance.fica.index') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.fica.*') ? 'active' : '' }}">FICA</a>
-                <a href="{{ route('compliance.rmcp') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.rmcp') ? 'active' : '' }}">RMCP</a>
+                @permission('access_rmcp')
+                <a href="{{ route('compliance.rmcp.index') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.rmcp.*') ? 'active' : '' }}">RMCP</a>
+                @endpermission
+                @permission('manage_compliance_officer')
+                <a href="{{ route('compliance.officer.index') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.officer.*') ? 'active' : '' }}">Compliance Officer</a>
+                @endpermission
                 @if($isOwner || $effectiveRole === 'super_admin')
                 @php $nonCompliantAgents = \App\Models\User::where('is_active', true)->whereNull('deleted_at')->whereNull('ffc_number')->count(); @endphp
                 <a href="{{ route('compliance.agents') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.agents') ? 'active' : '' }}">

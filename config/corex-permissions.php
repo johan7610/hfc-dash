@@ -115,6 +115,12 @@ return [
         ['key' => 'verify_user_documents',   'label' => 'Verify/Reject User Documents',    'section' => 'compliance',       'type' => 'action',  'module' => 'compliance',       'sort_order' => 15],
         ['key' => 'access_compliance_dashboard','label' => 'Access Compliance Dashboard',   'section' => 'compliance',       'type' => 'access',  'module' => 'compliance',       'sort_order' => 16],
 
+        // ── RMCP ──
+        ['key' => 'access_rmcp',                 'label' => 'View RMCP',                       'section' => 'compliance',       'type' => 'access',  'module' => 'rmcp',             'sort_order' => 20],
+        ['key' => 'edit_rmcp',                   'label' => 'Edit RMCP Drafts',                'section' => 'compliance',       'type' => 'action',  'module' => 'rmcp',             'sort_order' => 21],
+        ['key' => 'approve_rmcp',                'label' => 'Approve RMCP (Board)',             'section' => 'compliance',       'type' => 'action',  'module' => 'rmcp',             'sort_order' => 22],
+        ['key' => 'manage_compliance_officer',   'label' => 'Manage Compliance Officer',       'section' => 'compliance',       'type' => 'action',  'module' => 'rmcp',             'sort_order' => 23],
+
         // ── My Portal ──
         ['key' => 'access_my_portal',        'label' => 'Access My Portal',                'section' => 'my-portal',        'type' => 'access',  'module' => 'my_portal',        'sort_order' => 1],
         ['key' => 'upload_own_documents',    'label' => 'Upload Compliance Documents',     'section' => 'my-portal',        'type' => 'action',  'module' => 'my_portal',        'sort_order' => 2],
@@ -381,6 +387,7 @@ return [
                 'access_compliance', 'manage_compliance', 'view_compliance_reports',
                 'compliance.view', 'compliance.manage',
                 'verify_user_documents', 'access_compliance_dashboard',
+                'access_rmcp', 'edit_rmcp', 'manage_compliance_officer',
                 'access_my_portal', 'upload_own_documents', 'edit_own_profile',
                 'assign_user_branch',
                 'access_supervision', 'manage_supervision',
@@ -472,6 +479,7 @@ return [
                 'view_own_stats',
                 'access_deal_register_v2',
                 'deals_v2.view', 'deals_v2.create', 'deals_v2.edit',
+                'access_rmcp',
             ],
         ],
 
@@ -501,6 +509,7 @@ return [
                 'access_knowledge_base', 'knowledge.view',
                 'settings.view',
                 'view_own_stats',
+                'access_rmcp',
             ],
         ],
     ],

@@ -91,11 +91,11 @@ class FicaController extends Controller
     }
 
     /**
-     * Display the RMCP document.
+     * Redirect to structured RMCP module.
      */
     public function rmcp()
     {
-        return view('compliance.fica.rmcp');
+        return redirect()->route('compliance.rmcp.index');
     }
 
     /**
