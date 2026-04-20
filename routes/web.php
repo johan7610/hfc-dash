@@ -790,6 +790,15 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/{submission}/request-corrections', [\App\Http\Controllers\Compliance\FicaController::class, 'requestCorrections'])->name('request-corrections');
     });
 
+    // ── Document Verification Queue ──
+    Route::middleware('permission:access_compliance')->prefix('compliance/verification-queue')->name('compliance.verification.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Compliance\DocumentVerificationController::class, 'index'])->name('index');
+        Route::get('/{userDocument}', [\App\Http\Controllers\Compliance\DocumentVerificationController::class, 'show'])->name('show');
+        Route::post('/{userDocument}/verify', [\App\Http\Controllers\Compliance\DocumentVerificationController::class, 'verify'])->name('verify');
+        Route::post('/{userDocument}/reject', [\App\Http\Controllers\Compliance\DocumentVerificationController::class, 'reject'])->name('reject');
+        Route::post('/{userDocument}/expire', [\App\Http\Controllers\Compliance\DocumentVerificationController::class, 'markExpired'])->name('expire');
+    });
+
     Route::get('/supervision', [CoreXPlaceholderController::class, 'show'])->defaults('section', 'supervision')->middleware('permission:access_supervision')->name('corex.supervision');
     // Training placeholder replaced by LMS module (training.index route above)
     Route::get('/communication', [CoreXPlaceholderController::class, 'show'])->defaults('section', 'communication')->middleware('permission:access_communication')->name('corex.communication');
