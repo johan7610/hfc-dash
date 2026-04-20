@@ -511,6 +511,7 @@
                     </form>
                 </div>
             </div>
+            @endif
             @endpermission
 
             {{-- Designations (inline) --}}
