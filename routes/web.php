@@ -474,6 +474,10 @@ Route::get('/bm/listings', [\App\Http\Controllers\BM\ListingStockController::cla
         // Agency switcher (super admin)
         Route::post('/agency/switch/clear', [\App\Http\Controllers\Admin\AgencySwitcherController::class, 'clear'])->middleware('permission:access_agencies')->name('agency.switch.clear');
         Route::post('/agency/switch/{agency}', [\App\Http\Controllers\Admin\AgencySwitcherController::class, 'switch'])->middleware('permission:access_agencies')->name('agency.switch');
+
+        // Agency select interstitial (no agency.required — that would cause a loop)
+        Route::get('/agency/select', [\App\Http\Controllers\Admin\AgencySwitcherController::class, 'selectPage'])->name('agency.select');
+        Route::post('/agency/select/{agency}', [\App\Http\Controllers\Admin\AgencySwitcherController::class, 'selectAndRedirect'])->name('agency.select.submit');
     });
 
     Route::middleware(['permission:manage_tv_messages'])->group(function () {
@@ -722,14 +726,14 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
 
     // ── Agent Portal ──
     Route::get('/my-portal', [\App\Http\Controllers\Agent\AgentPortalController::class, 'index'])
-        ->middleware('permission:access_my_portal')->name('agent.portal');
+        ->middleware(['permission:access_my_portal', 'agency.required'])->name('agent.portal');
     Route::post('/my-portal/upload', [\App\Http\Controllers\Agent\AgentPortalController::class, 'uploadDocument'])
         ->middleware('permission:upload_own_documents')->name('agent.portal.upload');
     Route::patch('/my-portal/profile', [\App\Http\Controllers\Agent\AgentPortalController::class, 'updateProfile'])
         ->middleware('permission:edit_own_profile')->name('agent.portal.profile.update');
 
     // ── RMCP Acknowledgement Flow ──
-    Route::middleware('permission:access_rmcp')->group(function () {
+    Route::middleware(['permission:access_rmcp', 'agency.required'])->group(function () {
         Route::post('/my-portal/rmcp/acknowledge/start', [\App\Http\Controllers\Compliance\RmcpAcknowledgementController::class, 'start'])
             ->name('rmcp.ack.start');
         Route::get('/my-portal/rmcp/acknowledge/step/{order}', [\App\Http\Controllers\Compliance\RmcpAcknowledgementController::class, 'step'])
@@ -749,7 +753,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     });
 
     // ── RMCP Compliance Dashboard ──
-    Route::middleware('permission:access_compliance_dashboard')->prefix('compliance/rmcp-dashboard')->name('compliance.rmcp.dashboard.')->group(function () {
+    Route::middleware(['permission:access_compliance_dashboard', 'agency.required'])->prefix('compliance/rmcp-dashboard')->name('compliance.rmcp.dashboard.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Compliance\RmcpDashboardController::class, 'index'])->name('index');
         Route::post('/reminder', [\App\Http\Controllers\Compliance\RmcpDashboardController::class, 'sendReminder'])->name('reminder');
         Route::get('/report.pdf', [\App\Http\Controllers\Compliance\RmcpDashboardController::class, 'report'])->name('report');
@@ -808,7 +812,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     })->middleware('permission:access_compliance')->name('compliance.rmcp');
 
     // ── RMCP (structured) ──
-    Route::prefix('compliance/rmcp-manager')->name('compliance.rmcp.')->group(function () {
+    Route::middleware('agency.required')->prefix('compliance/rmcp-manager')->name('compliance.rmcp.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Compliance\RmcpController::class, 'index'])
             ->name('index')->middleware('permission:access_rmcp');
         Route::get('/variables', [\App\Http\Controllers\Compliance\RmcpController::class, 'variables'])
@@ -836,7 +840,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         return redirect('/corex/settings?tab=user');
     })->name('compliance.officer.index')->middleware('permission:manage_compliance_officer');
 
-    Route::middleware('permission:access_compliance')->prefix('compliance/fica')->name('compliance.fica.')->group(function () {
+    Route::middleware(['permission:access_compliance', 'agency.required'])->prefix('compliance/fica')->name('compliance.fica.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Compliance\FicaController::class, 'index'])->name('index');
         Route::get('/create', [\App\Http\Controllers\Compliance\FicaController::class, 'create'])->name('create');
         Route::post('/', [\App\Http\Controllers\Compliance\FicaController::class, 'store'])->name('store');
@@ -851,7 +855,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     });
 
     // ── Document Verification Queue ──
-    Route::middleware('permission:verify_user_documents')->prefix('compliance/verification-queue')->name('compliance.verification.')->group(function () {
+    Route::middleware(['permission:verify_user_documents', 'agency.required'])->prefix('compliance/verification-queue')->name('compliance.verification.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Compliance\DocumentVerificationController::class, 'index'])->name('index');
         Route::get('/{userDocument}', [\App\Http\Controllers\Compliance\DocumentVerificationController::class, 'show'])->name('show');
         Route::post('/{userDocument}/verify', [\App\Http\Controllers\Compliance\DocumentVerificationController::class, 'verify'])->name('verify');
@@ -866,7 +870,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::get('/franchise-admin', [CoreXPlaceholderController::class, 'show'])->defaults('section', 'franchise-admin')->middleware('permission:access_franchise_admin')->name('corex.franchise-admin');
 
     // Settings (admin only)
-    Route::get('/settings', [CoreXSettingsController::class, 'index'])->middleware('permission:access_settings')->name('corex.settings');
+    Route::get('/settings', [CoreXSettingsController::class, 'index'])->middleware(['permission:access_settings', 'agency.required'])->name('corex.settings');
     Route::post('/settings/generate-token', [CoreXSettingsController::class, 'generateApiToken'])->middleware('permission:access_settings')->name('corex.settings.generate-token');
     Route::post('/settings/marketing-enabled', [CoreXSettingsController::class, 'updateMarketingEnabled'])->middleware('permission:access_settings')->name('corex.settings.marketing-enabled');
     Route::post('/settings/matches-enabled', [CoreXSettingsController::class, 'updateMatchesEnabled'])->middleware('permission:access_settings')->name('corex.settings.matches-enabled');
@@ -936,7 +940,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         ->name('admin.company-settings.update');
 
     // Properties — listing sync to website
-    Route::prefix('properties')->middleware('permission:access_properties')->name('corex.properties.')->group(function () {
+    Route::prefix('properties')->middleware(['permission:access_properties', 'agency.required'])->name('corex.properties.')->group(function () {
         Route::get('/',                        [\App\Http\Controllers\CoreX\PropertyController::class, 'index'])->name('index');
         Route::get('/create',                  [\App\Http\Controllers\CoreX\PropertyController::class, 'create'])->name('create');
         Route::post('/',                       [\App\Http\Controllers\CoreX\PropertyController::class, 'store'])->name('store');
@@ -1017,7 +1021,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         ->name('corex.core-matches.index');
 
     // Contacts
-    Route::prefix('contacts')->middleware('permission:access_contacts')->name('corex.contacts.')->group(function () {
+    Route::prefix('contacts')->middleware(['permission:access_contacts', 'agency.required'])->name('corex.contacts.')->group(function () {
         Route::get('/',                   [\App\Http\Controllers\CoreX\ContactController::class, 'index'])->name('index');
         Route::post('/',                  [\App\Http\Controllers\CoreX\ContactController::class, 'store'])->name('store');
         Route::post('/check-duplicate',   [\App\Http\Controllers\CoreX\ContactController::class, 'checkDuplicate'])->name('check-duplicate');
