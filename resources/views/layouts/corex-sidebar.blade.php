@@ -950,7 +950,7 @@
 
         {{-- Dropdown menu --}}
         <div x-show="userMenu" x-cloak @click.outside="userMenu = false" x-transition class="corex-user-dropdown">
-            <a href="{{ route('profile.edit') }}" class="corex-user-dropdown-item">Profile</a>
+            <a href="{{ route('agent.portal') }}#profile" class="corex-user-dropdown-item">Profile</a>
             @if($canSwitchUsers)
             <button type="button" @click="switchPanel = !switchPanel; userMenu = false" class="corex-user-dropdown-item w-full text-left">Switch User</button>
             @endif

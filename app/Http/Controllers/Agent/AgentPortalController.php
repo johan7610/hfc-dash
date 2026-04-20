@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Agent;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\AgentApplication;
 use App\Models\AgentCapPeriod;
+use App\Models\AgentSocialAccount;
 use App\Models\CommissionLedger;
 use App\Models\TrainingCompletion;
 use App\Models\TrainingCourse;
+use App\Models\User;
 use App\Models\UserDocument;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -16,7 +19,14 @@ class AgentPortalController extends Controller
 {
     public function index()
     {
-        $user = auth()->user();
+        $user = auth()->user()->load(['documents', 'branch', 'agency']);
+
+        // ── User documents grouped by type (latest per type) ──
+        $documents = $user->documents()
+            ->orderByDesc('created_at')
+            ->get()
+            ->groupBy('document_type')
+            ->map(fn ($group) => $group->first());
 
         // ── Profile completeness ──
         $profileFields = [
@@ -24,8 +34,8 @@ class AgentPortalController extends Controller
             ['key' => 'email', 'label' => 'Email address', 'value' => $user->email],
             ['key' => 'phone_cell', 'label' => 'Phone / cell number', 'value' => $user->phone ?: $user->cell],
             ['key' => 'ffc_number', 'label' => 'FFC number', 'value' => $user->ffc_number],
-            ['key' => 'ffc_certificate_path', 'label' => 'FFC certificate uploaded', 'value' => $user->ffc_certificate_path],
-            ['key' => 'agent_photo_path', 'label' => 'Profile photo', 'value' => $user->agent_photo_path],
+            ['key' => 'ffc_certificate', 'label' => 'FFC certificate uploaded', 'value' => $documents->get('ffc_certificate')?->file_path ?? $user->ffc_certificate_path],
+            ['key' => 'agent_photo_path', 'label' => 'Profile photo', 'value' => $documents->get('profile_photo')?->file_path ?? $user->agent_photo_path],
             ['key' => 'designation', 'label' => 'Designation', 'value' => $user->designation],
             ['key' => 'branch_id', 'label' => 'Assigned to branch', 'value' => $user->branch_id],
         ];
@@ -33,8 +43,8 @@ class AgentPortalController extends Controller
         $filledCount = collect($profileFields)->filter(fn($f) => !empty($f['value']))->count();
         $profilePercent = count($profileFields) > 0 ? (int) round(($filledCount / count($profileFields)) * 100) : 0;
 
-        // ── FFC status ──
-        $ffcStatus = $this->calculateFfcStatus($user);
+        // ── Compliance status ──
+        $complianceStatus = $this->computeComplianceStatus($user, $documents);
 
         // ── Training status ──
         $requiredCourses = TrainingCourse::where('is_required', true)->published()->get();
@@ -83,7 +93,6 @@ class AgentPortalController extends Controller
         }
 
         // ── Earnings snapshot ──
-        $agencyId = $user->effectiveAgencyId() ?? 1;
         $thisMonthEarnings = (float) (CommissionLedger::forUser($user->id)->thisMonth()
             ->whereIn('status', ['pending', 'confirmed', 'paid'])
             ->sum('net_agent_amount') ?? 0);
@@ -109,37 +118,21 @@ class AgentPortalController extends Controller
             ->limit(5)
             ->get();
 
-        // ── Documents on file ──
-        $docTypes = [
-            ['key' => 'ffc_certificate_path', 'label' => 'FFC Certificate', 'type' => 'ffc_certificate', 'value' => $user->ffc_certificate_path],
-            ['key' => 'agent_photo_path', 'label' => 'Profile Photo', 'type' => 'photo', 'value' => $user->agent_photo_path],
-        ];
-
-        // Check for application documents if onboarded
-        $application = AgentApplication::where('user_id', $user->id)->first();
-        if ($application) {
-            $appDocs = $application->documents()->get();
-            foreach (['id_copy' => 'ID Copy', 'pi_insurance' => 'PI Insurance', 'tax_clearance' => 'Tax Clearance'] as $type => $label) {
-                $doc = $appDocs->where('document_type', $type)->first();
-                $docTypes[] = ['key' => "app_{$type}", 'label' => $label, 'type' => $type, 'value' => $doc?->file_path];
-            }
-        } else {
-            foreach (['id_copy' => 'ID Copy', 'pi_insurance' => 'PI Insurance', 'tax_clearance' => 'Tax Clearance'] as $type => $label) {
-                $docTypes[] = ['key' => "app_{$type}", 'label' => $label, 'type' => $type, 'value' => null];
-            }
-        }
+        // ── Social accounts ──
+        $socialAccounts = AgentSocialAccount::where('user_id', $user->id)->active()->get();
 
         // Determine if attention needed (for sidebar dot)
         $needsAttention = $profilePercent < 100
-            || $ffcStatus['status'] !== 'green'
+            || $complianceStatus['overall'] !== 'green'
             || $trainingItems->contains('status', 'red')
             || $rmcpStatus === 'red';
 
         return view('agent.portal', compact(
             'user',
+            'documents',
             'profileFields',
             'profilePercent',
-            'ffcStatus',
+            'complianceStatus',
             'trainingItems',
             'rmcpStatus',
             'rmcpLabel',
@@ -149,9 +142,23 @@ class AgentPortalController extends Controller
             'capPercent',
             'isCapped',
             'recentActivity',
-            'docTypes',
+            'socialAccounts',
             'needsAttention'
         ));
+    }
+
+    public function updateProfile(ProfileUpdateRequest $request)
+    {
+        $user = $request->user();
+        $user->fill($request->validated());
+
+        if ($user->isDirty('email')) {
+            $user->email_verified_at = null;
+        }
+
+        $user->save();
+
+        return redirect('/my-portal#profile')->with('success', 'Profile updated.');
     }
 
     public function uploadDocument(Request $request)
@@ -161,6 +168,7 @@ class AgentPortalController extends Controller
         $request->validate([
             'document_type' => ['required', 'string', 'max:50'],
             'file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
+            'expiry_date' => ['nullable', 'date'],
         ]);
 
         $file = $request->file('file');
@@ -192,6 +200,7 @@ class AgentPortalController extends Controller
             'verified_at'   => $isPhoto ? now() : null,
             'verified_by'   => $isPhoto ? $user->id : null,
             'uploaded_by'   => $user->id,
+            'expiry_date'   => $request->expiry_date,
         ]);
 
         // Update legacy user columns for backward compatibility
@@ -206,34 +215,123 @@ class AgentPortalController extends Controller
         return back()->with('success', $message);
     }
 
-    private function calculateFfcStatus($user): array
+    private function computeComplianceStatus(User $user, $documents): array
     {
-        $hasFile = !empty($user->ffc_certificate_path);
-        $hasNumber = !empty($user->ffc_number);
+        $items = [];
 
-        // Check expiry from application
-        $expiryDate = null;
-        $application = AgentApplication::where('user_id', $user->id)->first();
-        if ($application && $application->ffc_expiry) {
-            $expiryDate = $application->ffc_expiry;
+        // FFC Number
+        $items['ffc_number'] = [
+            'status' => !empty($user->ffc_number) ? 'green' : 'red',
+            'label' => !empty($user->ffc_number) ? $user->ffc_number : 'Not set',
+        ];
+
+        // FFC Certificate
+        $ffcDoc = $documents->get('ffc_certificate');
+        $items['ffc_certificate'] = $this->documentStatus($ffcDoc, 'FFC Certificate');
+
+        // FFC Expiry
+        $items['ffc_expiry'] = $this->expiryStatus($user->ffc_expiry_date, 'FFC');
+
+        // ID Copy
+        $idDoc = $documents->get('id_copy');
+        $items['id_copy'] = $this->documentStatus($idDoc, 'ID Copy');
+
+        // PI Insurance
+        $piDoc = $documents->get('pi_insurance');
+        $items['pi_insurance'] = $this->documentStatus($piDoc, 'PI Insurance');
+        if ($piDoc && $piDoc->expiry_date) {
+            $items['pi_insurance'] = array_merge($items['pi_insurance'], $this->expiryOverlay($piDoc->expiry_date));
         }
 
-        if ($expiryDate) {
-            $days = (int) now()->diffInDays(Carbon::parse($expiryDate), false);
-            if ($days < 0) {
-                return ['status' => 'red', 'label' => 'Expired', 'expiry' => $expiryDate];
-            } elseif ($days <= 60) {
-                return ['status' => 'amber', 'label' => 'Expiring ' . Carbon::parse($expiryDate)->format('d M'), 'expiry' => $expiryDate];
-            }
-            return ['status' => 'green', 'label' => 'Valid until ' . Carbon::parse($expiryDate)->format('d M Y'), 'expiry' => $expiryDate];
+        // Tax Clearance
+        $taxDoc = $documents->get('tax_clearance');
+        $items['tax_clearance'] = $this->documentStatus($taxDoc, 'Tax Clearance');
+        if ($taxDoc && $taxDoc->expiry_date) {
+            $items['tax_clearance'] = array_merge($items['tax_clearance'], $this->expiryOverlay($taxDoc->expiry_date));
         }
 
-        if ($hasFile && $hasNumber) {
-            return ['status' => 'green', 'label' => $user->ffc_number, 'expiry' => null];
-        } elseif ($hasNumber) {
-            return ['status' => 'amber', 'label' => $user->ffc_number . ' (cert missing)', 'expiry' => null];
+        // RMCP
+        $rmcpCourse = TrainingCourse::where('title', 'like', '%RMCP%')->published()->first();
+        $rmcpCompleted = false;
+        if ($rmcpCourse) {
+            $rmcpCompleted = TrainingCompletion::where('user_id', $user->id)
+                ->where('course_id', $rmcpCourse->id)
+                ->exists();
+        }
+        $items['rmcp_acknowledged'] = [
+            'status' => $rmcpCompleted ? 'green' : 'red',
+            'label' => $rmcpCompleted ? 'Acknowledged' : 'Not acknowledged',
+        ];
+
+        // Overall = worst status
+        $statuses = collect($items)->pluck('status');
+        $overall = 'green';
+        if ($statuses->contains('red')) {
+            $overall = 'red';
+        } elseif ($statuses->contains('amber')) {
+            $overall = 'amber';
         }
 
-        return ['status' => 'red', 'label' => 'Not set', 'expiry' => null];
+        $items['overall'] = $overall;
+        $items['issues_count'] = $statuses->filter(fn ($s) => $s !== 'green')->count();
+
+        return $items;
+    }
+
+    private function documentStatus($doc, string $label): array
+    {
+        if (!$doc) {
+            return ['status' => 'red', 'label' => 'Not uploaded', 'expiry' => null, 'days_to_expiry' => null];
+        }
+
+        return match ($doc->status) {
+            'pending' => ['status' => 'amber', 'label' => 'Pending verification', 'expiry' => $doc->expiry_date, 'days_to_expiry' => null],
+            'verified' => ['status' => 'green', 'label' => 'Verified', 'expiry' => $doc->expiry_date, 'days_to_expiry' => null],
+            'rejected' => ['status' => 'red', 'label' => 'Rejected: ' . ($doc->rejected_reason ?? ''), 'expiry' => null, 'days_to_expiry' => null],
+            'expired' => ['status' => 'red', 'label' => 'Expired', 'expiry' => $doc->expiry_date, 'days_to_expiry' => null],
+            default => ['status' => 'red', 'label' => 'Unknown', 'expiry' => null, 'days_to_expiry' => null],
+        };
+    }
+
+    private function expiryStatus($date, string $label): array
+    {
+        if (!$date) {
+            return ['status' => 'red', 'label' => 'Not set', 'expiry' => null, 'days_to_expiry' => null];
+        }
+
+        $expiry = Carbon::parse($date);
+        $days = (int) now()->diffInDays($expiry, false);
+
+        if ($days < 0) {
+            return ['status' => 'red', 'label' => 'Expired', 'expiry' => $expiry, 'days_to_expiry' => $days];
+        }
+        if ($days <= 30) {
+            return ['status' => 'red', 'label' => 'Expires ' . $expiry->format('d M Y') . " ({$days} days)", 'expiry' => $expiry, 'days_to_expiry' => $days];
+        }
+        if ($days <= 60) {
+            return ['status' => 'amber', 'label' => 'Expires ' . $expiry->format('d M Y') . " ({$days} days)", 'expiry' => $expiry, 'days_to_expiry' => $days];
+        }
+
+        return ['status' => 'green', 'label' => 'Valid until ' . $expiry->format('d M Y'), 'expiry' => $expiry, 'days_to_expiry' => $days];
+    }
+
+    private function expiryOverlay($date): array
+    {
+        if (!$date) return [];
+
+        $expiry = Carbon::parse($date);
+        $days = (int) now()->diffInDays($expiry, false);
+
+        if ($days < 0) {
+            return ['status' => 'red', 'expiry' => $expiry, 'days_to_expiry' => $days];
+        }
+        if ($days <= 30) {
+            return ['status' => 'red', 'expiry' => $expiry, 'days_to_expiry' => $days];
+        }
+        if ($days <= 60) {
+            return ['status' => 'amber', 'expiry' => $expiry, 'days_to_expiry' => $days];
+        }
+
+        return ['expiry' => $expiry, 'days_to_expiry' => $days];
     }
 }

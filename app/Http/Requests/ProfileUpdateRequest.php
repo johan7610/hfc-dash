@@ -29,6 +29,9 @@ class ProfileUpdateRequest extends FormRequest
             'cell' => ['required', 'string', 'max:50'],
             'fax' => ['nullable', 'string', 'max:50'],
             'website' => ['nullable', 'string', 'max:255'],
+            'ffc_number' => ['nullable', 'string', 'max:50'],
+            'ffc_expiry_date' => ['nullable', 'date', 'after:today'],
+            'id_number' => ['nullable', 'string', 'max:20'],
         ];
     }
 }

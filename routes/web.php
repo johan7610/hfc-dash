@@ -46,8 +46,9 @@ Route::middleware('auth')->group(function () {
         return view('evaluation.index');
     })->middleware('permission:access_evaluation')->name('evaluation.index');
 
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    // Profile → redirect to My Portal (consolidated)
+    Route::get('/profile', fn () => redirect('/my-portal#profile', 301))->name('profile.edit');
+    Route::patch('/profile', [\App\Http\Controllers\Agent\AgentPortalController::class, 'updateProfile'])->name('profile.update');
     Route::put('/profile/theme', [ProfileController::class, 'updateTheme'])->name('profile.theme');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::get('/corex/extension/download', [ProfileController::class, 'downloadExtension'])->name('corex.extension.download');
@@ -724,6 +725,8 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         ->name('agent.portal');
     Route::post('/my-portal/upload', [\App\Http\Controllers\Agent\AgentPortalController::class, 'uploadDocument'])
         ->name('agent.portal.upload');
+    Route::patch('/my-portal/profile', [\App\Http\Controllers\Agent\AgentPortalController::class, 'updateProfile'])
+        ->name('agent.portal.profile.update');
 
     // ── Commission Engine ──
     Route::get('/my-earnings', [\App\Http\Controllers\Commission\CommissionController::class, 'dashboard'])
