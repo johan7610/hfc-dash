@@ -1,7 +1,7 @@
 @extends('layouts.corex')
 
 @php
-    $photoPath = $documents->get('profile_photo')?->file_path ?? $user->agent_photo_path;
+    $photoUrl = $user->profilePhotoUrl();
     $overallColors = ['green' => '#00d4aa', 'amber' => '#f59e0b', 'red' => '#ef4444'];
     $overallColor = $overallColors[$complianceStatus['overall']] ?? '#64748b';
 @endphp
@@ -69,8 +69,10 @@
     {{-- Agent subtitle strip --}}
     <div class="flex items-center justify-between flex-wrap gap-2">
         <div class="flex items-center gap-3 text-sm" style="color:var(--text-muted);">
-            @if($photoPath)
-            <img src="{{ asset('storage/' . $photoPath) }}" alt="" style="width:24px; height:24px; object-fit:cover; border-radius:50%; border:1px solid var(--border);">
+            @if($photoUrl)
+            <img src="{{ $photoUrl }}" alt="" style="width:24px; height:24px; object-fit:cover; border-radius:50%; border:1px solid var(--border);">
+            @else
+            <div style="width:24px; height:24px; border-radius:50%; background:var(--surface-2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:0.55rem; font-weight:700; color:var(--text-muted); font-family:'Plus Jakarta Sans',sans-serif;">{{ $user->initials() }}</div>
             @endif
             <span style="color:var(--text-primary); font-weight:600;">{{ $user->name }}</span>
             <span style="width:3px; height:3px; border-radius:50%; background:var(--text-muted); display:inline-block;"></span>
@@ -188,12 +190,12 @@
         <div style="background:var(--surface); border:1px solid var(--border); border-radius:3px; padding:20px 24px; margin-bottom:20px;">
             <div class="flex items-center gap-6">
                 <div style="position:relative;">
-                    @if($photoPath)
-                    <img src="{{ asset('storage/' . $photoPath) }}" alt="Profile photo"
+                    @if($photoUrl)
+                    <img src="{{ $photoUrl }}" alt="Profile photo"
                          style="width:80px; height:80px; object-fit:cover; border-radius:50%; border:2px solid var(--border);">
                     @else
-                    <div style="width:80px; height:80px; border-radius:50%; background:var(--surface-2); border:2px solid var(--border); display:flex; align-items:center; justify-content:center;">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#64748b" style="width:32px; height:32px;"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0" /></svg>
+                    <div style="width:80px; height:80px; border-radius:50%; background:var(--surface-2); border:2px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:1.5rem; font-weight:700; color:var(--text-muted); font-family:'Plus Jakarta Sans',sans-serif;">
+                        {{ $user->initials() }}
                     </div>
                     @endif
                     <form method="POST" action="{{ route('agent.portal.upload') }}" enctype="multipart/form-data" style="position:absolute; bottom:-4px; right:-4px;">

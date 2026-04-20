@@ -18,13 +18,13 @@
     {{-- Page header --}}
     <div class="rounded-2xl px-6 py-5 flex items-center justify-between" style="background:var(--brand-default, #0b2a4a);">
         <div class="flex items-center gap-4">
-            @if($isEdit && $user->agent_photo_path)
-                <img src="{{ asset('storage/'.$user->agent_photo_path) }}" alt=""
+            @if($isEdit && $user->profilePhotoUrl())
+                <img src="{{ $user->profilePhotoUrl() }}" alt=""
                      class="w-12 h-12 rounded-xl object-cover flex-shrink-0" style="border:2px solid rgba(255,255,255,0.2);">
             @elseif($isEdit)
                 <div class="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 text-base font-bold"
                      style="background:rgba(255,255,255,0.15); color:#fff;">
-                    {{ strtoupper(substr($user->name,0,1)) }}{{ strtoupper(substr(strstr($user->name,' ') ?: '',1,1)) }}
+                    {{ $user->initials() }}
                 </div>
             @endif
             <div>
@@ -327,9 +327,9 @@
                                 Agent Photo
                             </label>
                             <div class="text-[11px] mb-2" style="color:var(--text-muted);">jpg/png/webp, max 2MB</div>
-                            @if($isEdit && $user->agent_photo_path)
+                            @if($isEdit && $user->profilePhotoUrl())
                             <div class="flex items-center gap-3 mb-3 p-2.5 rounded-lg" style="background:var(--surface-2); border:1px solid var(--border);">
-                                <img src="{{ asset('storage/'.$user->agent_photo_path) }}" alt="Photo"
+                                <img src="{{ $user->profilePhotoUrl() }}" alt="Photo"
                                      class="w-10 h-10 rounded-lg object-cover flex-shrink-0" style="border:1px solid var(--border);">
                                 <span class="text-xs flex-1 truncate" style="color:var(--text-secondary);">Current photo</span>
                                 <button type="button" class="text-xs font-medium px-2 py-1 rounded-md transition-colors"

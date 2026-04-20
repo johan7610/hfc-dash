@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -121,6 +122,41 @@ class User extends Authenticatable
     public function verifiedDocuments(): HasMany
     {
         return $this->documents()->where('status', 'verified');
+    }
+
+    /**
+     * Returns the public URL for the user's profile photo, or null if no valid file exists.
+     * Checks user_documents (profile_photo type) first, then legacy agent_photo_path.
+     */
+    public function profilePhotoUrl(): ?string
+    {
+        // Priority: user_documents profile_photo
+        $doc = $this->documents()
+            ->where('document_type', 'profile_photo')
+            ->latest()
+            ->first();
+
+        if ($doc && $doc->file_path && Storage::disk('public')->exists($doc->file_path)) {
+            return asset('storage/' . $doc->file_path);
+        }
+
+        // Fallback: legacy agent_photo_path column
+        if ($this->agent_photo_path && Storage::disk('public')->exists($this->agent_photo_path)) {
+            return asset('storage/' . $this->agent_photo_path);
+        }
+
+        return null;
+    }
+
+    /**
+     * Returns the user's initials (first + last name initial) for avatar placeholders.
+     */
+    public function initials(): string
+    {
+        $parts = explode(' ', trim($this->name ?? ''));
+        $first = strtoupper(substr($parts[0] ?? '', 0, 1));
+        $last = count($parts) > 1 ? strtoupper(substr(end($parts), 0, 1)) : '';
+        return $first . $last;
     }
 
     public function effectiveBranchId(): ?int
