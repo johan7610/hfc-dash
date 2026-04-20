@@ -191,6 +191,7 @@ class RmcpAcknowledgementController extends Controller
             'ack'             => $ack,
             'version'         => $version,
             'agency'          => $agency,
+            'user'            => $user,
             'declarationText' => $declarationText,
         ]);
     }

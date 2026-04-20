@@ -9,23 +9,27 @@
 
     <div class="p-4 lg:p-6">
         <div class="max-w-2xl mx-auto space-y-5">
-            {{-- Summary --}}
-            <div class="bg-white border p-5" style="border-color:var(--border, #e5e7eb); border-radius:3px;">
-                <h3 class="text-sm font-bold mb-3" style="color:#0f172a; font-family:'Plus Jakarta Sans',sans-serif;">Acknowledgement Summary</h3>
-                <div class="grid grid-cols-2 gap-2 text-xs" style="color:#64748b;">
-                    <div>Agency: <strong style="color:#0f172a;">{{ $agency->name }}</strong></div>
-                    <div>RMCP Version: <strong style="color:#0f172a;">v{{ $version->version_number }}</strong></div>
-                    <div>Sections acknowledged: <strong style="color:#00d4aa;">{{ $ack->sections_acknowledged_count }} of {{ $ack->sections_total_count }}</strong></div>
-                    <div>Date: <strong style="color:#0f172a;">{{ now()->format('d M Y H:i') }}</strong></div>
-                    <div>Your IP: <strong style="color:#0f172a;">{{ request()->ip() }}</strong></div>
-                </div>
-            </div>
 
-            {{-- Declaration text --}}
-            <div class="bg-white border p-5" style="border-color:var(--border, #e5e7eb); border-radius:3px;">
-                <h3 class="text-sm font-bold mb-3" style="color:#0f172a; font-family:'Plus Jakarta Sans',sans-serif;">Declaration</h3>
-                <div class="prose prose-sm max-w-none text-sm" style="color:#334155; line-height:1.7;">
-                    {!! $declarationText !!}
+            {{-- Declaration — electronic signing version --}}
+            <div class="bg-white border p-6" style="border-color:var(--border, #e5e7eb); border-radius:3px;">
+                <h3 class="text-base font-semibold mb-4" style="color:#0f172a; font-family:'Plus Jakarta Sans',sans-serif;">Declaration</h3>
+                <div class="space-y-3 text-sm" style="color:#334155; line-height:1.7;">
+                    <p>By signing below, I, <strong style="color:#0f172a;">{{ $user->name }}</strong>, confirm that:</p>
+                    <ul style="list-style:disc; padding-left:1.5rem;" class="space-y-2">
+                        <li>I have read the contents of this Risk Management and Compliance Programme in full.</li>
+                        <li>I understand each section and have acknowledged each where required.</li>
+                        <li>Where I did not understand any of my duties under the RMCP, I have contacted the FICA Compliance Officer for clarification.</li>
+                        <li>I undertake to observe strictly and diligently all my duties imposed by FICA and this RMCP.</li>
+                        <li>I acknowledge that failure to do so:
+                            <ul style="list-style:circle; padding-left:1.5rem; margin-top:0.5rem;" class="space-y-1">
+                                <li>will potentially expose {{ $agency->name }} to unacceptable risk, as well as financial and reputational risk from the penalties that may be levied by the FIC for any instances of non-compliance with FICA and the RMCP; and</li>
+                                <li>is a criminal offence in terms of FICA, and constitutes serious misconduct in terms of the Business' disciplinary code.</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                <div class="mt-4 pt-3 text-xs" style="border-top:1px solid var(--border, #e5e7eb); color:#94a3b8;">
+                    RMCP v{{ $version->version_number }} | {{ $agency->name }} | {{ $ack->sections_acknowledged_count }} of {{ $ack->sections_total_count }} sections acknowledged
                 </div>
             </div>
 
@@ -59,30 +63,40 @@
                 </div>
             </div>
 
-            {{-- Declaration checkbox + submit --}}
+            {{-- Declaration checkbox --}}
             <div>
-                <label class="flex items-start gap-3 mb-4 cursor-pointer p-3 -m-3">
+                <label class="flex items-start gap-3 cursor-pointer p-3 -m-3">
                     <input type="checkbox" x-model="declarationAcknowledged" style="accent-color:#00d4aa; width:24px; height:24px; margin-top:1px; flex-shrink:0;">
                     <span class="text-xs" style="color:var(--text-primary, #1f2937); line-height:1.5;">
                         I confirm that I have read and understood the RMCP in full, and acknowledge my obligations under FICA and this programme.
                     </span>
                 </label>
+            </div>
 
-                @if($errors->any())
-                <div class="mb-3 px-3 py-2 text-xs" style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:3px; color:#ef4444;">
-                    @foreach($errors->all() as $error) <div>{{ $error }}</div> @endforeach
-                </div>
-                @endif
+            {{-- Errors --}}
+            @if($errors->any())
+            <div class="px-3 py-2 text-xs" style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:3px; color:#ef4444;">
+                @foreach($errors->all() as $error) <div>{{ $error }}</div> @endforeach
+            </div>
+            @endif
+            <div x-show="errorMessage" x-cloak x-transition class="px-3 py-2 text-xs" style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:3px; color:#ef4444;" x-text="errorMessage"></div>
 
-                <div x-show="errorMessage" x-cloak x-transition class="mb-3 px-3 py-2 text-xs" style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:3px; color:#ef4444;" x-text="errorMessage"></div>
-
-                <button type="button" @click="submitSignature()" :disabled="!canSubmit || isSubmitting"
-                        class="w-full py-3 text-sm font-bold transition"
+            {{-- Submit button row --}}
+            <div class="flex items-center justify-between gap-4 pb-24">
+                <a href="{{ route('rmcp.ack.step', $ack->sections_total_count) }}" class="text-sm" style="color:#64748b;">
+                    Back to sections
+                </a>
+                <button type="button"
+                        data-sign-submit
+                        @click="submitSignature()"
+                        :disabled="!canSubmit || isSubmitting"
+                        class="px-6 py-3 text-sm font-bold transition"
                         :style="canSubmit && !isSubmitting ? 'background:#00d4aa; color:#0f172a; border-radius:3px; cursor:pointer;' : 'background:#e5e7eb; color:#94a3b8; border-radius:3px; cursor:not-allowed;'">
                     <span x-show="!isSubmitting">Sign and Complete</span>
                     <span x-show="isSubmitting" x-cloak>Submitting...</span>
                 </button>
             </div>
+
         </div>
     </div>
 </div>
@@ -101,6 +115,16 @@ function rmcpSign() {
             window.addEventListener('resize', () => {
                 if (this.mode === 'drawn' && this.signaturePad) {
                     this.resizeCanvas();
+                }
+            });
+
+            // Auto-scroll to submit button when form becomes complete
+            this.$watch('canSubmit', (val) => {
+                if (val) {
+                    this.$nextTick(() => {
+                        const btn = this.$el.querySelector('[data-sign-submit]');
+                        if (btn) btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    });
                 }
             });
         },
@@ -177,13 +201,11 @@ function rmcpSign() {
                 }
 
                 if (!res.ok) {
-                    const text = await res.text();
                     this.errorMessage = 'Submission failed. Please try again.';
                     this.isSubmitting = false;
                     return;
                 }
 
-                // Fallback — follow any response
                 window.location.href = res.url || '{{ route("rmcp.ack.receipt", $ack) }}';
             } catch (e) {
                 this.errorMessage = 'Network error. Please check your connection and try again.';
