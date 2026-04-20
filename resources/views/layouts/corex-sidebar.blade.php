@@ -145,6 +145,7 @@
         {{-- ═══════════════════════════════════════════
              MY PORTAL
              ═══════════════════════════════════════════ --}}
+        @permission('access_my_portal')
         @php
             $portalNeedsAttention = false;
             if ($user) {
@@ -164,6 +165,7 @@
             <span class="ml-auto w-2 h-2 rounded-full bg-amber-500 flex-shrink-0"></span>
             @endif
         </a>
+        @endpermission
 
         {{-- ═══════════════════════════════════════════
              MY EARNINGS
@@ -469,7 +471,7 @@
                     @endif
                 </a>
                 @endif
-                @if($isOwner || $effectiveRole === 'super_admin')
+                @permission('verify_user_documents')
                 @php $pendingVerificationCount = cache()->remember('pending-verification-count-' . (auth()->user()->agency_id ?? 'all'), 60, fn() => \App\Models\UserDocument::pending()->count()); @endphp
                 <a href="{{ route('compliance.verification.index') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.verification.*') ? 'active' : '' }}">
                     Verification Queue
@@ -477,7 +479,7 @@
                     <span class="ml-auto flex-shrink-0 inline-flex items-center justify-center" style="min-width:18px; height:18px; border-radius:9px; background:rgba(0,212,170,0.15); color:#00d4aa; font-size:0.6rem; font-weight:700; padding:0 5px;">{{ $pendingVerificationCount }}</span>
                     @endif
                 </a>
-                @endif
+                @endpermission
             </div>
         </div>
         @endpermission

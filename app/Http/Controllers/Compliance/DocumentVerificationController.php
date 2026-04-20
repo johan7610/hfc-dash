@@ -46,6 +46,8 @@ class DocumentVerificationController extends Controller
 
     public function verify(Request $request, UserDocument $userDocument)
     {
+        abort_unless(auth()->user()->hasPermission('verify_user_documents'), 403);
+
         $userDocument->update([
             'status' => 'verified',
             'verified_by' => auth()->id(),
@@ -74,6 +76,8 @@ class DocumentVerificationController extends Controller
 
     public function reject(Request $request, UserDocument $userDocument)
     {
+        abort_unless(auth()->user()->hasPermission('verify_user_documents'), 403);
+
         $validated = $request->validate([
             'rejected_reason' => ['required', 'string', 'max:1000'],
         ]);
@@ -100,6 +104,8 @@ class DocumentVerificationController extends Controller
 
     public function markExpired(UserDocument $userDocument)
     {
+        abort_unless(auth()->user()->hasPermission('verify_user_documents'), 403);
+
         $userDocument->update([
             'status' => 'expired',
             'verified_by' => null,

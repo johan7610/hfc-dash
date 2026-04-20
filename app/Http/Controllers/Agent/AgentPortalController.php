@@ -149,6 +149,8 @@ class AgentPortalController extends Controller
 
     public function updateProfile(ProfileUpdateRequest $request)
     {
+        abort_unless(auth()->user()->hasPermission('edit_own_profile'), 403);
+
         $user = $request->user();
         $user->fill($request->validated());
 
@@ -163,6 +165,8 @@ class AgentPortalController extends Controller
 
     public function uploadDocument(Request $request)
     {
+        abort_unless(auth()->user()->hasPermission('upload_own_documents'), 403);
+
         $user = auth()->user();
 
         $request->validate([

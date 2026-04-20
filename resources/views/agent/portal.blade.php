@@ -1,107 +1,98 @@
 @extends('layouts.corex')
 
+@php
+    $photoPath = $documents->get('profile_photo')?->file_path ?? $user->agent_photo_path;
+    $overallColors = ['green' => '#00d4aa', 'amber' => '#f59e0b', 'red' => '#ef4444'];
+    $overallColor = $overallColors[$complianceStatus['overall']] ?? '#64748b';
+@endphp
+
 @section('corex-content')
-<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5"
+<div class="-m-4 lg:-m-6"
      x-data="{
         tab: (window.location.hash || '#overview').replace('#', ''),
         setTab(t) { this.tab = t; history.replaceState(null, '', '#' + t); }
      }"
      x-init="window.addEventListener('hashchange', () => tab = (window.location.hash || '#overview').replace('#', ''))">
 
-    {{-- Page header --}}
-    <div style="background:#0f172a; border-radius:3px; padding:20px 24px;">
-        <div class="flex items-center gap-4">
-            @php $photoPath = $documents->get('profile_photo')?->file_path ?? $user->agent_photo_path; @endphp
-            @if($photoPath)
-            <img src="{{ asset('storage/' . $photoPath) }}" alt="Profile photo"
-                 style="width:48px; height:48px; object-fit:cover; border-radius:50%; border:2px solid #00d4aa; flex-shrink:0;">
-            @else
-            <div style="width:48px; height:48px; border-radius:50%; background:#1e293b; border:2px solid #334155; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#64748b" style="width:24px; height:24px;"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0" /></svg>
-            </div>
-            @endif
-            <div>
-                <h2 style="font-size:1.25rem; font-weight:800; color:#fff; margin:0 0 2px; font-family:'Plus Jakarta Sans',sans-serif;">My Portal</h2>
-                <div style="font-size:0.8rem; color:rgba(255,255,255,0.5);">{{ $user->name }} &middot; {{ $user->designation ?? 'Agent' }} &middot; {{ $user->branch?->name ?? 'No branch' }}</div>
-            </div>
-            <div class="ml-auto flex items-center gap-2">
-                @php
-                    $overallColors = ['green' => '#00d4aa', 'amber' => '#f59e0b', 'red' => '#ef4444'];
-                    $overallColor = $overallColors[$complianceStatus['overall']] ?? '#64748b';
-                @endphp
-                <span style="width:10px; height:10px; border-radius:50%; background:{{ $overallColor }}; display:inline-block;"></span>
-                <span style="font-size:0.75rem; font-weight:600; color:{{ $overallColor }};">
-                    @if($complianceStatus['overall'] === 'green') Compliant
-                    @elseif($complianceStatus['overall'] === 'amber') {{ $complianceStatus['issues_count'] }} item(s) need attention
-                    @else Action required @endif
-                </span>
-            </div>
-        </div>
-    </div>
+    {{-- Sticky page header (Rule 5) --}}
+    <x-page-header title="My Portal" :flush="true">
+        <x-slot:actions>
+            <span style="width:8px; height:8px; border-radius:50%; background:{{ $overallColor }}; display:inline-block;"></span>
+            <span style="font-size:0.75rem; font-weight:600; color:{{ $overallColor }};">
+                @if($complianceStatus['overall'] === 'green') Compliant
+                @elseif($complianceStatus['overall'] === 'amber') {{ $complianceStatus['issues_count'] }} item(s) need attention
+                @else Action required @endif
+            </span>
+        </x-slot:actions>
+    </x-page-header>
+
+    <div class="p-4 lg:p-6">
+        <div class="max-w-5xl mx-auto space-y-4">
 
     {{-- Flash messages --}}
     @if(session('success'))
-        <div style="border-radius:3px; border:1px solid #bbf7d0; background:rgba(0,212,170,0.08); color:#00d4aa; padding:12px 16px; font-size:0.85rem; font-weight:500;">{{ session('success') }}</div>
+        <div style="border-radius:3px; border:1px solid #bbf7d0; background:rgba(0,212,170,0.08); color:#00d4aa; padding:10px 16px; font-size:0.8rem; font-weight:500;">{{ session('success') }}</div>
     @endif
     @if(session('status') === 'profile-updated')
-        <div style="border-radius:3px; border:1px solid #bbf7d0; background:rgba(0,212,170,0.08); color:#00d4aa; padding:12px 16px; font-size:0.85rem; font-weight:500;">Profile updated successfully.</div>
+        <div style="border-radius:3px; border:1px solid #bbf7d0; background:rgba(0,212,170,0.08); color:#00d4aa; padding:10px 16px; font-size:0.8rem; font-weight:500;">Profile updated successfully.</div>
     @endif
     @if(session('status') === 'password-updated')
-        <div style="border-radius:3px; border:1px solid #bbf7d0; background:rgba(0,212,170,0.08); color:#00d4aa; padding:12px 16px; font-size:0.85rem; font-weight:500;">Password updated successfully.</div>
+        <div style="border-radius:3px; border:1px solid #bbf7d0; background:rgba(0,212,170,0.08); color:#00d4aa; padding:10px 16px; font-size:0.8rem; font-weight:500;">Password updated successfully.</div>
     @endif
 
-    {{-- Tab navigation --}}
-    <div style="display:flex; gap:0; border-bottom:1px solid var(--border); overflow-x:auto;">
-        @foreach([
-            'overview' => 'Overview',
-            'profile' => 'Profile',
-            'documents' => 'Documents',
-            'compliance' => 'Compliance',
-            'training' => 'Training',
-            'password' => 'Password',
-        ] as $key => $label)
-        <button @click="setTab('{{ $key }}')"
-                :style="tab === '{{ $key }}'
-                    ? 'color:#00d4aa; border-bottom:2px solid #00d4aa; font-weight:700;'
-                    : 'color:var(--text-muted); border-bottom:2px solid transparent;'"
-                style="padding:10px 18px; font-size:0.8rem; background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; white-space:nowrap; transition:all 200ms; font-family:'Plus Jakarta Sans',sans-serif;">
-            {{ $label }}
+    {{-- Tab navigation (fixed spacing) --}}
+    <div style="border-bottom:1px solid var(--border);">
+        <nav class="-mb-px flex gap-1 overflow-x-auto" aria-label="Tabs">
+            @foreach([
+                'overview' => 'Overview',
+                'profile' => 'Profile',
+                'documents' => 'Documents',
+                'compliance' => 'Compliance',
+                'training' => 'Training',
+                'password' => 'Password',
+            ] as $key => $label)
+            <button type="button"
+                    @click="setTab('{{ $key }}')"
+                    :class="tab === '{{ $key }}'
+                        ? 'border-[#00d4aa] text-[#00d4aa]'
+                        : 'border-transparent hover:border-slate-300'"
+                    class="whitespace-nowrap px-4 py-3 text-sm font-medium border-b-2 transition-colors"
+                    :style="tab === '{{ $key }}'
+                        ? 'color:#00d4aa; font-weight:700; font-family:Plus Jakarta Sans,sans-serif;'
+                        : 'color:var(--text-muted); font-family:Plus Jakarta Sans,sans-serif;'">
+                {{ $label }}
+            </button>
+            @endforeach
+        </nav>
+    </div>
+
+    {{-- Agent subtitle strip --}}
+    <div class="flex items-center justify-between flex-wrap gap-2">
+        <div class="flex items-center gap-3 text-sm" style="color:var(--text-muted);">
+            @if($photoPath)
+            <img src="{{ asset('storage/' . $photoPath) }}" alt="" style="width:24px; height:24px; object-fit:cover; border-radius:50%; border:1px solid var(--border);">
+            @endif
+            <span style="color:var(--text-primary); font-weight:600;">{{ $user->name }}</span>
+            <span style="width:3px; height:3px; border-radius:50%; background:var(--text-muted); display:inline-block;"></span>
+            <span>{{ $user->designation ?? 'No designation' }}</span>
+            <span style="width:3px; height:3px; border-radius:50%; background:var(--text-muted); display:inline-block;"></span>
+            <span>{{ $user->branch?->name ?? 'No branch' }}</span>
+        </div>
+        @if($profilePercent < 100)
+        <button type="button" @click="setTab('compliance')" class="flex items-center gap-2" style="background:none; border:none; cursor:pointer; padding:0;">
+            <div style="width:80px; height:6px; border-radius:3px; background:var(--border); overflow:hidden;">
+                <div style="height:100%; width:{{ $profilePercent }}%; background:#00d4aa; border-radius:3px;"></div>
+            </div>
+            <span style="font-size:0.7rem; font-weight:600; color:var(--text-muted);">{{ $profilePercent }}% complete</span>
         </button>
-        @endforeach
+        @endif
     </div>
 
     {{-- ═══════════════════════════════════════════
          TAB: OVERVIEW
          ═══════════════════════════════════════════ --}}
     <div x-show="tab === 'overview'" x-cloak>
-
-        {{-- Profile completeness --}}
-        <div style="background:var(--surface); border:1px solid var(--border); border-radius:3px; padding:20px 24px; margin-bottom:20px;">
-            <div class="flex items-center justify-between mb-3">
-                <h3 class="text-sm font-bold" style="color:var(--text-primary); font-family:'Plus Jakarta Sans',sans-serif;">Profile Completeness</h3>
-                <span class="text-sm font-bold" style="color:{{ $profilePercent === 100 ? '#00d4aa' : ($profilePercent >= 75 ? '#f59e0b' : '#ef4444') }};">{{ $profilePercent }}%</span>
-            </div>
-            <div class="h-2 rounded-full overflow-hidden" style="background:var(--border);">
-                <div class="h-full rounded-full transition-all" style="width:{{ $profilePercent }}%; background:{{ $profilePercent === 100 ? '#00d4aa' : '#00d4aa' }}; border-radius:3px;"></div>
-            </div>
-            @if($profilePercent < 100)
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
-                @foreach($profileFields as $field)
-                <div class="flex items-center gap-2 py-1">
-                    @if(!empty($field['value']))
-                    <svg class="w-4 h-4 flex-shrink-0" style="color:#00d4aa;" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" /></svg>
-                    <span class="text-xs" style="color:var(--text-muted);">{{ $field['label'] }}</span>
-                    @else
-                    <svg class="w-4 h-4 flex-shrink-0" style="color:#ef4444;" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd" /></svg>
-                    <span class="text-xs font-medium" style="color:#ef4444;">{{ $field['label'] }}</span>
-                    @endif
-                </div>
-                @endforeach
-            </div>
-            @endif
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {{-- Earnings snapshot --}}
             <div style="background:var(--surface); border:1px solid var(--border); border-radius:3px; padding:20px 24px;">
                 <h3 class="text-sm font-bold mb-4" style="color:var(--text-primary); font-family:'Plus Jakarta Sans',sans-serif;">My Earnings</h3>
@@ -155,7 +146,7 @@
         </div>
 
         {{-- Recent activity --}}
-        <div style="background:var(--surface); border:1px solid var(--border); border-radius:3px; overflow:hidden; margin-top:20px;">
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:3px; overflow:hidden; margin-top:16px;">
             <div class="px-5 py-3" style="border-bottom:1px solid var(--border);">
                 <h3 class="text-sm font-bold" style="color:var(--text-primary); font-family:'Plus Jakarta Sans',sans-serif;">Recent Activity</h3>
             </div>
@@ -762,5 +753,7 @@
         </div>
     </div>
 
-</div>
+        </div>{{-- .max-w-5xl --}}
+    </div>{{-- .p-4 --}}
+</div>{{-- .-m-4 x-data --}}
 @endsection

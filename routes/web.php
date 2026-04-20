@@ -722,11 +722,11 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
 
     // ── Agent Portal ──
     Route::get('/my-portal', [\App\Http\Controllers\Agent\AgentPortalController::class, 'index'])
-        ->name('agent.portal');
+        ->middleware('permission:access_my_portal')->name('agent.portal');
     Route::post('/my-portal/upload', [\App\Http\Controllers\Agent\AgentPortalController::class, 'uploadDocument'])
-        ->name('agent.portal.upload');
+        ->middleware('permission:upload_own_documents')->name('agent.portal.upload');
     Route::patch('/my-portal/profile', [\App\Http\Controllers\Agent\AgentPortalController::class, 'updateProfile'])
-        ->name('agent.portal.profile.update');
+        ->middleware('permission:edit_own_profile')->name('agent.portal.profile.update');
 
     // ── Commission Engine ──
     Route::get('/my-earnings', [\App\Http\Controllers\Commission\CommissionController::class, 'dashboard'])
@@ -791,7 +791,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     });
 
     // ── Document Verification Queue ──
-    Route::middleware('permission:access_compliance')->prefix('compliance/verification-queue')->name('compliance.verification.')->group(function () {
+    Route::middleware('permission:verify_user_documents')->prefix('compliance/verification-queue')->name('compliance.verification.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Compliance\DocumentVerificationController::class, 'index'])->name('index');
         Route::get('/{userDocument}', [\App\Http\Controllers\Compliance\DocumentVerificationController::class, 'show'])->name('show');
         Route::post('/{userDocument}/verify', [\App\Http\Controllers\Compliance\DocumentVerificationController::class, 'verify'])->name('verify');
