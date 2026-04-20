@@ -37,7 +37,7 @@
                         <th class="px-4 py-3 text-left font-semibold" style="color:var(--text-secondary, #6b7280);">Approved By</th>
                         <x-sort-header field="approved_at" :current-sort="$sort" :current-direction="$direction" label="Approved" />
                         <x-sort-header field="effective_from" :current-sort="$sort" :current-direction="$direction" label="Effective From" />
-                        <x-sort-header column="next_review_due" :current-sort="$sort" :current-direction="$direction" label="Next Review" />
+                        <x-sort-header field="next_review_due" :current-sort="$sort" :current-direction="$direction" label="Next Review" />
                         <th class="px-4 py-3 text-right font-semibold" style="color:var(--text-secondary, #6b7280);">Actions</th>
                     </tr>
                 </thead>
