@@ -101,19 +101,14 @@
 
         <div class="flex items-center gap-0.5">
             @if($statusKey !== 'done' && $nextStatus)
-                <form method="POST" action="{{ route('command-center.tasks.update-status', $task) }}">
-                    @csrf @method('PATCH')
-                    <input type="hidden" name="status" value="{{ $nextStatus }}">
-                    <button type="submit" class="p-1 rounded hover:bg-white/10" title="Move to {{ str_replace('_',' ',$nextStatus) }}">
-                        <svg class="w-3 h-3" style="color:var(--text-muted);" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" /></svg>
-                    </button>
-                </form>
-                <form method="POST" action="{{ route('command-center.tasks.complete', $task) }}">
-                    @csrf
-                    <button type="submit" class="p-1 rounded hover:bg-green-500/10" title="Complete">
-                        <svg class="w-3 h-3 text-green-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
-                    </button>
-                </form>
+                <button type="button" data-quick-move="{{ $nextStatus }}"
+                        class="p-1 rounded hover:bg-white/10" title="Move to {{ str_replace('_',' ',$nextStatus) }}">
+                    <svg class="w-3 h-3" style="color:var(--text-muted);" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" /></svg>
+                </button>
+                <button type="button" data-quick-move="done"
+                        class="p-1 rounded hover:bg-green-500/10" title="Complete">
+                    <svg class="w-3 h-3 text-green-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                </button>
             @elseif($statusKey === 'done')
                 <form method="POST" action="{{ route('command-center.tasks.destroy', $task) }}">
                     @csrf @method('DELETE')

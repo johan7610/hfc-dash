@@ -510,8 +510,38 @@ function taskBoard() {
             });
         },
 
-        initDragAndDrop() {
+        async moveTask(card, newStatus) {
+            if (!card) return;
+            const taskId    = card.dataset.taskId;
+            const oldStatus = card.dataset.status;
+            if (newStatus === oldStatus) return;
+
+            const targetZone = document.querySelector(`[data-drop-zone="${newStatus}"]`);
+            if (targetZone) {
+                const placeholder = targetZone.querySelector('[data-empty-placeholder]');
+                targetZone.insertBefore(card, placeholder);
+            }
+            card.dataset.status = newStatus;
+
             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+            try {
+                const res = await fetch(`/corex/command-center/tasks/${taskId}/status`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                    },
+                    body: JSON.stringify({ status: newStatus }),
+                });
+                if (!res.ok) throw new Error('Status update failed');
+                this.applyFilters();
+            } catch (err) {
+                window.location.reload();
+            }
+        },
+
+        initDragAndDrop() {
             let draggingCard = null;
 
             document.querySelectorAll('[data-task-card]').forEach(card => {
@@ -539,35 +569,18 @@ function taskBoard() {
                         zone.classList.remove('ring-2', 'ring-blue-400');
                     }
                 });
-                zone.addEventListener('drop', async (e) => {
+                zone.addEventListener('drop', (e) => {
                     e.preventDefault();
                     zone.classList.remove('ring-2', 'ring-blue-400');
-                    if (!draggingCard) return;
+                    this.moveTask(draggingCard, zone.dataset.dropZone);
+                });
+            });
 
-                    const newStatus = zone.dataset.dropZone;
-                    const taskId    = draggingCard.dataset.taskId;
-                    const oldStatus = draggingCard.dataset.status;
-                    if (newStatus === oldStatus) return;
-
-                    const placeholder = zone.querySelector('[data-empty-placeholder]');
-                    zone.insertBefore(draggingCard, placeholder);
-                    draggingCard.dataset.status = newStatus;
-
-                    try {
-                        const res = await fetch(`/corex/command-center/tasks/${taskId}/status`, {
-                            method: 'PATCH',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Accept': 'application/json',
-                                'X-CSRF-TOKEN': csrfToken,
-                            },
-                            body: JSON.stringify({ status: newStatus }),
-                        });
-                        if (!res.ok) throw new Error('Status update failed');
-                        this.applyFilters();
-                    } catch (err) {
-                        window.location.reload();
-                    }
+            document.querySelectorAll('[data-quick-move]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const card = btn.closest('[data-task-card]');
+                    this.moveTask(card, btn.dataset.quickMove);
                 });
             });
         },
