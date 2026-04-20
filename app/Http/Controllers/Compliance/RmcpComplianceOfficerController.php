@@ -8,6 +8,10 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
+/**
+ * @deprecated 2026-04-21 — Replaced by FicaOfficerAppointmentsController.
+ * Routes removed. CO management moved to Settings → Users → FICA Officers.
+ */
 class RmcpComplianceOfficerController extends Controller
 {
     public function index()

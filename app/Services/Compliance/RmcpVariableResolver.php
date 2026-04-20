@@ -3,7 +3,7 @@
 namespace App\Services\Compliance;
 
 use App\Models\Agency;
-use App\Models\Compliance\RmcpComplianceOfficer;
+use App\Models\Compliance\FicaOfficerAppointment;
 use App\Models\Compliance\RmcpVariable;
 use App\Models\Compliance\RmcpVersion;
 
@@ -31,8 +31,8 @@ class RmcpVariableResolver
         $variables['agency.phone']        = $agency->phone ?? '';
         $variables['agency.email']        = $agency->email ?? '';
 
-        // Compliance officer
-        $co = RmcpComplianceOfficer::current($agency->id);
+        // Compliance officer (primary CO from unified appointments table)
+        $co = FicaOfficerAppointment::currentPrimary($agency->id);
         $variables['compliance_officer.full_name']    = $co->full_name ?? '';
         $variables['compliance_officer.id_number']    = $co->id_number ?? '';
         $variables['compliance_officer.cell']         = $co->cell ?? '';

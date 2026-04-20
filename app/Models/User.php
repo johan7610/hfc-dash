@@ -149,11 +149,39 @@ class User extends Authenticatable
         return $this->agency_id ? (int) $this->agency_id : null;
     }
 
-    // ── Compliance Officer check ──
+    // ── Compliance Officer checks ──
 
+    /**
+     * True if this user holds ANY active FICA officer appointment
+     * (primary CO or MLRO). Used by FICA approval workflow.
+     */
     public function isComplianceOfficer(): bool
     {
-        return FicaComplianceOfficer::where('user_id', $this->id)->exists();
+        return Compliance\FicaOfficerAppointment::where('user_id', $this->id)
+            ->active()
+            ->exists();
+    }
+
+    public function isPrimaryComplianceOfficer(?int $agencyId = null): bool
+    {
+        $query = Compliance\FicaOfficerAppointment::where('user_id', $this->id)
+            ->primary()
+            ->active();
+        if ($agencyId) {
+            $query->where('agency_id', $agencyId);
+        }
+        return $query->exists();
+    }
+
+    public function isMlro(?int $branchId = null): bool
+    {
+        $query = Compliance\FicaOfficerAppointment::where('user_id', $this->id)
+            ->mlro()
+            ->active();
+        if ($branchId) {
+            $query->where(fn($q) => $q->where('branch_id', $branchId)->orWhereNull('branch_id'));
+        }
+        return $query->exists();
     }
 
     // ── Owner role checks (the ONLY hardcoded concept) ──

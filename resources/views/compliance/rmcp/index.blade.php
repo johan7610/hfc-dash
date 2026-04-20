@@ -4,11 +4,6 @@
 <div class="-m-4 lg:-m-6">
     <x-page-header title="RMCP Versions" :back-route="route('compliance.fica.index')" back-label="Compliance" :flush="true">
         <x-slot:actions>
-            @permission('manage_compliance_officer')
-            <a href="{{ route('compliance.officer.index') }}" class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold transition" style="border:1px solid var(--border, #e5e7eb); border-radius:3px; color:var(--text-secondary, #6b7280);">
-                Compliance Officer
-            </a>
-            @endpermission
             @permission('edit_rmcp')
             <a href="{{ route('compliance.rmcp.variables') }}" class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold transition" style="border:1px solid var(--border, #e5e7eb); border-radius:3px; color:var(--text-secondary, #6b7280);">
                 Variables

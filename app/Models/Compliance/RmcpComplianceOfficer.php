@@ -9,6 +9,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @deprecated 2026-04-21 — Replaced by FicaOfficerAppointment.
+ * Table renamed to rmcp_compliance_officers_deprecated_20260421.
+ * Kept for reference only — do not use in new code.
+ */
 class RmcpComplianceOfficer extends Model
 {
     use SoftDeletes, BelongsToAgency;

@@ -804,15 +804,10 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
             ->name('pdf')->middleware('permission:access_rmcp');
     });
 
-    // ── RMCP Compliance Officer ──
-    Route::prefix('compliance/officer')->name('compliance.officer.')->middleware('permission:manage_compliance_officer')->group(function () {
-        Route::get('/', [\App\Http\Controllers\Compliance\RmcpComplianceOfficerController::class, 'index'])->name('index');
-        Route::get('/create', [\App\Http\Controllers\Compliance\RmcpComplianceOfficerController::class, 'create'])->name('create');
-        Route::post('/', [\App\Http\Controllers\Compliance\RmcpComplianceOfficerController::class, 'store'])->name('store');
-        Route::get('/{officer}/edit', [\App\Http\Controllers\Compliance\RmcpComplianceOfficerController::class, 'edit'])->name('edit');
-        Route::patch('/{officer}', [\App\Http\Controllers\Compliance\RmcpComplianceOfficerController::class, 'update'])->name('update');
-        Route::post('/{officer}/end', [\App\Http\Controllers\Compliance\RmcpComplianceOfficerController::class, 'end'])->name('end');
-    });
+    // ── RMCP Compliance Officer (retired — redirects to settings) ──
+    Route::get('/compliance/officer', function () {
+        return redirect('/corex/settings?tab=user');
+    })->name('compliance.officer.index')->middleware('permission:manage_compliance_officer');
 
     Route::middleware('permission:access_compliance')->prefix('compliance/fica')->name('compliance.fica.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Compliance\FicaController::class, 'index'])->name('index');
@@ -850,7 +845,18 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::post('/settings/matches-enabled', [CoreXSettingsController::class, 'updateMatchesEnabled'])->middleware('permission:access_settings')->name('corex.settings.matches-enabled');
     Route::post('/settings/matches-wa-message', [CoreXSettingsController::class, 'updateMatchesWaMessage'])->middleware('permission:access_settings')->name('corex.settings.matches-wa-message');
     Route::post('/settings/matches-show-on-properties', [CoreXSettingsController::class, 'updateMatchesShowOnProperties'])->middleware('permission:access_settings')->name('corex.settings.matches-show-on-properties');
-    Route::post('/settings/compliance-officers', [\App\Http\Controllers\Compliance\FicaController::class, 'saveComplianceOfficers'])->middleware('permission:access_settings')->name('corex.settings.compliance-officers');
+    // Old compliance-officers endpoint — kept for backwards compat, redirects
+    Route::post('/settings/compliance-officers', function () {
+        return redirect('/corex/settings?tab=user');
+    })->middleware('permission:access_settings')->name('corex.settings.compliance-officers');
+
+    // ── FICA Officer Appointments (unified) ──
+    Route::post('/settings/fica-officers/primary', [\App\Http\Controllers\Compliance\FicaOfficerAppointmentsController::class, 'savePrimary'])
+        ->middleware('permission:manage_compliance_officer')->name('corex.settings.fica-officers.primary');
+    Route::post('/settings/fica-officers/mlros', [\App\Http\Controllers\Compliance\FicaOfficerAppointmentsController::class, 'saveMlros'])
+        ->middleware('permission:manage_compliance_officer')->name('corex.settings.fica-officers.mlros');
+    Route::post('/settings/fica-officers/{appointment}/end', [\App\Http\Controllers\Compliance\FicaOfficerAppointmentsController::class, 'endAppointment'])
+        ->middleware('permission:manage_compliance_officer')->name('corex.settings.fica-officers.end');
     Route::put('/settings/agency', [CoreXSettingsController::class, 'updateAgency'])->middleware('permission:access_settings')->name('corex.settings.agency.update');
     Route::get('/settings/preview-header', [CoreXSettingsController::class, 'previewHeader'])->middleware('permission:access_settings')->name('corex.settings.preview-header');
     Route::get('/settings/preview-signature', [CoreXSettingsController::class, 'previewSignature'])->middleware('permission:access_settings')->name('corex.settings.preview-signature');

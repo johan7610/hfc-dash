@@ -464,9 +464,6 @@
                 @permission('access_rmcp')
                 <a href="{{ route('compliance.rmcp.index') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.rmcp.*') ? 'active' : '' }}">RMCP</a>
                 @endpermission
-                @permission('manage_compliance_officer')
-                <a href="{{ route('compliance.officer.index') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.officer.*') ? 'active' : '' }}">Compliance Officer</a>
-                @endpermission
                 @if($isOwner || $effectiveRole === 'super_admin')
                 @php $nonCompliantAgents = \App\Models\User::where('is_active', true)->whereNull('deleted_at')->whereNull('ffc_number')->count(); @endphp
                 <a href="{{ route('compliance.agents') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.agents') ? 'active' : '' }}">

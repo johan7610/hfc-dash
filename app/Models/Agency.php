@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Models\Compliance\RmcpComplianceOfficer;
+use App\Models\Compliance\FicaOfficerAppointment;
 use App\Models\Compliance\RmcpVersion;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -68,6 +68,8 @@ class Agency extends Model
 
     public function complianceOfficer(): HasOne
     {
-        return $this->hasOne(RmcpComplianceOfficer::class)->whereNull('ended_on');
+        return $this->hasOne(FicaOfficerAppointment::class)
+            ->where('role', FicaOfficerAppointment::ROLE_PRIMARY)
+            ->whereNull('ended_on');
     }
 }
