@@ -609,7 +609,7 @@
                     ['key' => 'id_copy', 'label' => 'ID Copy', 'action_tab' => 'documents', 'action_text' => 'Upload document'],
                     ['key' => 'pi_insurance', 'label' => 'PI Insurance', 'action_tab' => 'documents', 'action_text' => 'Upload document'],
                     ['key' => 'tax_clearance', 'label' => 'Tax Clearance', 'action_tab' => 'documents', 'action_text' => 'Upload document'],
-                    ['key' => 'rmcp_acknowledged', 'label' => 'RMCP Acknowledgement', 'action_tab' => null, 'action_text' => 'Acknowledge RMCP', 'action_route' => true],
+                    ['key' => 'rmcp_acknowledged', 'label' => 'FICA Training & RMCP Acknowledgement', 'action_tab' => null, 'action_text' => 'Acknowledge RMCP', 'action_route' => true],
                     ['key' => 'employee_screening', 'label' => 'Employee Screening', 'action_tab' => null, 'action_text' => 'View records', 'action_route' => 'screening'],
                 ];
             @endphp

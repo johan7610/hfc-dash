@@ -10,11 +10,21 @@
     <div class="p-4 lg:p-6">
         <div class="max-w-2xl mx-auto space-y-5">
 
+            {{-- ID number warning --}}
+            @if(!$user->id_number)
+            <div class="px-4 py-3 text-sm" style="background:rgba(234,179,8,0.08); border:1px solid rgba(234,179,8,0.25); border-radius:3px; color:#a16207;">
+                <strong>Your ID Number is not captured in your profile.</strong>
+                For a more complete FICA acknowledgement record, consider adding it in
+                <a href="{{ route('agent.portal') }}#profile" style="text-decoration:underline; color:#92400e;">My Portal - Profile</a> before signing.
+                You can still proceed without it.
+            </div>
+            @endif
+
             {{-- Declaration — electronic signing version --}}
             <div class="bg-white border p-6" style="border-color:var(--border, #e5e7eb); border-radius:3px;">
                 <h3 class="text-base font-semibold mb-4" style="color:#0f172a; font-family:'Plus Jakarta Sans',sans-serif;">Declaration</h3>
                 <div class="space-y-3 text-sm" style="color:#334155; line-height:1.7;">
-                    <p>By signing below, I, <strong style="color:#0f172a;">{{ $user->name }}</strong>, confirm that:</p>
+                    <p>By signing below, I, <strong style="color:#0f172a;">{{ $user->name }}</strong>@if($user->id_number), ID Number <strong style="color:#0f172a;">{{ $user->id_number }}</strong>@endif, confirm that:</p>
                     <ul style="list-style:disc; padding-left:1.5rem;" class="space-y-2">
                         <li>I have read the contents of this Risk Management and Compliance Programme in full.</li>
                         <li>I understand each section and have acknowledged each where required.</li>

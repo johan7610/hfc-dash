@@ -33,7 +33,11 @@ class RmcpAcknowledgementController extends Controller
             ->first();
 
         if ($existing && $existing->status === 'in_progress') {
-            return redirect()->route('rmcp.ack.step', $this->nextIncompleteOrder($existing));
+            $nextOrder = $this->nextIncompleteOrder($existing);
+            if ($nextOrder === null) {
+                return redirect()->route('rmcp.ack.sign');
+            }
+            return redirect()->route('rmcp.ack.step', $nextOrder);
         }
 
         if ($existing && $existing->isValid()) {
@@ -76,6 +80,12 @@ class RmcpAcknowledgementController extends Controller
         $ack = $this->currentAck($user);
         abort_unless($ack, 404, 'No active acknowledgement session.');
 
+        // If all sections are acknowledged, go straight to sign
+        $nextIncomplete = $this->nextIncompleteOrder($ack);
+        if ($nextIncomplete === null) {
+            return redirect()->route('rmcp.ack.sign');
+        }
+
         $sectionAcks = $ack->sectionAcknowledgements()
             ->with('section')
             ->get()
@@ -86,7 +96,6 @@ class RmcpAcknowledgementController extends Controller
         $order = max(1, min($order, $total));
 
         // Enforce sequential — redirect to next incomplete if skipping
-        $nextIncomplete = $this->nextIncompleteOrder($ack);
         if ($order > $nextIncomplete) {
             return redirect()->route('rmcp.ack.step', $nextIncomplete);
         }
@@ -213,19 +222,12 @@ class RmcpAcknowledgementController extends Controller
             'declaration_acknowledged' => 'accepted',
         ]);
 
-        // Store declaration text snapshot
-        $version = $ack->version;
-        $declarationSection = $version->sections()
-            ->where('section_type', 'acknowledgement')
-            ->first();
-
+        // Store declaration text snapshot (electronic signing version with ID number)
         $agency = Agency::findOrFail($ack->agency_id);
-        $resolver = app(RmcpVariableResolver::class);
-        $variables = $resolver->resolve($agency, $version);
+        $version = $ack->version;
 
-        $declarationText = $declarationSection
-            ? $declarationSection->renderedBody($variables)
-            : 'I have read and understood the RMCP.';
+        $idPart = $user->id_number ? " (ID: {$user->id_number})" : '';
+        $declarationText = "I, {$user->name}{$idPart}, confirm that I have read and understood the Risk Management and Compliance Programme (RMCP v{$version->version_number}) of {$agency->name} in full, that I have acknowledged each section where required, and that I undertake to observe strictly and diligently all my duties imposed by FICA and this RMCP.";
 
         // Save signature
         $signaturePath = null;
@@ -309,7 +311,7 @@ class RmcpAcknowledgementController extends Controller
             ->first();
     }
 
-    private function nextIncompleteOrder(RmcpAcknowledgement $ack): int
+    private function nextIncompleteOrder(RmcpAcknowledgement $ack): ?int
     {
         $sectionAcks = $ack->sectionAcknowledgements()
             ->with('section')
@@ -323,6 +325,7 @@ class RmcpAcknowledgementController extends Controller
             }
         }
 
-        return $sectionAcks->count();
+        // All sections acknowledged — caller should redirect to sign
+        return null;
     }
 }
