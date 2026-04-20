@@ -13,10 +13,37 @@
         'awaiting'    => 'done',
         default       => null,
     };
+
+    // Due bucket — drives filter chips + list-view grouping
+    $bucket = 'none';
+    if ($task->due_date) {
+        if ($task->isOverdue())                                  $bucket = 'overdue';
+        elseif ($task->due_date->isToday())                      $bucket = 'today';
+        elseif ($task->due_date->isTomorrow())                   $bucket = 'tomorrow';
+        elseif ($task->due_date->between(now()->startOfWeek(), now()->endOfWeek()))
+                                                                 $bucket = 'week';
+        else                                                     $bucket = 'later';
+    }
+
+    // Lowercase haystack for client-side search
+    $searchHay = strtolower(trim(
+        ($task->title ?? '') . ' ' .
+        ($task->property?->buildDisplayAddress() ?? '') . ' ' .
+        ($task->property?->title ?? '') . ' ' .
+        ($task->contact ? ($task->contact->first_name . ' ' . $task->contact->last_name) : '')
+    ));
 @endphp
-<div class="rounded-md transition-shadow hover:shadow-sm p-2" style="background:var(--surface); border:1px solid var(--border-default);">
-    {{-- Row 1: tag + priority + title --}}
-    <div class="flex items-center gap-1.5 flex-wrap">
+<div data-task-card
+     data-status="{{ $task->status }}"
+     data-priority="{{ $task->priority }}"
+     data-pillar="{{ $tag ?? '' }}"
+     data-bucket="{{ $bucket }}"
+     data-title="{{ $searchHay }}"
+     class="task-card rounded-md transition-shadow hover:shadow-sm"
+     :class="$root.density === 'compact' ? 'p-1.5' : 'p-2'"
+     style="background:var(--surface); border:1px solid var(--border-default);">
+    {{-- Row 1: tag + priority --}}
+    <div class="flex items-center gap-1.5 flex-wrap" x-show="$root.density !== 'compact' || true">
         @if(($showPillar ?? true) && $tag && isset($pillarStyle[$tag]))
             <span class="text-[9px] font-bold uppercase px-1 py-px rounded"
                   style="background:{{ $pillarStyle[$tag]['bg'] }}; color:{{ $pillarStyle[$tag]['fg'] }}; letter-spacing:0.5px;">
@@ -28,27 +55,37 @@
         @elseif($task->priority === 'high')
             <span class="text-[9px] font-bold uppercase px-1 py-px rounded" style="background:rgba(245,158,11,0.15); color:#f59e0b; letter-spacing:0.5px;">High</span>
         @endif
+        @if($bucket === 'overdue')
+            <span class="text-[9px] font-bold uppercase px-1 py-px rounded" style="background:rgba(239,68,68,0.15); color:#ef4444; letter-spacing:0.5px;">Overdue</span>
+        @endif
     </div>
 
-    {{-- Row 2: title (link if pillar available) --}}
+    {{-- Row 2: title --}}
     @if($taskLink)
-        <a href="{{ $taskLink }}" class="block text-[13px] font-medium leading-snug mt-1 hover:underline {{ $task->status === 'done' ? 'line-through opacity-70' : '' }}" style="color:var(--text-primary);">
+        <a href="{{ $taskLink }}"
+           class="block font-medium leading-snug mt-1 hover:underline {{ $task->status === 'done' ? 'line-through opacity-70' : '' }}"
+           :class="$root.density === 'compact' ? 'text-[12px]' : 'text-[13px]'"
+           style="color:var(--text-primary);">
             {{ $task->title }}
         </a>
     @else
-        <p class="text-[13px] font-medium leading-snug mt-1 {{ $task->status === 'done' ? 'line-through opacity-70' : '' }}" style="color:var(--text-primary);">{{ $task->title }}</p>
+        <p class="font-medium leading-snug mt-1 {{ $task->status === 'done' ? 'line-through opacity-70' : '' }}"
+           :class="$root.density === 'compact' ? 'text-[12px]' : 'text-[13px]'"
+           style="color:var(--text-primary);">{{ $task->title }}</p>
     @endif
 
-    {{-- Row 3: linked entity text (small) --}}
-    @if($task->property)
-        <a href="{{ route('corex.properties.show', $task->property) }}" class="block text-[11px] truncate mt-0.5 hover:underline" style="color:var(--text-muted);">
-            {{ $task->property->buildDisplayAddress() ?: ($task->property->title ?: '') }}
-        </a>
-    @elseif($task->contact)
-        <a href="{{ route('corex.contacts.show', $task->contact) }}" class="block text-[11px] truncate mt-0.5 hover:underline" style="color:var(--text-muted);">
-            {{ $task->contact->first_name }} {{ $task->contact->last_name }}
-        </a>
-    @endif
+    {{-- Row 3: linked entity (hidden in compact density) --}}
+    <div x-show="$root.density !== 'compact'">
+        @if($task->property)
+            <a href="{{ route('corex.properties.show', $task->property) }}" class="block text-[11px] truncate mt-0.5 hover:underline" style="color:var(--text-muted);">
+                {{ $task->property->buildDisplayAddress() ?: ($task->property->title ?: '') }}
+            </a>
+        @elseif($task->contact)
+            <a href="{{ route('corex.contacts.show', $task->contact) }}" class="block text-[11px] truncate mt-0.5 hover:underline" style="color:var(--text-muted);">
+                {{ $task->contact->first_name }} {{ $task->contact->last_name }}
+            </a>
+        @endif
+    </div>
 
     {{-- Row 4: due + action buttons --}}
     <div class="flex items-center justify-between mt-1.5">
@@ -79,7 +116,7 @@
                 <form method="POST" action="{{ route('command-center.tasks.destroy', $task) }}">
                     @csrf @method('DELETE')
                     <button type="submit" class="p-1 rounded hover:bg-white/10" title="Archive">
-                        <svg class="w-3 h-3" style="color:var(--text-muted);" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5-1.5 11.645a1.125 1.125 0 0 1-.964.544H4.214a1.125 1.125 0 0 1-.965-.544L1.5 7.5m18.75 0h-18m18.75 0A1.125 1.125 0 0 0 22.5 6.375v-1.5A1.125 1.125 0 0 0 21.375 3.75H2.625A1.125 1.125 0 0 0 1.5 4.875v1.5A1.125 1.125 0 0 0 2.625 7.5" /></svg>
+                        <svg class="w-3 h-3" style="color:var(--text-muted);" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" /></svg>
                     </button>
                 </form>
             @endif
