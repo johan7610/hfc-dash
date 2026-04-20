@@ -270,6 +270,7 @@
 
                     {{-- Column body (scrollable, capped height) --}}
                     <div class="flex-1 space-y-1.5 p-1.5 rounded-b-md overflow-y-auto"
+                         data-drop-zone="{{ $statusKey }}"
                          x-show="!colCollapsed['{{ $statusKey }}']" x-transition
                          style="background:var(--surface-2); border:1px solid var(--border-default); border-top:none; max-height: calc(100vh - 280px); min-height: 8rem;">
                         @forelse($colTasks as $task)
@@ -503,7 +504,72 @@ function taskBoard() {
             ['search', 'filters', 'pillars', 'colShowAll'].forEach(k => {
                 this.$watch(k, () => this.applyFilters(), { deep: true });
             });
-            this.$nextTick(() => this.applyFilters());
+            this.$nextTick(() => {
+                this.applyFilters();
+                this.initDragAndDrop();
+            });
+        },
+
+        initDragAndDrop() {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+            let draggingCard = null;
+
+            document.querySelectorAll('[data-task-card]').forEach(card => {
+                card.addEventListener('dragstart', (e) => {
+                    draggingCard = card;
+                    card.classList.add('opacity-50');
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', card.dataset.taskId);
+                });
+                card.addEventListener('dragend', () => {
+                    card.classList.remove('opacity-50');
+                    draggingCard = null;
+                    document.querySelectorAll('[data-drop-zone]').forEach(z => z.classList.remove('ring-2', 'ring-blue-400'));
+                });
+            });
+
+            document.querySelectorAll('[data-drop-zone]').forEach(zone => {
+                zone.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    zone.classList.add('ring-2', 'ring-blue-400');
+                });
+                zone.addEventListener('dragleave', (e) => {
+                    if (!zone.contains(e.relatedTarget)) {
+                        zone.classList.remove('ring-2', 'ring-blue-400');
+                    }
+                });
+                zone.addEventListener('drop', async (e) => {
+                    e.preventDefault();
+                    zone.classList.remove('ring-2', 'ring-blue-400');
+                    if (!draggingCard) return;
+
+                    const newStatus = zone.dataset.dropZone;
+                    const taskId    = draggingCard.dataset.taskId;
+                    const oldStatus = draggingCard.dataset.status;
+                    if (newStatus === oldStatus) return;
+
+                    const placeholder = zone.querySelector('[data-empty-placeholder]');
+                    zone.insertBefore(draggingCard, placeholder);
+                    draggingCard.dataset.status = newStatus;
+
+                    try {
+                        const res = await fetch(`/corex/command-center/tasks/${taskId}/status`, {
+                            method: 'PATCH',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': csrfToken,
+                            },
+                            body: JSON.stringify({ status: newStatus }),
+                        });
+                        if (!res.ok) throw new Error('Status update failed');
+                        this.applyFilters();
+                    } catch (err) {
+                        window.location.reload();
+                    }
+                });
+            });
         },
 
         toggleFilter(k) { this.filters[k] = !this.filters[k]; },

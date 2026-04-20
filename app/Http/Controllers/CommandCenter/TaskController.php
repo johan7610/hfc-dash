@@ -119,7 +119,7 @@ class TaskController extends Controller
     }
 
     /**
-     * Update task status via AJAX (for drag-and-drop).
+     * Update task status via AJAX (for drag-and-drop) or form POST (card buttons).
      */
     public function updateStatus(Request $request, CommandTask $task)
     {
@@ -127,7 +127,11 @@ class TaskController extends Controller
 
         $task = $this->service->updateStatus($task, $request->status);
 
-        return response()->json($task);
+        if ($request->wantsJson()) {
+            return response()->json($task);
+        }
+
+        return back()->with('success', 'Task moved to ' . str_replace('_', ' ', $task->status) . '.');
     }
 
     /**

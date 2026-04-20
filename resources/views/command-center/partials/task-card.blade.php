@@ -34,12 +34,14 @@
     ));
 @endphp
 <div data-task-card
+     data-task-id="{{ $task->id }}"
      data-status="{{ $task->status }}"
      data-priority="{{ $task->priority }}"
      data-pillar="{{ $tag ?? '' }}"
      data-bucket="{{ $bucket }}"
      data-title="{{ $searchHay }}"
-     class="task-card rounded-md transition-shadow hover:shadow-sm"
+     draggable="true"
+     class="task-card rounded-md transition-shadow hover:shadow-sm cursor-grab active:cursor-grabbing"
      :class="$root.density === 'compact' ? 'p-1.5' : 'p-2'"
      style="background:var(--surface); border:1px solid var(--border-default);">
     {{-- Row 1: tag + priority --}}
