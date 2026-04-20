@@ -69,6 +69,11 @@ class User extends Authenticatable
         // Property24 importer
         'p24_agent_id',
         'source_reference',
+
+        // Employee screening
+        'risk_tier',
+        'screening_status',
+        'screening_due_on',
     ];
 
     protected $hidden = [
@@ -392,5 +397,29 @@ class User extends Authenticatable
         if ($ack->isValid()) return 'valid';
         if ($ack->isComplete()) return 'expired';
         return 'in_progress';
+    }
+
+    // ── Employee Screening ──
+
+    public function screenings(): HasMany
+    {
+        return $this->hasMany(Compliance\EmployeeScreening::class);
+    }
+
+    public function latestScreening(): ?Compliance\EmployeeScreening
+    {
+        return $this->screenings()->latest('initiated_on')->first();
+    }
+
+    public function currentScreeningStatus(): string
+    {
+        return $this->screening_status ?? 'never_screened';
+    }
+
+    public function needsScreening(): bool
+    {
+        return in_array($this->screening_status, [
+            'never_screened', 'pre_employment_pending', 'overdue', 'expired',
+        ]);
     }
 }

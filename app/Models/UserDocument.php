@@ -22,18 +22,24 @@ class UserDocument extends Model
     public const DOCUMENT_TYPE_QUALIFICATION    = 'qualification';
     public const DOCUMENT_TYPE_PROOF_OF_ADDRESS = 'proof_of_address';
     public const DOCUMENT_TYPE_BANK_CONFIRMATION = 'bank_confirmation';
-    public const DOCUMENT_TYPE_OTHER            = 'other';
+    public const DOCUMENT_TYPE_OTHER              = 'other';
+    public const DOCUMENT_TYPE_POLICE_CLEARANCE   = 'police_clearance';
+    public const DOCUMENT_TYPE_CREDIT_CHECK_REPORT = 'credit_check_report';
+    public const DOCUMENT_TYPE_REFERENCE_LETTER    = 'reference_letter';
 
     public static array $documentTypeLabels = [
-        'ffc_certificate'   => 'FFC Certificate',
-        'id_copy'           => 'ID Copy',
-        'pi_insurance'      => 'PI Insurance',
-        'tax_clearance'     => 'Tax Clearance',
-        'profile_photo'     => 'Profile Photo',
-        'qualification'     => 'Qualification',
-        'proof_of_address'  => 'Proof of Address',
-        'bank_confirmation' => 'Bank Confirmation',
-        'other'             => 'Other',
+        'ffc_certificate'      => 'FFC Certificate',
+        'id_copy'              => 'ID Copy',
+        'pi_insurance'         => 'PI Insurance',
+        'tax_clearance'        => 'Tax Clearance',
+        'profile_photo'        => 'Profile Photo',
+        'qualification'        => 'Qualification',
+        'proof_of_address'     => 'Proof of Address',
+        'bank_confirmation'    => 'Bank Confirmation',
+        'police_clearance'     => 'Police Clearance',
+        'credit_check_report'  => 'Credit Check Report',
+        'reference_letter'     => 'Reference Letter',
+        'other'                => 'Other',
     ];
 
     // ── Mass assignment ──

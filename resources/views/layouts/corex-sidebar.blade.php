@@ -470,6 +470,9 @@
                 @permission('access_compliance_dashboard')
                 <a href="{{ route('compliance.rmcp.dashboard.index') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.rmcp.dashboard.*') ? 'active' : '' }}">RMCP Dashboard</a>
                 @endpermission
+                @permission('manage_employee_screenings')
+                <a href="{{ route('compliance.screening.dashboard.index') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.screening.*') || request()->routeIs('compliance.screenings.*') ? 'active' : '' }}">Staff Screening</a>
+                @endpermission
                 @if($isOwner || $effectiveRole === 'super_admin')
                 @php $nonCompliantAgents = \App\Models\User::where('is_active', true)->whereNull('deleted_at')->whereNull('ffc_number')->count(); @endphp
                 <a href="{{ route('compliance.agents') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.agents') ? 'active' : '' }}">

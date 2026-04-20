@@ -121,6 +121,10 @@ return [
         ['key' => 'approve_rmcp',                'label' => 'Approve RMCP (Board)',             'section' => 'compliance',       'type' => 'action',  'module' => 'rmcp',             'sort_order' => 22],
         ['key' => 'manage_compliance_officer',   'label' => 'Manage Compliance Officer',       'section' => 'compliance',       'type' => 'action',  'module' => 'rmcp',             'sort_order' => 23],
 
+        // ── Employee Screening ──
+        ['key' => 'manage_employee_screenings', 'label' => 'Manage Employee Screenings',    'section' => 'compliance',       'type' => 'action',  'module' => 'screening',        'sort_order' => 30],
+        ['key' => 'view_own_screening',         'label' => 'View Own Screening Records',    'section' => 'compliance',       'type' => 'access',  'module' => 'screening',        'sort_order' => 31],
+
         // ── My Portal ──
         ['key' => 'access_my_portal',        'label' => 'Access My Portal',                'section' => 'my-portal',        'type' => 'access',  'module' => 'my_portal',        'sort_order' => 1],
         ['key' => 'upload_own_documents',    'label' => 'Upload Compliance Documents',     'section' => 'my-portal',        'type' => 'action',  'module' => 'my_portal',        'sort_order' => 2],
@@ -388,6 +392,7 @@ return [
                 'compliance.view', 'compliance.manage',
                 'verify_user_documents', 'access_compliance_dashboard',
                 'access_rmcp', 'edit_rmcp', 'manage_compliance_officer',
+                'manage_employee_screenings', 'view_own_screening',
                 'access_my_portal', 'upload_own_documents', 'edit_own_profile',
                 'assign_user_branch',
                 'access_supervision', 'manage_supervision',
@@ -480,6 +485,7 @@ return [
                 'access_deal_register_v2',
                 'deals_v2.view', 'deals_v2.create', 'deals_v2.edit',
                 'access_rmcp',
+                'view_own_screening',
             ],
         ],
 
@@ -510,6 +516,7 @@ return [
                 'settings.view',
                 'view_own_stats',
                 'access_rmcp',
+                'view_own_screening',
             ],
         ],
     ],

@@ -610,6 +610,7 @@
                     ['key' => 'pi_insurance', 'label' => 'PI Insurance', 'action_tab' => 'documents', 'action_text' => 'Upload document'],
                     ['key' => 'tax_clearance', 'label' => 'Tax Clearance', 'action_tab' => 'documents', 'action_text' => 'Upload document'],
                     ['key' => 'rmcp_acknowledged', 'label' => 'RMCP Acknowledgement', 'action_tab' => null, 'action_text' => 'Acknowledge RMCP', 'action_route' => true],
+                    ['key' => 'employee_screening', 'label' => 'Employee Screening', 'action_tab' => null, 'action_text' => 'View records', 'action_route' => 'screening'],
                 ];
             @endphp
 
@@ -635,6 +636,8 @@
                                 <button type="submit" style="font-size:0.65rem; padding:3px 8px; border-radius:3px; background:rgba(0,212,170,0.12); color:#00d4aa; border:none; cursor:pointer; font-weight:600;">{{ $ci['action_text'] }}</button>
                                 </form>
                                 @endif
+                            @elseif(!empty($ci['action_route']) && $ci['action_route'] === 'screening')
+                                <a href="{{ route('compliance.screenings.my') }}" style="font-size:0.65rem; padding:3px 8px; border-radius:3px; background:rgba(0,212,170,0.12); color:#00d4aa; text-decoration:none; font-weight:600;">{{ $ci['action_text'] }}</a>
                             @else
                             <button @click="setTab('{{ $ci['action_tab'] }}')" style="font-size:0.65rem; padding:3px 8px; border-radius:3px; background:rgba(0,212,170,0.12); color:#00d4aa; border:none; cursor:pointer;">{{ $ci['action_text'] }}</button>
                             @endif

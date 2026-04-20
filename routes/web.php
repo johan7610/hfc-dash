@@ -761,6 +761,33 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::get('/report.pdf', [\App\Http\Controllers\Compliance\RmcpDashboardController::class, 'report'])->name('report');
     });
 
+    // ── Employee Screening ──
+    Route::middleware(['permission:manage_employee_screenings', 'agency.required'])
+        ->prefix('compliance/screenings')
+        ->name('compliance.screenings.')
+        ->group(function () {
+            Route::get('/', [\App\Http\Controllers\Compliance\EmployeeScreeningController::class, 'index'])->name('index');
+            Route::get('/overdue', [\App\Http\Controllers\Compliance\EmployeeScreeningController::class, 'overdueReport'])->name('overdue');
+            Route::get('/create/{user?}', [\App\Http\Controllers\Compliance\EmployeeScreeningController::class, 'create'])->name('create');
+            Route::post('/', [\App\Http\Controllers\Compliance\EmployeeScreeningController::class, 'store'])->name('store');
+            Route::get('/{screening}', [\App\Http\Controllers\Compliance\EmployeeScreeningController::class, 'show'])->name('show');
+            Route::patch('/check/{check}', [\App\Http\Controllers\Compliance\EmployeeScreeningController::class, 'updateCheck'])->name('check.update');
+            Route::post('/check/{check}/document', [\App\Http\Controllers\Compliance\EmployeeScreeningController::class, 'uploadCheckDocument'])->name('check.document');
+            Route::post('/{screening}/complete', [\App\Http\Controllers\Compliance\EmployeeScreeningController::class, 'complete'])->name('complete');
+            Route::post('/{screening}/flag', [\App\Http\Controllers\Compliance\EmployeeScreeningController::class, 'flag'])->name('flag');
+    });
+
+    Route::middleware(['permission:access_compliance_dashboard', 'agency.required'])
+        ->prefix('compliance/screening-dashboard')
+        ->name('compliance.screening.dashboard.')
+        ->group(function () {
+            Route::get('/', [\App\Http\Controllers\Compliance\EmployeeScreeningDashboardController::class, 'index'])->name('index');
+    });
+
+    // User-facing: view own screening history
+    Route::get('/my-portal/my-screenings', [\App\Http\Controllers\Compliance\EmployeeScreeningController::class, 'myScreenings'])
+        ->middleware(['permission:view_own_screening', 'agency.required'])->name('compliance.screenings.my');
+
     // ── Commission Engine ──
     Route::get('/my-earnings', [\App\Http\Controllers\Commission\CommissionController::class, 'dashboard'])
         ->name('commission.dashboard');

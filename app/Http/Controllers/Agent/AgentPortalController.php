@@ -274,6 +274,25 @@ class AgentPortalController extends Controller
             },
         ];
 
+        // Employee Screening
+        $screeningSt = $user->currentScreeningStatus();
+        $items['employee_screening'] = [
+            'status' => match ($screeningSt) {
+                'clear'                  => 'green',
+                'pre_employment_pending' => 'amber',
+                default                  => 'red',
+            },
+            'label' => match ($screeningSt) {
+                'clear'                  => 'Clear' . ($user->screening_due_on ? ' — next review ' . \Carbon\Carbon::parse($user->screening_due_on)->format('d M Y') : ''),
+                'pre_employment_pending' => 'Screening in progress',
+                'concerns_flagged'       => 'Concerns flagged',
+                'overdue'                => 'Overdue — review pending',
+                'expired'                => 'Expired — re-screen required',
+                'never_screened'         => 'Pre-employment screening pending',
+                default                  => 'Not screened',
+            },
+        ];
+
         // Overall = worst status
         $statuses = collect($items)->pluck('status');
         $overall = 'green';
