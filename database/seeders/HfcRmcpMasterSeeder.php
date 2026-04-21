@@ -71,7 +71,7 @@ class HfcRmcpMasterSeeder extends Seeder
 
         // ── 3. Create RMCP Version 1 ──
         $superAdmin = User::where('role', 'super_admin')->first()
-            ?? User::whereHas('userRole', fn($q) => $q->where('is_owner', true))->first();
+            ?? User::where('role', optional(\App\Models\Role::ownerRole())->name)->first();
 
         $version = RmcpVersion::withoutGlobalScopes()->create([
             'agency_id'      => $agency->id,
