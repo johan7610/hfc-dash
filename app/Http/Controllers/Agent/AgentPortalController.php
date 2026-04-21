@@ -127,13 +127,17 @@ class AgentPortalController extends Controller
         $socialAccounts = AgentSocialAccount::where('user_id', $user->id)->active()->get();
 
         // ── Impersonation audit (recent logins-as-this-user in last 30 days) ──
-        $impersonationLogs = ImpersonationLog::forUser($user->id)
-            ->recent(30)
-            ->where('action', 'start')
-            ->with('admin')
-            ->orderByDesc('created_at')
-            ->limit(10)
-            ->get();
+        $impersonationLogs = collect();
+        if (class_exists(\App\Models\ImpersonationLog::class)
+            && \Schema::hasTable('impersonation_logs')) {
+            $impersonationLogs = ImpersonationLog::forUser($user->id)
+                ->recent(30)
+                ->where('action', 'start')
+                ->with('admin')
+                ->orderByDesc('created_at')
+                ->limit(10)
+                ->get();
+        }
 
         // Determine if attention needed (for sidebar dot)
         $needsAttention = $profilePercent < 100
