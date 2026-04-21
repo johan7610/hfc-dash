@@ -48,7 +48,16 @@ class UserManagementController extends Controller
 
         $p24AgentMap = $this->fetchP24AgentMap($request->boolean('refresh_p24'));
 
-        return view('admin.users.index', compact('users','branches','designations','p24AgentMap'));
+        // PPRA verification due count (never verified or >12 months)
+        $ppraDueCount = User::agencyMembers()
+            ->when($agencyId, fn ($q) => $q->where('agency_id', $agencyId))
+            ->where(function ($q) {
+                $q->whereNull('ppra_last_verified_at')
+                  ->orWhere('ppra_last_verified_at', '<', now()->subYear());
+            })
+            ->count();
+
+        return view('admin.users.index', compact('users','branches','designations','p24AgentMap','ppraDueCount'));
     }
 
     /**
@@ -293,8 +302,8 @@ class UserManagementController extends Controller
         $user->id_number   = $data['id_number'] ?? null;
         $user->website     = $data['website'] ?? null;
 
-        // PPRA Status — admin-editable only
-        if (array_key_exists('ppra_status', $data)) {
+        // PPRA Status — requires edit_user_ppra_status permission
+        if (array_key_exists('ppra_status', $data) && auth()->user()->hasPermission('edit_user_ppra_status')) {
             $oldPpra = $user->getOriginal('ppra_status');
             $user->ppra_status = $data['ppra_status'] ?: null;
             if ($user->ppra_status !== $oldPpra && $user->ppra_status) {

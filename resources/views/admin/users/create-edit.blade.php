@@ -280,25 +280,46 @@
                                    onfocus="this.style.borderColor='var(--brand-icon, #0ea5e9)'" onblur="this.style.borderColor='var(--border)'">
                         </div>
                     </div>
-                    @if($isEdit)
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                        <div>
-                            <label class="block text-xs font-medium mb-1.5" style="color:var(--text-secondary);">PPRA Status</label>
-                            @php $ppraVal = old('ppra_status', $user->ppra_status ?? ''); @endphp
-                            <select name="ppra_status"
-                                    class="w-full rounded-md px-3 py-2.5 text-sm outline-none transition-colors"
-                                    style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);"
-                                    onfocus="this.style.borderColor='var(--brand-icon, #0ea5e9)'" onblur="this.style.borderColor='var(--border)'">
-                                <option value="" {{ $ppraVal === '' ? 'selected' : '' }}>-- Not set --</option>
-                                <option value="active" {{ $ppraVal === 'active' ? 'selected' : '' }}>Active</option>
-                                <option value="pending" {{ $ppraVal === 'pending' ? 'selected' : '' }}>Pending</option>
-                                <option value="expired" {{ $ppraVal === 'expired' ? 'selected' : '' }}>Expired</option>
-                                <option value="suspended" {{ $ppraVal === 'suspended' ? 'selected' : '' }}>Suspended</option>
-                            </select>
-                            <p class="text-[10px] mt-1" style="color:var(--text-muted);">
-                                Verified against <a href="https://www.ppra.org.za" target="_blank" style="color:var(--brand-icon, #0ea5e9); text-decoration:underline;">PPRA public register</a>.
-                                Last verified: {{ $user->ppra_last_verified_at ? \Carbon\Carbon::parse($user->ppra_last_verified_at)->format('d M Y') : 'never' }}
-                            </p>
+                    @if($isEdit && auth()->user()->hasPermission('edit_user_ppra_status'))
+                    <div class="mt-5 pt-5" style="border-top:1px solid var(--border);" id="ppra">
+                        <div class="flex items-center gap-2 mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="color:var(--brand-icon, #0ea5e9);"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg>
+                            <h4 class="text-xs font-bold uppercase tracking-wider" style="color:var(--text-primary);">PPRA Registration Status</h4>
+                        </div>
+                        <p class="text-[11px] mb-3" style="color:var(--text-muted);">
+                            Verify at PPRA public register:
+                            <a href="https://theppra.org.za/agent_agency_search" target="_blank" style="color:#00d4aa; text-decoration:underline;">theppra.org.za</a>.
+                            FFCs are valid 3 years — annual re-verification recommended.
+                        </p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium mb-1.5" style="color:var(--text-secondary);">PPRA Status</label>
+                                @php $ppraVal = old('ppra_status', $user->ppra_status ?? ''); @endphp
+                                <select name="ppra_status"
+                                        class="w-full rounded-md px-3 py-2.5 text-sm outline-none transition-colors"
+                                        style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);"
+                                        onfocus="this.style.borderColor='var(--brand-icon, #0ea5e9)'" onblur="this.style.borderColor='var(--border)'">
+                                    <option value="" {{ $ppraVal === '' ? 'selected' : '' }}>-- Not set --</option>
+                                    <option value="active" {{ $ppraVal === 'active' ? 'selected' : '' }}>Active</option>
+                                    <option value="pending" {{ $ppraVal === 'pending' ? 'selected' : '' }}>Pending</option>
+                                    <option value="expired" {{ $ppraVal === 'expired' ? 'selected' : '' }}>Expired</option>
+                                    <option value="suspended" {{ $ppraVal === 'suspended' ? 'selected' : '' }}>Suspended</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <div>
+                                    <span class="text-xs" style="color:var(--text-muted);">Last verified:</span>
+                                    @if($user->ppra_last_verified_at)
+                                        @php $ppraVerified = \Carbon\Carbon::parse($user->ppra_last_verified_at); @endphp
+                                        <span class="text-xs font-medium" style="color:var(--text-primary);">{{ $ppraVerified->format('d M Y') }}</span>
+                                        @if($ppraVerified->lt(now()->subYear()))
+                                        <span class="text-[10px] font-semibold" style="color:#f59e0b;"> (overdue — over 12 months)</span>
+                                        @endif
+                                    @else
+                                        <span class="text-xs font-medium" style="color:#ef4444;">Never</span>
+                                    @endif
+                                </div>
+                            </div>
                         </div>
                     </div>
                     @endif

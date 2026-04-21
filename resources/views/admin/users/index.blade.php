@@ -47,6 +47,17 @@
         </div>
     @endif
 
+    {{-- PPRA verification due banner --}}
+    @if(($ppraDueCount ?? 0) > 0 && auth()->user()->hasPermission('edit_user_ppra_status'))
+    <div class="flex items-center justify-between rounded-xl px-4 py-3" style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2);">
+        <div class="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#f59e0b"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" /></svg>
+            <span class="text-xs font-semibold" style="color:#f59e0b;">{{ $ppraDueCount }} agent(s) need PPRA re-verification (over 12 months or never verified)</span>
+        </div>
+        <a href="https://theppra.org.za/agent_agency_search" target="_blank" class="text-[10px] font-semibold px-2 py-1 rounded" style="background:rgba(245,158,11,0.15); color:#f59e0b; text-decoration:none; border:1px solid rgba(245,158,11,0.25);">Check PPRA Register</a>
+    </div>
+    @endif
+
     {{-- Filters --}}
     <div class="flex flex-wrap gap-2">
         <input type="text" x-model="search" placeholder="Search name or email…"
