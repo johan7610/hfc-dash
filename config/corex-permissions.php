@@ -137,6 +137,7 @@ return [
         // ── User Management — Granular ──
         ['key' => 'edit_user_designation',   'label' => 'Change User Designation',         'section' => 'franchise-admin',  'type' => 'action',  'module' => 'users',            'sort_order' => 14],
         ['key' => 'assign_user_branch',      'label' => 'Assign User Branch',              'section' => 'franchise-admin',  'type' => 'action',  'module' => 'users',            'sort_order' => 15],
+        ['key' => 'edit_user_ppra_status',   'label' => 'Edit User PPRA Status',           'section' => 'compliance',       'type' => 'action',  'module' => 'compliance',       'sort_order' => 42],
 
         // ── Supervision ──
         ['key' => 'access_supervision',      'label' => 'Access Supervision',              'section' => 'supervision',      'type' => 'access',  'module' => 'supervision',      'sort_order' => 1],
@@ -397,6 +398,7 @@ return [
                 'verify_user_documents', 'access_compliance_dashboard',
                 'access_rmcp', 'edit_rmcp', 'manage_compliance_officer',
                 'manage_employee_screenings', 'view_own_screening',
+                'edit_user_ppra_status',
                 'access_my_portal', 'upload_own_documents', 'edit_own_profile',
                 'assign_user_branch',
                 'access_supervision', 'manage_supervision',

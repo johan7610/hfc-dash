@@ -363,7 +363,11 @@
                             <div style="padding:9px 12px; border-radius:3px; background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); font-size:0.85rem; opacity:0.7;">
                                 {{ ucfirst($user->ppra_status ?? 'Not set') }}
                                 @if($user->ppra_last_verified_at)
-                                <span style="font-size:0.65rem; color:var(--text-muted); margin-left:6px;">(verified {{ \Carbon\Carbon::parse($user->ppra_last_verified_at)->format('d M Y') }})</span>
+                                    @php $ppraVerifiedAt = \Carbon\Carbon::parse($user->ppra_last_verified_at); @endphp
+                                    <span style="font-size:0.65rem; color:var(--text-muted); margin-left:6px;">(verified {{ $ppraVerifiedAt->format('d M Y') }})</span>
+                                    @if($ppraVerifiedAt->lt(now()->subYear()))
+                                    <span style="font-size:0.6rem; color:#f59e0b; margin-left:4px; font-weight:600;">Overdue — over 12 months</span>
+                                    @endif
                                 @endif
                             </div>
                         </div>
