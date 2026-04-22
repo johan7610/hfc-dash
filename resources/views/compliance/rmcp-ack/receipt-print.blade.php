@@ -32,22 +32,12 @@
 
         .footer { border-top: 1px solid #e5e7eb; padding-top: 0.75rem; text-align: center; font-size: 0.65rem; color: #94a3b8; }
 
-        .no-print { text-align: center; margin-bottom: 1.5rem; }
-        .no-print button { font-family: 'Plus Jakarta Sans', sans-serif; padding: 0.5rem 1.5rem; font-size: 0.8rem; font-weight: 700; color: #fff; background: #00d4aa; border: none; border-radius: 3px; cursor: pointer; }
-        .no-print button:hover { opacity: 0.85; }
-        .no-print .hint { font-size: 0.7rem; color: #94a3b8; margin-top: 0.5rem; }
-
         @media print {
             body { padding: 0; }
-            .no-print { display: none !important; }
         }
     </style>
 </head>
 <body>
-    <div class="no-print">
-        <button onclick="window.print()">Save / Print PDF</button>
-        <div class="hint">Use "Save as PDF" in your browser's print dialog to download.</div>
-    </div>
 
     <div class="header">
         <div class="label">RMCP Acknowledgement Receipt</div>
@@ -114,8 +104,5 @@
         </div>
     </div>
 
-    <script>
-        window.onafterprint = function() { /* stay on page after print */ };
-    </script>
 </body>
 </html>
