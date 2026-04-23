@@ -459,4 +459,57 @@ class User extends Authenticatable
             'never_screened', 'pre_employment_pending', 'overdue', 'expired',
         ]);
     }
+
+    // ── Payroll ──
+
+    public function payrollEmployee(): HasOne
+    {
+        return $this->hasOne(Payroll\PayrollEmployee::class);
+    }
+
+    public function payrollPayslips(): HasMany
+    {
+        return $this->hasMany(Payroll\PayrollPayslip::class, 'user_id');
+    }
+
+    public function bankingDetail(): HasOne
+    {
+        return $this->hasOne(UserBankingDetail::class);
+    }
+
+    public function isOnPayroll(): bool
+    {
+        return $this->payrollEmployee()
+            ->where('is_active', true)
+            ->exists();
+    }
+
+    /**
+     * Calculate age at a given date from date_of_birth, falling back to
+     * SA ID number first 6 digits (YYMMDD) if date_of_birth is null.
+     */
+    public function getAgeOnDate(\Carbon\Carbon $date): ?int
+    {
+        $dob = $this->date_of_birth;
+
+        if (! $dob && $this->id_number && strlen($this->id_number) >= 6) {
+            $raw = substr($this->id_number, 0, 6);
+            $yy = (int) substr($raw, 0, 2);
+            $mm = (int) substr($raw, 2, 2);
+            $dd = (int) substr($raw, 4, 2);
+            // SA IDs: 00-29 → 2000s, 30-99 → 1900s
+            $yyyy = $yy <= 29 ? 2000 + $yy : 1900 + $yy;
+            try {
+                $dob = \Carbon\Carbon::createFromDate($yyyy, $mm, $dd);
+            } catch (\Exception $e) {
+                return null;
+            }
+        }
+
+        if (! $dob) {
+            return null;
+        }
+
+        return $dob->diffInYears($date);
+    }
 }

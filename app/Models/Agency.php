@@ -74,4 +74,45 @@ class Agency extends Model
             ->where('role', FicaOfficerAppointment::ROLE_PRIMARY)
             ->whereNull('ended_on');
     }
+
+    // ── Payroll ──
+
+    public function payrollEmployees(): HasMany
+    {
+        return $this->hasMany(Payroll\PayrollEmployee::class);
+    }
+
+    public function payrollRuns(): HasMany
+    {
+        return $this->hasMany(Payroll\PayrollRun::class);
+    }
+
+    public function earningTypes(): HasMany
+    {
+        return $this->hasMany(Payroll\PayrollEarningType::class);
+    }
+
+    public function deductionTypes(): HasMany
+    {
+        return $this->hasMany(Payroll\PayrollDeductionType::class);
+    }
+
+    /**
+     * Check if agency's total annual gross payroll meets the SDL threshold.
+     * Based on last 12 months of finalised payroll runs vs current tax rebate data.
+     */
+    public function hasSdlObligation(): bool
+    {
+        $rebate = Payroll\PayrollTaxRebate::forTaxYear(now())->first();
+        if (! $rebate) {
+            return false;
+        }
+
+        $annualGross = $this->payrollRuns()
+            ->finalised()
+            ->where('period_month', '>=', now()->subMonths(12)->startOfMonth()->toDateString())
+            ->sum('total_gross');
+
+        return bccomp((string) $annualGross, (string) $rebate->sdl_threshold_annual, 2) >= 0;
+    }
 }
