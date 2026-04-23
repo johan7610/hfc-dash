@@ -3,70 +3,75 @@
 @section('corex-content')
 @php
     $pct = $monthlyTarget > 0 ? min(100, round(($mtdPoints / $monthlyTarget) * 100)) : 0;
+
+    // Progress / score colours — never red for neutral values (UI_DESIGN_SYSTEM §5.3)
+    $progressBarClass = $pct >= 80 ? 'ds-bar-green' : ($pct >= 50 ? 'ds-bar-navy' : 'ds-bar-amber');
+    $progressTextVar  = $pct >= 80 ? 'var(--ds-green)' : ($pct >= 50 ? 'var(--brand-icon)' : 'var(--ds-amber)');
 @endphp
 
-<div class="space-y-5">
+<div class="space-y-6">
 
-    {{-- Header --}}
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-            <h1 class="text-2xl font-bold tracking-tight" style="color:var(--text-primary);">Performance</h1>
-            <p class="text-sm mt-0.5" style="color:var(--text-secondary);">
-                How you're tracking this week and this month
-            </p>
+    {{-- ══════ PAGE HEADER (Pattern A — branded) ══════ --}}
+    <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a);">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <h1 class="text-xl font-bold text-white leading-tight">Performance</h1>
+                <p class="text-sm text-white/60">How you're tracking this week and this month.</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="{{ route('corex.dashboard') }}" class="corex-btn-outline">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
+                    Back to Today
+                </a>
+            </div>
         </div>
-        <a href="{{ route('corex.dashboard') }}"
-           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium"
-           style="background:var(--surface-2); color:var(--text-secondary);">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
-            Back to Today
-        </a>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
         {{-- Scorecard --}}
         <div class="corex-panel lg:col-span-1">
             <div class="corex-panel-header">
                 <h3 class="corex-panel-title">My Scorecard</h3>
-                <span class="text-xs" style="color:var(--text-muted);">This Week</span>
+                <span class="text-xs" style="color: var(--text-muted);">This Week</span>
             </div>
             <div class="corex-panel-body">
                 @if($scorecard)
                     @php
-                        $scoreColor = match(true) {
-                            $scorecard->overall_score >= 90 => '#10b981',
-                            $scorecard->overall_score >= 70 => '#3b82f6',
-                            $scorecard->overall_score >= 50 => '#f59e0b',
-                            default                         => '#ef4444',
+                        // Overall score colour: 90+ green, 70-89 brand teal, <70 amber. Never red (neutral metric).
+                        $scoreBg = match(true) {
+                            $scorecard->overall_score >= 90 => 'var(--ds-green)',
+                            $scorecard->overall_score >= 70 => 'var(--brand-icon)',
+                            default                         => 'var(--ds-amber)',
                         };
                     @endphp
                     <div class="text-center mb-4">
-                        <div class="inline-flex items-center justify-center w-20 h-20 rounded-full text-2xl font-bold text-white" style="background:{{ $scoreColor }};">
-                            {{ $scorecard->overall_score }}
+                        <div class="inline-flex items-center justify-center w-20 h-20 rounded-full text-2xl font-bold text-white"
+                             style="background: {{ $scoreBg }};">
+                            {{ number_format($scorecard->overall_score) }}
                         </div>
-                        <p class="text-xs mt-2" style="color:var(--text-muted);">Overall Score</p>
+                        <p class="text-xs mt-2" style="color: var(--text-muted);">Overall Score</p>
                     </div>
 
                     @php
                         $metrics = [
-                            ['label' => 'Tasks Completed', 'value' => $scorecard->tasks_completed.'/'.$scorecard->tasks_total, 'pct' => $scorecard->tasks_total > 0 ? round(($scorecard->tasks_completed / $scorecard->tasks_total) * 100) : 0],
-                            ['label' => 'Properties Attended', 'value' => $scorecard->properties_attended.'/'.$scorecard->properties_total, 'pct' => $scorecard->properties_total > 0 ? round(($scorecard->properties_attended / $scorecard->properties_total) * 100) : 0],
-                            ['label' => 'Events Completed', 'value' => $scorecard->events_completed.'/'.$scorecard->events_total, 'pct' => $scorecard->events_total > 0 ? round(($scorecard->events_completed / $scorecard->events_total) * 100) : 0],
-                            ['label' => 'Docs Uploaded', 'value' => $scorecard->documents_uploaded, 'pct' => null],
-                            ['label' => 'Avg Response', 'value' => $scorecard->avg_response_hours ? round($scorecard->avg_response_hours, 1).'h' : '—', 'pct' => null],
+                            ['label' => 'Tasks Completed',     'value' => $scorecard->tasks_completed.'/'.$scorecard->tasks_total, 'pct' => $scorecard->tasks_total > 0 ? (int) round(($scorecard->tasks_completed / $scorecard->tasks_total) * 100) : 0],
+                            ['label' => 'Properties Attended', 'value' => $scorecard->properties_attended.'/'.$scorecard->properties_total, 'pct' => $scorecard->properties_total > 0 ? (int) round(($scorecard->properties_attended / $scorecard->properties_total) * 100) : 0],
+                            ['label' => 'Events Completed',    'value' => $scorecard->events_completed.'/'.$scorecard->events_total, 'pct' => $scorecard->events_total > 0 ? (int) round(($scorecard->events_completed / $scorecard->events_total) * 100) : 0],
+                            ['label' => 'Docs Uploaded',       'value' => number_format($scorecard->documents_uploaded), 'pct' => null],
+                            ['label' => 'Avg Response',        'value' => $scorecard->avg_response_hours ? number_format($scorecard->avg_response_hours, 1).'h' : '—', 'pct' => null],
                         ];
                     @endphp
                     <div class="space-y-2.5 text-sm">
                         @foreach($metrics as $m)
                             <div>
-                                <div class="flex justify-between mb-0.5">
-                                    <span style="color:var(--text-secondary);">{{ $m['label'] }}</span>
-                                    <span class="font-medium" style="color:var(--text-primary);">{{ $m['value'] }}</span>
+                                <div class="flex justify-between mb-1">
+                                    <span style="color: var(--text-secondary);">{{ $m['label'] }}</span>
+                                    <span class="font-medium" style="color: var(--text-primary);">{{ $m['value'] }}</span>
                                 </div>
                                 @if($m['pct'] !== null)
-                                    <div class="w-full h-1.5 rounded-full" style="background:var(--surface-2);">
-                                        <div class="h-1.5 rounded-full transition-all duration-300" style="width:{{ $m['pct'] }}%; background:var(--brand-icon);"></div>
+                                    <div class="ds-progress-track">
+                                        <div class="ds-progress-bar ds-bar-navy" style="width: {{ $m['pct'] }}%;"></div>
                                     </div>
                                 @endif
                             </div>
@@ -74,13 +79,17 @@
                     </div>
 
                     @if($scorecard->tasks_overdue > 0)
-                        <div class="mt-4 px-3 py-2 rounded-md text-xs" style="background:rgba(239,68,68,0.08); color:#ef4444;">
-                            {{ $scorecard->tasks_overdue }} overdue task(s) this week
+                        <div class="mt-4 rounded-md px-3 py-2 text-xs flex items-start gap-2"
+                             style="background: color-mix(in srgb, var(--ds-amber) 10%, transparent);
+                                    border: 1px solid color-mix(in srgb, var(--ds-amber) 30%, transparent);
+                                    color: var(--text-primary);">
+                            <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color: var(--ds-amber);" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
+                            <span>{{ number_format($scorecard->tasks_overdue) }} overdue task(s) this week.</span>
                         </div>
                     @endif
                 @else
-                    <div class="py-6 text-center">
-                        <p class="text-sm" style="color:var(--text-muted);">Scorecard will be available once data accumulates.</p>
+                    <div class="py-8 text-center">
+                        <p class="text-sm" style="color: var(--text-muted);">Scorecard will be available once data accumulates.</p>
                     </div>
                 @endif
             </div>
@@ -90,34 +99,32 @@
         <div class="corex-panel lg:col-span-2">
             <div class="corex-panel-header">
                 <h3 class="corex-panel-title">Activity Points</h3>
-                <span class="text-xs" style="color:var(--text-muted);">{{ now()->format('F Y') }}</span>
+                <span class="text-xs" style="color: var(--text-muted);">{{ now()->format('F Y') }}</span>
             </div>
             <div class="corex-panel-body">
                 <div class="flex items-end gap-6 flex-wrap">
                     <div>
-                        <p class="text-xs mb-1" style="color:var(--text-muted);">Points this month</p>
-                        <p class="text-3xl font-bold" style="color:var(--text-primary);">{{ number_format($mtdPoints) }}</p>
+                        <p class="text-xs mb-1" style="color: var(--text-muted);">Points this month</p>
+                        <p class="text-[1.75rem] font-semibold leading-none" style="color: var(--text-primary);">{{ number_format($mtdPoints) }}</p>
                     </div>
                     @if($monthlyTarget > 0)
                         <div>
-                            <p class="text-xs mb-1" style="color:var(--text-muted);">Target</p>
-                            <p class="text-xl font-semibold" style="color:var(--text-secondary);">{{ number_format($monthlyTarget) }}</p>
+                            <p class="text-xs mb-1" style="color: var(--text-muted);">Target</p>
+                            <p class="text-xl font-semibold" style="color: var(--text-secondary);">{{ number_format($monthlyTarget) }}</p>
                         </div>
                         <div>
-                            <p class="text-xs mb-1" style="color:var(--text-muted);">Progress</p>
-                            <p class="text-xl font-semibold" style="color:{{ $pct >= 80 ? '#10b981' : ($pct >= 50 ? '#3b82f6' : '#f59e0b') }};">{{ $pct }}%</p>
+                            <p class="text-xs mb-1" style="color: var(--text-muted);">Progress</p>
+                            <p class="text-xl font-semibold" style="color: {{ $progressTextVar }};">{{ $pct }}%</p>
                         </div>
                     @endif
                 </div>
                 @if($monthlyTarget > 0)
-                    <div class="w-full h-2 rounded-full mt-4" style="background:var(--surface-2);">
-                        <div class="h-2 rounded-full transition-all duration-300" style="width:{{ $pct }}%; background:var(--brand-icon,#0ea5e9);"></div>
+                    <div class="ds-progress-track mt-4">
+                        <div class="ds-progress-bar {{ $progressBarClass }}" style="width: {{ $pct }}%;"></div>
                     </div>
                 @endif
                 <div class="mt-4">
-                    <a href="{{ route('agent.daily') }}"
-                       class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium"
-                       style="background:var(--surface-2); color:var(--brand-icon);">
+                    <a href="{{ route('agent.daily') }}" class="corex-btn-outline">
                         Capture Daily Activity
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
                     </a>
@@ -128,32 +135,28 @@
 
     {{-- Candidate Documents (supervisors only) --}}
     @if($candidateDocs->count() > 0)
-        <div class="corex-panel border-l-4" style="border-left-color:#f59e0b;">
+        <div class="corex-panel">
             <div class="corex-panel-header">
-                <h3 class="corex-panel-title" style="color:#b45309;">Candidate Documents — Needs Authorisation</h3>
-                <span class="text-xs font-medium px-2 py-0.5 rounded-full" style="background:#fef3c7; color:#92400e;">
-                    {{ $candidateDocs->count() }} pending
-                </span>
+                <h3 class="corex-panel-title">Candidate Documents — Needs Authorisation</h3>
+                <span class="ds-badge ds-badge-warning">{{ number_format($candidateDocs->count()) }} Pending</span>
             </div>
             <div class="corex-panel-body">
-                <div class="divide-y" style="border-color:var(--border-default);">
+                <div class="divide-y" style="border-color: var(--border);">
                     @foreach($candidateDocs as $doc)
                         <div class="flex flex-col sm:flex-row sm:items-center justify-between py-3 gap-2">
                             <div class="flex-1 min-w-0">
-                                <p class="font-semibold text-sm truncate" style="color:var(--text-primary);">{{ $doc->document->name ?? 'Untitled Document' }}</p>
-                                <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-xs" style="color:var(--text-secondary);">
-                                    <span>Candidate: <strong>{{ $doc->creator->name ?? 'Unknown' }}</strong></span>
+                                <p class="font-semibold text-sm truncate" style="color: var(--text-primary);">{{ $doc->document->name ?? 'Untitled Document' }}</p>
+                                <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-xs" style="color: var(--text-secondary);">
+                                    <span>Candidate: <strong style="color: var(--text-primary);">{{ $doc->creator->name ?? 'Unknown' }}</strong></span>
                                     <span>Created: {{ $doc->created_at->format('d M Y') }}</span>
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ $doc->status === 'awaiting_supervisor' ? 'bg-yellow-100 text-yellow-800' : 'bg-orange-100 text-orange-800' }}">
+                                    <span class="ds-badge ds-badge-warning">
                                         {{ $doc->status === 'awaiting_supervisor' ? 'Initial Review' : 'Final Sign-off' }}
                                     </span>
                                 </div>
                             </div>
                             <div class="flex-shrink-0">
-                                <a href="{{ route('docuperfect.signatures.review', $doc->document_id) }}"
-                                   class="inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-semibold text-white shadow"
-                                   style="background:#f59e0b;">
-                                    Review & Authorise
+                                <a href="{{ route('docuperfect.signatures.review', $doc->document_id) }}" class="corex-btn-primary">
+                                    Review &amp; Authorise
                                 </a>
                             </div>
                         </div>
@@ -167,42 +170,48 @@
     <div class="corex-panel">
         <div class="corex-panel-header">
             <h3 class="corex-panel-title">Properties Needing Attention</h3>
-            <div class="flex items-center gap-2 text-xs">
+            <div class="flex items-center gap-2">
                 @if($propHealthSummary['critical'] > 0)
-                    <span class="px-2 py-0.5 rounded-full font-medium" style="background:rgba(239,68,68,0.1); color:#ef4444;">{{ $propHealthSummary['critical'] }} critical</span>
+                    <span class="ds-badge ds-badge-danger">{{ number_format($propHealthSummary['critical']) }} Critical</span>
                 @endif
                 @if($propHealthSummary['attention'] > 0)
-                    <span class="px-2 py-0.5 rounded-full font-medium" style="background:rgba(245,158,11,0.1); color:#f59e0b;">{{ $propHealthSummary['attention'] }} attention</span>
+                    <span class="ds-badge ds-badge-warning">{{ number_format($propHealthSummary['attention']) }} Attention</span>
                 @endif
-                <span class="px-2 py-0.5 rounded-full font-medium" style="background:rgba(16,185,129,0.1); color:#10b981;">{{ $propHealthSummary['good'] }} good</span>
+                <span class="ds-badge ds-badge-success">{{ number_format($propHealthSummary['good']) }} Good</span>
             </div>
         </div>
         <div class="corex-panel-body">
             @if($propsNeedingAttention->isEmpty())
-                <div class="py-8 text-center">
-                    <svg class="w-10 h-10 mx-auto mb-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
-                    <p class="text-sm" style="color:var(--text-muted);">All your properties are in good health.</p>
+                <div class="py-12 px-6 text-center">
+                    <div class="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
+                         style="background: color-mix(in srgb, var(--ds-green) 12%, transparent); color: var(--ds-green);">
+                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                    </div>
+                    <h3 class="text-base font-semibold mb-1" style="color: var(--text-primary);">All properties are in good health</h3>
+                    <p class="text-sm" style="color: var(--text-muted);">Nothing needs your attention right now.</p>
                 </div>
             @else
-                <div class="divide-y" style="border-color:var(--border-default);">
+                <div class="divide-y" style="border-color: var(--border);">
                     @foreach($propsNeedingAttention as $health)
                         @php
                             $prop = $health->property;
-                            $gradeColor = match($health->grade) {
-                                'critical'  => '#ef4444',
-                                'attention' => '#f59e0b',
-                                default     => '#10b981',
+                            // Grade colour: critical = genuine danger, attention = amber, other = green
+                            $gradeBg = match($health->grade) {
+                                'critical'  => 'var(--ds-crimson)',
+                                'attention' => 'var(--ds-amber)',
+                                default     => 'var(--ds-green)',
                             };
                         @endphp
                         <div class="flex items-center gap-3 py-3">
-                            <div class="flex-shrink-0 w-10 h-10 rounded-md flex items-center justify-center text-sm font-bold text-white" style="background:{{ $gradeColor }};">
-                                {{ $health->score }}
+                            <div class="flex-shrink-0 w-10 h-10 rounded-md flex items-center justify-center text-sm font-bold text-white"
+                                 style="background: {{ $gradeBg }};">
+                                {{ number_format($health->score) }}
                             </div>
                             <div class="flex-1 min-w-0">
                                 @if($prop)
                                     <a href="{{ route('corex.properties.show', $prop) }}"
                                        class="text-sm font-medium truncate block hover:underline"
-                                       style="color:var(--text-primary);">
+                                       style="color: var(--text-primary);">
                                         {{ $prop->buildDisplayAddress() ?: ($prop->title ?: 'Property #'.$prop->id) }}
                                     </a>
                                 @endif
@@ -210,13 +219,18 @@
                                     @if(is_array($health->factors))
                                         @foreach($health->factors as $key => $factor)
                                             @if(($factor['penalty'] ?? 0) > 0)
-                                                <span class="text-xs" style="color:{{ ($factor['status'] ?? null) === 'critical' ? '#ef4444' : '#f59e0b' }};">{{ $factor['label'] ?? $key }}</span>
+                                                @php
+                                                    $factorColor = ($factor['status'] ?? null) === 'critical'
+                                                        ? 'var(--ds-crimson)'
+                                                        : 'var(--ds-amber)';
+                                                @endphp
+                                                <span class="text-xs" style="color: {{ $factorColor }};">{{ $factor['label'] ?? $key }}</span>
                                             @endif
                                         @endforeach
                                     @endif
                                 </div>
                             </div>
-                            <div class="flex-shrink-0 text-xs" style="color:var(--text-muted);">
+                            <div class="flex-shrink-0 text-xs" style="color: var(--text-muted);">
                                 {{ $prop?->agent?->name ?? 'Unassigned' }}
                             </div>
                         </div>

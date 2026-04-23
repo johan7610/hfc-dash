@@ -862,6 +862,12 @@ html.dark {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.025em;
+    white-space: nowrap;
+}
+
+/* Task card icon-button hover — token-aware (works in both themes) */
+.task-card-action:hover {
+    background: var(--surface-2);
 }
 
 .ds-badge-behind  { background: var(--ds-crimson); color: #fff; }
