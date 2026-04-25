@@ -12,37 +12,49 @@
      }">
 
     {{-- Page Header --}}
-    <div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-5 flex items-center justify-between">
-        <div>
-            <h2 class="text-xl font-bold text-white leading-tight tracking-tight">{{ ($showOnlyAuthorisation ?? false) ? 'Authorise Documents' : 'My E-Sign Documents' }}</h2>
-            <div class="text-sm text-white/60 mt-1">
-                @if($showOnlyAuthorisation ?? false)
-                    <a href="{{ route('docuperfect.esign.myDocuments') }}" class="text-white/60 hover:text-white transition-all duration-300">&larr; My E-Sign Documents</a>
-                    &middot; Candidate documents requiring your authorisation.
-                @else
-                    <a href="{{ route('docuperfect.dashboard') }}" class="text-white/60 hover:text-white transition-all duration-300">&larr; DocuPerfect</a>
-                    &middot; Track all your e-sign flows, signing progress, and approvals.
-                @endif
+    <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a);">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <h1 class="text-xl font-bold text-white leading-tight">{{ ($showOnlyAuthorisation ?? false) ? 'Authorise Documents' : 'My E-Sign Documents' }}</h1>
+                <p class="text-sm text-white/60 mt-1">
+                    @if($showOnlyAuthorisation ?? false)
+                        <a href="{{ route('docuperfect.esign.myDocuments') }}" class="text-white/60 hover:text-white transition-colors duration-150">&larr; My E-Sign Documents</a>
+                        &middot; Candidate documents requiring your authorisation.
+                    @else
+                        <a href="{{ route('docuperfect.dashboard') }}" class="text-white/60 hover:text-white transition-colors duration-150">&larr; DocuPerfect</a>
+                        &middot; Track all your e-sign flows, signing progress, and approvals.
+                    @endif
+                </p>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="{{ route('docuperfect.esign.create') }}"
+                   class="corex-btn-primary inline-flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
+                    New E-Sign
+                </a>
             </div>
         </div>
-        <a href="{{ route('docuperfect.esign.create') }}"
-           class="corex-btn-primary inline-flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
-            New E-Sign
-        </a>
     </div>
 
     @if(session('status'))
-        <div class="rounded-md border border-emerald-500/30 px-4 py-3 text-sm" style="background: rgba(16,185,129,0.1); color: var(--text-primary);">
-            {{ session('status') }}
+        <div class="rounded-md px-4 py-3 text-sm flex items-start gap-3"
+             style="background: color-mix(in srgb, var(--ds-green) 10%, transparent);
+                    border: 1px solid color-mix(in srgb, var(--ds-green) 30%, transparent);
+                    color: var(--text-primary);">
+            <div class="flex-1">{{ session('status') }}</div>
         </div>
     @endif
 
     @if($errors->any())
-        <div class="rounded-md border border-red-500/30 px-4 py-3 text-sm" style="background: rgba(239,68,68,0.1); color: var(--text-primary);">
-            @foreach($errors->all() as $error)
-                <div>{{ $error }}</div>
-            @endforeach
+        <div class="rounded-md px-4 py-3 text-sm flex items-start gap-3"
+             style="background: color-mix(in srgb, var(--ds-crimson) 10%, transparent);
+                    border: 1px solid color-mix(in srgb, var(--ds-crimson) 30%, transparent);
+                    color: var(--text-primary);">
+            <div class="flex-1">
+                @foreach($errors->all() as $error)
+                    <div>{{ $error }}</div>
+                @endforeach
+            </div>
         </div>
     @endif
 
@@ -51,36 +63,38 @@
     <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
         @if(($counts['needs_authorisation'] ?? 0) > 0)
         <a href="#section-needs-authorisation" onclick="event.preventDefault(); scrollToSection('section-needs-authorisation')"
-           class="rounded-md p-4 text-center border-2 cursor-pointer block transition-all duration-300 hover:opacity-90" style="border-color: #f59e0b; background: rgba(245,158,11,0.1);">
-            <div class="text-2xl font-bold" style="color: #f59e0b;">{{ $counts['needs_authorisation'] }}</div>
-            <div class="text-xs mt-1 font-semibold" style="color: #b45309;">Needs Authorisation</div>
+           class="rounded-md p-4 text-center cursor-pointer block transition-all duration-300 hover:opacity-90"
+           style="border: 2px solid var(--ds-amber); background: color-mix(in srgb, var(--ds-amber) 10%, transparent);">
+            <div class="text-[1.625rem] font-semibold" style="color: var(--ds-amber);">{{ number_format($counts['needs_authorisation']) }}</div>
+            <div class="text-xs mt-1 font-semibold" style="color: var(--ds-amber);">Needs Authorisation</div>
         </a>
         @endif
         @if($counts['pending_approval'] > 0)
         <a href="#section-pending-approval" onclick="event.preventDefault(); scrollToSection('section-pending-approval')"
-           class="rounded-md p-4 text-center border-2 border-amber-400 cursor-pointer block transition-all duration-300 hover:border-amber-500" style="background: rgba(245,158,11,0.1);">
-            <div class="text-2xl font-bold text-amber-500">{{ $counts['pending_approval'] }}</div>
-            <div class="text-xs text-amber-500 mt-1 font-semibold">Needs Approval</div>
+           class="rounded-md p-4 text-center cursor-pointer block transition-all duration-300 hover:opacity-90"
+           style="border: 2px solid var(--ds-amber); background: color-mix(in srgb, var(--ds-amber) 10%, transparent);">
+            <div class="text-[1.625rem] font-semibold" style="color: var(--ds-amber);">{{ number_format($counts['pending_approval']) }}</div>
+            <div class="text-xs mt-1 font-semibold" style="color: var(--ds-amber);">Needs Approval</div>
         </a>
         @endif
         <a href="#section-draft" onclick="event.preventDefault(); scrollToSection('section-draft')"
            class="ds-status-card p-4 text-center transition-all duration-300 cursor-pointer block">
-            <div class="text-2xl font-bold" style="color: {{ $counts['draft'] > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}">{{ $counts['draft'] }}</div>
+            <div class="text-[1.625rem] font-semibold" style="color: {{ $counts['draft'] > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}">{{ number_format($counts['draft']) }}</div>
             <div class="text-xs mt-1" style="color: {{ $counts['draft'] > 0 ? 'var(--text-secondary)' : 'var(--text-muted)' }}">Draft</div>
         </a>
         <a href="#section-ready" onclick="event.preventDefault(); scrollToSection('section-ready')"
            class="ds-status-card p-4 text-center transition-all duration-300 cursor-pointer block">
-            <div class="text-2xl font-bold" style="color: {{ $counts['ready_to_sign'] > 0 ? 'var(--brand-icon, #0ea5e9)' : 'var(--text-muted)' }}">{{ $counts['ready_to_sign'] }}</div>
+            <div class="text-[1.625rem] font-semibold" style="color: {{ $counts['ready_to_sign'] > 0 ? 'var(--brand-icon)' : 'var(--text-muted)' }}">{{ number_format($counts['ready_to_sign']) }}</div>
             <div class="text-xs mt-1" style="color: {{ $counts['ready_to_sign'] > 0 ? 'var(--text-secondary)' : 'var(--text-muted)' }}">Ready to Sign</div>
         </a>
         <a href="#section-awaiting" onclick="event.preventDefault(); scrollToSection('section-awaiting')"
            class="ds-status-card p-4 text-center transition-all duration-300 cursor-pointer block">
-            <div class="text-2xl font-bold" style="color: {{ $counts['awaiting_signatures'] > 0 ? '#f59e0b' : 'var(--text-muted)' }}">{{ $counts['awaiting_signatures'] }}</div>
+            <div class="text-[1.625rem] font-semibold" style="color: {{ $counts['awaiting_signatures'] > 0 ? 'var(--ds-amber)' : 'var(--text-muted)' }}">{{ number_format($counts['awaiting_signatures']) }}</div>
             <div class="text-xs mt-1" style="color: {{ $counts['awaiting_signatures'] > 0 ? 'var(--text-secondary)' : 'var(--text-muted)' }}">Awaiting Signatures</div>
         </a>
         <a href="#section-completed" onclick="event.preventDefault(); scrollToSection('section-completed')"
            class="ds-status-card p-4 text-center transition-all duration-300 cursor-pointer block">
-            <div class="text-2xl font-bold" style="color: {{ $counts['completed'] > 0 ? '#10b981' : 'var(--text-muted)' }}">{{ $counts['completed'] }}</div>
+            <div class="text-[1.625rem] font-semibold" style="color: {{ $counts['completed'] > 0 ? 'var(--ds-green)' : 'var(--text-muted)' }}">{{ number_format($counts['completed']) }}</div>
             <div class="text-xs mt-1" style="color: {{ $counts['completed'] > 0 ? 'var(--text-secondary)' : 'var(--text-muted)' }}">Completed</div>
         </a>
     </div>
@@ -89,8 +103,8 @@
     {{-- ===== CANDIDATE DOCUMENTS — NEEDS AUTHORISATION ===== --}}
     @if(($groups['needs_authorisation'] ?? collect())->isNotEmpty())
     <div id="section-needs-authorisation" class="space-y-3 scroll-mt-4">
-        <h3 class="text-sm font-semibold uppercase tracking-wider flex items-center gap-2" style="color: #f59e0b;">
-            <span class="inline-flex items-center justify-center w-5 h-5 text-white text-[10px] font-bold rounded-md" style="background: #f59e0b;">{{ $groups['needs_authorisation']->count() }}</span>
+        <h3 class="text-sm font-semibold uppercase tracking-wider flex items-center gap-2" style="color: var(--ds-amber);">
+            <span class="inline-flex items-center justify-center w-5 h-5 text-white text-[10px] font-bold rounded-full" style="background: var(--ds-amber);">{{ number_format($groups['needs_authorisation']->count()) }}</span>
             Candidate Documents &mdash; Needs Authorisation
         </h3>
         <div class="space-y-3">
@@ -99,33 +113,27 @@
                     $doc = $tpl->document;
                     $candidateName = $tpl->creator?->name ?? 'Unknown Candidate';
                 @endphp
-                <div class="rounded-md border-2 p-4" style="border-color: #f59e0b; background: rgba(245,158,11,0.08);">
-                    <div class="flex items-start justify-between">
-                        <div class="flex-1">
+                <div class="rounded-md p-4" style="border: 2px solid var(--ds-amber); background: color-mix(in srgb, var(--ds-amber) 8%, transparent);">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex-1 min-w-0">
                             <div class="font-semibold" style="color: var(--text-primary);">
                                 {{ $doc->name ?? 'Untitled' }}
                                 @if($doc && $doc->template)
-                                    <span class="inline-block ml-2 px-2 py-0.5 rounded-md text-[10px] font-semibold" style="background: var(--surface-2); color: var(--text-secondary);">{{ $doc->template->name }}</span>
+                                    <span class="ds-badge ds-badge-default ml-2">{{ $doc->template->name }}</span>
                                 @endif
                             </div>
                             <div class="flex flex-wrap items-center gap-2 mt-2">
-                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold" style="background: rgba(245,158,11,0.15); color: #b45309;">
-                                    Candidate: <strong>{{ $candidateName }}</strong>
-                                </span>
-                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold
-                                    {{ $tpl->status === 'awaiting_supervisor' ? 'bg-yellow-100 text-yellow-800' : 'bg-orange-100 text-orange-800' }}">
-                                    {{ $tpl->status === 'awaiting_supervisor' ? 'Initial Review' : 'Final Sign-off' }}
-                                </span>
-                                <span class="text-[10px]" style="color: var(--text-muted);">
+                                <span class="ds-badge ds-badge-warning">{{ \Illuminate\Support\Str::limit($candidateName, 18) }}</span>
+                                <span class="ds-badge ds-badge-warning">{{ $tpl->status === 'awaiting_supervisor' ? 'Initial Review' : 'Final Sign-off' }}</span>
+                                <span class="text-xs" style="color: var(--text-muted);">
                                     Created {{ $tpl->created_at->format('d M Y') }}
                                 </span>
                             </div>
                         </div>
-                        <div class="flex flex-col gap-2 ml-4">
+                        <div class="flex flex-col gap-2">
                             @if($doc)
                             <a href="{{ route('docuperfect.signatures.review', $doc) }}"
-                               class="inline-flex items-center gap-1.5 px-4 py-2 text-white text-xs font-semibold rounded-md shadow hover:opacity-90 whitespace-nowrap transition-all duration-300"
-                               style="background: #f59e0b;">
+                               class="corex-btn-primary inline-flex items-center gap-1.5 whitespace-nowrap">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                                 </svg>

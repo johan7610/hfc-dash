@@ -15,13 +15,13 @@
          x-transition:enter-end="opacity-100 translate-y-0"
          x-transition:leave="transition ease-in duration-200"
          x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-         class="fixed top-20 right-6 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium"
-         :class="toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'">
+         class="fixed top-20 right-6 z-50 px-4 py-3 rounded-md shadow-lg text-sm font-medium text-white"
+         :style="toast.type === 'success' ? 'background: var(--ds-green);' : 'background: var(--ds-crimson);'">
         <span x-text="toast.message"></span>
     </div>
 
     {{-- ===== PROGRESS BAR (sticky header) ===== --}}
-    <div style="background:#0b2a4a;" class="px-6 py-4 flex-shrink-0">
+    <div style="background: var(--brand-default, #0b2a4a);" class="px-6 py-4 flex-shrink-0">
         <div class="flex items-center justify-between mb-3">
             <h2 class="text-xl font-bold text-white leading-tight flex items-center gap-2">
                 <span class="whitespace-nowrap">E-Sign Document —</span>
@@ -42,11 +42,7 @@
                      :class="canGoToStep(i+1) ? 'cursor-pointer' : 'cursor-default'"
                      @click="canGoToStep(i+1) && goToStep(i+1)">
                     <div class="h-1.5 rounded-full transition-all duration-300"
-                         :class="{
-                             'bg-emerald-400': (i+1) < currentStep,
-                             'bg-white': (i+1) === currentStep,
-                             'bg-white/20': (i+1) > currentStep
-                         }"></div>
+                         :style="(i+1) < currentStep ? 'background: var(--ds-green);' : ((i+1) === currentStep ? 'background: #ffffff;' : 'background: rgba(255,255,255,0.2);')"></div>
                     <span class="text-[10px] leading-tight"
                           :class="(i+1) <= currentStep ? 'text-white/70' : 'text-white/30'"
                           x-text="label"></span>
@@ -59,8 +55,8 @@
     <div class="flex-1 flex min-h-0 overflow-hidden">
 
         {{-- LEFT PANEL --}}
-        <div class="overflow-y-auto bg-white dark:bg-gray-900 flex flex-col"
-             :style="'width:' + leftPanelPx + 'px; min-width:250px; max-width:50vw;'">
+        <div class="overflow-y-auto flex flex-col"
+             :style="'background: var(--surface); width:' + leftPanelPx + 'px; min-width:250px; max-width:50vw;'">
             <div class="flex-1 p-6 pb-24">
 
             {{-- ======== STEP 1: Template Selection ======== --}}
@@ -68,86 +64,89 @@
 
                 {{-- Draft flows --}}
                 <div x-show="drafts.length > 0" class="mb-6">
-                    <h4 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Continue where you left off</h4>
+                    <h4 class="text-xs font-semibold uppercase tracking-wide mb-2" style="color: var(--text-muted);">Continue where you left off</h4>
                     <div class="space-y-2">
                         <template x-for="(d, di) in drafts" :key="d.id">
-                            <div class="p-3 rounded-lg border border-amber-200 bg-amber-50">
+                            <div class="p-3 rounded-md"
+                                 style="background: color-mix(in srgb, var(--ds-amber) 10%, transparent); border: 1px solid color-mix(in srgb, var(--ds-amber) 30%, transparent);">
                                 <div class="flex items-start justify-between">
                                     <div class="min-w-0">
-                                        <div class="font-medium text-gray-900 text-sm truncate" x-text="d.template_name || 'Untitled'"></div>
-                                        <div class="text-xs text-gray-500 mt-0.5">
+                                        <div class="font-medium text-sm truncate" style="color: var(--text-primary);" x-text="d.template_name || 'Untitled'"></div>
+                                        <div class="text-xs mt-0.5" style="color: var(--text-secondary);">
                                             Step <span x-text="d.current_step"></span> of 5
                                             <template x-if="d.property_address">
                                                 <span> &middot; <span x-text="d.property_address"></span></span>
                                             </template>
                                         </div>
-                                        <div class="text-xs text-gray-400 mt-0.5" x-text="'Last edited: ' + d.updated_ago"></div>
+                                        <div class="text-xs mt-0.5" style="color: var(--text-muted);" x-text="'Last edited: ' + d.updated_ago"></div>
                                     </div>
                                 </div>
-                                <div class="flex items-center justify-between mt-2 pt-2 border-t border-amber-200/60">
+                                <div class="flex items-center justify-between mt-2 pt-2" style="border-top: 1px solid color-mix(in srgb, var(--ds-amber) 25%, transparent);">
                                     <button @click="deleteDraft(d.id, di)"
-                                            class="text-xs text-red-400 hover:text-red-600 transition">Delete Draft</button>
+                                            class="text-xs font-semibold transition" style="color: var(--ds-crimson);">Delete Draft</button>
                                     <a :href="'/docuperfect/esign/' + d.id + '/step/' + d.current_step"
-                                       class="text-xs font-medium text-blue-600 hover:text-blue-800 transition">Continue &rarr;</a>
+                                       class="text-xs font-semibold transition" style="color: var(--brand-icon);">Continue &rarr;</a>
                                 </div>
                             </div>
                         </template>
                     </div>
                 </div>
 
-                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Select Template</h3>
+                <h3 class="text-lg font-semibold mb-4" style="color: var(--text-primary);">Select Template</h3>
 
                 {{-- Category filter buttons --}}
                 <div class="flex items-center gap-2 mb-3">
                     <button @click="categoryFilter = 'all'"
-                            class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
-                            :class="categoryFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">
+                            class="px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-300"
+                            :style="categoryFilter === 'all' ? 'background: var(--brand-button); color: #fff;' : 'background: var(--surface-2); color: var(--text-secondary);'">
                         All
                     </button>
                     <button @click="categoryFilter = 'sales'"
-                            class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
-                            :class="categoryFilter === 'sales' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">
+                            class="px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-300"
+                            :style="categoryFilter === 'sales' ? 'background: var(--brand-button); color: #fff;' : 'background: var(--surface-2); color: var(--text-secondary);'">
                         Sales
                     </button>
                     <button @click="categoryFilter = 'rentals'"
-                            class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
-                            :class="categoryFilter === 'rentals' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">
+                            class="px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-300"
+                            :style="categoryFilter === 'rentals' ? 'background: var(--brand-button); color: #fff;' : 'background: var(--surface-2); color: var(--text-secondary);'">
                         Rentals
                     </button>
                 </div>
 
                 <input type="text" x-model="templateSearch" placeholder="Search templates..."
-                       class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm mb-4" />
+                       class="w-full rounded-md px-3 py-2 text-sm mb-4"
+                       style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);" />
 
                 {{-- Template groups by type --}}
                 <template x-for="group in templateGroups" :key="group.type">
                     <div x-show="group.templates.length > 0" class="mb-4">
                         <button @click="group.open = !group.open"
-                                class="w-full flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-100 transition">
+                                class="w-full flex items-center justify-between px-3 py-2 rounded-md text-sm font-semibold transition"
+                                style="background: var(--surface-2); color: var(--text-primary);">
                             <span>
                                 <span x-text="group.label" class="capitalize"></span>
-                                <span class="text-gray-400 font-normal ml-1" x-text="'(' + group.templates.length + ')'"></span>
+                                <span class="font-normal ml-1" style="color: var(--text-muted);" x-text="'(' + group.templates.length + ')'"></span>
                             </span>
-                            <svg class="w-4 h-4 text-gray-400 transition-transform" :class="group.open ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="w-4 h-4 transition-transform" style="color: var(--text-muted);" :class="group.open ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                             </svg>
                         </button>
                         <div x-show="group.open" x-collapse class="mt-2 space-y-2">
                             <template x-for="t in group.templates" :key="t.id">
                                 <button @click="selectTemplate(t)"
-                                        class="w-full text-left p-3 rounded-lg border-2 transition-all duration-150"
-                                        :class="selectedTemplateId === t.id
-                                            ? 'border-blue-500 bg-blue-50'
-                                            : 'border-gray-200 hover:border-gray-300 bg-white'">
-                                    <div class="font-medium text-gray-900 text-sm flex items-center flex-wrap gap-1">
+                                        class="w-full text-left p-3 rounded-md transition-all duration-300"
+                                        :style="selectedTemplateId === t.id
+                                            ? 'background: color-mix(in srgb, var(--brand-button) 10%, transparent); border: 1px solid var(--brand-button);'
+                                            : 'background: var(--surface); border: 1px solid var(--border);'">
+                                    <div class="font-medium text-sm flex items-center flex-wrap gap-1" style="color: var(--text-primary);">
                                         <span x-text="t.name"></span>
-                                        <span x-show="t.render_type === 'web'" class="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-600">Web</span>
-                                        <span x-show="!t.render_type || t.render_type === 'pdf'" class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">PDF</span>
-                                        <span x-show="t.category === 'sales'" class="text-[10px] px-1.5 py-0.5 rounded font-medium" style="background: rgba(249,115,22,0.15); color: #ea580c;">Sales</span>
-                                        <span x-show="t.category === 'rentals'" class="text-[10px] px-1.5 py-0.5 rounded font-medium" style="background: rgba(59,130,246,0.15); color: #2563eb;">Rentals</span>
-                                        <span x-show="t.document_type?.label || t.document_type?.name" class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium" x-text="t.document_type?.label || t.document_type?.name"></span>
+                                        <span x-show="t.render_type === 'web'" class="ds-badge ds-badge-info">Web</span>
+                                        <span x-show="!t.render_type || t.render_type === 'pdf'" class="ds-badge ds-badge-default">PDF</span>
+                                        <span x-show="t.category === 'sales'" class="ds-badge ds-badge-warning">Sales</span>
+                                        <span x-show="t.category === 'rentals'" class="ds-badge ds-badge-info">Rentals</span>
+                                        <span x-show="t.document_type?.label || t.document_type?.name" class="ds-badge ds-badge-default" x-text="t.document_type?.label || t.document_type?.name"></span>
                                     </div>
-                                    <div class="text-xs text-gray-500 mt-0.5">
+                                    <div class="text-xs mt-0.5" style="color: var(--text-muted);">
                                         <span x-text="t.page_count + ' page' + (t.page_count !== 1 ? 's' : '')"></span>
                                         &middot; <span x-text="(t.fields_json?.length || 0) + ' fields'"></span>
                                     </div>
@@ -157,32 +156,32 @@
                     </div>
                 </template>
 
-                <div x-show="templateGroups.every(g => g.templates.length === 0) && allWebPacks.length === 0 && allPdfPacks.length === 0" class="text-gray-400 text-sm text-center py-8">
+                <div x-show="templateGroups.every(g => g.templates.length === 0) && allWebPacks.length === 0 && allPdfPacks.length === 0" class="text-sm text-center py-8" style="color: var(--text-muted);">
                     No templates match your search.
                 </div>
 
                 {{-- Web Packs section --}}
                 <template x-if="allWebPacks.length > 0">
                     <div class="mt-6">
-                        <div class="px-3 py-2 bg-blue-50 rounded-lg mb-3">
-                            <h4 class="text-sm font-semibold text-blue-700 uppercase tracking-wide">Web Packs</h4>
+                        <div class="px-3 py-2 rounded-md mb-3" style="background: var(--surface-2);">
+                            <h4 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--brand-icon);">Web Packs</h4>
                         </div>
                         <div class="space-y-2">
                             <template x-for="p in allWebPacks" :key="'pack-' + p.id">
                                 <button @click="selectPack(p)"
-                                        class="w-full text-left p-3 rounded-lg border-2 transition-all duration-150"
-                                        :class="selectedPackId === p.id
-                                            ? 'border-blue-500 bg-blue-50'
-                                            : 'border-gray-200 hover:border-gray-300 bg-white'">
-                                    <div class="font-medium text-gray-900 text-sm flex items-center">
+                                        class="w-full text-left p-3 rounded-md transition-all duration-300"
+                                        :style="selectedPackId === p.id
+                                            ? 'background: color-mix(in srgb, var(--brand-button) 10%, transparent); border: 1px solid var(--brand-button);'
+                                            : 'background: var(--surface); border: 1px solid var(--border);'">
+                                    <div class="font-medium text-sm flex items-center" style="color: var(--text-primary);">
                                         <span x-text="p.name"></span>
-                                        <span class="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 ml-2">Web</span>
-                                        <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 ml-1" x-text="p.items.length + ' template' + (p.items.length !== 1 ? 's' : '')"></span>
+                                        <span class="ds-badge ds-badge-info ml-2">Web</span>
+                                        <span class="ds-badge ds-badge-default ml-1" x-text="p.items.length + ' tpl' + (p.items.length !== 1 ? 's' : '')"></span>
                                     </div>
                                     <div x-show="p.items.length > 0" class="mt-1.5 space-y-0.5">
                                         <template x-for="item in p.items" :key="'pi-' + item.id">
-                                            <div class="text-xs text-gray-500 flex items-center gap-1">
-                                                <span class="w-1 h-1 rounded-full bg-blue-400 flex-shrink-0"></span>
+                                            <div class="text-xs flex items-center gap-1" style="color: var(--text-muted);">
+                                                <span class="w-1 h-1 rounded-full flex-shrink-0" style="background: var(--brand-icon);"></span>
                                                 <span x-text="item.template?.name || 'Unknown template'"></span>
                                             </div>
                                         </template>
@@ -196,27 +195,27 @@
                 {{-- PDF Packs section --}}
                 <template x-if="allPdfPacks.length > 0">
                     <div class="mt-6">
-                        <div class="px-3 py-2 bg-gray-50 rounded-lg mb-3">
-                            <h4 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Document Packs</h4>
+                        <div class="px-3 py-2 rounded-md mb-3" style="background: var(--surface-2);">
+                            <h4 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--text-secondary);">Document Packs</h4>
                         </div>
                         <div class="space-y-2">
                             <template x-for="p in allPdfPacks" :key="'pdfpack-' + p.id">
                                 <div>
                                     <template x-if="p.esign_eligible">
                                         <button @click="selectPdfPack(p)"
-                                                class="w-full text-left p-3 rounded-lg border-2 transition-all duration-150"
-                                                :class="selectedPdfPackId === p.id
-                                                    ? 'border-blue-500 bg-blue-50'
-                                                    : 'border-gray-200 hover:border-gray-300 bg-white'">
-                                            <div class="font-medium text-gray-900 text-sm flex items-center">
+                                                class="w-full text-left p-3 rounded-md transition-all duration-300"
+                                                :style="selectedPdfPackId === p.id
+                                                    ? 'background: color-mix(in srgb, var(--brand-button) 10%, transparent); border: 1px solid var(--brand-button);'
+                                                    : 'background: var(--surface); border: 1px solid var(--border);'">
+                                            <div class="font-medium text-sm flex items-center" style="color: var(--text-primary);">
                                                 <span x-text="p.name"></span>
-                                                <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 ml-2">Pack</span>
-                                                <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 ml-1" x-text="p.templates.length + ' template' + (p.templates.length !== 1 ? 's' : '')"></span>
+                                                <span class="ds-badge ds-badge-default ml-2">Pack</span>
+                                                <span class="ds-badge ds-badge-default ml-1" x-text="p.templates.length + ' tpl' + (p.templates.length !== 1 ? 's' : '')"></span>
                                             </div>
                                             <div x-show="p.templates.length > 0" class="mt-1.5 space-y-0.5">
                                                 <template x-for="t in p.templates" :key="'ppt-' + t.id">
-                                                    <div class="text-xs text-gray-500 flex items-center gap-1">
-                                                        <span class="w-1 h-1 rounded-full bg-gray-400 flex-shrink-0"></span>
+                                                    <div class="text-xs flex items-center gap-1" style="color: var(--text-muted);">
+                                                        <span class="w-1 h-1 rounded-full flex-shrink-0" style="background: var(--text-muted);"></span>
                                                         <span x-text="t.name"></span>
                                                     </div>
                                                 </template>
@@ -224,17 +223,18 @@
                                         </button>
                                     </template>
                                     <template x-if="!p.esign_eligible">
-                                        <div class="w-full text-left p-3 rounded-lg border-2 border-gray-200 bg-white opacity-50 cursor-not-allowed">
-                                            <div class="font-medium text-gray-900 text-sm flex items-center">
+                                        <div class="w-full text-left p-3 rounded-md opacity-50 cursor-not-allowed"
+                                             style="background: var(--surface); border: 1px solid var(--border);">
+                                            <div class="font-medium text-sm flex items-center" style="color: var(--text-primary);">
                                                 <span x-text="p.name"></span>
-                                                <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 ml-2">Pack</span>
-                                                <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 ml-1" x-text="p.templates.length + ' template' + (p.templates.length !== 1 ? 's' : '')"></span>
+                                                <span class="ds-badge ds-badge-default ml-2">Pack</span>
+                                                <span class="ds-badge ds-badge-default ml-1" x-text="p.templates.length + ' tpl' + (p.templates.length !== 1 ? 's' : '')"></span>
                                             </div>
-                                            <div class="text-xs text-amber-600 mt-1">Contains a wet ink document &mdash; not eligible for e-signature</div>
+                                            <div class="text-xs mt-1" style="color: var(--ds-amber);">Contains a wet ink document &mdash; not eligible for e-signature</div>
                                             <div x-show="p.templates.length > 0" class="mt-1.5 space-y-0.5">
                                                 <template x-for="t in p.templates" :key="'ppt-' + t.id">
-                                                    <div class="text-xs text-gray-500 flex items-center gap-1">
-                                                        <span class="w-1 h-1 rounded-full bg-gray-400 flex-shrink-0"></span>
+                                                    <div class="text-xs flex items-center gap-1" style="color: var(--text-muted);">
+                                                        <span class="w-1 h-1 rounded-full flex-shrink-0" style="background: var(--text-muted);"></span>
                                                         <span x-text="t.name"></span>
                                                     </div>
                                                 </template>
@@ -250,11 +250,11 @@
 
             {{-- ======== STEP 2: Property ======== --}}
             <div x-show="currentStep === 2" x-cloak>
-                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Property Details</h3>
+                <h3 class="text-lg font-semibold mb-4" style="color: var(--text-primary);">Property Details</h3>
 
                 {{-- Property search --}}
                 <div class="relative mb-4" @click.outside="propSearchOpen = false" @keydown.escape.window="propSearchOpen = false">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Search property by address, suburb, or ERF</label>
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Search property by address, suburb, or ERF</label>
                     <div class="relative">
                         <input type="text"
                                x-model="propSearchQuery"
@@ -263,45 +263,48 @@
                                @keydown.arrow-down.prevent="propSearchIdx = Math.min(propSearchIdx + 1, propSearchResults.length - 1); $nextTick(() => $el.closest('.relative').querySelector('[data-idx=\'' + propSearchIdx + '\']')?.scrollIntoView({block:'nearest'}))"
                                @keydown.arrow-up.prevent="propSearchIdx = Math.max(propSearchIdx - 1, 0)"
                                @keydown.enter.prevent="if (propSearchOpen && propSearchResults[propSearchIdx]) selectProperty(propSearchResults[propSearchIdx])"
-                               class="w-full rounded-lg border px-3 py-2 text-sm pr-8"
-                               :class="property._selected ? 'border-emerald-400 bg-emerald-50' : 'border-slate-300 bg-white'"
+                               class="w-full rounded-md px-3 py-2 text-sm pr-8"
+                               :style="property._selected ? 'background: color-mix(in srgb, var(--ds-green) 10%, transparent); border: 1px solid var(--ds-green); color: var(--text-primary);' : 'background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);'"
                                placeholder="Start typing to search...">
                         <div class="absolute right-2 top-1/2 -translate-y-1/2">
-                            <svg x-show="propSearching" class="w-4 h-4 animate-spin text-gray-400" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/><path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75"/></svg>
-                            <svg x-show="!propSearching && !property._selected" class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                            <svg x-show="property._selected" class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            <svg x-show="propSearching" class="w-4 h-4 animate-spin" style="color: var(--text-muted);" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/><path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75"/></svg>
+                            <svg x-show="!propSearching && !property._selected" class="w-4 h-4" style="color: var(--text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                            <svg x-show="property._selected" class="w-4 h-4" style="color: var(--ds-green);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                         </div>
                     </div>
 
                     {{-- Selected property badge --}}
-                    <div x-show="property._selected" class="mt-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-sm">
-                        <svg class="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        <span class="text-emerald-800 font-medium truncate" x-text="'Selected: ' + property.address"></span>
-                        <button @click="clearPropertySelection()" class="ml-auto text-emerald-600 hover:text-red-500 transition flex-shrink-0">
+                    <div x-show="property._selected" class="mt-2 flex items-center gap-2 px-3 py-2 rounded-md text-sm"
+                         style="background: color-mix(in srgb, var(--ds-green) 10%, transparent); border: 1px solid color-mix(in srgb, var(--ds-green) 30%, transparent); color: var(--text-primary);">
+                        <svg class="w-4 h-4 flex-shrink-0" style="color: var(--ds-green);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                        <span class="font-medium truncate" x-text="'Selected: ' + property.address"></span>
+                        <button @click="clearPropertySelection()" class="ml-auto transition flex-shrink-0" style="color: var(--ds-green);">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>
                     </div>
 
                     {{-- Search results dropdown --}}
                     <div x-show="propSearchOpen && propSearchResults.length > 0" x-transition
-                         class="absolute z-30 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                         class="absolute z-30 w-full mt-1 rounded-md max-h-64 overflow-y-auto"
+                         style="background: var(--surface); border: 1px solid var(--border); box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
                         <template x-for="(result, ri) in propSearchResults" :key="result.source + '-' + result.id">
                             <button @click="selectProperty(result)"
                                     :data-idx="ri"
-                                    class="w-full text-left px-3 py-2.5 border-b border-gray-100 last:border-0 transition-colors"
-                                    :class="ri === propSearchIdx ? 'bg-blue-50' : 'hover:bg-gray-50'">
+                                    class="w-full text-left px-3 py-2.5 transition-colors"
+                                    style="border-top: 1px solid var(--border);"
+                                    :style="(ri === propSearchIdx ? 'background: var(--surface-2);' : '') + 'border-top: 1px solid var(--border);'">
                                 <div class="flex items-start justify-between">
                                     <div class="min-w-0">
-                                        <div class="text-sm font-medium text-gray-900 truncate" x-text="result.display"></div>
-                                        <div class="text-xs text-gray-500 mt-0.5 flex items-center gap-2">
+                                        <div class="text-sm font-medium truncate" style="color: var(--text-primary);" x-text="result.display"></div>
+                                        <div class="text-xs mt-0.5 flex items-center gap-2" style="color: var(--text-muted);">
                                             <span x-show="result.property_type" x-text="result.property_type" class="capitalize"></span>
                                             <span x-show="result.beds" x-text="result.beds + ' bed'"></span>
                                             <span x-show="result.price && result.source === 'properties'" x-text="'R ' + Number(result.price).toLocaleString()"></span>
                                             <span x-show="result.rental_amount" x-text="'R ' + Number(result.rental_amount).toLocaleString() + '/mo'"></span>
                                         </div>
-                                        <div x-show="result.lessor_name" class="text-xs text-blue-600 mt-0.5" x-text="ownerPartyLabel + ': ' + result.lessor_name"></div>
+                                        <div x-show="result.lessor_name" class="text-xs mt-0.5" style="color: var(--brand-icon);" x-text="ownerPartyLabel + ': ' + result.lessor_name"></div>
                                     </div>
-                                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 flex-shrink-0 ml-2"
+                                    <span class="ds-badge ds-badge-default ml-2 flex-shrink-0"
                                           x-text="result.source === 'properties' ? 'Property' : 'Rental'"></span>
                                 </div>
                             </button>
@@ -310,40 +313,41 @@
 
                     {{-- No results --}}
                     <div x-show="propSearchOpen && propSearchResults.length === 0 && !propSearching && propSearchQuery.length >= 2"
-                         class="absolute z-30 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-4 text-center text-sm text-gray-500">
+                         class="absolute z-30 w-full mt-1 rounded-md p-4 text-center text-sm"
+                         style="background: var(--surface); border: 1px solid var(--border); color: var(--text-muted); box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
                         No properties found for "<span x-text="propSearchQuery"></span>"
                     </div>
                 </div>
 
                 {{-- Manual entry toggle --}}
                 <div x-show="!property._selected" class="mb-3">
-                    <p class="text-xs text-gray-400 italic">Can't find property? Enter manually below</p>
+                    <p class="text-xs italic" style="color: var(--text-muted);">Can't find property? Enter manually below</p>
                 </div>
 
                 {{-- Manual entry fields --}}
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                        <input type="text" x-model="property.address" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 21 Dee Road, Uvongo">
+                        <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Address</label>
+                        <input type="text" x-model="property.address" class="w-full rounded-md px-3 py-2 text-sm" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);" placeholder="e.g. 21 Dee Road, Uvongo">
                     </div>
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Suburb</label>
-                            <input type="text" x-model="property.suburb" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. Uvongo">
+                            <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Suburb</label>
+                            <input type="text" x-model="property.suburb" class="w-full rounded-md px-3 py-2 text-sm" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);" placeholder="e.g. Uvongo">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Unit / Erf Number</label>
-                            <input type="text" x-model="property.erf" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. Erf 789">
+                            <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Unit / Erf Number</label>
+                            <input type="text" x-model="property.erf" class="w-full rounded-md px-3 py-2 text-sm" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);" placeholder="e.g. Erf 789">
                         </div>
                     </div>
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Complex Name</label>
-                            <input type="text" x-model="property.complex_name" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. Ocean View">
+                            <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Complex Name</label>
+                            <input type="text" x-model="property.complex_name" class="w-full rounded-md px-3 py-2 text-sm" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);" placeholder="e.g. Ocean View">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Property Type</label>
-                            <select x-model="property.property_type" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
+                            <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Property Type</label>
+                            <select x-model="property.property_type" class="w-full rounded-md px-3 py-2 text-sm" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
                                 <option value="">Select...</option>
                                 <option value="house">House</option>
                                 <option value="unit">Unit</option>
@@ -360,33 +364,33 @@
 
             {{-- ======== STEP 3: Recipients ======== --}}
             <div x-show="currentStep === 3" x-cloak>
-                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recipients</h3>
+                <h3 class="text-lg font-semibold mb-4" style="color: var(--text-primary);">Recipients</h3>
 
                 <div class="space-y-3">
                     <template x-for="(r, ri) in recipients" :key="ri">
-                        <div class="p-4 rounded-xl border transition-colors"
-                             :class="r.readonly ? 'border-blue-200 bg-blue-50/50' : (r._contact_id ? 'border-emerald-200 bg-emerald-50/30' : 'border-gray-200 bg-white')">
+                        <div class="p-4 rounded-md transition-colors"
+                             :style="r.readonly ? 'background: color-mix(in srgb, var(--brand-icon) 6%, transparent); border: 1px solid color-mix(in srgb, var(--brand-icon) 30%, transparent);' : (r._contact_id ? 'background: color-mix(in srgb, var(--ds-green) 6%, transparent); border: 1px solid color-mix(in srgb, var(--ds-green) 30%, transparent);' : 'background: var(--surface); border: 1px solid var(--border);')">
                             <div class="flex items-center justify-between mb-3">
                                 <div class="flex items-center gap-2">
-                                    <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-                                          :class="r.readonly ? 'bg-blue-600 text-white' : (r._contact_id ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-600')"
+                                    <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                                          :style="r.readonly ? 'background: var(--brand-button);' : (r._contact_id ? 'background: var(--ds-green);' : 'background: var(--surface-2); color: var(--text-secondary);')"
                                           x-text="ri + 1"></span>
-                                    <span class="text-sm font-semibold text-gray-700" x-text="r.readonly ? 'Agent (You)' : 'Recipient ' + (ri+1)"></span>
-                                    <span x-show="r._contact_id" class="text-xs text-emerald-600 font-medium">Linked</span>
+                                    <span class="text-sm font-semibold" style="color: var(--text-primary);" x-text="r.readonly ? 'Agent (You)' : 'Recipient ' + (ri+1)"></span>
+                                    <span x-show="r._contact_id" class="ds-badge ds-badge-success">Linked</span>
                                 </div>
                                 <button x-show="!r.readonly" @click="removeRecipient(ri)"
-                                        class="w-6 h-6 flex items-center justify-center rounded-full text-red-400 hover:text-red-600 hover:bg-red-50 transition">
+                                        class="w-6 h-6 flex items-center justify-center rounded-full transition" style="color: var(--ds-crimson);">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                 </button>
                             </div>
                             <div class="space-y-3">
                                 <div>
-                                    <label class="block text-xs font-medium text-gray-600 mb-1">Role</label>
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Role</label>
                                     <template x-if="r.readonly">
-                                        <input type="text" value="Agent" disabled class="w-full rounded-lg border border-gray-200 bg-gray-100 text-gray-500 px-3 py-2 text-sm">
+                                        <input type="text" value="Agent" disabled class="w-full rounded-md px-3 py-2 text-sm" style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);">
                                     </template>
                                     <template x-if="!r.readonly">
-                                        <select x-model="r.role" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
+                                        <select x-model="r.role" class="w-full rounded-md px-3 py-2 text-sm" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
                                             <option value="">Select role...</option>
                                             {{-- Hidden fallback preserves bound value for roles not in the list --}}
                                             <option x-show="false" :value="r.role" x-text="getRoleLabel(r.role)" selected></option>
@@ -399,8 +403,9 @@
 
                                 {{-- Role mismatch warning --}}
                                 <template x-if="!r.readonly && r.role && requiredSigningRoles.length > 0 && !roleMatchesTemplate(r.role)">
-                                    <div class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
-                                        <p class="text-xs text-amber-800">
+                                    <div class="rounded-md px-3 py-2"
+                                         style="background: color-mix(in srgb, var(--ds-amber) 10%, transparent); border: 1px solid color-mix(in srgb, var(--ds-amber) 30%, transparent); color: var(--text-primary);">
+                                        <p class="text-xs">
                                             <strong x-text="r.name || ('Recipient ' + (ri+1))"></strong>
                                             is set as <strong x-text="getRoleLabel(r.role)"></strong>
                                             but this document requires
@@ -410,7 +415,8 @@
                                             <template x-for="pr in resolvedPartyRoles" :key="pr.value">
                                                 <button type="button"
                                                         @click="fixRecipientRole(ri, pr.value)"
-                                                        class="px-2.5 py-1 text-xs font-medium rounded-md bg-amber-200 text-amber-900 hover:bg-amber-300 transition">
+                                                        class="px-2.5 py-1 text-xs font-semibold rounded-md transition"
+                                                        style="background: color-mix(in srgb, var(--ds-amber) 25%, transparent); color: var(--text-primary);">
                                                     <span x-text="'Set as ' + pr.label"></span>
                                                 </button>
                                             </template>
@@ -421,7 +427,7 @@
                                 {{-- Contact search (only for non-agent recipients) --}}
                                 <template x-if="!r.readonly">
                                     <div class="relative" @click.outside="r._searchOpen = false" @keydown.escape.window="r._searchOpen = false">
-                                        <label class="block text-xs font-medium text-gray-600 mb-1">Search contact by name, email, or ID</label>
+                                        <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Search contact by name, email, or ID</label>
                                         <div class="relative">
                                             <input type="text"
                                                    x-model="r._searchQuery"
@@ -430,37 +436,39 @@
                                                    @keydown.arrow-down.prevent="r._searchIdx = Math.min((r._searchIdx || 0) + 1, (r._searchResults || []).length - 1)"
                                                    @keydown.arrow-up.prevent="r._searchIdx = Math.max((r._searchIdx || 0) - 1, 0)"
                                                    @keydown.enter.prevent="if (r._searchOpen && r._searchResults?.[r._searchIdx]) selectContact(ri, r._searchResults[r._searchIdx])"
-                                                   class="w-full rounded-lg border px-3 py-2 text-sm pr-8"
-                                                   :class="r._contact_id ? 'border-emerald-400 bg-emerald-50' : 'border-slate-300 bg-white'"
+                                                   class="w-full rounded-md px-3 py-2 text-sm pr-8"
+                                                   :style="r._contact_id ? 'background: color-mix(in srgb, var(--ds-green) 10%, transparent); border: 1px solid var(--ds-green); color: var(--text-primary);' : 'background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);'"
                                                    placeholder="Start typing to search...">
                                             <div class="absolute right-2 top-1/2 -translate-y-1/2">
-                                                <svg x-show="r._searching" class="w-4 h-4 animate-spin text-gray-400" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/><path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75"/></svg>
-                                                <svg x-show="!r._searching && r._contact_id" class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                                <svg x-show="!r._searching && !r._contact_id" class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                                                <svg x-show="r._searching" class="w-4 h-4 animate-spin" style="color: var(--text-muted);" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/><path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75"/></svg>
+                                                <svg x-show="!r._searching && r._contact_id" class="w-4 h-4" style="color: var(--ds-green);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                                <svg x-show="!r._searching && !r._contact_id" class="w-4 h-4" style="color: var(--text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                                             </div>
                                         </div>
 
                                         {{-- Selected contact badge --}}
-                                        <div x-show="r._contact_id" class="mt-1.5 flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs">
-                                            <svg class="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                            <span class="text-emerald-800 font-medium truncate" x-text="'Selected: ' + r.name"></span>
-                                            <button @click="clearContactSelection(ri)" class="ml-auto text-emerald-600 hover:text-red-500 transition flex-shrink-0">
+                                        <div x-show="r._contact_id" class="mt-1.5 flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs"
+                                             style="background: color-mix(in srgb, var(--ds-green) 10%, transparent); border: 1px solid color-mix(in srgb, var(--ds-green) 30%, transparent); color: var(--text-primary);">
+                                            <svg class="w-3.5 h-3.5 flex-shrink-0" style="color: var(--ds-green);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                            <span class="font-medium truncate" x-text="'Selected: ' + r.name"></span>
+                                            <button @click="clearContactSelection(ri)" class="ml-auto transition flex-shrink-0" style="color: var(--ds-green);">
                                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                             </button>
                                         </div>
 
                                         {{-- Search results --}}
                                         <div x-show="r._searchOpen && (r._searchResults || []).length > 0" x-transition
-                                             class="absolute z-30 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                             class="absolute z-30 w-full mt-1 rounded-md max-h-48 overflow-y-auto"
+                                             style="background: var(--surface); border: 1px solid var(--border); box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
                                             <template x-for="(contact, ci) in (r._searchResults || [])" :key="contact.id">
                                                 <button @click="selectContact(ri, contact)"
-                                                        class="w-full text-left px-3 py-2 border-b border-gray-100 last:border-0 transition-colors"
-                                                        :class="ci === (r._searchIdx || 0) ? 'bg-blue-50' : 'hover:bg-gray-50'">
-                                                    <div class="text-sm font-medium text-gray-900" x-text="contact.full_name"></div>
-                                                    <div class="text-xs text-gray-500 flex items-center gap-2">
+                                                        class="w-full text-left px-3 py-2 transition-colors"
+                                                        :style="(ci === (r._searchIdx || 0) ? 'background: var(--surface-2);' : '') + 'border-top: 1px solid var(--border);'">
+                                                    <div class="text-sm font-medium" style="color: var(--text-primary);" x-text="contact.full_name"></div>
+                                                    <div class="text-xs flex items-center gap-2" style="color: var(--text-muted);">
                                                         <span x-show="contact.email" x-text="contact.email"></span>
                                                         <span x-show="contact.phone" x-text="contact.phone"></span>
-                                                        <span x-show="contact.contact_type" class="text-blue-500" x-text="contact.contact_type"></span>
+                                                        <span x-show="contact.contact_type" style="color: var(--brand-icon);" x-text="contact.contact_type"></span>
                                                     </div>
                                                 </button>
                                             </template>
@@ -468,44 +476,45 @@
 
                                         {{-- No results --}}
                                         <div x-show="r._searchOpen && (r._searchResults || []).length === 0 && !r._searching && (r._searchQuery || '').length >= 2"
-                                             class="absolute z-30 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-center text-xs text-gray-500">
+                                             class="absolute z-30 w-full mt-1 rounded-md p-3 text-center text-xs"
+                                             style="background: var(--surface); border: 1px solid var(--border); color: var(--text-muted); box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
                                             No contacts found. Enter manually below.
                                         </div>
                                     </div>
                                 </template>
 
                                 <div>
-                                    <label class="block text-xs font-medium text-gray-600 mb-1">Full Name</label>
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Full Name</label>
                                     <input type="text" x-model="r.name" :readonly="r.readonly"
-                                           class="w-full rounded-lg border px-3 py-2 text-sm"
-                                           :class="r.readonly ? 'border-gray-200 bg-gray-100 text-gray-500' : 'border-slate-300 bg-white text-slate-900'">
+                                           class="w-full rounded-md px-3 py-2 text-sm"
+                                           :style="r.readonly ? 'background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);' : 'background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);'">
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-medium text-gray-600 mb-1">ID Number</label>
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">ID Number</label>
                                     <input type="text" x-model="r.id_number" :readonly="r.readonly"
-                                           class="w-full rounded-lg border px-3 py-2 text-sm"
-                                           :class="r.readonly ? 'border-gray-200 bg-gray-100 text-gray-500' : 'border-slate-300 bg-white text-slate-900'"
+                                           class="w-full rounded-md px-3 py-2 text-sm"
+                                           :style="r.readonly ? 'background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);' : 'background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);'"
                                            placeholder="SA ID or Passport">
                                 </div>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div>
-                                        <label class="block text-xs font-medium text-gray-600 mb-1">Email</label>
+                                        <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Email</label>
                                         <input type="email" x-model="r.email" :readonly="r.readonly"
-                                               class="w-full rounded-lg border px-3 py-2 text-sm"
-                                               :class="r.readonly ? 'border-gray-200 bg-gray-100 text-gray-500' : 'border-slate-300 bg-white text-slate-900'">
+                                               class="w-full rounded-md px-3 py-2 text-sm"
+                                               :style="r.readonly ? 'background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);' : 'background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);'">
                                     </div>
                                     <div>
-                                        <label class="block text-xs font-medium text-gray-600 mb-1">Cell Phone</label>
+                                        <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Cell Phone</label>
                                         <input type="tel" x-model="r.cell" :readonly="r.readonly"
-                                               class="w-full rounded-lg border px-3 py-2 text-sm"
-                                               :class="r.readonly ? 'border-gray-200 bg-gray-100 text-gray-500' : 'border-slate-300 bg-white text-slate-900'">
+                                               class="w-full rounded-md px-3 py-2 text-sm"
+                                               :style="r.readonly ? 'background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);' : 'background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);'">
                                     </div>
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-medium text-gray-600 mb-1">Physical Address</label>
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Physical Address</label>
                                     <input type="text" x-model="r.address" :readonly="r.readonly"
-                                           class="w-full rounded-lg border px-3 py-2 text-sm"
-                                           :class="r.readonly ? 'border-gray-200 bg-gray-100 text-gray-500' : 'border-slate-300 bg-white text-slate-900'"
+                                           class="w-full rounded-md px-3 py-2 text-sm"
+                                           :style="r.readonly ? 'background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);' : 'background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);'"
                                            placeholder="Residential address">
                                 </div>
                             </div>
@@ -516,28 +525,31 @@
                 {{-- Add second owner button (only when an owner party exists but no second one yet) --}}
                 <button x-show="hasRoleRecipient(ownerPartyRole) && !hasSecondRoleRecipient(ownerPartyRole)"
                         @click="addSecondOwner()"
-                        class="w-full mt-3 py-2.5 border-2 border-dashed border-emerald-300 rounded-xl text-sm text-emerald-600 hover:border-emerald-500 hover:text-emerald-700 transition">
+                        class="w-full mt-3 py-2.5 rounded-md text-sm transition"
+                        style="border: 2px dashed color-mix(in srgb, var(--ds-green) 40%, transparent); color: var(--ds-green);">
                     <span x-text="'+ Add Second ' + ownerPartyLabel + ' (Co-owner)'"></span>
                 </button>
 
-                <button @click="addRecipient()" class="w-full mt-3 py-2.5 border-2 border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 transition">
+                <button @click="addRecipient()" class="w-full mt-3 py-2.5 rounded-md text-sm transition"
+                        style="border: 2px dashed var(--border); color: var(--text-secondary);">
                     + Add Recipient
                 </button>
             </div>
 
             {{-- ======== STEP 4: Details ======== --}}
             <div x-show="currentStep === 4" x-cloak>
-                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Document Details</h3>
+                <h3 class="text-lg font-semibold mb-4" style="color: var(--text-primary);">Document Details</h3>
 
                 {{-- Auto-fill notice --}}
-                <div x-show="property._selected && (details._autoFilled || false)" class="mb-4 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-700 flex items-center gap-2">
-                    <svg class="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <div x-show="property._selected && (details._autoFilled || false)" class="mb-4 px-3 py-2 rounded-md text-xs flex items-center gap-2"
+                     style="background: color-mix(in srgb, var(--ds-green) 10%, transparent); border: 1px solid color-mix(in srgb, var(--ds-green) 30%, transparent); color: var(--text-primary);">
+                    <svg class="w-4 h-4 flex-shrink-0" style="color: var(--ds-green);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     Some fields were auto-filled from the selected property. You can adjust them below.
                 </div>
 
                 {{-- Context indicator --}}
-                <div class="mb-4 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2"
-                     :class="isSalesContext ? 'bg-purple-50 border border-purple-200 text-purple-700' : 'bg-teal-50 border border-teal-200 text-teal-700'">
+                <div class="mb-4 px-3 py-2 rounded-md text-xs font-medium flex items-center gap-2"
+                     style="background: color-mix(in srgb, var(--brand-icon) 10%, transparent); border: 1px solid color-mix(in srgb, var(--brand-icon) 30%, transparent); color: var(--text-primary);">
                     <span x-text="isSalesContext ? 'Sales Document' : 'Rental Document'"></span>
                 </div>
 
@@ -546,34 +558,34 @@
                     <template x-if="isSalesContext">
                         <div class="space-y-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Asking Price (R)</label>
+                                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Asking Price (R)</label>
                                 <input type="text" x-model="details.price"
                                        @input="updatePreviewField('price', $event.target.value)"
-                                       class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 2500000">
+                                       class="w-full rounded-md px-3 py-2 text-sm" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);" placeholder="e.g. 2500000">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Commission (%)</label>
+                                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Commission (%)</label>
                                 <input type="text" x-model="details.commission"
                                        @input="updatePreviewField('commission_percent', $event.target.value)"
-                                       class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 7.5">
+                                       class="w-full rounded-md px-3 py-2 text-sm" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);" placeholder="e.g. 7.5">
                             </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Mandate Start Date</label>
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Mandate Start Date</label>
                                     <input type="date" x-model="details.mandate_start"
                                            @input="updatePreviewField('mandate_start', $event.target.value)"
-                                           class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
+                                           class="w-full rounded-md px-3 py-2 text-sm" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Mandate Expiry Date</label>
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Mandate Expiry Date</label>
                                     <input type="date" x-model="details.mandate_expiry"
                                            @input="updatePreviewField('mandate_expiry', $event.target.value)"
-                                           class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
+                                           class="w-full rounded-md px-3 py-2 text-sm" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
                                     <div class="flex flex-wrap gap-1.5 mt-2">
                                         <template x-for="opt in [{m:1,l:'1 Mo'},{m:3,l:'3 Mo'},{m:6,l:'6 Mo'},{m:9,l:'9 Mo'}]" :key="opt.m">
                                             <button type="button" @click="quickFillExpiry(opt.m)"
-                                                    class="px-2.5 py-1 rounded-full border text-[11px] font-medium transition"
-                                                    :class="details.mandate_expiry === calcExpiryDate(opt.m) ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-600 border-gray-300 hover:border-teal-400 hover:text-teal-600'"
+                                                    class="px-2.5 py-1 rounded-full text-xs font-medium transition"
+                                                    :style="details.mandate_expiry === calcExpiryDate(opt.m) ? 'background: var(--brand-button); color: #fff; border: 1px solid var(--brand-button);' : 'background: var(--surface); color: var(--text-secondary); border: 1px solid var(--border);'"
                                                     x-text="opt.l"></button>
                                         </template>
                                     </div>
@@ -587,56 +599,56 @@
                         <div class="space-y-4">
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Monthly Rental (R)</label>
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Monthly Rental (R)</label>
                                     <input type="text" x-model="details.monthly_rental"
                                            @input="updatePreviewField('monthly_rental', $event.target.value); updatePreviewField('rental_amount', $event.target.value)"
-                                           class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 12000">
+                                           class="w-full rounded-md px-3 py-2 text-sm" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);" placeholder="e.g. 12000">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Deposit (R)</label>
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Deposit (R)</label>
                                     <input type="text" x-model="details.deposit"
                                            @input="updatePreviewField('deposit_amount', $event.target.value)"
-                                           class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 12000">
+                                           class="w-full rounded-md px-3 py-2 text-sm" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);" placeholder="e.g. 12000">
                                 </div>
                             </div>
 
                             {{-- Lease dates with duration selector --}}
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Lease Start Date</label>
+                                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Lease Start Date</label>
                                 <input type="date" x-model="details.lease_start"
                                        @change="calculateLeaseEnd()"
                                        @input="updatePreviewField('lease_start', $event.target.value)"
-                                       class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm">
+                                       class="w-full rounded-md px-3 py-2 text-sm" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Lease Duration</label>
+                                <label class="block text-xs font-medium mb-2" style="color: var(--text-secondary);">Lease Duration</label>
                                 <div class="flex flex-wrap gap-2 mb-3">
                                     <template x-for="opt in [{value: 6, label: '6 months'}, {value: 12, label: '12 months'}, {value: 24, label: '24 months'}, {value: 0, label: 'Custom'}]" :key="opt.value">
                                         <button type="button"
                                                 @click="details._duration = opt.value; calculateLeaseEnd()"
-                                                class="px-3 py-1.5 rounded-lg border text-xs font-medium transition"
-                                                :class="details._duration === opt.value ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'"
+                                                class="px-3 py-1.5 rounded-md text-xs font-medium transition"
+                                                :style="details._duration === opt.value ? 'background: var(--brand-button); color: #fff; border: 1px solid var(--brand-button);' : 'background: var(--surface); color: var(--text-secondary); border: 1px solid var(--border);'"
                                                 x-text="opt.label"></button>
                                     </template>
                                 </div>
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Lease End Date</label>
+                                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Lease End Date</label>
                                 <input type="date" x-model="details.lease_end"
                                        :readonly="details._duration !== 0"
-                                       class="w-full rounded-lg border px-3 py-2 text-sm"
-                                       :class="details._duration !== 0 ? 'border-gray-200 bg-gray-100 text-gray-500' : 'border-slate-300 bg-white text-slate-900'">
-                                <p x-show="details._duration !== 0 && details.lease_end" class="text-xs text-gray-400 mt-1" x-text="'Auto-calculated: ' + details._duration + ' months from start'"></p>
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       :style="details._duration !== 0 ? 'background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);' : 'background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);'">
+                                <p x-show="details._duration !== 0 && details.lease_end" class="text-xs mt-1" style="color: var(--text-muted);" x-text="'Auto-calculated: ' + details._duration + ' months from start'"></p>
                             </div>
 
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Commission (%)</label>
-                                    <input type="text" x-model="details.commission" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 8.5">
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Commission (%)</label>
+                                    <input type="text" x-model="details.commission" class="w-full rounded-md px-3 py-2 text-sm" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);" placeholder="e.g. 8.5">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Marketing Fee (R)</label>
-                                    <input type="text" x-model="details.marketing_fee" class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm" placeholder="e.g. 2500">
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Marketing Fee (R)</label>
+                                    <input type="text" x-model="details.marketing_fee" class="w-full rounded-md px-3 py-2 text-sm" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);" placeholder="e.g. 2500">
                                 </div>
                             </div>
                         </div>
@@ -644,15 +656,15 @@
 
                     {{-- Dynamic manual fields from template --}}
                     <template x-if="manualFields.length > 0">
-                        <div class="mt-4 pt-4 border-t border-gray-200">
-                            <p class="text-xs text-gray-500 mb-3">Additional template fields</p>
+                        <div class="mt-4 pt-4" style="border-top: 1px solid var(--border);">
+                            <p class="text-xs mb-3" style="color: var(--text-muted);">Additional template fields</p>
                             <div class="grid grid-cols-2 gap-4">
                                 <template x-for="mf in manualFields" :key="mf.id">
                                     <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-1" x-text="mf.name"></label>
+                                        <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);" x-text="mf.name"></label>
                                         <input type="text"
                                                x-model="details['named_field_' + mf.id]"
-                                               class="w-full rounded-lg border border-slate-300 bg-white text-slate-900 px-3 py-2 text-sm"
+                                               class="w-full rounded-md px-3 py-2 text-sm" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);"
                                                :placeholder="mf.name">
                                     </div>
                                 </template>
@@ -664,22 +676,23 @@
 
             {{-- ======== STEP 5: Fill & Review ======== --}}
             <div x-show="currentStep === 5" x-cloak>
-                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Fill & Review</h3>
-                <p class="text-xs text-gray-500 mb-4">Fields are shown in document order. Pre-filled values come from property and recipient data.</p>
+                <h3 class="text-lg font-semibold mb-4" style="color: var(--text-primary);">Fill & Review</h3>
+                <p class="text-xs mb-4" style="color: var(--text-muted);">Fields are shown in document order. Pre-filled values come from property and recipient data.</p>
 
                 {{-- All fields in document order (no party grouping) --}}
                 <div class="space-y-3">
                     <template x-for="(f, fi) in allWizardFields" :key="f.id">
                         <div>
                             <div class="flex items-center justify-between mb-1">
-                                <label class="block text-xs font-medium text-gray-600">
+                                <label class="block text-xs font-medium" style="color: var(--text-secondary);">
                                     <span x-text="fieldLabel(f)"></span>
-                                    <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded-full"
-                                          :class="isCreatorField(f) ? 'bg-blue-100 text-blue-600' : 'bg-amber-100 text-amber-600'"
+                                    <span class="ds-badge ml-1"
+                                          :class="isCreatorField(f) ? 'ds-badge-info' : 'ds-badge-warning'"
                                           x-text="fieldRoleLabel(f)"></span>
                                 </label>
                                 <select @change="setFieldParty(f.id, $event.target.value)"
-                                        class="text-[10px] rounded border border-gray-200 px-1.5 py-0.5 bg-gray-50 text-gray-500 ml-2">
+                                        class="text-xs rounded-md px-1.5 py-0.5 ml-2"
+                                        style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-secondary);">
                                     <template x-for="opt in partyOptions" :key="opt.value">
                                         <option :value="opt.value" x-text="opt.label" :selected="getFieldParty(f) === opt.value"></option>
                                     </template>
@@ -692,8 +705,8 @@
                                        :value="fieldValues[f.id] || ''"
                                        @input="setFieldValue(f.id, $event.target.value)"
                                        @focus="highlightField(f.id)" @blur="clearFieldHighlight()"
-                                       class="w-full rounded-lg border px-3 py-2 text-sm"
-                                       :class="(fieldValues[f.id] && fieldValues[f.id] !== '') ? 'border-green-400 bg-green-50' : 'border-slate-300 bg-white'"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       :style="(fieldValues[f.id] && fieldValues[f.id] !== '') ? 'background: color-mix(in srgb, var(--ds-green) 10%, transparent); border: 1px solid var(--ds-green); color: var(--text-primary);' : 'background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);'"
                                        :placeholder="fieldLabel(f)">
                             </template>
 
@@ -703,8 +716,8 @@
                                        :value="fieldValues[f.id] || ''"
                                        @input="setFieldValue(f.id, $event.target.value)"
                                        @focus="highlightField(f.id)" @blur="clearFieldHighlight()"
-                                       class="w-full rounded-lg border px-3 py-2 text-sm"
-                                       :class="(fieldValues[f.id] && fieldValues[f.id] !== '') ? 'border-green-400 bg-green-50' : 'border-slate-300 bg-white'">
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       :style="(fieldValues[f.id] && fieldValues[f.id] !== '') ? 'background: color-mix(in srgb, var(--ds-green) 10%, transparent); border: 1px solid var(--ds-green); color: var(--text-primary);' : 'background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);'">
                             </template>
 
                             {{-- Selection dropdown --}}
@@ -712,8 +725,8 @@
                                 <select :value="fieldValues[f.id] || ''"
                                         @change="setFieldValue(f.id, $event.target.value)"
                                         @focus="highlightField(f.id)" @blur="clearFieldHighlight()"
-                                        class="w-full rounded-lg border px-3 py-2 text-sm"
-                                        :class="(fieldValues[f.id] && fieldValues[f.id] !== '') ? 'border-green-400 bg-green-50' : 'border-slate-300 bg-white'">
+                                        class="w-full rounded-md px-3 py-2 text-sm"
+                                        :style="(fieldValues[f.id] && fieldValues[f.id] !== '') ? 'background: color-mix(in srgb, var(--ds-green) 10%, transparent); border: 1px solid var(--ds-green); color: var(--text-primary);' : 'background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);'">
                                     <option value="">Select...</option>
                                     <template x-for="opt in (f.options || [])" :key="opt">
                                         <option :value="opt" x-text="opt" :selected="fieldValues[f.id] === opt"></option>
@@ -727,8 +740,8 @@
                                     <template x-for="opt in (f.options || ['Yes', 'No'])" :key="opt">
                                         <button type="button"
                                                 @click="setFieldValue(f.id, opt); highlightField(f.id)"
-                                                class="px-3 py-1.5 rounded border text-xs font-medium transition"
-                                                :class="fieldValues[f.id] === opt ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'"
+                                                class="px-3 py-1.5 rounded-md text-xs font-medium transition"
+                                                :style="fieldValues[f.id] === opt ? 'background: var(--brand-button); color: #fff; border: 1px solid var(--brand-button);' : 'background: var(--surface); color: var(--text-secondary); border: 1px solid var(--border);'"
                                                 x-text="opt"></button>
                                     </template>
                                 </div>
@@ -741,8 +754,8 @@
                                     <input type="checkbox"
                                            :checked="fieldValues[f.id] === 'strikethrough'"
                                            @change="setFieldValue(f.id, $event.target.checked ? 'strikethrough' : '')"
-                                           class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                                    <span class="text-sm text-gray-700">Apply strikethrough</span>
+                                           class="rounded" style="accent-color: var(--brand-button);">
+                                    <span class="text-sm" style="color: var(--text-primary);">Apply strikethrough</span>
                                 </label>
                             </template>
 
@@ -752,17 +765,17 @@
                                           @input="setFieldValue(f.id, $event.target.value)"
                                           @focus="highlightField(f.id)" @blur="clearFieldHighlight()"
                                           rows="3"
-                                          class="w-full rounded-lg border px-3 py-2 text-sm"
-                                          :class="(fieldValues[f.id] && fieldValues[f.id] !== '') ? 'border-green-400 bg-green-50' : 'border-slate-300 bg-white'"
+                                          class="w-full rounded-md px-3 py-2 text-sm"
+                                          :style="(fieldValues[f.id] && fieldValues[f.id] !== '') ? 'background: color-mix(in srgb, var(--ds-green) 10%, transparent); border: 1px solid var(--ds-green); color: var(--text-primary);' : 'background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);'"
                                           :placeholder="fieldLabel(f)"></textarea>
                             </template>
 
                             {{-- Field group display (read-only, collapsed group members) --}}
                             <template x-if="fieldInputType(f) === 'field_group_display'">
-                                <div class="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-gray-800"
-                                     :class="(f.value || fieldValues[f.id]) ? 'border-green-400 bg-green-50' : ''">
+                                <div class="rounded-md px-3 py-2 text-sm"
+                                     :style="(f.value || fieldValues[f.id]) ? 'background: color-mix(in srgb, var(--ds-green) 10%, transparent); border: 1px solid var(--ds-green); color: var(--text-primary);' : 'background: color-mix(in srgb, var(--brand-icon) 8%, transparent); border: 1px solid color-mix(in srgb, var(--brand-icon) 30%, transparent); color: var(--text-primary);'">
                                     <span x-text="f.value || fieldValues[f.id] || 'Pending — will auto-fill from recipient data'"
-                                          :class="(f.value || fieldValues[f.id]) ? 'text-gray-900 font-medium' : 'text-gray-400 italic'"></span>
+                                          :style="(f.value || fieldValues[f.id]) ? 'font-weight: 500;' : 'color: var(--text-muted); font-style: italic;'"></span>
                                 </div>
                             </template>
                         </div>
@@ -770,16 +783,17 @@
                 </div>
 
                 {{-- Additional Clauses --}}
-                <div class="mt-6 mb-4 p-3 border border-dashed border-blue-300 rounded-lg bg-blue-50/50">
+                <div class="mt-6 mb-4 p-3 rounded-md"
+                     style="background: color-mix(in srgb, var(--brand-icon) 6%, transparent); border: 1px dashed color-mix(in srgb, var(--brand-icon) 40%, transparent);">
                     <div class="flex items-center justify-between">
                         <div>
-                            <span class="text-sm font-semibold text-blue-700">Other Conditions / Additional Clauses</span>
-                            <p class="text-xs text-blue-500 mt-0.5">
+                            <span class="text-sm font-semibold" style="color: var(--text-primary);">Other Conditions / Additional Clauses</span>
+                            <p class="text-xs mt-0.5" style="color: var(--text-secondary);">
                                 Type conditions manually or insert from the clause library. Separate each clause with a blank line.
                             </p>
                         </div>
                         <button type="button" @click="showClauseLibrary = true"
-                                class="text-sm px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                                class="corex-btn-primary">
                             + Insert Clause
                         </button>
                     </div>
@@ -788,30 +802,29 @@
                     <textarea x-model="otherConditionsText"
                               @input="updateClausesPreview()"
                               rows="6"
-                              class="mt-3 w-full rounded-lg border px-3 py-2 text-sm"
-                              :class="otherConditionsText.trim() ? 'border-green-400 bg-green-50' : 'border-slate-300 bg-white'"
-                              placeholder="Type additional conditions here, or use 'Insert Clause' to add from the library. Separate each clause with a blank line for per-clause initials tracking."
-                              style="min-height:120px; resize:vertical;"></textarea>
+                              class="mt-3 w-full rounded-md px-3 py-2 text-sm"
+                              :style="(otherConditionsText.trim() ? 'background: color-mix(in srgb, var(--ds-green) 10%, transparent); border: 1px solid var(--ds-green); color: var(--text-primary);' : 'background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);') + 'min-height:120px; resize:vertical;'"
+                              placeholder="Type additional conditions here, or use 'Insert Clause' to add from the library. Separate each clause with a blank line for per-clause initials tracking."></textarea>
                 </div>
             </div>
 
             {{-- ======== STEP 6: Signing Setup ======== --}}
             <div x-show="currentStep === 6" x-cloak>
-                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Signing Setup</h3>
+                <h3 class="text-lg font-semibold mb-4" style="color: var(--text-primary);">Signing Setup</h3>
 
                 {{-- Delivery Mode Selection --}}
                 <template x-if="effectiveDeliveryModes.length > 1">
-                    <div class="mb-6 p-4 rounded-lg border border-gray-200 bg-white">
-                        <h4 class="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-3">Delivery Mode</h4>
+                    <div class="mb-6 p-4 rounded-md" style="background: var(--surface); border: 1px solid var(--border);">
+                        <h4 class="text-xs font-semibold uppercase tracking-wide mb-3" style="color: var(--text-secondary);">Delivery Mode</h4>
                         <div class="space-y-2">
                             <template x-for="mode in effectiveDeliveryModes" :key="mode">
-                                <label class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all"
-                                       :class="deliveryMode === mode ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'">
+                                <label class="flex items-start gap-3 p-3 rounded-md cursor-pointer transition-all"
+                                       :style="deliveryMode === mode ? 'background: color-mix(in srgb, var(--brand-button) 10%, transparent); border: 1px solid var(--brand-button);' : 'background: var(--surface); border: 1px solid var(--border);'">
                                     <input type="radio" name="delivery_mode" :value="mode" x-model="deliveryMode"
-                                           class="mt-0.5 rounded-full border-gray-300 text-blue-600">
+                                           class="mt-0.5" style="accent-color: var(--brand-button);">
                                     <div>
-                                        <div class="text-sm font-semibold text-gray-800" x-text="deliveryModeLabel(mode)"></div>
-                                        <div class="text-xs text-gray-500 mt-0.5" x-text="deliveryModeDescription(mode)"></div>
+                                        <div class="text-sm font-semibold" style="color: var(--text-primary);" x-text="deliveryModeLabel(mode)"></div>
+                                        <div class="text-xs mt-0.5" style="color: var(--text-muted);" x-text="deliveryModeDescription(mode)"></div>
                                     </div>
                                 </label>
                             </template>
@@ -819,13 +832,14 @@
                     </div>
                 </template>
                 <template x-if="effectiveDeliveryModes.length === 1">
-                    <div class="mb-4 p-3 rounded-lg bg-gray-50 border border-gray-200 text-sm text-gray-600">
+                    <div class="mb-4 p-3 rounded-md text-sm" style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-secondary);">
                         <span class="font-semibold" x-text="deliveryModeLabel(effectiveDeliveryModes[0])"></span>
-                        <span class="text-xs ml-2 text-gray-400" x-text="'(only available mode for this template)'"></span>
+                        <span class="text-xs ml-2" style="color: var(--text-muted);" x-text="'(only available mode for this template)'"></span>
                     </div>
                 </template>
                 <template x-if="esignBlocked">
-                    <div class="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-300 text-sm text-amber-800">
+                    <div class="mb-4 p-3 rounded-md text-sm"
+                         style="background: color-mix(in srgb, var(--ds-amber) 10%, transparent); border: 1px solid color-mix(in srgb, var(--ds-amber) 30%, transparent); color: var(--text-primary);">
                         <strong>Sale agreements must be signed with wet ink</strong> per the Alienation of Land Act. E-signing is not permitted for this document type.
                     </div>
                 </template>
@@ -834,27 +848,27 @@
                 <div x-show="deliveryMode === 'esign'">
 
                 {{-- Signing order cards --}}
-                <h4 class="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-3">Signing Order</h4>
+                <h4 class="text-xs font-semibold uppercase tracking-wide mb-3" style="color: var(--text-secondary);">Signing Order</h4>
                 <div class="space-y-2 mb-6">
                     <template x-for="(r, ri) in recipients" :key="r.role + '_' + (r.name || ri)">
-                        <div class="p-3 rounded-lg border border-gray-200 bg-white transition-all">
+                        <div class="p-3 rounded-md transition-all" style="background: var(--surface); border: 1px solid var(--border);">
                             <div class="flex items-start justify-between">
-                                <span class="text-sm font-bold text-gray-500 mr-3 w-6 text-center mt-1" x-text="ri + 1"></span>
+                                <span class="text-sm font-bold mr-3 w-6 text-center mt-1" style="color: var(--text-muted);" x-text="ri + 1"></span>
                                 <div class="min-w-0 flex-1">
                                     <div class="flex items-center gap-2 mb-1">
-                                        <span class="text-sm font-semibold text-gray-800" x-text="signingRoleLabel(r.role) + ': ' + (r.name || '(unknown)')"></span>
+                                        <span class="text-sm font-semibold" style="color: var(--text-primary);" x-text="signingRoleLabel(r.role) + ': ' + (r.name || '(unknown)')"></span>
                                     </div>
                                     <div class="mt-2" x-show="r.role !== 'agent'">
-                                        <label class="block text-xs font-medium text-gray-500 mb-1">Email address</label>
+                                        <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Email address</label>
                                         <input type="email"
                                                x-model="r.email"
                                                :disabled="r.skipEmail"
-                                               :class="r.skipEmail ? 'bg-gray-100 text-gray-400' : 'bg-white text-gray-900'"
-                                               class="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+                                               :style="r.skipEmail ? 'background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border);' : 'background: var(--surface); color: var(--text-primary); border: 1px solid var(--border);'"
+                                               class="w-full rounded-md px-3 py-1.5 text-sm"
                                                placeholder="Email address">
-                                        <p class="text-xs text-gray-400 mt-1">Edit if signer uses a different email address</p>
+                                        <p class="text-xs mt-1" style="color: var(--text-muted);">Edit if signer uses a different email address</p>
                                     </div>
-                                    <div x-show="r.role === 'agent'" class="text-xs text-gray-500">
+                                    <div x-show="r.role === 'agent'" class="text-xs" style="color: var(--text-muted);">
                                         <span x-text="r.email"></span>
                                         <span x-show="r.cell"> | </span>
                                         <span x-show="r.cell" x-text="r.cell"></span>
@@ -863,7 +877,7 @@
                             </div>
                             <div class="mt-2 ml-9">
                                 <template x-if="r.role === 'agent'">
-                                    <span class="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">Signs first — locked</span>
+                                    <span class="ds-badge ds-badge-info">Signs first &mdash; locked</span>
                                 </template>
                                 <template x-if="r.role !== 'agent'">
                                     <div>
@@ -871,41 +885,45 @@
                                             <button type="button"
                                                     x-show="ri > 0"
                                                     @click="moveRecipient(ri, 'up')"
-                                                    class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100 flex items-center gap-1">
+                                                    class="text-xs px-2 py-1 rounded-md flex items-center gap-1 transition"
+                                                    style="background: var(--surface); border: 1px solid var(--border); color: var(--text-secondary);">
                                                 &uarr; Move Up
                                             </button>
                                             <button type="button"
                                                     x-show="ri < recipients.length - 1"
                                                     @click="moveRecipient(ri, 'down')"
-                                                    class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100 flex items-center gap-1">
+                                                    class="text-xs px-2 py-1 rounded-md flex items-center gap-1 transition"
+                                                    style="background: var(--surface); border: 1px solid var(--border); color: var(--text-secondary);">
                                                 &darr; Move Down
                                             </button>
                                         </div>
                                         <select x-model="signingActions[ri]"
                                                 :disabled="r.skipEmail"
-                                                class="text-xs rounded border border-gray-300 bg-white text-gray-700 px-2 py-1">
+                                                class="text-xs rounded-md px-2 py-1"
+                                                style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
                                             <option value="send_after" x-bind:disabled="!r.email || r.skipEmail">Send after previous</option>
                                             <option value="sign_later">Sign later (deferred)</option>
                                         </select>
-                                        <div x-show="signingActions[ri] === 'sign_later'" class="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
-                                            <div class="flex items-center gap-2 text-xs text-amber-700">
+                                        <div x-show="signingActions[ri] === 'sign_later'" class="mt-2 p-2 rounded-md"
+                                             style="background: color-mix(in srgb, var(--ds-amber) 10%, transparent); border: 1px solid color-mix(in srgb, var(--ds-amber) 30%, transparent);">
+                                            <div class="flex items-center gap-2 text-xs" style="color: var(--text-primary);">
                                                 <span>&#9208;</span>
-                                                <span class="font-medium">Deferred — details not yet known</span>
+                                                <span class="font-medium">Deferred &mdash; details not yet known</span>
                                             </div>
-                                            <p class="text-xs text-amber-600 mt-1">This party's signing will be paused until you provide their details. You can resume signing later from the document dashboard.</p>
+                                            <p class="text-xs mt-1" style="color: var(--text-secondary);">This party's signing will be paused until you provide their details. You can resume signing later from the document dashboard.</p>
                                         </div>
                                         <label class="flex items-center gap-2 mt-2 text-sm">
                                             <input type="checkbox"
                                                    x-model="r.skipEmail"
                                                    @change="if (r.skipEmail) signingActions[ri] = 'sign_later'"
-                                                   class="rounded">
-                                            <span class="text-gray-600 text-xs">Exclude from email — will sign in person or via primary recipient</span>
+                                                   class="rounded" style="accent-color: var(--brand-button);">
+                                            <span class="text-xs" style="color: var(--text-secondary);">Exclude from email &mdash; will sign in person or via primary recipient</span>
                                         </label>
                                         <label class="flex items-center gap-2 mt-2 text-sm">
                                             <input type="checkbox"
                                                    x-model="r.fica_required"
-                                                   class="rounded" style="accent-color: #0d9488;">
-                                            <span class="text-gray-600 text-xs">FICA verification required before signing</span>
+                                                   class="rounded" style="accent-color: var(--brand-button);">
+                                            <span class="text-xs" style="color: var(--text-secondary);">FICA verification required before signing</span>
                                         </label>
                                     </div>
                                 </template>
@@ -915,20 +933,21 @@
                 </div>
 
                 {{-- Field summary --}}
-                <h4 class="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-3">Document Summary</h4>
-                <div class="p-4 rounded-lg border border-gray-200 bg-gray-50 space-y-2 text-sm">
-                    <div class="flex items-center gap-2 text-gray-700">
-                        <span class="text-green-600">&#10003;</span>
+                <h4 class="text-xs font-semibold uppercase tracking-wide mb-3" style="color: var(--text-secondary);">Document Summary</h4>
+                <div class="p-4 rounded-md space-y-2 text-sm"
+                     style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
+                    <div class="flex items-center gap-2">
+                        <span style="color: var(--ds-green);">&#10003;</span>
                         <span x-text="fieldSummary.creatorFilled + ' fields completed by you'"></span>
                     </div>
                     <template x-for="sg in fieldSummary.signerGroups" :key="sg.role">
-                        <div class="flex items-center gap-2 text-gray-500">
+                        <div class="flex items-center gap-2" style="color: var(--text-secondary);">
                             <span>&#9203;</span>
                             <span x-text="sg.count + ' fields for ' + sg.label + ' to complete'"></span>
                         </div>
                     </template>
                     <template x-for="zg in fieldSummary.signatureZones" :key="zg.role">
-                        <div class="flex items-center gap-2 text-gray-500">
+                        <div class="flex items-center gap-2" style="color: var(--text-secondary);">
                             <span>&#9997;</span>
                             <span x-text="zg.label + ': ' + zg.initials + ' initials + ' + zg.signatures + ' signature'"></span>
                         </div>
@@ -938,22 +957,24 @@
                 </div>{{-- end deliveryMode === 'esign' wrapper --}}
 
                 {{-- Wet ink mode info --}}
-                <div x-show="deliveryMode === 'wet_ink'" class="p-4 rounded-lg border border-gray-200 bg-white space-y-3">
-                    <h4 class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Wet Ink Signing</h4>
-                    <p class="text-sm text-gray-600">The document will be generated as a PDF. Each signing party will receive a secure link to:</p>
-                    <ol class="text-sm text-gray-600 list-decimal ml-5 space-y-1">
+                <div x-show="deliveryMode === 'wet_ink'" class="p-4 rounded-md space-y-3"
+                     style="background: var(--surface); border: 1px solid var(--border);">
+                    <h4 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--text-secondary);">Wet Ink Signing</h4>
+                    <p class="text-sm" style="color: var(--text-secondary);">The document will be generated as a PDF. Each signing party will receive a secure link to:</p>
+                    <ol class="text-sm list-decimal ml-5 space-y-1" style="color: var(--text-secondary);">
                         <li>Download the document for printing</li>
                         <li>Sign in ink on the printed copy</li>
                         <li>Scan or photograph the signed pages</li>
                         <li>Upload the signed document through the portal</li>
                     </ol>
-                    <p class="text-xs text-gray-400 mt-2">You will review and approve each uploaded document before it proceeds to the next party.</p>
+                    <p class="text-xs mt-2" style="color: var(--text-muted);">You will review and approve each uploaded document before it proceeds to the next party.</p>
                 </div>
 
                 {{-- Download only mode info --}}
-                <div x-show="deliveryMode === 'download'" class="p-4 rounded-lg border border-gray-200 bg-white space-y-3">
-                    <h4 class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Download Only</h4>
-                    <p class="text-sm text-gray-600">The document will be generated as a PDF for you to download. No signing pipeline will be created.</p>
+                <div x-show="deliveryMode === 'download'" class="p-4 rounded-md space-y-3"
+                     style="background: var(--surface); border: 1px solid var(--border);">
+                    <h4 class="text-xs font-semibold uppercase tracking-wide" style="color: var(--text-secondary);">Download Only</h4>
+                    <p class="text-sm" style="color: var(--text-secondary);">The document will be generated as a PDF for you to download. No signing pipeline will be created.</p>
                 </div>
             </div>
 
@@ -961,11 +982,12 @@
         </div>
 
         {{-- RESIZE HANDLE --}}
-        <div class="w-1 bg-gray-200 hover:bg-blue-400 cursor-col-resize flex-shrink-0 transition-colors"
+        <div class="w-1 cursor-col-resize flex-shrink-0 transition-colors"
+             style="background: var(--border);"
              @mousedown.prevent="startResize($event)"></div>
 
         {{-- RIGHT PANEL: Document Preview --}}
-        <div class="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-gray-800 min-w-0">
+        <div class="flex-1 overflow-y-auto p-6 min-w-0" style="background: var(--bg);">
 
             {{-- Web template preview (wrapped in CoreX document CSS) --}}
             <div x-show="previewRenderType === 'web' && previewHtml" class="overflow-y-auto" style="max-height: calc(100vh - 200px);">
@@ -979,9 +1001,9 @@
                     min-height: auto !important;
                 }
                 .field-highlighted {
-                    background: rgba(255,200,0,0.3) !important;
-                    outline: 2px solid #f59e0b;
-                    border-radius: 2px;
+                    background: color-mix(in srgb, var(--ds-amber) 30%, transparent) !important;
+                    outline: 2px solid var(--ds-amber);
+                    border-radius: 6px;
                 }
             </style>
 
@@ -989,7 +1011,7 @@
             <div x-show="previewRenderType === 'pdf' && previewPages.length > 0">
                 <template x-for="(pageUrl, pi) in previewPages" :key="pi">
                     <div style="margin-bottom:24px;">
-                        <div style="font-size:0.75rem; color:#6b7280; margin-bottom:4px;" x-text="'Page ' + (pi+1)"></div>
+                        <div class="text-xs mb-1" style="color: var(--text-muted);" x-text="'Page ' + (pi+1)"></div>
                         {{-- Container: matches editor .dp-page-container exactly --}}
                         <div style="position:relative; width:100%; max-width:800px; overflow:visible; padding:0; margin:0;">
                             {{-- Image: matches editor .dp-page-img exactly --}}
@@ -1014,19 +1036,19 @@
 
             {{-- Pack summary / slot selection --}}
             <div x-show="isPackFlow && packPreview" class="p-6" x-cloak>
-                <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                    <div class="font-semibold text-blue-700 mb-2 text-base">
+                <div class="rounded-md p-5" style="background: var(--surface); border: 1px solid var(--border);">
+                    <div class="font-semibold mb-2 text-base" style="color: var(--brand-icon);">
                         <span x-text="selectedPackName"></span>
                     </div>
 
                     {{-- Simple pack (no slots) — just list the templates --}}
                     <template x-if="!packHasSlots">
                         <div>
-                            <p class="text-xs text-gray-500 mb-3">This pack contains the following documents in order:</p>
+                            <p class="text-xs mb-3" style="color: var(--text-muted);">This pack contains the following documents in order:</p>
                             <template x-for="(item, i) in (packPreview?.items || [])" :key="i">
-                                <div class="flex items-center gap-2 py-2 border-b border-slate-100 last:border-0">
-                                    <span class="text-xs font-bold text-gray-400 w-5 text-center" x-text="i+1"></span>
-                                    <span class="text-sm text-gray-700" x-text="item.template?.name || 'Unknown'"></span>
+                                <div class="flex items-center gap-2 py-2" style="border-bottom: 1px solid var(--border);">
+                                    <span class="text-xs font-bold w-5 text-center" style="color: var(--text-muted);" x-text="i+1"></span>
+                                    <span class="text-sm" style="color: var(--text-primary);" x-text="item.template?.name || 'Unknown'"></span>
                                 </div>
                             </template>
                         </div>
@@ -1035,32 +1057,32 @@
                     {{-- Pack with slots — show slot selection UI --}}
                     <template x-if="packHasSlots">
                         <div>
-                            <p class="text-xs text-gray-500 mb-3">Configure which documents to include:</p>
+                            <p class="text-xs mb-3" style="color: var(--text-muted);">Configure which documents to include:</p>
                             <div class="space-y-3">
                                 <template x-for="slot in packSlots" :key="slot.key">
-                                    <div class="border rounded-lg p-3">
+                                    <div class="rounded-md p-3" style="border: 1px solid var(--border);">
                                         {{-- Required slot --}}
                                         <template x-if="slot.type === 'required'">
                                             <div class="flex items-center gap-2">
-                                                <span class="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
-                                                <span class="text-sm text-gray-700" x-text="slot.templates[0].name"></span>
-                                                <span class="text-[10px] text-gray-400">Required</span>
+                                                <span class="w-2 h-2 rounded-full flex-shrink-0" style="background: var(--ds-green);"></span>
+                                                <span class="text-sm" style="color: var(--text-primary);" x-text="slot.templates[0].name"></span>
+                                                <span class="text-xs" style="color: var(--text-muted);">Required</span>
                                             </div>
                                         </template>
 
                                         {{-- Selectable slot — radio buttons --}}
                                         <template x-if="slot.type === 'selectable'">
                                             <div>
-                                                <span class="text-xs font-semibold text-gray-500 uppercase"
+                                                <span class="text-xs font-semibold uppercase" style="color: var(--text-secondary);"
                                                       x-text="slot.label || 'Select one'"></span>
                                                 <div class="mt-2 space-y-1">
                                                     <template x-for="tmpl in slot.templates" :key="tmpl.id">
-                                                        <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer p-2 rounded hover:bg-gray-50">
+                                                        <label class="flex items-center gap-2 text-sm cursor-pointer p-2 rounded-md transition" style="color: var(--text-primary);">
                                                             <input type="radio"
                                                                    :name="'slot-' + slot.group"
                                                                    :value="tmpl.id"
                                                                    x-model.number="slotSelections[slot.group]"
-                                                                   class="w-3.5 h-3.5 text-teal-600">
+                                                                   class="w-3.5 h-3.5" style="accent-color: var(--brand-button);">
                                                             <span x-text="tmpl.name"></span>
                                                         </label>
                                                     </template>
@@ -1070,13 +1092,13 @@
 
                                         {{-- Optional slot — checkbox --}}
                                         <template x-if="slot.type === 'optional'">
-                                            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                                            <label class="flex items-center gap-2 text-sm cursor-pointer" style="color: var(--text-primary);">
                                                 <input type="checkbox"
                                                        :value="slot.templates[0].id"
                                                        x-model.number="optionalSelections"
-                                                       class="w-3.5 h-3.5 text-teal-600 rounded">
+                                                       class="w-3.5 h-3.5 rounded" style="accent-color: var(--brand-button);">
                                                 <span x-text="slot.templates[0].name"></span>
-                                                <span class="text-[10px] text-gray-400">Optional</span>
+                                                <span class="text-xs" style="color: var(--text-muted);">Optional</span>
                                             </label>
                                         </template>
                                     </div>
@@ -1084,7 +1106,7 @@
                             </div>
 
                             {{-- Resolved template count --}}
-                            <div class="mt-3 text-xs text-gray-500">
+                            <div class="mt-3 text-xs" style="color: var(--text-muted);">
                                 <span x-text="resolvedPackTemplateIds.length"></span> document(s) will be included
                             </div>
                         </div>
@@ -1094,7 +1116,7 @@
 
             {{-- Empty state: no template selected --}}
             <div x-show="!isPackFlow && previewRenderType === 'pdf' && previewPages.length === 0 && !previewHtml" class="flex items-center justify-center h-full">
-                <div class="text-center text-gray-400">
+                <div class="text-center" style="color: var(--text-muted);">
                     <svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                     </svg>
@@ -1105,16 +1127,17 @@
     </div>
 
     {{-- ===== STICKY BOTTOM BAR ===== --}}
-    <div class="flex-shrink-0 px-6 py-3 bg-white dark:bg-gray-900 border-t border-gray-200 flex items-center justify-between">
+    <div class="flex-shrink-0 px-6 py-3 flex items-center justify-between"
+         style="background: var(--surface); border-top: 1px solid var(--border);">
         <div>
             <button x-show="currentStep > 1" @click="goBack()"
-                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                    class="corex-btn-outline">
                 &larr; Back
             </button>
         </div>
         <div>
             <button x-show="flowId" @click="saveDraft()" :disabled="saving"
-                    class="px-4 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition">
+                    class="corex-btn-outline disabled:opacity-40">
                 <span x-show="!saving">Save Draft</span>
                 <span x-show="saving" class="flex items-center gap-1">
                     <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/><path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75"/></svg>
@@ -1124,7 +1147,7 @@
         </div>
         <div>
             <button @click="goNext()" :disabled="loading || !canGoNext()"
-                    class="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                    class="corex-btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
                 <span x-show="!loading" x-text="nextButtonLabel()"></span>
                 <span x-show="loading" class="flex items-center gap-1">
                     <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/><path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75"/></svg>
@@ -1136,32 +1159,35 @@
 
     {{-- Clause Library Modal --}}
     <template x-if="showClauseLibrary">
-        <div class="fixed inset-0 z-50 flex items-center justify-center"
-             style="background:rgba(0,0,0,0.4);" @click.self="showClauseLibrary = false">
-            <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
-                <div class="p-4 border-b border-gray-200 flex items-center justify-between">
-                    <h3 class="text-sm font-semibold text-gray-800">Clause Library</h3>
-                    <button @click="showClauseLibrary = false" class="text-gray-400 hover:text-gray-600 text-lg">&times;</button>
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+             @click.self="showClauseLibrary = false">
+            <div class="rounded-md w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col"
+                 style="background: var(--surface); border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.18);">
+                <div class="p-4 flex items-center justify-between" style="border-bottom: 1px solid var(--border);">
+                    <h3 class="text-base font-semibold" style="color: var(--text-primary);">Clause Library</h3>
+                    <button @click="showClauseLibrary = false" class="text-lg transition" style="color: var(--text-muted);">&times;</button>
                 </div>
 
-                <div class="p-4 border-b border-gray-200">
+                <div class="p-4" style="border-bottom: 1px solid var(--border);">
                     <input type="text" x-model="clauseSearch" placeholder="Search clauses..."
-                           class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+                           class="w-full text-sm rounded-md px-3 py-2"
+                           style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
                 </div>
 
                 <div class="flex-1 overflow-y-auto p-4 space-y-2">
                     <template x-for="clause in filteredClauses" :key="clause.id">
-                        <div class="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                        <div class="p-3 rounded-md cursor-pointer transition-colors"
+                             style="background: var(--surface); border: 1px solid var(--border);"
                              @click="insertClause(clause)">
                             <div class="flex items-center justify-between">
-                                <span class="text-xs font-semibold text-gray-700" x-text="clause.name"></span>
-                                <span class="text-[10px] text-gray-400" x-text="clause.is_global ? 'Global' : 'Personal'"></span>
+                                <span class="text-xs font-semibold" style="color: var(--text-primary);" x-text="clause.name"></span>
+                                <span class="text-xs" style="color: var(--text-muted);" x-text="clause.is_global ? 'Global' : 'Personal'"></span>
                             </div>
-                            <p class="text-xs text-gray-500 mt-1 line-clamp-3" x-text="clause.text"></p>
+                            <p class="text-xs mt-1 line-clamp-3" style="color: var(--text-muted);" x-text="clause.text"></p>
                         </div>
                     </template>
                     <template x-if="filteredClauses.length === 0">
-                        <p class="text-xs text-gray-400 text-center py-8">No clauses found</p>
+                        <p class="text-xs text-center py-8" style="color: var(--text-muted);">No clauses found</p>
                     </template>
                 </div>
             </div>
