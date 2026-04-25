@@ -338,14 +338,14 @@
   <div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4">
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
       <div>
-        <h2 class="text-xl font-bold text-white leading-tight tracking-tight">Tools</h2>
-        <div class="text-sm text-white/60">Commission Calculator &middot; CMA Certificate &middot; History</div>
+        <h1 class="text-xl font-bold text-white leading-tight tracking-tight">Tools</h1>
+        <p class="text-sm text-white/60">Commission Calculator &middot; CMA Certificate &middot; History</p>
       </div>
       <div class="flex items-center gap-3">
         <div id="activeAgentDisplay" class="text-sm text-white/80 font-medium">
           <span id="currentAgentName">{{ auth()->user()?->name ?? "User" }}</span>
         </div>
-        <button class="btn secondary" id="btnReset" style="background:transparent; color:#fff; border-color:rgba(255,255,255,0.3);">Clear Form</button>
+        <button type="button" class="btn secondary" id="btnReset" style="background:transparent; color:#ffffff; border:1px solid rgba(255,255,255,0.3);">Clear Form</button>
       </div>
     </div>
   </div>
@@ -559,15 +559,25 @@
       </div>
 
       <div class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
-        <table class="history-table">
-          <thead>
-            <tr>
-              <th>Ref</th><th>Date</th><th>Type</th><th>Property</th><th>Agent</th><th>Value</th><th style="width:1%;"></th>
-            </tr>
-          </thead>
-          <tbody id="historyBody"></tbody>
-        </table>
-        <div id="historyEmpty" class="history-empty" style="display:none;">No history entries yet.</div>
+        <div class="overflow-x-auto">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Ref</th><th>Date</th><th>Type</th><th>Property</th><th>Agent</th><th style="text-align:right;">Value</th><th style="width:1%; text-align:right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+        <div id="historyEmpty" class="history-empty" style="display:none;">
+          <div class="rounded-full mx-auto mb-3 flex items-center justify-center" style="width:3rem; height:3rem; background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent); color: var(--brand-icon, #0ea5e9);">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:1.5rem; height:1.5rem;">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold mb-1" style="color: var(--text-primary);">No history yet</h3>
+          <p class="text-sm" style="color: var(--text-muted);">Use the Commission Calculator or CMA Certificate above to log your first entry.</p>
+        </div>
       </div>
     </div>
 
@@ -701,10 +711,10 @@ function renderHistory() {
     tr.innerHTML = `
       <td class="mono">${escapeHtml(item.ref || "")}</td>
       <td style="white-space:nowrap;">${escapeHtml(dateText)}</td>
-      <td><span class="agent-tag" style="background:var(--brand-default, #0b2a4a); color:#fff">${escapeHtml(item.type || "")}</span></td>
+      <td><span class="ds-badge ds-badge-info">${escapeHtml(item.type || "")}</span></td>
       <td>${escapeHtml(item.property || "")}</td>
       <td style="white-space:nowrap;">${escapeHtml(item.agent_name || "")}</td>
-      <td style="font-weight:700; white-space:nowrap;">${fmtZAR(Number(item.value || 0))}</td>
+      <td style="font-weight:700; white-space:nowrap; text-align:right;">${fmtZAR(Number(item.value || 0))}</td>
       <td class="actions-cell">
         <button class="btn danger" onclick="event.stopPropagation(); window.deleteHistoryItem(${item.id})">Delete</button>
       </td>
