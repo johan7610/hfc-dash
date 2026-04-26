@@ -1,177 +1,227 @@
 <x-app-layout>
-    <div class="max-w-7xl mx-auto p-6 space-y-6" x-data="faultReports()">
-        <div class="flex items-center justify-between gap-4">
-            <div>
-                <h1 class="text-2xl font-bold" style="color:var(--text-primary);">Fault Reports</h1>
-                <p class="text-sm" style="color:var(--text-secondary);">System errors, warnings, and manual reports.</p>
+    <div class="max-w-7xl mx-auto p-4 lg:p-6 space-y-6" x-data="faultReports()">
+        {{-- Page header (Pattern A — branded) --}}
+        <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a);">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h1 class="text-xl font-bold text-white leading-tight">Fault Reports</h1>
+                    <p class="text-sm text-white/60">System errors, warnings, and manual reports.</p>
+                </div>
+                <div class="text-xs text-white/70">
+                    Showing {{ number_format($reports->count()) }} of {{ number_format($reports->total()) }}
+                </div>
             </div>
-            <div class="flex items-center gap-2">
-                <a href="{{ route('admin.fault-reports', ['status' => 'new']) }}"
-                   class="px-3 py-1.5 rounded-lg text-xs font-medium {{ request('status') === 'new' ? 'bg-red-500/20 text-red-600 border border-red-500/30' : 'border hover:opacity-80' }}"
-                   @unless(request('status') === 'new') style="color:var(--text-secondary); border-color:var(--border);" @endunless>
-                    New
+        </div>
+
+        {{-- Status filters --}}
+        <div class="flex flex-wrap items-center gap-2">
+            @php
+                $statusFilters = [
+                    ['key' => null,            'label' => 'All',           'active' => !request('status')],
+                    ['key' => 'new',           'label' => 'New',           'active' => request('status') === 'new'],
+                    ['key' => 'investigating', 'label' => 'Investigating', 'active' => request('status') === 'investigating'],
+                    ['key' => 'fixed',         'label' => 'Fixed',         'active' => request('status') === 'fixed'],
+                    ['key' => 'ignored',       'label' => "Won't Fix",     'active' => request('status') === 'ignored'],
+                ];
+            @endphp
+            @foreach($statusFilters as $f)
+                <a href="{{ $f['key'] ? route('admin.fault-reports', ['status' => $f['key']]) : route('admin.fault-reports') }}"
+                   class="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
+                   @if($f['active'])
+                       style="background: color-mix(in srgb, var(--brand-button) 15%, transparent); color: var(--brand-button); border: 1px solid color-mix(in srgb, var(--brand-button) 30%, transparent);"
+                   @else
+                       style="background: var(--surface); color: var(--text-secondary); border: 1px solid var(--border);"
+                   @endif>
+                    {{ $f['label'] }}
                 </a>
-                <a href="{{ route('admin.fault-reports', ['status' => 'investigating']) }}"
-                   class="px-3 py-1.5 rounded-lg text-xs font-medium {{ request('status') === 'investigating' ? 'bg-amber-500/20 text-amber-600 border border-amber-500/30' : 'border hover:opacity-80' }}"
-                   @unless(request('status') === 'investigating') style="color:var(--text-secondary); border-color:var(--border);" @endunless>
-                    Investigating
-                </a>
-                <a href="{{ route('admin.fault-reports', ['status' => 'fixed']) }}"
-                   class="px-3 py-1.5 rounded-lg text-xs font-medium {{ request('status') === 'fixed' ? 'bg-emerald-500/20 text-emerald-600 border border-emerald-500/30' : 'border hover:opacity-80' }}"
-                   @unless(request('status') === 'fixed') style="color:var(--text-secondary); border-color:var(--border);" @endunless>
-                    Fixed
-                </a>
-                <a href="{{ route('admin.fault-reports', ['status' => 'ignored']) }}"
-                   class="px-3 py-1.5 rounded-lg text-xs font-medium {{ request('status') === 'ignored' ? 'bg-gray-500/20 text-gray-600 border border-gray-500/30' : 'border hover:opacity-80' }}"
-                   @unless(request('status') === 'ignored') style="color:var(--text-secondary); border-color:var(--border);" @endunless>
-                    Won't Fix
-                </a>
-                <a href="{{ route('admin.fault-reports') }}"
-                   class="px-3 py-1.5 rounded-lg text-xs font-medium {{ !request('status') ? 'bg-blue-500/20 text-blue-600 border border-blue-500/30' : 'border hover:opacity-80' }}"
-                   @unless(!request('status')) style="color:var(--text-secondary); border-color:var(--border);" @endunless>
-                    All
-                </a>
-            </div>
+            @endforeach
         </div>
 
         {{-- Bulk action bar --}}
         <div x-show="selectedIds.length > 0" x-cloak x-transition
-             class="sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-2.5 rounded-lg shadow-lg"
-             style="background:#0f172a; color:#fff;">
+             class="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-md"
+             style="background: var(--brand-default, #0b2a4a); color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
             <span class="text-xs font-semibold"><span x-text="selectedIds.length"></span> selected</span>
-            <div class="flex items-center gap-2">
-                <input type="text" x-model="bulkNotes" placeholder="Resolution notes (optional)" class="px-2 py-1 text-xs rounded border-0" style="background:rgba(255,255,255,0.1); color:#fff; width:220px;">
-                <button @click="bulkSubmit('fixed')" class="px-3 py-1 text-xs font-semibold rounded" style="background:#00d4aa; color:#0f172a;">Mark Fixed</button>
-                <button @click="bulkSubmit('ignored')" class="px-3 py-1 text-xs font-semibold rounded" style="background:#64748b; color:#fff;">Won't Fix</button>
-                <button @click="selectedIds = []; selectAll = false;" class="px-3 py-1 text-xs font-semibold rounded" style="background:rgba(255,255,255,0.1); color:#94a3b8;">Cancel</button>
+            <div class="flex flex-wrap items-center gap-2">
+                <input type="text" x-model="bulkNotes" placeholder="Resolution notes (optional)"
+                       class="rounded-md px-3 py-1.5 text-xs"
+                       style="background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.15); width: 220px;">
+                <button @click="bulkSubmit('fixed')" class="corex-btn-primary" style="padding: 0.375rem 0.75rem; font-size: 0.75rem;">Mark Fixed</button>
+                <button @click="bulkSubmit('ignored')" class="corex-btn-outline" style="padding: 0.375rem 0.75rem; font-size: 0.75rem; background: rgba(255,255,255,0.1); color: #fff; border-color: rgba(255,255,255,0.2);">Won't Fix</button>
+                <button @click="selectedIds = []; selectAll = false;" class="corex-btn-outline" style="padding: 0.375rem 0.75rem; font-size: 0.75rem; background: transparent; color: rgba(255,255,255,0.7); border-color: rgba(255,255,255,0.2);">Cancel</button>
             </div>
         </div>
 
         @if($reports->isEmpty())
-        <div class="rounded-xl p-12 text-center" style="border:1px solid var(--border); background:var(--surface);">
-            <div class="text-lg" style="color:var(--text-muted);">No fault reports found.</div>
-        </div>
+            {{-- Empty state --}}
+            <div class="rounded-md py-12 px-6 text-center" style="background: var(--surface); border: 1px solid var(--border);">
+                <div class="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
+                     style="background: color-mix(in srgb, var(--brand-icon) 12%, transparent); color: var(--brand-icon);">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                    </svg>
+                </div>
+                <h3 class="text-base font-semibold mb-1" style="color: var(--text-primary);">No fault reports found</h3>
+                <p class="text-sm" style="color: var(--text-muted);">Nothing to investigate right now. Errors and warnings will appear here as they happen.</p>
+            </div>
         @else
 
         {{-- Select all --}}
-        <label class="flex items-center gap-2 text-xs cursor-pointer" style="color:var(--text-muted);">
-            <input type="checkbox" x-model="selectAll" @change="toggleAll()" style="accent-color:#00d4aa;">
+        <label class="flex items-center gap-2 text-xs cursor-pointer" style="color: var(--text-muted);">
+            <input type="checkbox" x-model="selectAll" @change="toggleAll()" style="accent-color: var(--brand-button);">
             Select all on this page
         </label>
 
         <div class="space-y-2">
             @foreach($reports as $report)
-            <div class="rounded-xl p-4 transition-colors hover:opacity-95" style="border:1px solid var(--border); background:var(--surface);" x-data="{ expanded: false, acting: false, actionType: '' }">
+            <div class="rounded-md p-4 transition-colors" style="border: 1px solid var(--border); background: var(--surface);" x-data="{ expanded: false, acting: false, actionType: '' }">
                 <div class="flex items-start gap-3">
                     {{-- Checkbox --}}
                     <input type="checkbox" value="{{ $report->id }}" class="mt-1.5 flex-shrink-0"
                            :checked="selectedIds.includes({{ $report->id }})"
                            @change="toggleId({{ $report->id }})"
-                           style="accent-color:#00d4aa;">
+                           style="accent-color: var(--brand-button);">
 
                     {{-- Severity indicator --}}
-                    <div class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0
-                        {{ $report->severity === 'error' ? 'bg-red-500' : ($report->severity === 'warning' ? 'bg-amber-500' : 'bg-blue-500') }}">
-                    </div>
+                    @php
+                        $severityColor = match($report->severity) {
+                            'error' => 'var(--ds-crimson)',
+                            'warning' => 'var(--ds-amber)',
+                            default => 'var(--brand-icon)',
+                        };
+                    @endphp
+                    <div class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0" style="background: {{ $severityColor }};"></div>
 
                     <div class="flex-1 min-w-0 cursor-pointer" @click="expanded = !expanded">
                         <div class="flex items-center gap-2 flex-wrap">
-                            <span class="text-sm font-medium truncate max-w-[500px]" style="color:var(--text-primary);">{{ $report->title }}</span>
-                            <span class="px-1.5 py-0.5 rounded text-[10px] font-medium uppercase
-                                {{ $report->type === 'backend' ? 'bg-purple-500/20 text-purple-600' : ($report->type === 'frontend' ? 'bg-cyan-500/20 text-cyan-600' : '') }}"
-                                @if($report->type !== 'backend' && $report->type !== 'frontend') style="background:var(--surface-2); color:var(--text-secondary);" @endif>
+                            <span class="text-sm font-medium truncate max-w-[500px]" style="color: var(--text-primary);">{{ $report->title }}</span>
+
+                            {{-- Type badge --}}
+                            @php
+                                $typeClass = match($report->type) {
+                                    'backend' => 'ds-badge ds-badge-info',
+                                    'frontend' => 'ds-badge',
+                                    default => 'ds-badge ds-badge-default',
+                                };
+                                $typeStyle = $report->type === 'frontend'
+                                    ? 'background: color-mix(in srgb, var(--brand-icon) 12%, transparent); color: var(--brand-icon);'
+                                    : '';
+                            @endphp
+                            <span class="{{ $typeClass }}" @if($typeStyle) style="{{ $typeStyle }}" @endif>
                                 {{ $report->type }}
                             </span>
+
                             @if($report->occurrence_count > 1)
-                            <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-500/20 text-orange-600">
-                                {{ $report->occurrence_count }}x
-                            </span>
+                                <span class="ds-badge ds-badge-warning">{{ number_format($report->occurrence_count) }}x</span>
                             @endif
-                            <span class="px-1.5 py-0.5 rounded text-[10px] font-medium uppercase
-                                {{ $report->status === 'new' ? 'bg-red-500/20 text-red-600' : ($report->status === 'investigating' ? 'bg-amber-500/20 text-amber-600' : ($report->status === 'fixed' ? 'bg-emerald-500/20 text-emerald-600' : 'bg-gray-500/20 text-gray-500')) }}">
-                                {{ $report->status === 'ignored' ? "won't fix" : $report->status }}
-                            </span>
+
+                            {{-- Status badge --}}
+                            @php
+                                $statusBadge = match($report->status) {
+                                    'new' => 'ds-badge ds-badge-info',
+                                    'investigating' => 'ds-badge ds-badge-warning',
+                                    'fixed' => 'ds-badge ds-badge-success',
+                                    default => 'ds-badge ds-badge-default',
+                                };
+                                $statusLabel = $report->status === 'ignored' ? "won't fix" : $report->status;
+                            @endphp
+                            <span class="{{ $statusBadge }}">{{ $statusLabel }}</span>
                         </div>
-                        <div class="mt-1 flex items-center gap-3 text-[11px]" style="color:var(--text-muted);">
+                        <div class="mt-1 flex items-center gap-3 text-xs flex-wrap" style="color: var(--text-muted);">
                             @if($report->file)
-                            <span class="truncate max-w-[300px]">{{ basename($report->file) }}:{{ $report->line }}</span>
+                                <span class="truncate max-w-[300px]">{{ basename($report->file) }}:{{ $report->line }}</span>
                             @endif
                             <span>{{ $report->last_seen_at?->diffForHumans() }}</span>
                             @if($report->url)
-                            <span class="truncate max-w-[200px]">{{ $report->method }} {{ parse_url($report->url, PHP_URL_PATH) }}</span>
+                                <span class="truncate max-w-[200px]">{{ $report->method }} {{ parse_url($report->url, PHP_URL_PATH) }}</span>
                             @endif
                             @if($report->resolvedBy)
-                            <span style="color:#00d4aa;">Resolved by {{ $report->resolvedBy->name }} {{ $report->resolved_at?->diffForHumans() }}</span>
+                                <span style="color: var(--ds-green);">Resolved by {{ $report->resolvedBy->name }} {{ $report->resolved_at?->diffForHumans() }}</span>
                             @endif
                         </div>
                     </div>
 
                     {{-- Row actions --}}
                     @if(in_array($report->status, ['new', 'investigating']))
-                    <div class="flex items-center gap-1 flex-shrink-0" @click.stop>
+                    <div class="grid grid-cols-3 gap-2 flex-shrink-0" @click.stop>
                         @if($report->status === 'new')
-                        <form method="POST" action="{{ route('admin.fault-reports.update-status', $report->id) }}">
+                        <form method="POST" action="{{ route('admin.fault-reports.update-status', $report->id) }}" class="contents">
                             @csrf
                             <input type="hidden" name="status" value="investigating">
-                            <button type="submit" class="px-2 py-1 text-[10px] font-semibold rounded transition-colors" style="background:rgba(234,179,8,0.15); color:#eab308;">Investigating</button>
+                            <button type="submit" class="corex-btn-outline w-28 justify-center"
+                                    style="color: var(--ds-amber); border-color: color-mix(in srgb, var(--ds-amber) 40%, transparent);">Investigating</button>
                         </form>
+                        @else
+                        <span class="w-28"></span>
                         @endif
-                        <button @click="acting = true; actionType = 'fixed'" class="px-2 py-1 text-[10px] font-semibold rounded transition-colors" style="background:rgba(0,212,170,0.15); color:#00d4aa;">Resolved</button>
-                        <button @click="acting = true; actionType = 'ignored'" class="px-2 py-1 text-[10px] font-semibold rounded transition-colors" style="background:rgba(148,163,184,0.15); color:#94a3b8;">Won't Fix</button>
+                        <button @click="acting = true; actionType = 'fixed'"
+                                class="corex-btn-outline w-28 justify-center"
+                                style="color: var(--ds-green); border-color: color-mix(in srgb, var(--ds-green) 40%, transparent);">Resolved</button>
+                        <button @click="acting = true; actionType = 'ignored'"
+                                class="corex-btn-outline w-28 justify-center">Won't Fix</button>
                     </div>
                     @endif
 
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
-                         class="w-4 h-4 transition-transform cursor-pointer flex-shrink-0" style="color:var(--text-muted);" :class="expanded ? 'rotate-180' : ''" @click="expanded = !expanded">
+                         class="w-4 h-4 transition-transform cursor-pointer flex-shrink-0" style="color: var(--text-muted);" :class="expanded ? 'rotate-180' : ''" @click="expanded = !expanded">
                         <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
                     </svg>
                 </div>
 
                 {{-- Inline action form --}}
-                <div x-show="acting" x-cloak x-transition class="mt-3 pt-3 flex items-end gap-3" style="border-top:1px solid var(--border);" @click.stop>
-                    <form method="POST" action="{{ route('admin.fault-reports.update-status', $report->id) }}" class="flex items-end gap-3 flex-1">
+                <div x-show="acting" x-cloak x-transition class="mt-3 pt-3 flex flex-col md:flex-row md:items-end gap-3" style="border-top: 1px solid var(--border);" @click.stop>
+                    <form method="POST" action="{{ route('admin.fault-reports.update-status', $report->id) }}" class="flex flex-col md:flex-row md:items-end gap-3 flex-1">
                         @csrf
                         <input type="hidden" name="status" :value="actionType">
                         <div class="flex-1">
-                            <label class="block text-[10px] font-semibold mb-1" style="color:var(--text-muted);">
-                                Resolution notes <span x-show="actionType === 'ignored'" class="text-red-500">*</span>
+                            <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">
+                                Resolution notes <span x-show="actionType === 'ignored'" style="color: var(--ds-crimson);">*</span>
                             </label>
-                            <textarea name="notes" rows="2" class="w-full px-2 py-1.5 text-xs rounded border" style="border-color:var(--border); background:var(--surface-2); color:var(--text-primary);" :required="actionType === 'ignored'"></textarea>
+                            <textarea name="notes" rows="2"
+                                      class="w-full rounded-md px-3 py-2 text-sm"
+                                      style="border: 1px solid var(--border); background: var(--surface); color: var(--text-primary);"
+                                      :required="actionType === 'ignored'"></textarea>
                         </div>
-                        <button type="submit" class="px-3 py-1.5 text-xs font-semibold rounded" style="background:#00d4aa; color:#0f172a;">Confirm</button>
-                        <button type="button" @click="acting = false" class="px-3 py-1.5 text-xs font-semibold rounded" style="background:var(--surface-2); color:var(--text-muted);">Cancel</button>
+                        <div class="flex items-center gap-2">
+                            <button type="submit" class="corex-btn-primary">Confirm</button>
+                            <button type="button" @click="acting = false" class="corex-btn-outline">Cancel</button>
+                        </div>
                     </form>
                 </div>
 
                 {{-- Expanded detail --}}
-                <div x-show="expanded" x-cloak x-transition class="mt-3 pt-3 space-y-2" style="border-top:1px solid var(--border);">
+                <div x-show="expanded" x-cloak x-transition class="mt-3 pt-3 space-y-2" style="border-top: 1px solid var(--border);">
                     @if($report->exception_class)
-                    <div class="text-xs" style="color:var(--text-secondary);"><span style="color:var(--text-muted);">Class:</span> {{ $report->exception_class }}</div>
+                        <div class="text-xs" style="color: var(--text-secondary);"><span style="color: var(--text-muted);">Class:</span> {{ $report->exception_class }}</div>
                     @endif
                     @if($report->file)
-                    <div class="text-xs" style="color:var(--text-secondary);"><span style="color:var(--text-muted);">File:</span> {{ $report->file }}:{{ $report->line }}</div>
+                        <div class="text-xs" style="color: var(--text-secondary);"><span style="color: var(--text-muted);">File:</span> {{ $report->file }}:{{ $report->line }}</div>
                     @endif
                     @if($report->notes)
-                    <div class="text-xs px-3 py-2 rounded" style="background:rgba(0,212,170,0.06); border:1px solid rgba(0,212,170,0.15); color:var(--text-primary);">
-                        <span style="color:var(--text-muted);">Notes:</span> {{ $report->notes }}
-                    </div>
+                        <div class="text-xs rounded-md px-3 py-2"
+                             style="background: color-mix(in srgb, var(--ds-green) 8%, transparent); border: 1px solid color-mix(in srgb, var(--ds-green) 25%, transparent); color: var(--text-primary);">
+                            <span style="color: var(--text-muted);">Notes:</span> {{ $report->notes }}
+                        </div>
                     @endif
                     @if($report->message)
-                    <div class="text-xs rounded-lg p-3 font-mono whitespace-pre-wrap break-all" style="color:var(--text-primary); background:var(--surface-2); border:1px solid var(--border);">{{ Str::limit($report->message, 1000) }}</div>
+                        <div class="text-xs rounded-md p-3 font-mono whitespace-pre-wrap break-all"
+                             style="color: var(--text-primary); background: var(--surface-2); border: 1px solid var(--border);">{{ Str::limit($report->message, 1000) }}</div>
                     @endif
                     @if($report->trace)
-                    <details class="text-xs">
-                        <summary class="cursor-pointer hover:opacity-80" style="color:var(--text-muted);">Stack trace</summary>
-                        <div class="mt-1 rounded-lg p-3 font-mono whitespace-pre-wrap break-all max-h-60 overflow-y-auto" style="color:var(--text-secondary); background:var(--surface-2); border:1px solid var(--border);">{{ Str::limit($report->trace, 3000) }}</div>
-                    </details>
+                        <details class="text-xs">
+                            <summary class="cursor-pointer hover:opacity-80" style="color: var(--text-muted);">Stack trace</summary>
+                            <div class="mt-1 rounded-md p-3 font-mono whitespace-pre-wrap break-all max-h-60 overflow-y-auto"
+                                 style="color: var(--text-secondary); background: var(--surface-2); border: 1px solid var(--border);">{{ Str::limit($report->trace, 3000) }}</div>
+                        </details>
                     @endif
                     @if($report->request_data)
-                    <details class="text-xs">
-                        <summary class="cursor-pointer hover:opacity-80" style="color:var(--text-muted);">Request data</summary>
-                        <div class="mt-1 rounded-lg p-3 font-mono whitespace-pre-wrap break-all max-h-40 overflow-y-auto" style="color:var(--text-secondary); background:var(--surface-2); border:1px solid var(--border);">{{ json_encode($report->request_data, JSON_PRETTY_PRINT) }}</div>
-                    </details>
+                        <details class="text-xs">
+                            <summary class="cursor-pointer hover:opacity-80" style="color: var(--text-muted);">Request data</summary>
+                            <div class="mt-1 rounded-md p-3 font-mono whitespace-pre-wrap break-all max-h-40 overflow-y-auto"
+                                 style="color: var(--text-secondary); background: var(--surface-2); border: 1px solid var(--border);">{{ json_encode($report->request_data, JSON_PRETTY_PRINT) }}</div>
+                        </details>
                     @endif
-                    <div class="flex items-center gap-4 text-[11px]" style="color:var(--text-muted);">
+                    <div class="flex items-center gap-4 text-xs flex-wrap" style="color: var(--text-muted);">
                         <span>First seen: {{ $report->first_seen_at?->format('Y-m-d H:i') }}</span>
                         <span>Last seen: {{ $report->last_seen_at?->format('Y-m-d H:i') }}</span>
                         @if($report->user) <span>User: {{ $report->user->name }}</span> @endif
@@ -212,7 +262,9 @@
             async bulkSubmit(action) {
                 if (this.selectedIds.length === 0) return;
                 if (this.selectedIds.length > 50) {
-                    alert('Maximum 50 items per bulk action.');
+                    if (window.showToast) {
+                        window.showToast('Maximum 50 items per bulk action.', 'warning');
+                    }
                     return;
                 }
 

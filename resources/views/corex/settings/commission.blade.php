@@ -5,19 +5,25 @@
      x-data="commissionSettings()">
 
     {{-- Page header --}}
-    <div style="background:var(--brand-default, #0b2a4a); border-radius:6px; padding:20px 24px;">
-        <h2 style="font-size:1.25rem; font-weight:800; color:#fff; margin:0 0 4px;">Commission & Revenue Share</h2>
-        <div style="font-size:0.875rem; color:rgba(255,255,255,0.55);">Configure commission splits, caps, fees, and revenue share tiers.</div>
+    <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a);">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <h1 class="text-xl font-bold text-white leading-tight">Commission &amp; Revenue Share</h1>
+                <p class="text-sm text-white/60">Configure commission splits, caps, fees, and revenue share tiers.</p>
+            </div>
+        </div>
     </div>
 
     {{-- Session messages --}}
     @if(session('success'))
-        <div class="rounded-md border px-4 py-3 text-sm font-medium" style="border-color:#bbf7d0; background:#f0fdf4; color:#166534;">
+        <div class="rounded-md px-4 py-3 text-sm font-medium"
+             style="background: color-mix(in srgb, var(--ds-green) 10%, transparent); border:1px solid color-mix(in srgb, var(--ds-green) 30%, transparent); color: var(--text-primary);">
             {{ session('success') }}
         </div>
     @endif
     @if($errors->any())
-        <div class="rounded-md border px-4 py-3 text-sm" style="border-color:#fecaca; background:#fef2f2; color:#991b1b;">
+        <div class="rounded-md px-4 py-3 text-sm"
+             style="background: color-mix(in srgb, var(--ds-crimson) 10%, transparent); border:1px solid color-mix(in srgb, var(--ds-crimson) 30%, transparent); color: var(--text-primary);">
             <ul class="list-disc list-inside space-y-1">
                 @foreach($errors->all() as $error)
                     <li>{{ $error }}</li>
@@ -170,7 +176,7 @@
                                class="sr-only peer">
                         <div class="w-11 h-6 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:rounded-full after:h-5 after:w-5 after:transition-all"
                              style="background:var(--border);"
-                             :style="revShareEnabled ? 'background:#0ea5e9' : ''">
+                             :style="revShareEnabled ? 'background: var(--brand-button, #0ea5e9)' : ''">
                             <div class="absolute top-[2px] left-[2px] rounded-full h-5 w-5 transition-all bg-white"
                                  :style="revShareEnabled ? 'transform:translateX(100%)' : ''"></div>
                         </div>
@@ -192,10 +198,10 @@
                         <table class="w-full text-sm" style="border-collapse:separate; border-spacing:0;">
                             <thead>
                                 <tr style="border-bottom:1px solid var(--border);">
-                                    <th class="text-left text-xs font-bold uppercase tracking-wider px-3 py-2" style="color:var(--text-muted);">Tier</th>
-                                    <th class="text-left text-xs font-bold uppercase tracking-wider px-3 py-2" style="color:var(--text-muted);">Relationship</th>
-                                    <th class="text-left text-xs font-bold uppercase tracking-wider px-3 py-2" style="color:var(--text-muted);">Share %</th>
-                                    <th class="text-left text-xs font-bold uppercase tracking-wider px-3 py-2" style="color:var(--text-muted);">FLQA Required</th>
+                                    <th class="text-left text-xs font-semibold uppercase tracking-wider px-3 py-2" style="color:var(--text-muted);">Tier</th>
+                                    <th class="text-left text-xs font-semibold uppercase tracking-wider px-3 py-2" style="color:var(--text-muted);">Relationship</th>
+                                    <th class="text-left text-xs font-semibold uppercase tracking-wider px-3 py-2" style="color:var(--text-muted);">Share %</th>
+                                    <th class="text-left text-xs font-semibold uppercase tracking-wider px-3 py-2" style="color:var(--text-muted);">FLQA Required</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -223,7 +229,7 @@
                                     </td>
                                     <td class="px-3 py-2">
                                         @if($t <= 3)
-                                            <span class="text-xs font-medium px-2 py-1 rounded" style="background:rgba(14,165,233,0.12); color:#0ea5e9;">Automatic</span>
+                                            <span class="text-xs font-medium px-2 py-1 rounded" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent); color: var(--brand-icon, #0ea5e9);">Automatic</span>
                                         @else
                                             <input type="number" name="tier_{{ $t }}_flqa_requirement"
                                                    value="{{ old("tier_{$t}_flqa_requirement", $settings->{"tier_{$t}_flqa_requirement"}) }}"
