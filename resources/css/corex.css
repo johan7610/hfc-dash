@@ -1710,6 +1710,18 @@ main#appScroll {
     color: var(--text-primary);
 }
 
+.corex-btn-outline.corex-btn-on-brand {
+    background: transparent;
+    border-color: rgba(255, 255, 255, 0.4);
+    color: #ffffff;
+}
+
+.corex-btn-outline.corex-btn-on-brand:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.7);
+    color: #ffffff;
+}
+
 .corex-btn-primary {
     background: var(--brand-button, #0ea5e9);
     color: #ffffff;

@@ -5,16 +5,29 @@
 
     {{-- Page Header --}}
     <div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-5">
-        <h2 class="text-xl font-bold text-white leading-tight tracking-tight">Active Leases</h2>
-        <div class="text-sm text-white/60 mt-1">
-            <a href="{{ route('rental.dashboard') }}" class="text-white/60 hover:text-white transition-all duration-300">&larr; Rentals</a>
-            &middot; Completed and signed lease agreements.
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <h1 class="text-xl font-bold text-white leading-tight tracking-tight">Active Leases</h1>
+                <p class="text-sm text-white/60 mt-1">
+                    <a href="{{ route('rental.dashboard') }}" class="text-white/60 hover:text-white transition-all duration-300">&larr; Rentals</a>
+                    &middot; Completed and signed lease agreements.
+                </p>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="{{ route('docuperfect.rental.uploadAndSend') }}" class="corex-btn-primary">Upload &amp; Send Lease</a>
+            </div>
         </div>
     </div>
 
     @if(session('status'))
-        <div class="rounded-md px-4 py-3 text-sm" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
-            {{ session('status') }}
+        <div class="rounded-md px-4 py-3 text-sm flex items-start gap-3"
+             style="background: color-mix(in srgb, var(--ds-green) 10%, transparent);
+                    border: 1px solid color-mix(in srgb, var(--ds-green) 30%, transparent);
+                    color: var(--text-primary);">
+            <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--ds-green);">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            <div class="flex-1">{{ session('status') }}</div>
         </div>
     @endif
 
@@ -22,18 +35,16 @@
         @forelse($leases as $lease)
             @php
                 $daysLeft = $lease->daysUntilExpiry();
-                $rental = number_format((float) $lease->rental_amount, 0, '.', ' ');
-                $urgencyBadge = match(true) {
-                    $daysLeft <= 0  => 'bg-red-100 text-red-800',
-                    $daysLeft <= 30 => 'bg-red-100 text-red-700',
-                    $daysLeft <= 90 => 'bg-amber-100 text-amber-700',
-                    default         => 'bg-green-100 text-green-700',
+                $rental = number_format((float) $lease->rental_amount, 0, '.', ',');
+                $badgeVariant = match(true) {
+                    $daysLeft <= 0  => 'ds-badge-danger',
+                    $daysLeft <= 90 => 'ds-badge-warning',
+                    default         => 'ds-badge-success',
                 };
                 $borderAccent = match(true) {
-                    $daysLeft <= 0  => '#ef4444',
-                    $daysLeft <= 30 => '#f87171',
-                    $daysLeft <= 90 => '#f59e0b',
-                    default         => '#22c55e',
+                    $daysLeft <= 0  => 'var(--ds-crimson)',
+                    $daysLeft <= 90 => 'var(--ds-amber)',
+                    default         => 'var(--ds-green)',
                 };
             @endphp
             <div class="rounded-md p-5 transition-all duration-300"
@@ -54,17 +65,26 @@
                         </div>
                         @if($lease->lease_end_date)
                         <div class="mt-3">
-                            <span class="inline-block px-2.5 py-0.5 rounded-md text-[11px] font-semibold {{ $urgencyBadge }}">
+                            <span class="ds-badge {{ $badgeVariant }}">
                                 @if($daysLeft <= 0)
-                                    EXPIRED — {{ $lease->lease_end_date->format('d M Y') }}
+                                    Expired
+                                @elseif($daysLeft <= 90)
+                                    {{ $daysLeft }}d left
                                 @else
-                                    Expires {{ $lease->lease_end_date->format('d M Y') }} ({{ $daysLeft }} days)
+                                    Active
+                                @endif
+                            </span>
+                            <span class="text-[0.6875rem] ml-2" style="color: var(--text-muted);">
+                                @if($daysLeft <= 0)
+                                    {{ $lease->lease_end_date->format('d M Y') }}
+                                @else
+                                    Expires {{ $lease->lease_end_date->format('d M Y') }}
                                 @endif
                             </span>
                         </div>
                         @endif
                         @if($lease->signatureTemplate && $lease->signatureTemplate->completed_at)
-                            <div class="text-[11px] text-green-500 mt-1.5">
+                            <div class="text-[0.6875rem] mt-1.5" style="color: var(--ds-green);">
                                 Signed {{ $lease->signatureTemplate->completed_at->format('d M Y') }}
                             </div>
                         @endif
@@ -72,25 +92,23 @@
                     <div class="flex flex-col gap-2 ml-4 shrink-0">
                         @if($lease->document)
                             <a href="{{ route('docuperfect.signatures.audit', $lease->document) }}"
-                               class="corex-btn-outline text-xs px-3 py-1.5 text-center transition-all duration-300">
+                               class="corex-btn-outline text-xs px-3 py-1.5 text-center">
                                 Audit
                             </a>
                         @endif
                         @if($lease->signatureTemplate && $lease->signatureTemplate->signed_pdf_path)
                             <a href="{{ route('docuperfect.signatures.download', $lease->document) }}"
-                               class="text-xs px-3 py-1.5 rounded-md text-white text-center font-medium transition-all duration-300"
-                               style="background: var(--brand-button, #0ea5e9);">
+                               class="corex-btn-outline text-xs px-3 py-1.5 text-center">
                                 Download PDF
                             </a>
                         @endif
                         <a href="{{ route('docuperfect.leases.history', $lease) }}"
-                           class="corex-btn-outline text-xs px-3 py-1.5 text-center transition-all duration-300">
+                           class="corex-btn-outline text-xs px-3 py-1.5 text-center">
                             History
                         </a>
                         <form method="POST" action="{{ route('docuperfect.leases.renew', $lease) }}" class="inline">
                             @csrf
-                            <button type="submit" class="w-full text-xs px-3 py-1.5 rounded-md text-white font-medium text-center transition-all duration-300"
-                                    style="background: var(--brand-button, #0ea5e9);"
+                            <button type="submit" class="corex-btn-primary w-full text-xs px-3 py-1.5 text-center"
                                     onclick="return confirm('Renew lease for {{ $lease->property_address }}?')">
                                 Renew Lease
                             </button>
@@ -99,9 +117,16 @@
                 </div>
             </div>
         @empty
-            <div class="rounded-md p-8 text-center" style="background: var(--surface); border: 1px solid var(--border);">
-                <div class="text-lg" style="color: var(--text-muted);">No active leases yet</div>
-                <div class="text-sm mt-1" style="color: var(--text-muted);">Completed and approved lease agreements will appear here.</div>
+            <div class="rounded-md py-12 px-6 text-center" style="background: var(--surface); border: 1px solid var(--border);">
+                <div class="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
+                     style="background: color-mix(in srgb, var(--brand-icon) 12%, transparent); color: var(--brand-icon);">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                </div>
+                <h3 class="text-base font-semibold mb-1" style="color: var(--text-primary);">No active leases yet</h3>
+                <p class="text-sm mb-4" style="color: var(--text-muted);">Completed and approved lease agreements will appear here.</p>
+                <a href="{{ route('docuperfect.rental.uploadAndSend') }}" class="corex-btn-primary">Upload &amp; Send Lease</a>
             </div>
         @endforelse
     </div>
