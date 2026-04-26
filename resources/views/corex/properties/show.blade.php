@@ -14,17 +14,17 @@
             Back
         </a>
         @if(session('success'))
-        <div class="flex-1 rounded-md border px-4 py-2 text-sm font-medium" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534;">
+        <div class="flex-1 rounded-md border px-4 py-2 text-sm font-medium" style="background:color-mix(in srgb, var(--ds-green, #059669) 10%, transparent); border-color:color-mix(in srgb, var(--ds-green, #059669) 30%, transparent); color:var(--ds-green, #059669);">
             {{ session('success') }}
         </div>
         @endif
         @if(session('error'))
-        <div class="flex-1 rounded-md border px-4 py-2 text-sm font-medium" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;">
+        <div class="flex-1 rounded-md border px-4 py-2 text-sm font-medium" style="background:color-mix(in srgb, #dc2626 10%, transparent); border-color:color-mix(in srgb, #dc2626 30%, transparent); color:#dc2626;">
             {{ session('error') }}
         </div>
         @endif
         @if($errors->any())
-        <div class="flex-1 rounded-md border px-4 py-2 text-sm" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;">
+        <div class="flex-1 rounded-md border px-4 py-2 text-sm" style="background:color-mix(in srgb, #dc2626 10%, transparent); border-color:color-mix(in srgb, #dc2626 30%, transparent); color:#dc2626;">
             {{ $errors->first() }}
         </div>
         @endif
@@ -38,7 +38,7 @@
         {{-- LEFT: sticky property summary panel --}}
         @php
         $thumb = $property->gallery_images_json[0] ?? ($property->dawn_images_json[0] ?? null);
-        $statusColors = ['active'=>'#22c55e','draft'=>'#94a3b8','sold'=>'#3b82f6','withdrawn'=>'#f59e0b'];
+        $statusColors = ['active'=>'#059669','draft'=>'#94a3b8','sold'=>'#0b2a4a','withdrawn'=>'#f59e0b'];
         $sc = $statusColors[$property->status] ?? '#94a3b8';
         @endphp
         <aside class="hidden lg:flex flex-col gap-4 flex-shrink-0" style="width:280px; position:sticky; top:0;">
@@ -63,7 +63,7 @@
                             {{ ucfirst($property->status) }}
                         </span>
                         @if($property->isPublished())
-                        <span class="text-xs px-2 py-0.5 rounded-full font-semibold flex-shrink-0" style="background:rgba(34,197,94,0.12); color:#22c55e; border:1px solid rgba(34,197,94,0.3);">LIVE</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full font-semibold flex-shrink-0" style="background:color-mix(in srgb, var(--ds-green, #059669) 12%, transparent); color:var(--ds-green, #059669); border:1px solid color-mix(in srgb, var(--ds-green, #059669) 30%, transparent);">LIVE</span>
                         @endif
                     </div>
                     <h1 class="text-base font-extrabold leading-tight mt-2" style="color:var(--text-primary);">{{ $property->title ?: 'New Property' }}</h1>
@@ -900,7 +900,7 @@
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Property Type <span class="text-red-400">*</span></label>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Property Type <span class="text-red-500">*</span></label>
                             <select name="property_type" required class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
                                 <option value="">— None —</option>
                                 @foreach($settingItems['types'] as $item)
@@ -911,7 +911,7 @@
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Property Status <span class="text-red-400">*</span></label>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Property Status <span class="text-red-500">*</span></label>
                             <select name="status" required class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
                                 <option value="">— None —</option>
                                 @foreach($settingItems['statuses'] as $item)
@@ -948,14 +948,14 @@
                     <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Listing Details</h3>
                     <div class="space-y-4">
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Title <span class="text-red-400">*</span></label>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Title <span class="text-red-500">*</span></label>
                             <input type="text" name="title" value="{{ old('title', $property->title) }}" required
                                    class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
                         </div>
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3" x-data="{ showPriceModal: false }">
                             <div class="relative">
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Price (ZAR) <span class="text-red-400">*</span></label>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Price (ZAR) <span class="text-red-500">*</span></label>
                                 <div class="flex">
                                     <input type="number" name="price" value="{{ old('price', $property->price) }}" required min="0"
                                            class="w-full rounded-l-md px-3 py-2 text-sm"
@@ -1689,7 +1689,7 @@
                                     <div class="text-[10px] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default,#0b2a4a); color:#fff;">City or Suburb</div>
                                     <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
                                         <div>
-                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Suburb <span class="text-red-400">*</span></label>
+                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Suburb <span class="text-red-500">*</span></label>
                                             <input type="text" name="suburb" x-model="suburb" required placeholder="e.g. Uvongo Beach" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
                                         <div class="grid grid-cols-2 gap-3">
@@ -2006,7 +2006,7 @@
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {{-- Primary Agent Card --}}
                         <div class="rounded-md p-3" style="background:var(--surface-2); border:1px solid var(--border);">
-                            <label class="block text-xs font-semibold mb-2" style="color:var(--text-secondary);">Primary Agent <span class="text-red-400">*</span></label>
+                            <label class="block text-xs font-semibold mb-2" style="color:var(--text-secondary);">Primary Agent <span class="text-red-500">*</span></label>
                             <div class="flex items-start gap-3" x-data="{ agentId: {{ (int) old('agent_id', $property->agent_id) }} }">
                                 {{-- Agent photo preview --}}
                                 @php
@@ -4142,7 +4142,7 @@ function p24Syndication(config) {
 <div id="prop-required-modal"
      class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4"
      role="dialog" aria-modal="true" aria-labelledby="prop-required-title">
-    <div class="rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
+    <div class="rounded-lg shadow-xl max-w-md w-full overflow-hidden"
          style="background:var(--surface,#fff); border:1px solid var(--border);">
         <div class="px-6 py-4 flex items-start gap-3" style="border-bottom:1px solid var(--border);">
             <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center" style="background:rgba(220,38,38,0.12);">

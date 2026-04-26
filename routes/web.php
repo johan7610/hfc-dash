@@ -944,7 +944,6 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         ->name('admin.user.overrides.revoke');
 
     // Training placeholder replaced by LMS module (training.index route above)
-    Route::get('/franchise-admin', [CoreXPlaceholderController::class, 'show'])->defaults('section', 'franchise-admin')->middleware('permission:access_franchise_admin')->name('corex.franchise-admin');
 
     // Settings (admin only)
     Route::get('/settings', [CoreXSettingsController::class, 'index'])->middleware(['permission:access_settings', 'agency.required'])->name('corex.settings');

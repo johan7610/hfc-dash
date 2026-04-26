@@ -1,102 +1,123 @@
-<!-- ELLIE_WIDGET_2026 -->
+{{-- ELLIE_WIDGET_2026 — design-system aligned --}}
 <div id="ellie-root" style="position: fixed; bottom: 90px; right: 24px; z-index: 9999;">
-    <!-- Button -->
-    <button id="ellie-btn" type="button" aria-label="Open Ellie" style="
-        width: 84px; height: 84px; border-radius: 9999px;
-        border: 0; padding: 0; background: transparent;
-        box-shadow: 0 10px 28px rgba(0,0,0,0.35);
-          overflow: hidden;
-        cursor: pointer;
-        transform: translateZ(0);
-        animation: ellie-breathe 3.6s ease-in-out infinite;
-    ">
-        <span style="position: relative; display:block; width:84px; height:84px;">
-            <img src="/images/ellie-128-circle.png" alt="Ellie" style="
-                width: 84px; height: 84px; border-radius: 9999px; display:block; object-fit: cover; object-position: center;
-            ">
-        </span>
+    {{-- Trigger button --}}
+    <button id="ellie-btn" type="button" aria-label="Open Ellie" class="ellie-trigger">
+        <img src="/images/ellie-128-circle.png" alt="Ellie">
     </button>
 
-    <!-- Panel -->
-    <div id="ellie-panel" style="
-        position: absolute;
-        right: 0;
-        bottom: 98px;
-        width: 360px;
-        max-width: calc(100vw - 32px);
-        height: 520px;
-        max-height: calc(100vh - 140px);
-        border-radius: 18px;
-        overflow: hidden;
-        background: rgba(15, 23, 42, 0.96);
-        border: 1px solid rgba(255,255,255,0.12);
-        box-shadow: 0 18px 60px rgba(0,0,0,0.45);
-        display: none;
-    ">
-        <div style="
-            display:flex; align-items:center; justify-content:space-between;
-            padding: 12px 14px;
-            background: rgba(255,255,255,0.06);
-            border-bottom: 1px solid rgba(255,255,255,0.10);
-            color: rgba(255,255,255,0.92);
-            font-weight: 600;
-        ">
-            <div style="display:flex; gap:10px; align-items:center;">
-                <img src="/images/ellie-32-circle.png" alt="" style="width:32px;height:32px;border-radius:9999px;">
+    {{-- Panel --}}
+    <div id="ellie-panel" class="ellie-widget-panel rounded-md" style="display:none;">
+        <div class="ellie-widget-header">
+            <div class="flex items-center gap-2.5">
+                <img src="/images/ellie-32-circle.png" alt="" class="w-8 h-8 rounded-full">
                 <div>
-                    <div style="font-size:14px; line-height: 1.1;">Ellie</div>
-                    <div style="font-size:11px; opacity:0.75; font-weight:500;">HF Coastal Companion</div>
+                    <div class="text-sm font-semibold leading-tight" style="color: var(--text-primary);">Ellie</div>
+                    <div class="text-xs font-medium" style="color: var(--text-muted);">HF Coastal Companion</div>
                 </div>
             </div>
-            <button id="ellie-close" type="button" aria-label="Close Ellie" style="
-                border:0; background: transparent; color: rgba(255,255,255,0.75);
-                font-size: 18px; line-height: 1; cursor: pointer; padding: 6px 8px;
-            ">&times;</button>
+            <button id="ellie-close" type="button" aria-label="Close Ellie" class="ellie-widget-close">&times;</button>
         </div>
 
-        <div id="ellie-messages" style="
-            padding: 12px;
-            height: calc(100% - 112px);
-            overflow: auto;
-            color: rgba(255,255,255,0.90);
-            font-size: 13px;
-        ">
-            <div style="opacity:0.85; margin-bottom:10px;">
-                Hi 👋 I'm Ellie. Ask me anything about your performance, targets, listings, or next actions.
+        <div id="ellie-messages" class="ellie-widget-messages">
+            <div class="text-sm" style="color: var(--text-secondary);">
+                Hi, I'm Ellie. Ask me anything about your performance, targets, listings, or next actions.
             </div>
         </div>
 
-        <form id="ellie-form" style="
-            display:flex; gap:10px;
-            padding: 12px;
-            border-top: 1px solid rgba(255,255,255,0.10);
-            background: rgba(0,0,0,0.18);
-        ">
-            <input id="ellie-input" type="text" autocomplete="off" placeholder="Message Ellie…" style="
-                flex:1;
-                border-radius: 12px;
-                border: 1px solid rgba(255,255,255,0.14);
-                background: rgba(255,255,255,0.06);
-                color: rgba(255,255,255,0.92);
-                padding: 10px 12px;
-                outline: none;
-                font-size: 13px;
-            ">
-            <button id="ellie-send" type="submit" style="
-                border:0;
-                border-radius: 12px;
-                padding: 10px 12px;
-                background: rgba(255,255,255,0.14);
-                color: rgba(255,255,255,0.95);
-                cursor: pointer;
-                font-weight: 600;
-            ">Send</button>
+        <form id="ellie-form" class="ellie-widget-form">
+            <input id="ellie-input" type="text" autocomplete="off" placeholder="Message Ellie…" class="ellie-widget-input">
+            <button id="ellie-send" type="submit" class="corex-btn-primary">Send</button>
         </form>
     </div>
 </div>
 
 <style>
     @keyframes ellie-breathe { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-3px) } }
+
+    .ellie-trigger {
+        width: 84px; height: 84px; border-radius: 9999px;
+        border: 0; padding: 0; background: transparent;
+        box-shadow: 0 10px 28px rgba(0,0,0,0.35);
+        overflow: hidden; cursor: pointer; transform: translateZ(0);
+        animation: ellie-breathe 3.6s ease-in-out infinite;
+    }
+    .ellie-trigger img { width: 84px; height: 84px; border-radius: 9999px; display:block; object-fit: cover; object-position: center; }
+
+    .ellie-widget-panel {
+        position: absolute; right: 0; bottom: 98px;
+        width: 360px; max-width: calc(100vw - 32px);
+        height: 520px; max-height: calc(100vh - 140px);
+        overflow: hidden;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        box-shadow: 0 18px 60px rgba(0,0,0,0.45);
+        display: flex; flex-direction: column;
+    }
+
+    .ellie-widget-header {
+        display:flex; align-items:center; justify-content:space-between;
+        padding: 0.75rem 0.875rem;
+        background: var(--surface-2);
+        border-bottom: 1px solid var(--border);
+        flex: 0 0 auto;
+    }
+
+    .ellie-widget-close {
+        border: 0; background: transparent;
+        color: var(--text-muted);
+        font-size: 1.25rem; line-height: 1; cursor: pointer; padding: 6px 8px;
+        transition: color 150ms;
+    }
+    .ellie-widget-close:hover { color: var(--text-primary); }
+
+    .ellie-widget-messages {
+        flex: 1 1 auto; min-height: 0;
+        padding: 0.75rem; overflow: auto;
+        background: var(--bg);
+    }
+
+    .ellie-widget-form {
+        display: flex; gap: 0.625rem;
+        padding: 0.75rem;
+        border-top: 1px solid var(--border);
+        background: var(--surface);
+        flex: 0 0 auto;
+    }
+
+    .ellie-widget-input {
+        flex: 1;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--surface-2);
+        color: var(--text-primary);
+        padding: 0.625rem 0.75rem;
+        outline: none;
+        font-size: 0.875rem;
+        transition: border-color 300ms, box-shadow 300ms;
+    }
+    .ellie-widget-input::placeholder { color: var(--text-muted); }
+    .ellie-widget-input:focus {
+        border-color: var(--brand-button);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-button) 15%, transparent);
+    }
+
+    .ellie-widget-bubble {
+        max-width: 85%;
+        white-space: pre-wrap;
+        padding: 0.625rem 0.75rem;
+        border-radius: 6px;
+        font-size: 0.8125rem;
+        line-height: 1.45;
+    }
+    .ellie-widget-bubble.me {
+        background: var(--brand-button);
+        color: #fff;
+    }
+    .ellie-widget-bubble.ellie {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--text-primary);
+    }
 </style>
 
 <script>
@@ -113,11 +134,11 @@
     const KEY = 'ellie_open_v1';
     const CONVO_KEY = 'ELLIE_CONVO_ID';
     const csrf = (document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')) || '';
-    const open = () => { panel.style.display = 'block'; localStorage.setItem(KEY,'1'); setTimeout(()=>input.focus(), 50); };
+    const open = () => { panel.style.display = 'flex'; localStorage.setItem(KEY,'1'); setTimeout(()=>input.focus(), 50); };
     const close = () => { panel.style.display = 'none'; localStorage.setItem(KEY,'0'); };
 
     btn.addEventListener('click', () => {
-        if (panel.style.display === 'block') close(); else open();
+        if (panel.style.display === 'flex') close(); else open();
     });
     closeBtn.addEventListener('click', close);
 
@@ -135,13 +156,7 @@
 
         const b = document.createElement('div');
         b.textContent = text;
-        b.style.maxWidth = '85%';
-        b.style.whiteSpace = 'pre-wrap';
-        b.style.padding = '10px 12px';
-        b.style.borderRadius = '14px';
-        b.style.border = '1px solid rgba(255,255,255,0.10)';
-        b.style.background = (who === 'me') ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.06)';
-        b.style.color = 'rgba(255,255,255,0.92)';
+        b.className = 'ellie-widget-bubble ' + (who === 'me' ? 'me' : 'ellie');
         wrap.appendChild(b);
 
         messages.appendChild(wrap);
@@ -160,9 +175,9 @@
         busy = true;
 
         const typing = document.createElement('div');
-        typing.style.opacity = '0.75';
-        typing.style.fontSize = '12px';
+        typing.style.fontSize = '0.75rem';
         typing.style.marginTop = '6px';
+        typing.style.color = 'var(--text-muted)';
         typing.textContent = 'Ellie is typing…';
         messages.appendChild(typing);
         messages.scrollTop = messages.scrollHeight;
@@ -224,4 +239,4 @@
     });
 })();
 </script>
-<!-- /ELLIE_WIDGET_2026 -->
+{{-- /ELLIE_WIDGET_2026 --}}

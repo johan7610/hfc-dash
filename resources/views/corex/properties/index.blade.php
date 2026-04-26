@@ -4,26 +4,26 @@
 <div class="w-full space-y-5" x-data="{ view: localStorage.getItem('prop_view') || 'grid' }" x-init="$watch('view', v => localStorage.setItem('prop_view', v))">
 
     {{-- Header --}}
-    <div class="rounded-md px-6 py-5 flex items-center justify-between flex-wrap gap-3" style="background:linear-gradient(135deg,var(--brand-default,#0b2a4a) 0%,#163a5c 100%);">
-        <div>
-            <h2 class="text-xl font-bold text-white tracking-tight">Properties</h2>
-            <p class="text-sm mt-0.5" style="color:rgba(255,255,255,0.65);">Manage listings &amp; publish to website</p>
-        </div>
-        <div class="flex items-center gap-2">
-            <a href="{{ route('corex.properties.create') }}"
-               class="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-all duration-200"
-               style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.85);border:1px solid rgba(255,255,255,0.15);"
-               title="Classic single-page form">
-                Classic form
-            </a>
-            <a href="{{ route('corex.properties.wizard') }}"
-               class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-all duration-200"
-               style="background:#fff;color:var(--brand-default,#0b2a4a);">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
-                </svg>
-                New Property
-            </a>
+    <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a);">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <h1 class="text-xl font-bold text-white leading-tight">Properties</h1>
+                <p class="text-sm text-white/60">Manage listings and publish to website.</p>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <a href="{{ route('corex.properties.create') }}"
+                   class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all duration-300"
+                   style="background:rgba(255,255,255,0.08);color:#fff;border:1px solid rgba(255,255,255,0.18);"
+                   title="Classic single-page form">
+                    Classic form
+                </a>
+                <a href="{{ route('corex.properties.wizard') }}" class="corex-btn-primary inline-flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    New Property
+                </a>
+            </div>
         </div>
     </div>
 
@@ -37,11 +37,11 @@
             'Published' => '<path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918"/>',
         ];
         $kpiColors = [
-            'Total'     => ['bg' => 'rgba(14,165,233,0.10)',  'fg' => '#0284c7'],
-            'Active'    => ['bg' => 'rgba(34,197,94,0.10)',   'fg' => '#15803d'],
-            'Draft'     => ['bg' => 'rgba(245,158,11,0.10)',  'fg' => '#b45309'],
-            'Sold'      => ['bg' => 'rgba(99,102,241,0.10)',  'fg' => '#4338ca'],
-            'Published' => ['bg' => 'rgba(236,72,153,0.10)',  'fg' => '#be185d'],
+            'Total'     => ['bg' => 'color-mix(in srgb, var(--brand-icon) 12%, transparent)',  'fg' => 'var(--brand-icon)'],
+            'Active'    => ['bg' => 'color-mix(in srgb, var(--ds-green) 12%, transparent)',    'fg' => 'var(--ds-green)'],
+            'Draft'     => ['bg' => 'color-mix(in srgb, var(--ds-amber) 12%, transparent)',    'fg' => 'var(--ds-amber)'],
+            'Sold'      => ['bg' => 'color-mix(in srgb, var(--ds-navy) 12%, transparent)',     'fg' => 'var(--ds-navy)'],
+            'Published' => ['bg' => 'color-mix(in srgb, var(--brand-icon) 12%, transparent)',  'fg' => 'var(--brand-icon)'],
         ];
     @endphp
     <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 xl:gap-4">
@@ -53,18 +53,16 @@
             ['label' => 'Published', 'value' => $stats['synced']],
         ] as $kpi)
         @php $c = $kpiColors[$kpi['label']] ?? ['bg' => 'var(--surface-2)', 'fg' => 'var(--text-muted)']; @endphp
-        <div class="rounded-md px-4 py-3 flex items-center gap-3 transition-all duration-200 cursor-default"
-             style="background:var(--surface); border:1px solid var(--border);"
-             onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 16px rgba(0,0,0,0.06)'"
-             onmouseout="this.style.transform='';this.style.boxShadow=''">
-            <span class="inline-flex items-center justify-center w-9 h-9 rounded-md flex-shrink-0" style="background:{{ $c['bg'] }};color:{{ $c['fg'] }};">
+        <div class="rounded-md px-4 py-3 flex items-center gap-3 transition-all duration-300"
+             style="background:var(--surface); border:1px solid var(--border);">
+            <span class="inline-flex items-center justify-center w-10 h-10 rounded-md flex-shrink-0" style="background:{{ $c['bg'] }};color:{{ $c['fg'] }};">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     {!! $kpiIcons[$kpi['label']] ?? '' !!}
                 </svg>
             </span>
             <div class="min-w-0">
-                <div class="text-xl font-bold leading-none" style="color:var(--brand-default,#0b2a4a);">{{ $kpi['value'] }}</div>
-                <div class="text-[11px] font-medium mt-0.5 uppercase tracking-wider" style="color:var(--text-muted);">{{ $kpi['label'] }}</div>
+                <div class="text-[1.625rem] font-semibold leading-none" style="color:var(--text-primary);">{{ number_format((int) $kpi['value']) }}</div>
+                <div class="text-[0.6875rem] font-medium mt-1 uppercase tracking-wider" style="color:var(--text-muted);">{{ $kpi['label'] }}</div>
             </div>
         </div>
         @endforeach
@@ -72,8 +70,14 @@
 
     {{-- Flash --}}
     @if(session('success'))
-    <div class="rounded-md border px-4 py-3 text-sm font-medium" style="border-color:#bbf7d0;color:#166534;background:#f0fdf4;">
-        {{ session('success') }}
+    <div class="rounded-md px-4 py-3 text-sm flex items-start gap-3"
+         style="background: color-mix(in srgb, var(--ds-green) 10%, transparent);
+                border: 1px solid color-mix(in srgb, var(--ds-green) 30%, transparent);
+                color: var(--text-primary);">
+        <svg class="w-5 h-5 flex-shrink-0" style="color: var(--ds-green);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+        </svg>
+        <div class="flex-1">{{ session('success') }}</div>
     </div>
     @endif
 
@@ -476,12 +480,12 @@
             $images = $property->allImages();
             $thumb  = $images[0] ?? null;
             $sMap = [
-                'draft'     => ['bg' => 'var(--surface-2)', 'text' => 'var(--text-muted)', 'label' => 'Draft'],
-                'active'    => ['bg' => '#dcfce7', 'text' => '#166534', 'label' => 'Active'],
-                'sold'      => ['bg' => '#dbeafe', 'text' => '#1e40af', 'label' => 'Sold'],
-                'withdrawn' => ['bg' => '#fee2e2', 'text' => '#991b1b', 'label' => 'Withdrawn'],
+                'draft'     => ['variant' => 'ds-badge-default', 'label' => 'Draft'],
+                'active'    => ['variant' => 'ds-badge-success', 'label' => 'Active'],
+                'sold'      => ['variant' => 'ds-badge-info',    'label' => 'Sold'],
+                'withdrawn' => ['variant' => 'ds-badge-warning', 'label' => 'Withdrawn'],
             ];
-            $sc = $sMap[$property->status] ?? ['bg' => 'var(--surface-2)', 'text' => 'var(--text-muted)', 'label' => ucfirst($property->status)];
+            $sc = $sMap[$property->status] ?? ['variant' => 'ds-badge-default', 'label' => ucfirst($property->status)];
         @endphp
         <div class="rounded-md overflow-hidden flex flex-col transition-all duration-300"
              style="background:var(--surface); border:1px solid var(--border);"
@@ -509,12 +513,11 @@
 
                 {{-- Live badge --}}
                 @if($property->isPublished())
-                <span class="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase" style="background:var(--brand-icon,#0ea5e9);color:#fff;">Live</span>
+                <span class="ds-badge ds-badge-info absolute top-2.5 left-2.5" style="background:var(--brand-icon);color:#fff;">Live</span>
                 @endif
 
                 {{-- Status badge --}}
-                <span class="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide"
-                      style="background:{{ $sc['bg'] }};color:{{ $sc['text'] }};">{{ $sc['label'] }}</span>
+                <span class="ds-badge {{ $sc['variant'] }} absolute top-2.5 right-2.5">{{ $sc['label'] }}</span>
 
                 {{-- Photo count --}}
                 @if(count($images) > 0)
@@ -557,7 +560,7 @@
                 @if($property->p24_ref)
                 <div class="mt-1.5">
                     <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold"
-                          style="background:rgba(14,165,233,0.12); color:#0284c7; border:1px solid rgba(14,165,233,0.3);"
+                          style="background:color-mix(in srgb, var(--brand-icon) 12%, transparent); color:var(--brand-icon); border:1px solid color-mix(in srgb, var(--brand-icon) 30%, transparent);"
                           title="Property24 listing number">
                         P24: {{ $property->p24_ref }}
                     </span>
@@ -585,7 +588,7 @@
                             <button type="submit"
                                     class="text-[10px] font-medium px-2 py-1 rounded-md transition-all duration-300"
                                     style="color:var(--text-muted);"
-                                    onmouseover="this.style.color='#ef4444';this.style.background='rgba(239,68,68,0.08)'"
+                                    onmouseover="this.style.color='var(--ds-crimson)';this.style.background='color-mix(in srgb, var(--ds-crimson) 8%, transparent)'"
                                     onmouseout="this.style.color='var(--text-muted)';this.style.background=''">
                                 Delete
                             </button>
@@ -599,17 +602,18 @@
 
     {{-- ═══ LIST VIEW ═══ --}}
     <div x-show="view === 'list'" x-cloak class="rounded-md overflow-hidden" style="background:var(--surface);border:1px solid var(--border);">
-        <table class="w-full text-sm">
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm ds-table">
             <thead>
-                <tr style="border-bottom:1px solid var(--border);">
-                    <th class="text-left px-4 py-2.5 text-xs font-semibold" style="color:var(--text-muted);">Property</th>
-                    <th class="text-left px-4 py-2.5 text-xs font-semibold" style="color:var(--text-muted);">Location</th>
-                    <th class="text-left px-4 py-2.5 text-xs font-semibold hidden sm:table-cell" style="color:var(--text-muted);">Type</th>
-                    <th class="text-right px-4 py-2.5 text-xs font-semibold" style="color:var(--text-muted);">Price</th>
-                    <th class="text-center px-4 py-2.5 text-xs font-semibold hidden md:table-cell" style="color:var(--text-muted);">Bed</th>
-                    <th class="text-center px-4 py-2.5 text-xs font-semibold hidden md:table-cell" style="color:var(--text-muted);">Bath</th>
-                    <th class="text-left px-4 py-2.5 text-xs font-semibold hidden lg:table-cell" style="color:var(--text-muted);">Agent</th>
-                    <th class="text-center px-4 py-2.5 text-xs font-semibold" style="color:var(--text-muted);">Status</th>
+                <tr style="background: var(--surface-2);">
+                    <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color:var(--text-muted);">Property</th>
+                    <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color:var(--text-muted);">Location</th>
+                    <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider hidden sm:table-cell" style="color:var(--text-muted);">Type</th>
+                    <th class="text-right px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color:var(--text-muted);">Price</th>
+                    <th class="text-center px-4 py-2.5 text-xs font-semibold uppercase tracking-wider hidden md:table-cell" style="color:var(--text-muted);">Bed</th>
+                    <th class="text-center px-4 py-2.5 text-xs font-semibold uppercase tracking-wider hidden md:table-cell" style="color:var(--text-muted);">Bath</th>
+                    <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider hidden lg:table-cell" style="color:var(--text-muted);">Agent</th>
+                    <th class="text-center px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color:var(--text-muted);">Status</th>
                     <th class="px-4 py-2.5 text-xs font-semibold text-right" style="color:var(--text-muted);"></th>
                 </tr>
             </thead>
@@ -617,12 +621,12 @@
                 @foreach($properties as $property)
                 @php
                     $sMap = [
-                        'draft'     => ['bg' => 'var(--surface-2)', 'text' => 'var(--text-muted)', 'label' => 'Draft'],
-                        'active'    => ['bg' => '#dcfce7', 'text' => '#166534', 'label' => 'Active'],
-                        'sold'      => ['bg' => '#dbeafe', 'text' => '#1e40af', 'label' => 'Sold'],
-                        'withdrawn' => ['bg' => '#fee2e2', 'text' => '#991b1b', 'label' => 'Withdrawn'],
+                        'draft'     => ['variant' => 'ds-badge-default', 'label' => 'Draft'],
+                        'active'    => ['variant' => 'ds-badge-success', 'label' => 'Active'],
+                        'sold'      => ['variant' => 'ds-badge-info',    'label' => 'Sold'],
+                        'withdrawn' => ['variant' => 'ds-badge-warning', 'label' => 'Withdrawn'],
                     ];
-                    $sc = $sMap[$property->status] ?? ['bg' => 'var(--surface-2)', 'text' => 'var(--text-muted)', 'label' => ucfirst($property->status)];
+                    $sc = $sMap[$property->status] ?? ['variant' => 'ds-badge-default', 'label' => ucfirst($property->status)];
                 @endphp
                 <tr class="transition-all duration-300" style="border-bottom:1px solid var(--border);"
                     onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
@@ -631,7 +635,7 @@
                             {{ Str::limit($property->title, 35) }}
                         </a>
                         @if($property->p24_ref)
-                        <div class="text-[10px] font-mono mt-0.5" style="color:#0284c7;" title="Property24 listing number">P24: {{ $property->p24_ref }}</div>
+                        <div class="text-[10px] font-mono mt-0.5" style="color:var(--brand-icon);" title="Property24 listing number">P24: {{ $property->p24_ref }}</div>
                         @endif
                     </td>
                     <td class="px-4 py-2.5 text-xs" style="color:var(--text-secondary);">
@@ -647,7 +651,7 @@
                     <td class="px-4 py-2.5 text-xs text-center hidden md:table-cell" style="color:var(--text-secondary);">{{ $property->baths ?? '—' }}</td>
                     <td class="px-4 py-2.5 text-xs hidden lg:table-cell" style="color:var(--text-muted);">{{ $property->agent?->name ?? '—' }}</td>
                     <td class="px-4 py-2.5 text-center">
-                        <span class="inline-block px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide" style="background:{{ $sc['bg'] }};color:{{ $sc['text'] }};">{{ $sc['label'] }}</span>
+                        <span class="ds-badge {{ $sc['variant'] }}">{{ $sc['label'] }}</span>
                     </td>
                     <td class="px-4 py-2.5 text-right">
                         <div class="flex items-center justify-end gap-1">
@@ -657,7 +661,7 @@
                                   onsubmit="return confirm('Delete \'{{ addslashes($property->title) }}\'?')">
                                 @csrf @method('DELETE')
                                 <button type="submit" class="text-[10px] font-medium px-2 py-1 rounded-md transition-all duration-300" style="color:var(--text-muted);"
-                                        onmouseover="this.style.color='#ef4444';this.style.background='rgba(239,68,68,0.08)'"
+                                        onmouseover="this.style.color='var(--ds-crimson)';this.style.background='color-mix(in srgb, var(--ds-crimson) 8%, transparent)'"
                                         onmouseout="this.style.color='var(--text-muted)';this.style.background=''">Delete</button>
                             </form>
                         </div>
@@ -666,6 +670,7 @@
                 @endforeach
             </tbody>
         </table>
+      </div>
     </div>
 
     <p class="text-xs text-right mt-2" style="color:var(--text-muted);">
