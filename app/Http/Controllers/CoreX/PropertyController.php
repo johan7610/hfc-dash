@@ -203,6 +203,25 @@ class PropertyController extends Controller
             ? app(Property24ListingMapper::class)->checkReadiness($property)
             : [];
 
+        // HFC Premium readiness check (website requires agent + agent phone)
+        $hfcMissingFields = [];
+        if ($property->exists) {
+            if (! $property->agent) {
+                $hfcMissingFields[] = ['field' => 'agent', 'label' => 'Listing agent'];
+            } else {
+                if (empty($property->agent->phone)) {
+                    $hfcMissingFields[] = ['field' => 'agent_phone', 'label' => 'Agent phone number'];
+                }
+                if (empty($property->agent->email)) {
+                    $hfcMissingFields[] = ['field' => 'agent_email', 'label' => 'Agent email'];
+                }
+            }
+            if (empty($property->title))   $hfcMissingFields[] = ['field' => 'title',   'label' => 'Title'];
+            if (empty($property->price))   $hfcMissingFields[] = ['field' => 'price',   'label' => 'Price'];
+            if (empty($property->status))  $hfcMissingFields[] = ['field' => 'status',  'label' => 'Status'];
+            if (empty($property->suburb))  $hfcMissingFields[] = ['field' => 'suburb',  'label' => 'Suburb'];
+        }
+
         // Overview tab: activity timeline
         $activityTimeline = collect();
         // P24 syndication events
@@ -258,7 +277,7 @@ class PropertyController extends Controller
         }
 
         return view('corex.properties.show', compact(
-            'property', 'settingItems', 'branches', 'agents', 'activeTab', 'coreMatches', 'ppMissingFields', 'p24MissingFields',
+            'property', 'settingItems', 'branches', 'agents', 'activeTab', 'coreMatches', 'ppMissingFields', 'p24MissingFields', 'hfcMissingFields',
             'allDriveDocs', 'documentTypes', 'driveFolders', 'activityTimeline'
         ));
     }
@@ -690,6 +709,19 @@ class PropertyController extends Controller
         $this->authorizeProperty($property);
 
         $action = $request->input('action', 'toggle');
+        if ($action === 'publish' || $action === 'refresh' || ($action === 'toggle' && ! $property->published_at)) {
+            $missing = [];
+            if (! $property->agent)             $missing[] = 'Listing agent';
+            elseif (empty($property->agent->phone)) $missing[] = 'Agent phone number';
+            elseif (empty($property->agent->email)) $missing[] = 'Agent email';
+            if (empty($property->title))   $missing[] = 'Title';
+            if (empty($property->price))   $missing[] = 'Price';
+            if (empty($property->status))  $missing[] = 'Status';
+            if (empty($property->suburb))  $missing[] = 'Suburb';
+            if ($missing) {
+                return back()->with('error', 'Cannot publish to HFC Premium — missing: ' . implode(', ', $missing));
+            }
+        }
         if ($action === 'publish' || $action === 'refresh') {
             $property->published_at = now();
             $msg = $action === 'refresh' ? 'Listing refreshed on HFC Premium.' : 'Published to HFC Premium.';

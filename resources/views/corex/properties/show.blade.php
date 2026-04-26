@@ -264,10 +264,12 @@
 
                     @if($synWebsiteEnabled)
                     {{-- HFC Premium publish — mirrors P24 toggle/publish/refresh/unpublish pattern --}}
+                    @php $hfcMissing = $hfcMissingFields ?? []; @endphp
                     <div x-data="{
                             isPublished: {{ $isPublished ? 'true' : 'false' }},
                             enabled:     {{ $isPublished ? 'true' : 'false' }},
                             loading:     false,
+                            missingFields: {{ \Illuminate\Support\Js::from($hfcMissing) }},
                             csrf:        '{{ csrf_token() }}',
                             url:         '{{ route('corex.properties.publish-toggle', $property) }}',
                             previewUrl:  '{{ rtrim(config('integrations.website_public_url', ''), '/') ? rtrim(config('integrations.website_public_url'), '/') . '/listings/' . $property->external_id : route('corex.properties.preview', [$property, \Illuminate\Support\Str::slug($property->title)]) }}',
@@ -320,11 +322,25 @@
                             </div>
                         </div>
 
+                        {{-- Missing fields warning — blocks publish until resolved --}}
+                        <div x-show="missingFields.length > 0" x-cloak
+                             class="rounded-md px-3 py-2.5 space-y-1.5"
+                             style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25);">
+                            <p class="text-[11px] font-semibold" style="color:#f59e0b;">Cannot publish to HFC Premium — missing required fields:</p>
+                            <ul class="space-y-0.5 m-0 pl-3" style="list-style:disc;">
+                                <template x-for="(f, idx) in missingFields" :key="idx">
+                                    <li class="text-[11px]" style="color:#f59e0b;" x-text="f.label"></li>
+                                </template>
+                            </ul>
+                        </div>
+
                         {{-- Publish button — shown when enabled but not yet published --}}
                         <div x-show="enabled && !isPublished" x-cloak class="flex flex-wrap gap-2">
-                            <button type="button" @click.stop="publish()" :disabled="loading"
-                                    class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold transition-opacity hover:opacity-85"
-                                    style="background:#22c55e; color:#fff;">
+                            <button type="button" @click.stop="missingFields.length === 0 && publish()"
+                                    :disabled="loading || missingFields.length > 0"
+                                    class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
+                                    :style="missingFields.length > 0 ? 'background:#374151; color:#6b7280; cursor:not-allowed;' : 'background:#22c55e; color:#fff;'"
+                                    :class="missingFields.length === 0 ? 'hover:opacity-85' : ''">
                                 <svg x-show="!loading" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
                                 <svg x-show="loading" x-cloak class="w-3.5 h-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
                                 <span x-text="loading ? 'Publishing...' : 'Publish to HFC Premium'"></span>
