@@ -270,7 +270,7 @@
                             loading:     false,
                             csrf:        '{{ csrf_token() }}',
                             url:         '{{ route('corex.properties.publish-toggle', $property) }}',
-                            previewUrl:  '{{ route('corex.properties.preview', [$property, \Illuminate\Support\Str::slug($property->title)]) }}',
+                            previewUrl:  '{{ rtrim(config('integrations.website_public_url', ''), '/') ? rtrim(config('integrations.website_public_url'), '/') . '/listings/' . $property->external_id : route('corex.properties.preview', [$property, \Illuminate\Support\Str::slug($property->title)]) }}',
                             toggleEnabled() {
                                 if (this.loading) return;
                                 if (this.isPublished) {

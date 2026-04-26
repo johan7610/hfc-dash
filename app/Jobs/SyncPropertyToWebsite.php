@@ -10,6 +10,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class SyncPropertyToWebsite implements ShouldQueue
 {
@@ -101,12 +102,12 @@ class SyncPropertyToWebsite implements ShouldQueue
             'expiry_date'    => $p->expiry_date?->toDateString(),
             'published_at'   => $p->published_at?->toIso8601String(),
 
-            // Media
-            'images'         => $p->allImages(),
-            'dawn_images'    => $p->dawn_images_json    ?? [],
-            'noon_images'    => $p->noon_images_json    ?? [],
-            'dusk_images'    => $p->dusk_images_json    ?? [],
-            'gallery_images' => $p->gallery_images_json ?? [],
+            // Media (absolute URLs the website can fetch directly)
+            'images'         => $this->absoluteImageUrls($p->allImages()),
+            'dawn_images'    => $this->absoluteImageUrls($p->dawn_images_json    ?? []),
+            'noon_images'    => $this->absoluteImageUrls($p->noon_images_json    ?? []),
+            'dusk_images'    => $this->absoluteImageUrls($p->dusk_images_json    ?? []),
+            'gallery_images' => $this->absoluteImageUrls($p->gallery_images_json ?? []),
             'youtube_video_id' => $p->youtube_video_id,
             'matterport_id'    => $p->matterport_id,
 
@@ -131,5 +132,40 @@ class SyncPropertyToWebsite implements ShouldQueue
                 'logo_url'    => $agency->logo_url ?? null,
             ] : null,
         ];
+    }
+
+    /**
+     * Normalise stored image entries (disk paths, /storage/... paths, or already-absolute URLs)
+     * into absolute https URLs the website can fetch.
+     */
+    private function absoluteImageUrls(array $entries): array
+    {
+        $base = rtrim((string) config('app.url'), '/');
+        $out  = [];
+
+        foreach ($entries as $entry) {
+            if (empty($entry) || ! is_string($entry)) continue;
+
+            if (str_starts_with($entry, 'http://') || str_starts_with($entry, 'https://')) {
+                $out[] = $entry;
+                continue;
+            }
+
+            // /storage/... path → just prepend domain
+            if (str_starts_with($entry, '/storage/')) {
+                $out[] = $base . $entry;
+                continue;
+            }
+
+            // bare disk path like "properties/40/abc.jpg" → resolve via Storage::url
+            $url = Storage::disk('public')->url($entry);
+            if (str_starts_with($url, 'http')) {
+                $out[] = $url;
+            } else {
+                $out[] = $base . (str_starts_with($url, '/') ? $url : '/' . $url);
+            }
+        }
+
+        return $out;
     }
 }
