@@ -270,7 +270,7 @@
                             loading:     false,
                             csrf:        '{{ csrf_token() }}',
                             url:         '{{ route('corex.properties.publish-toggle', $property) }}',
-                            previewUrl:  '{{ route('corex.properties.preview', $property) }}',
+                            previewUrl:  '{{ route('corex.properties.preview', [$property, \Illuminate\Support\Str::slug($property->title)]) }}',
                             toggleEnabled() {
                                 if (this.loading) return;
                                 if (this.isPublished) {
@@ -734,7 +734,7 @@
                         </button>
                         <p class="text-xs font-semibold" style="color:var(--text-secondary);">Show contact info for:</p>
                     </div>
-                    <a href="{{ route('corex.properties.preview', $property) }}?agent=me"
+                    <a href="{{ route('corex.properties.preview', [$property, \Illuminate\Support\Str::slug($property->title)]) }}?agent=me"
                        target="_blank"
                        class="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold no-underline"
                        style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 8%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 20%, transparent);"
@@ -742,7 +742,7 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
                         Show my info
                     </a>
-                    <a href="{{ route('corex.properties.preview', $property) }}?agent=listing"
+                    <a href="{{ route('corex.properties.preview', [$property, \Illuminate\Support\Str::slug($property->title)]) }}?agent=listing"
                        target="_blank"
                        class="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold no-underline"
                        style="background:var(--surface-2); color:var(--text-secondary); border:1px solid var(--border);"
