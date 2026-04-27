@@ -501,7 +501,7 @@
                         </div>
                         <div class="flex items-center gap-2">
                             <button type="button"
-                                    @click="openEditRole({{ $role->id }}, {{ Js::from($role->only('name','label','description','color','sort_order','is_owner','can_be_deleted')) }})"
+                                    @click="openEditRole({{ $role->id }}, {{ Js::from($role->only('name','label','description','color','sort_order','is_owner','can_be_deleted','oversight_scope')) }})"
                                     class="px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-300"
                                     style="border:1px solid var(--border); color:var(--text-secondary);"
                                     onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
@@ -595,6 +595,22 @@
                                class="w-full rounded-md px-3 py-2 text-sm transition-all duration-300"
                                style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); outline:none;"
                                placeholder="0">
+                    </div>
+                </div>
+
+                <div x-show="editRoleId">
+                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Oversight Scope</label>
+                    <p class="text-xs mb-2" style="color:var(--text-muted);">If this role has the Manager Oversight permission, choose whose data they can see.</p>
+                    <div class="flex gap-3">
+                        <label class="text-xs flex items-center gap-1" style="color:var(--text-secondary);">
+                            <input type="radio" name="oversight_scope" value="" x-model="roleForm.oversight_scope"> None
+                        </label>
+                        <label class="text-xs flex items-center gap-1" style="color:var(--text-secondary);">
+                            <input type="radio" name="oversight_scope" value="branch" x-model="roleForm.oversight_scope"> Branch only
+                        </label>
+                        <label class="text-xs flex items-center gap-1" style="color:var(--text-secondary);">
+                            <input type="radio" name="oversight_scope" value="agency" x-model="roleForm.oversight_scope"> Entire agency
+                        </label>
                     </div>
                 </div>
 
@@ -840,7 +856,7 @@ function roleManager() {
         deleteRoleId: null,
         deleteRoleLabel: '',
         deleteRoleUserCount: 0,
-        roleForm: { label: '', name: '', description: '', color: '#0d9488', sort_order: 0 },
+        roleForm: { label: '', name: '', description: '', color: '#0d9488', sort_order: 0, oversight_scope: '' },
 
         selectedRoleLabel() {
             const r = rolesData.find(r => r.name === this.selectedRole);
@@ -1048,6 +1064,7 @@ function roleManager() {
                 description: data.description || '',
                 color: data.color || '#0d9488',
                 sort_order: data.sort_order || 0,
+                oversight_scope: data.oversight_scope || '',
             };
             this.showRoleModal = true;
         },

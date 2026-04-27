@@ -111,10 +111,43 @@
                 @endif
             @endif
         </div>
+    </div>
+    @endif
 
-        {{-- Branch switcher (Split Branches Phase 2) --}}
-        @if($_branchCanSwitch && $_agencyBranches->count() > 1)
-        <div x-data="{ branchOpen: false }" class="mt-2 px-0">
+    {{-- Agency Switcher (owner role only) --}}
+    @if($isOwner)
+    <div x-data="{ agencyOpen: false }" class="px-3 pb-2">
+        <button type="button" @click="agencyOpen = !agencyOpen"
+                class="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-colors"
+                style="background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent); color:var(--brand-icon, #0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon, #0ea5e9) 25%, transparent);">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5 flex-shrink-0">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+            </svg>
+            <span class="flex-1 text-left truncate">{{ $activeAgency ? $activeAgency->name : 'All Agencies' }}</span>
+            @if(!$activeAgency)
+            <span class="w-2 h-2 rounded-full flex-shrink-0 animate-pulse" style="background:var(--ds-amber);"></span>
+            @endif
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3 flex-shrink-0 transition-transform duration-150" :class="agencyOpen && 'rotate-90'"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+        </button>
+        <div x-show="agencyOpen" x-cloak @click.outside="agencyOpen = false" x-transition
+             class="mt-1 rounded-md overflow-hidden shadow-lg"
+             style="background:var(--surface-2, #1a1e28); border:1px solid var(--border);">
+            @foreach($agencies as $ag)
+            <form method="POST" action="{{ route('agency.switch', $ag) }}">
+                @csrf
+                <button type="submit" class="w-full text-left px-3 py-2 text-xs transition-colors hover:bg-[color:var(--surface)] {{ (int)$activeAgencyId === $ag->id ? 'font-semibold' : '' }}" style="color: @if((int)$activeAgencyId === $ag->id) var(--brand-icon, #0ea5e9) @else var(--text-secondary) @endif;">
+                    {{ $ag->name }}
+                </button>
+            </form>
+            @endforeach
+        </div>
+    </div>
+    @endif
+
+    {{-- Branch switcher (Split Branches Phase 2) --}}
+    @if($_userAgency && $_branchCanSwitch && $_agencyBranches->count() > 1)
+    <div class="px-4 pb-2">
+        <div x-data="{ branchOpen: false }" class="px-0">
             <button type="button" @click="branchOpen = !branchOpen"
                     class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors"
                     style="background:var(--surface-2); color:var(--text-secondary); border:1px solid var(--border);">
@@ -156,37 +189,6 @@
                 @endforeach
             </div>
         </div>
-        @endif
-    </div>
-    @endif
-
-    {{-- Agency Switcher (owner role only) --}}
-    @if($isOwner)
-    <div x-data="{ agencyOpen: false }" class="px-3 pb-2">
-        <button type="button" @click="agencyOpen = !agencyOpen"
-                class="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-colors"
-                style="background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent); color:var(--brand-icon, #0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon, #0ea5e9) 25%, transparent);">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5 flex-shrink-0">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
-            </svg>
-            <span class="flex-1 text-left truncate">{{ $activeAgency ? $activeAgency->name : 'All Agencies' }}</span>
-            @if(!$activeAgency)
-            <span class="w-2 h-2 rounded-full flex-shrink-0 animate-pulse" style="background:var(--ds-amber);"></span>
-            @endif
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3 flex-shrink-0 transition-transform duration-150" :class="agencyOpen && 'rotate-90'"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
-        </button>
-        <div x-show="agencyOpen" x-cloak @click.outside="agencyOpen = false" x-transition
-             class="mt-1 rounded-md overflow-hidden shadow-lg"
-             style="background:var(--surface-2, #1a1e28); border:1px solid var(--border);">
-            @foreach($agencies as $ag)
-            <form method="POST" action="{{ route('agency.switch', $ag) }}">
-                @csrf
-                <button type="submit" class="w-full text-left px-3 py-2 text-xs transition-colors hover:bg-[color:var(--surface)] {{ (int)$activeAgencyId === $ag->id ? 'font-semibold' : '' }}" style="color: @if((int)$activeAgencyId === $ag->id) var(--brand-icon, #0ea5e9) @else var(--text-secondary) @endif;">
-                    {{ $ag->name }}
-                </button>
-            </form>
-            @endforeach
-        </div>
     </div>
     @endif
 
@@ -218,6 +220,9 @@
                 <a href="{{ route('corex.dashboard') }}" class="corex-nav-subitem {{ request()->routeIs('corex.dashboard') ? 'active' : '' }}">Today</a>
                 <a href="{{ route('command-center.calendar') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.calendar*') ? 'active' : '' }}">Calendar</a>
                 <a href="{{ route('command-center.tasks') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.tasks*') ? 'active' : '' }}">Tasks</a>
+                @permission('dashboard.oversight.view')
+                    <a href="{{ route('corex.dashboard.oversight') }}" class="corex-nav-subitem {{ request()->routeIs('corex.dashboard.oversight') ? 'active' : '' }}">Oversight</a>
+                @endpermission
                 <a href="{{ route('command-center.performance') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.performance*') ? 'active' : '' }}">Performance</a>
                 <a href="{{ route('command-center.user-settings') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.user-settings*') ? 'active' : '' }}">User Settings</a>
             </div>

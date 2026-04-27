@@ -411,18 +411,15 @@ class RoleManagerController extends Controller
     public function updateRole(Request $request, Role $role)
     {
         $request->validate([
-            'label'       => 'required|string|max:100',
-            'description' => 'nullable|string|max:500',
-            'color'       => 'nullable|string|max:20',
-            'sort_order'  => 'nullable|integer',
+            'label'           => 'required|string|max:100',
+            'description'     => 'nullable|string|max:500',
+            'color'           => 'nullable|string|max:20',
+            'sort_order'      => 'nullable|integer',
+            'oversight_scope' => 'nullable|in:branch,agency',
         ]);
 
-        if ($role->is_owner) {
-            // Owner role: can update label/description/color but NOT name
-            $role->update($request->only('label', 'description', 'color', 'sort_order'));
-        } else {
-            $role->update($request->only('label', 'description', 'color', 'sort_order'));
-        }
+        $fields = ['label', 'description', 'color', 'sort_order', 'oversight_scope'];
+        $role->update($request->only($fields));
 
         Role::clearCache();
 

@@ -700,6 +700,16 @@ use App\Http\Controllers\CoreX\RoleManagerController as CoreXRoleManagerControll
 Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::get('/', [CommandCenterDashboardController::class, 'index'])->middleware('permission:view_dashboard')->name('corex.dashboard');
 
+    // ── Manager Oversight ──
+    Route::middleware('permission:dashboard.oversight.view')->group(function () {
+        Route::get('/dashboard/oversight', [\App\Http\Controllers\CoreX\Dashboard\OversightController::class, 'index'])->name('corex.dashboard.oversight');
+        Route::get('/settings/user/oversight', [\App\Http\Controllers\CoreX\Dashboard\OversightController::class, 'settings'])->name('corex.settings.user.oversight');
+        Route::post('/settings/user/oversight', [\App\Http\Controllers\CoreX\Dashboard\OversightController::class, 'saveSettings'])->name('corex.settings.user.oversight.save');
+    });
+    Route::middleware('permission:dashboard.oversight.manage')->group(function () {
+        Route::post('/dashboard/oversight/nudge', [\App\Http\Controllers\CoreX\Dashboard\OversightController::class, 'nudge'])->name('corex.dashboard.oversight.nudge');
+    });
+
     // ── Command Center ──
     Route::prefix('command-center')->group(function () {
         Route::get('/calendar', [CommandCenterCalendarController::class, 'index'])->name('command-center.calendar');

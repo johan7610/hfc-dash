@@ -37,6 +37,8 @@ return [
         ['key' => 'view_dashboard_kpis',     'label' => 'View KPI Cards',                  'section' => 'dashboard',        'type' => 'access',  'module' => 'dashboard',        'sort_order' => 2],
         ['key' => 'view_dashboard_charts',   'label' => 'View Charts & Analytics',         'section' => 'dashboard',        'type' => 'access',  'module' => 'dashboard',        'sort_order' => 3],
         ['key' => 'export_reports',          'label' => 'Export Reports',                  'section' => 'dashboard',        'type' => 'access',  'module' => 'dashboard',        'sort_order' => 4],
+        ['key' => 'dashboard.oversight.view',   'label' => 'View Manager Oversight',          'section' => 'dashboard',        'type' => 'access',  'module' => 'dashboard',        'sort_order' => 5],
+        ['key' => 'dashboard.oversight.manage', 'label' => 'Manage Oversight (nudge/reassign)','section' => 'dashboard',       'type' => 'action',  'module' => 'dashboard',        'sort_order' => 6],
 
         // ── Agency Tracker — Menu Access ──
         ['key' => 'access_agency_tracker',    'label' => 'Access Agency Tracker',           'section' => 'agency-tracker',   'type' => 'access',  'module' => 'agency_tracker',   'sort_order' => 1],
