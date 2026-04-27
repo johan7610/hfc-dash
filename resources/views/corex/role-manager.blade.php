@@ -74,7 +74,7 @@
                     <div class="flex gap-1 flex-wrap">
                         @foreach($roles as $role)
                         <button type="button"
-                                @click="selectedRole = '{{ $role->name }}'"
+                                @click="switchRole('{{ $role->name }}')"
                                 :style="selectedRole === '{{ $role->name }}'
                                     ? 'background:{{ $role->color }};color:#fff;'
                                     : 'background:var(--surface-2);color:var(--text-secondary);'"
@@ -121,24 +121,35 @@
 
                     {{-- LEFT: Vertical feature tabs --}}
                     <div class="w-52 flex-shrink-0 rounded-md overflow-y-auto sticky top-4" style="background:var(--surface); border:1px solid var(--border); max-height:calc(100vh - 8rem);">
+                        <div class="px-2 pt-2 pb-2 sticky top-0 z-10" style="background:var(--surface); border-bottom:1px solid var(--border);">
+                            <input type="text" x-model="featureSearch" placeholder="Search features…"
+                                   class="w-full text-xs rounded-md px-2 py-1.5"
+                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); outline:none;">
+                        </div>
                         @foreach($matrixSections as $sectionLabel => $modules)
-                            <div class="px-3 pt-3 pb-1">
-                                <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--brand-icon,#0ea5e9);">{{ $sectionLabel }}</p>
+                            @php
+                                $moduleKeysInSection = array_keys($modules);
+                                $sectionMatchExpr = collect($modules)->map(fn($d, $k) => "matchesFeature('{$k}', '" . addslashes($d['label']) . "')")->implode(' || ');
+                            @endphp
+                            <div x-show="{{ $sectionMatchExpr }}">
+                                <div class="px-3 pt-3 pb-1">
+                                    <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--brand-icon,#0ea5e9);">{{ $sectionLabel }}</p>
+                                </div>
+                                @foreach($modules as $moduleKey => $moduleData)
+                                <div class="px-2 pb-1" x-show="matchesFeature('{{ $moduleKey }}', '{{ addslashes($moduleData['label']) }}')">
+                                    <button type="button"
+                                            @click="selectedFeature = '{{ $moduleKey }}'; syncUrl()"
+                                            :style="selectedFeature === '{{ $moduleKey }}' ? 'background:var(--brand-button,#0ea5e9);color:#fff;' : 'color:var(--text-secondary);'"
+                                            class="w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-all duration-300"
+                                            :class="selectedFeature !== '{{ $moduleKey }}' ? 'hover:opacity-80' : ''">
+                                        {{ $moduleData['label'] }}
+                                    </button>
+                                </div>
+                                @endforeach
+                                @if(!$loop->last)
+                                <div class="mx-3 my-1" style="border-top:1px solid var(--border);"></div>
+                                @endif
                             </div>
-                            @foreach($modules as $moduleKey => $moduleData)
-                            <div class="px-2 pb-1">
-                                <button type="button"
-                                        @click="selectedFeature = '{{ $moduleKey }}'"
-                                        :style="selectedFeature === '{{ $moduleKey }}' ? 'background:var(--brand-button,#0ea5e9);color:#fff;' : 'color:var(--text-secondary);'"
-                                        class="w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-all duration-300"
-                                        :class="selectedFeature !== '{{ $moduleKey }}' ? 'hover:opacity-80' : ''">
-                                    {{ $moduleData['label'] }}
-                                </button>
-                            </div>
-                            @endforeach
-                            @if(!$loop->last)
-                            <div class="mx-3 my-1" style="border-top:1px solid var(--border);"></div>
-                            @endif
                         @endforeach
                         <div class="h-2"></div>
                     </div>
@@ -172,10 +183,14 @@
                                             <h3 class="font-semibold text-sm" style="color:var(--text-primary);">{{ $moduleData['label'] }}</h3>
                                             <p class="text-xs mt-0.5" style="color:var(--text-muted);">Editing permissions for: <span x-text="selectedRoleLabel()" style="color:var(--brand-icon,#0ea5e9);" class="font-medium"></span></p>
                                         </div>
-                                        <button type="button" @click="saveMatrix()"
-                                                class="corex-btn-primary px-3 py-1.5 text-xs font-semibold">
-                                            Save Changes
-                                        </button>
+                                        <div class="flex items-center gap-3">
+                                            <span class="text-xs" style="color:var(--text-muted);" x-text="saveStatusText()"></span>
+                                            <button type="button" @click="saveMatrix(true)"
+                                                    :disabled="saving"
+                                                    class="corex-btn-primary px-3 py-1.5 text-xs font-semibold disabled:opacity-50">
+                                                Save now
+                                            </button>
+                                        </div>
                                     </div>
                                     <div>
 
@@ -197,7 +212,7 @@
                                                         @else
                                                             <input type="checkbox"
                                                                    x-model="matrix['{{ $perm->key }}']['{{ $role->name }}']"
-                                                                   @change="dirty = true"
+                                                                   @change="scheduleSave()"
                                                                    class="w-5 h-5 rounded-md cursor-pointer"
                                                                    style="accent-color:var(--brand-button,#0ea5e9); border-color:var(--border);">
                                                         @endif
@@ -309,7 +324,7 @@
                                                             @else
                                                                 <input type="checkbox"
                                                                        x-model="matrix['{{ $fOp->key }}']['{{ $role->name }}']"
-                                                                       @change="dirty = true"
+                                                                       @change="scheduleSave()"
                                                                        class="w-5 h-5 rounded-md cursor-pointer"
                                                                        style="accent-color:var(--brand-button,#0ea5e9); border-color:var(--border);">
                                                             @endif
@@ -401,7 +416,8 @@
                                     <td class="py-2.5 px-4 text-xs" style="color:var(--text-secondary);">{{ $agencyName }}</td>
                                     <td class="py-2.5 px-4 text-xs" style="color:var(--text-secondary);">{{ $branchName }}</td>
                                     <td class="py-2.5 px-4">
-                                        <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold text-white"
+                                        <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold text-white user-role-badge"
+                                              data-user-id="{{ $u->id }}"
                                               style="background:{{ $badgeBg }};">
                                             {{ $roleLabel }}
                                         </span>
@@ -409,7 +425,8 @@
                                     @if(auth()->user()->hasPermission('change_user_roles'))
                                         <td class="py-2.5 px-4">
                                             <form method="POST" action="{{ route('corex.role-manager.user-role') }}"
-                                                  class="flex items-center gap-2">
+                                                  class="flex items-center gap-2 user-role-form"
+                                                  @submit.prevent="saveUserRole($event, {{ $u->id }})">
                                                 @csrf
                                                 <input type="hidden" name="user_id" value="{{ $u->id }}">
                                                 <select name="role"
@@ -428,6 +445,7 @@
                                                         class="corex-btn-primary px-3 py-1.5 text-xs font-semibold">
                                                     Save
                                                 </button>
+                                                <span class="text-xs user-role-status" style="color:var(--text-muted);"></span>
                                             </form>
                                         </td>
                                     @endif
@@ -789,14 +807,22 @@ function roleManager() {
         });
     });
 
+    const urlParams = new URLSearchParams(window.location.search);
+    const firstFeature = @json(collect($matrixSections)->flatMap(fn($m) => array_keys($m))->first() ?? '');
+
     return {
         dark: document.documentElement.classList.contains('dark'),
-        activeTab: 'permissions',
-        selectedRole: new URLSearchParams(window.location.search).get('role') || rolesData.find(r => !r.is_owner)?.name || rolesData[0]?.name || 'admin',
+        activeTab: urlParams.get('tab') || 'permissions',
+        selectedRole: urlParams.get('role') || rolesData.find(r => !r.is_owner)?.name || rolesData[0]?.name || 'admin',
         matrix: matrix,
         scopeMatrix: scopeMatrix,
         dirty: false,
-        selectedFeature: @json(collect($matrixSections)->flatMap(fn($m) => array_keys($m))->first() ?? ''),
+        saving: false,
+        lastSavedAt: null,
+        saveTimer: null,
+        autoSaveDelay: 800,
+        featureSearch: '',
+        selectedFeature: urlParams.get('feature') || firstFeature,
 
         // Copy from role
         copyFromRole: '',
@@ -822,7 +848,7 @@ function roleManager() {
         },
 
         handleScopeChange(moduleKey, roleName, scopeVal) {
-            this.dirty = true;
+            this.scheduleSave();
             const actions = moduleActions[moduleKey];
             if (!actions) return;
 
@@ -840,7 +866,7 @@ function roleManager() {
         },
 
         handleActionChange(moduleKey, action, roleName) {
-            this.dirty = true;
+            this.scheduleSave();
             const actions = moduleActions[moduleKey];
             if (!actions) return;
 
@@ -880,8 +906,8 @@ function roleManager() {
                 }
             });
 
-            this.dirty = true;
             this.copyFromRole = '';
+            this.scheduleSave();
 
             // Show toast
             const srcLabel = rolesData.find(r => r.name === src)?.label || src;
@@ -890,8 +916,123 @@ function roleManager() {
             setTimeout(() => { this.copyToast = false; }, 4000);
         },
 
-        saveMatrix() {
-            this.$refs.permForm.submit();
+        scheduleSave() {
+            this.dirty = true;
+            if (this.saveTimer) clearTimeout(this.saveTimer);
+            this.saveTimer = setTimeout(() => this.saveMatrix(false), this.autoSaveDelay);
+        },
+
+        async saveMatrix(manual) {
+            if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
+            if (this.saving) return;
+            if (!this.dirty && !manual) return;
+
+            this.saving = true;
+            const form = this.$refs.permForm;
+            const fd = new FormData(form);
+            const token = document.querySelector('meta[name="csrf-token"]')?.content
+                       || form.querySelector('input[name="_token"]')?.value;
+
+            try {
+                const res = await fetch(form.action, {
+                    method: 'POST',
+                    body: fd,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': token,
+                    },
+                    credentials: 'same-origin',
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+                this.dirty = false;
+                this.lastSavedAt = new Date();
+                this.copyToastMsg = manual ? 'Saved.' : `Auto-saved · ${this.selectedRoleLabel()}`;
+                this.copyToast = true;
+                clearTimeout(this._toastT);
+                this._toastT = setTimeout(() => { this.copyToast = false; }, 2000);
+            } catch (e) {
+                this.copyToastMsg = 'Save failed — try again';
+                this.copyToast = true;
+                clearTimeout(this._toastT);
+                this._toastT = setTimeout(() => { this.copyToast = false; }, 4000);
+            } finally {
+                this.saving = false;
+            }
+        },
+
+        saveStatusText() {
+            if (this.saving) return 'Saving…';
+            if (this.dirty) return 'Unsaved changes';
+            if (this.lastSavedAt) {
+                const t = this.lastSavedAt;
+                const hh = String(t.getHours()).padStart(2,'0');
+                const mm = String(t.getMinutes()).padStart(2,'0');
+                return `Saved at ${hh}:${mm}`;
+            }
+            return '';
+        },
+
+        switchRole(roleName) {
+            if (this.dirty) {
+                this.saveMatrix(false);
+            }
+            this.selectedRole = roleName;
+            this.syncUrl();
+        },
+
+        syncUrl() {
+            const p = new URLSearchParams(window.location.search);
+            p.set('role', this.selectedRole);
+            p.set('feature', this.selectedFeature);
+            p.set('tab', this.activeTab);
+            history.replaceState(null, '', window.location.pathname + '?' + p.toString());
+        },
+
+        matchesFeature(key, label) {
+            const q = (this.featureSearch || '').trim().toLowerCase();
+            if (!q) return true;
+            return key.toLowerCase().includes(q) || label.toLowerCase().includes(q);
+        },
+
+        async saveUserRole(ev, userId) {
+            const form = ev.target;
+            const status = form.querySelector('.user-role-status');
+            const fd = new FormData(form);
+            const token = document.querySelector('meta[name="csrf-token"]')?.content
+                       || form.querySelector('input[name="_token"]')?.value;
+            if (status) status.textContent = 'Saving…';
+            try {
+                const res = await fetch(form.action, {
+                    method: 'POST',
+                    body: fd,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': token,
+                    },
+                    credentials: 'same-origin',
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+                const badge = document.querySelector(`.user-role-badge[data-user-id="${userId}"]`);
+                if (badge) {
+                    badge.textContent = data.role_label;
+                    badge.style.background = data.role_color;
+                }
+                if (status) { status.textContent = 'Saved'; setTimeout(() => status.textContent = '', 1500); }
+            } catch (e) {
+                if (status) status.textContent = 'Failed';
+            }
+        },
+
+        init() {
+            window.addEventListener('beforeunload', (e) => {
+                if (this.dirty) { e.preventDefault(); e.returnValue = ''; }
+            });
+            this.$watch('activeTab', () => this.syncUrl());
+            this.$watch('selectedFeature', () => this.syncUrl());
         },
 
         openAddRole() {

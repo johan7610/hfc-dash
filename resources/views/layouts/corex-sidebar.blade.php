@@ -138,7 +138,7 @@
                 @if($_viewAsBranchId)
                 <form method="POST" action="{{ route('branch.switch.clear') }}">
                     @csrf
-                    <button type="submit" class="w-full text-left px-3 py-2 text-xs hover:bg-white/10"
+                    <button type="submit" class="w-full text-left px-3 py-2 text-xs hover:bg-[color:var(--surface)]"
                             style="color:var(--brand-icon, #0ea5e9);">
                         ← All Branches
                     </button>
@@ -148,8 +148,8 @@
                 <form method="POST" action="{{ route('branch.switch', $_b) }}">
                     @csrf
                     <button type="submit"
-                            class="w-full text-left px-3 py-2 text-xs hover:bg-white/10 {{ (int) $_viewAsBranchId === (int) $_b->id ? 'font-semibold' : '' }}"
-                            @if((int) $_viewAsBranchId === (int) $_b->id) style="color:var(--brand-icon, #0ea5e9);" @endif>
+                            class="w-full text-left px-3 py-2 text-xs hover:bg-[color:var(--surface)] {{ (int) $_viewAsBranchId === (int) $_b->id ? 'font-semibold' : '' }}"
+                            style="color: @if((int) $_viewAsBranchId === (int) $_b->id) var(--brand-icon, #0ea5e9) @else var(--text-secondary) @endif;">
                         {{ $_b->name }}
                     </button>
                 </form>
@@ -181,7 +181,7 @@
             @foreach($agencies as $ag)
             <form method="POST" action="{{ route('agency.switch', $ag) }}">
                 @csrf
-                <button type="submit" class="w-full text-left px-3 py-2 text-xs transition-colors hover:bg-white/10 {{ (int)$activeAgencyId === $ag->id ? 'font-semibold' : 'text-white/70' }}" @if((int)$activeAgencyId === $ag->id) style="color:var(--brand-icon, #0ea5e9);" @endif>
+                <button type="submit" class="w-full text-left px-3 py-2 text-xs transition-colors hover:bg-[color:var(--surface)] {{ (int)$activeAgencyId === $ag->id ? 'font-semibold' : '' }}" style="color: @if((int)$activeAgencyId === $ag->id) var(--brand-icon, #0ea5e9) @else var(--text-secondary) @endif;">
                     {{ $ag->name }}
                 </button>
             </form>
@@ -999,7 +999,7 @@
         {{-- Impersonation banner --}}
         @if($isImpersonating)
         <div class="corex-impersonate-banner">
-            <div class="text-[11px] text-amber-200">Viewing as <strong>{{ $user->name ?? 'User' }}</strong></div>
+            <div class="text-[11px]" style="color:var(--ds-amber);">Viewing as <strong>{{ $user->name ?? 'User' }}</strong></div>
             <form method="POST" action="{{ route('impersonate.stop') }}" class="mt-1">
                 @csrf
                 <button type="submit" class="corex-impersonate-btn">Switch back to {{ $impersonatorName ?? 'admin' }}</button>
@@ -1049,8 +1049,8 @@
                     <form method="POST" action="{{ route('impersonate.start', ['user' => $su->id]) }}">
                         @csrf
                         <button type="submit" class="corex-switch-item">
-                            <div class="text-xs text-white/90">{{ $su->name }}</div>
-                            <div class="text-[0.6875rem] text-white/50">{{ $su->email }} · {{ $su->role }}</div>
+                            <div class="text-xs" style="color:var(--text-primary);">{{ $su->name }}</div>
+                            <div class="text-[0.6875rem]" style="color:var(--text-muted);">{{ $su->email }} · {{ $su->role }}</div>
                         </button>
                     </form>
                     @endif

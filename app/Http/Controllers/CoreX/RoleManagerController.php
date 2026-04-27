@@ -258,6 +258,15 @@ class RoleManagerController extends Controller
 
         PermissionService::clearCache();
 
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'role'    => $role,
+                'count'   => count($rows),
+                'message' => 'Permissions saved.',
+            ]);
+        }
+
         return redirect()->route('corex.role-manager', ['role' => $role])->with('success', 'Permissions saved successfully.');
     }
 
@@ -279,6 +288,18 @@ class RoleManagerController extends Controller
         $user->save();
 
         PermissionService::clearCache();
+
+        if ($request->expectsJson() || $request->ajax()) {
+            $roleModel = Role::allRoles()->firstWhere('name', $user->role);
+            return response()->json([
+                'success'    => true,
+                'user_id'    => $user->id,
+                'role'       => $user->role,
+                'role_label' => $roleModel?->label ?? $user->role,
+                'role_color' => $roleModel?->color ?? '#64748b',
+                'message'    => "Role updated for {$user->name}.",
+            ]);
+        }
 
         return redirect()->route('corex.role-manager', ['role' => $request->role])->with('success', "Role updated for {$user->name}.");
     }
