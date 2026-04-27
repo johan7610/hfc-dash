@@ -1,8 +1,9 @@
 @extends('layouts.corex')
 
 @section('corex-content')
-<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5"
-     x-data="{ activeTab: '{{ $activeTab }}' }">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5"
+     x-data="settingsHub('{{ $activeSection }}')"
+     x-init="$watch('activeSection', v => { const u = new URL(window.location); u.searchParams.set('s', v); u.searchParams.delete('tab'); u.searchParams.delete('fsec'); window.history.replaceState({}, '', u); })">
 
     {{-- Page header --}}
     <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a);">
@@ -39,33 +40,115 @@
         </div>
     @endif
 
-    {{-- Tab container --}}
-    <div style="background:var(--surface); border:1px solid var(--border); border-radius:6px; overflow:hidden;">
+    {{-- Hub shell: left rail + right pane --}}
+    @php
+        $u = auth()->user();
+        $can = fn($p) => $u && $u->hasPermission($p);
+        $railGroups = [
+            [
+                'label' => 'My Preferences',
+                'items' => [
+                    ['key'=>'user', 'label'=>'Profile & Account', 'type'=>'section'],
+                ],
+            ],
+            [
+                'label' => 'Agency',
+                'items' => array_values(array_filter([
+                    ['key'=>'agency',                'label'=>'Agency Settings',       'type'=>'section', 'keywords'=>'company branding logo signature'],
+                    ['key'=>'company',               'label'=>'Company Details',       'type'=>'link', 'href'=>route('admin.company-settings'), 'keywords'=>'trading name address logo'],
+                    ['key'=>'branches',              'label'=>'Branches & Assignments','type'=>'link', 'href'=>route('admin.branch-assignments'), 'keywords'=>'users branch assignment'],
+                ])),
+            ],
+            [
+                'label' => 'Modules',
+                'items' => [
+                    ['key'=>'feature-documents',     'label'=>'Documents',             'type'=>'section', 'keywords'=>'docuperfect named fields'],
+                    ['key'=>'feature-rentals',       'label'=>'Rentals',               'type'=>'section', 'keywords'=>'rental document types reminders'],
+                    ['key'=>'feature-contacts',      'label'=>'Contacts',              'type'=>'section', 'keywords'=>'contact types sources tags'],
+                    ['key'=>'feature-properties',    'label'=>'Properties & Listings', 'type'=>'section', 'keywords'=>'syndication portals marketing'],
+                    ['key'=>'feature-matches',       'label'=>'Matches',               'type'=>'section', 'keywords'=>'whatsapp message'],
+                    ['key'=>'feature-dashboard',     'label'=>'Dashboard',             'type'=>'section', 'keywords'=>'cockpit widgets'],
+                    ['key'=>'notifications',         'label'=>'Notifications',         'type'=>'section', 'keywords'=>'reminders push email alerts overdue'],
+                    ['key'=>'doc-types',             'label'=>'Document Types',        'type'=>'link', 'href'=>route('admin.settings.document-types.index'), 'keywords'=>'splitter filing'],
+                    ['key'=>'docuperfect-types',    'label'=>'DocuPerfect — Types',   'type'=>'link', 'href'=>route('docuperfect.settings.types'), 'keywords'=>'document templates'],
+                    ['key'=>'docuperfect-fields',   'label'=>'DocuPerfect — Named Fields','type'=>'link', 'href'=>route('docuperfect.settings.namedFields'), 'keywords'=>'merge fields'],
+                ],
+            ],
+            [
+                'label' => 'Operations',
+                'items' => [
+                    ['key'=>'commission',            'label'=>'Commission & Revenue Share','type'=>'link', 'href'=>route('corex.settings.commission'), 'keywords'=>'splits caps fees tiers'],
+                    ['key'=>'performance',           'label'=>'Performance Settings',  'type'=>'link', 'href'=>route('admin.performance-settings.edit'), 'keywords'=>'vat targets'],
+                    ['key'=>'command-center',        'label'=>'Command Center Rules',  'type'=>'link', 'href'=>route('command-center.settings'), 'keywords'=>'expectations reminders'],
+                ],
+            ],
+            [
+                'label' => 'System',
+                'items' => [
+                    ['key'=>'system',                'label'=>'System Info & Tools',   'type'=>'section', 'keywords'=>'environment debug'],
+                    ['key'=>'p24-suburbs',           'label'=>'P24 Suburbs',           'type'=>'link', 'href'=>route('admin.p24-suburbs.index'), 'keywords'=>'property24 mapping'],
+                ],
+            ],
+        ];
+    @endphp
 
-        {{-- Tab bar --}}
-        <div class="flex overflow-x-auto" style="border-bottom:1px solid var(--border);">
-            @foreach([
-                ['key'=>'agency',  'label'=>'Agency Settings'],
-                ['key'=>'user',    'label'=>'User Settings'],
-                ['key'=>'feature', 'label'=>'Feature Settings'],
-                ['key'=>'system',  'label'=>'System Settings'],
-            ] as $tab)
-            <button type="button"
-                    @click="activeTab = '{{ $tab['key'] }}'"
-                    :class="activeTab === '{{ $tab['key'] }}' ? 'border-b-2' : 'border-b-2 border-transparent'"
-                    :style="activeTab === '{{ $tab['key'] }}' ? 'color:var(--brand-icon, #0ea5e9); border-color:var(--brand-icon, #0ea5e9); background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 5%, transparent);' : 'color:var(--text-secondary);'"
-                    class="px-6 py-4 text-sm font-semibold whitespace-nowrap flex-shrink-0 transition-all duration-300 outline-none focus:outline-none hover:opacity-80"
-                    style="background:transparent;">
-                {{ $tab['label'] }}
-            </button>
-            @endforeach
-        </div>
+    <div class="flex flex-col lg:flex-row gap-5">
+
+        {{-- Left rail --}}
+        <aside class="w-full lg:w-72 flex-shrink-0">
+            <div class="rounded-md sticky top-4" style="background:var(--surface); border:1px solid var(--border);">
+                <div class="p-3" style="border-bottom:1px solid var(--border);">
+                    <div class="relative">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" class="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2" style="color:var(--text-muted);"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+                        <input type="text" x-model="search" placeholder="Search settings…"
+                               class="w-full rounded-md pl-8 pr-3 py-2 text-sm outline-none"
+                               style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                    </div>
+                </div>
+                <nav class="p-2 max-h-[70vh] overflow-y-auto" aria-label="Settings sections">
+                    @foreach($railGroups as $group)
+                        @php $groupId = 'rg-' . \Illuminate\Support\Str::slug($group['label']); @endphp
+                        <div class="mt-2 first:mt-0" x-show="anyVisible(@js($group['items']))">
+                            <div class="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider" style="color:var(--text-muted);">
+                                {{ $group['label'] }}
+                            </div>
+                            @foreach($group['items'] as $item)
+                                @php
+                                    $matchExpr = "matchesSearch(" . json_encode(strtolower($item['label'] . ' ' . ($item['keywords'] ?? ''))) . ")";
+                                @endphp
+                                @if($item['type'] === 'section')
+                                    <button type="button"
+                                            @click="activeSection = '{{ $item['key'] }}'; $nextTick(() => window.scrollTo({top:0, behavior:'smooth'}))"
+                                            x-show="{{ $matchExpr }}"
+                                            :class="activeSection === '{{ $item['key'] }}' ? 'font-semibold' : ''"
+                                            :style="activeSection === '{{ $item['key'] }}' ? 'background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent); color:var(--brand-icon, #0ea5e9);' : 'color:var(--text-secondary);'"
+                                            class="w-full text-left px-3 py-2 rounded-md text-sm transition-colors duration-150 hover:bg-white/5 outline-none focus:outline-none">
+                                        {{ $item['label'] }}
+                                    </button>
+                                @else
+                                    <a href="{{ $item['href'] }}"
+                                       x-show="{{ $matchExpr }}"
+                                       class="flex items-center justify-between gap-2 px-3 py-2 rounded-md text-sm no-underline transition-colors duration-150 hover:bg-white/5"
+                                       style="color:var(--text-secondary);">
+                                        <span>{{ $item['label'] }}</span>
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" class="w-3.5 h-3.5 flex-shrink-0" style="color:var(--text-muted);"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+                                    </a>
+                                @endif
+                            @endforeach
+                        </div>
+                    @endforeach
+                </nav>
+            </div>
+        </aside>
+
+        {{-- Right pane --}}
+        <div class="flex-1 min-w-0" style="background:var(--surface); border:1px solid var(--border); border-radius:6px; overflow:hidden;">
 
         {{-- ============================================================
              AGENCY SETTINGS TAB
              Contains: Branch Assignments, Company Settings, Agency Mgmt
              ============================================================ --}}
-        <div x-show="activeTab === 'agency'" class="p-6 space-y-6">
+        <div x-show="activeSection === 'agency'" x-cloak class="p-6 space-y-6">
 
             {{-- Branch Assignments link --}}
             <div>
@@ -398,7 +481,7 @@
              USER SETTINGS TAB
              Contains: User Management, Roles & Permissions, Designations
              ============================================================ --}}
-        <div x-show="activeTab === 'user'" x-cloak class="p-6 space-y-6">
+        <div x-show="activeSection === 'user'" x-cloak class="p-6 space-y-6">
 
             {{-- Links: User Mgmt + Roles --}}
             <div>
@@ -514,9 +597,9 @@
                         </div>
                         <div>
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Notes</label>
-                            <textarea name="notes" rows="2" class="w-full px-2 py-1.5 text-sm border rounded" style="border-color:var(--border); background:var(--surface); color:var(--text-primary);"></textarea>
+                            <textarea name="notes" rows="2" class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"></textarea>
                         </div>
-                        <button type="submit" class="px-4 py-1.5 text-xs font-semibold rounded transition-all" style="background: var(--brand-button, #0ea5e9); color: #fff; border-radius:6px;">Appoint Primary CO</button>
+                        <button type="submit" class="corex-btn-primary text-xs">Appoint Primary CO</button>
                     </form>
 
                     @if($primaryHistory->isNotEmpty())
@@ -545,7 +628,7 @@
                     <div class="text-xs font-semibold mb-2" style="color:var(--text-secondary);">Select users who can perform FICA compliance reviews and approvals</div>
                     <form method="POST" action="{{ route('corex.settings.fica-officers.mlros') }}">
                         @csrf
-                        <div class="space-y-1 max-h-48 overflow-y-auto mb-3" style="border:1px solid var(--border); padding:0.5rem; border-radius:4px; background:var(--surface);">
+                        <div class="space-y-1 max-h-48 overflow-y-auto mb-3 rounded-md p-2" style="border:1px solid var(--border); background:var(--surface);">
                             @foreach($agencyUsers as $u)
                             <label class="flex items-center gap-2 py-1 px-1 text-sm cursor-pointer hover:bg-white/5 rounded">
                                 <input type="checkbox" name="mlro_user_ids[]" value="{{ $u->id }}" {{ in_array($u->id, $activeMlroUserIds) ? 'checked' : '' }} style="accent-color: #0d9488;">
@@ -554,7 +637,7 @@
                             </label>
                             @endforeach
                         </div>
-                        <button type="submit" class="px-4 py-1.5 text-xs font-semibold rounded transition-all" style="background: var(--brand-button, #0ea5e9); color: #fff; border-radius:6px;">Save MLROs</button>
+                        <button type="submit" class="corex-btn-primary text-xs">Save MLROs</button>
                     </form>
                 </div>
             </div>
@@ -628,7 +711,7 @@
                             <form method="POST" action="{{ url('/admin/designations/'.$d->id.'/delete') }}"
                                   onsubmit="return confirm('Delete this designation?');" class="mt-2">
                                 @csrf
-                                <button class="text-xs font-semibold text-red-600 hover:text-red-700">Delete</button>
+                                <button class="text-xs font-semibold" style="color: var(--ds-crimson);">Delete</button>
                             </form>
                         </div>
                         @empty
@@ -651,7 +734,7 @@
                      style="background: color-mix(in srgb, var(--ds-amber) 10%, transparent); border:1px solid color-mix(in srgb, var(--ds-amber) 30%, transparent); color: var(--text-primary);">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 flex-shrink-0 mt-0.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
                     <div class="flex-1">Your Facebook connection expires soon. Please reconnect to avoid interruptions to your property marketing.</div>
-                    <button @click="show = false" class="flex-shrink-0 text-yellow-700 hover:text-yellow-900">
+                    <button @click="show = false" class="flex-shrink-0" style="color: var(--ds-amber);">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
                     </button>
                 </div>
@@ -794,57 +877,12 @@
              FEATURE SETTINGS TAB
              Contains: Documents (Docuperfect), Rentals
              ============================================================ --}}
-        <div x-show="activeTab === 'feature'" x-cloak class="p-6 space-y-8"
-             x-data="{ featureSection: '{{ $featureSection }}' }">
-
-            {{-- Feature sub-nav --}}
-            <div class="flex gap-2 flex-wrap" style="border-bottom:1px solid var(--border); padding-bottom:16px;">
-                <button type="button"
-                        @click="featureSection = 'documents'"
-                        :class="featureSection === 'documents' ? 'bg-sky-500/10 text-sky-500 border-sky-500/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
-                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
-                        style="background:transparent;">
-                    Documents
-                </button>
-                <button type="button"
-                        @click="featureSection = 'rentals'"
-                        :class="featureSection === 'rentals' ? 'bg-sky-500/10 text-sky-500 border-sky-500/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
-                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
-                        style="background:transparent;">
-                    Rentals
-                </button>
-                <button type="button"
-                        @click="featureSection = 'contacts'"
-                        :class="featureSection === 'contacts' ? 'bg-sky-500/10 text-sky-500 border-sky-500/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
-                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
-                        style="background:transparent;">
-                    Contacts
-                </button>
-                <button type="button"
-                        @click="featureSection = 'properties'"
-                        :class="featureSection === 'properties' ? 'bg-sky-500/10 text-sky-500 border-sky-500/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
-                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
-                        style="background:transparent;">
-                    Properties
-                </button>
-                <button type="button"
-                        @click="featureSection = 'matches'"
-                        :class="featureSection === 'matches' ? 'bg-sky-500/10 text-sky-500 border-sky-500/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
-                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
-                        style="background:transparent;">
-                    Matches
-                </button>
-                <button type="button"
-                        @click="featureSection = 'dashboard'"
-                        :class="featureSection === 'dashboard' ? 'bg-sky-500/10 text-sky-500 border-sky-500/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
-                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
-                        style="background:transparent;">
-                    Dashboard
-                </button>
-            </div>
+        {{-- Feature sections — each one shows when its rail key is active --}}
+        <div class="p-6 space-y-8"
+             x-show="activeSection.startsWith('feature-')" x-cloak>
 
             {{-- DOCUMENTS section --}}
-            <div x-show="featureSection === 'documents'" class="space-y-6">
+            <div x-show="activeSection === 'feature-documents'" x-cloak class="space-y-6">
 
                 {{-- Named Fields --}}
                 <div>
@@ -925,7 +963,7 @@
                             <form method="POST" action="{{ route('docuperfect.settings.namedFields.destroy', $field->id) }}"
                                   onsubmit="return confirm('Delete this named field?');" class="mt-2">
                                 @csrf @method('DELETE')
-                                <button class="text-xs font-semibold text-red-600 hover:text-red-700">Delete</button>
+                                <button class="text-xs font-semibold" style="color: var(--ds-crimson);">Delete</button>
                             </form>
                         </div>
                         @empty
@@ -937,7 +975,7 @@
             </div>{{-- /documents --}}
 
             {{-- RENTALS section --}}
-            <div x-show="featureSection === 'rentals'" x-cloak class="space-y-6">
+            <div x-show="activeSection === 'feature-rentals'" x-cloak class="space-y-6">
 
                 {{-- Rental Properties link (has sub-pages) --}}
                 <div>
@@ -967,16 +1005,16 @@
                                 <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color: {{ $rType->color }}"></span>
                                 <span class="text-sm font-medium" style="color:var(--text-primary);">{{ $rType->name }}</span>
                                 @if($rType->is_system)<span class="text-xs ml-1" style="color:var(--text-muted);">(system)</span>@endif
-                                @if($rType->is_lease)<span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded ml-2">Lease</span>@endif
-                                @if(!$rType->is_active)<span class="text-xs bg-gray-100 text-gray-400 px-2 py-0.5 rounded ml-2">Inactive</span>@endif
+                                @if($rType->is_lease)<span class="ds-badge ds-badge-success ml-2">Lease</span>@endif
+                                @if(!$rType->is_active)<span class="ds-badge ds-badge-default ml-2">Inactive</span>@endif
                             </div>
                             <div class="flex items-center gap-3">
                                 <button @click="editId = editId === {{ $rType->id }} ? null : {{ $rType->id }}"
-                                        class="text-xs text-blue-600 hover:text-blue-700">Edit</button>
+                                        class="text-xs font-semibold" style="color: var(--brand-icon, #0ea5e9);">Edit</button>
                                 @if(!$rType->is_system)
                                 <form method="POST" action="{{ route('rental.settings.document-types.toggle', $rType) }}">
                                     @csrf
-                                    <button type="submit" class="text-xs {{ $rType->is_active ? 'text-orange-600' : 'text-green-600' }}">
+                                    <button type="submit" class="text-xs font-semibold" style="color: {{ $rType->is_active ? 'var(--ds-amber)' : 'var(--ds-green)' }};">
                                         {{ $rType->is_active ? 'Deactivate' : 'Activate' }}
                                     </button>
                                 </form>
@@ -1005,8 +1043,8 @@
                                     <input type="checkbox" name="is_lease" value="1" {{ $rType->is_lease ? 'checked' : '' }} class="rounded">
                                     Lease
                                 </label>
-                                <button type="submit" class="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">Save</button>
-                                <button type="button" @click="editId = null" class="px-3 py-1.5 text-sm" style="color:var(--text-muted);">Cancel</button>
+                                <button type="submit" class="corex-btn-primary text-sm">Save</button>
+                                <button type="button" @click="editId = null" class="corex-btn-outline text-sm">Cancel</button>
                             </form>
                         </div>
                         @endforeach
@@ -1014,7 +1052,7 @@
                         {{-- Add new --}}
                         <div class="mt-2">
                             <button @click="showAdd = !showAdd"
-                                    class="text-sm text-blue-600 hover:text-blue-700 font-medium">+ Add Document Type</button>
+                                    class="text-sm font-semibold" style="color: var(--brand-icon, #0ea5e9);">+ Add Document Type</button>
                             <div x-show="showAdd" x-cloak class="rounded-md p-3 mt-2"
                                  style="background: color-mix(in srgb, var(--ds-green) 6%, transparent); border:1px solid color-mix(in srgb, var(--ds-green) 20%, transparent);">
                                 <form method="POST" action="{{ route('rental.settings.document-types.store') }}"
@@ -1035,7 +1073,7 @@
                                         <input type="checkbox" name="is_lease" value="1" class="rounded">
                                         Lease
                                     </label>
-                                    <button type="submit" class="px-3 py-1.5 bg-green-600 text-white text-sm rounded hover:bg-green-700">Add</button>
+                                    <button type="submit" class="corex-btn-primary text-sm">Add</button>
                                 </form>
                             </div>
                         </div>
@@ -1062,7 +1100,9 @@
                                 <label class="relative inline-flex items-center cursor-pointer">
                                     <input type="hidden" name="enabled" value="0">
                                     <input type="checkbox" name="enabled" value="1" x-model="enabled" class="sr-only peer" {{ $rentalReminderSettings->enabled ? 'checked' : '' }}>
-                                    <div class="w-10 h-5 bg-gray-200 peer-focus:ring-2 peer-focus:ring-blue-500/50 rounded-full peer peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5"></div>
+                                    <div class="w-10 h-5 rounded-full peer after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5"
+                                         style="background:var(--border-hover);"
+                                         :style="enabled ? 'background:var(--brand-button, #0ea5e9)' : 'background:var(--border-hover)'"></div>
                                 </label>
                             </div>
                         </div>
@@ -1071,13 +1111,13 @@
                             <div class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
                                 <div class="text-sm font-semibold mb-3" style="color:var(--text-primary);">Reminder Mode</div>
                                 <div class="grid grid-cols-2 gap-3">
-                                    <label :class="mode === 'escalating' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'"
+                                    <label :style="mode === 'escalating' ? 'border-color:var(--brand-button, #0ea5e9); background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 8%, transparent);' : 'border-color:var(--border); background:var(--surface);'"
                                            class="border rounded-md p-3 cursor-pointer transition">
                                         <input type="radio" name="mode" value="escalating" x-model="mode" class="sr-only">
                                         <div class="font-medium text-sm" style="color:var(--text-primary);">Escalating</div>
                                         <div class="text-xs mt-1" style="color:var(--text-secondary);">Gentle → Firm → Team Alert → Final</div>
                                     </label>
-                                    <label :class="mode === 'simple' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'"
+                                    <label :style="mode === 'simple' ? 'border-color:var(--brand-button, #0ea5e9); background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 8%, transparent);' : 'border-color:var(--border); background:var(--surface);'"
                                            class="border rounded-md p-3 cursor-pointer transition">
                                         <input type="radio" name="mode" value="simple" x-model="mode" class="sr-only">
                                         <div class="font-medium text-sm" style="color:var(--text-primary);">Simple Interval</div>
@@ -1172,7 +1212,7 @@
             </div>{{-- /rentals --}}
 
             {{-- CONTACTS section --}}
-            <div x-show="featureSection === 'contacts'" x-cloak class="space-y-3">
+            <div x-show="activeSection === 'feature-contacts'" x-cloak class="space-y-3">
 
                 {{-- ── Contact Types (accordion) ── --}}
                 <div x-data="{ open: false }" class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
@@ -1259,7 +1299,7 @@
                                         <form method="POST" action="{{ route('corex.settings.contact-types.destroy', $cType) }}"
                                               onsubmit="return confirm('Delete this contact type?');">
                                             @csrf @method('DELETE')
-                                            <button class="text-xs font-semibold text-red-600 hover:text-red-700"
+                                            <button class="text-xs font-semibold" style="color: var(--ds-crimson);"
                                                     {{ $cType->contacts()->count() > 0 ? 'disabled title=Cannot delete — contacts assigned' : '' }}>
                                                 Delete
                                             </button>
@@ -1389,7 +1429,7 @@
                                         <form method="POST" action="{{ route('corex.settings.contact-sources.destroy', $cSource) }}"
                                               onsubmit="return confirm('Delete this contact source?');">
                                             @csrf @method('DELETE')
-                                            <button class="text-xs font-semibold text-red-600 hover:text-red-700"
+                                            <button class="text-xs font-semibold" style="color: var(--ds-crimson);"
                                                     {{ $cSource->contacts()->count() > 0 ? 'disabled title=Cannot delete — contacts assigned' : '' }}>
                                                 Delete
                                             </button>
@@ -1506,7 +1546,7 @@
                                         <form method="POST" action="{{ route('corex.settings.contact-tags.destroy', $cTag) }}"
                                               onsubmit="return confirm('Delete this contact tag?');">
                                             @csrf @method('DELETE')
-                                            <button class="text-xs font-semibold text-red-600 hover:text-red-700"
+                                            <button class="text-xs font-semibold" style="color: var(--ds-crimson);"
                                                     {{ $cTag->contacts()->count() > 0 ? 'disabled title=Cannot delete — contacts assigned' : '' }}>
                                                 Delete
                                             </button>
@@ -1557,7 +1597,7 @@
             </div>{{-- /contacts --}}
 
             {{-- PROPERTIES section --}}
-            <div x-show="featureSection === 'properties'" x-cloak class="space-y-3">
+            <div x-show="activeSection === 'feature-properties'" x-cloak class="space-y-3">
 
                 @php
                 $propGroups = [
@@ -1860,7 +1900,7 @@
             </div>{{-- /properties --}}
 
             {{-- MATCHES section --}}
-            <div x-show="featureSection === 'matches'" x-cloak class="space-y-5">
+            <div x-show="activeSection === 'feature-matches'" x-cloak class="space-y-5">
 
                 {{-- Enable / Disable toggle --}}
                 <div class="p-4 rounded-md flex items-center justify-between gap-4" style="background:var(--surface-2); border:1px solid var(--border);">
@@ -1919,7 +1959,7 @@
                     <div>
                         <div class="text-sm font-semibold" style="color:var(--text-primary);">WhatsApp Message Template</div>
                         <div class="text-xs mt-0.5" style="color:var(--text-secondary);">
-                            This is the default message pre-filled when sending matches via WhatsApp. Use <code style="background:var(--surface); padding:1px 4px; border-radius:4px; font-size:11px;">{name}</code> for the client's first name and <code style="background:var(--surface); padding:1px 4px; border-radius:4px; font-size:11px;">{link}</code> for the matches page link.
+                            This is the default message pre-filled when sending matches via WhatsApp. Use <code class="rounded font-mono text-[11px]" style="background:var(--surface); padding:1px 4px;">{name}</code> for the client's first name and <code class="rounded font-mono text-[11px]" style="background:var(--surface); padding:1px 4px;">{link}</code> for the matches page link.
                         </div>
                     </div>
                     <form method="POST" action="{{ route('corex.settings.matches-wa-message') }}" class="space-y-3">
@@ -1940,7 +1980,7 @@
                  DASHBOARD SETTINGS section
                  Controls whether agents use individual or agency-wide settings
                  ════════════════════════════════════════════════════════════════ --}}
-            <div x-show="featureSection === 'dashboard'" x-cloak class="space-y-6"
+            <div x-show="activeSection === 'feature-dashboard'" x-cloak class="space-y-6"
                  x-data="{ settingsMode: '{{ $dashboardSettingsMode ?? 'user' }}' }">
 
                 <div>
@@ -2092,10 +2132,20 @@
         </div>
 
         {{-- ============================================================
+             NOTIFICATIONS TAB
+             Per-event notification preferences (notification-preferences spec)
+             ============================================================ --}}
+        <div x-show="activeSection === 'notifications'" x-cloak class="p-6">
+            @include('corex.settings._notifications', [
+                'notificationSnapshot' => $notificationSnapshot ?? null,
+            ])
+        </div>
+
+        {{-- ============================================================
              SYSTEM SETTINGS TAB
              Contains: General, P24 Suburbs, System Info
              ============================================================ --}}
-        <div x-show="activeTab === 'system'" x-cloak class="p-6 space-y-6">
+        <div x-show="activeSection === 'system'" x-cloak class="p-6 space-y-6">
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
@@ -2111,13 +2161,13 @@
                     </div>
                     <div>
                         <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Environment</label>
-                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold {{ config('app.env') === 'production' ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800' }}">
+                        <span class="ds-badge {{ config('app.env') === 'production' ? 'ds-badge-danger' : 'ds-badge-success' }}">
                             {{ config('app.env') }}
                         </span>
                     </div>
                     <div>
                         <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Debug Mode</label>
-                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold {{ config('app.debug') ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800' }}">
+                        <span class="ds-badge {{ config('app.debug') ? 'ds-badge-warning' : 'ds-badge-success' }}">
                             {{ config('app.debug') ? 'Enabled' : 'Disabled' }}
                         </span>
                     </div>
@@ -2187,11 +2237,33 @@
 
         </div>
 
-    </div>{{-- /tab container --}}
+        </div>{{-- /right pane --}}
+    </div>{{-- /hub flex --}}
 
 </div>
 
 <script>
+function settingsHub(initial) {
+    return {
+        activeSection: initial || 'agency',
+        search: '',
+        matchesSearch(haystack) {
+            const q = (this.search || '').trim().toLowerCase();
+            if (!q) return true;
+            return (haystack || '').indexOf(q) !== -1;
+        },
+        anyVisible(items) {
+            if (!items || !items.length) return false;
+            const q = (this.search || '').trim().toLowerCase();
+            if (!q) return true;
+            return items.some(it => {
+                const hay = ((it.label || '') + ' ' + (it.keywords || '')).toLowerCase();
+                return hay.indexOf(q) !== -1;
+            });
+        },
+    };
+}
+
 function agencySettingsForm() {
     return {
         removelogo: false,

@@ -4,6 +4,9 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use App\Http\Controllers\Api\CommandCenterApiController;
+use App\Http\Controllers\Api\NotificationController as ApiNotificationController;
+use App\Http\Controllers\Api\NotificationPreferenceController;
+use App\Http\Controllers\Api\DeviceTokenController;
 use App\Http\Controllers\Api\ProspectingApiController;
 use App\Http\Controllers\Api\MobilePropertyController;
 use App\Http\Controllers\Api\PropertyPullController;
@@ -113,4 +116,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/user-settings', [CommandCenterApiController::class, 'settingsIndex']);
         Route::put('/user-settings', [CommandCenterApiController::class, 'settingsUpdate']);
     });
+
+    // ── Notifications (mobile) ──────────────────────────────────
+    Route::get('/notifications',                 [ApiNotificationController::class, 'index']);
+    Route::post('/notifications/{id}/read',      [ApiNotificationController::class, 'markRead']);
+    Route::post('/notifications/mark-all-read',  [ApiNotificationController::class, 'markAllRead']);
+    Route::get('/notifications/overdue',         [ApiNotificationController::class, 'overdue']);
+
+    Route::get('/notification-preferences',  [NotificationPreferenceController::class, 'index']);
+    Route::put('/notification-preferences',  [NotificationPreferenceController::class, 'update']);
+
+    Route::post('/device-tokens',           [DeviceTokenController::class, 'store']);
+    Route::delete('/device-tokens/{token}', [DeviceTokenController::class, 'destroy']);
 });

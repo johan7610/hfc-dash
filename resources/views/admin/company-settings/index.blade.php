@@ -28,7 +28,7 @@
 
     @if($agencies->count() > 1)
         <div class="ds-status-card p-4">
-            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Editing agency</label>
+            <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Editing agency</label>
             <select x-model="selectedAgencyId" @change="switchAgency()"
                     class="w-full sm:w-80 rounded-md px-3 py-2 text-sm"
                     style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
@@ -49,37 +49,37 @@
             <div class="text-xs font-bold uppercase tracking-wider pb-1" style="color:var(--text-muted); border-bottom:1px solid var(--border);">Company Identity</div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Trading Name</label>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Trading Name</label>
                     <input type="text" name="trading_name" value="{{ old('trading_name', $agency->trading_name) }}"
                            class="w-full rounded-md px-3 py-2 text-sm"
                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Tagline</label>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Tagline</label>
                     <input type="text" name="tagline" value="{{ old('tagline', $agency->tagline) }}"
                            class="w-full rounded-md px-3 py-2 text-sm"
                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Registration No</label>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Registration No</label>
                     <input type="text" name="reg_no" value="{{ old('reg_no', $agency->reg_no) }}"
                            class="w-full rounded-md px-3 py-2 text-sm"
                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">VAT No</label>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">VAT No</label>
                     <input type="text" name="vat_no" value="{{ old('vat_no', $agency->vat_no) }}"
                            class="w-full rounded-md px-3 py-2 text-sm"
                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">FFC No</label>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">FFC No</label>
                     <input type="text" name="ffc_no" value="{{ old('ffc_no', $agency->ffc_no) }}"
                            class="w-full rounded-md px-3 py-2 text-sm"
                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">FIC No</label>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">FIC No</label>
                     <input type="text" name="fic_no" value="{{ old('fic_no', $agency->fic_no) }}"
                            class="w-full rounded-md px-3 py-2 text-sm"
                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
@@ -89,43 +89,43 @@
             <div class="text-xs font-bold uppercase tracking-wider pb-1" style="color:var(--text-muted); border-bottom:1px solid var(--border);">Contact Details</div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div class="sm:col-span-2">
-                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Address</label>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Address</label>
                     <textarea name="address" rows="2"
                               class="w-full rounded-md px-3 py-2 text-sm"
                               style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">{{ old('address', $agency->address) }}</textarea>
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Primary Cell Number</label>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Primary Cell Number</label>
                     <input type="text" name="phone" value="{{ old('phone', $agency->phone) }}"
                            class="w-full rounded-md px-3 py-2 text-sm"
                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Primary Cell Label</label>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Primary Cell Label</label>
                     <input type="text" name="phone_label" value="{{ old('phone_label', $agency->phone_label) }}"
                            class="w-full rounded-md px-3 py-2 text-sm"
                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Secondary Cell Number</label>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Secondary Cell Number</label>
                     <input type="text" name="phone_secondary" value="{{ old('phone_secondary', $agency->phone_secondary) }}"
                            class="w-full rounded-md px-3 py-2 text-sm"
                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Secondary Cell Label</label>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Secondary Cell Label</label>
                     <input type="text" name="phone_secondary_label" value="{{ old('phone_secondary_label', $agency->phone_secondary_label) }}"
                            class="w-full rounded-md px-3 py-2 text-sm"
                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Fax</label>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Fax</label>
                     <input type="text" name="fax" value="{{ old('fax', $agency->fax) }}"
                            class="w-full rounded-md px-3 py-2 text-sm"
                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Email</label>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Email</label>
                     <input type="text" name="email" value="{{ old('email', $agency->email) }}"
                            class="w-full rounded-md px-3 py-2 text-sm"
                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
@@ -135,13 +135,13 @@
             <div class="text-xs font-bold uppercase tracking-wider pb-1" style="color:var(--text-muted); border-bottom:1px solid var(--border);">Email Signature</div>
             <div class="space-y-4">
                 <div>
-                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Email Disclaimer</label>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Email Disclaimer</label>
                     <textarea name="email_disclaimer" rows="4"
                               class="w-full rounded-md px-3 py-2 text-sm"
                               style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">{{ old('email_disclaimer', $agency->email_disclaimer) }}</textarea>
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">POPI Policy URL</label>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">POPI Policy URL</label>
                     <input type="text" name="popi_url" value="{{ old('popi_url', $agency->popi_url) }}"
                            class="w-full rounded-md px-3 py-2 text-sm"
                            style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
@@ -170,7 +170,7 @@
             </div>
 
             <div class="flex justify-end pt-1">
-                <button type="submit" class="corex-btn-primary text-sm">Save Company Settings</button>
+                <button type="submit" class="corex-btn-primary">Save Company Settings</button>
             </div>
         </form>
     @else

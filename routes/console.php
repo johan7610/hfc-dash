@@ -81,3 +81,8 @@ Schedule::command('command-center:archive-done-tasks')->dailyAt('03:00')->withou
 
 // Manager Oversight digest — runs hourly
 Schedule::job(new \App\Jobs\OversightDigestJob())->hourly()->withoutOverlapping();
+
+// ── Pillar Notifications (notification-preferences spec) ──
+Schedule::command('notifications:scan-properties')->everyThirtyMinutes()->withoutOverlapping();
+Schedule::command('notifications:scan-contacts')->hourly()->withoutOverlapping();
+Schedule::command('notifications:scan-deals')->everyThirtyMinutes()->withoutOverlapping();
