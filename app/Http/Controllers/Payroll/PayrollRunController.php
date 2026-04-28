@@ -350,6 +350,33 @@ class PayrollRunController extends Controller
         ));
     }
 
+    // ── FINALISE ──
+
+    public function finalise(Request $request, $id)
+    {
+        $run = PayrollRun::findOrFail($id);
+
+        if (!$run->isDraft()) {
+            abort(422, 'Only draft runs can be finalised.');
+        }
+
+        $service = new \App\Services\Payroll\PayrollFinaliseService();
+        $result = $service->finalise($run, auth()->user());
+
+        if (!$result['success']) {
+            return redirect()->route('payroll.runs.show', $run)
+                ->with('error', implode(' ', $result['errors']));
+        }
+
+        $msg = "Run {$run->run_number} finalised. {$result['payslip_count']} payslip(s) generated and filed.";
+        if (!empty($result['warnings'])) {
+            $msg .= ' Warnings: ' . implode('; ', $result['warnings']);
+        }
+
+        return redirect()->route('payroll.runs.show', $run)
+            ->with('success', $msg);
+    }
+
     // ── PAYSLIP PDF PREVIEW ──
 
     public function payslipPdfPreview($runId, $payslipId)
@@ -361,6 +388,24 @@ class PayrollRunController extends Controller
         $path = $pdfService->regenerate($payslip);
 
         return $pdfService->getInlineResponse($payslip, $path);
+    }
+
+    // ── PAYSLIP PDF DOWNLOAD ──
+
+    public function payslipPdfDownload($runId, $payslipId)
+    {
+        $run = PayrollRun::findOrFail($runId);
+        $payslip = PayrollPayslip::where('payroll_run_id', $run->id)->findOrFail($payslipId);
+
+        $pdfService = new \App\Services\Payroll\PayslipPdfService();
+        $path = $pdfService->getStoredPath($payslip);
+
+        if (!$path) {
+            // Draft or missing PDF — regenerate
+            $path = $pdfService->regenerate($payslip);
+        }
+
+        return $pdfService->getDownloadResponse($payslip, $path);
     }
 
     // ══════════════════════════════════════════════════════════════

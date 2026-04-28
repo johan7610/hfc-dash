@@ -1019,6 +1019,12 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
             Route::get('runs/{run}/payslips/{payslip}/pdf-preview', [\App\Http\Controllers\Payroll\PayrollRunController::class, 'payslipPdfPreview'])
                 ->name('runs.payslips.pdf-preview')
                 ->middleware('permission:run_payroll');
+            Route::post('runs/{run}/finalise', [\App\Http\Controllers\Payroll\PayrollRunController::class, 'finalise'])
+                ->name('runs.finalise')
+                ->middleware('permission:run_payroll');
+            Route::get('runs/{run}/payslips/{payslip}/pdf-download', [\App\Http\Controllers\Payroll\PayrollRunController::class, 'payslipPdfDownload'])
+                ->name('runs.payslips.pdf-download')
+                ->middleware('permission:run_payroll');
         });
 
     Route::get('/supervision', [CoreXPlaceholderController::class, 'show'])->defaults('section', 'supervision')->middleware('permission:access_supervision')->name('corex.supervision');

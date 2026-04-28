@@ -1,11 +1,13 @@
 @extends('layouts.corex-app')
 
 @section('corex-content')
-<div class="-m-4 lg:-m-6">
+<div class="-m-4 lg:-m-6" x-data="{ showFinalise: false }">
     <x-page-header title="Payroll Run {{ $run->run_number }}" :back-route="route('payroll.runs.index')" back-label="Runs" :flush="true">
         <x-slot:actions>
             @if($run->isDraft())
-                <span class="inline-flex items-center px-3 py-2 text-xs font-semibold transition" style="color:var(--text-secondary, #cbd5e1); border:1px solid var(--border, #e5e7eb); border-radius:3px; cursor:not-allowed;" title="Finalise available in Prompt K">Finalise</span>
+                <button @click="showFinalise = true" class="inline-flex items-center px-3 py-2 text-xs font-semibold text-white transition" style="background:#00d4aa; border-radius:3px; cursor:pointer;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">Finalise</button>
+            @elseif($run->isFinalised())
+                <span class="inline-flex items-center px-3 py-2 text-xs font-semibold transition" style="color:var(--text-secondary, #cbd5e1); border:1px solid var(--border, #e5e7eb); border-radius:3px; cursor:not-allowed;" title="Bundle download coming in Prompt M">Download Bundle</span>
             @endif
         </x-slot:actions>
     </x-page-header>
@@ -32,6 +34,9 @@
                     @endif
                 </div>
                 <p class="text-xs" style="color:var(--text-secondary, #6b7280);">Pay date: {{ $run->pay_date?->format('d M Y') }} | Created by {{ $run->createdBy->name ?? '?' }} on {{ $run->created_at?->format('d M Y H:i') }}</p>
+                @if($run->isFinalised())
+                    <p class="text-xs mt-1" style="color:#00d4aa;">Finalised by {{ $run->finalisedBy->name ?? '?' }} on {{ $run->finalised_at?->format('d M Y H:i') }}</p>
+                @endif
                 @if($run->cancellation_reason)
                     <p class="text-xs mt-1" style="color:#ef4444;">Cancelled: {{ $run->cancellation_reason }}</p>
                 @endif
@@ -72,7 +77,7 @@
                         <col style="width:90px;">{{-- UIF --}}
                         <col style="width:110px;">{{-- Net --}}
                         <col style="width:70px;">{{-- Status --}}
-                        <col style="width:60px;">{{-- View --}}
+                        <col style="width:120px;">{{-- Actions --}}
                     </colgroup>
                     <thead>
                         <tr style="border-bottom:2px solid var(--border, #e5e7eb);">
@@ -104,7 +109,13 @@
                             <td class="px-3 py-2.5 text-right text-xs" style="color:var(--text-secondary, #6b7280);">R {{ number_format($ps->uif_employee_amount, 2) }}</td>
                             <td class="px-3 py-2.5 text-right text-xs font-semibold" style="color:var(--text-primary, #0f172a);">R {{ number_format($ps->net_pay, 2) }}</td>
                             <td class="px-2 py-2.5 text-center">
-                                <span class="px-1.5 py-0.5 text-[10px] font-semibold" style="background:rgba(234,179,8,0.1); color:#eab308; border-radius:3px;">Draft</span>
+                                @if($run->isFinalised())
+                                    <span class="px-1.5 py-0.5 text-[10px] font-semibold" style="background:rgba(0,212,170,0.1); color:#00d4aa; border-radius:3px;">Final</span>
+                                @elseif($run->isDraft())
+                                    <span class="px-1.5 py-0.5 text-[10px] font-semibold" style="background:rgba(234,179,8,0.1); color:#eab308; border-radius:3px;">Draft</span>
+                                @else
+                                    <span class="px-1.5 py-0.5 text-[10px] font-semibold" style="background:rgba(148,163,184,0.15); color:#94a3b8; border-radius:3px;">Cancelled</span>
+                                @endif
                                 @if($ps->notes)
                                     <span class="ml-1 text-[9px] px-1 py-0.5 font-bold" style="background:rgba(239,68,68,0.1); color:#ef4444; border-radius:2px;" title="{{ $ps->notes }}">!</span>
                                 @endif
@@ -114,6 +125,9 @@
                                     <a href="{{ route('payroll.runs.payslips.show', [$run, $ps]) }}" class="text-xs font-semibold" style="color:#00d4aa;">View</a>
                                     @if($run->isDraft())
                                         <a href="{{ route('payroll.runs.payslips.edit', [$run, $ps]) }}" class="text-xs font-semibold" style="color:var(--text-secondary, #6b7280);">Edit</a>
+                                    @endif
+                                    @if($ps->document_id || $run->isFinalised())
+                                        <a href="{{ route('payroll.runs.payslips.pdf-download', [$run, $ps]) }}" class="text-xs font-semibold" style="color:var(--text-secondary, #6b7280);">PDF</a>
                                     @endif
                                 </div>
                             </td>
@@ -154,5 +168,28 @@
         </div>
         @endif
     </div>
+
+    {{-- Finalise confirmation modal --}}
+    @if($run->isDraft())
+    <div x-show="showFinalise" x-cloak class="fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,0.5);" @click.self="showFinalise = false">
+        <div class="w-full max-w-md p-6" style="background:var(--surface-1, #fff); border-radius:6px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);">
+            <h3 class="text-sm font-bold mb-3" style="color:var(--text-primary, #0f172a);">Finalise Payroll Run?</h3>
+            <p class="text-xs mb-4" style="color:var(--text-secondary, #6b7280);">
+                This will finalise <strong>{{ $run->payslip_count }}</strong> payslip(s) totalling
+                <strong style="color:#00d4aa;">R {{ number_format($run->total_net ?? 0, 2) }}</strong> net pay.
+                PDFs will be generated and filed to each employee's document profile.
+                <br><br>
+                <strong style="color:#ef4444;">This action cannot be undone.</strong> Finalised runs are permanently locked.
+            </p>
+            <div class="flex justify-end gap-2">
+                <button @click="showFinalise = false" class="px-4 py-2 text-xs font-semibold" style="color:var(--text-secondary, #6b7280); border:1px solid var(--border, #e5e7eb); border-radius:3px; background:none; cursor:pointer;">Cancel</button>
+                <form method="POST" action="{{ route('payroll.runs.finalise', $run) }}" class="inline">
+                    @csrf
+                    <button type="submit" class="px-4 py-2 text-xs font-semibold text-white" style="background:#00d4aa; border-radius:3px; cursor:pointer;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">Yes, Finalise</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endif
 </div>
 @endsection
