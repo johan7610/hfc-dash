@@ -350,6 +350,19 @@ class PayrollRunController extends Controller
         ));
     }
 
+    // ── PAYSLIP PDF PREVIEW ──
+
+    public function payslipPdfPreview($runId, $payslipId)
+    {
+        $run = PayrollRun::findOrFail($runId);
+        $payslip = PayrollPayslip::where('payroll_run_id', $run->id)->findOrFail($payslipId);
+
+        $pdfService = new \App\Services\Payroll\PayslipPdfService();
+        $path = $pdfService->regenerate($payslip);
+
+        return $pdfService->getInlineResponse($payslip, $path);
+    }
+
     // ══════════════════════════════════════════════════════════════
     // PAYSLIP EDITING (Prompt I)
     // ══════════════════════════════════════════════════════════════

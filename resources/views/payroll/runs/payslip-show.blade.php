@@ -3,11 +3,12 @@
 @section('corex-content')
 <div class="-m-4 lg:-m-6">
     <x-page-header title="Payslip {{ $payslip->payslip_number }}" :back-route="route('payroll.runs.show', $run)" back-label="Run {{ $run->run_number }}" :flush="true">
-        @if($run->isDraft())
         <x-slot:actions>
-            <a href="{{ route('payroll.runs.payslips.edit', [$run, $payslip]) }}" class="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold text-white transition" style="background:#00d4aa; border-radius:3px;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">Edit Payslip</a>
+            <a href="{{ route('payroll.runs.payslips.pdf-preview', [$run, $payslip]) }}" target="_blank" class="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold transition" style="color:var(--text-primary, #0f172a); border:1px solid var(--border, #e5e7eb); border-radius:3px;">Preview PDF</a>
+            @if($run->isDraft())
+                <a href="{{ route('payroll.runs.payslips.edit', [$run, $payslip]) }}" class="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold text-white transition" style="background:#00d4aa; border-radius:3px;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">Edit Payslip</a>
+            @endif
         </x-slot:actions>
-        @endif
     </x-page-header>
 
     <div class="p-4 lg:p-6">
