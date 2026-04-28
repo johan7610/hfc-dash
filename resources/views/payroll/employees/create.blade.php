@@ -17,19 +17,23 @@
         <form method="POST" action="{{ route('payroll.employees.store') }}">
             @csrf
 
-            <div class="max-w-3xl space-y-6" x-data="{
-                selectedUserId: '{{ old('user_id', '') }}',
-                selectedUser: null,
-                showBanking: {{ old('bank_name') ? 'true' : 'false' }},
-                users: @json($eligibleUsers->map(fn($u) => [
+            @php
+                $usersArray = $eligibleUsers->map(fn($u) => [
                     'id' => $u->id,
                     'name' => $u->name,
                     'email' => $u->email,
                     'designation' => $u->designation,
                     'id_number' => $u->id_number,
-                    'date_of_birth' => $u->date_of_birth?->format('Y-m-d'),
+                    'date_of_birth' => optional($u->date_of_birth)->format('Y-m-d'),
                     'branch_id' => $u->branch_id,
-                ])),
+                ])->values()->all();
+            @endphp
+
+            <div class="max-w-3xl space-y-6" x-data="{
+                selectedUserId: '{{ old('user_id', '') }}',
+                selectedUser: null,
+                showBanking: {{ old('bank_name') ? 'true' : 'false' }},
+                users: {{ Js::from($usersArray) }},
                 init() {
                     if (this.selectedUserId) {
                         this.selectedUser = this.users.find(u => u.id == this.selectedUserId) || null;

@@ -153,9 +153,9 @@
                                         <th class="text-right px-3 py-2 text-xs font-bold uppercase" style="color:var(--text-secondary, #94a3b8); letter-spacing:0.05em;">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody>
                                     @forelse($currentEarnings as $earning)
-                                    <tr style="border-bottom:1px solid var(--border, #e5e7eb);" x-data="{ editing: false }">
+                                <tbody x-data="{ editing: false }">
+                                    <tr style="border-bottom:1px solid var(--border, #e5e7eb);">
                                         <td class="px-3 py-2.5 font-semibold text-xs" style="color:var(--text-primary, #0f172a);">
                                             {{ $earning->earningType->label ?? 'Unknown' }}
                                             @if($earning->earningType?->is_system)
@@ -205,7 +205,9 @@
                                             </form>
                                         </td>
                                     </tr>
+                                </tbody>
                                     @empty
+                                <tbody>
                                     <tr><td colspan="5" class="px-3 py-4 text-center text-xs" style="color:var(--text-secondary, #94a3b8);">No earnings configured.</td></tr>
                                     @endforelse
                                 </tbody>
@@ -262,9 +264,9 @@
                                         <th class="text-right px-3 py-2 text-xs font-bold uppercase" style="color:var(--text-secondary, #94a3b8); letter-spacing:0.05em;">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody>
                                     @forelse($currentDeductions as $deduction)
-                                    <tr style="border-bottom:1px solid var(--border, #e5e7eb);" x-data="{ editing: false }">
+                                <tbody x-data="{ editing: false }">
+                                    <tr style="border-bottom:1px solid var(--border, #e5e7eb);">
                                         <td class="px-3 py-2.5 font-semibold text-xs" style="color:var(--text-primary, #0f172a);">
                                             {{ $deduction->deductionType->label ?? 'Unknown' }}
                                             @if($deduction->deductionType?->is_statutory)
@@ -335,7 +337,9 @@
                                             </form>
                                         </td>
                                     </tr>
+                                </tbody>
                                     @empty
+                                <tbody>
                                     <tr><td colspan="5" class="px-3 py-4 text-center text-xs" style="color:var(--text-secondary, #94a3b8);">No deductions configured.</td></tr>
                                     @endforelse
                                 </tbody>
