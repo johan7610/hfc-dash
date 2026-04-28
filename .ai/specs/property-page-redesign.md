@@ -71,6 +71,51 @@ The visible bar (Live Preview + Syndication trigger buttons) was deleted — tho
 
 ---
 
+## 2026-04-28 Addendum: Info Tab Restructure (Phase 1c)
+
+The Info tab was a single 1,300-line scroll with 7 ad-hoc sections, no visual hierarchy, no navigation, every input `w-full` (so a "Category" dropdown stretched 480px), inputs on `--surface-2` (inverted from spec §3.6), hardcoded hex (`#c97a2e`, `#ef4444`, `#00d4aa`, `text-red-500`, etc.), and Status / Mandate / Listing-Type all dumped in "Classification" alongside category and type.
+
+Restructured to four logical, collapsible sections with a sticky section nav:
+
+```
+┌─ Identity · Pricing · Property · Mandate & Assignment       [Save Changes] ─┐
+│
+│  IDENTITY        Title · Property Type · Category · Listing Type
+│  PRICING         Price · Rates · Levy · Special Levy   (+ pricing modal)
+│  PROPERTY        Sizes · Spaces & Features · Description · Address
+│  MANDATE & …     Lifecycle (Status, Mandate, Listed/Expiry, Loaded/Modified)
+│                  Showday Events · Assignment (agents) · Video & VR · Branch
+│  RENTAL          (only when listing type = rental)
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### What changed
+
+- **CSS helpers** added in [resources/css/corex.css](resources/css/corex.css) — `.prop-info-nav` (sticky strip), `.prop-section-heading` (3px brand-icon left bar + 14px bold), `.prop-subsection-heading` (uppercase muted), `.prop-input/.prop-select/.prop-textarea` (token-correct surface bg), `.prop-label`, `.prop-required`, plus width buckets `.prop-field-{enum,count,m2,money,short,date,id}`.
+- **Section nav strip** — sticky at the top of the Info tab, anchor links jump to each section + Expand-all / Collapse-all + a duplicate Save Changes button (mirrors the sidebar so long edit sessions can save without scrolling back to the rail).
+- **Collapsible sections** — Alpine `info` state at the form root tracks open/closed per section, persisted only in memory (lifecycle is a single edit session). Chevron rotates when open.
+- **Width caps** — every Identity / Pricing / Mandate / Rental input now has a width bucket. Category/Type/Status/Mandate/Listing Type are all 14rem; Beds/Baths/Garages are 6rem and centered; Floor/Erf are 8rem; money fields 12rem; dates 12rem; Branch / external IDs cap at 18-22rem; long text (Title, descriptions, addresses) stays full-width.
+- **Section grouping reorganised** — `Status`, `Mandate Type`, `Listed Date`, `Expiry Date` moved out of "Classification" / "Listing Details" / "Dates & Meta" into a single new **Lifecycle** subsection inside Mandate & Assignment. `Listing Type` moved out of Classification into Identity (locked after first save, per Phase 1b). `Description` and `Address` moved into the **Property** section.
+- **Token cleanup** — every input/select/textarea inside the new sections uses `--surface` (per spec §3.6, was inverted to `--surface-2`). `text-red-500 *` asterisks replaced with `.prop-required` (`--ds-crimson`). Internal-address tag `#c97a2e` → `var(--ds-amber)`. Showday `#00d4aa` and "Create Showday" button replaced with `var(--ds-green)`. Showday remove button `#ef4444` → `var(--ds-crimson)`.
+- **Visual hierarchy** — primary section headings get the brand-icon left bar + 14px bold; sub-headings inside a section use the existing 11px uppercase muted style. Reading the page now communicates the major divisions at a glance.
+
+### What did NOT change (intentionally)
+- The Spaces & Features Alpine widget internals (`spacesAndFeaturesManager`) — too risky to restructure mid-cycle and visually it works.
+- The Property Address Alpine widget internals (`propertyAddress`) — only the heading was retitled.
+- The Pricing Details modal triggered from the Price field — content + behaviour preserved verbatim.
+- All `name="..."` attributes — controller validation contract unchanged. Form submits identically.
+- Showday create/delete REST endpoints — only chrome restyled.
+
+### Recommendation E (per-field click-to-edit) — deferred
+Recommendation E from the audit (each field renders as a read-row by default, click → inline edit) was not implemented. The collapsible sections deliver most of the same density benefit at a fraction of the implementation risk. Per-field inline edit can be re-evaluated once usage feedback comes back.
+
+### Files touched (Phase 1c)
+- `resources/views/corex/properties/show.blade.php` — Info tab rewritten in-place from `<form id="prop-update-form">` to the closing `</section>` of Rental. ~600 lines of restructure.
+- `resources/css/corex.css` — `.prop-info-nav`, `.prop-section-heading`, `.prop-subsection-heading`, `.prop-input/select/textarea`, `.prop-label`, `.prop-required`, `.prop-field-*` width buckets, `.prop-section-toggle` / `.prop-section-chevron`.
+- `.ai/specs/property-page-redesign.md` — this addendum.
+
+---
+
 ---
 
 ## Problem

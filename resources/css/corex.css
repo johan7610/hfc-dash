@@ -338,6 +338,140 @@ html.dark {
     box-shadow: 0 6px 16px color-mix(in srgb, var(--brand-button, #0ea5e9) 35%, transparent);
 }
 
+/* ========== Property Info tab — Phase 1c ========== */
+
+/* Section navigation (sticky strip at top of Info tab). */
+.prop-info-nav {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem 0.625rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+.prop-info-nav-link {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.625rem;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: background-color 150ms, color 150ms;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+}
+.prop-info-nav-link:hover {
+    background: var(--surface-2);
+    color: var(--text-primary);
+}
+.prop-info-nav-spacer { flex: 1; }
+
+/* Primary section — wrap each section in a card so the form reads as panels, not floating text. */
+.prop-section {
+    scroll-margin-top: 4rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+.prop-section + .prop-section { margin-top: 0.75rem; }
+.prop-section-toggle {
+    background: var(--surface-2);
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 0.625rem 1rem;
+    width: 100%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    text-align: left;
+    transition: background 150ms;
+}
+.prop-section-toggle:hover { background: color-mix(in srgb, var(--text-primary) 4%, var(--surface-2)); }
+.prop-section-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+    line-height: 1.2;
+}
+.prop-section-chevron {
+    margin-left: auto;
+    color: var(--text-muted);
+    transition: transform 150ms;
+}
+.prop-section-chevron.is-open { transform: rotate(90deg); }
+.prop-section-body { padding: 1rem; }
+
+/* Secondary (inside-section) heading — small uppercase muted, no left bar. */
+.prop-subsection-heading {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+/* Required-field marker */
+.prop-required {
+    color: var(--ds-crimson);
+    font-weight: 700;
+}
+
+/* Width buckets — inputs/selects cap to a sane max-width per data shape. */
+.prop-field-enum  { max-width: 14rem; }   /* short enums: Category, Type, Status, Mandate */
+.prop-field-count { max-width: 6rem; text-align: center; }    /* Beds/Baths/Garages */
+.prop-field-m2    { max-width: 8rem; }    /* Floor/Erf m² */
+.prop-field-money { max-width: 12rem; }   /* Currency */
+.prop-field-short { max-width: 18rem; }   /* Short text */
+.prop-field-date  { max-width: 12rem; }   /* Dates */
+.prop-field-id    { max-width: 22rem; }   /* IDs / external refs */
+.prop-field-lifecycle { width: 11rem; max-width: 100%; }   /* Status, Mandate, Dates, Loaded, Modified — uniform row */
+
+/* Standard form input — surface bg per spec §3.6, surface-2 was inverted. */
+.prop-input,
+.prop-select,
+.prop-textarea {
+    width: 100%;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    transition: border-color 150ms, box-shadow 150ms;
+}
+.prop-input:focus,
+.prop-select:focus,
+.prop-textarea:focus {
+    outline: 0;
+    border-color: var(--brand-button);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-button) 15%, transparent);
+}
+.prop-input:disabled {
+    background: var(--surface-2);
+    color: var(--text-muted);
+    cursor: not-allowed;
+}
+.prop-label {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    color: var(--text-secondary);
+}
+
+/* (legacy ruleset for prop-section-toggle / chevron — superseded above) */
+
 /* ========== Property page action stack & misc helpers ========== */
 .prop-action-btn {
     display: flex;
@@ -379,6 +513,20 @@ html.dark {
 .prop-action-btn-fb svg,
 .prop-action-btn-neutral svg,
 .prop-action-btn-danger svg { color: var(--text-secondary); }
+
+/* Dirty-state — Save Changes lights up when the form has unsaved edits. */
+.prop-action-btn.is-dirty {
+    background: var(--ds-green);
+    color: #fff;
+    border-color: var(--ds-green);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ds-green) 25%, transparent);
+    animation: prop-save-pulse 1.6s ease-in-out infinite;
+}
+.prop-action-btn.is-dirty svg { color: #fff; }
+@keyframes prop-save-pulse {
+    0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--ds-green) 25%, transparent); }
+    50%      { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ds-green) 35%, transparent); }
+}
 
 .prop-photo-chip {
     padding: 0.25rem 0.625rem;

@@ -485,6 +485,24 @@
                 </div>
             </div>
 
+            {{-- Other Virtual Tour (iPanorama / Kuula / custom) --}}
+            @if($property->virtual_tour_url)
+            <div class="card overflow-hidden">
+                <div class="panel-pad" style="padding-bottom:1rem;">
+                    <h2 class="section-h" style="margin-bottom:.25rem;">Virtual Tour</h2>
+                    <p style="font-size:.8125rem; color:var(--text-muted);">Interactive 360° tour of the property.</p>
+                </div>
+                <iframe
+                    src="{{ $property->virtual_tour_url }}"
+                    width="100%" height="520"
+                    style="border:0; display:block;"
+                    allow="fullscreen; xr-spatial-tracking; gyroscope; accelerometer; vr"
+                    allowfullscreen
+                    loading="lazy"
+                    referrerpolicy="no-referrer-when-downgrade"></iframe>
+            </div>
+            @endif
+
             {{-- Map --}}
             @if($locationQuery)
             <div class="card overflow-hidden">

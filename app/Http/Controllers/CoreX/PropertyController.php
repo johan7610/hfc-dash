@@ -394,6 +394,7 @@ class PropertyController extends Controller
             'pp_second_agent_image'    => 'nullable|image|max:1024',
             'youtube_video_id'   => 'nullable|string|max:500',
             'matterport_id'      => 'nullable|string|max:100',
+            'virtual_tour_url'   => 'nullable|url|max:1000',
             'rental_price_type'  => 'nullable|string|max:50',
             'pp_hide_street_name'   => 'nullable|boolean',
             'pp_hide_street_number' => 'nullable|boolean',
@@ -429,6 +430,14 @@ class PropertyController extends Controller
             $data['agent_id'] = $user->id;
         }
         $data['agency_id'] = $user->effectiveAgencyId();
+
+        // Branch follows the primary agent — every property is owned by its agent's branch.
+        // If the agent has no branch, leave whatever the form/default supplied so we don't null it out.
+        $assignedAgent = User::find($data['agent_id']);
+        $derivedBranchId = $assignedAgent ? ($assignedAgent->effectiveBranchId() ?? $assignedAgent->branch_id) : null;
+        if ($derivedBranchId) {
+            $data['branch_id'] = $derivedBranchId;
+        }
 
         if (! empty($data['publish'])) {
             $data['published_at'] = now();
@@ -582,6 +591,7 @@ class PropertyController extends Controller
             'pp_second_agent_image'    => 'nullable|image|max:1024',
             'youtube_video_id'   => 'nullable|string|max:500',
             'matterport_id'      => 'nullable|string|max:100',
+            'virtual_tour_url'   => 'nullable|url|max:1000',
             'rental_price_type'  => 'nullable|string|max:50',
             'pp_hide_street_name'   => 'nullable|boolean',
             'pp_hide_street_number' => 'nullable|boolean',
@@ -611,6 +621,15 @@ class PropertyController extends Controller
         // the new agent's profile photo. Same for second agent.
         if (isset($data['agent_id']) && (int) $data['agent_id'] !== (int) $property->agent_id && !$request->hasFile('pp_agent_image')) {
             $data['pp_agent_image_path'] = null;
+        }
+        // Branch follows the primary agent — re-derive on every save so it stays in sync.
+        // Preserve existing branch when the agent has no branch of their own.
+        if (isset($data['agent_id'])) {
+            $assignedAgent = User::find($data['agent_id']);
+            $derivedBranchId = $assignedAgent ? ($assignedAgent->effectiveBranchId() ?? $assignedAgent->branch_id) : null;
+            if ($derivedBranchId) {
+                $data['branch_id'] = $derivedBranchId;
+            }
         }
         if (array_key_exists('pp_second_agent_id', $data) && (int) ($data['pp_second_agent_id'] ?? 0) !== (int) ($property->pp_second_agent_id ?? 0) && !$request->hasFile('pp_second_agent_image')) {
             $data['pp_second_agent_image_path'] = null;
@@ -668,6 +687,11 @@ class PropertyController extends Controller
         }
 
         $property->update($data);
+        // Force-touch updated_at even when no fillable attribute changed (e.g. only photos uploaded),
+        // so the Modified column always reflects the latest save action.
+        if (! $property->wasChanged()) {
+            $property->touch();
+        }
 
         return redirect()->route('corex.properties.show', $property)
             ->with('success', 'Property updated.')

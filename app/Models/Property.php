@@ -108,6 +108,7 @@ class Property extends Model
         'pp_hide_unit_number',
         'youtube_video_id',
         'matterport_id',
+        'virtual_tour_url',
         'rental_price_type',
         'p24_syndication_enabled',
         'p24_syndication_status',

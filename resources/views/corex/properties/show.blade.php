@@ -3,8 +3,9 @@
 @section('corex-content')
 @php $isNew = !$property->exists; @endphp
 <div class="w-full space-y-4"
-     x-data="{ activeTab: '{{ $isNew ? 'info' : session('tab', $activeTab) }}', synOpen: false, synStep: 'main', sbCollapsed: (localStorage.getItem('hfc.propSidebar.collapsed') === '1') }"
-     x-effect="localStorage.setItem('hfc.propSidebar.collapsed', sbCollapsed ? '1' : '0')">
+     x-data="{ activeTab: '{{ $isNew ? 'info' : session('tab', $activeTab) }}', synOpen: false, synStep: 'main', sbCollapsed: (localStorage.getItem('hfc.propSidebar.collapsed') === '1'), formDirty: false }"
+     x-effect="localStorage.setItem('hfc.propSidebar.collapsed', sbCollapsed ? '1' : '0')"
+     @beforeunload.window="if (formDirty) { $event.preventDefault(); $event.returnValue = ''; }">
 
     {{-- Top bar: back + flash --}}
     <div class="flex items-center gap-4 flex-wrap">
@@ -112,9 +113,10 @@
                 <p class="text-[0.6875rem] font-bold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Actions</p>
 
                 <button type="submit" form="prop-update-form"
-                        class="prop-action-btn prop-action-btn-success">
+                        class="prop-action-btn prop-action-btn-success"
+                        :class="formDirty ? 'is-dirty' : ''">
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
-                    Save Changes
+                    <span x-text="formDirty ? 'Save Changes *' : 'Save Changes'"></span>
                 </button>
 
                 <button type="button" @click="synOpen=true; synStep='main'" class="prop-action-btn prop-action-btn-neutral">
@@ -306,7 +308,7 @@
                 @endif
                 <div class="flex-1 min-w-0">
                     <h1 class="text-base font-extrabold leading-tight" style="color:var(--text-primary);">{{ $property->title ?: 'New Property' }}</h1>
-                    <div class="text-base font-bold mt-0.5" style="color:var(--brand-default,#0b2a4a);">{{ $property->formattedPrice() }}</div>
+                    <div class="text-base font-bold mt-0.5" style="color:var(--brand-default);">{{ $property->formattedPrice() }}</div>
                     <div class="flex items-center gap-2 mt-1 flex-wrap">
                         <span class="text-xs px-2 py-0.5 rounded-full font-semibold"
                               style="background:{{ $sc }}22; color:{{ $sc }}; border:1px solid {{ $sc }}44;">{{ ucfirst($property->status) }}</span>
@@ -343,7 +345,7 @@
                     {{-- Header --}}
                     <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid var(--border);">
                         <div class="flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="color:var(--brand-icon,#0ea5e9);">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="color:var(--brand-icon);">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 0 1 7.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 0 1 1.06 0Z" />
                             </svg>
                             <span class="text-sm font-semibold" style="color:var(--text-primary);">Syndication</span>
@@ -405,46 +407,46 @@
                             unpublish() { this.post('unpublish'); },
                          }"
                          @click.stop class="space-y-3">
-                        <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--text-muted);">Publish to HFC Premium</p>
+                        <p class="text-[0.6875rem] font-bold uppercase tracking-wider" style="color:var(--text-muted);">Publish to HFC Premium</p>
 
                         {{-- HFC Premium toggle row --}}
                         <div class="flex items-center justify-between gap-3 px-3 py-2 rounded-md cursor-pointer"
                              @click="toggleEnabled()"
                              :style="enabled ? 'background:rgba(34,197,94,0.06); border:1px solid rgba(34,197,94,0.25);' : 'background:var(--surface-2); border:1px solid var(--border);'">
                             <div class="flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" :style="enabled ? 'color:#22c55e' : 'color:var(--text-muted)'">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" :style="enabled ? 'color:var(--ds-green)' : 'color:var(--text-muted)'">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418" />
                                 </svg>
                                 <span class="text-xs font-semibold" style="color:var(--text-primary);">HFC Premium</span>
                             </div>
                             <div class="flex items-center gap-2">
                                 <div class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full transition-colors duration-200"
-                                     :style="enabled ? 'background:#22c55e' : 'background:var(--surface-3,#374151)'"
+                                     :style="enabled ? 'background:var(--ds-green)' : 'background:var(--surface-3)'"
                                      role="switch" :aria-checked="enabled">
                                     <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-sm transition-transform duration-200"
                                           style="background:#fff; margin-top:2px;"
                                           :style="enabled ? 'transform:translateX(18px); margin-left:1px;' : 'transform:translateX(2px); margin-left:1px;'"></span>
                                 </div>
-                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide"
-                                      :style="isPublished ? 'background:rgba(34,197,94,0.15); color:#22c55e;' : (enabled ? 'background:rgba(245,158,11,0.15); color:#f59e0b;' : 'background:var(--surface-3,#374151); color:var(--text-muted);')"
+                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[0.6875rem] font-bold uppercase tracking-wide"
+                                      :style="isPublished ? 'background:rgba(34,197,94,0.15); color:var(--ds-green);' : (enabled ? 'background:rgba(245,158,11,0.15); color:var(--ds-amber);' : 'background:var(--surface-3); color:var(--text-muted);')"
                                       x-text="isPublished ? 'Live' : (enabled ? 'Pending' : 'Off')"></span>
                             </div>
                         </div>
 
                         {{-- Server error after a failed publish attempt --}}
                         <div x-show="errorMsg" x-cloak
-                             class="rounded-md px-3 py-2.5 text-[11px] font-medium"
-                             style="background:rgba(239,68,68,0.08); color:#ef4444; border:1px solid rgba(239,68,68,0.25);"
+                             class="rounded-md px-3 py-2.5 text-xs font-medium"
+                             style="background:rgba(239,68,68,0.08); color:var(--ds-crimson); border:1px solid rgba(239,68,68,0.25);"
                              x-text="errorMsg"></div>
 
                         {{-- Missing fields warning — blocks publish until resolved --}}
                         <div x-show="missingFields.length > 0" x-cloak
                              class="rounded-md px-3 py-2.5 space-y-1.5"
                              style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25);">
-                            <p class="text-[11px] font-semibold" style="color:#f59e0b;">Cannot publish to HFC Premium — missing required fields:</p>
+                            <p class="text-xs font-semibold" style="color:var(--ds-amber);">Cannot publish to HFC Premium — missing required fields:</p>
                             <ul class="space-y-0.5 m-0 pl-3" style="list-style:disc;">
                                 <template x-for="(f, idx) in missingFields" :key="idx">
-                                    <li class="text-[11px]" style="color:#f59e0b;" x-text="f.label"></li>
+                                    <li class="text-xs" style="color:var(--ds-amber);" x-text="f.label"></li>
                                 </template>
                             </ul>
                         </div>
@@ -454,7 +456,7 @@
                             <button type="button" @click.stop="missingFields.length === 0 && publish()"
                                     :disabled="loading || missingFields.length > 0"
                                     class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
-                                    :style="missingFields.length > 0 ? 'background:#374151; color:#6b7280; cursor:not-allowed;' : 'background:#22c55e; color:#fff;'"
+                                    :style="missingFields.length > 0 ? 'background:#374151; color:#6b7280; cursor:not-allowed;' : 'background:var(--ds-green); color:#fff;'"
                                     :class="missingFields.length === 0 ? 'hover:opacity-85' : ''">
                                 <svg x-show="!loading" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
                                 <svg x-show="loading" x-cloak class="w-3.5 h-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
@@ -466,19 +468,19 @@
                         <div x-show="isPublished" x-cloak class="flex flex-wrap gap-2">
                             <a :href="previewUrl" target="_blank"
                                class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold no-underline transition-opacity hover:opacity-85"
-                               style="background:#22c55e; color:#fff;">
+                               style="background:var(--ds-green); color:#fff;">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
                                 View on HFC Premium
                             </a>
                             <button type="button" @click.stop="refresh()" :disabled="loading"
                                     class="px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
-                                    style="background:rgba(34,197,94,0.10); color:#22c55e; border:1px solid rgba(34,197,94,0.25);"
+                                    style="background:rgba(34,197,94,0.10); color:var(--ds-green); border:1px solid rgba(34,197,94,0.25);"
                                     onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
                                 <span x-text="loading ? 'Syncing...' : 'Refresh'"></span>
                             </button>
                             <button type="button" @click.stop="unpublish()" :disabled="loading"
                                     class="px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
-                                    style="background:rgba(239,68,68,0.10); color:#ef4444; border:1px solid rgba(239,68,68,0.25);"
+                                    style="background:rgba(239,68,68,0.10); color:var(--ds-crimson); border:1px solid rgba(239,68,68,0.25);"
                                     onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
                                 Unpublish
                             </button>
@@ -489,7 +491,7 @@
                     @if($synPpEnabled || $synP24Enabled)
                     {{-- Portal Syndication section --}}
                     <div>
-                        <p class="text-[10px] font-bold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Portal Syndication</p>
+                        <p class="text-[0.6875rem] font-bold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Portal Syndication</p>
 
                         @if($synPpEnabled)
                         @php
@@ -523,7 +525,7 @@
                                  @click="toggleEnabled()"
                                  :style="enabled ? 'background:rgba(0,212,170,0.06); border-color:rgba(0,212,170,0.25);' : 'background:var(--surface-2); border-color:var(--border);'">
                                 <div class="flex items-center gap-2">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" :style="enabled ? 'color:#00d4aa' : 'color:var(--text-muted)'">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" :style="enabled ? 'color:var(--ds-green)' : 'color:var(--text-muted)'">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418" />
                                     </svg>
                                     <span class="text-xs font-semibold" style="color:var(--text-primary);">Private Property</span>
@@ -531,7 +533,7 @@
                                 <div class="flex items-center gap-2">
                                     {{-- Toggle switch --}}
                                     <div class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full transition-colors duration-200"
-                                         :style="enabled ? 'background:#00d4aa' : 'background:var(--surface-3,#374151)'"
+                                         :style="enabled ? 'background:var(--ds-green)' : 'background:var(--surface-3)'"
                                          role="switch"
                                          :aria-checked="enabled">
                                         <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-sm transition-transform duration-200"
@@ -539,13 +541,13 @@
                                               :style="enabled ? 'transform:translateX(18px); margin-left:1px;' : 'transform:translateX(2px); margin-left:1px;'"></span>
                                     </div>
                                     {{-- Status badge --}}
-                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide"
+                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[0.6875rem] font-bold uppercase tracking-wide"
                                           :style="statusBadgeStyle()" x-text="statusLabel()"></span>
                                 </div>
                             </div>
 
                             {{-- Status line --}}
-                            <div x-show="status && status !== ''" x-cloak class="text-[11px] px-1" style="color:var(--text-secondary);">
+                            <div x-show="status && status !== ''" x-cloak class="text-xs px-1" style="color:var(--text-secondary);">
                                 <template x-if="ppRef">
                                     <span>PP Ref: <strong x-text="ppRef" style="color:var(--text-primary);"></strong> &mdash; <span x-text="statusLabel()"></span></span>
                                 </template>
@@ -556,7 +558,7 @@
                                     <span>Ready to submit</span>
                                 </template>
                                 <template x-if="status === 'error'">
-                                    <span style="color:#ef4444;" x-text="'Error: ' + lastError"></span>
+                                    <span style="color:var(--ds-crimson);" x-text="'Error: ' + lastError"></span>
                                 </template>
                                 <template x-if="status === 'deactivated'">
                                     <span style="color:var(--text-muted);">Deactivated</span>
@@ -567,10 +569,10 @@
                             <div x-show="isPpExclusiveActive()" x-cloak
                                  class="rounded-md px-3 py-2.5 space-y-1"
                                  style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25);">
-                                <p class="text-[11px] font-semibold" style="color:#f59e0b;">
+                                <p class="text-xs font-semibold" style="color:var(--ds-amber);">
                                     PP Exclusive listing — do not publish elsewhere until <span x-text="ppDelayUntil"></span>
                                 </p>
-                                <p class="text-[10px]" style="color:#d97706;">
+                                <p class="text-[0.6875rem]" style="color:#d97706;">
                                     <span x-text="ppDelayDaysRemaining()"></span> days remaining
                                 </p>
                             </div>
@@ -579,10 +581,10 @@
                             <div x-show="enabled && missingFields.length > 0" x-cloak
                                  class="rounded-md px-3 py-2.5 space-y-1.5"
                                  style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25);">
-                                <p class="text-[11px] font-semibold" style="color:#f59e0b;">Cannot submit — missing required fields:</p>
+                                <p class="text-xs font-semibold" style="color:var(--ds-amber);">Cannot submit — missing required fields:</p>
                                 <ul class="space-y-0.5 m-0 pl-3" style="list-style:disc;">
                                     <template x-for="(f, idx) in missingFields" :key="idx">
-                                        <li class="text-[11px]" style="color:#f59e0b;">
+                                        <li class="text-xs" style="color:var(--ds-amber);">
                                             <span x-text="f.label"></span>
                                             <span class="opacity-60" x-text="'(' + f.tab + ' tab)'"></span>
                                         </li>
@@ -593,9 +595,9 @@
                             {{-- Exclusive days auto-calculated from Listed Date → Expiry Date for sole mandates --}}
                             @if(in_array(strtolower($property->mandate_type ?? ''), ['sole', 'sole mandate']) && ($property->listing_type ?? 'sale') === 'sale' && $property->listed_date && $property->expiry_date)
                             <div x-show="enabled" x-cloak class="flex items-center gap-2">
-                                <span class="text-[11px]" style="color:var(--text-secondary);">Exclusive:</span>
-                                <span class="text-[11px] font-medium" style="color:var(--text-primary);">{{ $property->listed_date->diffInDays($property->expiry_date) }} days</span>
-                                <span class="text-[10px]" style="color:var(--text-muted);">({{ $property->listed_date->format('d M') }} – {{ $property->expiry_date->format('d M Y') }})</span>
+                                <span class="text-xs" style="color:var(--text-secondary);">Exclusive:</span>
+                                <span class="text-xs font-medium" style="color:var(--text-primary);">{{ $property->listed_date->diffInDays($property->expiry_date) }} days</span>
+                                <span class="text-[0.6875rem]" style="color:var(--text-muted);">({{ $property->listed_date->format('d M') }} – {{ $property->expiry_date->format('d M Y') }})</span>
                             </div>
                             @endif
 
@@ -605,7 +607,7 @@
                                         @click.stop="submitListing()"
                                         :disabled="loading || missingFields.length > 0"
                                         class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
-                                        :style="missingFields.length > 0 ? 'background:#374151; color:#6b7280; cursor:not-allowed;' : 'background:#00d4aa; color:#fff;'"
+                                        :style="missingFields.length > 0 ? 'background:#374151; color:#6b7280; cursor:not-allowed;' : 'background:var(--ds-green); color:#fff;'"
                                         :class="missingFields.length === 0 ? 'hover:opacity-85' : ''">
                                     <svg x-show="!loading" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
                                     <svg x-show="loading" x-cloak class="w-3.5 h-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
@@ -614,7 +616,7 @@
                                 {{-- Reactivate (for deactivated, no ref yet edge case) --}}
                                 <button type="button" x-show="status === 'deactivated'" @click.stop="reactivateListing()" :disabled="loading"
                                         class="px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
-                                        style="background:rgba(0,212,170,0.10); color:#00d4aa; border:1px solid rgba(0,212,170,0.25);"
+                                        style="background:rgba(0,212,170,0.10); color:var(--ds-green); border:1px solid rgba(0,212,170,0.25);"
                                         onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
                                     Reactivate
                                 </button>
@@ -624,19 +626,19 @@
                             <div x-show="enabled && ppRef && (status === 'active' || status === 'submitted')" x-cloak class="flex flex-wrap gap-2">
                                 <a :href="ppListingUrl()" target="_blank"
                                    class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold no-underline transition-opacity hover:opacity-85"
-                                   style="background:#00d4aa; color:#fff;">
+                                   style="background:var(--ds-green); color:#fff;">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
                                     View on PP
                                 </a>
                                 <button type="button" @click.stop="refreshListing()" :disabled="loading"
                                         class="px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
-                                        style="background:rgba(0,212,170,0.10); color:#00d4aa; border:1px solid rgba(0,212,170,0.25);"
+                                        style="background:rgba(0,212,170,0.10); color:var(--ds-green); border:1px solid rgba(0,212,170,0.25);"
                                         onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
                                     <span x-text="loading ? 'Syncing...' : 'Refresh'"></span>
                                 </button>
                                 <button type="button" @click.stop="deactivateListing()" :disabled="loading"
                                         class="px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
-                                        style="background:rgba(239,68,68,0.10); color:#ef4444; border:1px solid rgba(239,68,68,0.25);"
+                                        style="background:rgba(239,68,68,0.10); color:var(--ds-crimson); border:1px solid rgba(239,68,68,0.25);"
                                         onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
                                     Deactivate
                                 </button>
@@ -646,22 +648,22 @@
                             <div x-show="enabled && ppRef && status === 'deactivated'" x-cloak class="flex flex-wrap gap-2">
                                 <button type="button" @click.stop="reactivateListing()" :disabled="loading"
                                         class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
-                                        style="background:rgba(0,212,170,0.10); color:#00d4aa; border:1px solid rgba(0,212,170,0.25);"
+                                        style="background:rgba(0,212,170,0.10); color:var(--ds-green); border:1px solid rgba(0,212,170,0.25);"
                                         onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
                                     Reactivate
                                 </button>
                             </div>
 
                             {{-- Last submitted timestamp --}}
-                            <div x-show="lastSubmitted" x-cloak class="text-[10px]" style="color:var(--text-muted);">
+                            <div x-show="lastSubmitted" x-cloak class="text-[0.6875rem]" style="color:var(--text-muted);">
                                 Last submitted: <span x-text="lastSubmitted"></span>
                             </div>
 
                             {{-- Toast message (success only) --}}
                             <div x-show="message && messageType === 'success'" x-cloak
                                  x-transition
-                                 class="px-3 py-2 rounded-md text-[11px] font-medium"
-                                 style="background:rgba(0,212,170,0.10); color:#00d4aa; border:1px solid rgba(0,212,170,0.25);"
+                                 class="px-3 py-2 rounded-md text-xs font-medium"
+                                 style="background:rgba(0,212,170,0.10); color:var(--ds-green); border:1px solid rgba(0,212,170,0.25);"
                                  x-text="message"></div>
 
                             {{-- Debug error panel --}}
@@ -670,16 +672,16 @@
                                  class="rounded-md space-y-2"
                                  style="background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.25); padding:10px 12px;">
                                 <div class="flex items-center justify-between">
-                                    <p class="text-[11px] font-bold" style="color:#ef4444;">Submission Failed</p>
+                                    <p class="text-xs font-bold" style="color:var(--ds-crimson);">Submission Failed</p>
                                     <button type="button" @click.stop="showDebug = false; debugErrors = []"
-                                            class="text-[10px] px-1.5 py-0.5 rounded"
+                                            class="text-[0.6875rem] px-1.5 py-0.5 rounded"
                                             style="color:var(--text-muted); background:var(--surface-2);">
                                         Dismiss
                                     </button>
                                 </div>
                                 <ul class="space-y-1 m-0 pl-3" style="list-style:disc;">
                                     <template x-for="(err, i) in debugErrors" :key="i">
-                                        <li class="text-[11px] break-words" style="color:#f87171; word-break:break-word;"
+                                        <li class="text-xs break-words" style="color:#f87171; word-break:break-word;"
                                             x-text="err"></li>
                                     </template>
                                 </ul>
@@ -718,8 +720,8 @@
                         <div x-data="p24Syndication({{ Js::from($p24Config) }})" @click.stop class="space-y-3 mt-2">
                             {{-- P24 exclusive lock warning --}}
                             <div x-show="isPpExclusiveLocked()" x-cloak
-                                 class="rounded-md px-3 py-2 text-[11px] font-medium"
-                                 style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); color:#f59e0b;">
+                                 class="rounded-md px-3 py-2 text-xs font-medium"
+                                 style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); color:var(--ds-amber);">
                                 Cannot enable P24 syndication during PP exclusive period (until <span x-text="ppDelayUntil"></span>)
                             </div>
                             <div class="flex items-center justify-between gap-3 px-3 py-2 rounded-md"
@@ -735,26 +737,26 @@
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <div class="relative inline-flex h-5 w-9 flex-shrink-0 rounded-full transition-colors duration-200"
-                                         :style="enabled ? 'background:#3b82f6' : 'background:var(--surface-3,#374151)'"
+                                         :style="enabled ? 'background:#3b82f6' : 'background:var(--surface-3)'"
                                          role="switch" :aria-checked="enabled">
                                         <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-sm transition-transform duration-200"
                                               style="background:#fff; margin-top:2px;"
                                               :style="enabled ? 'transform:translateX(18px); margin-left:1px;' : 'transform:translateX(2px); margin-left:1px;'"></span>
                                     </div>
-                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide"
+                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[0.6875rem] font-bold uppercase tracking-wide"
                                           :style="statusBadgeStyle()" x-text="statusLabel()"></span>
                                 </div>
                             </div>
                             {{-- Status line --}}
-                            <div x-show="status && status !== ''" x-cloak class="text-[11px] px-1" style="color:var(--text-secondary);">
+                            <div x-show="status && status !== ''" x-cloak class="text-xs px-1" style="color:var(--text-secondary);">
                                 <template x-if="p24Ref"><span>P24 Ref: <strong x-text="p24Ref" style="color:var(--text-primary);"></strong> &mdash; <span x-text="statusLabel()"></span></span></template>
                                 <template x-if="!p24Ref && status === 'submitted'"><span>Submitted, awaiting activation...</span></template>
                                 <template x-if="!p24Ref && status === 'pending'"><span>Ready to submit</span></template>
-                                <template x-if="status === 'error'"><span style="color:#ef4444;" x-text="'Error: ' + lastError"></span></template>
+                                <template x-if="status === 'error'"><span style="color:var(--ds-crimson);" x-text="'Error: ' + lastError"></span></template>
                                 <template x-if="status === 'deactivated'"><span style="color:var(--text-muted);">Deactivated</span></template>
                             </div>
 
-                            <div x-show="enabled && !resolvedP24AgencyId" x-cloak class="text-[11px] px-1" style="color:#f59e0b;">
+                            <div x-show="enabled && !resolvedP24AgencyId" x-cloak class="text-xs px-1" style="color:var(--ds-amber);">
                                 No Property24 agency ID configured on branch or agency.
                             </div>
 
@@ -762,10 +764,10 @@
                             <div x-show="enabled && !p24Ref && missingFields.length > 0" x-cloak
                                  class="rounded-md px-3 py-2.5 space-y-1.5"
                                  style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25);">
-                                <p class="text-[11px] font-semibold" style="color:#f59e0b;">Cannot submit — missing required fields:</p>
+                                <p class="text-xs font-semibold" style="color:var(--ds-amber);">Cannot submit — missing required fields:</p>
                                 <ul class="space-y-0.5 m-0 pl-3" style="list-style:disc;">
                                     <template x-for="(f, idx) in missingFields" :key="idx">
-                                        <li class="text-[11px]" style="color:#f59e0b;" x-text="f.label"></li>
+                                        <li class="text-xs" style="color:var(--ds-amber);" x-text="f.label"></li>
                                     </template>
                                 </ul>
                             </div>
@@ -807,7 +809,7 @@
                                 </button>
                                 <button type="button" @click.stop="deactivateListing()" :disabled="loading"
                                         class="px-3 py-2 rounded-md text-xs font-semibold transition-opacity"
-                                        style="background:rgba(239,68,68,0.10); color:#ef4444; border:1px solid rgba(239,68,68,0.25);"
+                                        style="background:rgba(239,68,68,0.10); color:var(--ds-crimson); border:1px solid rgba(239,68,68,0.25);"
                                         onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
                                     Deactivate
                                 </button>
@@ -824,13 +826,13 @@
                             </div>
 
                             {{-- Last submitted timestamp --}}
-                            <div x-show="lastSubmitted" x-cloak class="text-[10px]" style="color:var(--text-muted);">
+                            <div x-show="lastSubmitted" x-cloak class="text-[0.6875rem]" style="color:var(--text-muted);">
                                 Last submitted: <span x-text="lastSubmitted"></span>
                             </div>
 
                             {{-- Toast message --}}
                             <div x-show="message && messageType === 'success'" x-cloak x-transition
-                                 class="px-3 py-2 rounded-md text-[11px] font-medium"
+                                 class="px-3 py-2 rounded-md text-xs font-medium"
                                  style="background:rgba(59,130,246,0.10); color:#3b82f6; border:1px solid rgba(59,130,246,0.25);"
                                  x-text="message"></div>
 
@@ -839,12 +841,12 @@
                                  class="rounded-md space-y-2"
                                  style="background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.25); padding:10px 12px;">
                                 <div class="flex items-center justify-between">
-                                    <p class="text-[11px] font-bold" style="color:#ef4444;">Submission Failed</p>
-                                    <button type="button" @click.stop="showDebug = false; debugErrors = []" class="text-[10px] px-1.5 py-0.5 rounded" style="color:var(--text-muted); background:var(--surface-2);">Dismiss</button>
+                                    <p class="text-xs font-bold" style="color:var(--ds-crimson);">Submission Failed</p>
+                                    <button type="button" @click.stop="showDebug = false; debugErrors = []" class="text-[0.6875rem] px-1.5 py-0.5 rounded" style="color:var(--text-muted); background:var(--surface-2);">Dismiss</button>
                                 </div>
                                 <ul class="space-y-1 m-0 pl-3" style="list-style:disc;">
                                     <template x-for="(err, i) in debugErrors" :key="i">
-                                        <li class="text-[11px] break-words" style="color:#f87171; word-break:break-word;" x-text="err"></li>
+                                        <li class="text-xs break-words" style="color:#f87171; word-break:break-word;" x-text="err"></li>
                                     </template>
                                 </ul>
                             </div>
@@ -868,8 +870,8 @@
                     <a href="{{ route('corex.properties.preview', [$property, \Illuminate\Support\Str::slug($property->title)]) }}?agent=me"
                        target="_blank"
                        class="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold no-underline"
-                       style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 8%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 20%, transparent);"
-                       onmouseover="this.style.background='color-mix(in srgb, var(--brand-icon,#0ea5e9) 18%, transparent)'" onmouseout="this.style.background='color-mix(in srgb, var(--brand-icon,#0ea5e9) 8%, transparent)'">
+                       style="background:color-mix(in srgb, var(--brand-icon) 8%, transparent); color:var(--brand-icon); border:1px solid color-mix(in srgb, var(--brand-icon) 20%, transparent);"
+                       onmouseover="this.style.background='color-mix(in srgb, var(--brand-icon) 18%, transparent)'" onmouseout="this.style.background='color-mix(in srgb, var(--brand-icon) 8%, transparent)'">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
                         Show my info
                     </a>
@@ -904,21 +906,21 @@
             <button type="button"
                     @click="activeTab = '{{ $tab['key'] }}'"
                     :class="activeTab === '{{ $tab['key'] }}' ? 'border-b-2 border-sky-500 bg-sky-500/5' : 'border-b-2 border-transparent'"
-                    :style="activeTab === '{{ $tab['key'] }}' ? 'color:var(--brand-icon,#0ea5e9);' : 'color:var(--text-secondary);'"
+                    :style="activeTab === '{{ $tab['key'] }}' ? 'color:var(--brand-icon);' : 'color:var(--text-secondary);'"
                     class="px-6 py-4 text-sm font-semibold whitespace-nowrap flex-shrink-0 transition-colors duration-150 outline-none focus:outline-none"
                     style="background:transparent;">
                 {{ $tab['label'] }}
                 @if(!$isNew && $tab['key'] === 'contacts' && $property->contacts->count())
-                <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded-full" style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 20%, transparent);color:var(--brand-icon,#0ea5e9);">{{ $property->contacts->count() }}</span>
+                <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded-full" style="background:color-mix(in srgb, var(--brand-icon) 20%, transparent);color:var(--brand-icon);">{{ $property->contacts->count() }}</span>
                 @endif
                 @if(!$isNew && $tab['key'] === 'notes' && $property->notes->count())
-                <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded-full" style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 20%, transparent);color:var(--brand-icon,#0ea5e9);">{{ $property->notes->count() }}</span>
+                <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded-full" style="background:color-mix(in srgb, var(--brand-icon) 20%, transparent);color:var(--brand-icon);">{{ $property->notes->count() }}</span>
                 @endif
                 @if(!$isNew && $tab['key'] === 'drive' && $allDriveDocs->count())
-                <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded-full" style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 20%, transparent);color:var(--brand-icon,#0ea5e9);">{{ $allDriveDocs->count() }}</span>
+                <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded-full" style="background:color-mix(in srgb, var(--brand-icon) 20%, transparent);color:var(--brand-icon);">{{ $allDriveDocs->count() }}</span>
                 @endif
                 @if(!$isNew && $tab['key'] === 'core-matches' && $coreMatches->count())
-                <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded-full" style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 20%, transparent);color:var(--brand-icon,#0ea5e9);">{{ $coreMatches->count() }}</span>
+                <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded-full" style="background:color-mix(in srgb, var(--brand-icon) 20%, transparent);color:var(--brand-icon);">{{ $coreMatches->count() }}</span>
                 @endif
             </button>
             @endforeach
@@ -1144,138 +1146,123 @@
 
 
         {{-- ── INFO TAB ───────────────────────────────────────────────────── --}}
-        <div x-show="activeTab === 'info'" {{ $isNew ? '' : 'x-cloak' }} class="p-6">
+        <div x-show="activeTab === 'info'" {{ $isNew ? '' : 'x-cloak' }} class="px-4 pb-4">
             <form id="prop-update-form" method="POST" enctype="multipart/form-data"
                   action="@if($isNew){{ route('corex.properties.store') }}@else{{ route('corex.properties.update', $property) }}@endif"
-                  class="space-y-6"
-                  novalidate>
+                  class="space-y-0"
+                  novalidate
+                  @input="formDirty = true"
+                  @change="formDirty = true"
+                  @submit="formDirty = false"
+                  x-data="{
+                      info: {
+                          identity: true,
+                          pricing:  true,
+                          property: true,
+                          mandate:  true,
+                          rental:   '{{ strtolower($property->listing_type ?? '') }}' === 'rental',
+                      },
+                      toggleAll(state) {
+                          for (const k of Object.keys(this.info)) this.info[k] = state;
+                      },
+                  }">
                 @csrf
                 @if(!$isNew) @method('PUT') @endif
 
                 {{-- Pre-linked contact from "Create Listing" on contact page --}}
                 @if($isNew && isset($preLinkedContact) && $preLinkedContact)
                 <input type="hidden" name="pending_contact_ids[]" value="{{ $preLinkedContact->id }}">
-                <div class="rounded-md px-4 py-3 flex items-center gap-3" style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 8%, transparent); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 20%, transparent);">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 flex-shrink-0" style="color:var(--brand-icon,#0ea5e9);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"/></svg>
-                    <span class="text-sm font-medium" style="color:var(--brand-icon,#0ea5e9);">
+                <div class="rounded-md px-4 py-3 flex items-center gap-3" style="background:color-mix(in srgb, var(--brand-icon) 8%, transparent); border:1px solid color-mix(in srgb, var(--brand-icon) 20%, transparent);">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 flex-shrink-0" style="color:var(--brand-icon);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"/></svg>
+                    <span class="text-sm font-medium" style="color:var(--brand-icon);">
                         Linking to: <strong>{{ $preLinkedContact->full_name }}</strong>
                     </span>
                 </div>
                 @endif
 
-                {{-- Classification --}}
-                <div>
-                    <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Classification</h3>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {{-- ── SECTION: IDENTITY ──────────────────────────────────── --}}
+                <section id="sec-identity" class="prop-section">
+                    <button type="button" class="prop-section-toggle" @click="info.identity = !info.identity">
+                        <h3 class="prop-section-heading"><span class="prop-section-heading-text">Identity</span></h3>
+                        <svg class="prop-section-chevron" :class="info.identity ? 'is-open' : ''" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+                    </button>
+                    <div x-show="info.identity" x-collapse class="prop-section-body space-y-4">
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Category</label>
-                            <select name="category" class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                                <option value="">— None —</option>
-                                @foreach($settingItems['categories'] as $item)
-                                <option value="{{ $item->name }}" {{ old('category', $property->category) === $item->name ? 'selected' : '' }}>
-                                    {{ $item->name }}
-                                </option>
-                                @endforeach
-                            </select>
+                            <label class="prop-label">Title <span class="prop-required">*</span></label>
+                            <input type="text" name="title" value="{{ old('title', $property->title) }}" required class="prop-input">
                         </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Property Type <span class="text-red-500">*</span></label>
-                            <select name="property_type" required class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                                <option value="">— None —</option>
-                                @foreach($settingItems['types'] as $item)
-                                <option value="{{ $item->name }}" {{ old('property_type', $property->property_type) === $item->name ? 'selected' : '' }}>
-                                    {{ $item->name }}
-                                </option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Property Status <span class="text-red-500">*</span></label>
-                            <select name="status" required class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                                <option value="">— None —</option>
-                                @foreach($settingItems['statuses'] as $item)
-                                @php $val = strtolower(str_replace(' ','_',$item->name)); @endphp
-                                <option value="{{ $val }}" {{ old('status', $property->status) === $val ? 'selected' : '' }}>
-                                    {{ $item->name }}
-                                </option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Mandate Type</label>
-                            <select name="mandate_type" class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                                <option value="">— None —</option>
-                                @foreach($settingItems['mandateTypes'] as $item)
-                                <option value="{{ $item->name }}" {{ old('mandate_type', $property->mandate_type) === $item->name ? 'selected' : '' }}>
-                                    {{ $item->name }}
-                                </option>
-                                @endforeach
-                            </select>
-                        </div>
-                        @if($isNew)
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Listing Type</label>
-                                <select name="listing_type" class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                                    <option value="sale" {{ old('listing_type', $property->listing_type ?? 'sale') === 'sale' ? 'selected' : '' }}>For Sale</option>
-                                    <option value="rental" {{ old('listing_type', $property->listing_type ?? 'sale') === 'rental' ? 'selected' : '' }}>For Rental</option>
+                                <label class="prop-label">Property Type <span class="prop-required">*</span></label>
+                                <select name="property_type" required class="prop-select prop-field-enum">
+                                    <option value="">— None —</option>
+                                    @foreach($settingItems['types'] as $item)
+                                        <option value="{{ $item->name }}" {{ old('property_type', $property->property_type) === $item->name ? 'selected' : '' }}>{{ $item->name }}</option>
+                                    @endforeach
                                 </select>
-                                <p class="mt-1 text-xs" style="color:var(--text-muted);">Once saved, this property is locked to the chosen type. To change it, duplicate the listing.</p>
                             </div>
-                        @else
-                            {{-- Locked after first save. Listing type is foundational — changing it after publish breaks portal feeds. Duplicate the listing to create the other type. --}}
-                            <input type="hidden" name="listing_type" value="{{ $property->listing_type }}">
-                        @endif
-                    </div>
-                </div>
-
-                {{-- Title --}}
-                <div>
-                    <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Listing Details</h3>
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Title <span class="text-red-500">*</span></label>
-                            <input type="text" name="title" value="{{ old('title', $property->title) }}" required
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                            <div>
+                                <label class="prop-label">Category</label>
+                                <select name="category" class="prop-select prop-field-enum">
+                                    <option value="">— None —</option>
+                                    @foreach($settingItems['categories'] as $item)
+                                        <option value="{{ $item->name }}" {{ old('category', $property->category) === $item->name ? 'selected' : '' }}>{{ $item->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div>
+                                <label class="prop-label">Listing Type</label>
+                                @if($isNew)
+                                    <select name="listing_type" class="prop-select prop-field-enum">
+                                        <option value="sale"   {{ old('listing_type', $property->listing_type ?? 'sale') === 'sale'   ? 'selected' : '' }}>For Sale</option>
+                                        <option value="rental" {{ old('listing_type', $property->listing_type ?? 'sale') === 'rental' ? 'selected' : '' }}>For Rental</option>
+                                    </select>
+                                    <p class="mt-1 text-xs" style="color:var(--text-muted);">Locked after first save. To change, duplicate the listing.</p>
+                                @else
+                                    <input type="hidden" name="listing_type" value="{{ $property->listing_type }}">
+                                    <input type="text" value="For {{ ucfirst($property->listing_type) }}" disabled class="prop-input prop-field-enum">
+                                    <p class="mt-1 text-xs" style="color:var(--text-muted);">Locked. Duplicate to change.</p>
+                                @endif
+                            </div>
                         </div>
-                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3" x-data="{ showPriceModal: false }">
+                    </div>
+                </section>
+                {{-- ── SECTION: PRICING ─────────────────────────────────── --}}
+                <section id="sec-pricing" class="prop-section">
+                    <button type="button" class="prop-section-toggle" @click="info.pricing = !info.pricing">
+                        <h3 class="prop-section-heading"><span class="prop-section-heading-text">Pricing &amp; Costs</span></h3>
+                        <svg class="prop-section-chevron" :class="info.pricing ? 'is-open' : ''" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+                    </button>
+                    <div x-show="info.pricing" x-collapse class="prop-section-body space-y-4">
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4" x-data="{ showPriceModal: false }">
                             <div class="relative">
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Price (ZAR) <span class="text-red-500">*</span></label>
-                                <div class="flex">
+                                <label class="prop-label">Price (ZAR) <span class="prop-required">*</span></label>
+                                <div class="flex prop-field-money">
                                     <input type="number" name="price" value="{{ old('price', $property->price) }}" required min="0"
-                                           class="w-full rounded-l-md px-3 py-2 text-sm"
-                                           style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); border-right:none;">
+                                           class="prop-input"
+                                           style="border-top-right-radius:0; border-bottom-right-radius:0; border-right:none;">
                                     <button type="button" @click="showPriceModal = true"
                                             class="px-2 rounded-r-md flex items-center justify-center transition-colors hover:opacity-80"
-                                            style="background:var(--brand-button, #0ea5e9); border:1px solid var(--brand-button, #0ea5e9);"
+                                            style="background:var(--brand-button); border:1px solid var(--brand-button);"
                                             title="Pricing details">
                                         <svg class="w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
                                     </button>
                                 </div>
                                 @if($property->price_on_application)
-                                <span class="text-[10px] mt-0.5 block font-medium" style="color:var(--brand-icon, #0ea5e9);">Price on Application</span>
+                                <span class="text-[0.6875rem] mt-0.5 block font-medium" style="color:var(--brand-icon);">Price on Application</span>
                                 @endif
                             </div>
                             <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Rates & Taxes</label>
-                                <input type="number" name="rates_taxes" value="{{ old('rates_taxes', $property->rates_taxes) }}" min="0"
-                                       placeholder="—"
-                                       class="w-full rounded-md px-3 py-2 text-sm"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                <label class="prop-label">Rates &amp; Taxes</label>
+                                <input type="number" name="rates_taxes" value="{{ old('rates_taxes', $property->rates_taxes) }}" min="0" placeholder="—" class="prop-input prop-field-money">
                             </div>
                             <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Levy</label>
-                                <input type="number" name="levy" value="{{ old('levy', $property->levy) }}" min="0"
-                                       placeholder="—"
-                                       class="w-full rounded-md px-3 py-2 text-sm"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                <label class="prop-label">Levy</label>
+                                <input type="number" name="levy" value="{{ old('levy', $property->levy) }}" min="0" placeholder="—" class="prop-input prop-field-money">
                             </div>
                             <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Special Levy</label>
-                                <input type="number" name="special_levy" value="{{ old('special_levy', $property->special_levy) }}" min="0"
-                                       placeholder="—"
-                                       class="w-full rounded-md px-3 py-2 text-sm"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                <label class="prop-label">Special Levy</label>
+                                <input type="number" name="special_levy" value="{{ old('special_levy', $property->special_levy) }}" min="0" placeholder="—" class="prop-input prop-field-money">
                             </div>
 
                             {{-- Price Details Modal --}}
@@ -1351,7 +1338,7 @@
                                                 <span class="text-xs font-medium tabular-nums" style="color:var(--text-muted);">
                                                     @if($property->price && $property->size_m2 && $property->size_m2 > 0)
                                                         R {{ number_format($property->price / $property->size_m2, 2, '.', ',') }}
-                                                        <span class="text-[10px] opacity-60">(auto)</span>
+                                                        <span class="text-[0.6875rem] opacity-60">(auto)</span>
                                                     @else
                                                         —
                                                     @endif
@@ -1424,7 +1411,7 @@
                                         <div class="px-5 py-3 flex justify-end" style="background:var(--surface-2); border-top:1px solid var(--border);">
                                             <button type="button" @click="showPriceModal = false"
                                                     class="px-4 py-2 rounded-md text-xs font-semibold text-white transition-opacity hover:opacity-80"
-                                                    style="background:var(--brand-button, #0ea5e9);">
+                                                    style="background:var(--brand-button);">
                                                 Done
                                             </button>
                                         </div>
@@ -1432,20 +1419,29 @@
                                 </div>
                             </template>
                         </div>
-
-                        <div class="grid grid-cols-3 gap-3">
-                            @foreach([['garages','Garages'],['size_m2','Floor m²'],['erf_size_m2','Erf m²']] as [$n,$lbl])
-                            <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">{{ $lbl }}</label>
-                                <input type="number" name="{{ $n }}" value="{{ old($n, $property->$n ?? '') }}" min="0"
-                                       {{ $n === 'garages' ? 'required max=20' : 'placeholder=—' }}
-                                       class="w-full rounded-md px-3 py-2 text-sm text-center"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                            </div>
-                            @endforeach
-                        </div>
                     </div>
-                </div>
+                </section>
+
+                {{-- ── SECTION: PROPERTY ────────────────────────────────── --}}
+                <section id="sec-property" class="prop-section">
+                    <button type="button" class="prop-section-toggle" @click="info.property = !info.property">
+                        <h3 class="prop-section-heading"><span class="prop-section-heading-text">Property Details</span></h3>
+                        <svg class="prop-section-chevron" :class="info.property ? 'is-open' : ''" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+                    </button>
+                    <div x-show="info.property" x-collapse class="prop-section-body space-y-5">
+                        <div>
+                            <p class="prop-subsection-heading">Sizes</p>
+                            <div class="flex flex-wrap gap-4">
+                                @foreach([['garages','Garages','prop-field-count'],['size_m2','Floor m²','prop-field-m2'],['erf_size_m2','Erf m²','prop-field-m2']] as [$n,$lbl,$cls])
+                                    <div>
+                                        <label class="prop-label">{{ $lbl }}</label>
+                                        <input type="number" name="{{ $n }}" value="{{ old($n, $property->$n ?? '') }}" min="0"
+                                               {!! $n === 'garages' ? 'required max=20' : 'placeholder="—"' !!}
+                                               class="prop-input {{ $cls }}">
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
 
                 {{-- Spaces & Features --}}
                 @php
@@ -1465,19 +1461,28 @@
                     <input type="hidden" name="spaces_json" :value="spacesJsonStr">
 
                     {{-- ── SPACES ────────────────────────────────────────────── --}}
-                    <div>
+                    <div x-data="{ spacesInfoOpen: false }">
                         <div class="flex items-center mb-1.5">
                             <span class="text-xs font-semibold" style="color:var(--text-secondary);">Spaces:</span>
-                            <div class="ml-auto flex items-center gap-0.5">
-                                <button type="button" title="Search spaces" class="w-6 h-6 rounded flex items-center justify-center transition-colors" style="color:var(--text-muted);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35" stroke-linecap="round"/></svg>
+                            <div class="ml-auto relative">
+                                <button type="button"
+                                        @click="spacesInfoOpen = !spacesInfoOpen"
+                                        title="How Spaces work"
+                                        class="w-6 h-6 rounded flex items-center justify-center transition-colors"
+                                        style="color:var(--text-muted);"
+                                        onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                 </button>
-                                <button type="button" title="Click any tile to edit its details" class="w-6 h-6 rounded flex items-center justify-center transition-colors" style="color:var(--text-muted);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                </button>
-                                <button type="button" @click="addSpaceOpen = true" title="Add space" class="w-6 h-6 rounded flex items-center justify-center transition-colors" style="color:var(--text-muted);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8v8M8 12h8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                </button>
+                                <div x-show="spacesInfoOpen" x-cloak
+                                     @click.outside="spacesInfoOpen = false"
+                                     class="absolute right-0 top-7 z-20 w-72 rounded-md p-3 shadow-lg"
+                                     style="background:var(--surface); border:1px solid var(--border);"
+                                     x-transition.opacity>
+                                    <p class="text-xs font-bold mb-1.5" style="color:var(--text-primary);">How Spaces work</p>
+                                    <p class="text-xs leading-relaxed" style="color:var(--text-secondary);">
+                                        Spaces are the rooms and areas of the property — bedrooms, bathrooms, garages, etc. Click a tile to set the count and add per-room features (e.g. en-suite on bedroom 1). Use the <span style="color:var(--text-primary); font-weight:600;">Add</span> tile at the end of the row to add a new space type. Counts on the tiles drive the at-a-glance stats on the Overview tab.
+                                    </p>
+                                </div>
                             </div>
                         </div>
 
@@ -1489,17 +1494,17 @@
                                             class="flex flex-col items-center justify-center gap-2 px-4 py-4 transition-all cursor-pointer"
                                             style="flex:1 0 110px; border-right:1px solid var(--border);"
                                             :style="(idx === modalSpaceIdx && modalOpen)
-                                                ? 'background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 6%, transparent); border-bottom:2px solid var(--brand-icon,#0ea5e9);'
+                                                ? 'background:color-mix(in srgb, var(--brand-icon) 6%, transparent); border-bottom:2px solid var(--brand-icon);'
                                                 : 'background:var(--surface); border-bottom:2px solid transparent;'">
                                         <div class="flex items-center gap-2">
                                             <span class="w-7 h-7 flex items-center justify-center flex-shrink-0"
-                                                  :style="(idx === modalSpaceIdx && modalOpen) ? 'color:var(--brand-icon,#0ea5e9);' : 'color:var(--text-secondary);'"
+                                                  :style="(idx === modalSpaceIdx && modalOpen) ? 'color:var(--brand-icon);' : 'color:var(--text-secondary);'"
                                                   x-html="getSpaceIconSvg(space.type)"></span>
                                             <span class="text-xl font-bold tabular-nums leading-none"
-                                                  :style="(idx === modalSpaceIdx && modalOpen) ? 'color:var(--brand-icon,#0ea5e9);' : 'color:var(--text-primary);'"
+                                                  :style="(idx === modalSpaceIdx && modalOpen) ? 'color:var(--brand-icon);' : 'color:var(--text-primary);'"
                                                   x-text="formatCount(space.count)"></span>
                                         </div>
-                                        <span class="text-[11px] font-medium text-center leading-tight"
+                                        <span class="text-xs font-medium text-center leading-tight"
                                               style="color:var(--text-muted); max-width:100px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
                                               x-text="space.type"></span>
                                     </button>
@@ -1510,7 +1515,7 @@
                                         @click="addSpaceOpen = true"
                                         class="flex flex-col items-center justify-center gap-2 px-4 py-4 transition-all cursor-pointer"
                                         style="flex:1 0 80px; border-left:1px solid var(--border); background:var(--surface);"
-                                        onmouseover="this.style.background='color-mix(in srgb, var(--brand-icon,#0ea5e9) 4%, transparent)'"
+                                        onmouseover="this.style.background='color-mix(in srgb, var(--brand-icon) 4%, transparent)'"
                                         onmouseout="this.style.background='var(--surface)'">
                                     <div class="flex items-center gap-2">
                                         <span class="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
@@ -1518,26 +1523,35 @@
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
                                         </span>
                                     </div>
-                                    <span class="text-[11px] font-medium" style="color:var(--text-muted);">Add</span>
+                                    <span class="text-xs font-medium" style="color:var(--text-muted);">Add</span>
                                 </button>
                             </div>
                         </div>
                     </div>
 
                     {{-- ── FEATURES SECTION ──────────────────────────────────── --}}
-                    <div class="mt-4">
+                    <div class="mt-4" x-data="{ featuresInfoOpen: false }">
                         <div class="flex items-center mb-1.5">
                             <span class="text-xs font-semibold" style="color:var(--text-secondary);">Features:</span>
-                            <div class="ml-auto flex items-center gap-0.5">
-                                <button type="button" title="Search features" class="w-6 h-6 rounded flex items-center justify-center transition-colors" style="color:var(--text-muted);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35" stroke-linecap="round"/></svg>
+                            <div class="ml-auto relative">
+                                <button type="button"
+                                        @click="featuresInfoOpen = !featuresInfoOpen"
+                                        title="How Features work"
+                                        class="w-6 h-6 rounded flex items-center justify-center transition-colors"
+                                        style="color:var(--text-muted);"
+                                        onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                 </button>
-                                <button type="button" title="Help" class="w-6 h-6 rounded flex items-center justify-center transition-colors" style="color:var(--text-muted);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                </button>
-                                <button type="button" title="Add feature category" class="w-6 h-6 rounded flex items-center justify-center transition-colors" style="color:var(--text-muted);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8v8M8 12h8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                </button>
+                                <div x-show="featuresInfoOpen" x-cloak
+                                     @click.outside="featuresInfoOpen = false"
+                                     class="absolute right-0 top-7 z-20 w-72 rounded-md p-3 shadow-lg"
+                                     style="background:var(--surface); border:1px solid var(--border);"
+                                     x-transition.opacity>
+                                    <p class="text-xs font-bold mb-1.5" style="color:var(--text-primary);">How Features work</p>
+                                    <p class="text-xs leading-relaxed" style="color:var(--text-secondary);">
+                                        Features are property-wide amenities — pool, security, fibre, sea view, etc. Pick a category tab (Outdoor, Security, Connectivity…) and click any chip to toggle it on. Selected features appear in the <span style="color:var(--text-primary); font-weight:600;">Feature Summary</span> below and feed into portal listings (P24, Private Property) and the public website. Click a chip in the summary to remove it.
+                                    </p>
+                                </div>
                             </div>
                         </div>
 
@@ -1549,15 +1563,15 @@
                                             class="relative flex flex-col items-center gap-1 px-4 py-3 transition-all cursor-pointer"
                                             style="flex:1; border-right:1px solid var(--border);"
                                             :style="featureCategoryTab === catKey
-                                                ? 'background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 5%, transparent); border-bottom:2px solid var(--brand-icon,#0ea5e9);'
+                                                ? 'background:color-mix(in srgb, var(--brand-icon) 5%, transparent); border-bottom:2px solid var(--brand-icon);'
                                                 : 'background:var(--surface); border-bottom:2px solid transparent;'">
                                         <span class="w-7 h-7 flex items-center justify-center" x-html="getFeatureCatIconSvg(catKey)"></span>
-                                        <span class="text-[11px] font-medium"
-                                              :style="featureCategoryTab === catKey ? 'color:var(--brand-icon,#0ea5e9);' : 'color:var(--text-secondary);'"
+                                        <span class="text-xs font-medium"
+                                              :style="featureCategoryTab === catKey ? 'color:var(--brand-icon);' : 'color:var(--text-secondary);'"
                                               x-text="catDef.label"></span>
                                         <span x-show="features[catKey] && features[catKey].length > 0"
-                                              class="absolute top-1 right-1.5 text-[9px] px-1 rounded-full font-bold leading-tight"
-                                              style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 18%, transparent); color:var(--brand-icon,#0ea5e9); min-width:14px; text-align:center;"
+                                              class="absolute top-1 right-1.5 text-[0.6875rem] px-1 rounded-full font-bold leading-tight"
+                                              style="background:color-mix(in srgb, var(--brand-icon) 18%, transparent); color:var(--brand-icon); min-width:14px; text-align:center;"
                                               x-text="features[catKey].length"></span>
                                     </button>
                                 </template>
@@ -1565,7 +1579,7 @@
                                         class="flex flex-col items-center gap-1 px-4 py-3 opacity-40 cursor-not-allowed"
                                         style="flex:1; background:var(--surface);">
                                     <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="color:var(--text-muted);"><circle cx="12" cy="12" r="9" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8v8M8 12h8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                    <span class="text-[11px] font-medium" style="color:var(--text-muted);">Add</span>
+                                    <span class="text-xs font-medium" style="color:var(--text-muted);">Add</span>
                                 </button>
                             </div>
 
@@ -1575,7 +1589,7 @@
                                             @click="toggleGlobalFeature(featureCategoryTab, feat)"
                                             class="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full transition-colors"
                                             :style="features[featureCategoryTab] && features[featureCategoryTab].includes(feat)
-                                                ? 'background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 15%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 35%, transparent);'
+                                                ? 'background:color-mix(in srgb, var(--brand-icon) 15%, transparent); color:var(--brand-icon); border:1px solid color-mix(in srgb, var(--brand-icon) 35%, transparent);'
                                                 : 'background:var(--surface); color:var(--text-secondary); border:1px solid var(--border);'">
                                         <span x-text="feat"></span>
                                         <svg x-show="features[featureCategoryTab] && features[featureCategoryTab].includes(feat)"
@@ -1600,7 +1614,7 @@
                                 <button type="button"
                                         @click="removeFeatureByName(feat)"
                                         class="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium transition-opacity hover:opacity-75 cursor-pointer"
-                                        style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 10%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 20%, transparent);">
+                                        style="background:color-mix(in srgb, var(--brand-icon) 10%, transparent); color:var(--brand-icon); border:1px solid color-mix(in srgb, var(--brand-icon) 20%, transparent);">
                                     <span x-text="feat"></span>
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                                 </button>
@@ -1649,13 +1663,13 @@
                                                 <template x-if="supportsHalf(currentSpace.type)">
                                                     <button type="button" @click="toggleHalf(modalSpaceIdx)"
                                                             class="text-xs px-2.5 py-1.5 rounded-md font-semibold"
-                                                            style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 10%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 25%, transparent);">
+                                                            style="background:color-mix(in srgb, var(--brand-icon) 10%, transparent); color:var(--brand-icon); border:1px solid color-mix(in srgb, var(--brand-icon) 25%, transparent);">
                                                         ½ Toggle
                                                     </button>
                                                 </template>
                                             </div>
                                             <template x-if="supportsHalf(currentSpace.type)">
-                                                <p class="text-[11px] mt-1.5" style="color:var(--text-muted);">
+                                                <p class="text-xs mt-1.5" style="color:var(--text-muted);">
                                                     Supports half units (e.g. ½ bathroom = toilet only). Click ½ Toggle to add/remove.
                                                 </p>
                                             </template>
@@ -1666,7 +1680,7 @@
                                             <div class="space-y-4">
                                                 <div class="flex items-center gap-2">
                                                     <button type="button" @click="featurePickerOpen = false"
-                                                            class="flex items-center gap-1 text-xs font-semibold" style="color:var(--brand-icon,#0ea5e9);">
+                                                            class="flex items-center gap-1 text-xs font-semibold" style="color:var(--brand-icon);">
                                                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"/></svg>
                                                         Back
                                                     </button>
@@ -1677,14 +1691,14 @@
                                                 </div>
                                                 <template x-for="[group, items] in Object.entries(getSpaceFeatures(currentSpace.type))" :key="group">
                                                     <div>
-                                                        <h4 class="text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:var(--text-muted);" x-text="group"></h4>
+                                                        <h4 class="text-[0.6875rem] font-bold uppercase tracking-wider mb-1.5" style="color:var(--text-muted);" x-text="group"></h4>
                                                         <div class="flex flex-wrap gap-1.5">
                                                             <template x-for="item in items" :key="item">
                                                                 <button type="button"
                                                                         @click="togglePickerFeature(item)"
                                                                         class="text-xs px-2.5 py-1 rounded-full transition-colors"
                                                                         :style="isPickerFeatureSelected(item)
-                                                                            ? 'background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 15%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 40%, transparent);'
+                                                                            ? 'background:color-mix(in srgb, var(--brand-icon) 15%, transparent); color:var(--brand-icon); border:1px solid color-mix(in srgb, var(--brand-icon) 40%, transparent);'
                                                                             : 'background:var(--surface-2); color:var(--text-secondary); border:1px solid var(--border);'"
                                                                         x-text="item">
                                                                 </button>
@@ -1706,7 +1720,7 @@
                                                                x-text="'Features of all ' + currentSpace.type + 's'"></label>
                                                         <button type="button" @click="openFeaturePicker('all')"
                                                                 class="text-xs px-2.5 py-1 rounded-md font-semibold"
-                                                                style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 10%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 25%, transparent);">
+                                                                style="background:color-mix(in srgb, var(--brand-icon) 10%, transparent); color:var(--brand-icon); border:1px solid color-mix(in srgb, var(--brand-icon) 25%, transparent);">
                                                             + Add Feature
                                                         </button>
                                                     </div>
@@ -1714,10 +1728,10 @@
                                                          style="background:var(--surface-2); border:1px solid var(--border);">
                                                         <template x-for="(feat, fi) in currentSpace.featuresAll" :key="feat + fi">
                                                             <span class="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full"
-                                                                  style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 10%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 20%, transparent);">
+                                                                  style="background:color-mix(in srgb, var(--brand-icon) 10%, transparent); color:var(--brand-icon); border:1px solid color-mix(in srgb, var(--brand-icon) 20%, transparent);">
                                                                 <span x-text="feat"></span>
                                                                 <button type="button" @click="removeSpaceFeature(modalSpaceIdx,'all',fi)"
-                                                                        class="font-bold hover:text-red-400 leading-none">×</button>
+                                                                        class="font-bold hover:opacity-70 leading-none">×</button>
                                                             </span>
                                                         </template>
                                                         <span x-show="currentSpace.featuresAll.length === 0"
@@ -1748,14 +1762,14 @@
                                                                        style="background:transparent; border:1px solid var(--border); color:var(--text-primary);">
                                                                 <button type="button" @click="openFeaturePicker(ui)"
                                                                         class="text-xs px-2 py-0.5 rounded-md flex-shrink-0"
-                                                                        style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 10%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 20%, transparent);">
+                                                                        style="background:color-mix(in srgb, var(--brand-icon) 10%, transparent); color:var(--brand-icon); border:1px solid color-mix(in srgb, var(--brand-icon) 20%, transparent);">
                                                                     + Feature
                                                                 </button>
                                                                 <template x-if="ui < currentSpace.units.length - 1">
                                                                     <button type="button" @click="copyFeaturesDown(modalSpaceIdx, ui)"
                                                                             title="Copy these features to all units below"
                                                                             class="text-xs px-2 py-0.5 rounded-md flex-shrink-0"
-                                                                            style="background:rgba(99,102,241,0.1); color:#818cf8; border:1px solid rgba(99,102,241,0.2);">
+                                                                            style="background:color-mix(in srgb, var(--brand-icon) 10%, transparent); color:var(--brand-icon); border:1px solid color-mix(in srgb, var(--brand-icon) 20%, transparent);">
                                                                         Copy ↓
                                                                     </button>
                                                                 </template>
@@ -1763,10 +1777,10 @@
                                                             <div class="flex flex-wrap gap-1">
                                                                 <template x-for="(feat, fi) in unit.features" :key="feat + fi">
                                                                     <span class="inline-flex items-center gap-0.5 text-xs px-2 py-0.5 rounded-full"
-                                                                          style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 10%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 20%, transparent);">
+                                                                          style="background:color-mix(in srgb, var(--brand-icon) 10%, transparent); color:var(--brand-icon); border:1px solid color-mix(in srgb, var(--brand-icon) 20%, transparent);">
                                                                         <span x-text="feat"></span>
                                                                         <button type="button" @click="removeSpaceFeature(modalSpaceIdx,ui,fi)"
-                                                                                class="font-bold hover:text-red-400 leading-none text-xs">×</button>
+                                                                                class="font-bold hover:opacity-70 leading-none text-xs">×</button>
                                                                     </span>
                                                                 </template>
                                                                 <span x-show="unit.features.length === 0"
@@ -1787,14 +1801,14 @@
                             <div class="flex items-center justify-between px-5 py-4" style="border-top:1px solid var(--border);">
                                 <button type="button" @click="deleteSpace(modalSpaceIdx)"
                                         class="flex items-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-md transition-colors"
-                                        style="color:#ef4444;"
+                                        style="color:var(--ds-crimson);"
                                         onmouseover="this.style.background='rgba(239,68,68,0.08)'" onmouseout="this.style.background='transparent'">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.021-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/></svg>
                                     Remove Space
                                 </button>
                                 <button type="button" @click="featurePickerOpen ? featurePickerOpen=false : closeModal()"
                                         class="flex items-center gap-1.5 text-sm font-semibold text-white px-4 py-2 rounded-md"
-                                        style="background:#22c55e;">
+                                        style="background:var(--ds-green);">
                                     <template x-if="featurePickerOpen">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"/></svg>
                                     </template>
@@ -1830,11 +1844,11 @@
                                                 @click="addSpace(type)"
                                                 class="flex flex-col items-center gap-1 p-2.5 rounded-md transition-colors"
                                                 :style="hasSpace(type)
-                                                    ? 'background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 10%, transparent); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 30%, transparent); color:var(--brand-icon,#0ea5e9);'
+                                                    ? 'background:color-mix(in srgb, var(--brand-icon) 10%, transparent); border:1px solid color-mix(in srgb, var(--brand-icon) 30%, transparent); color:var(--brand-icon);'
                                                     : 'background:var(--surface-2); border:1px solid var(--border); color:var(--text-secondary);'">
                                             <span class="w-5 h-5 flex items-center justify-center flex-shrink-0" x-html="getSpaceIconSvg(type)"></span>
-                                            <span class="text-[10px] text-center leading-tight" x-text="type"></span>
-                                            <span x-show="hasSpace(type)" class="text-[9px] font-bold" style="color:var(--brand-icon,#0ea5e9);">Added ✓</span>
+                                            <span class="text-[0.6875rem] text-center leading-tight" x-text="type"></span>
+                                            <span x-show="hasSpace(type)" class="text-[0.6875rem] font-bold" style="color:var(--brand-icon);">Added ✓</span>
                                         </button>
                                     </template>
                                 </div>
@@ -1844,25 +1858,10 @@
 
                 </div>{{-- /spacesAndFeaturesManager --}}
 
-                {{-- Description --}}
+                {{-- Description / marketing copy (still inside Property section) --}}
                 <div>
-                    <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Description</h3>
-                    <div class="space-y-3">
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Excerpt <span class="text-xs font-normal" style="color:var(--text-muted);">(max 500 chars)</span></label>
-                            <textarea name="excerpt" rows="2"
-                                      class="w-full rounded-md px-3 py-2 text-sm"
-                                      style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);"
-                                      placeholder="Short summary shown in search results...">{{ old('excerpt', $property->excerpt) }}</textarea>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Full Description</label>
-                            <textarea name="description" rows="6"
-                                      class="w-full rounded-md px-3 py-2 text-sm"
-                                      style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);"
-                                      placeholder="Full property description...">{{ old('description', $property->description) }}</textarea>
-                        </div>
-                    </div>
+                    <p class="prop-subsection-heading">Description</p>
+                    <textarea name="description" rows="6" class="prop-textarea" placeholder="Full property description...">{{ old('description', $property->description) }}</textarea>
                 </div>
 
                 {{-- Property Address --}}
@@ -1879,7 +1878,7 @@
                     'hideComplexName' => (bool) old('pp_hide_complex_name', $property->pp_hide_complex_name ?? false),
                     'hideUnitNumber' => (bool) old('pp_hide_unit_number', $property->pp_hide_unit_number ?? false),
                 ]) }})">
-                    <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Property Address</h3>
+                    <p class="prop-subsection-heading">Address</p>
 
                     {{-- Summary rows — Internal & Public --}}
                     <div class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
@@ -1889,8 +1888,8 @@
                              @click="openModal = 'internal'"
                              @mouseenter="$el.style.background='var(--surface-2)'" @mouseleave="$el.style.background=''">
                             <div class="px-3 py-2.5 flex items-center gap-1.5 flex-shrink-0" style="width:100px;">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" style="color:#c97a2e;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-                                <span class="text-xs font-semibold" style="color:#c97a2e;">Internal</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" style="color:var(--ds-amber);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                                <span class="text-xs font-semibold" style="color:var(--ds-amber);">Internal</span>
                             </div>
                             <div class="flex-1 px-3 py-2.5 text-right text-xs truncate" style="color:var(--text-primary);" x-text="internalAddress || 'Click to set address'"></div>
                         </div>
@@ -1899,8 +1898,8 @@
                              @click="openModal = 'public'"
                              @mouseenter="$el.style.background='var(--surface-2)'" @mouseleave="$el.style.background=''">
                             <div class="px-3 py-2.5 flex items-center gap-1.5 flex-shrink-0" style="width:100px;">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" style="color:#c93434;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418"/></svg>
-                                <span class="text-xs font-semibold" style="color:#c93434;">Public</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" style="color:var(--brand-icon);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418"/></svg>
+                                <span class="text-xs font-semibold" style="color:var(--brand-icon);">Public</span>
                             </div>
                             <div class="flex-1 px-3 py-2.5 text-right text-xs truncate" style="color:var(--text-primary);" x-text="publicAddress || 'Click to configure'"></div>
                         </div>
@@ -1918,9 +1917,9 @@
                              style="background:var(--surface); border:1px solid var(--border);" @click.stop>
 
                             <div class="sticky top-0 z-10 flex items-center justify-between px-5 py-3 rounded-t-lg"
-                                 style="background:var(--brand-default,#0b2a4a); color:#fff;">
+                                 style="background:var(--brand-default); color:#fff;">
                                 <div class="flex items-center gap-2">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" style="color:#c97a2e;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" style="color:var(--ds-amber);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
                                     <span class="text-sm font-bold">Internal Address</span>
                                 </div>
                                 <button type="button" @click="openModal = null" class="p-1 rounded hover:bg-white/10">
@@ -1931,24 +1930,24 @@
                             <div class="p-5 space-y-5">
                                 {{-- Complex or Estate --}}
                                 <div>
-                                    <div class="text-[10px] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default,#0b2a4a); color:#fff;">Complex or Estate</div>
+                                    <div class="text-[0.6875rem] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default); color:#fff;">Complex or Estate</div>
                                     <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
                                         <div class="grid grid-cols-2 gap-3">
                                             <div>
-                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Unit Number</label>
+                                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Unit Number</label>
                                                 <input type="text" name="unit_number" x-model="unitNumber" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                             </div>
                                             <div>
-                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Floor Number</label>
+                                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Floor Number</label>
                                                 <input type="text" name="floor_number" value="{{ old('floor_number', $property->floor_number) }}" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                             </div>
                                         </div>
                                         <div>
-                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Name of Unit, Section or Block</label>
+                                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Name of Unit, Section or Block</label>
                                             <input type="text" name="unit_section_block" value="{{ old('unit_section_block', $property->unit_section_block) }}" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
                                         <div>
-                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Name of Complex or Estate</label>
+                                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Name of Complex or Estate</label>
                                             <input type="text" name="complex_name" x-model="complexName" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
                                     </div>
@@ -1956,14 +1955,14 @@
 
                                 {{-- Street --}}
                                 <div>
-                                    <div class="text-[10px] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default,#0b2a4a); color:#fff;">Street</div>
+                                    <div class="text-[0.6875rem] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default); color:#fff;">Street</div>
                                     <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
                                         <div>
-                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Street Number</label>
+                                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Street Number</label>
                                             <input type="text" name="street_number" x-model="streetNumber" placeholder="e.g. 1046-2" class="w-40 rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
                                         <div>
-                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Street Name</label>
+                                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Street Name</label>
                                             <input type="text" name="street_name" x-model="streetName" placeholder="e.g. Clarendon Road" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
                                     </div>
@@ -1971,19 +1970,19 @@
 
                                 {{-- City or Suburb --}}
                                 <div>
-                                    <div class="text-[10px] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default,#0b2a4a); color:#fff;">City or Suburb</div>
+                                    <div class="text-[0.6875rem] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default); color:#fff;">City or Suburb</div>
                                     <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
                                         <div>
-                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Suburb <span class="text-red-500">*</span></label>
+                                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Suburb <span class="prop-required">*</span></label>
                                             <input type="text" name="suburb" x-model="suburb" required placeholder="e.g. Uvongo Beach" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
                                         <div class="grid grid-cols-2 gap-3">
                                             <div>
-                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">City / Town</label>
+                                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">City / Town</label>
                                                 <input type="text" name="city" x-model="city" placeholder="e.g. Margate" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                             </div>
                                             <div>
-                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Province</label>
+                                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Province</label>
                                                 <select name="province" x-model="province" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                                     @foreach(['KwaZulu-Natal','Gauteng','Western Cape','Eastern Cape','Free State','Limpopo','Mpumalanga','North West','Northern Cape'] as $prov)
                                                     <option value="{{ $prov }}">{{ $prov }}</option>
@@ -1996,21 +1995,21 @@
 
                                 {{-- More Info --}}
                                 <div>
-                                    <div class="text-[10px] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default,#0b2a4a); color:#fff;">More Info</div>
+                                    <div class="text-[0.6875rem] font-bold uppercase tracking-wider text-center py-1.5 rounded-t-md" style="background:var(--brand-default); color:#fff;">More Info</div>
                                     <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
                                         <div class="grid grid-cols-2 gap-3">
                                             <div>
-                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Property / Erf Number</label>
+                                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Property / Erf Number</label>
                                                 <input type="text" name="property_number" value="{{ old('property_number', $property->property_number) }}" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                             </div>
                                             <div>
-                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Stand Number</label>
+                                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Stand Number</label>
                                                 <input type="text" name="stand_number" value="{{ old('stand_number', $property->stand_number) }}" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                             </div>
                                         </div>
                                         <div class="grid grid-cols-2 gap-3">
                                             <div>
-                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Zone Type</label>
+                                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Zone Type</label>
                                                 <select name="zone_type" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                                     <option value="">-- None --</option>
                                                     @foreach(['Residential','Commercial','Industrial','Agricultural','Mixed Use'] as $zt)
@@ -2019,16 +2018,16 @@
                                                 </select>
                                             </div>
                                             <div>
-                                                <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">District / Municipality</label>
+                                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">District / Municipality</label>
                                                 <input type="text" name="district" value="{{ old('district', $property->district) }}" placeholder="e.g. Ray Nkonyeni" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                             </div>
                                         </div>
                                         <div>
-                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Region</label>
+                                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Region</label>
                                             <input type="text" name="region" value="{{ old('region', $property->region) }}" placeholder="KZN South Coast" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
                                         <div>
-                                            <label class="block text-[11px] font-semibold mb-1" style="color:var(--text-secondary);">Internal Note</label>
+                                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Internal Note</label>
                                             <textarea name="address_internal_note" rows="2" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">{{ old('address_internal_note', $property->address_internal_note) }}</textarea>
                                         </div>
                                     </div>
@@ -2036,7 +2035,7 @@
                             </div>
 
                             <div class="sticky bottom-0 px-5 py-3 rounded-b-lg flex justify-end" style="background:var(--surface); border-top:1px solid var(--border);">
-                                <button type="button" @click="openModal = null" class="px-4 py-2 rounded-md text-xs font-semibold text-white" style="background:#00d4aa;">Done</button>
+                                <button type="button" @click="openModal = null" class="px-4 py-2 rounded-md text-xs font-semibold text-white" style="background:var(--ds-green);">Done</button>
                             </div>
                         </div>
                     </div>
@@ -2050,7 +2049,7 @@
                              style="background:var(--surface); border:1px solid var(--border);" @click.stop>
 
                             <div class="sticky top-0 z-10 flex items-center justify-between px-5 py-3 rounded-t-lg"
-                                 style="background:#c93434; color:#fff;">
+                                 style="background:var(--brand-icon); color:#fff;">
                                 <div class="flex items-center gap-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3"/></svg>
                                     <span class="text-sm font-bold">Public Address &mdash; Portal Feeds</span>
@@ -2061,13 +2060,13 @@
                             </div>
 
                             <div class="p-5 space-y-5">
-                                <p class="text-[11px]" style="color:var(--text-muted);">
+                                <p class="text-xs" style="color:var(--text-muted);">
                                     This controls what is shown on portal feeds (Private Property, Property24, website). Unchecked fields are <strong>hidden</strong> from the public.
                                 </p>
 
                                 {{-- Public preview --}}
                                 <div class="rounded-md px-4 py-3" style="background:var(--surface-2); border:1px solid var(--border);">
-                                    <p class="text-[10px] font-bold uppercase tracking-wider mb-2" style="color:var(--text-muted);">Feed Preview</p>
+                                    <p class="text-[0.6875rem] font-bold uppercase tracking-wider mb-2" style="color:var(--text-muted);">Feed Preview</p>
                                     <p class="text-sm font-semibold" style="color:var(--text-primary);" x-text="publicAddress"></p>
                                 </div>
 
@@ -2076,10 +2075,10 @@
                                     <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid var(--border);">
                                         <div>
                                             <p class="text-xs font-semibold" style="color:var(--text-primary);">Street Number</p>
-                                            <p class="text-[11px]" style="color:var(--text-muted);" x-text="streetNumber || '(not set)'"></p>
+                                            <p class="text-xs" style="color:var(--text-muted);" x-text="streetNumber || '(not set)'"></p>
                                         </div>
                                         <label class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200"
-                                               :style="!hideStreetNumber ? 'background:#00d4aa' : 'background:var(--surface-3,#374151)'">
+                                               :style="!hideStreetNumber ? 'background:var(--ds-green)' : 'background:var(--surface-3)'">
                                             <input type="checkbox" name="pp_hide_street_number" value="1" :checked="hideStreetNumber" @change="hideStreetNumber = $el.checked" class="sr-only">
                                             <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-sm transition-transform duration-200"
                                                   style="background:#fff; margin-top:2px;"
@@ -2089,10 +2088,10 @@
                                     <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid var(--border);">
                                         <div>
                                             <p class="text-xs font-semibold" style="color:var(--text-primary);">Street Name</p>
-                                            <p class="text-[11px]" style="color:var(--text-muted);" x-text="streetName || '(not set)'"></p>
+                                            <p class="text-xs" style="color:var(--text-muted);" x-text="streetName || '(not set)'"></p>
                                         </div>
                                         <label class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200"
-                                               :style="!hideStreetName ? 'background:#00d4aa' : 'background:var(--surface-3,#374151)'">
+                                               :style="!hideStreetName ? 'background:var(--ds-green)' : 'background:var(--surface-3)'">
                                             <input type="checkbox" name="pp_hide_street_name" value="1" :checked="hideStreetName" @change="hideStreetName = $el.checked" class="sr-only">
                                             <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-sm transition-transform duration-200"
                                                   style="background:#fff; margin-top:2px;"
@@ -2102,10 +2101,10 @@
                                     <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid var(--border);">
                                         <div>
                                             <p class="text-xs font-semibold" style="color:var(--text-primary);">Complex Name</p>
-                                            <p class="text-[11px]" style="color:var(--text-muted);" x-text="complexName || '(not set)'"></p>
+                                            <p class="text-xs" style="color:var(--text-muted);" x-text="complexName || '(not set)'"></p>
                                         </div>
                                         <label class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200"
-                                               :style="!hideComplexName ? 'background:#00d4aa' : 'background:var(--surface-3,#374151)'">
+                                               :style="!hideComplexName ? 'background:var(--ds-green)' : 'background:var(--surface-3)'">
                                             <input type="checkbox" name="pp_hide_complex_name" value="1" :checked="hideComplexName" @change="hideComplexName = $el.checked" class="sr-only">
                                             <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-sm transition-transform duration-200"
                                                   style="background:#fff; margin-top:2px;"
@@ -2115,10 +2114,10 @@
                                     <div class="flex items-center justify-between px-4 py-3">
                                         <div>
                                             <p class="text-xs font-semibold" style="color:var(--text-primary);">Unit Number</p>
-                                            <p class="text-[11px]" style="color:var(--text-muted);" x-text="unitNumber || '(not set)'"></p>
+                                            <p class="text-xs" style="color:var(--text-muted);" x-text="unitNumber || '(not set)'"></p>
                                         </div>
                                         <label class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200"
-                                               :style="!hideUnitNumber ? 'background:#00d4aa' : 'background:var(--surface-3,#374151)'">
+                                               :style="!hideUnitNumber ? 'background:var(--ds-green)' : 'background:var(--surface-3)'">
                                             <input type="checkbox" name="pp_hide_unit_number" value="1" :checked="hideUnitNumber" @change="hideUnitNumber = $el.checked" class="sr-only">
                                             <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full shadow-sm transition-transform duration-200"
                                                   style="background:#fff; margin-top:2px;"
@@ -2127,49 +2126,76 @@
                                     </div>
                                 </div>
 
-                                <p class="text-[10px]" style="color:var(--text-muted);">
+                                <p class="text-[0.6875rem]" style="color:var(--text-muted);">
                                     Toggle ON (green) = visible on feeds. Toggle OFF = hidden. Changes apply when you save the property.
                                 </p>
                             </div>
 
                             <div class="sticky bottom-0 px-5 py-3 rounded-b-lg flex justify-end" style="background:var(--surface); border-top:1px solid var(--border);">
-                                <button type="button" @click="openModal = null" class="px-4 py-2 rounded-md text-xs font-semibold text-white" style="background:#00d4aa;">Done</button>
+                                <button type="button" @click="openModal = null" class="px-4 py-2 rounded-md text-xs font-semibold text-white" style="background:var(--ds-green);">Done</button>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {{-- Dates & Meta --}}
-                <div>
-                    <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Dates & Meta</h3>
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    </div>{{-- /info.property body --}}
+                </section>{{-- /Property section --}}
+
+                {{-- ── SECTION: MANDATE & ASSIGNMENT ────────────────────── --}}
+                <section id="sec-mandate" class="prop-section">
+                    <button type="button" class="prop-section-toggle" @click="info.mandate = !info.mandate">
+                        <h3 class="prop-section-heading"><span class="prop-section-heading-text">Mandate &amp; Assignment</span></h3>
+                        <svg class="prop-section-chevron" :class="info.mandate ? 'is-open' : ''" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+                    </button>
+                    <div x-show="info.mandate" x-collapse class="prop-section-body space-y-5">
+
+                        {{-- Lifecycle: Status, Mandate, Listed/Expiry --}}
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Listed Date</label>
-                            <input type="date" name="listed_date" value="{{ old('listed_date', $property->listed_date?->format('Y-m-d')) }}"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); color-scheme: light dark;">
+                            <p class="prop-subsection-heading">Lifecycle</p>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                                <div>
+                                    <label class="prop-label">Status <span class="prop-required">*</span></label>
+                                    <select name="status" required class="prop-select prop-field-lifecycle">
+                                        <option value="">— None —</option>
+                                        @foreach($settingItems['statuses'] as $item)
+                                            @php $val = strtolower(str_replace(' ','_',$item->name)); @endphp
+                                            <option value="{{ $val }}" {{ old('status', $property->status) === $val ? 'selected' : '' }}>{{ $item->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="prop-label">Mandate Type</label>
+                                    <select name="mandate_type" class="prop-select prop-field-lifecycle">
+                                        <option value="">— None —</option>
+                                        @foreach($settingItems['mandateTypes'] as $item)
+                                            <option value="{{ $item->name }}" {{ old('mandate_type', $property->mandate_type) === $item->name ? 'selected' : '' }}>{{ $item->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="prop-label">Listed Date</label>
+                                    <input type="date" name="listed_date" value="{{ old('listed_date', $property->listed_date?->format('Y-m-d')) }}" class="prop-input prop-field-lifecycle" style="color-scheme: light dark;">
+                                </div>
+                                <div>
+                                    <label class="prop-label">Expiry Date</label>
+                                    <input type="date" name="expiry_date" value="{{ old('expiry_date', $property->expiry_date?->format('Y-m-d')) }}" class="prop-input prop-field-lifecycle" style="color-scheme: light dark;">
+                                </div>
+                                @if(!$isNew)
+                                    <div>
+                                        <label class="prop-label">Loaded</label>
+                                        <input type="text" value="{{ $property->created_at->format('d M Y H:i') }}" disabled class="prop-input prop-field-lifecycle"
+                                               title="{{ $property->created_at->toDayDateTimeString() }}">
+                                    </div>
+                                    <div>
+                                        <label class="prop-label">Modified</label>
+                                        <input type="text"
+                                               value="{{ $property->updated_at->format('d M Y H:i') }} ({{ $property->updated_at->diffForHumans() }})"
+                                               disabled class="prop-input prop-field-lifecycle"
+                                               title="{{ $property->updated_at->toDayDateTimeString() }}">
+                                    </div>
+                                @endif
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Expiry Date</label>
-                            <input type="date" name="expiry_date" value="{{ old('expiry_date', $property->expiry_date?->format('Y-m-d')) }}"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); color-scheme: light dark;">
-                        </div>
-                        @if(!$isNew)
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Loaded</label>
-                            <input type="text" value="{{ $property->created_at->format('d M Y H:i') }}" disabled
-                                   class="w-full rounded-md px-3 py-2 text-sm cursor-not-allowed"
-                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-muted);">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Modified</label>
-                            <input type="text" value="{{ $property->updated_at->format('d M Y H:i') }}" disabled
-                                   class="w-full rounded-md px-3 py-2 text-sm cursor-not-allowed"
-                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-muted);">
-                        </div>
-                        @endif
-                    </div>
 
                     {{-- Showday Events --}}
                     @if(!$isNew)
@@ -2214,12 +2240,12 @@
                                 if (d.success) this.showdays = d.showdays;
                             } catch {}
                         }
-                    }" class="mt-5">
+                    }">
                         <div class="flex items-center justify-between mb-3">
-                            <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--text-muted);">Showday Events</p>
+                            <p class="prop-subsection-heading" style="margin-bottom:0;">Showday Events</p>
                             <button type="button" @click="showForm = !showForm"
-                                    class="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md transition-colors"
-                                    style="background:rgba(0,212,170,0.08); color:#00d4aa; border:1px solid rgba(0,212,170,0.2);">
+                                    class="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md transition-colors"
+                                    style="background:color-mix(in srgb, var(--ds-green) 8%, transparent); color:var(--ds-green); border:1px solid color-mix(in srgb, var(--ds-green) 25%, transparent);">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
                                 <span x-text="showForm ? 'Cancel' : 'Add Showday'"></span>
                             </button>
@@ -2232,15 +2258,15 @@
                                     <div class="flex items-center justify-between px-3 py-2 rounded-md text-xs"
                                          style="background:var(--surface-2); border:1px solid var(--border);">
                                         <div class="flex items-center gap-3">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 flex-shrink-0" style="color:#00d4aa;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 flex-shrink-0" style="color:var(--ds-green);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
                                             <div>
                                                 <span style="color:var(--text-primary);" x-text="sd.start_date + ' — ' + sd.end_date"></span>
                                                 <span class="ml-2" style="color:var(--text-muted);" x-text="sd.description"></span>
                                             </div>
                                         </div>
                                         <button type="button" @click="removeShowday(sd.id)"
-                                                class="p-1 rounded hover:bg-red-500/10 transition-colors flex-shrink-0"
-                                                style="color:#ef4444;" title="Remove showday">
+                                                class="p-1 rounded transition-colors flex-shrink-0"
+                                                style="color:var(--ds-crimson);" title="Remove showday">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
                                         </button>
                                     </div>
@@ -2248,7 +2274,7 @@
                             </div>
                         </template>
                         <template x-if="showdays.length === 0 && !showForm">
-                            <p class="text-[11px] mb-3" style="color:var(--text-muted);">No showdays scheduled</p>
+                            <p class="text-xs mb-3" style="color:var(--text-muted);">No showdays scheduled</p>
                         </template>
 
                         {{-- Create form --}}
@@ -2275,34 +2301,44 @@
                                 <button type="button" @click="createShowday()"
                                         :disabled="sdLoading || !sdStart || !sdEnd"
                                         class="px-4 py-2 rounded-md text-xs font-semibold text-white"
-                                        style="background:#00d4aa;">
+                                        style="background:var(--ds-green);">
                                     <span x-text="sdLoading ? 'Creating...' : 'Create Showday'"></span>
                                 </button>
-                                <span x-show="sdMsg" x-text="sdMsg" class="text-xs" style="color:#00d4aa;"></span>
+                                <span x-show="sdMsg" x-text="sdMsg" class="text-xs" style="color:var(--ds-green);"></span>
                             </div>
                         </div>
                     </div>
                     @endif
-                </div>
 
-                {{-- Agent / Branch --}}
+                {{-- Assignment subsection (still inside Mandate body) --}}
                 <div>
-                    <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Assignment</h3>
+                    <p class="prop-subsection-heading">Assignment</p>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {{-- Primary Agent Card --}}
                         <div class="rounded-md p-3" style="background:var(--surface-2); border:1px solid var(--border);">
-                            <label class="block text-xs font-semibold mb-2" style="color:var(--text-secondary);">Primary Agent <span class="text-red-500">*</span></label>
+                            <label class="prop-label" style="margin-bottom:0.5rem;">Primary Agent <span class="prop-required">*</span></label>
                             <div class="flex items-start gap-3" x-data="{ agentId: {{ (int) old('agent_id', $property->agent_id) }} }">
-                                {{-- Agent photo preview --}}
+                                {{-- Agent photo preview — uses the eager-loaded full User relation
+                                     so accessors (profilePhotoUrl / profile_photo_url) have the data they need. --}}
                                 @php
-                                    $primaryAgent = $agents->firstWhere('id', $property->agent_id);
+                                    $primaryAgent = $property->agent;
                                     $primaryImgSrc = $property->pp_agent_image_path
                                         ? asset('storage/' . $property->pp_agent_image_path)
-                                        : ($primaryAgent ? $primaryAgent->profilePhotoUrl() : null);
+                                        : ($primaryAgent
+                                            ? ($primaryAgent->profile_photo_url ?? (method_exists($primaryAgent, 'profilePhotoUrl') ? $primaryAgent->profilePhotoUrl() : null))
+                                            : null);
                                 @endphp
                                 <div class="flex-shrink-0">
                                     @if($primaryImgSrc)
                                         <img src="{{ $primaryImgSrc }}" alt="" class="w-14 h-14 rounded-md object-cover" style="border:1px solid var(--border);">
+                                    @elseif($primaryAgent)
+                                        @php
+                                            $pn = trim($primaryAgent->name ?? '');
+                                            $pInitials = strtoupper(collect(preg_split('/\s+/', $pn))->filter()->map(fn($w) => substr($w, 0, 1))->take(2)->implode(''));
+                                        @endphp
+                                        <div class="w-14 h-14 rounded-md flex items-center justify-center font-bold text-lg" style="background:var(--brand-icon); color:#fff; border:1px solid var(--border);">
+                                            {{ $pInitials ?: '—' }}
+                                        </div>
                                     @else
                                         <div class="w-14 h-14 rounded-md flex items-center justify-center" style="background:var(--surface-3); border:1px solid var(--border);">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" style="color:var(--text-muted);"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
@@ -2315,25 +2351,34 @@
                                         <option value="{{ $agent->id }}" {{ (int) old('agent_id', $property->agent_id) === $agent->id ? 'selected' : '' }}>{{ $agent->name }}</option>
                                         @endforeach
                                     </select>
-                                    <p class="text-xs mt-1" style="color:var(--text-muted);">The Primary Agent is the listing agent for this property. Changing it transfers the listing to that agent.</p>
                                 </div>
                             </div>
                         </div>
 
                         {{-- Second Agent Card --}}
                         <div class="rounded-md p-3" style="background:var(--surface-2); border:1px solid var(--border);">
-                            <label class="block text-xs font-semibold mb-2" style="color:var(--text-secondary);">Second Agent</label>
+                            <label class="prop-label" style="margin-bottom:0.5rem;">Second Agent</label>
                             <div class="flex items-start gap-3">
-                                {{-- Agent photo preview --}}
+                                {{-- Agent photo preview — fetch the full User to get profile photo accessors --}}
                                 @php
-                                    $secondAgent = $property->pp_second_agent_id ? $agents->firstWhere('id', $property->pp_second_agent_id) : null;
+                                    $secondAgent = $property->pp_second_agent_id ? \App\Models\User::find($property->pp_second_agent_id) : null;
                                     $secondImgSrc = $property->pp_second_agent_image_path
                                         ? asset('storage/' . $property->pp_second_agent_image_path)
-                                        : ($secondAgent ? $secondAgent->profilePhotoUrl() : null);
+                                        : ($secondAgent
+                                            ? ($secondAgent->profile_photo_url ?? (method_exists($secondAgent, 'profilePhotoUrl') ? $secondAgent->profilePhotoUrl() : null))
+                                            : null);
                                 @endphp
                                 <div class="flex-shrink-0">
                                     @if($secondImgSrc)
                                         <img src="{{ $secondImgSrc }}" alt="" class="w-14 h-14 rounded-md object-cover" style="border:1px solid var(--border);">
+                                    @elseif($secondAgent)
+                                        @php
+                                            $sn = trim($secondAgent->name ?? '');
+                                            $sInitials = strtoupper(collect(preg_split('/\s+/', $sn))->filter()->map(fn($w) => substr($w, 0, 1))->take(2)->implode(''));
+                                        @endphp
+                                        <div class="w-14 h-14 rounded-md flex items-center justify-center font-bold text-lg" style="background:var(--brand-icon); color:#fff; border:1px solid var(--border);">
+                                            {{ $sInitials ?: '—' }}
+                                        </div>
                                     @else
                                         <div class="w-14 h-14 rounded-md flex items-center justify-center" style="background:var(--surface-3); border:1px solid var(--border);">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" style="color:var(--text-muted);"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
@@ -2354,80 +2399,72 @@
 
                     {{-- Video & Virtual Tour Links --}}
                     <div class="mt-4">
-                        <h3 class="text-xs font-bold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Video & Virtual Tour</h3>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <p class="prop-subsection-heading">Video &amp; Virtual Tour</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">YouTube Video <span class="opacity-60">(URL or ID)</span></label>
+                                <label class="prop-label">YouTube Video <span class="opacity-60">(URL or ID)</span></label>
                                 <input type="text" name="youtube_video_id" value="{{ old('youtube_video_id', $property->youtube_video_id) }}"
                                        placeholder="https://www.youtube.com/watch?v=... or video ID"
-                                       class="w-full rounded-md px-3 py-2 text-sm font-mono"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                       class="prop-input" style="font-family:var(--font-mono, monospace);">
                             </div>
                             <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Matterport ID</label>
+                                <label class="prop-label">Matterport ID</label>
                                 <input type="text" name="matterport_id" value="{{ old('matterport_id', $property->matterport_id) }}"
                                        placeholder="Matterport scan ID"
-                                       class="w-full rounded-md px-3 py-2 text-sm font-mono"
-                                       style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                       class="prop-input" style="font-family:var(--font-mono, monospace);">
+                            </div>
+                            <div>
+                                <label class="prop-label">Other Virtual Tour / Video URL</label>
+                                <input type="url" name="virtual_tour_url" value="{{ old('virtual_tour_url', $property->virtual_tour_url) }}"
+                                       placeholder="https://findaholiday.co.za/wordpress/ipanorama/virtualtour/121"
+                                       class="prop-input" style="font-family:var(--font-mono, monospace);">
                             </div>
                         </div>
+                        <p class="text-xs mt-2" style="color:var(--text-muted);">iPanorama, Kuula, or any embeddable 360 host can go in the Other Virtual Tour field. Shown on Live Preview + custom websites only — not pushed to portal feeds.</p>
                     </div>
 
-                    {{-- Branch --}}
-                    <div class="mt-4" style="max-width:50%;">
-                        <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Branch</label>
-                        <select name="branch_id" class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
-                            <option value="">— None —</option>
-                            @foreach($branches as $branch)
-                            <option value="{{ $branch->id }}" {{ (int) old('branch_id', $property->branch_id) === $branch->id ? 'selected' : '' }}>{{ $branch->name }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                </div>
+                </div>{{-- /Assignment subsection --}}
 
-                {{-- Rental Details — only visible when listing type is rental --}}
-                <div x-data="{ isRental: document.querySelector('[name=listing_type]')?.value === 'Rental' }"
-                     x-init="$watch('isRental', v => {}); document.querySelector('[name=listing_type]')?.addEventListener('change', e => isRental = e.target.value === 'Rental')"
+                    </div>{{-- /info.mandate body --}}
+                </section>{{-- /Mandate section --}}
+
+                {{-- ── SECTION: RENTAL DETAILS (only when listing type = rental) ── --}}
+                <section id="sec-rental" class="prop-section"
+                     x-data="{ isRental: document.querySelector('[name=listing_type]')?.value === 'rental' }"
+                     x-init="document.querySelector('[name=listing_type]')?.addEventListener('change', e => isRental = e.target.value === 'rental')"
                      x-show="isRental || '{{ strtolower($property->listing_type ?? '') }}' === 'rental'" x-cloak>
-                    <h3 class="text-xs font-bold uppercase tracking-wider mb-4" style="color:var(--text-muted);">Rental Details</h3>
-                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    <button type="button" class="prop-section-toggle" @click="info.rental = !info.rental">
+                        <h3 class="prop-section-heading"><span class="prop-section-heading-text">Rental Details</span></h3>
+                        <svg class="prop-section-chevron" :class="info.rental ? 'is-open' : ''" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+                    </button>
+                    <div x-show="info.rental" x-collapse class="prop-section-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Monthly Rental (R)</label>
-                            <input type="number" name="rental_amount" value="{{ old('rental_amount', $property->rental_amount) }}"
-                                   placeholder="0.00" min="0" step="0.01"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                            <label class="prop-label">Monthly Rental (R)</label>
+                            <input type="number" name="rental_amount" value="{{ old('rental_amount', $property->rental_amount) }}" placeholder="0.00" min="0" step="0.01" class="prop-input prop-field-money">
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Deposit (R)</label>
-                            <input type="number" name="deposit_amount" value="{{ old('deposit_amount', $property->deposit_amount) }}"
-                                   placeholder="0.00" min="0" step="0.01"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                            <label class="prop-label">Deposit (R)</label>
+                            <input type="number" name="deposit_amount" value="{{ old('deposit_amount', $property->deposit_amount) }}" placeholder="0.00" min="0" step="0.01" class="prop-input prop-field-money">
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Rental Price Type</label>
-                            <select name="rental_price_type" class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                            <label class="prop-label">Rental Price Type</label>
+                            <select name="rental_price_type" class="prop-select prop-field-enum">
                                 <option value="">— Not Set —</option>
                                 @foreach(['per month' => 'Per Month', 'per sqm' => 'Per Sqm', 'per day' => 'Per Day', 'per week' => 'Per Week', 'per year' => 'Per Year'] as $val => $lbl)
-                                <option value="{{ $val }}" {{ old('rental_price_type', $property->rental_price_type) === $val ? 'selected' : '' }}>{{ $lbl }}</option>
+                                    <option value="{{ $val }}" {{ old('rental_price_type', $property->rental_price_type) === $val ? 'selected' : '' }}>{{ $lbl }}</option>
                                 @endforeach
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Lease Start Date</label>
-                            <input type="date" name="lease_start_date" value="{{ old('lease_start_date', $property->lease_start_date?->format('Y-m-d')) }}"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); color-scheme: light dark;">
+                            <label class="prop-label">Lease Start Date</label>
+                            <input type="date" name="lease_start_date" value="{{ old('lease_start_date', $property->lease_start_date?->format('Y-m-d')) }}" class="prop-input prop-field-date" style="color-scheme: light dark;">
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Lease End Date</label>
-                            <input type="date" name="lease_end_date" value="{{ old('lease_end_date', $property->lease_end_date?->format('Y-m-d')) }}"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); color-scheme: light dark;">
+                            <label class="prop-label">Lease End Date</label>
+                            <input type="date" name="lease_end_date" value="{{ old('lease_end_date', $property->lease_end_date?->format('Y-m-d')) }}" class="prop-input prop-field-date" style="color-scheme: light dark;">
                         </div>
                     </div>
-                </div>
+                </section>
 
             </form>{{-- /prop-update-form --}}
 
@@ -2435,7 +2472,7 @@
             <div class="flex items-center justify-between pt-4">
                 <button type="submit" form="prop-update-form"
                         class="px-5 py-2 rounded-md text-sm font-semibold text-white"
-                        style="background:var(--brand-default,#0b2a4a); border:1px solid var(--border);"
+                        style="background:var(--brand-default); border:1px solid var(--border);"
                         onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
                     {{ $isNew ? 'Create Property' : 'Save Changes' }}
                 </button>
@@ -2443,7 +2480,7 @@
                 <form method="POST" action="{{ route('corex.properties.destroy', $property) }}"
                       onsubmit="return confirm('Delete this property?')">
                     @csrf @method('DELETE')
-                    <button type="submit" class="text-sm font-semibold text-red-500 hover:text-red-600 px-4 py-2 rounded-md hover:bg-red-500/10 transition-colors">
+                    <button type="submit" class="text-sm font-semibold px-4 py-2 rounded-md transition-colors hover:opacity-80" style="color:var(--ds-crimson);">
                         Delete Property
                     </button>
                 </form>
@@ -2459,7 +2496,7 @@
                 <p class="text-xs mb-4" style="color:var(--text-muted);">Images will be uploaded when you click <strong style="color:var(--text-secondary);">Create Property</strong>.</p>
                 <label class="flex items-center gap-3 px-4 py-3 rounded-md border border-dashed cursor-pointer text-sm transition-colors"
                        style="border-color:var(--border-hover); color:var(--text-secondary);"
-                       onmouseover="this.style.borderColor='var(--brand-icon,#0ea5e9)'" onmouseout="this.style.borderColor='var(--border-hover)'">
+                       onmouseover="this.style.borderColor='var(--brand-icon)'" onmouseout="this.style.borderColor='var(--border-hover)'">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
                     <span id="gallery_images-create-label">Select images (multiple allowed)</span>
                     <input type="file" name="gallery_images[]" multiple accept="image/*" form="prop-update-form" class="hidden"
@@ -2485,7 +2522,7 @@
 
                     <label class="flex items-center gap-3 px-4 py-3 rounded-md border border-dashed cursor-pointer transition-colors text-sm"
                            style="border-color:var(--border-hover); color:var(--text-secondary);"
-                           onmouseover="this.style.borderColor='var(--brand-icon,#0ea5e9)'" onmouseout="this.style.borderColor='var(--border-hover)'">
+                           onmouseover="this.style.borderColor='var(--brand-icon)'" onmouseout="this.style.borderColor='var(--border-hover)'">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
                         <span id="gal-label">Select images to upload (multiple allowed)</span>
                         <input type="file" name="gallery_images[]" multiple accept="image/*" class="hidden"
@@ -2531,18 +2568,18 @@
                     </h3>
                     <div class="flex items-center gap-2">
                         <button type="button" @click="toggleTagMode()"
-                                class="text-[10px] font-semibold px-2.5 py-1 rounded transition-colors"
-                                :style="tagMode ? 'background:var(--brand-icon,#0ea5e9); color:#fff;' : 'background:var(--surface-2); color:var(--text-secondary); border:1px solid var(--border);'">
+                                class="text-[0.6875rem] font-semibold px-2.5 py-1 rounded transition-colors"
+                                :style="tagMode ? 'background:var(--brand-icon); color:#fff;' : 'background:var(--surface-2); color:var(--text-secondary); border:1px solid var(--border);'">
                             <span x-text="tagMode ? 'Exit Tag Mode' : 'Tag Images'"></span>
                         </button>
                         <button type="button" @click="sortByCategory()"
-                                class="text-[10px] font-semibold px-2.5 py-1 rounded transition-colors"
+                                class="text-[0.6875rem] font-semibold px-2.5 py-1 rounded transition-colors"
                                 style="background:var(--surface-2); color:var(--text-secondary); border:1px solid var(--border);">
                             Sort by Category
                         </button>
                         <button type="button" @click="save()" :disabled="saving"
-                                class="text-[10px] font-semibold px-2.5 py-1 rounded transition-colors"
-                                style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 12%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 25%, transparent);">
+                                class="text-[0.6875rem] font-semibold px-2.5 py-1 rounded transition-colors"
+                                style="background:color-mix(in srgb, var(--brand-icon) 12%, transparent); color:var(--brand-icon); border:1px solid color-mix(in srgb, var(--brand-icon) 25%, transparent);">
                             <span x-text="saving ? 'Saving...' : (dirty ? 'Save' : 'Saved')"></span>
                         </button>
                     </div>
@@ -2550,15 +2587,15 @@
 
                 {{-- Tag mode bar (sticky within page scroll) --}}
                 <div x-show="tagMode" x-cloak x-transition
-                     class="px-3 py-2.5 space-y-2 rounded-md" style="position:sticky; top:8px; z-index:20; background:var(--surface-2); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 30%, transparent); box-shadow:0 2px 8px rgba(0,0,0,0.15);">
+                     class="px-3 py-2.5 space-y-2 rounded-md" style="position:sticky; top:8px; z-index:20; background:var(--surface-2); border:1px solid color-mix(in srgb, var(--brand-icon) 30%, transparent); box-shadow:0 2px 8px rgba(0,0,0,0.15);">
                     <div class="flex items-center justify-between">
                         <span class="text-xs font-semibold" style="color:var(--text-primary);">
                             <span x-show="selected.length === 0">Click images to select them, then pick a tag</span>
                             <span x-show="selected.length > 0"><span x-text="selected.length"></span> image<span x-show="selected.length > 1">s</span> selected</span>
                         </span>
                         <div class="flex items-center gap-2">
-                            <button type="button" @click="selectAll()" class="text-[10px] font-semibold" style="color:var(--brand-icon,#0ea5e9);">Select All</button>
-                            <button type="button" @click="selectNone()" x-show="selected.length > 0" class="text-[10px] font-semibold" style="color:var(--text-muted);">Clear</button>
+                            <button type="button" @click="selectAll()" class="text-[0.6875rem] font-semibold" style="color:var(--brand-icon);">Select All</button>
+                            <button type="button" @click="selectNone()" x-show="selected.length > 0" class="text-[0.6875rem] font-semibold" style="color:var(--text-muted);">Clear</button>
                         </div>
                     </div>
                     <div class="flex flex-wrap gap-1.5">
@@ -2568,13 +2605,13 @@
                                     @dragstart="tagDragStart(tIdx, $event)"
                                     @dragover.prevent="tagDragOver(tIdx, $event)"
                                     @drop.prevent="tagDragDrop()"
-                                    class="text-[10px] font-semibold px-2.5 py-1 rounded-full transition-colors cursor-grab"
-                                    :style="activeTag === tag ? 'background:var(--brand-icon,#0ea5e9); color:#fff;' : 'background:var(--surface); color:var(--text-secondary); border:1px solid var(--border);'"
+                                    class="text-[0.6875rem] font-semibold px-2.5 py-1 rounded-full transition-colors cursor-grab"
+                                    :style="activeTag === tag ? 'background:var(--brand-icon); color:#fff;' : 'background:var(--surface); color:var(--text-secondary); border:1px solid var(--border);'"
                                     x-text="tag"></button>
                         </template>
                         <button type="button" @click="tagSelected(null)"
-                                class="text-[10px] font-semibold px-2.5 py-1 rounded-full"
-                                style="background:rgba(239,68,68,0.10); color:#ef4444; border:1px solid rgba(239,68,68,0.20);">
+                                class="text-[0.6875rem] font-semibold px-2.5 py-1 rounded-full"
+                                style="background:rgba(239,68,68,0.10); color:var(--ds-crimson); border:1px solid rgba(239,68,68,0.20);">
                             Clear Tags
                         </button>
                     </div>
@@ -2599,14 +2636,14 @@
 
                             {{-- Tag badge --}}
                             <div x-show="tags[img]" class="absolute bottom-1 left-1 right-1">
-                                <span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold text-white truncate max-w-full"
+                                <span class="inline-block px-1.5 py-0.5 rounded text-[0.6875rem] font-bold text-white truncate max-w-full"
                                       style="background:rgba(14,165,233,0.85);"
                                       x-text="tags[img] || ''"></span>
                             </div>
 
                             {{-- Selection checkmark (tag mode) --}}
-                            <div x-show="tagMode && selected.includes(idx)" class="absolute inset-0 rounded-md" style="border:3px solid var(--brand-icon,#0ea5e9); background:rgba(14,165,233,0.15);">
-                                <div class="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center" style="background:var(--brand-icon,#0ea5e9);">
+                            <div x-show="tagMode && selected.includes(idx)" class="absolute inset-0 rounded-md" style="border:3px solid var(--brand-icon); background:rgba(14,165,233,0.15);">
+                                <div class="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center" style="background:var(--brand-icon);">
                                     <svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
                                 </div>
                             </div>
@@ -2634,12 +2671,12 @@
                 </div>
 
                 {{-- Tip --}}
-                <div x-show="images.length > 0 && !tagMode" class="text-[10px]" style="color:var(--text-muted);">
+                <div x-show="images.length > 0 && !tagMode" class="text-[0.6875rem]" style="color:var(--text-muted);">
                     Drag to reorder · First image = cover photo · Click "Tag Images" to categorise
                 </div>
 
                 {{-- Save status --}}
-                <div x-show="saveMsg" x-cloak x-transition class="text-[11px] font-medium" :style="saveError ? 'color:#ef4444' : 'color:#22c55e'" x-text="saveMsg"></div>
+                <div x-show="saveMsg" x-cloak x-transition class="text-xs font-medium" :style="saveError ? 'color:var(--ds-crimson)' : 'color:var(--ds-green)'" x-text="saveMsg"></div>
             </div>
 
             {{-- Lightbox with prev/next navigation --}}
@@ -2717,7 +2754,7 @@
                         </div>
                         <input type="hidden" :name="'pending_contact_ids['+idx+']'" :value="c.id" form="prop-update-form">
                         <button type="button" @click="remove(idx)"
-                                class="text-xs font-semibold text-red-500 hover:text-red-600 px-3 py-1.5 rounded-md hover:bg-red-500/10 transition-colors">Remove</button>
+                                class="text-xs font-semibold px-3 py-1.5 rounded-md transition-colors hover:opacity-80" style="color:var(--ds-crimson);">Remove</button>
                     </div>
                 </template>
                 <template x-for="(nc, idx) in pendingNew" :key="'n'+idx">
@@ -2725,7 +2762,7 @@
                         <div class="flex-1 min-w-0">
                             <div class="text-sm font-semibold" style="color:var(--text-primary);" x-text="nc.first_name + ' ' + nc.last_name"></div>
                             <div class="text-xs mt-0.5" style="color:var(--text-muted);" x-text="[nc.phone, nc.email].filter(Boolean).join(' · ')"></div>
-                            <div class="text-xs font-medium mt-0.5" style="color:var(--brand-icon,#0ea5e9);">New contact (will be created)</div>
+                            <div class="text-xs font-medium mt-0.5" style="color:var(--brand-icon);">New contact (will be created)</div>
                         </div>
                         <input type="hidden" :name="'pending_new_contacts['+idx+'][first_name]'" :value="nc.first_name" form="prop-update-form">
                         <input type="hidden" :name="'pending_new_contacts['+idx+'][last_name]'"  :value="nc.last_name"  form="prop-update-form">
@@ -2733,7 +2770,7 @@
                         <input type="hidden" :name="'pending_new_contacts['+idx+'][email]'"      :value="nc.email"      form="prop-update-form">
                         <input type="hidden" :name="'pending_new_contacts['+idx+'][contact_type_id]'" :value="nc.contact_type_id" form="prop-update-form">
                         <button type="button" @click="removeNew(idx)"
-                                class="text-xs font-semibold text-red-500 hover:text-red-600 px-3 py-1.5 rounded-md hover:bg-red-500/10 transition-colors">Remove</button>
+                                class="text-xs font-semibold px-3 py-1.5 rounded-md transition-colors hover:opacity-80" style="color:var(--ds-crimson);">Remove</button>
                     </div>
                 </template>
             </div>
@@ -2759,7 +2796,7 @@
                                 <div class="text-sm font-semibold" style="color:var(--text-primary);" x-text="r.first_name + ' ' + r.last_name"></div>
                                 <div class="text-xs mt-0.5" style="color:var(--text-muted);" x-text="[r.phone, r.email].filter(Boolean).join(' · ')"></div>
                             </div>
-                            <span class="ml-auto text-xs font-semibold flex-shrink-0" style="color:var(--brand-icon,#0ea5e9);">+ Add</span>
+                            <span class="ml-auto text-xs font-semibold flex-shrink-0" style="color:var(--brand-icon);">+ Add</span>
                         </button>
                     </template>
                 </div>
@@ -2770,7 +2807,7 @@
             <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:6px; padding:20px;">
                 <button type="button" @click="showNewForm = !showNewForm"
                         class="flex items-center gap-2 text-sm font-semibold"
-                        style="color:var(--brand-icon,#0ea5e9); background:none; border:none; cursor:pointer; padding:0;">
+                        style="color:var(--brand-icon); background:none; border:none; cursor:pointer; padding:0;">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4"
                          :class="showNewForm ? 'rotate-45' : ''" style="transition:transform .2s;">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -2780,19 +2817,19 @@
                 <div x-show="showNewForm" x-cloak class="mt-5 space-y-4">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">First Name <span class="text-red-500">*</span></label>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">First Name <span class="prop-required">*</span></label>
                             <input type="text" x-model="newForm.first_name"
                                    class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Surname <span class="text-red-500">*</span></label>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Surname <span class="prop-required">*</span></label>
                             <input type="text" x-model="newForm.last_name"
                                    class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Phone <span class="text-red-500">*</span></label>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Phone <span class="prop-required">*</span></label>
                             <input type="text" x-model="newForm.phone"
                                    class="w-full rounded-md px-3 py-2 text-sm"
                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
@@ -2843,13 +2880,13 @@
                         <div class="text-xs mt-0.5 flex gap-3" style="color:var(--text-muted);">
                             @if($c->phone)<span>{{ $c->phone }}</span>@endif
                             @if($c->email)<span>{{ $c->email }}</span>@endif
-                            @if($c->pivot->role)<span class="font-semibold" style="color:var(--brand-icon,#0ea5e9);">{{ ucfirst($c->pivot->role) }}</span>@endif
+                            @if($c->pivot->role)<span class="font-semibold" style="color:var(--brand-icon);">{{ ucfirst($c->pivot->role) }}</span>@endif
                         </div>
                     </div>
                     <form method="POST" action="{{ route('corex.properties.contacts.unlink', [$property, $c]) }}"
                           onsubmit="return confirm('Unlink {{ addslashes($c->full_name) }} from this property?')">
                         @csrf @method('DELETE')
-                        <button type="submit" class="text-xs font-semibold text-red-500 hover:text-red-600 px-3 py-1.5 rounded-md hover:bg-red-500/10 transition-colors">Unlink</button>
+                        <button type="submit" class="text-xs font-semibold px-3 py-1.5 rounded-md transition-colors hover:opacity-80" style="color:var(--ds-crimson);">Unlink</button>
                     </form>
                 </div>
                 @empty
@@ -2885,7 +2922,7 @@
                                     <div class="text-sm font-semibold" style="color:var(--text-primary);" x-text="r.first_name + ' ' + r.last_name"></div>
                                     <div class="text-xs mt-0.5" style="color:var(--text-muted);" x-text="[r.phone, r.email].filter(Boolean).join(' · ')"></div>
                                 </div>
-                                <span class="ml-auto text-xs font-semibold flex-shrink-0" style="color:var(--brand-icon,#0ea5e9);">+ Link</span>
+                                <span class="ml-auto text-xs font-semibold flex-shrink-0" style="color:var(--brand-icon);">+ Link</span>
                             </button>
                         </form>
                     </template>
@@ -2901,7 +2938,7 @@
                  x-data="{ open: false }">
                 <button type="button" @click="open = !open"
                         class="flex items-center gap-2 text-sm font-semibold"
-                        style="color:var(--brand-icon,#0ea5e9); background:none; border:none; cursor:pointer; padding:0;">
+                        style="color:var(--brand-icon); background:none; border:none; cursor:pointer; padding:0;">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4"
                          :class="open ? 'rotate-45' : ''" style="transition:transform .2s;">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -2914,19 +2951,19 @@
                         @csrf
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">First Name <span class="text-red-500">*</span></label>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">First Name <span class="prop-required">*</span></label>
                                 <input type="text" name="first_name" required
                                        class="w-full rounded-md px-3 py-2 text-sm"
                                        style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                             </div>
                             <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Surname <span class="text-red-500">*</span></label>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Surname <span class="prop-required">*</span></label>
                                 <input type="text" name="last_name" required
                                        class="w-full rounded-md px-3 py-2 text-sm"
                                        style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                             </div>
                             <div>
-                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Phone <span class="text-red-500">*</span></label>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Phone <span class="prop-required">*</span></label>
                                 <input type="text" name="phone" required
                                        class="w-full rounded-md px-3 py-2 text-sm"
                                        style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
@@ -3010,7 +3047,7 @@
                         <form method="POST" action="{{ route('corex.properties.notes.destroy', [$property, $note]) }}"
                               onsubmit="return confirm('Delete this note?')">
                             @csrf @method('DELETE')
-                            <button type="submit" class="text-xs text-red-500 hover:text-red-600 font-semibold flex-shrink-0">Delete</button>
+                            <button type="submit" class="text-xs font-semibold flex-shrink-0 transition-opacity hover:opacity-80" style="color:var(--ds-crimson);">Delete</button>
                         </form>
                         @endif
                     </div>
@@ -3032,7 +3069,7 @@
                 <p class="text-xs mb-4" style="color:var(--text-muted);">Files will be uploaded when you click <strong style="color:var(--text-secondary);">Create Property</strong>.</p>
                 <label class="flex items-center gap-3 px-4 py-3 rounded-md border border-dashed cursor-pointer text-sm transition-colors"
                        style="border-color:var(--border-hover); color:var(--text-secondary);"
-                       onmouseover="this.style.borderColor='var(--brand-icon,#0ea5e9)'" onmouseout="this.style.borderColor='var(--border-hover)'">
+                       onmouseover="this.style.borderColor='var(--brand-icon)'" onmouseout="this.style.borderColor='var(--border-hover)'">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" /></svg>
                     <span id="drive-create-label">Select files (multiple allowed, max 50 MB each)</span>
                     <input type="file" name="drive_files[]" multiple form="prop-update-form" class="hidden"
@@ -3051,7 +3088,7 @@
                     <div class="flex items-center gap-3 flex-wrap">
                         <label class="flex-1 flex items-center gap-3 px-4 py-3 rounded-md border border-dashed cursor-pointer transition-colors text-sm"
                                style="border-color:var(--border-hover); color:var(--text-secondary); min-width:200px;"
-                               onmouseover="this.style.borderColor='var(--brand-icon,#0ea5e9)'" onmouseout="this.style.borderColor='var(--border-hover)'">
+                               onmouseover="this.style.borderColor='var(--brand-icon)'" onmouseout="this.style.borderColor='var(--border-hover)'">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" /></svg>
                             <span id="drive-label">Select a file (max 50 MB)</span>
                             <input type="file" name="file" class="hidden"
@@ -3106,10 +3143,10 @@
                             style="background:var(--surface-2);"
                             onmouseover="this.style.background='rgba(14,165,233,0.04)'" onmouseout="this.style.background='var(--surface-2)'">
                         <div class="flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4" style="color:var(--brand-icon, #0ea5e9);"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" /></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4" style="color:var(--brand-icon);"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" /></svg>
                             <span class="text-xs font-semibold" style="color:var(--text-primary);">{{ $folder->label }}</span>
                             <span class="text-xs px-1.5 py-0.5 rounded-full font-medium"
-                                  style="background:{{ $folderDocs->isNotEmpty() ? 'rgba(14,165,233,0.12)' : 'var(--surface)' }}; color:{{ $folderDocs->isNotEmpty() ? 'var(--brand-icon, #0ea5e9)' : 'var(--text-muted)' }};">{{ $folderDocs->count() }}</span>
+                                  style="background:{{ $folderDocs->isNotEmpty() ? 'rgba(14,165,233,0.12)' : 'var(--surface)' }}; color:{{ $folderDocs->isNotEmpty() ? 'var(--brand-icon)' : 'var(--text-muted)' }};">{{ $folderDocs->count() }}</span>
                         </div>
                         <svg class="w-3.5 h-3.5 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--text-muted);"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
@@ -3222,10 +3259,10 @@
 
                     {{-- View count --}}
                     <div class="flex-shrink-0 text-center px-3">
-                        <div class="text-base font-extrabold" style="color:{{ $views > 0 ? 'var(--brand-icon,#0ea5e9)' : 'var(--text-muted)' }};">
+                        <div class="text-base font-extrabold" style="color:{{ $views > 0 ? 'var(--brand-icon)' : 'var(--text-muted)' }};">
                             {{ $views }}
                         </div>
-                        <div class="text-[10px] font-semibold" style="color:var(--text-muted);">
+                        <div class="text-[0.6875rem] font-semibold" style="color:var(--text-muted);">
                             {{ $views === 1 ? 'view' : 'views' }}
                         </div>
                     </div>
@@ -3245,7 +3282,7 @@
 
                         {{-- Agent card --}}
                         <div class="rounded-md p-4 space-y-2" style="background:var(--surface-2); border:1px solid var(--border);">
-                            <div class="text-[10px] font-bold uppercase tracking-wider mb-2" style="color:var(--text-muted);">Agent</div>
+                            <div class="text-[0.6875rem] font-bold uppercase tracking-wider mb-2" style="color:var(--text-muted);">Agent</div>
                             @if($cm->createdBy)
                             <div class="flex items-center gap-3">
                                 <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 text-xs font-bold text-white"
@@ -3255,7 +3292,7 @@
                                 <div class="min-w-0">
                                     <div class="text-sm font-bold truncate" style="color:var(--text-primary);">{{ $cm->createdBy->name }}</div>
                                     @if($cm->createdBy->branch)
-                                    <div class="text-[10px]" style="color:var(--text-muted);">{{ $cm->createdBy->branch->name }}</div>
+                                    <div class="text-[0.6875rem]" style="color:var(--text-muted);">{{ $cm->createdBy->branch->name }}</div>
                                     @endif
                                 </div>
                             </div>
@@ -3284,7 +3321,7 @@
 
                         {{-- Client + match details --}}
                         <div class="rounded-md p-4 space-y-3" style="background:var(--surface-2); border:1px solid var(--border);">
-                            <div class="text-[10px] font-bold uppercase tracking-wider mb-2" style="color:var(--text-muted);">Client</div>
+                            <div class="text-[0.6875rem] font-bold uppercase tracking-wider mb-2" style="color:var(--text-muted);">Client</div>
                             <div class="text-sm font-bold" style="color:var(--text-primary);">{{ $cm->contact->full_name ?? '—' }}</div>
                             <div class="space-y-1">
                                 @if($cm->contact->phone ?? null)
@@ -3300,7 +3337,7 @@
                                 </a>
                                 @endif
                             </div>
-                            <div class="pt-1 flex flex-wrap gap-x-4 gap-y-1.5 text-[10px]" style="color:var(--text-muted);">
+                            <div class="pt-1 flex flex-wrap gap-x-4 gap-y-1.5 text-[0.6875rem]" style="color:var(--text-muted);">
                                 @foreach([[$cm->beds_min,'Min Beds'],[$cm->baths_min,'Min Baths'],[$cm->garages_min,'Min Gar']] as [$v,$l])
                                 @if($v !== null)<span><strong style="color:var(--text-secondary);">{{ $v }}+</strong> {{ $l }}</span>@endif
                                 @endforeach
@@ -3310,7 +3347,7 @@
                             </div>
                             <a href="{{ route('corex.contacts.matches.results', [$cm->contact, $cm]) }}"
                                class="inline-flex items-center gap-1.5 mt-2 text-xs font-semibold no-underline"
-                               style="color:var(--brand-icon,#0ea5e9);">
+                               style="color:var(--brand-icon);">
                                 View match results →
                             </a>
                         </div>
@@ -3613,12 +3650,14 @@ function spacesAndFeaturesManager(initSpaces, initFeatures, initBeds, initBaths)
         },
 
         incrementCount(idx) {
-            const sp = this.spaces[idx]; const step = this.supportsHalf(sp.type) ? 0.5 : 1;
-            sp.count = parseFloat((sp.count + step).toFixed(1)); this._rebuildUnits(idx);
+            // +1 always — half-units are added separately via the ½ Toggle button.
+            const sp = this.spaces[idx];
+            sp.count = parseFloat((sp.count + 1).toFixed(1)); this._rebuildUnits(idx);
         },
         decrementCount(idx) {
-            const sp = this.spaces[idx]; const step = this.supportsHalf(sp.type) ? 0.5 : 1;
-            const n = parseFloat((sp.count - step).toFixed(1)); if (n < 0) return;
+            // −1 always — preserves any existing half so e.g. 2.5 → 1.5.
+            const sp = this.spaces[idx];
+            const n = parseFloat((sp.count - 1).toFixed(1)); if (n < 0) return;
             sp.count = n; this._rebuildUnits(idx);
         },
         toggleHalf(idx) {
@@ -3965,10 +4004,10 @@ function ppSyndication(config) {
         statusBadgeStyle() {
             const styles = {
                 '': 'background:var(--surface-2); color:var(--text-muted);',
-                'pending': 'background:rgba(245,158,11,0.12); color:#f59e0b;',
-                'submitted': 'background:rgba(245,158,11,0.12); color:#f59e0b;',
-                'active': 'background:rgba(0,212,170,0.12); color:#00d4aa;',
-                'error': 'background:rgba(239,68,68,0.12); color:#ef4444;',
+                'pending': 'background:rgba(245,158,11,0.12); color:var(--ds-amber);',
+                'submitted': 'background:rgba(245,158,11,0.12); color:var(--ds-amber);',
+                'active': 'background:rgba(0,212,170,0.12); color:var(--ds-green);',
+                'error': 'background:rgba(239,68,68,0.12); color:var(--ds-crimson);',
                 'deactivated': 'background:var(--surface-2); color:var(--text-muted);',
             };
             if (!this.enabled && !this.status) return styles[''];
@@ -4260,7 +4299,7 @@ function p24Syndication(config) {
             return labels[this.status] || 'Disabled';
         },
         statusBadgeStyle() {
-            const styles = {'':'background:var(--surface-2);color:var(--text-muted);','pending':'background:rgba(245,158,11,0.12);color:#f59e0b;','submitted':'background:rgba(245,158,11,0.12);color:#f59e0b;','active':'background:rgba(59,130,246,0.12);color:#3b82f6;','error':'background:rgba(239,68,68,0.12);color:#ef4444;','rejected':'background:rgba(239,68,68,0.12);color:#ef4444;','deactivated':'background:var(--surface-2);color:var(--text-muted);'};
+            const styles = {'':'background:var(--surface-2);color:var(--text-muted);','pending':'background:rgba(245,158,11,0.12);color:var(--ds-amber);','submitted':'background:rgba(245,158,11,0.12);color:var(--ds-amber);','active':'background:rgba(59,130,246,0.12);color:#3b82f6;','error':'background:rgba(239,68,68,0.12);color:var(--ds-crimson);','rejected':'background:rgba(239,68,68,0.12);color:var(--ds-crimson);','deactivated':'background:var(--surface-2);color:var(--text-muted);'};
             if (!this.enabled && !this.status) return styles[''];
             return styles[this.status] || styles[''];
         },
@@ -4453,7 +4492,7 @@ function p24Syndication(config) {
             </button>
             <button type="button" id="prop-required-goto"
                     class="px-4 py-2 rounded-md text-sm font-semibold text-white transition-colors"
-                    style="background:var(--brand-default,#0b2a4a);"
+                    style="background:var(--brand-default);"
                     onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
                 Take Me There
             </button>
