@@ -75,52 +75,31 @@ class AgentPpController extends Controller
         $externalRef   = trim($validated['external_ref']);
         $ppEncryptedId = trim($validated['pp_encrypted_id'] ?? '');
 
-        if ($ppEncryptedId !== '') {
-            $result = $this->soapClient->updateUniqueAgentId($ppEncryptedId, $externalRef);
-
-            if (isset($result['error']) && $result['error'] === true) {
-                return response()->json([
-                    'success' => false,
-                    'message' => $result['message'] ?? 'UpdateUniqueAgentID failed',
-                ], 422);
-            }
-
-            $user->update(['pp_unique_agent_id' => $ppEncryptedId]);
-
-            return response()->json([
-                'success'            => true,
-                'message'            => 'PP External Ref remapped via UpdateUniqueAgentID',
-                'external_ref'       => $externalRef,
-                'pp_unique_agent_id' => $ppEncryptedId,
-            ]);
-        }
-
-        $agentData = $this->mapper->buildAgentData($user, true);
-
-        if (empty($agentData['TelCell'])) {
+        if ($ppEncryptedId === '') {
             return response()->json([
                 'success' => false,
-                'message' => 'Agent has no phone/cell number — required by Private Property',
+                'message' => 'PP Encrypted Agent ID is required to remap External Ref. '
+                           . 'Use the Sync Agent button to push UpdateAgent with the default AgentId='
+                           . $user->id . '.',
             ], 422);
         }
 
-        // AgentId must always be (string) $user->id so PP matches the existing
-        // profile by External Ref. Never use the external_ref input here.
-        $agentData['AgentId'] = (string) $user->id;
-
-        $result = $this->soapClient->updateAgent($agentData);
+        $result = $this->soapClient->updateUniqueAgentId($ppEncryptedId, $externalRef);
 
         if (isset($result['error']) && $result['error'] === true) {
             return response()->json([
                 'success' => false,
-                'message' => $result['message'] ?? 'UpdateAgent failed',
+                'message' => $result['message'] ?? 'UpdateUniqueAgentID failed',
             ], 422);
         }
 
+        $user->update(['pp_unique_agent_id' => $ppEncryptedId]);
+
         return response()->json([
-            'success'      => true,
-            'message'      => 'Agent updated on PP (AgentId=' . $user->id . ')',
-            'external_ref' => (string) $user->id,
+            'success'            => true,
+            'message'            => 'PP External Ref remapped via UpdateUniqueAgentID',
+            'external_ref'       => $externalRef,
+            'pp_unique_agent_id' => $ppEncryptedId,
         ]);
     }
 }

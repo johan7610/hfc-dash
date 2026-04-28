@@ -642,7 +642,10 @@
                                onfocus="this.style.borderColor='var(--brand-icon, #0ea5e9)'" onblur="this.style.borderColor='var(--border)'">
                         <p class="text-[11px] mt-1.5" style="color:var(--text-muted);">
                             This is the ID PP shows as "External Ref" in their portal.
-                            Defaults to your CoreX user ID. Change it here to update PP.
+                            Defaults to the CoreX user ID. To remap to a different value
+                            you must also supply the PP Encrypted Agent ID below — that
+                            calls UpdateUniqueAgentID. The Sync Agent button always sends
+                            the CoreX user ID via UpdateAgent.
                         </p>
                     </div>
 
