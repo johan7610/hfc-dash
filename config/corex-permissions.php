@@ -373,6 +373,16 @@ return [
         ['key' => 'view_payroll_reports',  'label' => 'View Payroll Reports',              'section' => 'payroll', 'type' => 'action', 'module' => 'payroll', 'sort_order' => 122],
         ['key' => 'view_own_payslips',     'label' => 'View Own Payslips',                 'section' => 'payroll', 'type' => 'action', 'module' => 'payroll', 'sort_order' => 123],
 
+        // ── Leave ──
+        ['key' => 'manage_leave',             'label' => 'Manage Leave (admin/BM)',                  'section' => 'leave', 'type' => 'action', 'module' => 'leave', 'sort_order' => 130],
+        ['key' => 'approve_leave',            'label' => 'Approve / Reject Leave Applications',     'section' => 'leave', 'type' => 'action', 'module' => 'leave', 'sort_order' => 131],
+        ['key' => 'apply_for_leave',          'label' => 'Apply for Own Leave',                     'section' => 'leave', 'type' => 'action', 'module' => 'leave', 'sort_order' => 132],
+        ['key' => 'view_leave_reports',       'label' => 'View Leave Reports',                      'section' => 'leave', 'type' => 'action', 'module' => 'leave', 'sort_order' => 133],
+        ['key' => 'manage_leave_types',       'label' => 'Manage Leave Types (admin)',               'section' => 'leave', 'type' => 'action', 'module' => 'leave', 'sort_order' => 134],
+        ['key' => 'manage_staff_take_on',     'label' => 'Manage Staff Take-On Wizard',              'section' => 'leave', 'type' => 'action', 'module' => 'leave', 'sort_order' => 135],
+        ['key' => 'view_team_leave_calendar', 'label' => 'View Team Leave Calendar',                'section' => 'leave', 'type' => 'action', 'module' => 'leave', 'sort_order' => 136],
+        ['key' => 'adjust_leave_balances',    'label' => 'Manually Adjust Leave Balances (admin)',   'section' => 'leave', 'type' => 'action', 'module' => 'leave', 'sort_order' => 137],
+
         // ── Branches — Split Branches (Phase 2 branch isolation) ──
         // view_all = bypass BranchScope (see all branches in the agency)
         // switch   = use the "View as Branch" dropdown to impersonate a branch
@@ -396,6 +406,10 @@ return [
             // Payroll: admin gets full payroll management
             'include' => [
                 'manage_payroll', 'run_payroll', 'view_payroll_reports', 'view_own_payslips',
+                // Leave: admin gets all leave permissions
+                'manage_leave', 'approve_leave', 'apply_for_leave', 'view_leave_reports',
+                'manage_leave_types', 'manage_staff_take_on', 'view_team_leave_calendar',
+                'adjust_leave_balances',
             ],
         ],
 
@@ -468,6 +482,9 @@ return [
                 'branches.switch',
                 // Payroll
                 'view_own_payslips',
+                // Leave
+                'manage_leave', 'approve_leave', 'apply_for_leave', 'view_leave_reports',
+                'view_team_leave_calendar',
             ],
         ],
 
@@ -521,6 +538,8 @@ return [
                 'view_own_screening',
                 // Payroll
                 'view_own_payslips',
+                // Leave
+                'apply_for_leave', 'view_team_leave_calendar',
             ],
         ],
 
