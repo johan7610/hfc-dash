@@ -57,11 +57,16 @@ class AgentPpController extends Controller
     /**
      * Update the PP External Ref (AgentId) for an agent.
      *
-     * UpdateAgent always sends AgentId = (string) $user->id so PP matches
-     * the existing profile by External Ref instead of creating a new one.
+     * Always uses UpdateUniqueAgentID — UpdateAgent creates a new profile
+     * when the AgentId doesn't already exist on PP, which is never what we
+     * want here. UpdateUniqueAgentID remaps PP's existing internal record
+     * (identified by its encrypted PrivatePropertyAgentId) to the supplied
+     * External Ref without creating a duplicate.
      *
-     * The external_ref UI field is only used to remap PP's encrypted
-     * internal ID via UpdateUniqueAgentID, which requires pp_encrypted_id.
+     * Encrypted ID resolution order:
+     *   1. pp_encrypted_id supplied in the request (admin pasted from PP support)
+     *   2. user.pp_unique_agent_id stored on a previous claim
+     *   3. fetch from PP via GetAgent(current External Ref)
      */
     public function updateExternalRef(User $user, Request $request): JsonResponse
     {
@@ -76,11 +81,20 @@ class AgentPpController extends Controller
         $ppEncryptedId = trim($validated['pp_encrypted_id'] ?? '');
 
         if ($ppEncryptedId === '') {
+            $ppEncryptedId = trim((string) ($user->pp_unique_agent_id ?? ''));
+        }
+
+        if ($ppEncryptedId === '') {
+            $ppEncryptedId = $this->fetchEncryptedAgentIdFromPp($user);
+        }
+
+        if ($ppEncryptedId === '') {
             return response()->json([
                 'success' => false,
-                'message' => 'PP Encrypted Agent ID is required to remap External Ref. '
-                           . 'Use the Sync Agent button to push UpdateAgent with the default AgentId='
-                           . $user->id . '.',
+                'message' => 'Could not locate this agent on Private Property. '
+                           . 'Sync the agent first (creates the profile), or paste '
+                           . 'the encrypted PrivatePropertyAgentId from PP support '
+                           . 'into the field below.',
             ], 422);
         }
 
@@ -97,9 +111,58 @@ class AgentPpController extends Controller
 
         return response()->json([
             'success'            => true,
-            'message'            => 'PP External Ref remapped via UpdateUniqueAgentID',
+            'message'            => 'PP External Ref remapped via UpdateUniqueAgentID (now ' . $externalRef . ')',
             'external_ref'       => $externalRef,
             'pp_unique_agent_id' => $ppEncryptedId,
         ]);
+    }
+
+    /**
+     * Try to discover PP's encrypted PrivatePropertyAgentId for a user by
+     * looking up their current External Ref via GetAgent. Returns '' on miss.
+     */
+    private function fetchEncryptedAgentIdFromPp(User $user): string
+    {
+        $candidates = array_unique(array_filter([
+            (string) $user->id,
+            (string) ($user->pp_external_ref ?? ''),
+        ]));
+
+        foreach ($candidates as $candidate) {
+            try {
+                $resp = $this->soapClient->getAgent($candidate);
+            } catch (\Throwable $e) {
+                continue;
+            }
+
+            if (isset($resp['error']) && $resp['error'] === true) {
+                continue;
+            }
+
+            $encrypted = $this->extractEncryptedId($resp);
+            if ($encrypted !== '') {
+                return $encrypted;
+            }
+        }
+
+        return '';
+    }
+
+    private function extractEncryptedId(array $resp): string
+    {
+        $candidates = [
+            $resp['PrivatePropertyAgentId'] ?? null,
+            $resp['GetAgentResult']['PrivatePropertyAgentId'] ?? null,
+            $resp['Agent']['PrivatePropertyAgentId'] ?? null,
+        ];
+
+        foreach ($candidates as $value) {
+            $value = trim((string) ($value ?? ''));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
     }
 }
