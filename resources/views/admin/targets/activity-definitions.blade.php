@@ -1,172 +1,181 @@
-@extends('layouts.corex')
+@extends('layouts.corex-app')
 
-@section('content')
-<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+@section('corex-content')
+    <style>
+        .acty-input {
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.8125rem;
+            border-radius: 6px;
+            background: var(--surface-2, #f0f2f8);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            transition: all 300ms;
+        }
+        .acty-input:focus {
+            outline: none;
+            border-color: var(--brand-button, #0ea5e9);
+            box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-button, #0ea5e9) 15%, transparent);
+        }
+        .acty-input-sm {
+            padding: 0.375rem 0.625rem;
+        }
+        .acty-num {
+            text-align: right;
+        }
+        .acty-defs-table tbody tr { transition: background-color 150ms ease; }
+        .acty-defs-table tbody tr:hover td { background: var(--surface-2); }
+    </style>
 
-    {{-- Page Header --}}
-    <div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4">
-        <h2 class="text-xl font-bold text-white leading-tight tracking-tight">Activity Definitions (V2)</h2>
-        <div class="text-sm text-white/60">Define activities, weights, and scoring modes.</div>
-    </div>
+    <div class="max-w-7xl mx-auto space-y-6">
 
-    @if (session('status'))
-        <div class="rounded-md px-4 py-3 text-sm" style="background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); color: #10b981;">{{ session('status') }}</div>
-    @endif
-
-    @if($errors->any())
-        <div class="rounded-md px-4 py-3 text-sm" style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #ef4444;">{{ $errors->first() }}</div>
-    @endif
-
-    {{-- Add Activity --}}
-    <div class="rounded-md overflow-hidden" style="background: var(--surface); border: 1px solid var(--border);">
-        <div class="px-5 py-4" style="border-bottom: 1px solid var(--border);">
-            <h3 class="text-sm font-semibold" style="color: var(--text-primary);">Add New Activity</h3>
+        {{-- Page Header (Pattern A: branded) --}}
+        <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a);">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h1 class="text-xl font-bold text-white leading-tight">Activity Definitions</h1>
+                    <p class="text-sm text-white/60">Define activities, weights, and scoring modes.</p>
+                </div>
+            </div>
         </div>
 
-        <div class="px-5 py-4">
-            <form method="POST" action="{{ route('admin.targets.activity.definitions.save') }}" class="grid grid-cols-1 sm:grid-cols-6 gap-4 items-end">
-                @csrf
+        @if (session('status'))
+            <div class="rounded-md px-4 py-3 text-sm flex items-start gap-3"
+                 style="background: color-mix(in srgb, var(--ds-green) 10%, transparent);
+                        border: 1px solid color-mix(in srgb, var(--ds-green) 30%, transparent);
+                        color: var(--text-primary);">
+                <svg class="w-5 h-5 flex-shrink-0 mt-0.5" style="color: var(--ds-green);" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+                <div class="flex-1">{{ session('status') }}</div>
+            </div>
+        @endif
 
-                <div class="sm:col-span-2">
-                    <label class="block text-xs font-medium mb-1.5" style="color: var(--text-secondary);">Name</label>
-                    <input name="name" required placeholder="Appointments"
-                           class="w-full rounded-md px-3 py-2 text-sm transition-all duration-300"
-                           style="background: var(--surface-2, #f0f2f8); border: 1px solid var(--border); color: var(--text-primary);"
-                           onfocus="this.style.borderColor='var(--brand-button, #0ea5e9)';this.style.boxShadow='0 0 0 2px rgba(14,165,233,0.15)'"
-                           onblur="this.style.borderColor='var(--border)';this.style.boxShadow='none'" />
-                </div>
+        @if($errors->any())
+            <div class="rounded-md px-4 py-3 text-sm flex items-start gap-3"
+                 style="background: color-mix(in srgb, var(--ds-crimson) 10%, transparent);
+                        border: 1px solid color-mix(in srgb, var(--ds-crimson) 30%, transparent);
+                        color: var(--text-primary);">
+                <svg class="w-5 h-5 flex-shrink-0 mt-0.5" style="color: var(--ds-crimson);" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                </svg>
+                <div class="flex-1">{{ $errors->first() }}</div>
+            </div>
+        @endif
 
-                <div class="sm:col-span-1">
-                    <label class="block text-xs font-medium mb-1.5" style="color: var(--text-secondary);">Weight</label>
-                    <input name="weight" type="number" step="0.01" min="0" value="1"
-                           class="w-full rounded-md px-3 py-2 text-sm text-right transition-all duration-300"
-                           style="background: var(--surface-2, #f0f2f8); border: 1px solid var(--border); color: var(--text-primary);"
-                           onfocus="this.style.borderColor='var(--brand-button, #0ea5e9)';this.style.boxShadow='0 0 0 2px rgba(14,165,233,0.15)'"
-                           onblur="this.style.borderColor='var(--border)';this.style.boxShadow='none'" />
-                </div>
+        {{-- Add New Activity --}}
+        <div class="rounded-md overflow-hidden" style="background: var(--surface); border: 1px solid var(--border);">
+            <div class="px-5 py-4" style="border-bottom: 1px solid var(--border);">
+                <h2 class="text-lg font-semibold" style="color: var(--text-primary);">Add New Activity</h2>
+            </div>
 
-                <div class="sm:col-span-1">
-                    <label class="block text-xs font-medium mb-1.5" style="color: var(--text-secondary);">Order</label>
-                    <input name="sort_order" type="number" min="0" value="100"
-                           class="w-full rounded-md px-3 py-2 text-sm text-right transition-all duration-300"
-                           style="background: var(--surface-2, #f0f2f8); border: 1px solid var(--border); color: var(--text-primary);"
-                           onfocus="this.style.borderColor='var(--brand-button, #0ea5e9)';this.style.boxShadow='0 0 0 2px rgba(14,165,233,0.15)'"
-                           onblur="this.style.borderColor='var(--border)';this.style.boxShadow='none'" />
-                </div>
+            <div class="px-5 py-4">
+                <form method="POST" action="{{ route('admin.targets.activity.definitions.save') }}" class="grid grid-cols-1 sm:grid-cols-6 gap-4 items-end">
+                    @csrf
 
-                <div class="sm:col-span-1">
-                    <label class="block text-xs font-medium mb-1.5" style="color: var(--text-secondary);">Scoring</label>
-                    <select name="scoring_mode"
-                            class="w-full rounded-md px-3 py-2 text-sm transition-all duration-300"
-                            style="background: var(--surface-2, #f0f2f8); border: 1px solid var(--border); color: var(--text-primary);">
-                        <option value="count" selected>Per action</option>
-                        <option value="once">Once (tick)</option>
-                    </select>
-                </div>
+                    <div class="sm:col-span-2">
+                        <label for="acty-name" class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Name</label>
+                        <input id="acty-name" name="name" required placeholder="Appointments" class="acty-input" />
+                    </div>
 
-                <div class="sm:col-span-1 flex items-end gap-3">
-                    <label class="inline-flex items-center gap-2 text-sm pb-2" style="color: var(--text-primary);">
-                        <input type="checkbox" name="is_enabled" value="1" checked class="rounded-md transition-all duration-300" style="border-color: var(--border);">
-                        Active
-                    </label>
-                    <button class="corex-btn-primary text-sm ml-auto">Add</button>
-                </div>
-            </form>
+                    <div class="sm:col-span-1">
+                        <label for="acty-weight" class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Weight</label>
+                        <input id="acty-weight" name="weight" type="number" step="0.01" min="0" value="1" class="acty-input acty-num" />
+                    </div>
+
+                    <div class="sm:col-span-1">
+                        <label for="acty-order" class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Order</label>
+                        <input id="acty-order" name="sort_order" type="number" min="0" value="100" class="acty-input acty-num" />
+                    </div>
+
+                    <div class="sm:col-span-1">
+                        <label for="acty-scoring" class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Scoring</label>
+                        <select id="acty-scoring" name="scoring_mode" class="acty-input">
+                            <option value="count" selected>Per action</option>
+                            <option value="once">Once (tick)</option>
+                        </select>
+                    </div>
+
+                    <div class="sm:col-span-1 flex items-center justify-between gap-3">
+                        <label class="inline-flex items-center gap-2 text-sm" style="color: var(--text-primary);">
+                            <input type="checkbox" name="is_enabled" value="1" checked>
+                            Active
+                        </label>
+                        <button class="corex-btn-primary">Add</button>
+                    </div>
+                </form>
+            </div>
         </div>
-    </div>
 
-    {{-- Existing Definitions --}}
-    <div class="rounded-md overflow-hidden" style="background: var(--surface); border: 1px solid var(--border);">
-        <div class="px-5 py-4" style="border-bottom: 1px solid var(--border);">
-            <h3 class="text-sm font-semibold" style="color: var(--text-primary);">Existing Definitions</h3>
-        </div>
+        {{-- Existing Definitions --}}
+        <div class="rounded-md overflow-hidden" style="background: var(--surface); border: 1px solid var(--border);">
+            <div class="px-5 py-4" style="border-bottom: 1px solid var(--border);">
+                <h2 class="text-lg font-semibold" style="color: var(--text-primary);">Existing Definitions</h2>
+            </div>
 
-        <div class="overflow-x-auto">
-            <table class="min-w-full text-sm ds-table">
-                <thead>
-                    <tr style="background: var(--surface-2, var(--surface));">
-                        <th class="text-left px-4 py-3" style="color: var(--text-secondary);">Name</th>
-                        <th class="text-left px-4 py-3 w-28" style="color: var(--text-secondary);">Weight</th>
-                        <th class="text-left px-4 py-3 w-28" style="color: var(--text-secondary);">Order</th>
-                        <th class="text-left px-4 py-3 w-36" style="color: var(--text-secondary);">Scoring</th>
-                        <th class="text-left px-4 py-3 w-28" style="color: var(--text-secondary);">Enabled</th>
-                        <th class="text-right px-4 py-3 w-24" style="color: var(--text-secondary);"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse($definitions as $d)
-                        <tr class="transition-all duration-300" style="border-bottom: 1px solid var(--border);">
-                            <form method="POST" action="{{ route('admin.targets.activity.definitions.save') }}">
-                                @csrf
-                                <input type="hidden" name="id" value="{{ $d->id }}">
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm ds-table acty-defs-table">
+                    <thead>
+                        <tr style="background: var(--surface-2);">
+                            <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Name</th>
+                            <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider w-28" style="color: var(--text-muted);">Weight</th>
+                            <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider w-28" style="color: var(--text-muted);">Order</th>
+                            <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider w-36" style="color: var(--text-muted);">Scoring</th>
+                            <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider w-24" style="color: var(--text-muted);">Enabled</th>
+                            <th class="text-right px-4 py-2.5 text-xs font-semibold uppercase tracking-wider w-24" style="color: var(--text-muted);">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($definitions as $d)
+                            <tr style="border-top: 1px solid var(--border);">
+                                <form method="POST" action="{{ route('admin.targets.activity.definitions.save') }}">
+                                    @csrf
+                                    <input type="hidden" name="id" value="{{ $d->id }}">
 
-                                <td class="px-4 py-3">
-                                    <input name="name"
-                                           value="{{ $d->name }}"
-                                           class="w-full rounded-md px-2.5 py-1.5 text-sm transition-all duration-300"
-                                           style="background: var(--surface-2, #f0f2f8); border: 1px solid var(--border); color: var(--text-primary);"
-                                           onfocus="this.style.borderColor='var(--brand-button, #0ea5e9)';this.style.boxShadow='0 0 0 2px rgba(14,165,233,0.15)'"
-                                           onblur="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
-                                </td>
+                                    <td class="px-4 py-3">
+                                        <input name="name" value="{{ $d->name }}" class="acty-input acty-input-sm">
+                                    </td>
 
-                                <td class="px-4 py-3">
-                                    <input name="weight"
-                                           type="number"
-                                           step="0.01"
-                                           min="0"
-                                           value="{{ number_format((float)$d->weight, 2, '.', '') }}"
-                                           class="w-24 rounded-md px-2.5 py-1.5 text-sm text-right transition-all duration-300"
-                                           style="background: var(--surface-2, #f0f2f8); border: 1px solid var(--border); color: var(--text-primary);"
-                                           onfocus="this.style.borderColor='var(--brand-button, #0ea5e9)';this.style.boxShadow='0 0 0 2px rgba(14,165,233,0.15)'"
-                                           onblur="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
-                                </td>
+                                    <td class="px-4 py-3">
+                                        <input name="weight" type="number" step="0.01" min="0"
+                                               value="{{ number_format((float)$d->weight, 2, '.', '') }}"
+                                               class="acty-input acty-input-sm acty-num w-24">
+                                    </td>
 
-                                <td class="px-4 py-3">
-                                    <input name="sort_order"
-                                           type="number"
-                                           min="0"
-                                           value="{{ (int)$d->sort_order }}"
-                                           class="w-24 rounded-md px-2.5 py-1.5 text-sm text-right transition-all duration-300"
-                                           style="background: var(--surface-2, #f0f2f8); border: 1px solid var(--border); color: var(--text-primary);"
-                                           onfocus="this.style.borderColor='var(--brand-button, #0ea5e9)';this.style.boxShadow='0 0 0 2px rgba(14,165,233,0.15)'"
-                                           onblur="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
-                                </td>
+                                    <td class="px-4 py-3">
+                                        <input name="sort_order" type="number" min="0"
+                                               value="{{ (int)$d->sort_order }}"
+                                               class="acty-input acty-input-sm acty-num w-24">
+                                    </td>
 
-                                <td class="px-4 py-3">
-                                    <select name="scoring_mode"
-                                            class="w-32 rounded-md px-2.5 py-1.5 text-sm transition-all duration-300"
-                                            style="background: var(--surface-2, #f0f2f8); border: 1px solid var(--border); color: var(--text-primary);">
+                                    <td class="px-4 py-3">
                                         @php($sm = (string)($d->scoring_mode ?? 'count'))
-                                        <option value="count" @selected($sm === 'count')>Per action</option>
-                                        <option value="once" @selected($sm === 'once')>Once (tick)</option>
-                                    </select>
-                                </td>
+                                        <select name="scoring_mode" class="acty-input acty-input-sm w-32">
+                                            <option value="count" @selected($sm === 'count')>Per action</option>
+                                            <option value="once" @selected($sm === 'once')>Once (tick)</option>
+                                        </select>
+                                    </td>
 
-                                <td class="px-4 py-3">
-                                    <input type="checkbox"
-                                           name="is_enabled"
-                                           value="1"
-                                           @checked((int)$d->is_enabled === 1)
-                                           class="rounded-md transition-all duration-300"
-                                           style="border-color: var(--border);">
-                                </td>
+                                    <td class="px-4 py-3">
+                                        <input type="checkbox" name="is_enabled" value="1" @checked((int)$d->is_enabled === 1)>
+                                    </td>
 
-                                <td class="px-4 py-3 text-right">
-                                    <button class="corex-btn-primary text-xs">Save</button>
+                                    <td class="px-4 py-3 text-right">
+                                        <button class="corex-btn-primary text-xs">Save</button>
+                                    </td>
+                                </form>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="6" class="px-4 py-12 text-center text-sm" style="color: var(--text-muted);">
+                                    No activity definitions yet.
                                 </td>
-                            </form>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="6" class="px-4 py-6 text-sm text-center" style="color: var(--text-muted);">
-                                No activity definitions yet.
-                            </td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
         </div>
-    </div>
 
-</div>
+    </div>
 @endsection

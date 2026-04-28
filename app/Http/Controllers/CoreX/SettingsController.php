@@ -18,6 +18,7 @@ use App\Models\Branch;
 use App\Models\User;
 use App\Models\CommandCenter\AgencyDashboardSetting;
 use App\Models\CommandCenter\UserDashboardSetting;
+use App\Services\CommandCenter\NotificationPreferenceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -28,9 +29,29 @@ class SettingsController extends Controller
     {
         $user = auth()->user();
 
+        // New hub: single ?s=section-key drives the right pane.
+        // Legacy ?tab= / ?fsec= still supported and mapped forward.
+        $section = $request->get('s');
+        if (!$section) {
+            $tab  = $request->get('tab', 'agency');
+            $fsec = $request->get('fsec', 'documents');
+            $section = $tab === 'feature' ? 'feature-' . $fsec : $tab;
+        }
+
+        $validSections = [
+            'agency', 'user', 'system', 'notifications',
+            'feature-documents', 'feature-rentals', 'feature-contacts',
+            'feature-properties', 'feature-matches', 'feature-dashboard',
+        ];
+        if (!in_array($section, $validSections, true)) {
+            $section = 'agency';
+        }
+
         $data = [
-            'activeTab'      => $request->get('tab', 'agency'),
-            'featureSection' => $request->get('fsec', 'documents'),
+            'activeSection'  => $section,
+            // Legacy variables kept for any partial that still references them.
+            'activeTab'      => str_starts_with($section, 'feature-') ? 'feature' : $section,
+            'featureSection' => str_starts_with($section, 'feature-') ? substr($section, 8) : 'documents',
         ];
 
         // User Settings tab: Designations
@@ -70,6 +91,11 @@ class SettingsController extends Controller
         // Feature Settings tab: Properties — marketing toggle
         $data['marketingEnabled'] = (bool) PerformanceSetting::get('marketing_enabled', 1);
 
+        // Feature Settings tab: Properties — syndication portal availability
+        $data['syndicationWebsiteEnabled'] = (bool) PerformanceSetting::get('syndication_website_enabled', 1);
+        $data['syndicationPpEnabled']      = (bool) PerformanceSetting::get('syndication_pp_enabled', 1);
+        $data['syndicationP24Enabled']     = (bool) PerformanceSetting::get('syndication_p24_enabled', 1);
+
         // Feature Settings tab: Matches
         $data['matchesEnabled']            = (bool) PerformanceSetting::get('matches_enabled', 1);
         $data['matchesShowOnProperties']   = (bool) PerformanceSetting::get('matches_show_on_properties', 1);
@@ -95,7 +121,38 @@ class SettingsController extends Controller
             ? AgencyDashboardSetting::firstOrNew(['agency_id' => $data['agency']->id], UserDashboardSetting::defaults())
             : new AgencyDashboardSetting(UserDashboardSetting::defaults());
 
+        // Notifications tab snapshot
+        if ($user) {
+            $data['notificationSnapshot'] = app(NotificationPreferenceService::class)->snapshot($user);
+        } else {
+            $data['notificationSnapshot'] = null;
+        }
+
         return view('corex.settings', $data);
+    }
+
+    public function updateNotificationPreferences(Request $request, NotificationPreferenceService $service)
+    {
+        $user = auth()->user();
+        abort_unless($user, 403);
+
+        $payload = $request->validate([
+            'master'                       => 'sometimes|array',
+            'master.in_app'                => 'sometimes|boolean',
+            'master.email'                 => 'sometimes|boolean',
+            'master.push'                  => 'sometimes|boolean',
+            'preferences'                  => 'sometimes|array',
+            'preferences.*.key'            => 'required_with:preferences|string',
+            'preferences.*.enabled'        => 'sometimes|boolean',
+            'preferences.*.threshold'      => 'sometimes|nullable|integer|min:0',
+            'preferences.*.channel_in_app' => 'sometimes|boolean',
+            'preferences.*.channel_email'  => 'sometimes|boolean',
+            'preferences.*.channel_push'   => 'sometimes|boolean',
+        ]);
+
+        $saved = $service->applyUpdates($user, $payload);
+
+        return response()->json(['ok' => true, 'saved' => $saved]);
     }
 
     // ── Property Setting Items CRUD ─────────────────────────────────────────
@@ -176,6 +233,14 @@ class SettingsController extends Controller
         $enabled = $request->boolean('marketing_enabled');
         PerformanceSetting::updateOrCreate(['key' => 'marketing_enabled'], ['value' => $enabled ? 1 : 0]);
         return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('success', 'Marketing setting updated.');
+    }
+
+    public function updateSyndicationPortals(Request $request)
+    {
+        foreach (['syndication_website_enabled', 'syndication_pp_enabled', 'syndication_p24_enabled'] as $key) {
+            PerformanceSetting::updateOrCreate(['key' => $key], ['value' => $request->boolean($key) ? 1 : 0]);
+        }
+        return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('success', 'Syndication portals updated.');
     }
 
     public function updateMatchesEnabled(Request $request)

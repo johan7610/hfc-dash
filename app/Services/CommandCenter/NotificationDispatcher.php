@@ -1,0 +1,108 @@
+<?php
+
+namespace App\Services\CommandCenter;
+
+use App\Models\CommandCenter\NotificationDispatchLog;
+use App\Models\DeviceToken;
+use App\Models\User;
+use App\Notifications\PillarEventNotification;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification as NotificationFacade;
+
+class NotificationDispatcher
+{
+    public function __construct(private NotificationPreferenceService $prefs) {}
+
+    /**
+     * Dispatch a pillar event notification respecting user preferences and idempotency.
+     *
+     * @param string $eventKey   e.g. "property.documents_missing"
+     * @param Model  $subject    The Property / Contact / Deal / etc.
+     * @param array  $args       title, body, action_url, severity, payload, threshold_hit_at (Carbon)
+     * @return bool true if anything was dispatched
+     */
+    public function fire(User $user, string $eventKey, Model $subject, array $args): bool
+    {
+        $eff = $this->prefs->effective($user, $eventKey);
+        if (! $eff || ! $eff['enabled']) return false;
+
+        $channels = [];
+        if ($eff['channel_in_app']) $channels[] = 'database';
+        if ($eff['channel_email'])  $channels[] = 'mail';
+        if ($eff['channel_push'])   $channels[] = 'fcm';
+        if (empty($channels)) return false;
+
+        $thresholdHit = $args['threshold_hit_at'] ?? now();
+        $subjectType = $subject->getMorphClass();
+        $subjectId   = $subject->getKey();
+
+        $alreadySent = NotificationDispatchLog::where('user_id', $user->id)
+            ->where('notification_event_type_id', $eff['event_type']->id)
+            ->where('subject_type', $subjectType)
+            ->where('subject_id', $subjectId)
+            ->where('threshold_hit_at', '>=', $thresholdHit)
+            ->exists();
+        if ($alreadySent) return false;
+
+        $notification = new PillarEventNotification(
+            eventKey:     $eventKey,
+            pillar:       $eff['event_type']->pillar,
+            title:        $args['title']     ?? $eff['event_type']->label,
+            body:         $args['body']      ?? '',
+            subjectType:  $subjectType,
+            subjectId:    $subjectId,
+            subjectLabel: $args['subject_label'] ?? null,
+            actionUrl:    $args['action_url']    ?? null,
+            severity:     $args['severity']      ?? 'info',
+            payload:      $args['payload']       ?? [],
+            channels:     array_intersect($channels, ['database', 'mail']), // FCM handled below
+        );
+
+        // 1) Database + mail via Laravel notifications
+        try {
+            $user->notify($notification);
+        } catch (\Throwable $e) {
+            Log::warning('Pillar notification dispatch failed', [
+                'user' => $user->id, 'key' => $eventKey, 'error' => $e->getMessage(),
+            ]);
+        }
+
+        // 2) FCM push — best-effort, only if a transport class is installed.
+        if (in_array('fcm', $channels, true)) {
+            $this->sendPush($user, $notification);
+        }
+
+        foreach ($channels as $ch) {
+            $logChannel = $ch === 'database' ? 'in_app' : ($ch === 'mail' ? 'email' : 'push');
+            NotificationDispatchLog::create([
+                'user_id' => $user->id,
+                'notification_event_type_id' => $eff['event_type']->id,
+                'subject_type' => $subjectType,
+                'subject_id'   => $subjectId,
+                'threshold_hit_at' => $thresholdHit,
+                'dispatched_at'    => now(),
+                'channel'          => $logChannel,
+            ]);
+        }
+
+        return true;
+    }
+
+    private function sendPush(User $user, PillarEventNotification $n): void
+    {
+        $tokens = DeviceToken::where('user_id', $user->id)->pluck('token')->all();
+        if (empty($tokens)) return;
+
+        // Soft hook: if the FCM transport service exists, call it. Otherwise, no-op.
+        // Mobile teams can plug in their own service (e.g. App\Services\Push\FcmService).
+        $serviceClass = '\\App\\Services\\Push\\FcmService';
+        if (class_exists($serviceClass)) {
+            try {
+                app($serviceClass)->send($tokens, $n->toFcmPayload());
+            } catch (\Throwable $e) {
+                Log::warning('FCM push failed', ['user' => $user->id, 'error' => $e->getMessage()]);
+            }
+        }
+    }
+}

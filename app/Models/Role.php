@@ -21,6 +21,7 @@ class Role extends Model
         'color',
         'sort_order',
         'agency_id',
+        'oversight_scope',
     ];
 
     protected $casts = [

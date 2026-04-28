@@ -1,6 +1,6 @@
-@extends('layouts.corex')
+@extends('layouts.corex-app')
 
-@section('content')
+@section('corex-content')
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6"
      x-data="{
         showCancelModal: false,
@@ -12,37 +12,49 @@
      }">
 
     {{-- Page Header --}}
-    <div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-5 flex items-center justify-between">
-        <div>
-            <h2 class="text-xl font-bold text-white leading-tight tracking-tight">{{ ($showOnlyAuthorisation ?? false) ? 'Authorise Documents' : 'My E-Sign Documents' }}</h2>
-            <div class="text-sm text-white/60 mt-1">
-                @if($showOnlyAuthorisation ?? false)
-                    <a href="{{ route('docuperfect.esign.myDocuments') }}" class="text-white/60 hover:text-white transition-all duration-300">&larr; My E-Sign Documents</a>
-                    &middot; Candidate documents requiring your authorisation.
-                @else
-                    <a href="{{ route('docuperfect.dashboard') }}" class="text-white/60 hover:text-white transition-all duration-300">&larr; DocuPerfect</a>
-                    &middot; Track all your e-sign flows, signing progress, and approvals.
-                @endif
+    <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a);">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <h1 class="text-xl font-bold text-white leading-tight">{{ ($showOnlyAuthorisation ?? false) ? 'Authorise Documents' : 'My E-Sign Documents' }}</h1>
+                <p class="text-sm text-white/60 mt-1">
+                    @if($showOnlyAuthorisation ?? false)
+                        <a href="{{ route('docuperfect.esign.myDocuments') }}" class="text-white/60 hover:text-white transition-colors duration-150">&larr; My E-Sign Documents</a>
+                        &middot; Candidate documents requiring your authorisation.
+                    @else
+                        <a href="{{ route('docuperfect.dashboard') }}" class="text-white/60 hover:text-white transition-colors duration-150">&larr; DocuPerfect</a>
+                        &middot; Track all your e-sign flows, signing progress, and approvals.
+                    @endif
+                </p>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="{{ route('docuperfect.esign.create') }}"
+                   class="corex-btn-primary inline-flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
+                    New E-Sign
+                </a>
             </div>
         </div>
-        <a href="{{ route('docuperfect.esign.create') }}"
-           class="corex-btn-primary inline-flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
-            New E-Sign
-        </a>
     </div>
 
     @if(session('status'))
-        <div class="rounded-md border border-emerald-500/30 px-4 py-3 text-sm" style="background: rgba(16,185,129,0.1); color: var(--text-primary);">
-            {{ session('status') }}
+        <div class="rounded-md px-4 py-3 text-sm flex items-start gap-3"
+             style="background: color-mix(in srgb, var(--ds-green) 10%, transparent);
+                    border: 1px solid color-mix(in srgb, var(--ds-green) 30%, transparent);
+                    color: var(--text-primary);">
+            <div class="flex-1">{{ session('status') }}</div>
         </div>
     @endif
 
     @if($errors->any())
-        <div class="rounded-md border border-red-500/30 px-4 py-3 text-sm" style="background: rgba(239,68,68,0.1); color: var(--text-primary);">
-            @foreach($errors->all() as $error)
-                <div>{{ $error }}</div>
-            @endforeach
+        <div class="rounded-md px-4 py-3 text-sm flex items-start gap-3"
+             style="background: color-mix(in srgb, var(--ds-crimson) 10%, transparent);
+                    border: 1px solid color-mix(in srgb, var(--ds-crimson) 30%, transparent);
+                    color: var(--text-primary);">
+            <div class="flex-1">
+                @foreach($errors->all() as $error)
+                    <div>{{ $error }}</div>
+                @endforeach
+            </div>
         </div>
     @endif
 
@@ -51,36 +63,38 @@
     <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
         @if(($counts['needs_authorisation'] ?? 0) > 0)
         <a href="#section-needs-authorisation" onclick="event.preventDefault(); scrollToSection('section-needs-authorisation')"
-           class="rounded-md p-4 text-center border-2 cursor-pointer block transition-all duration-300 hover:opacity-90" style="border-color: #f59e0b; background: rgba(245,158,11,0.1);">
-            <div class="text-2xl font-bold" style="color: #f59e0b;">{{ $counts['needs_authorisation'] }}</div>
-            <div class="text-xs mt-1 font-semibold" style="color: #b45309;">Needs Authorisation</div>
+           class="rounded-md p-4 text-center cursor-pointer block transition-all duration-300 hover:opacity-90"
+           style="border: 2px solid var(--ds-amber); background: color-mix(in srgb, var(--ds-amber) 10%, transparent);">
+            <div class="text-[1.625rem] font-semibold" style="color: var(--ds-amber);">{{ number_format($counts['needs_authorisation']) }}</div>
+            <div class="text-xs mt-1 font-semibold" style="color: var(--ds-amber);">Needs Authorisation</div>
         </a>
         @endif
         @if($counts['pending_approval'] > 0)
         <a href="#section-pending-approval" onclick="event.preventDefault(); scrollToSection('section-pending-approval')"
-           class="rounded-md p-4 text-center border-2 border-amber-400 cursor-pointer block transition-all duration-300 hover:border-amber-500" style="background: rgba(245,158,11,0.1);">
-            <div class="text-2xl font-bold text-amber-500">{{ $counts['pending_approval'] }}</div>
-            <div class="text-xs text-amber-500 mt-1 font-semibold">Needs Approval</div>
+           class="rounded-md p-4 text-center cursor-pointer block transition-all duration-300 hover:opacity-90"
+           style="border: 2px solid var(--ds-amber); background: color-mix(in srgb, var(--ds-amber) 10%, transparent);">
+            <div class="text-[1.625rem] font-semibold" style="color: var(--ds-amber);">{{ number_format($counts['pending_approval']) }}</div>
+            <div class="text-xs mt-1 font-semibold" style="color: var(--ds-amber);">Needs Approval</div>
         </a>
         @endif
         <a href="#section-draft" onclick="event.preventDefault(); scrollToSection('section-draft')"
            class="ds-status-card p-4 text-center transition-all duration-300 cursor-pointer block">
-            <div class="text-2xl font-bold" style="color: {{ $counts['draft'] > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}">{{ $counts['draft'] }}</div>
+            <div class="text-[1.625rem] font-semibold" style="color: {{ $counts['draft'] > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}">{{ number_format($counts['draft']) }}</div>
             <div class="text-xs mt-1" style="color: {{ $counts['draft'] > 0 ? 'var(--text-secondary)' : 'var(--text-muted)' }}">Draft</div>
         </a>
         <a href="#section-ready" onclick="event.preventDefault(); scrollToSection('section-ready')"
            class="ds-status-card p-4 text-center transition-all duration-300 cursor-pointer block">
-            <div class="text-2xl font-bold" style="color: {{ $counts['ready_to_sign'] > 0 ? 'var(--brand-icon, #0ea5e9)' : 'var(--text-muted)' }}">{{ $counts['ready_to_sign'] }}</div>
+            <div class="text-[1.625rem] font-semibold" style="color: {{ $counts['ready_to_sign'] > 0 ? 'var(--brand-icon)' : 'var(--text-muted)' }}">{{ number_format($counts['ready_to_sign']) }}</div>
             <div class="text-xs mt-1" style="color: {{ $counts['ready_to_sign'] > 0 ? 'var(--text-secondary)' : 'var(--text-muted)' }}">Ready to Sign</div>
         </a>
         <a href="#section-awaiting" onclick="event.preventDefault(); scrollToSection('section-awaiting')"
            class="ds-status-card p-4 text-center transition-all duration-300 cursor-pointer block">
-            <div class="text-2xl font-bold" style="color: {{ $counts['awaiting_signatures'] > 0 ? '#f59e0b' : 'var(--text-muted)' }}">{{ $counts['awaiting_signatures'] }}</div>
+            <div class="text-[1.625rem] font-semibold" style="color: {{ $counts['awaiting_signatures'] > 0 ? 'var(--ds-amber)' : 'var(--text-muted)' }}">{{ number_format($counts['awaiting_signatures']) }}</div>
             <div class="text-xs mt-1" style="color: {{ $counts['awaiting_signatures'] > 0 ? 'var(--text-secondary)' : 'var(--text-muted)' }}">Awaiting Signatures</div>
         </a>
         <a href="#section-completed" onclick="event.preventDefault(); scrollToSection('section-completed')"
            class="ds-status-card p-4 text-center transition-all duration-300 cursor-pointer block">
-            <div class="text-2xl font-bold" style="color: {{ $counts['completed'] > 0 ? '#10b981' : 'var(--text-muted)' }}">{{ $counts['completed'] }}</div>
+            <div class="text-[1.625rem] font-semibold" style="color: {{ $counts['completed'] > 0 ? 'var(--ds-green)' : 'var(--text-muted)' }}">{{ number_format($counts['completed']) }}</div>
             <div class="text-xs mt-1" style="color: {{ $counts['completed'] > 0 ? 'var(--text-secondary)' : 'var(--text-muted)' }}">Completed</div>
         </a>
     </div>
@@ -89,8 +103,8 @@
     {{-- ===== CANDIDATE DOCUMENTS — NEEDS AUTHORISATION ===== --}}
     @if(($groups['needs_authorisation'] ?? collect())->isNotEmpty())
     <div id="section-needs-authorisation" class="space-y-3 scroll-mt-4">
-        <h3 class="text-sm font-semibold uppercase tracking-wider flex items-center gap-2" style="color: #f59e0b;">
-            <span class="inline-flex items-center justify-center w-5 h-5 text-white text-[10px] font-bold rounded-md" style="background: #f59e0b;">{{ $groups['needs_authorisation']->count() }}</span>
+        <h3 class="text-sm font-semibold uppercase tracking-wider flex items-center gap-2" style="color: var(--ds-amber);">
+            <span class="inline-flex items-center justify-center w-5 h-5 text-white text-[0.6875rem] font-bold rounded-full" style="background: var(--ds-amber);">{{ number_format($groups['needs_authorisation']->count()) }}</span>
             Candidate Documents &mdash; Needs Authorisation
         </h3>
         <div class="space-y-3">
@@ -99,33 +113,27 @@
                     $doc = $tpl->document;
                     $candidateName = $tpl->creator?->name ?? 'Unknown Candidate';
                 @endphp
-                <div class="rounded-md border-2 p-4" style="border-color: #f59e0b; background: rgba(245,158,11,0.08);">
-                    <div class="flex items-start justify-between">
-                        <div class="flex-1">
+                <div class="rounded-md p-4" style="border: 2px solid var(--ds-amber); background: color-mix(in srgb, var(--ds-amber) 8%, transparent);">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex-1 min-w-0">
                             <div class="font-semibold" style="color: var(--text-primary);">
                                 {{ $doc->name ?? 'Untitled' }}
                                 @if($doc && $doc->template)
-                                    <span class="inline-block ml-2 px-2 py-0.5 rounded-md text-[10px] font-semibold" style="background: var(--surface-2); color: var(--text-secondary);">{{ $doc->template->name }}</span>
+                                    <span class="ds-badge ds-badge-default ml-2">{{ $doc->template->name }}</span>
                                 @endif
                             </div>
                             <div class="flex flex-wrap items-center gap-2 mt-2">
-                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold" style="background: rgba(245,158,11,0.15); color: #b45309;">
-                                    Candidate: <strong>{{ $candidateName }}</strong>
-                                </span>
-                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold
-                                    {{ $tpl->status === 'awaiting_supervisor' ? 'bg-yellow-100 text-yellow-800' : 'bg-orange-100 text-orange-800' }}">
-                                    {{ $tpl->status === 'awaiting_supervisor' ? 'Initial Review' : 'Final Sign-off' }}
-                                </span>
-                                <span class="text-[10px]" style="color: var(--text-muted);">
+                                <span class="ds-badge ds-badge-warning">{{ \Illuminate\Support\Str::limit($candidateName, 18) }}</span>
+                                <span class="ds-badge ds-badge-warning">{{ $tpl->status === 'awaiting_supervisor' ? 'Initial Review' : 'Final Sign-off' }}</span>
+                                <span class="text-xs" style="color: var(--text-muted);">
                                     Created {{ $tpl->created_at->format('d M Y') }}
                                 </span>
                             </div>
                         </div>
-                        <div class="flex flex-col gap-2 ml-4">
+                        <div class="flex flex-col gap-2">
                             @if($doc)
                             <a href="{{ route('docuperfect.signatures.review', $doc) }}"
-                               class="inline-flex items-center gap-1.5 px-4 py-2 text-white text-xs font-semibold rounded-md shadow hover:opacity-90 whitespace-nowrap transition-all duration-300"
-                               style="background: #f59e0b;">
+                               class="corex-btn-primary inline-flex items-center gap-1.5 whitespace-nowrap">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                                 </svg>
@@ -144,8 +152,8 @@
     {{-- ===== NEEDS YOUR APPROVAL ===== --}}
     @if($groups['pending_approval']->isNotEmpty())
     <div id="section-pending-approval" class="space-y-3 scroll-mt-4">
-        <h3 class="text-sm font-semibold text-amber-500 uppercase tracking-wider flex items-center gap-2">
-            <span class="inline-flex items-center justify-center w-5 h-5 bg-amber-500 text-white text-[10px] font-bold rounded-md">{{ $groups['pending_approval']->count() }}</span>
+        <h3 class="text-sm font-semibold uppercase tracking-wider flex items-center gap-2" style="color: var(--ds-amber);">
+            <span class="inline-flex items-center justify-center w-5 h-5 text-white text-[0.6875rem] font-bold rounded-full" style="background: var(--ds-amber);">{{ number_format($groups['pending_approval']->count()) }}</span>
             Needs Your Approval
         </h3>
         <div class="space-y-3">
@@ -155,52 +163,44 @@
                     $completedReq = $tpl->requests->where('status', 'completed')->where('party_role', '!=', 'agent')->sortByDesc('completed_at')->first();
                     $requests = $tpl->requests->keyBy('party_role');
                 @endphp
-                <div class="rounded-md border-2 border-amber-400 p-4" style="background: rgba(245,158,11,0.08);">
-                    <div class="flex items-start justify-between">
-                        <div class="flex-1">
+                <div class="rounded-md p-4" style="border: 2px solid var(--ds-amber); background: color-mix(in srgb, var(--ds-amber) 8%, transparent);">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex-1 min-w-0">
                             <div class="font-semibold" style="color: var(--text-primary);">
                                 {{ $doc->name ?? 'Untitled' }}
                                 @if($doc && $doc->template)
-                                    <span class="inline-block ml-2 px-2 py-0.5 rounded-md text-[10px] font-semibold" style="background: var(--surface-2); color: var(--text-secondary);">{{ $doc->template->name }}</span>
+                                    <span class="ds-badge ds-badge-default ml-2">{{ $doc->template->name }}</span>
                                 @endif
                             </div>
                             <div class="flex flex-wrap items-center gap-2 mt-2">
                                 @foreach($tpl->requests as $req)
                                     @if($req->status === 'completed')
-                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/15 text-emerald-400">
-                                            &#10003; {{ ucfirst($req->party_role ?? 'Party') }} signed
-                                            @if($req->signing_method === 'wet_ink')
-                                                <span style="color: var(--text-muted);">(wet ink)</span>
-                                            @endif
-                                        </span>
+                                        <span class="ds-badge ds-badge-success">{{ ucfirst($req->party_role ?? 'Party') }} signed</span>
                                     @elseif($req->status === 'waiting')
-                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold" style="background: var(--surface-2); color: var(--text-muted);">
-                                            &#128274; {{ ucfirst($req->party_role ?? 'Party') }} waiting
-                                        </span>
+                                        <span class="ds-badge ds-badge-default">{{ ucfirst($req->party_role ?? 'Party') }} waiting</span>
                                     @elseif(in_array($req->status, ['pending', 'viewed', 'partially_signed']))
-                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold" style="background: rgba(14,165,233,0.12); color: var(--brand-icon, #0ea5e9);">
-                                            &#9993; {{ ucfirst($req->party_role ?? 'Party') }} — {{ $req->status === 'viewed' ? 'viewed' : ($req->status === 'partially_signed' ? 'signing' : 'sent') }}
-                                        </span>
+                                        <span class="ds-badge ds-badge-info">{{ ucfirst($req->party_role ?? 'Party') }} {{ $req->status === 'viewed' ? 'viewed' : ($req->status === 'partially_signed' ? 'signing' : 'sent') }}</span>
                                     @endif
                                 @endforeach
                             </div>
                             @if($completedReq)
-                                <div class="text-xs text-amber-500 mt-2">
+                                <div class="text-xs mt-2" style="color: var(--ds-amber);">
                                     {{ ucfirst($completedReq->party_role ?? 'Party') }} <strong>{{ $completedReq->signer_name }}</strong>
                                     signed {{ $completedReq->completed_at?->diffForHumans() }}
                                 </div>
                             @endif
                         </div>
-                        <div class="flex flex-col gap-2 ml-4">
+                        <div class="flex flex-col gap-2">
                             @if($doc)
                             <a href="{{ route('docuperfect.signatures.review', $doc) }}"
-                               class="inline-flex items-center px-4 py-2 bg-amber-600 text-white text-xs font-medium rounded-md hover:bg-amber-700 whitespace-nowrap transition-all duration-300">
+                               class="corex-btn-primary whitespace-nowrap text-center">
                                 Review &amp; Approve
                             </a>
                             @endif
                             <button type="button"
                                     @click="cancelTemplateId = {{ $tpl->id }}; cancelDocName = {{ Js::from($doc->name ?? 'Untitled') }}; showCancelModal = true"
-                                    class="text-xs text-red-400 hover:text-red-300 text-center transition-all duration-300">
+                                    class="text-xs font-semibold text-center hover:underline transition-colors duration-150"
+                                    style="color: var(--ds-crimson);">
                                 Cancel Document
                             </button>
                         </div>
@@ -214,15 +214,16 @@
     {{-- ===== AWAITING SIGNATURES ===== --}}
     @if($groups['awaiting']->isNotEmpty())
     <div id="section-awaiting" class="space-y-3 scroll-mt-4">
-        <h3 class="text-sm font-semibold text-amber-500 uppercase tracking-wider">Awaiting Signatures</h3>
+        <h3 class="text-sm font-semibold uppercase tracking-wider" style="color: var(--ds-amber);">Awaiting Signatures</h3>
         <div class="rounded-md overflow-hidden" style="background: var(--surface); border: 1px solid var(--border);">
-            <table class="w-full text-sm ds-table">
+            <div class="overflow-x-auto">
+            <table class="min-w-full text-sm ds-table">
                 <thead>
                     <tr style="background: var(--surface-2);">
-                        <th class="text-left px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Document</th>
-                        <th class="text-left px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Signing Progress</th>
-                        <th class="text-left px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Created</th>
-                        <th class="text-right px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Actions</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Document</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Signing Progress</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Created</th>
+                        <th class="text-right px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -232,12 +233,12 @@
                         $totalReq = $tpl->requests->count();
                         $completedReq = $tpl->requests->where('status', 'completed')->count();
                     @endphp
-                    <tr class="transition-all duration-300" style="border-bottom: 1px solid var(--border);"
-                        onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
+                    <tr class="transition-colors" style="border-top: 1px solid var(--border);"
+                        onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
                         <td class="px-4 py-3">
                             <div class="font-medium" style="color: var(--text-primary);">{{ $doc->name ?? 'Untitled' }}</div>
                             @if($doc && $doc->template)
-                                <div class="text-[10px] mt-0.5" style="color: var(--text-muted);">{{ $doc->template->name }}</div>
+                                <div class="text-xs mt-0.5" style="color: var(--text-muted);">{{ $doc->template->name }}</div>
                             @endif
                         </td>
                         <td class="px-4 py-3">
@@ -246,25 +247,25 @@
                                 @foreach($tpl->requests as $req)
                                 <div class="flex items-start gap-1.5 text-xs">
                                     @if($req->status === 'completed')
-                                        <span class="text-emerald-400 mt-0.5">&#10003;</span>
+                                        <span class="mt-0.5" style="color: var(--ds-green);">&#10003;</span>
                                         <div>
                                             <span class="capitalize" style="color: var(--text-secondary);">{{ $req->party_role ?? 'Party' }}</span>
-                                            <span class="text-emerald-400 font-medium">{{ $req->signer_name }}</span>
+                                            <span class="font-medium" style="color: var(--ds-green);">{{ $req->signer_name }}</span>
                                         </div>
                                     @elseif(in_array($req->status, ['pending', 'viewed', 'partially_signed']))
-                                        <span class="mt-0.5" style="color: var(--brand-icon, #0ea5e9);">&#9993;</span>
+                                        <span class="mt-0.5" style="color: var(--brand-icon);">&#9993;</span>
                                         <div>
                                             <span class="capitalize" style="color: var(--text-secondary);">{{ $req->party_role ?? 'Party' }}</span>
-                                            <span style="color: var(--brand-icon, #0ea5e9);">
+                                            <span style="color: var(--brand-icon);">
                                                 {{ $req->signer_name }}
                                                 — {{ $req->status === 'viewed' ? 'viewed' : ($req->status === 'partially_signed' ? 'signing' : 'sent') }}
                                             </span>
                                             @if($req->fica_required && $req->contact_id)
                                                 @php $ficaDone = \App\Models\FicaSubmission::where('contact_id', $req->contact_id)->where('status', 'approved')->exists(); @endphp
                                                 @if($ficaDone)
-                                                    <span class="ml-1 text-emerald-500 font-medium">FICA OK</span>
+                                                    <span class="ml-1 font-medium" style="color: var(--ds-green);">FICA OK</span>
                                                 @else
-                                                    <a href="{{ $req->fica_submission_id ? route('compliance.fica.show', $req->fica_submission_id) : '#' }}" class="ml-1 text-amber-500 font-medium hover:text-amber-700">Awaiting FICA</a>
+                                                    <a href="{{ $req->fica_submission_id ? route('compliance.fica.show', $req->fica_submission_id) : '#' }}" class="ml-1 font-medium hover:underline" style="color: var(--ds-amber);">Awaiting FICA</a>
                                                 @endif
                                             @endif
                                         </div>
@@ -276,9 +277,9 @@
                                             @if($req->fica_required && $req->contact_id)
                                                 @php $ficaDone = \App\Models\FicaSubmission::where('contact_id', $req->contact_id)->where('status', 'approved')->exists(); @endphp
                                                 @if($ficaDone)
-                                                    <span class="ml-1 text-emerald-500 font-medium">FICA OK</span>
+                                                    <span class="ml-1 font-medium" style="color: var(--ds-green);">FICA OK</span>
                                                 @else
-                                                    <a href="{{ $req->fica_submission_id ? route('compliance.fica.show', $req->fica_submission_id) : '#' }}" class="ml-1 text-amber-500 font-medium hover:text-amber-700">Awaiting FICA</a>
+                                                    <a href="{{ $req->fica_submission_id ? route('compliance.fica.show', $req->fica_submission_id) : '#' }}" class="ml-1 font-medium hover:underline" style="color: var(--ds-amber);">Awaiting FICA</a>
                                                 @endif
                                             @endif
                                         </div>
@@ -296,7 +297,7 @@
                         <td class="px-4 py-3 text-right">
                             <div class="flex flex-col items-end gap-1">
                                 @if($doc)
-                                <a href="{{ route('docuperfect.signatures.sendConfirmation', $doc) }}" class="text-xs hover:underline transition-all duration-300" style="color: var(--brand-icon, #0ea5e9);">View Progress</a>
+                                <a href="{{ route('docuperfect.signatures.sendConfirmation', $doc) }}" class="text-xs font-semibold hover:underline transition-colors duration-150" style="color: var(--brand-icon);">View Progress</a>
                                 @endif
                                 @php
                                     $activeReq = $tpl->requests->first(fn($r) => in_array($r->status, ['pending', 'viewed', 'partially_signed']));
@@ -304,14 +305,15 @@
                                 @if($activeReq && $doc)
                                     <form method="POST" action="{{ route('docuperfect.signatures.sendReminder', ['document' => $doc->id, 'signatureRequest' => $activeReq->id]) }}" class="inline">
                                         @csrf
-                                        <button type="submit" class="text-amber-500 hover:underline text-xs transition-all duration-300" onclick="return confirm('Send reminder to {{ $activeReq->signer_name }}?')">
+                                        <button type="submit" class="text-xs font-semibold hover:underline transition-colors duration-150" style="color: var(--ds-amber);" onclick="return confirm('Send reminder to {{ $activeReq->signer_name }}?')">
                                             Send Reminder
                                         </button>
                                     </form>
                                 @endif
                                 <button type="button"
                                         @click="cancelTemplateId = {{ $tpl->id }}; cancelDocName = {{ Js::from($doc->name ?? 'Untitled') }}; showCancelModal = true"
-                                        class="text-red-400 hover:underline text-xs transition-all duration-300">
+                                        class="text-xs font-semibold hover:underline transition-colors duration-150"
+                                        style="color: var(--ds-crimson);">
                                     Cancel
                                 </button>
                             </div>
@@ -320,6 +322,7 @@
                 @endforeach
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
     @endif
@@ -327,35 +330,37 @@
     {{-- ===== READY TO SIGN ===== --}}
     @if($groups['ready_to_sign']->isNotEmpty())
     <div id="section-ready" class="space-y-3 scroll-mt-4">
-        <h3 class="text-sm font-semibold uppercase tracking-wider" style="color: var(--brand-icon, #0ea5e9);">Ready to Sign</h3>
+        <h3 class="text-sm font-semibold uppercase tracking-wider" style="color: var(--brand-icon);">Ready to Sign</h3>
         <div class="rounded-md overflow-hidden" style="background: var(--surface); border: 1px solid var(--border);">
-            <table class="w-full text-sm ds-table">
+            <div class="overflow-x-auto">
+            <table class="min-w-full text-sm ds-table">
                 <thead>
                     <tr style="background: var(--surface-2);">
-                        <th class="text-left px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Document</th>
-                        <th class="text-left px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Template</th>
-                        <th class="text-left px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Created</th>
-                        <th class="text-right px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Actions</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Document</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Template</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Created</th>
+                        <th class="text-right px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                 @foreach($groups['ready_to_sign'] as $tpl)
                     @php $doc = $tpl->document; @endphp
-                    <tr class="transition-all duration-300" style="border-bottom: 1px solid var(--border);"
-                        onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
+                    <tr class="transition-colors" style="border-top: 1px solid var(--border);"
+                        onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
                         <td class="px-4 py-3 font-medium" style="color: var(--text-primary);">{{ $doc->name ?? 'Untitled' }}</td>
-                        <td class="px-4 py-3" style="color: var(--text-secondary);">{{ $doc->template->name ?? '-' }}</td>
+                        <td class="px-4 py-3" style="color: var(--text-secondary);">{{ $doc->template->name ?? '—' }}</td>
                         <td class="px-4 py-3">
                             <span class="text-xs" style="color: var(--text-muted);">{{ $tpl->created_at->format('d M Y') }}</span>
                         </td>
                         <td class="px-4 py-3 text-right">
-                            <div class="flex items-center justify-end gap-2">
+                            <div class="flex items-center justify-end gap-3">
                                 @if($doc)
-                                <a href="{{ route('docuperfect.signatures.sign', $doc) }}" class="corex-btn-primary text-xs px-3 py-1">Sign Document</a>
+                                <a href="{{ route('docuperfect.signatures.sign', $doc) }}" class="corex-btn-primary">Sign Document</a>
                                 @endif
                                 <button type="button"
                                         @click="cancelTemplateId = {{ $tpl->id }}; cancelDocName = {{ Js::from($doc->name ?? 'Untitled') }}; showCancelModal = true"
-                                        class="text-red-400 hover:underline text-xs transition-all duration-300">
+                                        class="text-xs font-semibold hover:underline transition-colors duration-150"
+                                        style="color: var(--ds-crimson);">
                                     Cancel
                                 </button>
                             </div>
@@ -364,6 +369,7 @@
                 @endforeach
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
     @endif
@@ -373,14 +379,15 @@
     <div id="section-draft" class="space-y-3 scroll-mt-4">
         <h3 class="text-sm font-semibold uppercase tracking-wider" style="color: var(--text-secondary);">Draft</h3>
         <div class="rounded-md overflow-hidden" style="background: var(--surface); border: 1px solid var(--border);">
-            <table class="w-full text-sm ds-table">
+            <div class="overflow-x-auto">
+            <table class="min-w-full text-sm ds-table">
                 <thead>
                     <tr style="background: var(--surface-2);">
-                        <th class="text-left px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Document</th>
-                        <th class="text-left px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Template</th>
-                        <th class="text-left px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Signing Progress</th>
-                        <th class="text-left px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Created</th>
-                        <th class="text-right px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Actions</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Document</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Template</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Signing Progress</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Created</th>
+                        <th class="text-right px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -390,17 +397,17 @@
                         $totalReq = $tpl->requests->count();
                         $completedReq = $tpl->requests->where('status', 'completed')->count();
                     @endphp
-                    <tr class="transition-all duration-300" style="border-bottom: 1px solid var(--border);"
-                        onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
+                    <tr class="transition-colors" style="border-top: 1px solid var(--border);"
+                        onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
                         <td class="px-4 py-3 font-medium" style="color: var(--text-primary);">{{ $doc->name ?? 'Untitled' }}</td>
-                        <td class="px-4 py-3" style="color: var(--text-secondary);">{{ $doc->template->name ?? '-' }}</td>
+                        <td class="px-4 py-3" style="color: var(--text-secondary);">{{ $doc->template->name ?? '—' }}</td>
                         <td class="px-4 py-3">
                             @if($totalReq > 0)
                             <div class="flex items-center gap-2">
-                                <div class="flex-1 max-w-[120px] rounded-md h-1.5" style="background: var(--surface-2);">
-                                    <div class="bg-amber-500 h-1.5 rounded-md" style="width: {{ round(($completedReq / $totalReq) * 100) }}%"></div>
+                                <div class="flex-1 max-w-[120px] ds-progress-track">
+                                    <div class="ds-progress-bar ds-bar-amber" style="width: {{ round(($completedReq / $totalReq) * 100) }}%"></div>
                                 </div>
-                                <span class="text-xs text-amber-500 font-medium">{{ $completedReq }}/{{ $totalReq }}</span>
+                                <span class="text-xs font-medium" style="color: var(--ds-amber);">{{ number_format($completedReq) }}/{{ number_format($totalReq) }}</span>
                             </div>
                             @else
                                 <span class="text-xs" style="color: var(--text-muted);">No signers yet</span>
@@ -410,13 +417,14 @@
                             <span class="text-xs" style="color: var(--text-muted);">{{ $tpl->created_at->format('d M Y') }}</span>
                         </td>
                         <td class="px-4 py-3 text-right">
-                            <div class="flex items-center justify-end gap-2">
+                            <div class="flex items-center justify-end gap-3">
                                 @if($doc)
-                                <a href="{{ route('docuperfect.signatures.setup', $doc) }}" class="text-xs hover:underline transition-all duration-300" style="color: var(--brand-icon, #0ea5e9);">Continue Setup</a>
+                                <a href="{{ route('docuperfect.signatures.setup', $doc) }}" class="text-xs font-semibold hover:underline transition-colors duration-150" style="color: var(--brand-icon);">Continue Setup</a>
                                 @endif
                                 <button type="button"
                                         @click="cancelTemplateId = {{ $tpl->id }}; cancelDocName = {{ Js::from($doc->name ?? 'Untitled') }}; showCancelModal = true"
-                                        class="text-red-400 hover:underline text-xs transition-all duration-300">
+                                        class="text-xs font-semibold hover:underline transition-colors duration-150"
+                                        style="color: var(--ds-crimson);">
                                     Delete
                                 </button>
                             </div>
@@ -425,6 +433,7 @@
                 @endforeach
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
     @endif
@@ -432,42 +441,45 @@
     {{-- ===== COMPLETED (collapsed by default) ===== --}}
     @if($groups['completed']->isNotEmpty())
     <div id="section-completed" class="space-y-3 scroll-mt-4">
-        <h3 class="text-sm font-semibold text-emerald-500 uppercase tracking-wider cursor-pointer transition-all duration-300"
+        <h3 class="text-sm font-semibold uppercase tracking-wider cursor-pointer transition-colors duration-150"
+            style="color: var(--ds-green);"
             @click="showCompleted = !showCompleted">
-            Completed ({{ $groups['completed']->count() }})
+            Completed ({{ number_format($groups['completed']->count()) }})
             <span class="text-xs" x-text="showCompleted ? '&#9660;' : '&#9654;'"></span>
         </h3>
         <div x-show="showCompleted" x-collapse>
             <div class="rounded-md overflow-hidden" style="background: var(--surface); border: 1px solid var(--border);">
-                <table class="w-full text-sm ds-table">
+                <div class="overflow-x-auto">
+                <table class="min-w-full text-sm ds-table">
                     <thead>
                         <tr style="background: var(--surface-2);">
-                            <th class="text-left px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Document</th>
-                            <th class="text-left px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Template</th>
-                            <th class="text-left px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Completed</th>
-                            <th class="text-right px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Actions</th>
+                            <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Document</th>
+                            <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Template</th>
+                            <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Completed</th>
+                            <th class="text-right px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                     @foreach($groups['completed'] as $tpl)
                         @php $doc = $tpl->document; @endphp
-                        <tr class="transition-all duration-300" style="border-bottom: 1px solid var(--border);"
-                            onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
+                        <tr class="transition-colors" style="border-top: 1px solid var(--border);"
+                            onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
                             <td class="px-4 py-3 font-medium" style="color: var(--text-primary);">{{ $doc->name ?? 'Untitled' }}</td>
-                            <td class="px-4 py-3" style="color: var(--text-secondary);">{{ $doc->template->name ?? '-' }}</td>
+                            <td class="px-4 py-3" style="color: var(--text-secondary);">{{ $doc->template->name ?? '—' }}</td>
                             <td class="px-4 py-3">
                                 <span class="text-xs" style="color: var(--text-muted);">{{ $tpl->completed_at?->format('d M Y') ?? $tpl->updated_at->format('d M Y') }}</span>
                             </td>
                             <td class="px-4 py-3 text-right">
                                 @if($doc)
-                                <a href="{{ route('docuperfect.signatures.audit', $doc) }}" class="text-xs hover:underline transition-all duration-300" style="color: var(--brand-icon, #0ea5e9);">Audit</a>
-                                <a href="{{ route('docuperfect.signatures.download', $doc) }}" class="text-emerald-400 hover:underline text-xs ml-2 transition-all duration-300">Download</a>
+                                <a href="{{ route('docuperfect.signatures.audit', $doc) }}" class="text-xs font-semibold hover:underline transition-colors duration-150" style="color: var(--brand-icon);">Audit</a>
+                                <a href="{{ route('docuperfect.signatures.download', $doc) }}" class="text-xs font-semibold hover:underline ml-3 transition-colors duration-150" style="color: var(--ds-green);">Download</a>
                                 @endif
                             </td>
                         </tr>
                     @endforeach
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
     </div>
@@ -476,27 +488,27 @@
     {{-- ===== CANCELLED (collapsed by default) ===== --}}
     @if($groups['cancelled']->isNotEmpty())
     <div id="section-cancelled" class="space-y-3 scroll-mt-4 mt-6">
-        <h3 class="text-sm font-semibold uppercase tracking-wider cursor-pointer transition-all duration-300" style="color: var(--text-muted);"
+        <h3 class="text-sm font-semibold uppercase tracking-wider cursor-pointer transition-colors duration-150" style="color: var(--text-muted);"
             @click="showCancelled = !showCancelled">
-            Cancelled ({{ $groups['cancelled']->count() }})
+            Cancelled ({{ number_format($groups['cancelled']->count()) }})
             <span class="text-xs" x-text="showCancelled ? '&#9660;' : '&#9654;'"></span>
         </h3>
         <div x-show="showCancelled" x-collapse class="space-y-3">
             @foreach($groups['cancelled'] as $tpl)
                 @php $doc = $tpl->document; @endphp
                 <div class="rounded-md p-4 opacity-75" style="background: var(--surface); border: 1px solid var(--border);">
-                    <div class="flex items-start justify-between">
+                    <div class="flex items-start justify-between gap-3">
                         <div>
                             <h4 class="font-medium line-through" style="color: var(--text-muted);">{{ $doc->name ?? 'Untitled' }}</h4>
                             @if($doc && $doc->template)
-                                <div class="text-[10px] mt-0.5" style="color: var(--text-muted);">{{ $doc->template->name }}</div>
+                                <div class="text-xs mt-0.5" style="color: var(--text-muted);">{{ $doc->template->name }}</div>
                             @endif
                             <div class="text-xs mt-1" style="color: var(--text-muted);">
                                 Cancelled {{ $tpl->updated_at->format('d M Y H:i') }}
                             </div>
                         </div>
                         @if($doc)
-                        <a href="{{ route('docuperfect.signatures.audit', $doc) }}" class="text-xs hover:underline transition-all duration-300" style="color: var(--text-muted);">View</a>
+                        <a href="{{ route('docuperfect.signatures.audit', $doc) }}" class="text-xs font-semibold hover:underline transition-colors duration-150" style="color: var(--text-muted);">View</a>
                         @endif
                     </div>
                 </div>
@@ -507,11 +519,14 @@
 
     {{-- Empty state --}}
     @if($counts['draft'] === 0 && $counts['ready_to_sign'] === 0 && $counts['awaiting_signatures'] === 0 && $counts['completed'] === 0 && $counts['pending_approval'] === 0)
-    <div class="ds-status-card p-8 text-center">
-        <svg class="w-12 h-12 mx-auto mb-4" style="color: var(--text-muted);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-        </svg>
-        <h3 class="text-lg font-semibold mb-2" style="color: var(--text-secondary);">No e-sign documents yet</h3>
+    <div class="rounded-md py-12 px-6 text-center" style="background: var(--surface); border: 1px solid var(--border);">
+        <div class="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
+             style="background: color-mix(in srgb, var(--brand-icon) 12%, transparent); color: var(--brand-icon);">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+            </svg>
+        </div>
+        <h3 class="text-base font-semibold mb-1" style="color: var(--text-primary);">No e-sign documents yet</h3>
         <p class="text-sm mb-4" style="color: var(--text-muted);">Create your first e-sign flow to get started.</p>
         <a href="{{ route('docuperfect.esign.create') }}" class="corex-btn-primary inline-flex items-center gap-2">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
@@ -525,8 +540,8 @@
     <div x-show="showCancelModal" x-cloak
          class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
          x-data="{ cancelReason: '', submitting: false }">
-        <div class="rounded-md shadow-xl p-6 w-full max-w-md" style="background: var(--surface); border: 1px solid var(--border);" @click.away="showCancelModal = false">
-            <h3 class="text-lg font-bold text-red-400 mb-4">Cancel Document</h3>
+        <div class="rounded-md p-6 w-full max-w-md" style="background: var(--surface); border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.18);" @click.away="showCancelModal = false">
+            <h3 class="text-lg font-semibold mb-4" style="color: var(--ds-crimson);">Cancel Document</h3>
             <p class="text-sm mb-4" style="color: var(--text-secondary);">
                 Cancel <strong x-text="cancelDocName"></strong>?
             </p>
@@ -539,23 +554,23 @@
                 @csrf
 
                 <div class="mb-4">
-                    <label class="block text-sm font-medium mb-1" style="color: var(--text-primary);">Reason for cancellation <span class="text-red-500">*</span></label>
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Reason for cancellation <span style="color: var(--ds-crimson);">*</span></label>
                     <textarea name="cancellation_reason" x-model="cancelReason" rows="3" required
-                              class="w-full rounded-md border text-sm px-3 py-2 focus:ring-red-500 focus:border-red-500"
-                              style="background: var(--surface); border-color: var(--border); color: var(--text-primary);"
+                              class="w-full rounded-md px-3 py-2 text-sm"
+                              style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);"
                               placeholder="e.g. Document contains errors, deal fell through, terms changed..."></textarea>
                     <p class="text-xs mt-1" style="color: var(--text-muted);">This reason will be shared with all waiting signers.</p>
                 </div>
 
                 <div class="flex justify-end gap-3">
                     <button type="button" @click="showCancelModal = false; cancelReason = ''"
-                            class="px-4 py-2 text-sm transition-all duration-300" style="color: var(--text-secondary);">
+                            class="corex-btn-outline">
                         Keep Document
                     </button>
                     <button type="submit"
                             :disabled="!cancelReason.trim() || submitting"
-                            class="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 transition-all duration-300"
-                            :class="(!cancelReason.trim() || submitting) ? 'opacity-50 cursor-not-allowed' : ''">
+                            class="corex-btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                            style="background: var(--ds-crimson);">
                         <span x-show="!submitting">Cancel Document</span>
                         <span x-show="submitting" x-cloak>Cancelling...</span>
                     </button>

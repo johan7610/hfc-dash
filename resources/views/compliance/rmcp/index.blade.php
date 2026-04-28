@@ -1,89 +1,119 @@
 @extends('layouts.corex-app')
 
 @section('corex-content')
-<div class="-m-4 lg:-m-6">
-    <x-page-header title="RMCP Versions" :back-route="route('compliance.fica.index')" back-label="Compliance" :flush="true">
-        <x-slot:actions>
-            @permission('edit_rmcp')
-            <a href="{{ route('compliance.rmcp.variables') }}" class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold transition" style="border:1px solid var(--border, #e5e7eb); border-radius:3px; color:var(--text-secondary, #6b7280);">
-                Variables
-            </a>
-            <a href="{{ route('compliance.rmcp.create') }}" class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold transition" style="background:#00d4aa; color:#0f172a; border-radius:3px;">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                New Version
-            </a>
-            @endpermission
-        </x-slot:actions>
-    </x-page-header>
+<div class="space-y-6">
+    {{-- Page header (Pattern A — branded) --}}
+    <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a);">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <h1 class="text-xl font-bold text-white leading-tight">RMCP Versions</h1>
+                <p class="text-sm text-white/60">Risk Management & Compliance Programme — version history and approvals.</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="{{ route('compliance.fica.index') }}" class="corex-btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.3);">Back</a>
+                @permission('edit_rmcp')
+                <a href="{{ route('compliance.rmcp.variables') }}" class="corex-btn-outline" style="color:#fff; border-color:rgba(255,255,255,0.3);">Variables</a>
+                <a href="{{ route('compliance.rmcp.create') }}" class="corex-btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    New Version
+                </a>
+                @endpermission
+            </div>
+        </div>
+    </div>
 
-    <div class="p-4 lg:p-6">
-        {{-- Search --}}
-        <form method="GET" class="mb-4 flex items-center gap-3">
+    {{-- Filter / search bar --}}
+    <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
+        <form method="GET" class="flex flex-col sm:flex-row sm:items-center gap-3">
             <input type="text" name="search" value="{{ request('search') }}" placeholder="Search versions..."
-                   class="w-full max-w-xs px-3 py-2 text-sm border rounded" style="border-color:var(--border, #e5e7eb); border-radius:3px; font-family:'Plus Jakarta Sans',sans-serif;">
+                   class="w-full sm:max-w-xs rounded-md px-3 py-2 text-sm"
+                   style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
+            <button type="submit" class="corex-btn-outline">Search</button>
             @if(request('search'))
-            <a href="{{ route('compliance.rmcp.index') }}" class="text-sm" style="color:#6b7280;">Clear</a>
+                <a href="{{ route('compliance.rmcp.index') }}" class="text-sm font-medium" style="color: var(--brand-icon);">Clear</a>
             @endif
+            <div class="sm:ml-auto text-xs" style="color: var(--text-muted);">
+                Showing {{ number_format($versions->count()) }} of {{ number_format($versions->total()) }} versions
+            </div>
         </form>
+    </div>
 
-        <div class="text-xs mb-2" style="color:#64748b;">Showing {{ $versions->count() }} of {{ $versions->total() }} versions</div>
-
-        <div class="overflow-x-auto" style="border:1px solid var(--border, #e5e7eb); border-radius:3px;">
-            <table class="w-full text-sm" style="font-family:'Plus Jakarta Sans',sans-serif;">
+    {{-- Versions table --}}
+    <div class="rounded-md overflow-hidden" style="background: var(--surface); border: 1px solid var(--border);">
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm ds-table">
                 <thead>
-                    <tr style="background:var(--surface-alt, #f8fafc); border-bottom:1px solid var(--border, #e5e7eb);">
+                    <tr style="background: var(--surface-2);">
                         <x-sort-header field="version_number" :current-sort="$sort" :current-direction="$direction" label="Version" />
                         <x-sort-header field="status" :current-sort="$sort" :current-direction="$direction" label="Status" />
-                        <th class="px-4 py-3 text-left font-semibold" style="color:var(--text-secondary, #6b7280);">Approved By</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Approved By</th>
                         <x-sort-header field="approved_at" :current-sort="$sort" :current-direction="$direction" label="Approved" />
                         <x-sort-header field="effective_from" :current-sort="$sort" :current-direction="$direction" label="Effective From" />
                         <x-sort-header field="next_review_due" :current-sort="$sort" :current-direction="$direction" label="Next Review" />
-                        <th class="px-4 py-3 text-right font-semibold" style="color:var(--text-secondary, #6b7280);">Actions</th>
+                        <th class="text-right px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse($versions as $v)
-                    <tr style="border-bottom:1px solid var(--border, #f1f5f9);">
-                        <td class="px-4 py-3 font-semibold">v{{ $v->version_number }}</td>
-                        <td class="px-4 py-3">
-                            @if($v->status === 'active')
-                            <span class="inline-flex items-center px-2 py-0.5 text-xs font-semibold" style="background:rgba(0,212,170,0.15); color:#00d4aa; border-radius:3px;">Active</span>
-                            @elseif($v->status === 'draft')
-                            <span class="inline-flex items-center px-2 py-0.5 text-xs font-semibold" style="background:rgba(234,179,8,0.15); color:#eab308; border-radius:3px;">Draft</span>
-                            @else
-                            <span class="inline-flex items-center px-2 py-0.5 text-xs font-semibold" style="background:rgba(148,163,184,0.15); color:#94a3b8; border-radius:3px;">Superseded</span>
-                            @endif
-                        </td>
-                        <td class="px-4 py-3" style="color:var(--text-secondary, #6b7280);">{{ $v->approver?->name ?? '-' }}</td>
-                        <td class="px-4 py-3" style="color:var(--text-secondary, #6b7280);">{{ $v->approved_at?->format('d M Y') ?? '-' }}</td>
-                        <td class="px-4 py-3" style="color:var(--text-secondary, #6b7280);">{{ $v->effective_from?->format('d M Y') ?? '-' }}</td>
-                        <td class="px-4 py-3" style="color:var(--text-secondary, #6b7280);">{{ $v->next_review_due?->format('d M Y') ?? '-' }}</td>
-                        <td class="px-4 py-3 text-right">
-                            <div class="flex items-center justify-end gap-2">
-                                <a href="{{ route('compliance.rmcp.show', $v) }}" class="text-xs font-semibold px-2 py-1" style="color:#00d4aa;">View</a>
-                                @if($v->canBeEdited())
-                                @permission('edit_rmcp')
-                                <a href="{{ route('compliance.rmcp.edit', $v) }}" class="text-xs font-semibold px-2 py-1" style="color:#3b82f6;">Edit</a>
-                                @endpermission
-                                @permission('approve_rmcp')
-                                <a href="{{ route('compliance.rmcp.approve.form', $v) }}" class="text-xs font-semibold px-2 py-1" style="color:#f59e0b;">Approve</a>
-                                @endpermission
+                        <tr class="transition-colors" style="border-top: 1px solid var(--border);"
+                            onmouseover="this.style.background='var(--surface-2)'"
+                            onmouseout="this.style.background=''">
+                            <td class="px-4 py-3 font-semibold" style="color: var(--text-primary);">v{{ $v->version_number }}</td>
+                            <td class="px-4 py-3">
+                                @if($v->status === 'active')
+                                    <span class="ds-badge ds-badge-success">Active</span>
+                                @elseif($v->status === 'draft')
+                                    <span class="ds-badge ds-badge-warning">Draft</span>
+                                @else
+                                    <span class="ds-badge ds-badge-default">Superseded</span>
                                 @endif
-                                <a href="{{ route('compliance.rmcp.pdf', $v) }}" class="text-xs font-semibold px-2 py-1" style="color:#6b7280;" target="_blank">PDF</a>
-                            </div>
-                        </td>
-                    </tr>
+                            </td>
+                            <td class="px-4 py-3" style="color: var(--text-secondary);">{{ $v->approver?->name ?? '—' }}</td>
+                            <td class="px-4 py-3" style="color: var(--text-secondary);">{{ $v->approved_at?->format('d M Y') ?? '—' }}</td>
+                            <td class="px-4 py-3" style="color: var(--text-secondary);">{{ $v->effective_from?->format('d M Y') ?? '—' }}</td>
+                            <td class="px-4 py-3" style="color: var(--text-secondary);">{{ $v->next_review_due?->format('d M Y') ?? '—' }}</td>
+                            <td class="px-4 py-3 text-right">
+                                <div class="flex items-center justify-end gap-3">
+                                    <a href="{{ route('compliance.rmcp.show', $v) }}" class="text-xs font-semibold" style="color: var(--brand-icon);">View</a>
+                                    @if($v->canBeEdited())
+                                        @permission('edit_rmcp')
+                                        <a href="{{ route('compliance.rmcp.edit', $v) }}" class="text-xs font-semibold" style="color: var(--brand-icon);">Edit</a>
+                                        @endpermission
+                                        @permission('approve_rmcp')
+                                        <a href="{{ route('compliance.rmcp.approve.form', $v) }}" class="text-xs font-semibold" style="color: var(--ds-amber);">Approve</a>
+                                        @endpermission
+                                    @endif
+                                    <a href="{{ route('compliance.rmcp.pdf', $v) }}" class="text-xs font-semibold" style="color: var(--text-muted);" target="_blank">PDF</a>
+                                </div>
+                            </td>
+                        </tr>
                     @empty
-                    <tr>
-                        <td colspan="7" class="px-4 py-8 text-center" style="color:#94a3b8;">No RMCP versions found. Create your first version to get started.</td>
-                    </tr>
+                        <tr>
+                            <td colspan="7" class="px-4 py-12 text-center text-sm" style="color: var(--text-muted);">
+                                <div class="flex flex-col items-center gap-3">
+                                    <div class="w-12 h-12 rounded-full flex items-center justify-center"
+                                         style="background: color-mix(in srgb, var(--brand-icon) 12%, transparent); color: var(--brand-icon);">
+                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                    </div>
+                                    <div>
+                                        <h3 class="text-base font-semibold mb-1" style="color: var(--text-primary);">No RMCP versions yet</h3>
+                                        <p class="text-sm" style="color: var(--text-muted);">Create your first version to get started.</p>
+                                    </div>
+                                    @permission('edit_rmcp')
+                                    <a href="{{ route('compliance.rmcp.create') }}" class="corex-btn-primary mt-2">New Version</a>
+                                    @endpermission
+                                </div>
+                            </td>
+                        </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
 
         @if($versions->hasPages())
-        <div class="mt-4">{{ $versions->links() }}</div>
+            <div class="px-4 py-3" style="border-top: 1px solid var(--border);">
+                {{ $versions->links() }}
+            </div>
         @endif
     </div>
 </div>

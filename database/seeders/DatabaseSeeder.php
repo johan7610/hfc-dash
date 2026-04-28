@@ -41,6 +41,7 @@ class DatabaseSeeder extends Seeder
             DealPipelineTemplateSeeder::class,
             AgencyDocumentTypeConfigSeeder::class,
             PayrollSeeder::class,
+            NotificationEventTypeSeeder::class,
         ]);
     }
 }

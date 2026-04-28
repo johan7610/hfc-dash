@@ -838,6 +838,63 @@ html.dark {
 
 .ds-table tbody tr {
     border-top: 1px solid var(--ds-border);
+    transition: background 300ms ease;
+}
+
+.ds-table tbody tr:hover {
+    background: var(--surface-2);
+}
+
+/* ===== Daily Activity page — day chips + field focus ===== */
+.ds-daily-chip {
+    background: var(--surface-2);
+    color: var(--text-primary);
+    transition: background-color 150ms ease, color 150ms ease;
+}
+.ds-daily-chip:hover {
+    background: var(--surface);
+}
+.ds-daily-chip-active {
+    background: var(--brand-default, #0b2a4a);
+    color: #fff;
+}
+.ds-daily-chip-active:hover {
+    background: var(--brand-default, #0b2a4a);
+    color: #fff;
+}
+
+.ds-field {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.ds-field:focus {
+    outline: none;
+    border-color: var(--brand-button, #0ea5e9);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-button, #0ea5e9) 15%, transparent);
+}
+.ds-field-sunken {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.ds-field-sunken:focus {
+    outline: none;
+    border-color: var(--brand-button, #0ea5e9);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-button, #0ea5e9) 15%, transparent);
+}
+
+/* Number input — centred digits, no spinner buttons (spinners shift text off-centre) */
+.ds-field-number {
+    text-align: center;
+    -moz-appearance: textfield;
+}
+.ds-field-number::-webkit-outer-spin-button,
+.ds-field-number::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
 }
 
 .ds-agent-link {
@@ -862,6 +919,12 @@ html.dark {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.025em;
+    white-space: nowrap;
+}
+
+/* Task card icon-button hover — token-aware (works in both themes) */
+.task-card-action:hover {
+    background: var(--surface-2);
 }
 
 .ds-badge-behind  { background: var(--ds-crimson); color: #fff; }
@@ -1645,6 +1708,18 @@ main#appScroll {
     background: var(--surface-2);
     border-color: var(--border-hover);
     color: var(--text-primary);
+}
+
+.corex-btn-outline.corex-btn-on-brand {
+    background: transparent;
+    border-color: rgba(255, 255, 255, 0.4);
+    color: #ffffff;
+}
+
+.corex-btn-outline.corex-btn-on-brand:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.7);
+    color: #ffffff;
 }
 
 .corex-btn-primary {

@@ -73,11 +73,9 @@
 #hf-tool-root label {
   display: block;
   color: var(--text-secondary);
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  margin-bottom: 6px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  margin-bottom: 4px;
 }
 
 /* Inputs */
@@ -159,8 +157,8 @@
 
 #hf-tool-root .btn.danger {
   background: transparent;
-  color: #dc2626;
-  border: 1px solid #fca5a5;
+  color: var(--ds-crimson, #c41e3a);
+  border: 1px solid color-mix(in srgb, var(--ds-crimson, #c41e3a) 40%, transparent);
   font-size: 0.6875rem;
   padding: 0.25rem 0.625rem;
   border-radius: 6px;
@@ -168,7 +166,7 @@
 }
 
 #hf-tool-root .btn.danger:hover {
-  background: rgba(220, 38, 38, 0.08);
+  background: color-mix(in srgb, var(--ds-crimson, #c41e3a) 10%, transparent);
   filter: none;
 }
 
@@ -296,11 +294,11 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 2rem;
-  background: #ffffff;
-  color: #111;
+  background: var(--surface);
+  color: var(--text-primary);
   max-width: 820px;
   margin: 1.25rem auto 0;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 
 /* Section cards */
@@ -308,7 +306,7 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 1.5rem;
+  padding: 1.25rem;
 }
 
 #hf-tool-root .tool-card + .tool-card {
@@ -316,8 +314,8 @@
 }
 
 #hf-tool-root .tool-card-header {
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: 1.125rem;
+  font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 1.25rem;
 }
@@ -332,20 +330,20 @@
 </style>
 
 <div id="hf-tool-root" class="py-6">
-<div class="wrap" style="display:flex; flex-direction:column; gap:1.5rem;">
+<div class="wrap flex flex-col gap-6">
 
   {{-- Page Header --}}
-  <div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4">
+  <div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-5">
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
       <div>
-        <h2 class="text-xl font-bold text-white leading-tight tracking-tight">Tools</h2>
-        <div class="text-sm text-white/60">Commission Calculator &middot; CMA Certificate &middot; History</div>
+        <h1 class="text-xl font-bold text-white leading-tight">Tools</h1>
+        <p class="text-sm text-white/60">Commission Calculator &middot; CMA Certificate &middot; History</p>
       </div>
       <div class="flex items-center gap-3">
         <div id="activeAgentDisplay" class="text-sm text-white/80 font-medium">
           <span id="currentAgentName">{{ auth()->user()?->name ?? "User" }}</span>
         </div>
-        <button class="btn secondary" id="btnReset" style="background:transparent; color:#fff; border-color:rgba(255,255,255,0.3);">Clear Form</button>
+        <button type="button" class="corex-btn-outline" id="btnReset" style="background:transparent; color:#ffffff; border-color:rgba(255,255,255,0.3);">Clear Form</button>
       </div>
     </div>
   </div>
@@ -449,7 +447,7 @@
         </div>
         <div class="result">
           <div class="k">Owner Pocket</div>
-          <div class="v good" id="rOwnerPocket">&mdash;</div>
+          <div class="v" id="rOwnerPocket" style="color: var(--ds-green);">&mdash;</div>
         </div>
         <div class="result">
           <div class="k">Commission (VAT Incl)</div>
@@ -458,7 +456,7 @@
 
         <div class="result">
           <div class="k">Discount vs Default</div>
-          <div class="v bad" id="rLostInc">&mdash;</div>
+          <div class="v" id="rLostInc" style="color: var(--ds-amber);">&mdash;</div>
           <div class="mono">Lost: <span id="rLostVsDefault">0%</span></div>
         </div>
         <div class="result" style="grid-column:span 8">
@@ -475,7 +473,7 @@
           <input id="certDate" type="date" />
         </div>
         <div class="field" style="display:flex; align-items:flex-end;">
-          <button class="btn action" id="btnPrint">Print Commission Summary</button>
+          <button class="corex-btn-primary" id="btnPrint">Print Commission Summary</button>
         </div>
       </div>
     </div>
@@ -540,7 +538,7 @@
 
       <div class="inlineRow">
         <div class="field" style="display:flex; align-items:flex-end;">
-          <button class="btn action" id="btnPrintCert">Print CMA Certificate</button>
+          <button class="corex-btn-primary" id="btnPrintCert">Print CMA Certificate</button>
         </div>
       </div>
 
@@ -559,15 +557,29 @@
       </div>
 
       <div class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
-        <table class="history-table">
-          <thead>
-            <tr>
-              <th>Ref</th><th>Date</th><th>Type</th><th>Property</th><th>Agent</th><th>Value</th><th style="width:1%;"></th>
-            </tr>
-          </thead>
-          <tbody id="historyBody"></tbody>
-        </table>
-        <div id="historyEmpty" class="history-empty" style="display:none;">No history entries yet.</div>
+        <div class="overflow-x-auto">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Ref</th><th>Date</th><th>Type</th><th>Property</th><th>Agent</th><th style="text-align:right;">Value</th><th style="width:1%; text-align:right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+        <div id="historyEmpty" class="history-empty" style="display:none;">
+          <div class="rounded-full mx-auto mb-3 flex items-center justify-center" style="width:3rem; height:3rem; background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent); color: var(--brand-icon, #0ea5e9);">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:1.5rem; height:1.5rem;">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold mb-1" style="color: var(--text-primary);">No history yet</h3>
+          <p class="text-sm mb-4" style="color: var(--text-muted);">Use the Commission Calculator or CMA Certificate to log your first entry.</p>
+          <div class="flex items-center justify-center gap-2 flex-wrap">
+            <button type="button" class="corex-btn-primary" onclick="activateSection('calcSection')">Open Commission Calculator</button>
+            <button type="button" class="corex-btn-outline" onclick="activateSection('certSection')">Open CMA Certificate</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -701,10 +713,10 @@ function renderHistory() {
     tr.innerHTML = `
       <td class="mono">${escapeHtml(item.ref || "")}</td>
       <td style="white-space:nowrap;">${escapeHtml(dateText)}</td>
-      <td><span class="agent-tag" style="background:var(--brand-default, #0b2a4a); color:#fff">${escapeHtml(item.type || "")}</span></td>
+      <td><span class="ds-badge ds-badge-info">${escapeHtml(item.type || "")}</span></td>
       <td>${escapeHtml(item.property || "")}</td>
       <td style="white-space:nowrap;">${escapeHtml(item.agent_name || "")}</td>
-      <td style="font-weight:700; white-space:nowrap;">${fmtZAR(Number(item.value || 0))}</td>
+      <td style="font-weight:700; white-space:nowrap; text-align:right;">${fmtZAR(Number(item.value || 0))}</td>
       <td class="actions-cell">
         <button class="btn danger" onclick="event.stopPropagation(); window.deleteHistoryItem(${item.id})">Delete</button>
       </td>

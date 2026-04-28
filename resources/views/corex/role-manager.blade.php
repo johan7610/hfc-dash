@@ -1,14 +1,14 @@
-@extends('layouts.corex')
+@extends('layouts.corex-app')
 
 @section('corex-content')
 <style>
 /* ── Role Manager: scoped component styles ── */
 #rm-root .rm-scope-btn { transition: all 300ms; }
 #rm-root .rm-scope-btn[data-active="true"] { color: #fff; font-weight: 600; }
-#rm-root .rm-scope-btn[data-scope="none"][data-active="true"] { background: #475569; }
-#rm-root .rm-scope-btn[data-scope="own"][data-active="true"] { background: #2563eb; }
-#rm-root .rm-scope-btn[data-scope="branch"][data-active="true"] { background: #d97706; }
-#rm-root .rm-scope-btn[data-scope="all"][data-active="true"] { background: #16a34a; }
+#rm-root .rm-scope-btn[data-scope="none"][data-active="true"] { background: var(--text-secondary); }
+#rm-root .rm-scope-btn[data-scope="own"][data-active="true"] { background: var(--brand-button, #0ea5e9); }
+#rm-root .rm-scope-btn[data-scope="branch"][data-active="true"] { background: var(--ds-amber, #f59e0b); }
+#rm-root .rm-scope-btn[data-scope="all"][data-active="true"] { background: var(--ds-green, #059669); }
 </style>
 <div id="rm-root" x-data="roleManager()">
 
@@ -17,8 +17,8 @@
         {{-- Page header --}}
         <div class="rounded-md px-6 py-5 flex items-center justify-between" style="background:var(--brand-default,#0b2a4a);">
             <div>
-                <h2 class="text-xl font-bold text-white tracking-tight">Role Manager</h2>
-                <p class="text-sm mt-0.5" style="color:rgba(255,255,255,0.55);">Manage roles, permissions & user assignments.</p>
+                <h1 class="text-xl font-bold text-white tracking-tight leading-tight">Role Manager</h1>
+                <p class="text-sm text-white/60 mt-0.5">Manage roles, permissions & user assignments.</p>
             </div>
         </div>
 
@@ -42,13 +42,19 @@
         </div>
 
         @if(session('success'))
-            <div class="rounded-md border px-4 py-3 text-sm font-medium" style="border-color:#bbf7d0; background:#f0fdf4; color:#166534;">
+            <div class="rounded-md px-4 py-3 text-sm font-medium"
+                 style="background: color-mix(in srgb, var(--ds-green) 10%, transparent);
+                        border: 1px solid color-mix(in srgb, var(--ds-green) 30%, transparent);
+                        color: var(--text-primary);">
                 {{ session('success') }}
             </div>
         @endif
 
         @if($errors->any())
-            <div class="rounded-md border px-4 py-3 text-sm font-medium" style="border-color:#fecaca; background:#fef2f2; color:#991b1b;">
+            <div class="rounded-md px-4 py-3 text-sm font-medium"
+                 style="background: color-mix(in srgb, var(--ds-crimson) 10%, transparent);
+                        border: 1px solid color-mix(in srgb, var(--ds-crimson) 30%, transparent);
+                        color: var(--text-primary);">
                 @foreach($errors->all() as $error)
                     <div>{{ $error }}</div>
                 @endforeach
@@ -68,7 +74,7 @@
                     <div class="flex gap-1 flex-wrap">
                         @foreach($roles as $role)
                         <button type="button"
-                                @click="selectedRole = '{{ $role->name }}'"
+                                @click="switchRole('{{ $role->name }}')"
                                 :style="selectedRole === '{{ $role->name }}'
                                     ? 'background:{{ $role->color }};color:#fff;'
                                     : 'background:var(--surface-2);color:var(--text-secondary);'"
@@ -115,24 +121,35 @@
 
                     {{-- LEFT: Vertical feature tabs --}}
                     <div class="w-52 flex-shrink-0 rounded-md overflow-y-auto sticky top-4" style="background:var(--surface); border:1px solid var(--border); max-height:calc(100vh - 8rem);">
+                        <div class="px-2 pt-2 pb-2 sticky top-0 z-10" style="background:var(--surface); border-bottom:1px solid var(--border);">
+                            <input type="text" x-model="featureSearch" placeholder="Search features…"
+                                   class="w-full text-xs rounded-md px-2 py-1.5"
+                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary); outline:none;">
+                        </div>
                         @foreach($matrixSections as $sectionLabel => $modules)
-                            <div class="px-3 pt-3 pb-1">
-                                <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--brand-icon,#0ea5e9);">{{ $sectionLabel }}</p>
+                            @php
+                                $moduleKeysInSection = array_keys($modules);
+                                $sectionMatchExpr = collect($modules)->map(fn($d, $k) => "matchesFeature('{$k}', '" . addslashes($d['label']) . "')")->implode(' || ');
+                            @endphp
+                            <div x-show="{{ $sectionMatchExpr }}">
+                                <div class="px-3 pt-3 pb-1">
+                                    <p class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--brand-icon,#0ea5e9);">{{ $sectionLabel }}</p>
+                                </div>
+                                @foreach($modules as $moduleKey => $moduleData)
+                                <div class="px-2 pb-1" x-show="matchesFeature('{{ $moduleKey }}', '{{ addslashes($moduleData['label']) }}')">
+                                    <button type="button"
+                                            @click="selectedFeature = '{{ $moduleKey }}'; syncUrl()"
+                                            :style="selectedFeature === '{{ $moduleKey }}' ? 'background:var(--brand-button,#0ea5e9);color:#fff;' : 'color:var(--text-secondary);'"
+                                            class="w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-all duration-300"
+                                            :class="selectedFeature !== '{{ $moduleKey }}' ? 'hover:opacity-80' : ''">
+                                        {{ $moduleData['label'] }}
+                                    </button>
+                                </div>
+                                @endforeach
+                                @if(!$loop->last)
+                                <div class="mx-3 my-1" style="border-top:1px solid var(--border);"></div>
+                                @endif
                             </div>
-                            @foreach($modules as $moduleKey => $moduleData)
-                            <div class="px-2 pb-1">
-                                <button type="button"
-                                        @click="selectedFeature = '{{ $moduleKey }}'"
-                                        :style="selectedFeature === '{{ $moduleKey }}' ? 'background:var(--brand-button,#0ea5e9);color:#fff;' : 'color:var(--text-secondary);'"
-                                        class="w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-all duration-300"
-                                        :class="selectedFeature !== '{{ $moduleKey }}' ? 'hover:opacity-80' : ''">
-                                    {{ $moduleData['label'] }}
-                                </button>
-                            </div>
-                            @endforeach
-                            @if(!$loop->last)
-                            <div class="mx-3 my-1" style="border-top:1px solid var(--border);"></div>
-                            @endif
                         @endforeach
                         <div class="h-2"></div>
                     </div>
@@ -166,10 +183,14 @@
                                             <h3 class="font-semibold text-sm" style="color:var(--text-primary);">{{ $moduleData['label'] }}</h3>
                                             <p class="text-xs mt-0.5" style="color:var(--text-muted);">Editing permissions for: <span x-text="selectedRoleLabel()" style="color:var(--brand-icon,#0ea5e9);" class="font-medium"></span></p>
                                         </div>
-                                        <button type="button" @click="saveMatrix()"
-                                                class="corex-btn-primary px-3 py-1.5 text-xs font-semibold">
-                                            Save Changes
-                                        </button>
+                                        <div class="flex items-center gap-3">
+                                            <span class="text-xs" style="color:var(--text-muted);" x-text="saveStatusText()"></span>
+                                            <button type="button" @click="saveMatrix(true)"
+                                                    :disabled="saving"
+                                                    class="corex-btn-primary px-3 py-1.5 text-xs font-semibold disabled:opacity-50">
+                                                Save now
+                                            </button>
+                                        </div>
                                     </div>
                                     <div>
 
@@ -191,7 +212,7 @@
                                                         @else
                                                             <input type="checkbox"
                                                                    x-model="matrix['{{ $perm->key }}']['{{ $role->name }}']"
-                                                                   @change="dirty = true"
+                                                                   @change="scheduleSave()"
                                                                    class="w-5 h-5 rounded-md cursor-pointer"
                                                                    style="accent-color:var(--brand-button,#0ea5e9); border-color:var(--border);">
                                                         @endif
@@ -220,7 +241,8 @@
                                                             @if($role->is_owner)
                                                                 <span class="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-semibold" style="background:var(--surface-2); color:var(--text-muted);">All (Owner)</span>
                                                             @elseif($fIsShared)
-                                                                <span class="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-semibold text-emerald-600 bg-emerald-50">Shared — all users</span>
+                                                                <span class="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-semibold"
+                                                                      style="background: color-mix(in srgb, var(--ds-green) 12%, transparent); color: var(--ds-green);">Shared — all users</span>
                                                             @else
                                                                 <div class="inline-flex rounded-md overflow-hidden" style="border:1px solid var(--border);">
                                                                     @foreach(['none','own','branch','all'] as $scopeVal)
@@ -302,7 +324,7 @@
                                                             @else
                                                                 <input type="checkbox"
                                                                        x-model="matrix['{{ $fOp->key }}']['{{ $role->name }}']"
-                                                                       @change="dirty = true"
+                                                                       @change="scheduleSave()"
                                                                        class="w-5 h-5 rounded-md cursor-pointer"
                                                                        style="accent-color:var(--brand-button,#0ea5e9); border-color:var(--border);">
                                                             @endif
@@ -394,7 +416,8 @@
                                     <td class="py-2.5 px-4 text-xs" style="color:var(--text-secondary);">{{ $agencyName }}</td>
                                     <td class="py-2.5 px-4 text-xs" style="color:var(--text-secondary);">{{ $branchName }}</td>
                                     <td class="py-2.5 px-4">
-                                        <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold text-white"
+                                        <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold text-white user-role-badge"
+                                              data-user-id="{{ $u->id }}"
                                               style="background:{{ $badgeBg }};">
                                             {{ $roleLabel }}
                                         </span>
@@ -402,7 +425,8 @@
                                     @if(auth()->user()->hasPermission('change_user_roles'))
                                         <td class="py-2.5 px-4">
                                             <form method="POST" action="{{ route('corex.role-manager.user-role') }}"
-                                                  class="flex items-center gap-2">
+                                                  class="flex items-center gap-2 user-role-form"
+                                                  @submit.prevent="saveUserRole($event, {{ $u->id }})">
                                                 @csrf
                                                 <input type="hidden" name="user_id" value="{{ $u->id }}">
                                                 <select name="role"
@@ -421,6 +445,7 @@
                                                         class="corex-btn-primary px-3 py-1.5 text-xs font-semibold">
                                                     Save
                                                 </button>
+                                                <span class="text-xs user-role-status" style="color:var(--text-muted);"></span>
                                             </form>
                                         </td>
                                     @endif
@@ -459,7 +484,8 @@
                             <div class="flex items-center gap-2">
                                 <span class="text-xs font-mono" style="color:var(--text-muted);">{{ $role->name }}</span>
                                 @if($role->is_owner)
-                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-100 text-amber-700">
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase whitespace-nowrap"
+                                          style="background: color-mix(in srgb, var(--ds-amber) 14%, transparent); color: var(--ds-amber);">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
                                         OWNER
                                     </span>
@@ -475,7 +501,7 @@
                         </div>
                         <div class="flex items-center gap-2">
                             <button type="button"
-                                    @click="openEditRole({{ $role->id }}, {{ Js::from($role->only('name','label','description','color','sort_order','is_owner','can_be_deleted')) }})"
+                                    @click="openEditRole({{ $role->id }}, {{ Js::from($role->only('name','label','description','color','sort_order','is_owner','can_be_deleted','oversight_scope')) }})"
                                     class="px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-300"
                                     style="border:1px solid var(--border); color:var(--text-secondary);"
                                     onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
@@ -484,7 +510,9 @@
                             @if(!$role->is_owner && $role->can_be_deleted)
                             <button type="button"
                                     @click="openDeleteRole({{ $role->id }}, {{ Js::from($role->label) }}, {{ $role->users_count }})"
-                                    class="px-3 py-1.5 rounded-md text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50 transition-all duration-300">
+                                    class="px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-300"
+                                    style="border:1px solid color-mix(in srgb, var(--ds-crimson) 30%, transparent); color: var(--ds-crimson);"
+                                    onmouseover="this.style.background='color-mix(in srgb, var(--ds-crimson) 8%, transparent)'" onmouseout="this.style.background='transparent'">
                                 Delete
                             </button>
                             @endif
@@ -570,6 +598,22 @@
                     </div>
                 </div>
 
+                <div x-show="editRoleId">
+                    <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Oversight Scope</label>
+                    <p class="text-xs mb-2" style="color:var(--text-muted);">If this role has the Manager Oversight permission, choose whose data they can see.</p>
+                    <div class="flex gap-3">
+                        <label class="text-xs flex items-center gap-1" style="color:var(--text-secondary);">
+                            <input type="radio" name="oversight_scope" value="" x-model="roleForm.oversight_scope"> None
+                        </label>
+                        <label class="text-xs flex items-center gap-1" style="color:var(--text-secondary);">
+                            <input type="radio" name="oversight_scope" value="branch" x-model="roleForm.oversight_scope"> Branch only
+                        </label>
+                        <label class="text-xs flex items-center gap-1" style="color:var(--text-secondary);">
+                            <input type="radio" name="oversight_scope" value="agency" x-model="roleForm.oversight_scope"> Entire agency
+                        </label>
+                    </div>
+                </div>
+
                 <div>
                     <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Preview</label>
                     <span class="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-semibold text-white"
@@ -602,8 +646,9 @@
          x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
          x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
         <div class="rounded-md shadow-xl w-full max-w-md mx-4 overflow-hidden" style="background:var(--surface);" @click.stop>
-            <div class="px-6 py-4" style="background:#fef2f2; border-bottom:1px solid var(--border);">
-                <h3 class="font-semibold text-sm text-red-700">Delete Role</h3>
+            <div class="px-6 py-4"
+                 style="background: color-mix(in srgb, var(--ds-crimson) 10%, transparent); border-bottom:1px solid var(--border);">
+                <h3 class="font-semibold text-sm" style="color: var(--ds-crimson);">Delete Role</h3>
             </div>
             <form :action="'{{ url('corex/role-manager/roles') }}/' + deleteRoleId"
                   method="POST" class="p-6 space-y-4">
@@ -615,14 +660,16 @@
                 </p>
 
                 <template x-if="deleteRoleUserCount > 0">
-                    <div class="rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
-                        <p class="text-sm text-amber-800 font-medium">
+                    <div class="rounded-md px-4 py-3"
+                         style="background: color-mix(in srgb, var(--ds-amber) 10%, transparent);
+                                border: 1px solid color-mix(in srgb, var(--ds-amber) 30%, transparent);">
+                        <p class="text-sm font-medium" style="color: var(--text-primary);">
                             <span x-text="deleteRoleUserCount"></span> active user(s) have this role.
                         </p>
-                        <p class="text-xs text-amber-700 mt-1">Reassign them to:</p>
+                        <p class="text-xs mt-1" style="color: var(--text-secondary);">Reassign them to:</p>
                         <select name="reassign_to"
-                                class="mt-2 w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm focus:outline-none"
-                                style="color:var(--text-primary);">
+                                class="mt-2 w-full rounded-md px-3 py-2 text-sm focus:outline-none"
+                                style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
                             @foreach($roles as $role)
                                 @if(!$role->is_owner || auth()->user()->isOwnerRole())
                                 <option value="{{ $role->name }}">{{ $role->label }}</option>
@@ -640,7 +687,9 @@
                         Cancel
                     </button>
                     <button type="submit"
-                            class="px-4 py-2 rounded-md text-xs font-semibold text-white bg-red-600 hover:bg-red-700 transition-all duration-300">
+                            class="px-4 py-2 rounded-md text-xs font-semibold text-white transition-all duration-300"
+                            style="background: var(--ds-crimson, #c41e3a);"
+                            onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
                         Delete Role
                     </button>
                 </div>
@@ -700,8 +749,10 @@
                     </div>
                 </div>
 
-                <div class="rounded-md border px-4 py-3" style="border-color:#fde68a; background:#fffbeb;">
-                    <p class="text-xs font-medium" style="color:#92400e;">This will overwrite all existing permissions on the target role(s). This action cannot be undone.</p>
+                <div class="rounded-md px-4 py-3"
+                     style="background: color-mix(in srgb, var(--ds-amber) 10%, transparent);
+                            border: 1px solid color-mix(in srgb, var(--ds-amber) 30%, transparent);">
+                    <p class="text-xs font-medium" style="color: var(--text-primary);">This will overwrite all existing permissions on the target role(s). This action cannot be undone.</p>
                 </div>
 
                 <div class="flex justify-end gap-3 pt-2">
@@ -772,14 +823,22 @@ function roleManager() {
         });
     });
 
+    const urlParams = new URLSearchParams(window.location.search);
+    const firstFeature = @json(collect($matrixSections)->flatMap(fn($m) => array_keys($m))->first() ?? '');
+
     return {
         dark: document.documentElement.classList.contains('dark'),
-        activeTab: 'permissions',
-        selectedRole: new URLSearchParams(window.location.search).get('role') || rolesData.find(r => !r.is_owner)?.name || rolesData[0]?.name || 'admin',
+        activeTab: urlParams.get('tab') || 'permissions',
+        selectedRole: urlParams.get('role') || rolesData.find(r => !r.is_owner)?.name || rolesData[0]?.name || 'admin',
         matrix: matrix,
         scopeMatrix: scopeMatrix,
         dirty: false,
-        selectedFeature: @json(collect($matrixSections)->flatMap(fn($m) => array_keys($m))->first() ?? ''),
+        saving: false,
+        lastSavedAt: null,
+        saveTimer: null,
+        autoSaveDelay: 800,
+        featureSearch: '',
+        selectedFeature: urlParams.get('feature') || firstFeature,
 
         // Copy from role
         copyFromRole: '',
@@ -797,7 +856,7 @@ function roleManager() {
         deleteRoleId: null,
         deleteRoleLabel: '',
         deleteRoleUserCount: 0,
-        roleForm: { label: '', name: '', description: '', color: '#0d9488', sort_order: 0 },
+        roleForm: { label: '', name: '', description: '', color: '#0d9488', sort_order: 0, oversight_scope: '' },
 
         selectedRoleLabel() {
             const r = rolesData.find(r => r.name === this.selectedRole);
@@ -805,7 +864,7 @@ function roleManager() {
         },
 
         handleScopeChange(moduleKey, roleName, scopeVal) {
-            this.dirty = true;
+            this.scheduleSave();
             const actions = moduleActions[moduleKey];
             if (!actions) return;
 
@@ -823,7 +882,7 @@ function roleManager() {
         },
 
         handleActionChange(moduleKey, action, roleName) {
-            this.dirty = true;
+            this.scheduleSave();
             const actions = moduleActions[moduleKey];
             if (!actions) return;
 
@@ -863,8 +922,8 @@ function roleManager() {
                 }
             });
 
-            this.dirty = true;
             this.copyFromRole = '';
+            this.scheduleSave();
 
             // Show toast
             const srcLabel = rolesData.find(r => r.name === src)?.label || src;
@@ -873,8 +932,123 @@ function roleManager() {
             setTimeout(() => { this.copyToast = false; }, 4000);
         },
 
-        saveMatrix() {
-            this.$refs.permForm.submit();
+        scheduleSave() {
+            this.dirty = true;
+            if (this.saveTimer) clearTimeout(this.saveTimer);
+            this.saveTimer = setTimeout(() => this.saveMatrix(false), this.autoSaveDelay);
+        },
+
+        async saveMatrix(manual) {
+            if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
+            if (this.saving) return;
+            if (!this.dirty && !manual) return;
+
+            this.saving = true;
+            const form = this.$refs.permForm;
+            const fd = new FormData(form);
+            const token = document.querySelector('meta[name="csrf-token"]')?.content
+                       || form.querySelector('input[name="_token"]')?.value;
+
+            try {
+                const res = await fetch(form.action, {
+                    method: 'POST',
+                    body: fd,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': token,
+                    },
+                    credentials: 'same-origin',
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+                this.dirty = false;
+                this.lastSavedAt = new Date();
+                this.copyToastMsg = manual ? 'Saved.' : `Auto-saved · ${this.selectedRoleLabel()}`;
+                this.copyToast = true;
+                clearTimeout(this._toastT);
+                this._toastT = setTimeout(() => { this.copyToast = false; }, 2000);
+            } catch (e) {
+                this.copyToastMsg = 'Save failed — try again';
+                this.copyToast = true;
+                clearTimeout(this._toastT);
+                this._toastT = setTimeout(() => { this.copyToast = false; }, 4000);
+            } finally {
+                this.saving = false;
+            }
+        },
+
+        saveStatusText() {
+            if (this.saving) return 'Saving…';
+            if (this.dirty) return 'Unsaved changes';
+            if (this.lastSavedAt) {
+                const t = this.lastSavedAt;
+                const hh = String(t.getHours()).padStart(2,'0');
+                const mm = String(t.getMinutes()).padStart(2,'0');
+                return `Saved at ${hh}:${mm}`;
+            }
+            return '';
+        },
+
+        switchRole(roleName) {
+            if (this.dirty) {
+                this.saveMatrix(false);
+            }
+            this.selectedRole = roleName;
+            this.syncUrl();
+        },
+
+        syncUrl() {
+            const p = new URLSearchParams(window.location.search);
+            p.set('role', this.selectedRole);
+            p.set('feature', this.selectedFeature);
+            p.set('tab', this.activeTab);
+            history.replaceState(null, '', window.location.pathname + '?' + p.toString());
+        },
+
+        matchesFeature(key, label) {
+            const q = (this.featureSearch || '').trim().toLowerCase();
+            if (!q) return true;
+            return key.toLowerCase().includes(q) || label.toLowerCase().includes(q);
+        },
+
+        async saveUserRole(ev, userId) {
+            const form = ev.target;
+            const status = form.querySelector('.user-role-status');
+            const fd = new FormData(form);
+            const token = document.querySelector('meta[name="csrf-token"]')?.content
+                       || form.querySelector('input[name="_token"]')?.value;
+            if (status) status.textContent = 'Saving…';
+            try {
+                const res = await fetch(form.action, {
+                    method: 'POST',
+                    body: fd,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': token,
+                    },
+                    credentials: 'same-origin',
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+                const badge = document.querySelector(`.user-role-badge[data-user-id="${userId}"]`);
+                if (badge) {
+                    badge.textContent = data.role_label;
+                    badge.style.background = data.role_color;
+                }
+                if (status) { status.textContent = 'Saved'; setTimeout(() => status.textContent = '', 1500); }
+            } catch (e) {
+                if (status) status.textContent = 'Failed';
+            }
+        },
+
+        init() {
+            window.addEventListener('beforeunload', (e) => {
+                if (this.dirty) { e.preventDefault(); e.returnValue = ''; }
+            });
+            this.$watch('activeTab', () => this.syncUrl());
+            this.$watch('selectedFeature', () => this.syncUrl());
         },
 
         openAddRole() {
@@ -890,6 +1064,7 @@ function roleManager() {
                 description: data.description || '',
                 color: data.color || '#0d9488',
                 sort_order: data.sort_order || 0,
+                oversight_scope: data.oversight_scope || '',
             };
             this.showRoleModal = true;
         },

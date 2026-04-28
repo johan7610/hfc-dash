@@ -108,7 +108,7 @@
                         ?? $property->dusk_images_json[0]
                         ?? null;
                 @endphp
-                <a href="{{ route('corex.properties.preview', $property) }}?agent=listing"
+                <a href="{{ route('corex.properties.preview', [$property, \Illuminate\Support\Str::slug($property->title)]) }}?agent=listing"
                    target="_blank"
                    data-record-view="{{ route('shared.match.view', [$token, $property->id]) }}"
                    class="card flex gap-0 overflow-hidden no-underline group transition-all duration-200 property-card-link"

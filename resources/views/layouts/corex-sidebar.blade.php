@@ -104,7 +104,7 @@
     </div>
     @if($_userAgency)
     <div class="px-4 -mt-1 pb-2">
-        <div class="text-[10px] font-semibold uppercase tracking-widest text-center truncate" style="color:var(--text-muted); opacity:0.6;">
+        <div class="text-[0.6875rem] font-semibold uppercase tracking-widest text-center truncate" style="color:var(--text-muted); opacity:0.6;">
             {{ $_userAgency->name }}@if($_activeBranch || ($_branchViewAll && $_agencyBranches->count() > 0)) <span style="opacity:0.5;">—</span>
                 @if($_branchViewAll && !$_viewAsBranchId)
                     <span>All Branches</span>
@@ -113,10 +113,43 @@
                 @endif
             @endif
         </div>
+    </div>
+    @endif
 
-        {{-- Branch switcher (Split Branches Phase 2) --}}
-        @if($_branchCanSwitch && $_agencyBranches->count() > 1)
-        <div x-data="{ branchOpen: false }" class="mt-2 px-0">
+    {{-- Agency Switcher (owner role only) --}}
+    @if($isOwner)
+    <div x-data="{ agencyOpen: false }" class="px-3 pb-2">
+        <button type="button" @click="agencyOpen = !agencyOpen"
+                class="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-colors"
+                style="background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent); color:var(--brand-icon, #0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon, #0ea5e9) 25%, transparent);">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5 flex-shrink-0">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+            </svg>
+            <span class="flex-1 text-left truncate">{{ $activeAgency ? $activeAgency->name : 'All Agencies' }}</span>
+            @if(!$activeAgency)
+            <span class="w-2 h-2 rounded-full flex-shrink-0 animate-pulse" style="background:var(--ds-amber);"></span>
+            @endif
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3 flex-shrink-0 transition-transform duration-150" :class="agencyOpen && 'rotate-90'"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+        </button>
+        <div x-show="agencyOpen" x-cloak @click.outside="agencyOpen = false" x-transition
+             class="mt-1 rounded-md overflow-hidden shadow-lg"
+             style="background:var(--surface-2, #1a1e28); border:1px solid var(--border);">
+            @foreach($agencies as $ag)
+            <form method="POST" action="{{ route('agency.switch', $ag) }}">
+                @csrf
+                <button type="submit" class="w-full text-left px-3 py-2 text-xs transition-colors hover:bg-[color:var(--surface)] {{ (int)$activeAgencyId === $ag->id ? 'font-semibold' : '' }}" style="color: @if((int)$activeAgencyId === $ag->id) var(--brand-icon, #0ea5e9) @else var(--text-secondary) @endif;">
+                    {{ $ag->name }}
+                </button>
+            </form>
+            @endforeach
+        </div>
+    </div>
+    @endif
+
+    {{-- Branch switcher (Split Branches Phase 2) --}}
+    @if($_userAgency && $_branchCanSwitch && $_agencyBranches->count() > 1)
+    <div class="px-4 pb-2">
+        <div x-data="{ branchOpen: false }" class="px-0">
             <button type="button" @click="branchOpen = !branchOpen"
                     class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors"
                     style="background:var(--surface-2); color:var(--text-secondary); border:1px solid var(--border);">
@@ -140,7 +173,7 @@
                 @if($_viewAsBranchId)
                 <form method="POST" action="{{ route('branch.switch.clear') }}">
                     @csrf
-                    <button type="submit" class="w-full text-left px-3 py-2 text-xs hover:bg-white/10"
+                    <button type="submit" class="w-full text-left px-3 py-2 text-xs hover:bg-[color:var(--surface)]"
                             style="color:var(--brand-icon, #0ea5e9);">
                         ← All Branches
                     </button>
@@ -150,44 +183,13 @@
                 <form method="POST" action="{{ route('branch.switch', $_b) }}">
                     @csrf
                     <button type="submit"
-                            class="w-full text-left px-3 py-2 text-xs hover:bg-white/10 {{ (int) $_viewAsBranchId === (int) $_b->id ? 'font-semibold' : '' }}"
-                            @if((int) $_viewAsBranchId === (int) $_b->id) style="color:var(--brand-icon, #0ea5e9);" @endif>
+                            class="w-full text-left px-3 py-2 text-xs hover:bg-[color:var(--surface)] {{ (int) $_viewAsBranchId === (int) $_b->id ? 'font-semibold' : '' }}"
+                            style="color: @if((int) $_viewAsBranchId === (int) $_b->id) var(--brand-icon, #0ea5e9) @else var(--text-secondary) @endif;">
                         {{ $_b->name }}
                     </button>
                 </form>
                 @endforeach
             </div>
-        </div>
-        @endif
-    </div>
-    @endif
-
-    {{-- Agency Switcher (owner role only) --}}
-    @if($isOwner)
-    <div x-data="{ agencyOpen: false }" class="px-3 pb-2">
-        <button type="button" @click="agencyOpen = !agencyOpen"
-                class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors"
-                style="background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent); color:var(--brand-icon, #0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon, #0ea5e9) 25%, transparent);">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5 flex-shrink-0">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
-            </svg>
-            <span class="flex-1 text-left truncate">{{ $activeAgency ? $activeAgency->name : 'All Agencies' }}</span>
-            @if(!$activeAgency)
-            <span class="w-2 h-2 rounded-full flex-shrink-0 animate-pulse" style="background:#eab308;"></span>
-            @endif
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3 flex-shrink-0 transition-transform duration-150" :class="agencyOpen && 'rotate-90'"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
-        </button>
-        <div x-show="agencyOpen" x-cloak @click.outside="agencyOpen = false" x-transition
-             class="mt-1 rounded-lg overflow-hidden shadow-lg"
-             style="background:var(--surface-2, #1a1e28); border:1px solid var(--border);">
-            @foreach($agencies as $ag)
-            <form method="POST" action="{{ route('agency.switch', $ag) }}">
-                @csrf
-                <button type="submit" class="w-full text-left px-3 py-2 text-xs transition-colors hover:bg-white/10 {{ (int)$activeAgencyId === $ag->id ? 'font-semibold' : 'text-white/70' }}" @if((int)$activeAgencyId === $ag->id) style="color:var(--brand-icon, #0ea5e9);" @endif>
-                    {{ $ag->name }}
-                </button>
-            </form>
-            @endforeach
         </div>
     </div>
     @endif
@@ -220,6 +222,9 @@
                 <a href="{{ route('corex.dashboard') }}" class="corex-nav-subitem {{ request()->routeIs('corex.dashboard') ? 'active' : '' }}">Today</a>
                 <a href="{{ route('command-center.calendar') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.calendar*') ? 'active' : '' }}">Calendar</a>
                 <a href="{{ route('command-center.tasks') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.tasks*') ? 'active' : '' }}">Tasks</a>
+                @permission('dashboard.oversight.view')
+                    <a href="{{ route('corex.dashboard.oversight') }}" class="corex-nav-subitem {{ request()->routeIs('corex.dashboard.oversight') ? 'active' : '' }}">Oversight</a>
+                @endpermission
                 <a href="{{ route('command-center.performance') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.performance*') ? 'active' : '' }}">Performance</a>
                 <a href="{{ route('command-center.user-settings') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.user-settings*') ? 'active' : '' }}">User Settings</a>
             </div>
@@ -572,7 +577,7 @@
                 <a href="{{ route('compliance.agents') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.agents') ? 'active' : '' }}">
                     Agent Compliance
                     @if($nonCompliantAgents > 0)
-                    <span class="ml-auto w-2 h-2 rounded-full bg-red-500 flex-shrink-0 inline-block"></span>
+                    <span class="ml-auto w-2 h-2 rounded-full bg-amber-500 flex-shrink-0 inline-block"></span>
                     @endif
                 </a>
                 @endif
@@ -581,7 +586,7 @@
                 <a href="{{ route('compliance.verification.index') }}" class="corex-nav-subitem {{ request()->routeIs('compliance.verification.*') ? 'active' : '' }}">
                     Verification Queue
                     @if($pendingVerificationCount > 0)
-                    <span class="ml-auto flex-shrink-0 inline-flex items-center justify-center" style="min-width:18px; height:18px; border-radius:9px; background:rgba(0,212,170,0.15); color:#00d4aa; font-size:0.6rem; font-weight:700; padding:0 5px;">{{ $pendingVerificationCount }}</span>
+                    <span class="ml-auto flex-shrink-0 inline-flex items-center justify-center rounded-full text-[0.6875rem] font-bold px-1.5" style="min-width:18px; height:18px; background:color-mix(in srgb, var(--ds-amber) 15%, transparent); color:var(--ds-amber);">{{ number_format($pendingVerificationCount) }}</span>
                     @endif
                 </a>
                 @endpermission
@@ -595,38 +600,7 @@
         </div>
         @endpermission
 
-        {{-- Supervision --}}
-        @permission('access_supervision')
-        <a href="{{ route('corex.supervision') }}" class="corex-nav-item {{ request()->routeIs('corex.supervision') ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-            </svg>
-            <span>Supervision</span>
-        </a>
-        @endpermission
-
         {{-- Training (LMS) — moved to agent section above as "Training" --}}
-
-        {{-- Communication --}}
-        @permission('access_communication')
-        <a href="{{ route('corex.communication') }}" class="corex-nav-item {{ request()->routeIs('corex.communication') ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 0 1-.825-.242m9.345-8.334a2.126 2.126 0 0 0-.476-.095 48.64 48.64 0 0 0-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0 0 11.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
-            </svg>
-            <span>Communication</span>
-        </a>
-        @endpermission
-
-        {{-- Client Portal --}}
-        @permission('access_client_portal')
-        <a href="{{ route('corex.client-portal') }}" class="corex-nav-item {{ request()->routeIs('corex.client-portal') ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
-            </svg>
-            <span>Client Portal</span>
-        </a>
-        @endpermission
 
         {{-- Sales Documents --}}
         @permission('access_sales_documents')
@@ -739,16 +713,6 @@
         @endif
         @endpermission
 
-
-        {{-- Franchise Admin --}}
-        @permission('access_franchise_admin')
-        <a href="{{ route('corex.franchise-admin') }}" class="corex-nav-item {{ request()->routeIs('corex.franchise-admin') ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" />
-            </svg>
-            <span>Franchise Admin</span>
-        </a>
-        @endpermission
 
         {{-- ═══════════════════════════════════════════
              TOOLS SECTION
@@ -956,7 +920,7 @@
             </svg>
             <span>Onboarding</span>
             @if($onboardingCount > 0)
-            <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold bg-blue-500 text-white">{{ $onboardingCount }}</span>
+            <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[0.6875rem] font-bold" style="background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 15%, transparent); color:var(--brand-icon, #0ea5e9);">{{ number_format($onboardingCount) }}</span>
             @endif
         </a>
         @endif
@@ -1010,7 +974,7 @@
             </svg>
             <span>Fault Reports</span>
             @if($faultNewCount > 0)
-            <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold bg-red-500 text-white">{{ $faultNewCount }}</span>
+            <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[0.6875rem] font-bold" style="background:color-mix(in srgb, var(--ds-crimson) 15%, transparent); color:var(--ds-crimson);">{{ number_format($faultNewCount) }}</span>
             @endif
         </a>
         @endif
@@ -1072,7 +1036,7 @@
         {{-- Impersonation banner --}}
         @if($isImpersonating)
         <div class="corex-impersonate-banner">
-            <div class="text-[11px] text-amber-200">Viewing as <strong>{{ $user->name ?? 'User' }}</strong></div>
+            <div class="text-[11px]" style="color:var(--ds-amber);">Viewing as <strong>{{ $user->name ?? 'User' }}</strong></div>
             <form method="POST" action="{{ route('impersonate.stop') }}" class="mt-1">
                 @csrf
                 <button type="submit" class="corex-impersonate-btn">Switch back to {{ $impersonatorName ?? 'admin' }}</button>
@@ -1115,15 +1079,15 @@
         {{-- Switch user panel --}}
         @if($canSwitchUsers)
         <div x-show="switchPanel" x-cloak @click.outside="switchPanel = false" x-transition class="corex-switch-panel">
-            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold px-2 py-1">Switch User</div>
+            <div class="text-[0.6875rem] uppercase tracking-wider font-semibold px-2 py-1" style="color:var(--text-muted);">Switch User</div>
             <div class="corex-switch-list">
                 @foreach($switchUsers as $su)
                     @if((int)$su->id !== (int)($user->id ?? 0))
                     <form method="POST" action="{{ route('impersonate.start', ['user' => $su->id]) }}">
                         @csrf
                         <button type="submit" class="corex-switch-item">
-                            <div class="text-xs text-white/90">{{ $su->name }}</div>
-                            <div class="text-[10px] text-white/50">{{ $su->email }} · {{ $su->role }}</div>
+                            <div class="text-xs" style="color:var(--text-primary);">{{ $su->name }}</div>
+                            <div class="text-[0.6875rem]" style="color:var(--text-muted);">{{ $su->email }} · {{ $su->role }}</div>
                         </button>
                     </form>
                     @endif

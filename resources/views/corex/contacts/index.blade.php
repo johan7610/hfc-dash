@@ -5,19 +5,18 @@
      x-data="{ showAdd: false, showImport: false, editId: null, importLoading: false }">
 
     {{-- Page header --}}
-    <div class="rounded-md px-6 py-5 flex items-center justify-between" style="background:var(--brand-default,#0b2a4a);">
-        <div>
-            <h2 class="text-xl font-bold text-white tracking-tight">Contacts</h2>
-            <p class="text-sm mt-0.5" style="color:rgba(255,255,255,0.55);">Manage your contacts and leads.</p>
-        </div>
-        <div class="flex items-center gap-2">
+    <div class="rounded-md px-6 py-5" style="background:var(--brand-default,#0b2a4a);">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <h1 class="text-xl font-bold text-white leading-tight">Contacts</h1>
+                <p class="text-sm text-white/60">Manage your contacts and leads.</p>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
             @if(auth()->user()->effectiveRole() === 'super_admin')
             <form method="POST" action="{{ route('corex.contacts.destroy-all') }}"
                   onsubmit="return confirm('DELETE ALL CONTACTS? This will permanently delete every contact in the system. Are you sure?');">
                 @csrf @method('DELETE')
-                <button type="submit" class="text-sm font-medium px-3 py-2 rounded-md transition-all duration-300"
-                        style="color:#ef4444; border:1px solid rgba(239,68,68,0.3);"
-                        onmouseover="this.style.background='rgba(239,68,68,0.08)'" onmouseout="this.style.background=''">
+                <button type="submit" class="corex-btn-outline text-sm" style="color:var(--ds-crimson,#c41e3a); border-color:color-mix(in srgb, var(--ds-crimson,#c41e3a) 35%, transparent);">
                     Delete All
                 </button>
             </form>
@@ -34,21 +33,25 @@
                 </svg>
                 Add Contact
             </button>
+            </div>
         </div>
     </div>
 
     @if(session('success'))
-        <div class="rounded-md border px-4 py-3 text-sm font-medium" style="border-color:#bbf7d0; background:#f0fdf4; color:#166534;">
+        <div class="rounded-md px-4 py-3 text-sm font-medium"
+             style="background: color-mix(in srgb, var(--ds-green) 10%, transparent); border:1px solid color-mix(in srgb, var(--ds-green) 30%, transparent); color: var(--text-primary);">
             {{ session('success') }}
         </div>
     @endif
     @if(session('error'))
-        <div class="rounded-md border px-4 py-3 text-sm font-medium" style="border-color:#fecaca; background:#fef2f2; color:#991b1b;">
+        <div class="rounded-md px-4 py-3 text-sm font-medium"
+             style="background: color-mix(in srgb, var(--ds-crimson) 10%, transparent); border:1px solid color-mix(in srgb, var(--ds-crimson) 30%, transparent); color: var(--text-primary);">
             {{ session('error') }}
         </div>
     @endif
     @if($errors->any())
-        <div class="rounded-md border px-4 py-3 text-sm" style="border-color:#fecaca; background:#fef2f2; color:#991b1b;">
+        <div class="rounded-md px-4 py-3 text-sm"
+             style="background: color-mix(in srgb, var(--ds-crimson) 10%, transparent); border:1px solid color-mix(in srgb, var(--ds-crimson) 30%, transparent); color: var(--text-primary);">
             {{ $errors->first() }}
         </div>
     @endif
@@ -89,19 +92,19 @@
                 }
             }
          }"
-         class="rounded-md" style="background:var(--surface); border:1px solid var(--border); padding:24px;">
-        <div class="text-sm font-bold mb-4" style="color:var(--text-primary);">New Contact</div>
+         class="rounded-md p-5" style="background:var(--surface); border:1px solid var(--border);">
+        <div class="text-lg font-semibold mb-4" style="color:var(--text-primary);">New Contact</div>
 
         {{-- Duplicate found popup --}}
         <div x-show="dupFound" x-cloak
              x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0 -translate-y-1" x-transition:enter-end="opacity-100 translate-y-0"
-             class="rounded-md mb-4 p-4" style="background:rgba(234,179,8,0.08); border:1px solid rgba(234,179,8,0.3);">
+             class="rounded-md mb-4 p-4" style="background: color-mix(in srgb, var(--ds-amber) 10%, transparent); border:1px solid color-mix(in srgb, var(--ds-amber) 30%, transparent);">
             <div class="flex items-start gap-3">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0 mt-0.5" style="color:#eab308;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0 mt-0.5" style="color:var(--ds-amber);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/>
                 </svg>
                 <div class="flex-1 min-w-0">
-                    <div class="text-sm font-bold" style="color:#eab308;">Possible Duplicate Found</div>
+                    <div class="text-sm font-semibold" style="color:var(--ds-amber);">Possible Duplicate Found</div>
                     <p class="text-xs mt-1" style="color:var(--text-secondary);">A contact with this phone number or email already exists.</p>
                     <div class="mt-3 rounded-md p-3" style="background:var(--surface); border:1px solid var(--border);">
                         <div class="flex items-center gap-3 mb-2">
@@ -202,10 +205,10 @@
     {{-- Import Contacts Panel (collapsible) --}}
     <div x-show="showImport" x-cloak
          x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0 -translate-y-2" x-transition:enter-end="opacity-100 translate-y-0"
-         class="rounded-md" style="background:var(--surface); border:1px solid var(--border); padding:24px;">
+         class="rounded-md p-5" style="background:var(--surface); border:1px solid var(--border);">
         <div class="flex items-center justify-between mb-4">
             <div>
-                <div class="text-sm font-bold" style="color:var(--text-primary);">Import Contacts from Excel</div>
+                <div class="text-lg font-semibold" style="color:var(--text-primary);">Import Contacts from Excel</div>
                 <p class="text-xs mt-1" style="color:var(--text-muted);">Upload an .xlsx file. Contacts will be matched to agents by name, and new types/sources/tags will be created automatically if they don't exist.</p>
             </div>
         </div>
@@ -443,7 +446,7 @@
                                style="color:var(--text-primary);"
                                onmouseover="this.style.color='var(--brand-icon,#0ea5e9)'" onmouseout="this.style.color='var(--text-primary)'">{{ $contact->full_name }}</a>
                             @if($contact->type)
-                            <span class="text-xs px-2 py-0.5 rounded-md font-medium"
+                            <span class="text-xs px-2 py-0.5 rounded-md font-medium whitespace-nowrap"
                                   style="background:color-mix(in srgb, var(--brand-icon,#0ea5e9) 12%, transparent); color:var(--brand-icon,#0ea5e9); border:1px solid color-mix(in srgb, var(--brand-icon,#0ea5e9) 25%, transparent);">
                                 {{ $contact->type->name }}
                             </span>
@@ -473,11 +476,8 @@
                     <form method="POST" action="{{ route('corex.contacts.destroy', $contact) }}"
                           onsubmit="return confirm('Delete {{ addslashes($contact->full_name) }}?');">
                         @csrf @method('DELETE')
-                        <button type="submit"
-                                class="text-[10px] font-medium px-2 py-1 rounded-md transition-all duration-300"
-                                style="color:var(--text-muted);"
-                                onmouseover="this.style.color='#ef4444';this.style.background='rgba(239,68,68,0.08)'"
-                                onmouseout="this.style.color='var(--text-muted)';this.style.background=''">Delete</button>
+                        <button type="submit" class="corex-btn-outline text-[10px] px-2 py-1"
+                                style="color:var(--ds-crimson,#c41e3a); border-color:color-mix(in srgb, var(--ds-crimson,#c41e3a) 30%, transparent);">Delete</button>
                     </form>
                     @endif
                 </div>
@@ -541,10 +541,14 @@
 
         </div>
         @empty
-        <div class="p-8 text-center" style="color:var(--text-muted);">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="w-10 h-10 mx-auto mb-3 opacity-30"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>
-            <div class="text-sm">No contacts yet.</div>
-            <button type="button" @click="showAdd = true" class="mt-3 text-sm font-semibold" style="color:var(--brand-icon,#0ea5e9);">Add your first contact</button>
+        <div class="py-12 px-6 text-center">
+            <div class="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
+                 style="background: color-mix(in srgb, var(--brand-icon,#0ea5e9) 12%, transparent); color: var(--brand-icon,#0ea5e9);">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>
+            </div>
+            <h3 class="text-base font-semibold mb-1" style="color: var(--text-primary);">No contacts yet</h3>
+            <p class="text-sm mb-4" style="color: var(--text-muted);">Add your first contact to start tracking relationships.</p>
+            <button type="button" @click="showAdd = true" class="corex-btn-primary text-sm">Add Contact</button>
         </div>
         @endforelse
 

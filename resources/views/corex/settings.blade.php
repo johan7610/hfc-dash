@@ -1,72 +1,163 @@
 @extends('layouts.corex')
 
 @section('corex-content')
-<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5"
-     x-data="{ activeTab: '{{ $activeTab }}' }">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5"
+     x-data="settingsHub('{{ $activeSection }}')"
+     x-init="$watch('activeSection', v => { const u = new URL(window.location); u.searchParams.set('s', v); u.searchParams.delete('tab'); u.searchParams.delete('fsec'); window.history.replaceState({}, '', u); })">
 
     {{-- Page header --}}
-    <div style="background:var(--brand-default, #0b2a4a); border-radius:6px; padding:20px 24px;">
-        <h2 style="font-size:1.25rem; font-weight:800; color:#fff; margin:0 0 4px;">Settings</h2>
-        <div style="font-size:0.875rem; color:rgba(255,255,255,0.55);">System configuration and preferences.</div>
+    <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a);">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <h1 class="text-xl font-bold text-white leading-tight">Settings</h1>
+                <p class="text-sm text-white/60">System configuration and preferences.</p>
+            </div>
+        </div>
     </div>
 
     @if(session('success'))
-        <div class="rounded-md border px-4 py-3 text-sm font-medium" style="border-color:#bbf7d0; background:#f0fdf4; color:#166534;">
+        <div class="rounded-md px-4 py-3 text-sm font-medium"
+             style="background: color-mix(in srgb, var(--ds-green) 10%, transparent); border:1px solid color-mix(in srgb, var(--ds-green) 30%, transparent); color: var(--text-primary);">
             {{ session('success') }}
         </div>
     @endif
     @if(session('status'))
-        <div class="rounded-md border px-4 py-3 text-sm font-medium" style="border-color:#bbf7d0; background:#f0fdf4; color:#166534;">
+        <div class="rounded-md px-4 py-3 text-sm font-medium"
+             style="background: color-mix(in srgb, var(--ds-green) 10%, transparent); border:1px solid color-mix(in srgb, var(--ds-green) 30%, transparent); color: var(--text-primary);">
             {{ session('status') }}
         </div>
     @endif
     @if(session('error'))
-        <div class="rounded-md border px-4 py-3 text-sm font-medium" style="border-color:#fecaca; background:#fef2f2; color:#991b1b;">
+        <div class="rounded-md px-4 py-3 text-sm font-medium"
+             style="background: color-mix(in srgb, var(--ds-crimson) 10%, transparent); border:1px solid color-mix(in srgb, var(--ds-crimson) 30%, transparent); color: var(--text-primary);">
             {{ session('error') }}
         </div>
     @endif
     @if($errors->any())
-        <div class="rounded-md border px-4 py-3 text-sm" style="border-color:#fecaca; background:#fef2f2; color:#991b1b;">
+        <div class="rounded-md px-4 py-3 text-sm"
+             style="background: color-mix(in srgb, var(--ds-crimson) 10%, transparent); border:1px solid color-mix(in srgb, var(--ds-crimson) 30%, transparent); color: var(--text-primary);">
             {{ $errors->first() }}
         </div>
     @endif
 
-    {{-- Tab container --}}
-    <div style="background:var(--surface); border:1px solid var(--border); border-radius:6px; overflow:hidden;">
+    {{-- Hub shell: left rail + right pane --}}
+    @php
+        $u = auth()->user();
+        $can = fn($p) => $u && $u->hasPermission($p);
+        $railGroups = [
+            [
+                'label' => 'My Preferences',
+                'items' => [
+                    ['key'=>'user', 'label'=>'Profile & Account', 'type'=>'section'],
+                ],
+            ],
+            [
+                'label' => 'Agency',
+                'items' => array_values(array_filter([
+                    ['key'=>'agency',                'label'=>'Agency Settings',       'type'=>'section', 'keywords'=>'company branding logo signature'],
+                    ['key'=>'company',               'label'=>'Company Details',       'type'=>'link', 'href'=>route('admin.company-settings'), 'keywords'=>'trading name address logo'],
+                    ['key'=>'branches',              'label'=>'Branches & Assignments','type'=>'link', 'href'=>route('admin.branch-assignments'), 'keywords'=>'users branch assignment'],
+                ])),
+            ],
+            [
+                'label' => 'Modules',
+                'items' => [
+                    ['key'=>'feature-documents',     'label'=>'Documents',             'type'=>'section', 'keywords'=>'docuperfect named fields'],
+                    ['key'=>'feature-rentals',       'label'=>'Rentals',               'type'=>'section', 'keywords'=>'rental document types reminders'],
+                    ['key'=>'feature-contacts',      'label'=>'Contacts',              'type'=>'section', 'keywords'=>'contact types sources tags'],
+                    ['key'=>'feature-properties',    'label'=>'Properties & Listings', 'type'=>'section', 'keywords'=>'syndication portals marketing'],
+                    ['key'=>'feature-matches',       'label'=>'Matches',               'type'=>'section', 'keywords'=>'whatsapp message'],
+                    ['key'=>'feature-dashboard',     'label'=>'Dashboard',             'type'=>'section', 'keywords'=>'cockpit widgets'],
+                    ['key'=>'notifications',         'label'=>'Notifications',         'type'=>'section', 'keywords'=>'reminders push email alerts overdue'],
+                    ['key'=>'doc-types',             'label'=>'Document Types',        'type'=>'link', 'href'=>route('admin.settings.document-types.index'), 'keywords'=>'splitter filing'],
+                    ['key'=>'docuperfect-types',    'label'=>'DocuPerfect — Types',   'type'=>'link', 'href'=>route('docuperfect.settings.types'), 'keywords'=>'document templates'],
+                    ['key'=>'docuperfect-fields',   'label'=>'DocuPerfect — Named Fields','type'=>'link', 'href'=>route('docuperfect.settings.namedFields'), 'keywords'=>'merge fields'],
+                ],
+            ],
+            [
+                'label' => 'Operations',
+                'items' => [
+                    ['key'=>'commission',            'label'=>'Commission & Revenue Share','type'=>'link', 'href'=>route('corex.settings.commission'), 'keywords'=>'splits caps fees tiers'],
+                    ['key'=>'performance',           'label'=>'Performance Settings',  'type'=>'link', 'href'=>route('admin.performance-settings.edit'), 'keywords'=>'vat targets'],
+                    ['key'=>'command-center',        'label'=>'Command Center Rules',  'type'=>'link', 'href'=>route('command-center.settings'), 'keywords'=>'expectations reminders'],
+                ],
+            ],
+            [
+                'label' => 'System',
+                'items' => [
+                    ['key'=>'system',                'label'=>'System Info & Tools',   'type'=>'section', 'keywords'=>'environment debug'],
+                    ['key'=>'p24-suburbs',           'label'=>'P24 Suburbs',           'type'=>'link', 'href'=>route('admin.p24-suburbs.index'), 'keywords'=>'property24 mapping'],
+                ],
+            ],
+        ];
+    @endphp
 
-        {{-- Tab bar --}}
-        <div class="flex overflow-x-auto" style="border-bottom:1px solid var(--border);">
-            @foreach([
-                ['key'=>'agency',  'label'=>'Agency Settings'],
-                ['key'=>'user',    'label'=>'User Settings'],
-                ['key'=>'feature', 'label'=>'Feature Settings'],
-                ['key'=>'system',  'label'=>'System Settings'],
-            ] as $tab)
-            <button type="button"
-                    @click="activeTab = '{{ $tab['key'] }}'"
-                    :class="activeTab === '{{ $tab['key'] }}' ? 'border-b-2' : 'border-b-2 border-transparent'"
-                    :style="activeTab === '{{ $tab['key'] }}' ? 'color:var(--brand-icon, #0ea5e9); border-color:var(--brand-icon, #0ea5e9); background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 5%, transparent);' : 'color:var(--text-secondary);'"
-                    class="px-6 py-4 text-sm font-semibold whitespace-nowrap flex-shrink-0 transition-all duration-300 outline-none focus:outline-none hover:opacity-80"
-                    style="background:transparent;">
-                {{ $tab['label'] }}
-            </button>
-            @endforeach
-        </div>
+    <div class="flex flex-col lg:flex-row gap-5">
+
+        {{-- Left rail --}}
+        <aside class="w-full lg:w-72 flex-shrink-0">
+            <div class="rounded-md sticky top-4" style="background:var(--surface); border:1px solid var(--border);">
+                <div class="p-3" style="border-bottom:1px solid var(--border);">
+                    <div class="relative">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" class="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2" style="color:var(--text-muted);"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+                        <input type="text" x-model="search" placeholder="Search settings…"
+                               class="w-full rounded-md pl-8 pr-3 py-2 text-sm outline-none"
+                               style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                    </div>
+                </div>
+                <nav class="p-2 max-h-[70vh] overflow-y-auto" aria-label="Settings sections">
+                    @foreach($railGroups as $group)
+                        @php $groupId = 'rg-' . \Illuminate\Support\Str::slug($group['label']); @endphp
+                        <div class="mt-2 first:mt-0" x-show="anyVisible(@js($group['items']))">
+                            <div class="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider" style="color:var(--text-muted);">
+                                {{ $group['label'] }}
+                            </div>
+                            @foreach($group['items'] as $item)
+                                @php
+                                    $matchExpr = "matchesSearch(" . json_encode(strtolower($item['label'] . ' ' . ($item['keywords'] ?? ''))) . ")";
+                                @endphp
+                                @if($item['type'] === 'section')
+                                    <button type="button"
+                                            @click="activeSection = '{{ $item['key'] }}'; $nextTick(() => window.scrollTo({top:0, behavior:'smooth'}))"
+                                            x-show="{{ $matchExpr }}"
+                                            :class="activeSection === '{{ $item['key'] }}' ? 'font-semibold' : ''"
+                                            :style="activeSection === '{{ $item['key'] }}' ? 'background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent); color:var(--brand-icon, #0ea5e9);' : 'color:var(--text-secondary);'"
+                                            class="w-full text-left px-3 py-2 rounded-md text-sm transition-colors duration-150 hover:bg-white/5 outline-none focus:outline-none">
+                                        {{ $item['label'] }}
+                                    </button>
+                                @else
+                                    <a href="{{ $item['href'] }}"
+                                       x-show="{{ $matchExpr }}"
+                                       class="flex items-center justify-between gap-2 px-3 py-2 rounded-md text-sm no-underline transition-colors duration-150 hover:bg-white/5"
+                                       style="color:var(--text-secondary);">
+                                        <span>{{ $item['label'] }}</span>
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" class="w-3.5 h-3.5 flex-shrink-0" style="color:var(--text-muted);"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+                                    </a>
+                                @endif
+                            @endforeach
+                        </div>
+                    @endforeach
+                </nav>
+            </div>
+        </aside>
+
+        {{-- Right pane --}}
+        <div class="flex-1 min-w-0" style="background:var(--surface); border:1px solid var(--border); border-radius:6px; overflow:hidden;">
 
         {{-- ============================================================
              AGENCY SETTINGS TAB
              Contains: Branch Assignments, Company Settings, Agency Mgmt
              ============================================================ --}}
-        <div x-show="activeTab === 'agency'" class="p-6 space-y-6">
+        <div x-show="activeSection === 'agency'" x-cloak class="p-6 space-y-6">
 
             {{-- Branch Assignments link --}}
             <div>
-                <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Structure</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Structure</h3>
                 <a href="{{ route('admin.branch-assignments') }}"
                    class="flex items-center gap-3 p-3 rounded-md transition-all duration-300 no-underline group hover:bg-white/5"
                    style="border:1px solid var(--border);">
-                    <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background:rgba(14,165,233,0.12);">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#0ea5e9" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" /></svg>
+                    <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent);">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="color: var(--brand-icon, #0ea5e9);" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" /></svg>
                     </div>
                     <div class="flex-1">
                         <div class="text-sm font-semibold" style="color:var(--text-primary);">Branch Assignments</div>
@@ -79,12 +170,12 @@
             {{-- Company Settings — moved to its own admin page (mirrors Branch Assignments) --}}
             @if(isset($agency) && $agency)
             <div>
-                <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Company</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Company</h3>
                 <a href="{{ route('admin.company-settings') }}"
                    class="flex items-center gap-3 p-3 rounded-md transition-all duration-300 no-underline group hover:bg-white/5"
                    style="border:1px solid var(--border);">
-                    <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background:rgba(14,165,233,0.12);">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#0ea5e9" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/></svg>
+                    <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent);">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="color: var(--brand-icon, #0ea5e9);" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/></svg>
                     </div>
                     <div class="flex-1">
                         <div class="text-sm font-semibold" style="color:var(--text-primary);">Company Settings</div>
@@ -98,7 +189,7 @@
             {{-- Data Isolation — Split Branches toggle (branch-isolation phase 2) --}}
             @if(isset($agency) && $agency && auth()->user()?->hasPermission('manage_performance_settings'))
             <div>
-                <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Data Isolation</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Data Isolation</h3>
                 <form method="POST" action="{{ route('corex.settings.split-branches') }}"
                       class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
                     @csrf
@@ -333,7 +424,7 @@
             {{-- Performance Settings (VAT, Listings per Sale) --}}
             @if(isset($vatRate))
             <div>
-                <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Performance Settings</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Performance Settings</h3>
                 <form method="POST" action="{{ route('admin.performance-settings.update') }}"
                       class="space-y-4 p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
                     @csrf
@@ -368,12 +459,12 @@
             {{-- Agency Management (owner role only) --}}
             @if(auth()->user()?->isOwnerRole())
             <div>
-                <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Super Admin</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Super Admin</h3>
                 <a href="{{ route('agencies.index') }}"
                    class="flex items-center gap-3 p-3 rounded-md transition-all duration-300 no-underline hover:bg-white/5"
                    style="border:1px solid var(--border);">
-                    <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background:rgba(99,102,241,0.12);">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#818cf8" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" /></svg>
+                    <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent);">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="color: var(--brand-icon, #0ea5e9);" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" /></svg>
                     </div>
                     <div class="flex-1">
                         <div class="text-sm font-semibold" style="color:var(--text-primary);">Agency Management</div>
@@ -390,17 +481,17 @@
              USER SETTINGS TAB
              Contains: User Management, Roles & Permissions, Designations
              ============================================================ --}}
-        <div x-show="activeTab === 'user'" x-cloak class="p-6 space-y-6">
+        <div x-show="activeSection === 'user'" x-cloak class="p-6 space-y-6">
 
             {{-- Links: User Mgmt + Roles --}}
             <div>
-                <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Management</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Management</h3>
                 <div class="space-y-2">
                     <a href="{{ route('admin.users') }}"
                        class="flex items-center gap-3 p-3 rounded-md transition-all duration-300 no-underline hover:bg-white/5"
                        style="border:1px solid var(--border);">
-                        <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background:rgba(34,197,94,0.12);">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#22c55e" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>
+                        <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background: color-mix(in srgb, var(--ds-green) 12%, transparent);">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="color: var(--ds-green);" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>
                         </div>
                         <div class="flex-1">
                             <div class="text-sm font-semibold" style="color:var(--text-primary);">User Management</div>
@@ -411,8 +502,8 @@
                     <a href="{{ route('corex.role-manager') }}"
                        class="flex items-center gap-3 p-3 rounded-md transition-all duration-300 no-underline hover:bg-white/5"
                        style="border:1px solid var(--border);">
-                        <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background:rgba(0,180,216,0.12);">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#00b4d8" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg>
+                        <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent);">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="color: var(--brand-icon, #0ea5e9);" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg>
                         </div>
                         <div class="flex-1">
                             <div class="text-sm font-semibold" style="color:var(--text-primary);">Role &amp; Permissions Manager</div>
@@ -440,7 +531,7 @@
 
             {{-- Section A: Primary Compliance Officer --}}
             <div>
-                <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Primary Compliance Officer (Section 43)</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Primary Compliance Officer (Section 43)</h3>
                 <div class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
                     @if($currentPrimary)
                     <div class="flex items-start justify-between mb-3">
@@ -451,15 +542,15 @@
                                 @if($currentPrimary->id_number) | ID: {{ $currentPrimary->id_number }} @endif
                             </div>
                         </div>
-                        <span class="inline-flex items-center px-2 py-0.5 text-xs font-semibold" style="background:rgba(0,212,170,0.15); color:#00d4aa; border-radius:3px;">Active</span>
+                        <span class="inline-flex items-center px-2 py-0.5 text-xs font-semibold" style="background: color-mix(in srgb, var(--ds-green) 15%, transparent); color: var(--ds-green); border-radius:6px;">Active</span>
                     </div>
                     @else
-                    <div class="mb-3 px-3 py-2 text-xs font-semibold" style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:3px; color:#ef4444;">
+                    <div class="mb-3 px-3 py-2 text-xs font-semibold" style="background: color-mix(in srgb, var(--ds-crimson) 10%, transparent); border:1px solid color-mix(in srgb, var(--ds-crimson) 30%, transparent); border-radius:6px; color: var(--ds-crimson);">
                         No primary compliance officer appointed. Appoint one to remain FICA compliant.
                     </div>
                     @endif
 
-                    <div class="mb-2 px-3 py-2 text-xs" style="background:rgba(234,179,8,0.08); border:1px solid rgba(234,179,8,0.2); border-radius:3px; color:#ca8a04;">
+                    <div class="mb-2 px-3 py-2 text-xs" style="background: color-mix(in srgb, var(--ds-amber) 10%, transparent); border:1px solid color-mix(in srgb, var(--ds-amber) 30%, transparent); border-radius:6px; color: var(--text-primary);">
                         This person is named in RMCP Section 26 and registered with the FIC. Changing requires a new RMCP version to be issued.
                     </div>
 
@@ -506,9 +597,9 @@
                         </div>
                         <div>
                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Notes</label>
-                            <textarea name="notes" rows="2" class="w-full px-2 py-1.5 text-sm border rounded" style="border-color:var(--border); background:var(--surface); color:var(--text-primary);"></textarea>
+                            <textarea name="notes" rows="2" class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"></textarea>
                         </div>
-                        <button type="submit" class="px-4 py-1.5 text-xs font-semibold rounded transition-all" style="background:#00d4aa; color:#0f172a; border-radius:3px;">Appoint Primary CO</button>
+                        <button type="submit" class="corex-btn-primary text-xs">Appoint Primary CO</button>
                     </form>
 
                     @if($primaryHistory->isNotEmpty())
@@ -519,7 +610,7 @@
                         </button>
                         <div x-show="showHistory" x-cloak class="mt-2 space-y-1">
                             @foreach($primaryHistory as $prev)
-                            <div class="flex items-center justify-between px-2 py-1 text-xs" style="background:var(--surface); border-radius:3px;">
+                            <div class="flex items-center justify-between px-2 py-1 text-xs" style="background:var(--surface); border-radius:6px;">
                                 <span style="color:var(--text-primary);">{{ $prev->full_name }}</span>
                                 <span style="color:var(--text-muted);">{{ $prev->appointed_on->format('d M Y') }} — {{ $prev->ended_on->format('d M Y') }}</span>
                             </div>
@@ -532,12 +623,12 @@
 
             {{-- Section B: MLROs / Reporting Officers --}}
             <div>
-                <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">MLROs / Reporting Officers (PCC 5C)</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">MLROs / Reporting Officers (PCC 5C)</h3>
                 <div class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
                     <div class="text-xs font-semibold mb-2" style="color:var(--text-secondary);">Select users who can perform FICA compliance reviews and approvals</div>
                     <form method="POST" action="{{ route('corex.settings.fica-officers.mlros') }}">
                         @csrf
-                        <div class="space-y-1 max-h-48 overflow-y-auto mb-3" style="border:1px solid var(--border); padding:0.5rem; border-radius:4px; background:var(--surface);">
+                        <div class="space-y-1 max-h-48 overflow-y-auto mb-3 rounded-md p-2" style="border:1px solid var(--border); background:var(--surface);">
                             @foreach($agencyUsers as $u)
                             <label class="flex items-center gap-2 py-1 px-1 text-sm cursor-pointer hover:bg-white/5 rounded">
                                 <input type="checkbox" name="mlro_user_ids[]" value="{{ $u->id }}" {{ in_array($u->id, $activeMlroUserIds) ? 'checked' : '' }} style="accent-color: #0d9488;">
@@ -546,7 +637,7 @@
                             </label>
                             @endforeach
                         </div>
-                        <button type="submit" class="px-4 py-1.5 text-xs font-semibold rounded transition-all" style="background:#00d4aa; color:#0f172a; border-radius:3px;">Save MLROs</button>
+                        <button type="submit" class="corex-btn-primary text-xs">Save MLROs</button>
                     </form>
                 </div>
             </div>
@@ -555,7 +646,7 @@
             {{-- Designations (inline) --}}
             @permission('manage_designations')
             <div>
-                <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Designations</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Designations</h3>
 
                 {{-- Add designation --}}
                 <div class="p-4 rounded-md mb-3" style="background:var(--surface-2); border:1px solid var(--border);">
@@ -620,7 +711,7 @@
                             <form method="POST" action="{{ url('/admin/designations/'.$d->id.'/delete') }}"
                                   onsubmit="return confirm('Delete this designation?');" class="mt-2">
                                 @csrf
-                                <button class="text-xs font-semibold text-red-600 hover:text-red-700">Delete</button>
+                                <button class="text-xs font-semibold" style="color: var(--ds-crimson);">Delete</button>
                             </form>
                         </div>
                         @empty
@@ -633,17 +724,17 @@
 
             {{-- Social Media Accounts --}}
             <div>
-                <h3 class="text-xs font-bold uppercase tracking-widest mb-1" style="color:var(--text-muted);">Social Media Accounts</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Social Media Accounts</h3>
                 <p class="text-xs mb-4" style="color:var(--text-secondary);">Connect your <strong>Facebook Page</strong> or Instagram Business account to publish property listings directly from CoreX. Facebook requires a Page (not a personal profile) — create one at <span style="color:var(--text-primary);">facebook.com/pages/create</span> if you don't have one yet.</p>
 
                 {{-- Token expiry warning --}}
                 @if(isset($socialAccountExpiringSoon) && $socialAccountExpiringSoon)
                 <div class="flex items-start gap-3 rounded-md border px-4 py-3 mb-4 text-sm"
                      x-data="{ show: true }" x-show="show"
-                     style="background:#fefce8; border-color:#fde68a; color:#92400e;">
+                     style="background: color-mix(in srgb, var(--ds-amber) 10%, transparent); border:1px solid color-mix(in srgb, var(--ds-amber) 30%, transparent); color: var(--text-primary);">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 flex-shrink-0 mt-0.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
                     <div class="flex-1">Your Facebook connection expires soon. Please reconnect to avoid interruptions to your property marketing.</div>
-                    <button @click="show = false" class="flex-shrink-0 text-yellow-700 hover:text-yellow-900">
+                    <button @click="show = false" class="flex-shrink-0" style="color: var(--ds-amber);">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
                     </button>
                 </div>
@@ -664,9 +755,9 @@
                                 @endif
                             </div>
                             @if($fbSocial)
-                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full" style="background:rgba(34,197,94,0.12); color:#22c55e;">Connected</span>
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full" style="background: color-mix(in srgb, var(--ds-green) 12%, transparent); color: var(--ds-green);">Connected</span>
                             @else
-                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full" style="background:rgba(148,163,184,0.12); color:var(--text-muted);">Not Connected</span>
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full" style="background: color-mix(in srgb, var(--text-muted) 18%, transparent); color: var(--text-muted);">Not Connected</span>
                             @endif
                         </div>
 
@@ -682,7 +773,7 @@
                             @csrf
                             <input type="hidden" name="platform" value="facebook">
                             <button type="submit" onclick="return confirm('Disconnect Facebook? This will stop all Facebook publishing.')"
-                                    class="text-xs px-3 py-1.5 rounded-md font-medium" style="background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid rgba(239,68,68,0.2);">
+                                    class="text-xs px-3 py-1.5 rounded-md font-medium" style="background: color-mix(in srgb, var(--ds-crimson) 10%, transparent); color: var(--ds-crimson); border:1px solid color-mix(in srgb, var(--ds-crimson) 20%, transparent);">
                                 Disconnect Facebook
                             </button>
                         </form>
@@ -712,9 +803,9 @@
                                 @endif
                             </div>
                             @if($igSocial)
-                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full" style="background:rgba(34,197,94,0.12); color:#22c55e;">Connected</span>
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full" style="background: color-mix(in srgb, var(--ds-green) 12%, transparent); color: var(--ds-green);">Connected</span>
                             @else
-                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full" style="background:rgba(148,163,184,0.12); color:var(--text-muted);">Not Connected</span>
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full" style="background: color-mix(in srgb, var(--text-muted) 18%, transparent); color: var(--text-muted);">Not Connected</span>
                             @endif
                         </div>
 
@@ -730,7 +821,7 @@
                             @csrf
                             <input type="hidden" name="platform" value="instagram">
                             <button type="submit" onclick="return confirm('Disconnect Instagram?')"
-                                    class="text-xs px-3 py-1.5 rounded-md font-medium" style="background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid rgba(239,68,68,0.2);">
+                                    class="text-xs px-3 py-1.5 rounded-md font-medium" style="background: color-mix(in srgb, var(--ds-crimson) 10%, transparent); color: var(--ds-crimson); border:1px solid color-mix(in srgb, var(--ds-crimson) 20%, transparent);">
                                 Disconnect Instagram
                             </button>
                         </form>
@@ -786,61 +877,16 @@
              FEATURE SETTINGS TAB
              Contains: Documents (Docuperfect), Rentals
              ============================================================ --}}
-        <div x-show="activeTab === 'feature'" x-cloak class="p-6 space-y-8"
-             x-data="{ featureSection: '{{ $featureSection }}' }">
-
-            {{-- Feature sub-nav --}}
-            <div class="flex gap-2 flex-wrap" style="border-bottom:1px solid var(--border); padding-bottom:16px;">
-                <button type="button"
-                        @click="featureSection = 'documents'"
-                        :class="featureSection === 'documents' ? 'bg-[#00b4d8]/10 text-[#00b4d8] border-[#00b4d8]/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
-                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
-                        style="background:transparent;">
-                    Documents
-                </button>
-                <button type="button"
-                        @click="featureSection = 'rentals'"
-                        :class="featureSection === 'rentals' ? 'bg-[#00b4d8]/10 text-[#00b4d8] border-[#00b4d8]/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
-                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
-                        style="background:transparent;">
-                    Rentals
-                </button>
-                <button type="button"
-                        @click="featureSection = 'contacts'"
-                        :class="featureSection === 'contacts' ? 'bg-[#00b4d8]/10 text-[#00b4d8] border-[#00b4d8]/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
-                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
-                        style="background:transparent;">
-                    Contacts
-                </button>
-                <button type="button"
-                        @click="featureSection = 'properties'"
-                        :class="featureSection === 'properties' ? 'bg-[#00b4d8]/10 text-[#00b4d8] border-[#00b4d8]/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
-                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
-                        style="background:transparent;">
-                    Properties
-                </button>
-                <button type="button"
-                        @click="featureSection = 'matches'"
-                        :class="featureSection === 'matches' ? 'bg-[#00b4d8]/10 text-[#00b4d8] border-[#00b4d8]/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
-                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
-                        style="background:transparent;">
-                    Matches
-                </button>
-                <button type="button"
-                        @click="featureSection = 'dashboard'"
-                        :class="featureSection === 'dashboard' ? 'bg-[#00b4d8]/10 text-[#00b4d8] border-[#00b4d8]/40' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'"
-                        class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors duration-150 outline-none"
-                        style="background:transparent;">
-                    Dashboard
-                </button>
-            </div>
+        {{-- Feature sections — each one shows when its rail key is active --}}
+        <div class="p-6 space-y-8"
+             x-show="activeSection.startsWith('feature-')" x-cloak>
 
             {{-- DOCUMENTS section --}}
-            <div x-show="featureSection === 'documents'" class="space-y-6">
+            <div x-show="activeSection === 'feature-documents'" x-cloak class="space-y-6">
 
                 {{-- Named Fields --}}
                 <div>
-                    <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Named Fields</h3>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Named Fields</h3>
                     <div class="p-4 rounded-md mb-3" style="background:var(--surface-2); border:1px solid var(--border);">
                         <div class="text-xs font-semibold mb-3" style="color:var(--text-secondary);">Add Named Field</div>
                         <form method="POST" action="{{ route('docuperfect.settings.namedFields.store') }}"
@@ -917,7 +963,7 @@
                             <form method="POST" action="{{ route('docuperfect.settings.namedFields.destroy', $field->id) }}"
                                   onsubmit="return confirm('Delete this named field?');" class="mt-2">
                                 @csrf @method('DELETE')
-                                <button class="text-xs font-semibold text-red-600 hover:text-red-700">Delete</button>
+                                <button class="text-xs font-semibold" style="color: var(--ds-crimson);">Delete</button>
                             </form>
                         </div>
                         @empty
@@ -929,16 +975,16 @@
             </div>{{-- /documents --}}
 
             {{-- RENTALS section --}}
-            <div x-show="featureSection === 'rentals'" x-cloak class="space-y-6">
+            <div x-show="activeSection === 'feature-rentals'" x-cloak class="space-y-6">
 
                 {{-- Rental Properties link (has sub-pages) --}}
                 <div>
-                    <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Properties</h3>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Properties</h3>
                     <a href="{{ route('rental.settings.properties.index') }}"
                        class="flex items-center gap-3 p-3 rounded-md transition-all duration-300 no-underline hover:bg-white/5"
                        style="border:1px solid var(--border);">
-                        <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background:rgba(34,197,94,0.12);">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#22c55e" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" /></svg>
+                        <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background: color-mix(in srgb, var(--ds-green) 12%, transparent);">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="color: var(--ds-green);" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" /></svg>
                         </div>
                         <div class="flex-1">
                             <div class="text-sm font-semibold" style="color:var(--text-primary);">Rental Properties</div>
@@ -950,7 +996,7 @@
 
                 {{-- Rental Document Types (inline) --}}
                 <div>
-                    <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Rental Document Types</h3>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Rental Document Types</h3>
                     <div class="space-y-2 mb-3" x-data="{ showAdd: false, editId: null }">
                         @foreach($rentalDocTypes as $rType)
                         <div class="flex items-center justify-between p-3 rounded-md {{ !$rType->is_active ? 'opacity-50' : '' }}"
@@ -959,16 +1005,16 @@
                                 <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color: {{ $rType->color }}"></span>
                                 <span class="text-sm font-medium" style="color:var(--text-primary);">{{ $rType->name }}</span>
                                 @if($rType->is_system)<span class="text-xs ml-1" style="color:var(--text-muted);">(system)</span>@endif
-                                @if($rType->is_lease)<span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded ml-2">Lease</span>@endif
-                                @if(!$rType->is_active)<span class="text-xs bg-gray-100 text-gray-400 px-2 py-0.5 rounded ml-2">Inactive</span>@endif
+                                @if($rType->is_lease)<span class="ds-badge ds-badge-success ml-2">Lease</span>@endif
+                                @if(!$rType->is_active)<span class="ds-badge ds-badge-default ml-2">Inactive</span>@endif
                             </div>
                             <div class="flex items-center gap-3">
                                 <button @click="editId = editId === {{ $rType->id }} ? null : {{ $rType->id }}"
-                                        class="text-xs text-blue-600 hover:text-blue-700">Edit</button>
+                                        class="text-xs font-semibold" style="color: var(--brand-icon, #0ea5e9);">Edit</button>
                                 @if(!$rType->is_system)
                                 <form method="POST" action="{{ route('rental.settings.document-types.toggle', $rType) }}">
                                     @csrf
-                                    <button type="submit" class="text-xs {{ $rType->is_active ? 'text-orange-600' : 'text-green-600' }}">
+                                    <button type="submit" class="text-xs font-semibold" style="color: {{ $rType->is_active ? 'var(--ds-amber)' : 'var(--ds-green)' }};">
                                         {{ $rType->is_active ? 'Deactivate' : 'Activate' }}
                                     </button>
                                 </form>
@@ -977,7 +1023,7 @@
                         </div>
                         {{-- Inline edit --}}
                         <div x-show="editId === {{ $rType->id }}" x-cloak class="rounded-md p-3"
-                             style="background:rgba(59,130,246,0.06); border:1px solid rgba(59,130,246,0.2);">
+                             style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 6%, transparent); border:1px solid color-mix(in srgb, var(--brand-icon, #0ea5e9) 20%, transparent);">
                             <form method="POST" action="{{ route('rental.settings.document-types.update', $rType) }}"
                                   class="flex flex-wrap items-end gap-3">
                                 @csrf @method('PUT')
@@ -997,8 +1043,8 @@
                                     <input type="checkbox" name="is_lease" value="1" {{ $rType->is_lease ? 'checked' : '' }} class="rounded">
                                     Lease
                                 </label>
-                                <button type="submit" class="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">Save</button>
-                                <button type="button" @click="editId = null" class="px-3 py-1.5 text-sm" style="color:var(--text-muted);">Cancel</button>
+                                <button type="submit" class="corex-btn-primary text-sm">Save</button>
+                                <button type="button" @click="editId = null" class="corex-btn-outline text-sm">Cancel</button>
                             </form>
                         </div>
                         @endforeach
@@ -1006,9 +1052,9 @@
                         {{-- Add new --}}
                         <div class="mt-2">
                             <button @click="showAdd = !showAdd"
-                                    class="text-sm text-blue-600 hover:text-blue-700 font-medium">+ Add Document Type</button>
+                                    class="text-sm font-semibold" style="color: var(--brand-icon, #0ea5e9);">+ Add Document Type</button>
                             <div x-show="showAdd" x-cloak class="rounded-md p-3 mt-2"
-                                 style="background:rgba(34,197,94,0.06); border:1px solid rgba(34,197,94,0.2);">
+                                 style="background: color-mix(in srgb, var(--ds-green) 6%, transparent); border:1px solid color-mix(in srgb, var(--ds-green) 20%, transparent);">
                                 <form method="POST" action="{{ route('rental.settings.document-types.store') }}"
                                       class="flex flex-wrap items-end gap-3">
                                     @csrf
@@ -1027,7 +1073,7 @@
                                         <input type="checkbox" name="is_lease" value="1" class="rounded">
                                         Lease
                                     </label>
-                                    <button type="submit" class="px-3 py-1.5 bg-green-600 text-white text-sm rounded hover:bg-green-700">Add</button>
+                                    <button type="submit" class="corex-btn-primary text-sm">Add</button>
                                 </form>
                             </div>
                         </div>
@@ -1036,7 +1082,7 @@
 
                 {{-- Rental Reminders (inline) --}}
                 <div>
-                    <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Email Reminders</h3>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Email Reminders</h3>
                     <form method="POST" action="{{ route('rental.settings.reminders.update') }}"
                           x-data="{
                               mode: '{{ old('mode', $rentalReminderSettings->mode) }}',
@@ -1054,7 +1100,9 @@
                                 <label class="relative inline-flex items-center cursor-pointer">
                                     <input type="hidden" name="enabled" value="0">
                                     <input type="checkbox" name="enabled" value="1" x-model="enabled" class="sr-only peer" {{ $rentalReminderSettings->enabled ? 'checked' : '' }}>
-                                    <div class="w-10 h-5 bg-gray-200 peer-focus:ring-2 peer-focus:ring-blue-500/50 rounded-full peer peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5"></div>
+                                    <div class="w-10 h-5 rounded-full peer after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5"
+                                         style="background:var(--border-hover);"
+                                         :style="enabled ? 'background:var(--brand-button, #0ea5e9)' : 'background:var(--border-hover)'"></div>
                                 </label>
                             </div>
                         </div>
@@ -1063,13 +1111,13 @@
                             <div class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
                                 <div class="text-sm font-semibold mb-3" style="color:var(--text-primary);">Reminder Mode</div>
                                 <div class="grid grid-cols-2 gap-3">
-                                    <label :class="mode === 'escalating' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'"
+                                    <label :style="mode === 'escalating' ? 'border-color:var(--brand-button, #0ea5e9); background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 8%, transparent);' : 'border-color:var(--border); background:var(--surface);'"
                                            class="border rounded-md p-3 cursor-pointer transition">
                                         <input type="radio" name="mode" value="escalating" x-model="mode" class="sr-only">
                                         <div class="font-medium text-sm" style="color:var(--text-primary);">Escalating</div>
                                         <div class="text-xs mt-1" style="color:var(--text-secondary);">Gentle → Firm → Team Alert → Final</div>
                                     </label>
-                                    <label :class="mode === 'simple' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'"
+                                    <label :style="mode === 'simple' ? 'border-color:var(--brand-button, #0ea5e9); background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 8%, transparent);' : 'border-color:var(--border); background:var(--surface);'"
                                            class="border rounded-md p-3 cursor-pointer transition">
                                         <input type="radio" name="mode" value="simple" x-model="mode" class="sr-only">
                                         <div class="font-medium text-sm" style="color:var(--text-primary);">Simple Interval</div>
@@ -1164,17 +1212,17 @@
             </div>{{-- /rentals --}}
 
             {{-- CONTACTS section --}}
-            <div x-show="featureSection === 'contacts'" x-cloak class="space-y-3">
+            <div x-show="activeSection === 'feature-contacts'" x-cloak class="space-y-3">
 
                 {{-- ── Contact Types (accordion) ── --}}
                 <div x-data="{ open: false }" class="rounded-md overflow-hidden" style="border:1px solid var(--border);">
                     <button type="button" @click="open = !open"
                             class="w-full flex items-center justify-between px-4 py-3 transition-colors"
                             style="background:var(--surface-2);"
-                            onmouseover="this.style.background='rgba(0,180,216,0.04)'" onmouseout="this.style.background='var(--surface-2)'">
+                            onmouseover="this.style.background='color-mix(in srgb, var(--brand-icon, #0ea5e9) 4%, transparent)'" onmouseout="this.style.background='var(--surface-2)'">
                         <div class="flex items-center gap-3">
                             <span class="text-sm font-semibold" style="color:var(--text-primary);">Contact Types</span>
-                            <span class="text-xs px-2 py-0.5 rounded-full font-medium" style="background:rgba(0,180,216,0.12); color:#00b4d8;">{{ count($contactTypes) }}</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full font-medium" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent); color: var(--brand-icon, #0ea5e9);">{{ count($contactTypes) }}</span>
                         </div>
                         <svg class="w-4 h-4 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--text-muted);"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
@@ -1241,17 +1289,17 @@
                                               style="background-color: {{ $cType->color }}"></span>
                                         <span class="text-sm font-medium" style="color:var(--text-primary);">{{ $cType->name }}</span>
                                         @if($cType->esign_role)
-                                            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" style="background:rgba(13,148,136,0.12); color:#0d9488;">{{ ucfirst($cType->esign_role) }}</span>
+                                            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" style="background: color-mix(in srgb, var(--ds-green) 12%, transparent); color: var(--ds-green);">{{ ucfirst($cType->esign_role) }}</span>
                                         @endif
                                         <span class="text-xs" style="color:var(--text-muted);">{{ $cType->contacts()->count() }} contact{{ $cType->contacts()->count() !== 1 ? 's' : '' }}</span>
                                     </div>
                                     <div class="flex items-center gap-3">
                                         <button @click="editCTId = {{ $cType->id }}"
-                                                class="text-xs font-semibold text-[#00b4d8] hover:text-[#0091ae]">Edit</button>
+                                                class="text-xs font-semibold font-semibold" style="color: var(--brand-icon, #0ea5e9);">Edit</button>
                                         <form method="POST" action="{{ route('corex.settings.contact-types.destroy', $cType) }}"
                                               onsubmit="return confirm('Delete this contact type?');">
                                             @csrf @method('DELETE')
-                                            <button class="text-xs font-semibold text-red-600 hover:text-red-700"
+                                            <button class="text-xs font-semibold" style="color: var(--ds-crimson);"
                                                     {{ $cType->contacts()->count() > 0 ? 'disabled title=Cannot delete — contacts assigned' : '' }}>
                                                 Delete
                                             </button>
@@ -1260,7 +1308,7 @@
                                 </div>
                                 {{-- Edit row --}}
                                 <div x-show="editCTId === {{ $cType->id }}" x-cloak
-                                     class="p-4" style="background:rgba(0,180,216,0.05); border-top:1px solid rgba(0,180,216,0.15);">
+                                     class="p-4" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 5%, transparent); border-top:1px solid color-mix(in srgb, var(--brand-icon, #0ea5e9) 15%, transparent);">
                                     <form method="POST" action="{{ route('corex.settings.contact-types.update', $cType) }}"
                                           class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                                         @csrf @method('PUT')
@@ -1317,10 +1365,10 @@
                     <button type="button" @click="open = !open"
                             class="w-full flex items-center justify-between px-4 py-3 transition-colors"
                             style="background:var(--surface-2);"
-                            onmouseover="this.style.background='rgba(0,180,216,0.04)'" onmouseout="this.style.background='var(--surface-2)'">
+                            onmouseover="this.style.background='color-mix(in srgb, var(--brand-icon, #0ea5e9) 4%, transparent)'" onmouseout="this.style.background='var(--surface-2)'">
                         <div class="flex items-center gap-3">
                             <span class="text-sm font-semibold" style="color:var(--text-primary);">Contact Sources</span>
-                            <span class="text-xs px-2 py-0.5 rounded-full font-medium" style="background:rgba(0,180,216,0.12); color:#00b4d8;">{{ count($contactSources) }}</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full font-medium" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent); color: var(--brand-icon, #0ea5e9);">{{ count($contactSources) }}</span>
                         </div>
                         <svg class="w-4 h-4 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--text-muted);"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
@@ -1377,11 +1425,11 @@
                                     </div>
                                     <div class="flex items-center gap-3">
                                         <button @click="editCSId = {{ $cSource->id }}"
-                                                class="text-xs font-semibold text-[#00b4d8] hover:text-[#0091ae]">Edit</button>
+                                                class="text-xs font-semibold font-semibold" style="color: var(--brand-icon, #0ea5e9);">Edit</button>
                                         <form method="POST" action="{{ route('corex.settings.contact-sources.destroy', $cSource) }}"
                                               onsubmit="return confirm('Delete this contact source?');">
                                             @csrf @method('DELETE')
-                                            <button class="text-xs font-semibold text-red-600 hover:text-red-700"
+                                            <button class="text-xs font-semibold" style="color: var(--ds-crimson);"
                                                     {{ $cSource->contacts()->count() > 0 ? 'disabled title=Cannot delete — contacts assigned' : '' }}>
                                                 Delete
                                             </button>
@@ -1389,7 +1437,7 @@
                                     </div>
                                 </div>
                                 <div x-show="editCSId === {{ $cSource->id }}" x-cloak
-                                     class="p-4" style="background:rgba(0,180,216,0.05); border-top:1px solid rgba(0,180,216,0.15);">
+                                     class="p-4" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 5%, transparent); border-top:1px solid color-mix(in srgb, var(--brand-icon, #0ea5e9) 15%, transparent);">
                                     <form method="POST" action="{{ route('corex.settings.contact-sources.update', $cSource) }}"
                                           class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                                         @csrf @method('PUT')
@@ -1434,10 +1482,10 @@
                     <button type="button" @click="open = !open"
                             class="w-full flex items-center justify-between px-4 py-3 transition-colors"
                             style="background:var(--surface-2);"
-                            onmouseover="this.style.background='rgba(0,180,216,0.04)'" onmouseout="this.style.background='var(--surface-2)'">
+                            onmouseover="this.style.background='color-mix(in srgb, var(--brand-icon, #0ea5e9) 4%, transparent)'" onmouseout="this.style.background='var(--surface-2)'">
                         <div class="flex items-center gap-3">
                             <span class="text-sm font-semibold" style="color:var(--text-primary);">Contact Tags</span>
-                            <span class="text-xs px-2 py-0.5 rounded-full font-medium" style="background:rgba(0,180,216,0.12); color:#00b4d8;">{{ count($contactTags) }}</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full font-medium" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent); color: var(--brand-icon, #0ea5e9);">{{ count($contactTags) }}</span>
                         </div>
                         <svg class="w-4 h-4 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--text-muted);"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
@@ -1494,11 +1542,11 @@
                                     </div>
                                     <div class="flex items-center gap-3">
                                         <button @click="editTagId = {{ $cTag->id }}"
-                                                class="text-xs font-semibold text-[#00b4d8] hover:text-[#0091ae]">Edit</button>
+                                                class="text-xs font-semibold font-semibold" style="color: var(--brand-icon, #0ea5e9);">Edit</button>
                                         <form method="POST" action="{{ route('corex.settings.contact-tags.destroy', $cTag) }}"
                                               onsubmit="return confirm('Delete this contact tag?');">
                                             @csrf @method('DELETE')
-                                            <button class="text-xs font-semibold text-red-600 hover:text-red-700"
+                                            <button class="text-xs font-semibold" style="color: var(--ds-crimson);"
                                                     {{ $cTag->contacts()->count() > 0 ? 'disabled title=Cannot delete — contacts assigned' : '' }}>
                                                 Delete
                                             </button>
@@ -1506,7 +1554,7 @@
                                     </div>
                                 </div>
                                 <div x-show="editTagId === {{ $cTag->id }}" x-cloak
-                                     class="p-4" style="background:rgba(0,180,216,0.05); border-top:1px solid rgba(0,180,216,0.15);">
+                                     class="p-4" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 5%, transparent); border-top:1px solid color-mix(in srgb, var(--brand-icon, #0ea5e9) 15%, transparent);">
                                     <form method="POST" action="{{ route('corex.settings.contact-tags.update', $cTag) }}"
                                           class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                                         @csrf @method('PUT')
@@ -1549,7 +1597,7 @@
             </div>{{-- /contacts --}}
 
             {{-- PROPERTIES section --}}
-            <div x-show="featureSection === 'properties'" x-cloak class="space-y-3">
+            <div x-show="activeSection === 'feature-properties'" x-cloak class="space-y-3">
 
                 @php
                 $propGroups = [
@@ -1579,13 +1627,53 @@
                                    class="sr-only"
                                    onchange="this.closest('form').submit()">
                             <span class="block w-full h-full rounded-full transition-colors duration-200"
-                                  style="background:{{ $marketingEnabled ? '#00b4d8' : 'var(--border-hover)' }}"></span>
+                                  style="background:{{ $marketingEnabled ? 'var(--brand-button, #0ea5e9)' : 'var(--border-hover)' }}"></span>
                             <span class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-200"
                                   style="transform:translateX({{ $marketingEnabled ? '20px' : '0' }})"></span>
                         </label>
-                        <span class="text-sm font-semibold" style="color:{{ $marketingEnabled ? '#00b4d8' : 'var(--text-muted)' }};">
+                        <span class="text-sm font-semibold" style="color:{{ $marketingEnabled ? 'var(--brand-button, #0ea5e9)' : 'var(--text-muted)' }};">
                             {{ $marketingEnabled ? 'On' : 'Off' }}
                         </span>
+                    </form>
+                </div>
+
+                {{-- Syndication portals — controls which portals appear in the property syndication panel --}}
+                <div class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
+                    <div class="mb-3">
+                        <div class="text-sm font-semibold" style="color:var(--text-primary);">Syndication Portals</div>
+                        <div class="text-xs mt-0.5" style="color:var(--text-secondary);">Choose which portals appear in the Syndication panel on each property. Disabled portals are hidden everywhere.</div>
+                    </div>
+                    <form method="POST" action="{{ route('corex.settings.syndication-portals') }}" class="space-y-2"
+                          x-data="{
+                            web: {{ $syndicationWebsiteEnabled ? 'true' : 'false' }},
+                            pp:  {{ $syndicationPpEnabled      ? 'true' : 'false' }},
+                            p24: {{ $syndicationP24Enabled     ? 'true' : 'false' }},
+                            submit() { this.$refs.frm.submit(); }
+                          }" x-ref="frm">
+                        @csrf
+                        <input type="hidden" name="syndication_website_enabled" :value="web ? 1 : 0">
+                        <input type="hidden" name="syndication_pp_enabled"      :value="pp  ? 1 : 0">
+                        <input type="hidden" name="syndication_p24_enabled"     :value="p24 ? 1 : 0">
+
+                        @foreach([
+                            ['key' => 'web', 'label' => 'HFC Premium',      'desc' => 'Publish to the agency website (HFC Premium)'],
+                            ['key' => 'pp',  'label' => 'Private Property', 'desc' => 'Submit listings to Private Property'],
+                            ['key' => 'p24', 'label' => 'Property24',       'desc' => 'Submit listings to Property24'],
+                        ] as $row)
+                        <div class="flex items-center justify-between gap-3 px-3 py-2 rounded-md" style="background:var(--surface); border:1px solid var(--border);">
+                            <div>
+                                <div class="text-sm font-medium" style="color:var(--text-primary);">{{ $row['label'] }}</div>
+                                <div class="text-xs" style="color:var(--text-muted);">{{ $row['desc'] }}</div>
+                            </div>
+                            <label class="relative cursor-pointer flex-shrink-0" style="width:44px; height:24px; display:block;">
+                                <input type="checkbox" class="sr-only" x-model="{{ $row['key'] }}" @change="submit()">
+                                <span class="block w-full h-full rounded-full transition-colors duration-200"
+                                      :style="{{ $row['key'] }} ? 'background:var(--brand-button, #0ea5e9)' : 'background:var(--border-hover)'"></span>
+                                <span class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-200"
+                                      :style="{{ $row['key'] }} ? 'transform:translateX(20px)' : 'transform:translateX(0)'"></span>
+                            </label>
+                        </div>
+                        @endforeach
                     </form>
                 </div>
 
@@ -1655,11 +1743,11 @@
                     <button type="button" @click="open = !open"
                             class="w-full flex items-center justify-between px-4 py-3 transition-colors"
                             style="background:var(--surface-2);"
-                            onmouseover="this.style.background='rgba(0,180,216,0.04)'"
+                            onmouseover="this.style.background='color-mix(in srgb, var(--brand-icon, #0ea5e9) 4%, transparent)'"
                             onmouseout="this.style.background='var(--surface-2)'">
                         <div class="flex items-center gap-3">
                             <span class="text-sm font-semibold" style="color:var(--text-primary);">{{ $pg['label'] }}</span>
-                            <span class="text-xs px-2 py-0.5 rounded-full font-medium" style="background:rgba(0,180,216,0.12); color:#00b4d8;">{{ $totalCount }}</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full font-medium" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent); color: var(--brand-icon, #0ea5e9);">{{ $totalCount }}</span>
                         </div>
                         <svg class="w-4 h-4 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--text-muted);"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
@@ -1671,14 +1759,14 @@
                         <div style="border-bottom:1px solid var(--border);">
                             <button type="button" @click="addOpen = !addOpen"
                                     class="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors"
-                                    style="color:#00b4d8; background:var(--surface);"
-                                    onmouseover="this.style.background='rgba(0,180,216,0.04)'"
+                                    style="color: var(--brand-icon, #0ea5e9); background:var(--surface);"
+                                    onmouseover="this.style.background='color-mix(in srgb, var(--brand-icon, #0ea5e9) 4%, transparent)'"
                                     onmouseout="this.style.background='var(--surface)'">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
                                 Add New
                                 <svg class="w-3.5 h-3.5 ml-auto transition-transform" :class="addOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
                             </button>
-                            <div x-show="addOpen" x-cloak class="px-4 pb-4 pt-3" style="background:rgba(0,180,216,0.03); border-top:1px solid var(--border);">
+                            <div x-show="addOpen" x-cloak class="px-4 pb-4 pt-3" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 3%, transparent); border-top:1px solid var(--border);">
                                 <form method="POST" action="{{ route('corex.settings.property-items.store') }}"
                                       class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                                     @csrf
@@ -1705,7 +1793,7 @@
                         {{-- Defaults list --}}
                         @if($hasDefaults)
                         <template x-for="(item, idx) in defs" :key="item.id">
-                            <div :style="isDragTarget(idx,'d') ? 'border-top:2px solid #00b4d8; background:rgba(0,180,216,0.04);' : 'border-bottom:1px solid var(--border); background:var(--surface);'"
+                            <div :style="isDragTarget(idx,'d') ? 'border-top:2px solid var(--brand-icon, #0ea5e9); background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 4%, transparent);' : 'border-bottom:1px solid var(--border); background:var(--surface);'"
                                  @dragover.prevent="onOver(idx,'d')"
                                  @drop.prevent="drop(idx,'d')"
                                  @dragleave="dragTarget=null">
@@ -1722,7 +1810,7 @@
                                     <label class="relative flex-shrink-0 cursor-pointer" style="width:36px; height:20px; display:block;">
                                         <input type="checkbox" :checked="item.active" @change="item.active = !item.active" class="sr-only">
                                         <span class="block w-full h-full rounded-full transition-colors duration-200"
-                                              :style="item.active ? 'background:#00b4d8' : 'background:var(--border-hover)'"></span>
+                                              :style="item.active ? 'background: var(--brand-button, #0ea5e9)' : 'background:var(--border-hover)'"></span>
                                         <span class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200"
                                               :style="item.active ? 'transform:translateX(16px)' : 'transform:translateX(0)'"></span>
                                     </label>
@@ -1740,7 +1828,7 @@
 
                         {{-- Custom items (all groups) --}}
                         <template x-for="(item, idx) in custs" :key="item.id">
-                            <div :style="isDragTarget(idx,'c') ? 'border-top:2px solid #00b4d8; background:rgba(0,180,216,0.04);' : 'border-bottom:1px solid var(--border);'"
+                            <div :style="isDragTarget(idx,'c') ? 'border-top:2px solid var(--brand-icon, #0ea5e9); background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 4%, transparent);' : 'border-bottom:1px solid var(--border);'"
                                  @dragover.prevent="onOver(idx,'c')"
                                  @drop.prevent="drop(idx,'c')"
                                  @dragleave="dragTarget=null">
@@ -1758,19 +1846,19 @@
                                     <span class="flex-1 text-sm font-medium" x-text="item.name" style="color:var(--text-primary);"></span>
                                     <span class="text-xs tabular-nums" x-text="'#' + (idx+1)" style="color:var(--text-muted);"></span>
                                     <button type="button" @click="startEdit(item)"
-                                            class="text-xs font-semibold" style="color:#00b4d8;"
-                                            onmouseover="this.style.color='#0091ae'" onmouseout="this.style.color='#00b4d8'">Edit</button>
+                                            class="text-xs font-semibold" style="color: var(--brand-icon, #0ea5e9);"
+                                            onmouseout="this.style.color='var(--brand-icon, #0ea5e9)'">Edit</button>
                                     <form :action="itemBaseUrl + '/' + item.id" method="POST"
                                           @submit.prevent="if(confirm('Delete \'' + item.name + '\'?')) $el.submit()">
                                         <input type="hidden" name="_token" :value="csrf">
                                         <input type="hidden" name="_method" value="DELETE">
                                         <button type="submit" class="text-xs font-semibold" style="color:var(--text-muted);"
-                                                onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='var(--text-muted)'">Delete</button>
+                                                onmouseover="this.style.color='var(--ds-crimson)'" onmouseout="this.style.color='var(--text-muted)'">Delete</button>
                                     </form>
                                 </div>
                                 {{-- Edit row --}}
                                 <div x-show="editId === item.id" x-cloak
-                                     class="px-4 py-3" style="background:rgba(0,180,216,0.04); border-top:1px solid rgba(0,180,216,0.15);">
+                                     class="px-4 py-3" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 4%, transparent); border-top:1px solid color-mix(in srgb, var(--brand-icon, #0ea5e9) 15%, transparent);">
                                     <form :action="itemBaseUrl + '/' + item.id" method="POST"
                                           class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                                         <input type="hidden" name="_token" :value="csrf">
@@ -1812,7 +1900,7 @@
             </div>{{-- /properties --}}
 
             {{-- MATCHES section --}}
-            <div x-show="featureSection === 'matches'" x-cloak class="space-y-5">
+            <div x-show="activeSection === 'feature-matches'" x-cloak class="space-y-5">
 
                 {{-- Enable / Disable toggle --}}
                 <div class="p-4 rounded-md flex items-center justify-between gap-4" style="background:var(--surface-2); border:1px solid var(--border);">
@@ -1830,11 +1918,11 @@
                                    class="sr-only"
                                    onchange="this.closest('form').submit()">
                             <span class="block w-full h-full rounded-full transition-colors duration-200"
-                                  style="background:{{ $matchesEnabled ? '#00b4d8' : 'var(--border-hover)' }}"></span>
+                                  style="background:{{ $matchesEnabled ? 'var(--brand-button, #0ea5e9)' : 'var(--border-hover)' }}"></span>
                             <span class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-200"
                                   style="transform:translateX({{ $matchesEnabled ? '20px' : '0' }})"></span>
                         </label>
-                        <span class="text-sm font-semibold" style="color:{{ $matchesEnabled ? '#00b4d8' : 'var(--text-muted)' }};">
+                        <span class="text-sm font-semibold" style="color:{{ $matchesEnabled ? 'var(--brand-button, #0ea5e9)' : 'var(--text-muted)' }};">
                             {{ $matchesEnabled ? 'On' : 'Off' }}
                         </span>
                     </form>
@@ -1856,11 +1944,11 @@
                                    class="sr-only"
                                    onchange="this.closest('form').submit()">
                             <span class="block w-full h-full rounded-full transition-colors duration-200"
-                                  style="background:{{ $matchesShowOnProperties ? '#00b4d8' : 'var(--border-hover)' }}"></span>
+                                  style="background:{{ $matchesShowOnProperties ? 'var(--brand-button, #0ea5e9)' : 'var(--border-hover)' }}"></span>
                             <span class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-200"
                                   style="transform:translateX({{ $matchesShowOnProperties ? '20px' : '0' }})"></span>
                         </label>
-                        <span class="text-sm font-semibold" style="color:{{ $matchesShowOnProperties ? '#00b4d8' : 'var(--text-muted)' }};">
+                        <span class="text-sm font-semibold" style="color:{{ $matchesShowOnProperties ? 'var(--brand-button, #0ea5e9)' : 'var(--text-muted)' }};">
                             {{ $matchesShowOnProperties ? 'On' : 'Off' }}
                         </span>
                     </form>
@@ -1871,7 +1959,7 @@
                     <div>
                         <div class="text-sm font-semibold" style="color:var(--text-primary);">WhatsApp Message Template</div>
                         <div class="text-xs mt-0.5" style="color:var(--text-secondary);">
-                            This is the default message pre-filled when sending matches via WhatsApp. Use <code style="background:var(--surface); padding:1px 4px; border-radius:4px; font-size:11px;">{name}</code> for the client's first name and <code style="background:var(--surface); padding:1px 4px; border-radius:4px; font-size:11px;">{link}</code> for the matches page link.
+                            This is the default message pre-filled when sending matches via WhatsApp. Use <code class="rounded font-mono text-[11px]" style="background:var(--surface); padding:1px 4px;">{name}</code> for the client's first name and <code class="rounded font-mono text-[11px]" style="background:var(--surface); padding:1px 4px;">{link}</code> for the matches page link.
                         </div>
                     </div>
                     <form method="POST" action="{{ route('corex.settings.matches-wa-message') }}" class="space-y-3">
@@ -1892,11 +1980,11 @@
                  DASHBOARD SETTINGS section
                  Controls whether agents use individual or agency-wide settings
                  ════════════════════════════════════════════════════════════════ --}}
-            <div x-show="featureSection === 'dashboard'" x-cloak class="space-y-6"
+            <div x-show="activeSection === 'feature-dashboard'" x-cloak class="space-y-6"
                  x-data="{ settingsMode: '{{ $dashboardSettingsMode ?? 'user' }}' }">
 
                 <div>
-                    <h3 class="text-xs font-bold uppercase tracking-widest mb-1" style="color:var(--text-muted);">Dashboard & Command Center</h3>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Dashboard & Command Center</h3>
                     <p class="text-xs" style="color:var(--text-muted);">Control how dashboard reminder and alert settings work for agents in this agency.</p>
                 </div>
 
@@ -1909,14 +1997,14 @@
                         @csrf @method('PUT')
                         <div class="flex flex-col sm:flex-row gap-4 mt-3">
                             <label class="flex-1 p-4 rounded-md cursor-pointer transition-all border-2"
-                                   :class="settingsMode === 'user' ? 'border-[#00b4d8]' : 'border-transparent'"
+                                   :class="settingsMode === 'user' ? 'border-sky-500' : 'border-transparent'"
                                    style="background:var(--surface);"
                                    @click="settingsMode = 'user'">
                                 <input type="radio" name="dashboard_settings_mode" value="user" class="sr-only"
                                        {{ ($dashboardSettingsMode ?? 'user') === 'user' ? 'checked' : '' }}>
                                 <div class="flex items-center gap-3">
-                                    <div class="w-8 h-8 rounded-md flex items-center justify-center" style="background:rgba(14,165,233,0.15);">
-                                        <svg class="w-4 h-4" style="color:#0ea5e9;" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
+                                    <div class="w-8 h-8 rounded-md flex items-center justify-center" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 15%, transparent);">
+                                        <svg class="w-4 h-4" style="color: var(--brand-icon, #0ea5e9);" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
                                     </div>
                                     <div>
                                         <p class="text-sm font-semibold" style="color:var(--text-primary);">Individual Settings</p>
@@ -1926,14 +2014,14 @@
                             </label>
 
                             <label class="flex-1 p-4 rounded-md cursor-pointer transition-all border-2"
-                                   :class="settingsMode === 'agency' ? 'border-[#00b4d8]' : 'border-transparent'"
+                                   :class="settingsMode === 'agency' ? 'border-sky-500' : 'border-transparent'"
                                    style="background:var(--surface);"
                                    @click="settingsMode = 'agency'">
                                 <input type="radio" name="dashboard_settings_mode" value="agency" class="sr-only"
                                        {{ ($dashboardSettingsMode ?? 'user') === 'agency' ? 'checked' : '' }}>
                                 <div class="flex items-center gap-3">
-                                    <div class="w-8 h-8 rounded-md flex items-center justify-center" style="background:rgba(245,158,11,0.15);">
-                                        <svg class="w-4 h-4" style="color:#f59e0b;" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" /></svg>
+                                    <div class="w-8 h-8 rounded-md flex items-center justify-center" style="background: color-mix(in srgb, var(--ds-amber) 15%, transparent);">
+                                        <svg class="w-4 h-4" style="color: var(--ds-amber);" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" /></svg>
                                     </div>
                                     <div>
                                         <p class="text-sm font-semibold" style="color:var(--text-primary);">Agency Settings</p>
@@ -2044,16 +2132,26 @@
         </div>
 
         {{-- ============================================================
+             NOTIFICATIONS TAB
+             Per-event notification preferences (notification-preferences spec)
+             ============================================================ --}}
+        <div x-show="activeSection === 'notifications'" x-cloak class="p-6">
+            @include('corex.settings._notifications', [
+                'notificationSnapshot' => $notificationSnapshot ?? null,
+            ])
+        </div>
+
+        {{-- ============================================================
              SYSTEM SETTINGS TAB
              Contains: General, P24 Suburbs, System Info
              ============================================================ --}}
-        <div x-show="activeTab === 'system'" x-cloak class="p-6 space-y-6">
+        <div x-show="activeSection === 'system'" x-cloak class="p-6 space-y-6">
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
                 {{-- General --}}
                 <div class="p-4 rounded-md space-y-4" style="background:var(--surface-2); border:1px solid var(--border);">
-                    <h3 class="text-xs font-bold uppercase tracking-widest" style="color:var(--text-muted); border-left:3px solid #00b4d8; padding-left:10px;">General</h3>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider" style="color:var(--text-muted); border-left:3px solid var(--brand-icon, #0ea5e9); padding-left:10px;">General</h3>
                     <div>
                         <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Application Name</label>
                         <input type="text" value="{{ config('app.name') }}" disabled
@@ -2063,13 +2161,13 @@
                     </div>
                     <div>
                         <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Environment</label>
-                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold {{ config('app.env') === 'production' ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800' }}">
+                        <span class="ds-badge {{ config('app.env') === 'production' ? 'ds-badge-danger' : 'ds-badge-success' }}">
                             {{ config('app.env') }}
                         </span>
                     </div>
                     <div>
                         <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Debug Mode</label>
-                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold {{ config('app.debug') ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800' }}">
+                        <span class="ds-badge {{ config('app.debug') ? 'ds-badge-warning' : 'ds-badge-success' }}">
                             {{ config('app.debug') ? 'Enabled' : 'Disabled' }}
                         </span>
                     </div>
@@ -2080,8 +2178,8 @@
                     <a href="{{ route('admin.p24-suburbs.index') }}"
                        class="flex items-center gap-3 p-3 rounded-md transition-all duration-300 no-underline hover:bg-white/5"
                        style="border:1px solid var(--border);">
-                        <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background:rgba(0,180,216,0.12);">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#00b4d8" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
+                        <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent);">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="color: var(--brand-icon, #0ea5e9);" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
                         </div>
                         <div class="flex-1">
                             <div class="text-sm font-semibold" style="color:var(--text-primary);">P24 Suburbs</div>
@@ -2093,8 +2191,8 @@
                     <a href="{{ route('admin.settings.document-types.index') }}"
                        class="flex items-center gap-3 p-3 rounded-md transition-all duration-300 no-underline hover:bg-white/5"
                        style="border:1px solid var(--border);">
-                        <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background:rgba(0,180,216,0.12);">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#00b4d8" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+                        <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent);">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="color: var(--brand-icon, #0ea5e9);" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
                         </div>
                         <div class="flex-1">
                             <div class="text-sm font-semibold" style="color:var(--text-primary);">Document Types</div>
@@ -2106,8 +2204,8 @@
                     <a href="{{ route('corex.settings.commission') }}"
                        class="flex items-center gap-3 p-3 rounded-md transition-all duration-300 no-underline hover:bg-white/5"
                        style="border:1px solid var(--border);">
-                        <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background:rgba(14,165,233,0.12);">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#0ea5e9" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" /></svg>
+                        <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent);">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="color: var(--brand-icon, #0ea5e9);" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" /></svg>
                         </div>
                         <div class="flex-1">
                             <div class="text-sm font-semibold" style="color:var(--text-primary);">Commission & Revenue Share</div>
@@ -2121,7 +2219,7 @@
 
             {{-- System Information --}}
             <div>
-                <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted); border-left:3px solid #00b4d8; padding-left:10px;">System Information</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted); border-left:3px solid var(--brand-icon, #0ea5e9); padding-left:10px;">System Information</h3>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     @foreach([
                         ['label'=>'Laravel','value'=>app()->version()],
@@ -2130,7 +2228,7 @@
                         ['label'=>'Users','value'=>\App\Models\User::count()],
                     ] as $stat)
                     <div class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
-                        <div class="text-xs font-bold uppercase tracking-widest mb-2" style="color:var(--text-muted);">{{ $stat['label'] }}</div>
+                        <div class="text-xs font-semibold uppercase tracking-wider mb-2" style="color:var(--text-muted);">{{ $stat['label'] }}</div>
                         <div class="text-xl font-bold" style="color:var(--text-primary);">{{ $stat['value'] }}</div>
                     </div>
                     @endforeach
@@ -2139,11 +2237,33 @@
 
         </div>
 
-    </div>{{-- /tab container --}}
+        </div>{{-- /right pane --}}
+    </div>{{-- /hub flex --}}
 
 </div>
 
 <script>
+function settingsHub(initial) {
+    return {
+        activeSection: initial || 'agency',
+        search: '',
+        matchesSearch(haystack) {
+            const q = (this.search || '').trim().toLowerCase();
+            if (!q) return true;
+            return (haystack || '').indexOf(q) !== -1;
+        },
+        anyVisible(items) {
+            if (!items || !items.length) return false;
+            const q = (this.search || '').trim().toLowerCase();
+            if (!q) return true;
+            return items.some(it => {
+                const hay = ((it.label || '') + ' ' + (it.keywords || '')).toLowerCase();
+                return hay.indexOf(q) !== -1;
+            });
+        },
+    };
+}
+
 function agencySettingsForm() {
     return {
         removelogo: false,

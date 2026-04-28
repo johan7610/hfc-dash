@@ -1,25 +1,30 @@
 @extends('layouts.corex')
 
-@section('content')
+@section('corex-content')
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6" x-data="{ tab: 'templates', viewMode: localStorage.getItem('docuperfect_view_mode') || 'grid', typeFilter: '', tplTypeFilter: '', search: '' }">
 
     {{-- Page Header --}}
-    <div style="background: var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4">
+    <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a);">
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
-                <h2 class="text-xl font-bold text-white leading-tight tracking-tight">Create Document</h2>
-                <div class="text-sm text-white/60">Choose a template or document pack to get started.</div>
+                <h1 class="text-xl font-bold text-white leading-tight">Create Document</h1>
+                <p class="text-sm text-white/60">Choose a template or document pack to get started — {{ number_format($templates->count()) }} template{{ $templates->count() === 1 ? '' : 's' }} available.</p>
             </div>
-            <div class="text-right">
-                <div class="text-xs uppercase tracking-wide text-white/60">Available templates</div>
-                <div class="text-2xl font-bold text-white">{{ $templates->count() }}</div>
+            <div class="flex items-center gap-2">
+                <a href="{{ route('docuperfect.dashboard') }}" class="corex-btn-outline">Back to Documents</a>
             </div>
         </div>
     </div>
 
     @if(session('status'))
-        <div class="rounded-md px-4 py-3 text-sm" style="border: 1px solid var(--ds-green, #10b981); background: rgba(16,185,129,0.1); color: var(--text-primary);">
-            {{ session('status') }}
+        <div class="rounded-md px-4 py-3 text-sm flex items-start gap-3"
+             style="background: color-mix(in srgb, var(--ds-green) 10%, transparent);
+                    border: 1px solid color-mix(in srgb, var(--ds-green) 30%, transparent);
+                    color: var(--text-primary);">
+            <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--ds-green);">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            <div class="flex-1">{{ session('status') }}</div>
         </div>
     @endif
 
@@ -91,23 +96,30 @@
     {{-- ===================== TEMPLATES TAB ===================== --}}
     <div x-show="tab === 'templates'">
         @if($templates->isEmpty())
-            <div class="rounded-md p-6 text-center" style="background: var(--surface); border: 1px solid var(--border);">
-                <div class="text-sm" style="color: var(--text-muted);">No templates available yet.</div>
+            <div class="rounded-md py-12 px-6 text-center" style="background: var(--surface); border: 1px solid var(--border);">
+                <div class="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
+                     style="background: color-mix(in srgb, var(--brand-icon) 12%, transparent); color: var(--brand-icon);">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                </div>
+                <h3 class="text-base font-semibold mb-1" style="color: var(--text-primary);">No templates yet</h3>
+                <p class="text-sm mb-4" style="color: var(--text-muted);">Templates are created in DocuPerfect Settings — once added, they will appear here.</p>
+                <a href="{{ route('docuperfect.dashboard') }}" class="corex-btn-outline">Back to Documents</a>
             </div>
         @else
             {{-- Grid View --}}
             <div x-show="viewMode === 'grid'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 @foreach($templates as $tpl)
-                <div class="rounded-md p-4 flex flex-col transition-all duration-300 hover:shadow-lg"
+                <div class="rounded-md p-4 flex flex-col transition-all duration-300 docuperfect-card"
                      style="background: var(--surface); border: 1px solid var(--border);"
-                     onmouseover="this.style.borderColor='var(--brand-icon)'" onmouseout="this.style.borderColor='var(--border)'"
                      x-show="(tplTypeFilter === '' || tplTypeFilter === '{{ $tpl->template_type ?? '' }}') && (typeFilter === '' || typeFilter === '{{ $tpl->document_type_id ?? 'none' }}') && (search === '' || '{{ strtolower(addslashes($tpl->name)) }}'.includes(search.toLowerCase()))" x-cloak>
                     <div class="flex items-start justify-between gap-2 mb-2">
                         <div class="font-semibold text-sm leading-tight" style="color: var(--text-primary);">{{ $tpl->name }}</div>
                         @if($tpl->documentType)
-                        <span class="ds-badge ds-badge-info text-[10px] flex-shrink-0">{{ $tpl->documentType->name }}</span>
+                        <span class="ds-badge ds-badge-info flex-shrink-0">{{ \Illuminate\Support\Str::limit($tpl->documentType->name, 20, '') }}</span>
                         @elseif($tpl->template_type)
-                        <span class="ds-badge ds-badge-info text-[10px] flex-shrink-0">{{ $tpl->template_type }}</span>
+                        <span class="ds-badge ds-badge-info flex-shrink-0">{{ \Illuminate\Support\Str::limit($tpl->template_type, 20, '') }}</span>
                         @endif
                     </div>
                     <div class="text-xs mb-3" style="color: var(--text-muted);">
@@ -127,7 +139,7 @@
                     </div>
                     @endif
                     <div class="mt-auto pt-3" style="border-top: 1px solid var(--border);">
-                        <a href="{{ route('docuperfect.documents.create', $tpl->id) }}" class="corex-btn-primary text-xs px-3 py-1.5">Create Document</a>
+                        <a href="{{ route('docuperfect.documents.create', $tpl->id) }}" class="corex-btn-primary">Create Document</a>
                     </div>
                 </div>
                 @endforeach
@@ -137,48 +149,50 @@
             <div x-show="viewMode === 'list'" x-cloak>
                 <div class="rounded-md overflow-hidden" style="background: var(--surface); border: 1px solid var(--border);">
                     <div class="overflow-x-auto">
-                        <table class="w-full text-sm ds-table">
+                        <table class="min-w-full text-sm ds-table">
                             <thead>
                                 <tr style="background: var(--surface-2);">
-                                    <th class="text-left px-4 py-2.5 w-12 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);"></th>
-                                    <th class="text-left px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Name</th>
-                                    <th class="text-left px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Type</th>
-                                    <th class="text-left px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Branches</th>
-                                    <th class="text-center px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Pages</th>
-                                    <th class="text-right px-4 py-2.5 text-xs font-medium uppercase tracking-wider" style="color: var(--text-muted);">Actions</th>
+                                    <th class="text-left px-4 py-2.5 w-12 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);"></th>
+                                    <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Name</th>
+                                    <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Type</th>
+                                    <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Branches</th>
+                                    <th class="text-center px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Pages</th>
+                                    <th class="text-right px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach($templates as $tpl)
-                                <tr class="transition-all duration-300" style="border-bottom: 1px solid var(--border);"
-                                    onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'"
+                                <tr class="transition-colors" style="border-top: 1px solid var(--border);"
+                                    onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''"
                                     x-show="(tplTypeFilter === '' || tplTypeFilter === '{{ $tpl->template_type ?? '' }}') && (typeFilter === '' || typeFilter === '{{ $tpl->document_type_id ?? 'none' }}') && (search === '' || '{{ strtolower(addslashes($tpl->name)) }}'.includes(search.toLowerCase()))" x-cloak>
-                                    <td class="px-4 py-2.5">
+                                    <td class="px-4 py-3">
                                         @if($tpl->page_count > 0)
                                         <img src="{{ route('docuperfect.page.image', ['id' => $tpl->id, 'page' => 0]) }}"
                                              alt="{{ $tpl->name }}"
-                                             class="w-10 h-14 object-cover rounded-md shadow-sm"
+                                             class="w-10 h-14 object-cover rounded-md"
                                              loading="lazy" />
                                         @endif
                                     </td>
-                                    <td class="px-4 py-2.5 font-medium" style="color: var(--text-primary);">{{ $tpl->name }}</td>
-                                    <td class="px-4 py-2.5">
+                                    <td class="px-4 py-3 font-medium" style="color: var(--text-primary);">{{ $tpl->name }}</td>
+                                    <td class="px-4 py-3">
                                         @if($tpl->documentType)
-                                        <span class="ds-badge ds-badge-info text-[10px]">{{ $tpl->documentType->name }}</span>
+                                        <span class="ds-badge ds-badge-info">{{ \Illuminate\Support\Str::limit($tpl->documentType->name, 20, '') }}</span>
                                         @elseif($tpl->template_type)
-                                        <span class="text-xs" style="color: var(--text-muted);">{{ $tpl->template_type }}</span>
+                                        <span class="ds-badge ds-badge-default">{{ \Illuminate\Support\Str::limit($tpl->template_type, 20, '') }}</span>
+                                        @else
+                                        <span class="text-xs" style="color: var(--text-muted);">—</span>
                                         @endif
                                     </td>
-                                    <td class="px-4 py-2.5 text-xs" style="color: var(--text-muted);">
+                                    <td class="px-4 py-3 text-xs" style="color: var(--text-muted);">
                                         @if($tpl->is_global)
-                                            <span class="ds-badge ds-badge-success text-[10px]">Global</span>
+                                            <span class="ds-badge ds-badge-success">Global</span>
                                         @else
                                             {{ $tpl->branches->pluck('name')->join(', ') ?: '—' }}
                                         @endif
                                     </td>
-                                    <td class="px-4 py-2.5 text-center" style="color: var(--text-muted);">{{ $tpl->page_count }}</td>
-                                    <td class="px-4 py-2.5 text-right">
-                                        <a href="{{ route('docuperfect.documents.create', $tpl->id) }}" class="corex-btn-primary text-xs px-3 py-1.5">Create</a>
+                                    <td class="px-4 py-3 text-center" style="color: var(--text-muted);">{{ number_format($tpl->page_count) }}</td>
+                                    <td class="px-4 py-3 text-right">
+                                        <a href="{{ route('docuperfect.documents.create', $tpl->id) }}" class="text-xs font-semibold" style="color: var(--brand-icon);">Create</a>
                                     </td>
                                 </tr>
                                 @endforeach
@@ -193,31 +207,39 @@
     {{-- ===================== PACKS TAB ===================== --}}
     <div x-show="tab === 'packs'" x-cloak>
         @if($packs->isEmpty())
-            <div class="rounded-md p-6 text-center" style="background: var(--surface); border: 1px solid var(--border);">
-                <div class="text-sm" style="color: var(--text-muted);">No document packs available yet.</div>
+            <div class="rounded-md py-12 px-6 text-center" style="background: var(--surface); border: 1px solid var(--border);">
+                <div class="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
+                     style="background: color-mix(in srgb, var(--brand-icon) 12%, transparent); color: var(--brand-icon);">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                    </svg>
+                </div>
+                <h3 class="text-base font-semibold mb-1" style="color: var(--text-primary);">No document packs yet</h3>
+                <p class="text-sm mb-4" style="color: var(--text-muted);">Document packs bundle multiple templates together — none have been configured for this agency.</p>
+                <a href="{{ route('docuperfect.dashboard') }}" class="corex-btn-outline">Back to Documents</a>
             </div>
         @else
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 @foreach($packs as $pack)
-                <div class="rounded-md p-4 flex flex-col transition-all duration-300 hover:shadow-lg"
+                <div class="rounded-md p-4 flex flex-col transition-all duration-300 docuperfect-card"
                      style="background: var(--surface); border: 1px solid var(--border);"
-                     onmouseover="this.style.borderColor='var(--brand-icon)'" onmouseout="this.style.borderColor='var(--border)'"
                      x-show="search === '' || '{{ strtolower(addslashes($pack->name)) }}'.includes(search.toLowerCase())" x-cloak>
                     <div class="font-semibold text-sm leading-tight mb-2" style="color: var(--text-primary);">{{ $pack->name }}</div>
                     @if($pack->description)
                     <div class="text-xs mb-2" style="color: var(--text-muted);">{{ $pack->description }}</div>
                     @endif
-                    <div class="text-xs mb-3" style="color: var(--text-muted);">
-                        @if($pack->usesSlots())
-                            {{ $pack->slots->count() }} slot{{ $pack->slots->count() !== 1 ? 's' : '' }}
-                        @else
-                            {{ $pack->templates->count() }} template{{ $pack->templates->count() !== 1 ? 's' : '' }}
-                        @endif
-                        &middot;
+                    <div class="text-xs mb-3 flex items-center gap-2 flex-wrap" style="color: var(--text-muted);">
+                        <span>
+                            @if($pack->usesSlots())
+                                {{ number_format($pack->slots->count()) }} slot{{ $pack->slots->count() !== 1 ? 's' : '' }}
+                            @else
+                                {{ number_format($pack->templates->count()) }} template{{ $pack->templates->count() !== 1 ? 's' : '' }}
+                            @endif
+                        </span>
                         @if($pack->is_global)
-                            <span class="ds-badge ds-badge-success text-[10px]">Global</span>
+                            <span class="ds-badge ds-badge-success">Global</span>
                         @else
-                            {{ $pack->branches->pluck('name')->join(', ') ?: 'No branches' }}
+                            <span>{{ $pack->branches->pluck('name')->join(', ') ?: 'No branches' }}</span>
                         @endif
                     </div>
 
@@ -228,9 +250,9 @@
                             @foreach($pack->slots as $slot)
                             <li class="flex items-center gap-1.5">
                                 @if($slot->slot_type === 'required')
-                                    <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0"></span>
+                                    <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background: var(--ds-green);"></span>
                                 @elseif($slot->slot_type === 'selectable')
-                                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0"></span>
+                                    <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background: var(--ds-amber);"></span>
                                 @else
                                     <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background: var(--brand-icon);"></span>
                                 @endif
@@ -254,7 +276,7 @@
                     @endif
 
                     <div class="mt-auto pt-3" style="border-top: 1px solid var(--border);">
-                        <a href="{{ route('docuperfect.packs.showLaunch', $pack->id) }}" class="corex-btn-primary text-xs px-3 py-1.5 inline-block">Launch Pack</a>
+                        <a href="{{ route('docuperfect.packs.showLaunch', $pack->id) }}" class="corex-btn-primary inline-block">Launch Pack</a>
                     </div>
                 </div>
                 @endforeach
@@ -263,4 +285,9 @@
     </div>
 
 </div>
+
+<style>
+    .docuperfect-card { transition: border-color 300ms ease, box-shadow 300ms ease; }
+    .docuperfect-card:hover { border-color: var(--brand-icon) !important; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+</style>
 @endsection
