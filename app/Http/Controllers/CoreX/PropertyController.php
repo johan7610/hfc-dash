@@ -858,14 +858,15 @@ class PropertyController extends Controller
 
     public function livePreview(Property $property, \Illuminate\Http\Request $request)
     {
-        $this->authorizeProperty($property);
         $property->load(['agent', 'branch', 'agency']);
 
-        /** @var User $authUser */
+        /** @var User|null $authUser */
         $authUser = auth()->user();
 
         $agentChoice  = $request->query('agent', 'listing');
-        $displayAgent = ($agentChoice === 'me') ? $authUser : ($property->agent ?? $authUser);
+        $displayAgent = ($agentChoice === 'me' && $authUser)
+            ? $authUser
+            : ($property->agent ?? $authUser);
 
         return view('corex.properties.live-preview', compact('property', 'displayAgent', 'agentChoice'));
     }

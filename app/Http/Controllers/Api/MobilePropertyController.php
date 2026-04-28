@@ -657,7 +657,7 @@ class MobilePropertyController extends Controller
                    && (string) ($property->p24_syndication_status ?? '') === 'active'
                    && !empty($property->p24_ref);
         if ($p24Live) {
-            $isSandbox = (bool) ($property->p24_environment ?? false) || str_contains((string) config('app.env'), 'local');
+            $isSandbox = (bool) config('services.property24_syndication.sandbox', true);
             $domain    = $isSandbox ? 'www.exdev.property24-test.com' : 'www.property24.com';
             $section   = strtolower($property->listing_type ?? 'sale') === 'rental' ? 'to-rent' : 'for-sale';
             $slug      = function ($s) {

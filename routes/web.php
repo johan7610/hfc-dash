@@ -321,6 +321,10 @@ Route::prefix('admin/knowledge')->middleware(['auth', 'permission:access_knowled
     Route::post('/categories/reorder', [\App\Http\Controllers\Admin\KnowledgeController::class, 'reorderCategories'])->name('admin.knowledge.reorderCategories');
 });
 
+// ===== PUBLIC PROPERTY PREVIEW (shareable, no auth required) =====
+Route::get('/corex/properties/{property}/preview/{slug?}', [\App\Http\Controllers\CoreX\PropertyController::class, 'livePreview'])
+    ->name('corex.properties.preview');
+
 // ===== FAULT REPORTS =====
 Route::middleware(['auth'])->group(function () {
     Route::post('/admin/fault-reports/manual', [\App\Http\Controllers\FaultReportController::class, 'manualReport'])
@@ -1049,7 +1053,6 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::get('/{property}',              [\App\Http\Controllers\CoreX\PropertyController::class, 'show'])->name('show');
         Route::get('/{property}/edit',         [\App\Http\Controllers\CoreX\PropertyController::class, 'edit'])->name('edit');
         Route::get('/{property}/ad',           [\App\Http\Controllers\CoreX\PropertyController::class, 'ad'])->name('ad');
-        Route::get('/{property}/preview/{slug?}',      [\App\Http\Controllers\CoreX\PropertyController::class, 'livePreview'])->name('preview');
         Route::put('/{property}',              [\App\Http\Controllers\CoreX\PropertyController::class, 'update'])->name('update');
         Route::delete('/{property}',           [\App\Http\Controllers\CoreX\PropertyController::class, 'destroy'])->name('destroy');
         Route::post('/{property}/restore',     [\App\Http\Controllers\CoreX\PropertyController::class, 'restore'])->name('restore')->withTrashed();
