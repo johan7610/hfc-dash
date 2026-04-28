@@ -57,11 +57,11 @@ class AgentPpController extends Controller
     /**
      * Update the PP External Ref (AgentId) for an agent.
      *
-     * Two modes:
-     *   - With pp_encrypted_id: claim ownership via UpdateUniqueAgentID, mapping
-     *     PP's encrypted internal ID to the supplied external_ref as AgentId.
-     *   - Without pp_encrypted_id: push a normal UpdateAgent with the new
-     *     external_ref as AgentId so PP updates its record directly.
+     * UpdateAgent always sends AgentId = (string) $user->id so PP matches
+     * the existing profile by External Ref instead of creating a new one.
+     *
+     * The external_ref UI field is only used to remap PP's encrypted
+     * internal ID via UpdateUniqueAgentID, which requires pp_encrypted_id.
      */
     public function updateExternalRef(User $user, Request $request): JsonResponse
     {
@@ -89,7 +89,7 @@ class AgentPpController extends Controller
 
             return response()->json([
                 'success'            => true,
-                'message'            => 'PP External Ref updated and ownership claimed',
+                'message'            => 'PP External Ref remapped via UpdateUniqueAgentID',
                 'external_ref'       => $externalRef,
                 'pp_unique_agent_id' => $ppEncryptedId,
             ]);
@@ -104,7 +104,9 @@ class AgentPpController extends Controller
             ], 422);
         }
 
-        $agentData['AgentId'] = $externalRef;
+        // AgentId must always be (string) $user->id so PP matches the existing
+        // profile by External Ref. Never use the external_ref input here.
+        $agentData['AgentId'] = (string) $user->id;
 
         $result = $this->soapClient->updateAgent($agentData);
 
@@ -117,8 +119,8 @@ class AgentPpController extends Controller
 
         return response()->json([
             'success'      => true,
-            'message'      => 'PP External Ref updated',
-            'external_ref' => $externalRef,
+            'message'      => 'Agent updated on PP (AgentId=' . $user->id . ')',
+            'external_ref' => (string) $user->id,
         ]);
     }
 }
