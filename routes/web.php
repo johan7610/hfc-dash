@@ -1050,6 +1050,20 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
                 ->except(['show']);
         });
 
+    // ── Staff Take-On Wizard ──
+    Route::middleware(['permission:manage_staff_take_on', 'agency.required'])
+        ->prefix('staff-take-on')
+        ->name('staff-take-on.')
+        ->group(function () {
+            Route::get('/', [\App\Http\Controllers\StaffTakeOnController::class, 'index'])->name('index');
+            Route::get('create', [\App\Http\Controllers\StaffTakeOnController::class, 'create'])->name('create');
+            Route::post('/', [\App\Http\Controllers\StaffTakeOnController::class, 'store'])->name('store');
+            Route::get('{takeOn}/wizard/{step}', [\App\Http\Controllers\StaffTakeOnController::class, 'wizard'])->name('wizard');
+            Route::patch('{takeOn}/wizard/{step}', [\App\Http\Controllers\StaffTakeOnController::class, 'saveStep'])->name('save-step');
+            Route::post('{takeOn}/complete', [\App\Http\Controllers\StaffTakeOnController::class, 'complete'])->name('complete');
+            Route::post('{takeOn}/upload-document', [\App\Http\Controllers\StaffTakeOnController::class, 'uploadDocument'])->name('upload-document');
+        });
+
     Route::get('/supervision', [CoreXPlaceholderController::class, 'show'])->defaults('section', 'supervision')->middleware('permission:access_supervision')->name('corex.supervision');
     // Training placeholder replaced by LMS module (training.index route above)
 
