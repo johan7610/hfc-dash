@@ -158,24 +158,9 @@ class MyPortalLeaveController extends Controller
                 'affects_payroll'         => $type->affects_payroll,
             ]);
 
-            // Pending reservation transaction
-            $cycleStart = $balanceService->getCurrentCycleStart($employee, $type);
-            LeaveTransaction::create([
-                'agency_id'            => $employee->agency_id,
-                'payroll_employee_id'  => $employee->id,
-                'user_id'              => $user->id,
-                'leave_type_id'        => $type->id,
-                'cycle_start_date'     => $cycleStart->toDateString(),
-                'transaction_type'     => 'application_approved',
-                'days_delta'           => bcmul((string) $workingDays, '-1', 3),
-                'effective_date'       => $start->toDateString(),
-                'description'          => "Pending: {$app->application_number} ({$workingDays} days {$type->label})",
-                'source_type'          => 'leave_application',
-                'source_id'            => $app->id,
-                'created_by_user_id'   => $user->id,
-            ]);
-
-            $balanceService->refreshEntitlement($employee, $type);
+            // No reservation transaction created at submit — pending balance
+            // is derived from application status query in getBalance().
+            // Transaction created only at admin approval (Option C fix).
 
             return $app;
         });
@@ -259,46 +244,14 @@ class MyPortalLeaveController extends Controller
             ->where('status', 'submitted')
             ->findOrFail($applicationId);
 
-        DB::transaction(function () use ($application, $user) {
-            $application->update([
-                'status'              => 'cancelled',
-                'cancelled_at'        => now(),
-                'cancelled_by_user_id' => $user->id,
-                'cancellation_reason' => request('cancellation_reason', 'Cancelled by applicant'),
-            ]);
-
-            // Reverse the pending reservation
-            $pendingTxn = LeaveTransaction::withoutGlobalScopes()
-                ->where('source_type', 'leave_application')
-                ->where('source_id', $application->id)
-                ->whereIn('transaction_type', ['application_approved'])
-                ->first();
-
-            if ($pendingTxn) {
-                $balanceService = new LeaveBalanceService();
-                $cycleStart = $balanceService->getCurrentCycleStart(
-                    $application->payrollEmployee, $application->leaveType
-                );
-
-                LeaveTransaction::create([
-                    'agency_id'                  => $application->agency_id,
-                    'payroll_employee_id'        => $application->payroll_employee_id,
-                    'user_id'                    => $application->user_id,
-                    'leave_type_id'              => $application->leave_type_id,
-                    'cycle_start_date'           => $cycleStart->toDateString(),
-                    'transaction_type'           => 'application_cancelled',
-                    'days_delta'                 => bcmul((string) $pendingTxn->days_delta, '-1', 3),
-                    'effective_date'             => now()->toDateString(),
-                    'description'                => "Cancelled: {$application->application_number}",
-                    'source_type'                => 'leave_application',
-                    'source_id'                  => $application->id,
-                    'created_by_user_id'         => $user->id,
-                    'reversal_of_transaction_id' => $pendingTxn->id,
-                ]);
-
-                $balanceService->refreshEntitlement($application->payrollEmployee, $application->leaveType);
-            }
-        });
+        // No transaction to reverse — Option C: no reservation txn at submit.
+        // Just update application status. Pending query in getBalance() auto-adjusts.
+        $application->update([
+            'status'              => 'cancelled',
+            'cancelled_at'        => now(),
+            'cancelled_by_user_id' => $user->id,
+            'cancellation_reason' => request('cancellation_reason', 'Cancelled by applicant'),
+        ]);
 
         // Remove calendar event if it exists
         try {

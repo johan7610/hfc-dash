@@ -190,41 +190,9 @@ class LeaveApplicationController extends Controller
 
         $application = LeaveApplication::findOrFail($id);
 
-        // Check if there was a pending reservation transaction to reverse
-        $pendingTxn = LeaveTransaction::withoutGlobalScopes()
-            ->where('source_type', 'leave_application')
-            ->where('source_id', $application->id)
-            ->whereIn('transaction_type', ['application_approved'])
-            ->first();
-
-        if ($pendingTxn) {
-            DB::transaction(function () use ($application, $pendingTxn) {
-                $cycleStart = (new LeaveBalanceService())->getCurrentCycleStart(
-                    $application->payrollEmployee, $application->leaveType
-                );
-
-                // Reversal transaction
-                LeaveTransaction::create([
-                    'agency_id'                    => $application->agency_id,
-                    'payroll_employee_id'          => $application->payroll_employee_id,
-                    'user_id'                      => $application->user_id,
-                    'leave_type_id'                => $application->leave_type_id,
-                    'cycle_start_date'             => $cycleStart->toDateString(),
-                    'transaction_type'             => 'reversal',
-                    'days_delta'                   => bcmul((string) $pendingTxn->days_delta, '-1', 3),
-                    'effective_date'               => now()->toDateString(),
-                    'description'                  => "Reversal: application {$application->application_number} rejected",
-                    'source_type'                  => 'leave_application',
-                    'source_id'                    => $application->id,
-                    'created_by_user_id'           => auth()->id(),
-                    'reversal_of_transaction_id'   => $pendingTxn->id,
-                ]);
-
-                (new LeaveBalanceService())->refreshEntitlement(
-                    $application->payrollEmployee, $application->leaveType
-                );
-            });
-        }
+        // Option C: no reservation transaction exists at submit time,
+        // so no reversal needed on rejection. The pending query in
+        // getBalance() auto-adjusts when status changes from 'submitted'.
 
         // Notify applicant
         $this->dispatchNotification('leave.rejected', $application, $application->user);
