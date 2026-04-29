@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\NotificationPreferenceController;
 use App\Http\Controllers\Api\DeviceTokenController;
 use App\Http\Controllers\Api\ProspectingApiController;
 use App\Http\Controllers\Api\MobilePropertyController;
+use App\Http\Controllers\Api\MobileContactController;
+use App\Http\Controllers\Api\MobileCoreMatchController;
 use App\Http\Controllers\Api\PropertyPullController;
 use App\Http\Controllers\FaultReportController;
 use Illuminate\Support\Facades\Route;
@@ -101,6 +103,27 @@ Route::middleware('auth:sanctum')->group(function () {
         // Spaces & features (Bedroom, Bathroom, Kitchen, …)
         Route::get('/{property}/spaces', [MobilePropertyController::class, 'spacesShow']);
         Route::put('/{property}/spaces', [MobilePropertyController::class, 'spacesUpdate']);
+    });
+
+    // ── Mobile Contacts ─────────────────────────────────────────
+    Route::prefix('mobile/contacts')->group(function () {
+        Route::get('/',         [MobileContactController::class, 'index']);
+        Route::post('/',        [MobileContactController::class, 'store']);
+        Route::get('/options',  [MobileContactController::class, 'options']);
+        Route::get('/{contact}',[MobileContactController::class, 'show']);
+        Route::put('/{contact}',[MobileContactController::class, 'update']);
+        Route::post('/{contact}/whatsapp', [MobileContactController::class, 'whatsapp']);
+        Route::post('/{contact}/matches',  [MobileContactController::class, 'storeMatch']);
+    });
+
+    // ── Mobile Core Matches ─────────────────────────────────────
+    Route::prefix('mobile/core-matches')->group(function () {
+        Route::get('/',                       [MobileCoreMatchController::class, 'index']);
+        Route::get('/{match}',                [MobileCoreMatchController::class, 'show']);
+        Route::put('/{match}',                [MobileCoreMatchController::class, 'update']);
+        Route::patch('/{match}/status',       [MobileCoreMatchController::class, 'setStatus']);
+        Route::post('/{match}/hide/{property}', [MobileCoreMatchController::class, 'toggleHide']);
+        Route::delete('/{match}',             [MobileCoreMatchController::class, 'destroy']);
     });
 
     // ── Command Center ────────────────────────────────────────────

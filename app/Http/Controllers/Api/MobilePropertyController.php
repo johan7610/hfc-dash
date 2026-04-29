@@ -66,7 +66,15 @@ class MobilePropertyController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $data = $request->validate($this->propertyRules(isCreate: true));
+        $rules = $this->propertyRules(isCreate: true) + [
+            'link_contact_id'   => 'nullable|integer|exists:contacts,id',
+            'link_contact_role' => 'nullable|string|max:50',
+        ];
+        $data = $request->validate($rules);
+
+        $linkContactId   = $data['link_contact_id']   ?? null;
+        $linkContactRole = $data['link_contact_role'] ?? null;
+        unset($data['link_contact_id'], $data['link_contact_role']);
 
         // Server fills these — never trust the client
         $data['agent_id']  = $user->id;
@@ -76,6 +84,14 @@ class MobilePropertyController extends Controller
         $data = $this->mapPayloadToColumns($data);
 
         $property = Property::create($data);
+
+        if ($linkContactId) {
+            $contact = \App\Models\Contact::find($linkContactId);
+            if ($contact && $contact->created_by_user_id === $user->id) {
+                $property->contacts()->attach($contact->id, ['role' => $linkContactRole]);
+            }
+        }
+
         $property->refresh();
 
         return response()->json([

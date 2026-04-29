@@ -125,9 +125,26 @@ lib/
 
 **Other modules:**
 - `GET /api/properties` — list properties (endpoint exists in api_service.dart but not in Laravel routes yet)
-- `GET /api/contacts` — list contacts
 - `GET /api/deals` — list deals
 - `GET /api/notifications` — notification feed
+
+**Contacts (BUILT 2026-04-29 — see `.ai/specs/mobile-contacts.md`):**
+- `GET    /api/mobile/contacts` — list own contacts (`?search=`, `?per_page=`)
+- `GET    /api/mobile/contacts/options` — contact types for dropdowns
+- `GET    /api/mobile/contacts/{id}` — full contact + matches + linked properties
+- `POST   /api/mobile/contacts` — create (`first_name, last_name, phone, email?, id_number?, contact_type_id?, notes?`). 422 on duplicate phone/email
+- `PUT    /api/mobile/contacts/{id}` — limited edit (first_name, last_name, phone, email, id_number ONLY)
+- `POST   /api/mobile/contacts/{id}/whatsapp` — increments touch count, returns `wa_link`
+- `POST   /api/mobile/contacts/{id}/matches` — create CoreMatch (listing_type required, plus optional filters)
+- `POST   /api/mobile/properties` — now accepts optional `link_contact_id` + `link_contact_role` to auto-link the new property to a contact via `contact_property` pivot
+
+**Core Matches (BUILT 2026-04-29 — see `.ai/specs/mobile-core-matches.md`):**
+- `GET    /api/mobile/core-matches` — own matches grouped by contact, with feedback_summary counts (interested / not_interested / saved)
+- `GET    /api/mobile/core-matches/{id}` — match + contact + result properties (each with `hidden`, `reaction`, `reaction_note`)
+- `PUT    /api/mobile/core-matches/{id}` — edit filters (listing_type, price/beds/baths/garages, suburbs, features, notes)
+- `PATCH  /api/mobile/core-matches/{id}/status` — active|paused|fulfilled|expired
+- `POST   /api/mobile/core-matches/{id}/hide/{propertyId}` — toggle hide for that property within the match
+- `DELETE /api/mobile/core-matches/{id}` — soft-delete the match
 
 ### Command Center Data Shapes (for Flutter models)
 
