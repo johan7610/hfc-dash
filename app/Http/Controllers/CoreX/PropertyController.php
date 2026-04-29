@@ -44,22 +44,14 @@ class PropertyController extends Controller
 
         $canPickAgent = in_array($dataScope, ['all', 'branch']);
 
-        // Agent filter with session persistence (admin/BM only)
+        // Agent filter (admin/BM only) — defaults to self on every fresh load.
+        // The user only sees other agents (or "All agents") when they explicitly
+        // switch via the picker (which sets ?agent_id= in the URL).
         if ($canPickAgent) {
             if ($request->has('agent_id')) {
-                $raw           = $request->query('agent_id', '');
-                $filterAgentId = $raw;
-                session(['corex_properties_agent_id' => $raw === '' ? 'all' : $raw]);
+                $filterAgentId = $request->query('agent_id', '');
             } else {
-                $saved = session('corex_properties_agent_id');
-                if ($saved === null) {
-                    $filterAgentId = (string) $user->id;
-                    session(['corex_properties_agent_id' => $filterAgentId]);
-                } elseif ($saved === 'all') {
-                    $filterAgentId = '';
-                } else {
-                    $filterAgentId = $saved;
-                }
+                $filterAgentId = (string) $user->id;
             }
         }
 

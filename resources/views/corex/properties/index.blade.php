@@ -115,8 +115,9 @@
                 </svg>
                 <input type="text" name="search" value="{{ $search }}"
                        placeholder="Search title, suburb, or P24 ref..."
-                       class="w-full pl-10 pr-3 py-2 text-sm rounded-md transition-all duration-300"
-                       style="border:1px solid var(--border);background:var(--surface-2);color:var(--text-primary);outline:none;">
+                       onchange="this.form.submit()"
+                       class="list-header-filter w-full"
+                       style="padding-left:2.25rem;">
             </div>
 
             {{-- Scope (agents only) --}}
@@ -125,32 +126,6 @@
                 <option value="my" {{ $scope === 'my' ? 'selected' : '' }}>My Listings</option>
                 <option value="branch" {{ $scope === 'branch' ? 'selected' : '' }}>Branch</option>
             </select>
-            @endif
-
-            {{-- Mine / All pill toggle (role must grant scope='branch' or 'all' on properties.view) --}}
-            @if($canPickAgent)
-            @php
-                $cuId        = (string) auth()->id();
-                $vtIsMine    = (string) $filterAgentId === $cuId;
-                $vtIsAll     = $filterAgentId === '';
-                $vtCarry     = request()->except(['agent_id', 'page']);
-                $vtMineUrl   = route('corex.properties.index', array_merge($vtCarry, ['agent_id' => $cuId]));
-                $vtAllUrl    = route('corex.properties.index', array_merge($vtCarry, ['agent_id' => '']));
-            @endphp
-            <div class="inline-flex rounded-md overflow-hidden" style="border:1px solid var(--border);">
-                <a href="{{ $vtMineUrl }}"
-                   class="px-3 py-2 text-xs font-semibold no-underline transition-all duration-300"
-                   style="{{ $vtIsMine ? 'background:var(--brand-icon,#0ea5e9);color:#fff;' : 'background:var(--surface);color:var(--text-muted);' }}"
-                   title="Show only my listings">
-                    My Listings
-                </a>
-                <a href="{{ $vtAllUrl }}"
-                   class="px-3 py-2 text-xs font-semibold no-underline transition-all duration-300"
-                   style="border-left:1px solid var(--border); {{ $vtIsAll ? 'background:var(--brand-icon,#0ea5e9);color:#fff;' : 'background:var(--surface);color:var(--text-muted);' }}"
-                   title="Show all {{ $dataScope === 'branch' ? 'branch' : 'agency' }} listings">
-                    All Listings
-                </a>
-            </div>
             @endif
 
             {{-- Status --}}
@@ -178,11 +153,28 @@
                 <option value="title"      {{ ($filters['sort'] ?? '') === 'title'      ? 'selected' : '' }}>Title (A–Z)</option>
             </select>
 
-            {{-- Agent picker (admin/bm only) --}}
+            {{-- More filters toggle --}}
+            <button type="button" @click="advancedOpen = !advancedOpen"
+                    class="list-header-filter inline-flex items-center gap-1.5 cursor-pointer"
+                    :style="advancedOpen ? 'border-color:var(--brand-icon,#0ea5e9);color:var(--brand-icon,#0ea5e9);' : ''">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 4.5h18M6 12h12m-9 7.5h6"/>
+                </svg>
+                <span>More filters</span>
+                @if($advancedActive)
+                <span class="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold" style="background:var(--brand-icon,#0ea5e9);color:#fff;">●</span>
+                @endif
+            </button>
+
+            @if(collect(request()->except(['direction','page']))->filter(fn($v) => $v !== null && $v !== '')->isNotEmpty())
+            <a href="{{ route('corex.properties.index') }}" class="text-xs underline transition-all duration-300" style="color:var(--text-muted);">Clear all</a>
+            @endif
+
+            {{-- Agent picker (admin/bm only) — right-aligned modal --}}
             @if($canPickAgent)
             <input type="hidden" name="agent_id" value="{{ $filterAgentId }}">
-            <div class="relative" @click.outside="agentPicker = false">
-                <button type="button" @click="agentPicker = !agentPicker"
+            <div class="ml-auto flex items-center gap-1">
+                <button type="button" @click="agentPicker = true"
                         class="list-header-filter inline-flex items-center gap-1.5 cursor-pointer"
                         style="{{ $selectedAgent ? 'border-color:var(--brand-icon,#0ea5e9);color:var(--brand-icon,#0ea5e9);' : '' }}">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -196,21 +188,32 @@
 
                 @if($selectedAgent)
                 <a href="{{ route('corex.properties.index', ['status' => $status, 'search' => $search, 'agent_id' => '']) }}"
-                   class="ml-1 inline-flex items-center justify-center w-6 h-6 rounded-md text-xs font-bold transition-all duration-300"
+                   class="inline-flex items-center justify-center w-6 h-6 rounded-md text-xs font-bold transition-all duration-300"
                    style="color:var(--text-muted);" title="Clear agent filter">&times;</a>
                 @endif
+            </div>
 
-                {{-- Picker dropdown --}}
-                <div x-show="agentPicker"
-                     x-transition:enter="transition ease-out duration-150"
-                     x-transition:enter-start="opacity-0 translate-y-1"
-                     x-transition:enter-end="opacity-100 translate-y-0"
-                     x-transition:leave="transition ease-in duration-100"
-                     x-transition:leave-start="opacity-100 translate-y-0"
-                     x-transition:leave-end="opacity-0 translate-y-1"
-                     class="absolute top-full mt-1.5 left-0 z-50 w-72 rounded-md overflow-hidden"
-                     style="background:var(--surface);border:1px solid var(--border);box-shadow:0 8px 30px rgba(0,0,0,0.12);"
-                     x-cloak>
+            {{-- Modal popup --}}
+            <div x-show="agentPicker" x-cloak
+                 class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                 style="background:rgba(0,0,0,0.5);"
+                 @click.self="agentPicker = false"
+                 @keydown.escape.window="agentPicker = false"
+                 x-transition.opacity>
+                <div class="w-full max-w-md rounded-md overflow-hidden"
+                     style="background:var(--surface);border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+
+                    <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid var(--border);">
+                        <h3 class="text-sm font-semibold" style="color:var(--text-primary);">Select Agent</h3>
+                        <button type="button" @click="agentPicker = false"
+                                class="inline-flex items-center justify-center w-7 h-7 rounded-md transition-all duration-300"
+                                style="color:var(--text-muted);"
+                                onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
 
                     <div class="p-3" style="border-bottom:1px solid var(--border);">
                         <div class="relative">
@@ -219,12 +222,11 @@
                             </svg>
                             <input type="text" x-model="agentSearch" placeholder="Search agents..."
                                    class="w-full pl-8 pr-3 py-1.5 text-xs rounded-md outline-none transition-all duration-300"
-                                   style="border:1px solid var(--border);background:var(--surface-2);color:var(--text-primary);"
-                                   @keydown.escape="agentPicker = false">
+                                   style="border:1px solid var(--border);background:var(--surface-2);color:var(--text-primary);">
                         </div>
                     </div>
 
-                    <div style="max-height:260px;overflow-y:auto;">
+                    <div style="max-height:55vh;overflow-y:auto;">
                         <a href="{{ route('corex.properties.index', ['status' => $status, 'search' => $search, 'agent_id' => '']) }}"
                            class="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold transition-all duration-300"
                            style="color:var(--text-secondary);border-bottom:1px solid var(--border);"
@@ -264,29 +266,10 @@
             </div>
             @endif
 
-            <button type="submit" class="corex-btn-outline text-xs px-3 py-2">Search</button>
-
-            {{-- More filters toggle --}}
-            <button type="button" @click="advancedOpen = !advancedOpen"
-                    class="list-header-filter inline-flex items-center gap-1.5 cursor-pointer"
-                    :style="advancedOpen ? 'border-color:var(--brand-icon,#0ea5e9);color:var(--brand-icon,#0ea5e9);' : ''">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 4.5h18M6 12h12m-9 7.5h6"/>
-                </svg>
-                <span>More filters</span>
-                @if($advancedActive)
-                <span class="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold" style="background:var(--brand-icon,#0ea5e9);color:#fff;">●</span>
-                @endif
-            </button>
-
-            @if(collect(request()->except(['direction','page']))->filter(fn($v) => $v !== null && $v !== '')->isNotEmpty())
-            <a href="{{ route('corex.properties.index') }}" class="text-xs underline transition-all duration-300" style="color:var(--text-muted);">Clear all</a>
-            @endif
-
             {{-- View toggle --}}
-            <div class="flex items-center gap-0.5 ml-auto rounded-md p-0.5" style="background:var(--surface-2);border:1px solid var(--border);">
+            <div class="flex items-center gap-0.5 rounded-md" style="height:2.25rem;padding:0.125rem;background:var(--surface-2);border:1px solid var(--border);">
                 <button type="button" @click="view = 'grid'"
-                        class="p-1.5 rounded transition-all duration-300"
+                        class="h-full px-2 rounded transition-all duration-300 inline-flex items-center justify-center"
                         :style="view === 'grid' ? 'background:var(--brand-default,#0b2a4a);color:#fff;' : 'color:var(--text-muted);'"
                         title="Grid view">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -294,7 +277,7 @@
                     </svg>
                 </button>
                 <button type="button" @click="view = 'list'"
-                        class="p-1.5 rounded transition-all duration-300"
+                        class="h-full px-2 rounded transition-all duration-300 inline-flex items-center justify-center"
                         :style="view === 'list' ? 'background:var(--brand-default,#0b2a4a);color:#fff;' : 'color:var(--text-muted);'"
                         title="List view">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -310,7 +293,7 @@
                     {{-- Property Type --}}
                     <div>
                         <label class="block text-[10px] font-bold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Property Type</label>
-                        <select name="property_type" class="list-header-filter w-full">
+                        <select name="property_type" onchange="this.form.submit()" class="list-header-filter w-full">
                             <option value="">Any type</option>
                             @foreach($filterOptions['property_types'] as $opt)
                                 <option value="{{ $opt->name }}" {{ ($filters['propertyType'] ?? '') === $opt->name ? 'selected' : '' }}>{{ $opt->name }}</option>
@@ -321,7 +304,7 @@
                     {{-- Category --}}
                     <div>
                         <label class="block text-[10px] font-bold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Category</label>
-                        <select name="category" class="list-header-filter w-full">
+                        <select name="category" onchange="this.form.submit()" class="list-header-filter w-full">
                             <option value="">Any category</option>
                             @foreach($filterOptions['categories'] as $opt)
                                 <option value="{{ $opt->name }}" {{ ($filters['category'] ?? '') === $opt->name ? 'selected' : '' }}>{{ $opt->name }}</option>
@@ -332,7 +315,7 @@
                     {{-- Mandate --}}
                     <div>
                         <label class="block text-[10px] font-bold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Mandate</label>
-                        <select name="mandate_type" class="list-header-filter w-full">
+                        <select name="mandate_type" onchange="this.form.submit()" class="list-header-filter w-full">
                             <option value="">Any mandate</option>
                             @foreach($filterOptions['mandate_types'] as $opt)
                                 <option value="{{ $opt->name }}" {{ ($filters['mandateType'] ?? '') === $opt->name ? 'selected' : '' }}>{{ $opt->name }}</option>
@@ -344,7 +327,7 @@
                     @if($canPickAgent && $filterOptions['branches']->isNotEmpty())
                     <div>
                         <label class="block text-[10px] font-bold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Branch</label>
-                        <select name="branch_id" class="list-header-filter w-full">
+                        <select name="branch_id" onchange="this.form.submit()" class="list-header-filter w-full">
                             <option value="">All branches</option>
                             @foreach($filterOptions['branches'] as $branch)
                                 <option value="{{ $branch->id }}" {{ (string) ($filters['branchFilter'] ?? '') === (string) $branch->id ? 'selected' : '' }}>{{ $branch->name }}</option>
@@ -356,7 +339,7 @@
                     {{-- Min Beds --}}
                     <div>
                         <label class="block text-[10px] font-bold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Min Beds</label>
-                        <select name="beds_min" class="list-header-filter w-full">
+                        <select name="beds_min" onchange="this.form.submit()" class="list-header-filter w-full">
                             <option value="">Any</option>
                             @for($i = 1; $i <= 6; $i++)
                                 <option value="{{ $i }}" {{ (string) ($filters['bedsMin'] ?? '') === (string) $i ? 'selected' : '' }}>{{ $i }}+</option>
@@ -367,7 +350,7 @@
                     {{-- Min Baths --}}
                     <div>
                         <label class="block text-[10px] font-bold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Min Baths</label>
-                        <select name="baths_min" class="list-header-filter w-full">
+                        <select name="baths_min" onchange="this.form.submit()" class="list-header-filter w-full">
                             <option value="">Any</option>
                             @for($i = 1; $i <= 6; $i++)
                                 <option value="{{ $i }}" {{ (string) ($filters['bathsMin'] ?? '') === (string) $i ? 'selected' : '' }}>{{ $i }}+</option>
@@ -380,6 +363,7 @@
                         <label class="block text-[10px] font-bold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Price Min (R)</label>
                         <input type="number" name="price_min" min="0" step="50000"
                                value="{{ $filters['priceMin'] ?? '' }}" placeholder="0"
+                               onchange="this.form.submit()"
                                class="list-header-filter w-full">
                     </div>
 
@@ -388,13 +372,11 @@
                         <label class="block text-[10px] font-bold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Price Max (R)</label>
                         <input type="number" name="price_max" min="0" step="50000"
                                value="{{ $filters['priceMax'] ?? '' }}" placeholder="No max"
+                               onchange="this.form.submit()"
                                class="list-header-filter w-full">
                     </div>
                 </div>
 
-                <div class="flex items-center justify-end gap-2 mt-3">
-                    <button type="submit" class="corex-btn-primary text-xs px-4 py-1.5">Apply filters</button>
-                </div>
             </div>
         </form>
 
