@@ -71,15 +71,25 @@ class ContactMatchController extends Controller
         return back()->with('success', "Match marked {$status}.");
     }
 
-    public function results(Contact $contact, ContactMatch $match)
+    public function results(\Illuminate\Http\Request $request, Contact $contact, ContactMatch $match)
     {
         abort_if($match->contact_id !== $contact->id, 403);
 
-        $properties = $this->matching->propertiesForMatch($match, ['include_hidden' => true]);
+        $allowCrossAgent     = (bool) \App\Models\PerformanceSetting::get('matches_allow_cross_agent', 0);
+        $requestedCrossAgent = $request->boolean('show_other_agents');
+        $showOtherAgents     = $allowCrossAgent && $requestedCrossAgent;
 
-        $feedback = $match->feedback()->get()->keyBy('property_id');
+        $overrides = ['include_hidden' => true];
+        if ($showOtherAgents) {
+            $overrides['agent_id'] = null;
+        }
 
-        return view('corex.contacts.match-results', compact('contact', 'match', 'properties', 'feedback'));
+        $properties = $this->matching->propertiesForMatch($match, $overrides);
+        $feedback   = $match->feedback()->get()->keyBy('property_id');
+
+        return view('corex.contacts.match-results', compact(
+            'contact', 'match', 'properties', 'feedback', 'allowCrossAgent', 'showOtherAgents'
+        ));
     }
 
     public function toggleHide(Contact $contact, ContactMatch $match, int $property)

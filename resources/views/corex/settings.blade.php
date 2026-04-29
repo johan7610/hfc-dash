@@ -1954,6 +1954,32 @@
                     </form>
                 </div>
 
+                {{-- Allow cross-agent properties toggle --}}
+                <div class="p-4 rounded-md flex items-center justify-between gap-4" style="background:var(--surface-2); border:1px solid var(--border);">
+                    <div>
+                        <div class="text-sm font-semibold" style="color:var(--text-primary);">Allow agents to view other agents' properties in match results</div>
+                        <div class="text-xs mt-0.5" style="color:var(--text-secondary);">When On, the Core Match results page (web and mobile) shows a "Show other agents" toggle so the agent can include the rest of the agency's stock. When Off, results are restricted to the agent's own listings — no toggle is shown.</div>
+                    </div>
+                    <form method="POST" action="{{ route('corex.settings.matches-allow-cross-agent') }}" class="flex items-center gap-3 flex-shrink-0">
+                        @csrf
+                        <input type="hidden" name="matches_allow_cross_agent" value="0">
+                        <label class="relative cursor-pointer flex-shrink-0" style="width:44px; height:24px; display:block;"
+                               title="{{ $matchesAllowCrossAgent ? 'Enabled — click to disable' : 'Disabled — click to enable' }}">
+                            <input type="checkbox" name="matches_allow_cross_agent" value="1"
+                                   {{ $matchesAllowCrossAgent ? 'checked' : '' }}
+                                   class="sr-only"
+                                   onchange="this.closest('form').submit()">
+                            <span class="block w-full h-full rounded-full transition-colors duration-200"
+                                  style="background:{{ $matchesAllowCrossAgent ? 'var(--brand-button, #0ea5e9)' : 'var(--border-hover)' }}"></span>
+                            <span class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-200"
+                                  style="transform:translateX({{ $matchesAllowCrossAgent ? '20px' : '0' }})"></span>
+                        </label>
+                        <span class="text-sm font-semibold" style="color:{{ $matchesAllowCrossAgent ? 'var(--brand-button, #0ea5e9)' : 'var(--text-muted)' }};">
+                            {{ $matchesAllowCrossAgent ? 'On' : 'Off' }}
+                        </span>
+                    </form>
+                </div>
+
                 {{-- WhatsApp message template --}}
                 <div class="p-4 rounded-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border);">
                     <div>

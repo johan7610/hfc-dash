@@ -969,6 +969,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::post('/settings/matches-enabled', [CoreXSettingsController::class, 'updateMatchesEnabled'])->middleware('permission:access_settings')->name('corex.settings.matches-enabled');
     Route::post('/settings/matches-wa-message', [CoreXSettingsController::class, 'updateMatchesWaMessage'])->middleware('permission:access_settings')->name('corex.settings.matches-wa-message');
     Route::post('/settings/matches-show-on-properties', [CoreXSettingsController::class, 'updateMatchesShowOnProperties'])->middleware('permission:access_settings')->name('corex.settings.matches-show-on-properties');
+    Route::post('/settings/matches-allow-cross-agent', [CoreXSettingsController::class, 'updateMatchesAllowCrossAgent'])->middleware('permission:access_settings')->name('corex.settings.matches-allow-cross-agent');
     // Old compliance-officers endpoint — kept for backwards compat, redirects
     Route::post('/settings/compliance-officers', function () {
         return redirect('/corex/settings?tab=user');

@@ -182,6 +182,29 @@
         </a>
     </div>
     @else
+    {{-- Cross-agent scope toggle (only when agency setting allows it) --}}
+    @if($allowCrossAgent ?? false)
+    <div class="flex items-center justify-end mb-3">
+        <form method="GET" action="" class="inline-flex items-center gap-2 text-xs">
+            <span style="color: var(--text-muted);">Showing:</span>
+            <a href="{{ url()->current() }}"
+               class="px-3 py-1.5 rounded-md font-semibold border"
+               style="background: {{ $showOtherAgents ? 'transparent' : 'var(--brand-button, #0ea5e9)' }};
+                      color: {{ $showOtherAgents ? 'var(--text-secondary)' : '#fff' }};
+                      border-color: {{ $showOtherAgents ? 'var(--border)' : 'var(--brand-button, #0ea5e9)' }};">
+                My properties only
+            </a>
+            <a href="{{ url()->current() }}?show_other_agents=1"
+               class="px-3 py-1.5 rounded-md font-semibold border"
+               style="background: {{ $showOtherAgents ? 'var(--brand-button, #0ea5e9)' : 'transparent' }};
+                      color: {{ $showOtherAgents ? '#fff' : 'var(--text-secondary)' }};
+                      border-color: {{ $showOtherAgents ? 'var(--brand-button, #0ea5e9)' : 'var(--border)' }};">
+                Include other agents
+            </a>
+        </form>
+    </div>
+    @endif
+
     <div class="space-y-3">
         @foreach($properties as $property)
         @php

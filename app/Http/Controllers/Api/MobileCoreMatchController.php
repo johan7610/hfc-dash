@@ -54,7 +54,16 @@ class MobileCoreMatchController extends Controller
         $this->authorizeMatch($request->user(), $match);
         $match->load(['contact.type', 'feedback']);
 
-        $properties = $this->matching->propertiesForMatch($match, ['include_hidden' => true]);
+        $allowCrossAgent     = (bool) \App\Models\PerformanceSetting::get('matches_allow_cross_agent', 0);
+        $requestedCrossAgent = $request->boolean('show_other_agents');
+        $showOtherAgents     = $allowCrossAgent && $requestedCrossAgent;
+
+        $overrides = ['include_hidden' => true];
+        if ($showOtherAgents) {
+            $overrides['agent_id'] = null;
+        }
+
+        $properties = $this->matching->propertiesForMatch($match, $overrides);
         $feedback   = $match->feedback->keyBy('property_id');
 
         $results = $properties->map(function (Property $p) use ($match, $feedback) {
@@ -85,6 +94,10 @@ class MobileCoreMatchController extends Controller
                 'type'      => $match->contact->type?->name,
             ],
             'results' => $results,
+            'scope'   => [
+                'allow_cross_agent' => $allowCrossAgent,
+                'show_other_agents' => $showOtherAgents,
+            ],
         ]);
     }
 
@@ -146,6 +159,69 @@ class MobileCoreMatchController extends Controller
         $this->authorizeMatch($request->user(), $match);
         $match->delete();
         return response()->json(['deleted' => true]);
+    }
+
+    // GET  /api/mobile/core-matches/{match}/share-whatsapp
+    // POST /api/mobile/core-matches/{match}/share-whatsapp
+    //   GET  → returns the template (rendered with {name}/{link} replaced) so the app can preview/edit it
+    //   POST → records the touch (whatsapp_count++, last_contacted_at, last_engaged_at) and returns the
+    //          final wa.me URL the client should launch. Optional body: { message?: string } to override.
+    public function shareWhatsApp(Request $request, ContactMatch $match): JsonResponse
+    {
+        $this->authorizeMatch($request->user(), $match);
+        $match->loadMissing('contact');
+
+        $contact = $match->contact;
+        $template = \App\Models\PerformanceSetting::get(
+            'matches_wa_message',
+            "Hi {name}! \u{1F44B}\n\nI've put together a personalised selection of properties that match your search criteria.\n\nView your property matches here:\n{link}\n\nFeel free to reach out if you'd like to arrange viewings or have any questions!"
+        );
+
+        $shareUrl = $match->sharedUrl();
+        $rendered = str_replace(
+            ['{name}', '{link}'],
+            [$contact->first_name ?? '', $shareUrl],
+            $template
+        );
+
+        // Allow the mobile UI to override the body before sending
+        $message = $request->input('message', $rendered);
+
+        $digits = preg_replace('/\D+/', '', (string) $contact->phone);
+        if ($digits && str_starts_with($digits, '0')) {
+            $digits = '27' . substr($digits, 1);
+        }
+
+        $waLink = $digits
+            ? 'https://wa.me/' . $digits . '?text=' . rawurlencode($message)
+            : null;
+
+        if ($request->isMethod('post')) {
+            $contact->increment('whatsapp_count');
+            $contact->update(['last_contacted_at' => now()]);
+            $match->update(['last_engaged_at' => now()]);
+        }
+
+        return response()->json([
+            'wa_link'         => $waLink,
+            'phone'           => $digits,
+            'message'         => $message,
+            'template'        => $template,
+            'rendered'        => $rendered,
+            'share_url'       => $shareUrl,
+            'contact_name'    => trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')),
+            'first_name'      => $contact->first_name,
+            'whatsapp_count'  => $contact->whatsapp_count,
+        ]);
+    }
+
+    // GET /api/mobile/core-matches/settings
+    // Lightweight settings the mobile app needs to render the right UI.
+    public function settings(): JsonResponse
+    {
+        return response()->json([
+            'allow_cross_agent' => (bool) \App\Models\PerformanceSetting::get('matches_allow_cross_agent', 0),
+        ]);
     }
 
     // ── helpers ─────────────────────────────────────────────────

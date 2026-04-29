@@ -118,11 +118,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // ── Mobile Core Matches ─────────────────────────────────────
     Route::prefix('mobile/core-matches')->group(function () {
+        Route::get('/settings',               [MobileCoreMatchController::class, 'settings']);
         Route::get('/',                       [MobileCoreMatchController::class, 'index']);
         Route::get('/{match}',                [MobileCoreMatchController::class, 'show']);
         Route::put('/{match}',                [MobileCoreMatchController::class, 'update']);
         Route::patch('/{match}/status',       [MobileCoreMatchController::class, 'setStatus']);
         Route::post('/{match}/hide/{property}', [MobileCoreMatchController::class, 'toggleHide']);
+        Route::get('/{match}/share-whatsapp',  [MobileCoreMatchController::class, 'shareWhatsApp']);
+        Route::post('/{match}/share-whatsapp', [MobileCoreMatchController::class, 'shareWhatsApp']);
         Route::delete('/{match}',             [MobileCoreMatchController::class, 'destroy']);
     });
 

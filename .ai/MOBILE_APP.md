@@ -139,12 +139,15 @@ lib/
 - `POST   /api/mobile/properties` — now accepts optional `link_contact_id` + `link_contact_role` to auto-link the new property to a contact via `contact_property` pivot
 
 **Core Matches (BUILT 2026-04-29 — see `.ai/specs/mobile-core-matches.md`):**
+- `GET    /api/mobile/core-matches/settings` — `{ allow_cross_agent: bool }` — agency setting that controls whether the mobile app should expose the "Include other agents" toggle on the match results screen
 - `GET    /api/mobile/core-matches` — own matches grouped by contact, with feedback_summary counts (interested / not_interested / saved)
-- `GET    /api/mobile/core-matches/{id}` — match + contact + result properties (each with `hidden`, `reaction`, `reaction_note`)
+- `GET    /api/mobile/core-matches/{id}` — match + contact + result properties (each with `hidden`, `reaction`, `reaction_note`). Defaults to **own properties only**. Pass `?show_other_agents=1` to include other agents' agency stock — silently ignored if the agency setting `matches_allow_cross_agent` is off. Response includes `scope: { allow_cross_agent, show_other_agents }`
 - `PUT    /api/mobile/core-matches/{id}` — edit filters (listing_type, price/beds/baths/garages, suburbs, features, notes)
 - `PATCH  /api/mobile/core-matches/{id}/status` — active|paused|fulfilled|expired
 - `POST   /api/mobile/core-matches/{id}/hide/{propertyId}` — toggle hide for that property within the match
 - `DELETE /api/mobile/core-matches/{id}` — soft-delete the match
+- `GET    /api/mobile/core-matches/{id}/share-whatsapp` — preview the rendered WA message + wa.me link (no side effects). Uses the agency's `matches_wa_message` template, replaces `{name}` with contact first name and `{link}` with the public match share URL.
+- `POST   /api/mobile/core-matches/{id}/share-whatsapp` — same payload, but records the touch (`whatsapp_count++`, `last_contacted_at = now`, `match.last_engaged_at = now`). Optional body `{ "message": "..." }` to override the text the agent edited in-app before sending. Response includes `wa_link` (https://wa.me/27…?text=…) for the app to launch.
 
 ### Command Center Data Shapes (for Flutter models)
 

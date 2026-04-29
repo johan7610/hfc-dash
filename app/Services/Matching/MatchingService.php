@@ -83,6 +83,19 @@ class MatchingService
             $query->where('agency_id', $match->agency_id);
         }
 
+        // Agent scope. Default: only the match owner's properties.
+        // Override with `agent_id` (specific agent) or `agent_id => null` to allow all agency agents.
+        // Cross-agent results require the agency setting `matches_allow_cross_agent` to be enabled
+        // (caller is responsible for enforcing that — service trusts the override).
+        if (array_key_exists('agent_id', $overrides)) {
+            if ($overrides['agent_id'] !== null) {
+                $query->where('agent_id', $overrides['agent_id']);
+            }
+            // null = no agent_id filter (all agency agents)
+        } else {
+            $query->where('agent_id', $match->created_by_user_id);
+        }
+
         $includeHidden = !empty($overrides['include_hidden']);
         if (!$includeHidden && !empty($match->hidden_property_ids)) {
             $query->whereNotIn('id', $match->hidden_property_ids);

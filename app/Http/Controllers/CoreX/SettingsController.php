@@ -99,6 +99,7 @@ class SettingsController extends Controller
         // Feature Settings tab: Matches
         $data['matchesEnabled']            = (bool) PerformanceSetting::get('matches_enabled', 1);
         $data['matchesShowOnProperties']   = (bool) PerformanceSetting::get('matches_show_on_properties', 1);
+        $data['matchesAllowCrossAgent']    = (bool) PerformanceSetting::get('matches_allow_cross_agent', 0);
         $defaultWaMsg = "Hi {name}! 👋\n\nI've put together a personalised selection of properties that match your search criteria.\n\nView your property matches here:\n{link}\n\nFeel free to reach out if you'd like to arrange viewings or have any questions!";
         $data['matchesWaMessage'] = (string) PerformanceSetting::get('matches_wa_message', $defaultWaMsg);
 
@@ -255,6 +256,13 @@ class SettingsController extends Controller
         $enabled = $request->boolean('matches_show_on_properties');
         PerformanceSetting::updateOrCreate(['key' => 'matches_show_on_properties'], ['value' => $enabled ? 1 : 0]);
         return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'matches'])->with('success', 'Setting updated.');
+    }
+
+    public function updateMatchesAllowCrossAgent(Request $request)
+    {
+        $enabled = $request->boolean('matches_allow_cross_agent');
+        PerformanceSetting::updateOrCreate(['key' => 'matches_allow_cross_agent'], ['value' => $enabled ? 1 : 0]);
+        return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'matches'])->with('success', 'Cross-agent setting updated.');
     }
 
     public function updateMatchesWaMessage(Request $request)
