@@ -27,6 +27,155 @@ class AgentPpController extends Controller
     }
 
     /**
+     * List every agent profile on the PP branch (so admins can spot
+     * duplicates created when UpdateAgent was called with mismatched
+     * AgentIds). Parses the embedded XML DataSet returned by
+     * GetAllAgentsForBranch and renders a sortable table.
+     */
+    public function index()
+    {
+        abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
+
+        $resp = $this->soapClient->getAllAgentsForBranch();
+
+        $agents = [];
+        $error  = null;
+
+        if (isset($resp['error']) && $resp['error'] === true) {
+            $error = $resp['message'] ?? 'Failed to fetch agents from PP';
+        } else {
+            $xml = $resp['GetAllAgentsForBranchResult']['any'] ?? '';
+            if ($xml !== '') {
+                $agents = $this->parseAgentDataSet($xml);
+            }
+        }
+
+        $byUser = User::query()
+            ->whereNotNull('email')
+            ->get(['id', 'name', 'email'])
+            ->keyBy(fn ($u) => strtolower(trim($u->email)));
+
+        foreach ($agents as &$a) {
+            $key = strtolower(trim($a['email'] ?? ''));
+            $match = $byUser[$key] ?? null;
+            $a['corex_user_id']   = $match?->id;
+            $a['corex_user_name'] = $match?->name;
+            $a['is_duplicate_external_ref'] = false;
+        }
+        unset($a);
+
+        $emailCounts = array_count_values(array_map(
+            fn ($a) => strtolower(trim($a['email'] ?? '')),
+            $agents
+        ));
+        foreach ($agents as &$a) {
+            $key = strtolower(trim($a['email'] ?? ''));
+            if ($key !== '' && ($emailCounts[$key] ?? 0) > 1) {
+                $a['is_duplicate_external_ref'] = true;
+            }
+        }
+        unset($a);
+
+        return view('admin.pp.agents', [
+            'agents' => $agents,
+            'error'  => $error,
+        ]);
+    }
+
+    /**
+     * Deactivate a PP agent by its encrypted PrivatePropertyAgentId.
+     * Used to clean up duplicate profiles that don't map to a CoreX user.
+     * Sends UpdateAgent with Active=false.
+     */
+    public function deactivateByEncryptedId(Request $request): JsonResponse
+    {
+        abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
+
+        $validated = $request->validate([
+            'pp_encrypted_id' => 'required|string|max:500',
+            'agent_id'        => 'required|string|max:100',
+            'first_name'      => 'nullable|string|max:100',
+            'last_name'       => 'nullable|string|max:100',
+            'email'           => 'nullable|string|max:200',
+            'tel_cell'        => 'nullable|string|max:50',
+        ]);
+
+        $payload = [
+            'AgentId'                => $validated['agent_id'],
+            'FirstName'              => $validated['first_name'] ?? '',
+            'LastName'               => $validated['last_name'] ?? '',
+            'Email'                  => $validated['email'] ?? '',
+            'TelCell'                => $validated['tel_cell'] ?? '',
+            'TelWork'                => $validated['tel_cell'] ?? '',
+            'TelHome'                => '',
+            'Active'                 => false,
+            'BranchId'               => config('services.private_property.branch_guid'),
+            'PrivatePropertyAgentId' => $validated['pp_encrypted_id'],
+            'PrivysealAlias'         => '',
+        ];
+
+        $result = $this->soapClient->updateAgent($payload);
+
+        if (isset($result['error']) && $result['error'] === true) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'] ?? 'UpdateAgent (deactivate) failed',
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'PP agent profile ' . $validated['agent_id'] . ' deactivated',
+        ]);
+    }
+
+    /**
+     * Parse the DataSet XML returned in GetAllAgentsForBranchResult.any.
+     */
+    private function parseAgentDataSet(string $xml): array
+    {
+        $rows = [];
+        try {
+            $previous = libxml_use_internal_errors(true);
+            $doc = new \DOMDocument();
+            $doc->loadXML($xml);
+            $xpath = new \DOMXPath($doc);
+            $xpath->registerNamespace('diffgr', 'urn:schemas-microsoft-com:xml-diffgram-v1');
+
+            $nodes = $xpath->query('//NewDataSet/Agents');
+            foreach ($nodes as $node) {
+                $row = [];
+                foreach ($node->childNodes as $child) {
+                    if ($child->nodeType === XML_ELEMENT_NODE) {
+                        $row[$child->nodeName] = trim($child->textContent);
+                    }
+                }
+                $rows[] = [
+                    'id'                       => $row['ID'] ?? '',
+                    'agent_id'                 => $row['AgentId'] ?? '',
+                    'pp_encrypted_id'          => $row['PrivatePropertyAgentId'] ?? '',
+                    'first_name'               => $row['firstName'] ?? '',
+                    'last_name'                => $row['LastName'] ?? '',
+                    'email'                    => $row['email'] ?? '',
+                    'contact_number'           => trim($row['ContactNumber'] ?? ''),
+                    'image_url'                => $row['AgentImageUrl'] ?? '',
+                ];
+            }
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+        } catch (\Throwable $e) {
+            // fall through with empty rows
+        }
+
+        usort($rows, fn ($a, $b) => strcmp(
+            ($a['email'] ?? '') . ($a['agent_id'] ?? ''),
+            ($b['email'] ?? '') . ($b['agent_id'] ?? '')
+        ));
+
+        return $rows;
+    }
+
+    /**
      * Register/sync an agent on Private Property.
      */
     public function sync(User $user): JsonResponse
