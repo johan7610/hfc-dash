@@ -141,6 +141,44 @@ class AgentPpController extends Controller
     }
 
     /**
+     * Hard-delete a listing referenced by PP's PP121 error.
+     * Called from the duplicate-agent cleanup popup. Deactivates on PP first
+     * (so PP releases the agent association) then force-deletes the Property
+     * row in CoreX. This is the one place hard deletion is allowed — it's a
+     * sandbox/duplicate cleanup workflow under manage_users.
+     */
+    public function purgeListing(int $id): JsonResponse
+    {
+        abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
+
+        $property = \App\Models\Property::withTrashed()->find($id);
+
+        // Best-effort PP deactivation (so PP releases the agent association).
+        $ppMessage = null;
+        if ($property && !empty($property->pp_ref)) {
+            $listingType = in_array(strtolower($property->listing_type ?? ''), ['rental']) ? 'Rental' : 'Sale';
+            $resp = $this->soapClient->deactivateListing((string) $property->id, $listingType);
+            if (isset($resp['error']) && $resp['error'] === true) {
+                $ppMessage = $resp['message'] ?? 'PP deactivation returned an error';
+            } else {
+                $ppMessage = 'PP listing deactivated';
+            }
+        }
+
+        if ($property) {
+            // Hard delete — bypass SoftDeletes
+            $property->forceDelete();
+        }
+
+        return response()->json([
+            'success'    => true,
+            'message'    => 'Listing #' . $id . ' purged from CoreX'
+                          . ($ppMessage ? ' (' . $ppMessage . ')' : ''),
+            'pp_message' => $ppMessage,
+        ]);
+    }
+
+    /**
      * Parse "active listings: 16, 17, 18" from PP's PP121 error and resolve
      * each ID against the CoreX Property table so the UI can offer one-click
      * deactivation per listing.
@@ -172,8 +210,8 @@ class AgentPpController extends Controller
                 'address'      => $p ? trim(($p->address ?? '') . ', ' . ($p->suburb ?? '') . ' ' . ($p->town ?? '')) : '',
                 'pp_ref'       => $p?->pp_ref,
                 'agent_id'     => $p?->agent_id,
-                'deactivate_url' => $p ? route('corex.properties.syndication.deactivate', ['property' => $id]) : null,
-                'view_url'     => $p ? route('corex.properties.show', ['property' => $id]) : null,
+                'purge_url'  => route('admin.pp.agents.purge-listing', ['id' => $id]),
+                'view_url'   => $p ? route('corex.properties.show', ['property' => $id]) : null,
             ];
         }
 

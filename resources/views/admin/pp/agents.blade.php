@@ -94,8 +94,11 @@
                     <h2 class="text-lg font-bold" style="color:var(--text-primary);">Active listings blocking deactivation</h2>
                     <p class="text-xs mt-1" style="color:var(--text-muted);">
                         PP refused to deactivate agent profile <span x-text="modal.agentId" class="font-mono"></span>
-                        because these listings are still active under it. Deactivate each on PP, wait
-                        a couple of minutes, then retry deactivating the agent.
+                        because these listings are still attached to it. Delete each listing entirely
+                        from the system, wait a couple of minutes, then retry deactivating the agent.
+                    </p>
+                    <p class="text-xs mt-1" style="color:#f59e0b;">
+                        ⚠ This is a hard delete — the Property row is removed from the database (not soft-deleted).
                     </p>
                 </div>
                 <button type="button" @click="modal.open = false"
@@ -122,17 +125,17 @@
                                    class="px-2 py-1 rounded-md text-xs font-medium"
                                    style="border:1px solid var(--border); color:var(--text-secondary); background:var(--surface);">View</a>
                             </template>
-                            <template x-if="L.deactivate_url">
+                            <template x-if="L.purge_url">
                                 <button type="button"
-                                        @click="deactivateListing(L)"
+                                        @click="purgeListing(L)"
                                         :disabled="L._busy || L._done"
                                         class="px-2 py-1 rounded-md text-xs font-medium"
                                         :style="L._done
                                             ? 'background:rgba(34,197,94,0.12); color:#22c55e; border:1px solid rgba(34,197,94,0.3);'
                                             : 'background:rgba(239,68,68,0.08); color:#ef4444; border:1px solid rgba(239,68,68,0.3);'">
-                                    <span x-show="!L._busy && !L._done">Deactivate on PP</span>
+                                    <span x-show="!L._busy && !L._done">Delete Listing</span>
                                     <span x-show="L._busy" x-cloak>...</span>
-                                    <span x-show="L._done" x-cloak>Deactivated</span>
+                                    <span x-show="L._done" x-cloak>Deleted</span>
                                 </button>
                             </template>
                         </div>
@@ -220,11 +223,12 @@ window.ppAgentsPage = function (root) {
             this.busy = null;
         },
 
-        async deactivateListing(L) {
-            if (!L.deactivate_url) return;
+        async purgeListing(L) {
+            if (!L.purge_url) return;
+            if (!confirm('Hard-delete listing #' + L.id + ' from CoreX? This is irreversible — the Property row is removed from the database (not soft-deleted) and PP is told to deactivate the listing.')) return;
             L._busy = true; this.modal.msg = ''; this.modal.ok = null;
             try {
-                var res = await fetch(L.deactivate_url, {
+                var res = await fetch(L.purge_url, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -238,7 +242,7 @@ window.ppAgentsPage = function (root) {
                 if (data.success) {
                     L._done = true;
                     this.modal.ok = true;
-                    this.modal.msg = 'Listing ' + L.id + ' deactivated on PP. Wait a moment, then retry agent deactivation.';
+                    this.modal.msg = data.message || ('Listing ' + L.id + ' deleted.');
                 } else {
                     this.modal.ok = false;
                     this.modal.msg = 'Listing ' + L.id + ': ' + (data.message || 'failed (HTTP ' + res.status + ')');

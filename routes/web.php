@@ -142,6 +142,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/admin/users/{user}/pp/update-external-ref', [\App\Http\Controllers\PrivateProperty\AgentPpController::class, 'updateExternalRef'])->middleware('permission:manage_users')->name('admin.users.pp.update-external-ref');
     Route::get('/admin/pp/agents', [\App\Http\Controllers\PrivateProperty\AgentPpController::class, 'index'])->middleware('permission:manage_users')->name('admin.pp.agents');
     Route::post('/admin/pp/agents/deactivate', [\App\Http\Controllers\PrivateProperty\AgentPpController::class, 'deactivateByEncryptedId'])->middleware('permission:manage_users')->name('admin.pp.agents.deactivate');
+    Route::post('/admin/pp/agents/purge-listing/{id}', [\App\Http\Controllers\PrivateProperty\AgentPpController::class, 'purgeListing'])->middleware('permission:manage_users')->name('admin.pp.agents.purge-listing');
 
     Route::get('/admin/listing-targets', [ListingTargetController::class, 'index'])
         ->middleware('permission:manage_targets')->name('admin.listing-targets');
