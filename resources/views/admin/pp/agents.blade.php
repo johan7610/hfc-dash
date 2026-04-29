@@ -4,42 +4,9 @@
 
 @section('corex-content')
 <div class="p-6 space-y-6"
-     x-data="{
-        busy: null, msg: '', ok: null,
-        deactivateUrl: @json(route('admin.pp.agents.deactivate')),
-        csrf: @json(csrf_token()),
-        async deactivate(btn) {
-            const a = {
-                pp_encrypted_id: btn.dataset.encryptedId,
-                agent_id:        btn.dataset.agentId,
-                first_name:      btn.dataset.firstName,
-                last_name:       btn.dataset.lastName,
-                email:           btn.dataset.email,
-                tel_cell:        btn.dataset.cell,
-            };
-            if (!confirm('Deactivate PP profile ' + a.agent_id + ' (' + a.first_name + ' ' + a.last_name + ')? PP will refuse if this profile has active listings.')) return;
-            this.busy = a.pp_encrypted_id; this.msg = ''; this.ok = null;
-            try {
-                const res = await fetch(this.deactivateUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': this.csrf,
-                        'Accept': 'application/json',
-                    },
-                    body: JSON.stringify(a),
-                });
-                const data = await res.json().catch(() => ({ success: false, message: 'Bad JSON from server (HTTP ' + res.status + ')' }));
-                this.ok = !!data.success;
-                this.msg = data.message || (this.ok ? 'Deactivated' : 'Deactivate failed (HTTP ' + res.status + ')');
-                if (this.ok) setTimeout(() => location.reload(), 1200);
-            } catch (e) {
-                this.ok = false;
-                this.msg = 'Network error: ' + (e && e.message ? e.message : e);
-            }
-            this.busy = null;
-        }
-     }">
+     data-deactivate-url="{{ route('admin.pp.agents.deactivate') }}"
+     data-csrf="{{ csrf_token() }}"
+     x-data="ppAgentsPage($el)">
     <div class="flex items-center justify-between">
         <div>
             <h1 class="text-xl font-bold" style="color:var(--text-primary);">Private Property — Agents on Branch</h1>
@@ -115,4 +82,47 @@
         </table>
     </div>
 </div>
+
+<script>
+window.ppAgentsPage = function (root) {
+    return {
+        busy: null, msg: '', ok: null,
+        deactivateUrl: root.dataset.deactivateUrl,
+        csrf: root.dataset.csrf,
+        async deactivate(btn) {
+            var a = {
+                pp_encrypted_id: btn.dataset.encryptedId,
+                agent_id:        btn.dataset.agentId,
+                first_name:      btn.dataset.firstName,
+                last_name:       btn.dataset.lastName,
+                email:           btn.dataset.email,
+                tel_cell:        btn.dataset.cell,
+            };
+            if (!confirm('Deactivate PP profile ' + a.agent_id + ' (' + a.first_name + ' ' + a.last_name + ')? PP will refuse if this profile has active listings.')) return;
+            this.busy = a.pp_encrypted_id; this.msg = ''; this.ok = null;
+            try {
+                var res = await fetch(this.deactivateUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': this.csrf,
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify(a),
+                });
+                var data;
+                try { data = await res.json(); }
+                catch (_) { data = { success: false, message: 'Bad JSON from server (HTTP ' + res.status + ')' }; }
+                this.ok = !!data.success;
+                this.msg = data.message || (this.ok ? 'Deactivated' : 'Deactivate failed (HTTP ' + res.status + ')');
+                if (this.ok) setTimeout(function () { location.reload(); }, 1200);
+            } catch (e) {
+                this.ok = false;
+                this.msg = 'Network error: ' + (e && e.message ? e.message : e);
+            }
+            this.busy = null;
+        }
+    };
+};
+</script>
 @endsection
