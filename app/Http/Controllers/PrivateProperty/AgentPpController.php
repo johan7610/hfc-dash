@@ -44,9 +44,14 @@ class AgentPpController extends Controller
         if (isset($resp['error']) && $resp['error'] === true) {
             $error = $resp['message'] ?? 'Failed to fetch agents from PP';
         } else {
-            $xml = $resp['GetAllAgentsForBranchResult']['any'] ?? '';
+            $xml = $this->extractAgentsXml($resp);
             if ($xml !== '') {
                 $agents = $this->parseAgentDataSet($xml);
+            }
+            if (empty($agents)) {
+                $error = 'PP returned a response but no agent rows were parsed. '
+                       . 'Raw response (truncated): '
+                       . substr(json_encode($resp), 0, 1500);
             }
         }
 
@@ -130,10 +135,39 @@ class AgentPpController extends Controller
     }
 
     /**
+     * Pull the XML DataSet string out of whatever shape PP returned.
+     * The "any" field can sit at different depths depending on PHP SoapClient
+     * version and WSDL import style.
+     */
+    private function extractAgentsXml(array $resp): string
+    {
+        $candidates = [
+            $resp['GetAllAgentsForBranchResult']['any'] ?? null,
+            $resp['any'] ?? null,
+            is_string($resp['GetAllAgentsForBranchResult'] ?? null) ? $resp['GetAllAgentsForBranchResult'] : null,
+        ];
+        foreach ($candidates as $c) {
+            if (is_string($c) && str_contains($c, '<Agents')) {
+                return $c;
+            }
+        }
+        $flat = json_encode($resp);
+        if (is_string($flat) && str_contains($flat, '<Agents')) {
+            return $flat;
+        }
+        return '';
+    }
+
+    /**
      * Parse the DataSet XML returned in GetAllAgentsForBranchResult.any.
+     * Falls back to regex if XML parsing yields nothing (handles escaped
+     * XML inside JSON wrappers).
      */
     private function parseAgentDataSet(string $xml): array
     {
+        $xml = html_entity_decode($xml);
+        $xml = str_replace(['\\"', '\\/'], ['"', '/'], $xml);
+
         $rows = [];
         try {
             $previous = libxml_use_internal_errors(true);
@@ -142,7 +176,10 @@ class AgentPpController extends Controller
             $xpath = new \DOMXPath($doc);
             $xpath->registerNamespace('diffgr', 'urn:schemas-microsoft-com:xml-diffgram-v1');
 
-            $nodes = $xpath->query('//NewDataSet/Agents');
+            $nodes = $xpath->query('//*[local-name()="NewDataSet"]/*[local-name()="Agents"]');
+            if (!$nodes || $nodes->length === 0) {
+                $nodes = $xpath->query('//*[local-name()="Agents"]');
+            }
             foreach ($nodes as $node) {
                 $row = [];
                 foreach ($node->childNodes as $child) {
@@ -150,7 +187,7 @@ class AgentPpController extends Controller
                         $row[$child->nodeName] = trim($child->textContent);
                     }
                 }
-                $rows[] = [
+                $candidate = [
                     'id'                       => $row['ID'] ?? '',
                     'agent_id'                 => $row['AgentId'] ?? '',
                     'pp_encrypted_id'          => $row['PrivatePropertyAgentId'] ?? '',
@@ -160,11 +197,48 @@ class AgentPpController extends Controller
                     'contact_number'           => trim($row['ContactNumber'] ?? ''),
                     'image_url'                => $row['AgentImageUrl'] ?? '',
                 ];
+                if ($candidate['pp_encrypted_id'] === '' && $candidate['agent_id'] === '') {
+                    continue;
+                }
+                $rows[] = $candidate;
             }
             libxml_clear_errors();
             libxml_use_internal_errors($previous);
         } catch (\Throwable $e) {
             // fall through with empty rows
+        }
+
+        if (empty($rows) && preg_match_all('/<Agents\b[^>]*>(.*?)<\/Agents>/s', $xml, $matches)) {
+            foreach ($matches[1] as $inner) {
+                $row = [];
+                foreach (['ID','AgentId','PrivatePropertyAgentId','firstName','LastName','email','ContactNumber','AgentImageUrl'] as $field) {
+                    if (preg_match('/<' . $field . '\b[^>]*>(.*?)<\/' . $field . '>/s', $inner, $m)) {
+                        $row[$field] = trim(html_entity_decode($m[1]));
+                    } elseif (preg_match('/<' . $field . '\b[^>]*\/>/', $inner)) {
+                        $row[$field] = '';
+                    }
+                }
+                if (!empty($row)) {
+                    $rows[] = [
+                        'id'              => $row['ID'] ?? '',
+                        'agent_id'        => $row['AgentId'] ?? '',
+                        'pp_encrypted_id' => $row['PrivatePropertyAgentId'] ?? '',
+                        'first_name'      => $row['firstName'] ?? '',
+                        'last_name'       => $row['LastName'] ?? '',
+                        'email'           => $row['email'] ?? '',
+                        'contact_number'  => trim($row['ContactNumber'] ?? ''),
+                        'image_url'       => $row['AgentImageUrl'] ?? '',
+                    ];
+                }
+            }
+            // Dedupe by encrypted ID — diffgram repeats rows in a `before` block.
+            $seen = [];
+            $rows = array_values(array_filter($rows, function ($r) use (&$seen) {
+                $key = $r['pp_encrypted_id'] !== '' ? $r['pp_encrypted_id'] : ($r['id'] . '|' . $r['agent_id']);
+                if (isset($seen[$key])) return false;
+                $seen[$key] = true;
+                return true;
+            }));
         }
 
         usort($rows, fn ($a, $b) => strcmp(
