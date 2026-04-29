@@ -187,7 +187,7 @@
     <div class="flex items-center justify-end mb-3">
         <form method="GET" action="" class="inline-flex items-center gap-2 text-xs">
             <span style="color: var(--text-muted);">Showing:</span>
-            <a href="{{ url()->current() }}"
+            <a href="{{ url()->current() }}?show_other_agents=0"
                class="px-3 py-1.5 rounded-md font-semibold border"
                style="background: {{ $showOtherAgents ? 'transparent' : 'var(--brand-button, #0ea5e9)' }};
                       color: {{ $showOtherAgents ? 'var(--text-secondary)' : '#fff' }};
