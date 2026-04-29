@@ -1,8 +1,8 @@
-@extends('layouts.corex-app')
+@extends('layouts.corex')
 
 @section('title', 'Private Property — Agents on Branch')
 
-@section('content')
+@section('corex-content')
 <div class="p-6 space-y-6" x-data="ppAgents()">
     <div class="flex items-center justify-between">
         <div>
