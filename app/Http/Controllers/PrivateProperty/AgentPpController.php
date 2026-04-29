@@ -172,8 +172,8 @@ class AgentPpController extends Controller
                 'address'      => $p ? trim(($p->address ?? '') . ', ' . ($p->suburb ?? '') . ' ' . ($p->town ?? '')) : '',
                 'pp_ref'       => $p?->pp_ref,
                 'agent_id'     => $p?->agent_id,
-                'deactivate_url' => $p ? route('syndication.deactivate', ['property' => $id]) : null,
-                'view_url'     => $p ? '/corex/properties/' . $id : null,
+                'deactivate_url' => $p ? route('corex.properties.syndication.deactivate', ['property' => $id]) : null,
+                'view_url'     => $p ? route('corex.properties.show', ['property' => $id]) : null,
             ];
         }
 
