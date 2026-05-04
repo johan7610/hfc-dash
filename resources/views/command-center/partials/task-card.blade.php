@@ -41,6 +41,7 @@
      data-bucket="{{ $bucket }}"
      data-title="{{ $searchHay }}"
      draggable="true"
+     @click="if (!$event.target.closest('a,button,form,input')) $root.openDetail({ id: {{ $task->id }}, title: @js($task->title), due_date: @js($task->due_date?->format('d M Y')) })"
      class="task-card rounded-md transition-all cursor-grab active:cursor-grabbing hover:shadow-sm"
      :class="$root.density === 'compact' ? 'p-2' : 'p-3'"
      style="background: var(--surface); border: 1px solid var(--border);">

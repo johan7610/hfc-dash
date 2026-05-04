@@ -66,6 +66,19 @@ Route::middleware('auth')->group(function () {
         Route::get('/deals/{deal}',    [\App\Http\Controllers\Api\V1\DealsController::class, 'show'])->name('deals.show');
 
         Route::get('/branding',        [\App\Http\Controllers\Api\V1\BrandingController::class, 'show'])->name('branding.show');
+
+        // ── Command Center: Task Notes (threaded) + Checklist ──
+        Route::prefix('command-center/tasks/{task}')->name('command-center.tasks.')->group(function () {
+            Route::get('/notes',           [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'index'])->name('notes.index');
+            Route::post('/notes',          [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'store'])->name('notes.store');
+            Route::put('/notes/{note}',    [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'update'])->name('notes.update');
+            Route::delete('/notes/{note}', [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'destroy'])->name('notes.destroy');
+
+            Route::get('/checklist',                [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'checklistIndex'])->name('checklist.index');
+            Route::post('/checklist',               [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'checklistStore'])->name('checklist.store');
+            Route::patch('/checklist/{itemId}',     [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'checklistUpdate'])->name('checklist.update');
+            Route::delete('/checklist/{itemId}',    [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'checklistDestroy'])->name('checklist.destroy');
+        });
     });
 
     Route::get('/evaluation', function () {

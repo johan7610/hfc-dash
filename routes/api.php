@@ -167,6 +167,18 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/tasks/{task}/status', [CommandCenterApiController::class, 'tasksUpdateStatus']);
         Route::delete('/tasks/{task}', [CommandCenterApiController::class, 'tasksDestroy']);
 
+        // ── Task Notes (threaded) ──
+        Route::get('/tasks/{task}/notes',           [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'index']);
+        Route::post('/tasks/{task}/notes',          [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'store']);
+        Route::put('/tasks/{task}/notes/{note}',    [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'update']);
+        Route::delete('/tasks/{task}/notes/{note}', [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'destroy']);
+
+        // ── Task Checklist ──
+        Route::get('/tasks/{task}/checklist',             [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'checklistIndex']);
+        Route::post('/tasks/{task}/checklist',            [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'checklistStore']);
+        Route::patch('/tasks/{task}/checklist/{itemId}',  [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'checklistUpdate']);
+        Route::delete('/tasks/{task}/checklist/{itemId}', [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'checklistDestroy']);
+
         Route::post('/resolve-task/{task}', [CommandCenterApiController::class, 'resolveTask']);
         Route::post('/resolve-event/{calendarEvent}', [CommandCenterApiController::class, 'resolveEvent']);
 
