@@ -40,7 +40,6 @@ class DatabaseSeeder extends Seeder
             DepositTrustInterestSeeder::class,
             DealPipelineTemplateSeeder::class,
             AgencyDocumentTypeConfigSeeder::class,
-            NotificationEventTypeSeeder::class,
         ]);
     }
 }
