@@ -32,6 +32,11 @@ Route::post('/login', function (Request $request) {
 
     $token = $user->createToken('corex-mobile')->plainTextToken;
 
+    $agency = $user->effectiveAgencyId()
+        ? \App\Models\Agency::withoutGlobalScope(\App\Models\Scopes\AgencyScope::class)
+            ->find($user->effectiveAgencyId())
+        : null;
+
     return response()->json([
         'token' => $token,
         'user' => [
@@ -40,6 +45,11 @@ Route::post('/login', function (Request $request) {
             'email' => $user->email,
             'branch' => $user->branch?->name ?? null,
             'ffc_status' => $user->ffc_status ?? null,
+            'agency' => $agency ? [
+                'id'   => $agency->id,
+                'slug' => $agency->slug,
+                'name' => $agency->name,
+            ] : null,
         ],
     ]);
 });
@@ -56,12 +66,22 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/profile', function (Request $request) {
         $user = $request->user();
 
+        $agency = $user->effectiveAgencyId()
+            ? \App\Models\Agency::withoutGlobalScope(\App\Models\Scopes\AgencyScope::class)
+                ->find($user->effectiveAgencyId())
+            : null;
+
         return response()->json([
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
             'branch' => $user->branch?->name ?? null,
             'ffc_status' => $user->ffc_status ?? null,
+            'agency' => $agency ? [
+                'id'   => $agency->id,
+                'slug' => $agency->slug,
+                'name' => $agency->name,
+            ] : null,
         ]);
     });
 
