@@ -32,6 +32,10 @@ Route::get('/{agencySlug}/properties/{property}', [\App\Http\Controllers\PublicA
     ->where('agencySlug', '^(?!admin|shared|dashboard|login|register|corex|api|storage|livewire|_ignition|broadcasting|horizon|sanctum|agent|onboarding|compliance|docuperfect|presentation|presentations|settings|profile|nexus|tv|ellie|xgrid|invite|up)[a-z0-9-]+$')
     ->name('public.agency.properties.show');
 
+// Public branding lookup by agency slug (no auth — used by mobile app login screen)
+Route::get('/api/v1/branding/{slug}', [\App\Http\Controllers\Api\V1\BrandingController::class, 'showBySlug'])
+    ->name('api.v1.branding.show-by-slug');
+
 Route::get('/dashboard', function () {
     return redirect()->route('corex.dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
@@ -51,7 +55,6 @@ Route::middleware('auth')->group(function () {
     // ── CoreX Global API v1 (session-authenticated, browser-visible XHR) ──
     Route::prefix('api/v1')->name('api.v1.')->group(function () {
         Route::get('/logged-user', [\App\Http\Controllers\Api\V1\MeController::class, 'show'])->name('logged-user');
-        Route::get('/me', [\App\Http\Controllers\Api\V1\MeController::class, 'show'])->name('me'); // alias
 
         Route::get('/properties',      [\App\Http\Controllers\Api\V1\PropertiesController::class, 'index'])->name('properties.index');
         Route::get('/properties/{property}', [\App\Http\Controllers\Api\V1\PropertiesController::class, 'show'])->name('properties.show');
@@ -61,6 +64,8 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/deals',           [\App\Http\Controllers\Api\V1\DealsController::class, 'index'])->name('deals.index');
         Route::get('/deals/{deal}',    [\App\Http\Controllers\Api\V1\DealsController::class, 'show'])->name('deals.show');
+
+        Route::get('/branding',        [\App\Http\Controllers\Api\V1\BrandingController::class, 'show'])->name('branding.show');
     });
 
     Route::get('/evaluation', function () {
