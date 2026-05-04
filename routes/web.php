@@ -43,9 +43,15 @@ Route::middleware('auth')->group(function () {
     Route::post('/api/notifications/{id}/read', [\App\Http\Controllers\Api\NotificationController::class, 'markRead']);
     Route::post('/api/notifications/mark-all-read', [\App\Http\Controllers\Api\NotificationController::class, 'markAllRead']);
 
+    // ── Admin: API Catalog (auto-generated from route table) ──
+    Route::get('/admin/api', [\App\Http\Controllers\Admin\ApiCatalogController::class, 'index'])
+        ->middleware('permission:manage_users')
+        ->name('admin.api.catalog');
+
     // ── CoreX Global API v1 (session-authenticated, browser-visible XHR) ──
     Route::prefix('api/v1')->name('api.v1.')->group(function () {
-        Route::get('/me', [\App\Http\Controllers\Api\V1\MeController::class, 'show'])->name('me');
+        Route::get('/logged-user', [\App\Http\Controllers\Api\V1\MeController::class, 'show'])->name('logged-user');
+        Route::get('/me', [\App\Http\Controllers\Api\V1\MeController::class, 'show'])->name('me'); // alias
 
         Route::get('/properties',      [\App\Http\Controllers\Api\V1\PropertiesController::class, 'index'])->name('properties.index');
         Route::get('/properties/{property}', [\App\Http\Controllers\Api\V1\PropertiesController::class, 'show'])->name('properties.show');

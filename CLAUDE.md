@@ -94,7 +94,10 @@ Every new feature includes permission keys in `config/corex-permissions.php`, si
 ### 6. Production quality only.
 No demo modes. No "we'll fix it later." No patches over root causes. If it works, it works correctly. If it doesn't, fix the root cause.
 
-### 7. Branch rules.
+### 7. Every API endpoint is registered and discoverable.
+All new HTTP API endpoints MUST live under `/api/v1/*` (or another versioned `/api/vN/*` namespace), MUST have a `->name()` on the route, and MUST be reachable from the **Admin → API** catalog page at `/admin/api`. The catalog is auto-generated from Laravel's route table — if the route is registered correctly with the `api/` URI prefix, it appears automatically. Do NOT build hidden JSON endpoints under arbitrary URIs (e.g. `/some-page/data`). One global frontend client (`window.CoreX.api`) consumes them; one catalog lists them. The session-authenticated "who am I" endpoint is `GET /api/v1/logged-user` — fired automatically on every authenticated page via `resources/js/corex-api.js`.
+
+### 8. Branch rules.
 - `main` = production server (91.99.130.85)
 - `HFC2402` = Johan's dev branch
 - `andre` = Andre's dev branch

@@ -34,7 +34,8 @@
     window.CoreX = window.CoreX || {};
     window.CoreX.api = {
         fetch: apiFetch,
-        me:         ()         => apiFetch('/api/v1/me'),
+        loggedUser: ()         => apiFetch('/api/v1/logged-user'),
+        me:         ()         => apiFetch('/api/v1/logged-user'),
         properties: (params)   => apiFetch('/api/v1/properties' + qs(params)),
         property:   (id)       => apiFetch('/api/v1/properties/' + id),
         contacts:   (params)   => apiFetch('/api/v1/contacts' + qs(params)),
@@ -51,13 +52,15 @@
 
     // Boot — fire /me on every authenticated page.
     if (document.querySelector('meta[name="corex-auth"]')?.content === '1') {
-        apiFetch('/api/v1/me')
+        apiFetch('/api/v1/logged-user')
             .then((data) => {
-                window.CoreX.me = data;
-                window.dispatchEvent(new CustomEvent('corex:me', { detail: data }));
+                window.CoreX.loggedUser = data;
+                window.CoreX.me = data; // back-compat alias
+                window.dispatchEvent(new CustomEvent('corex:logged-user', { detail: data }));
+                window.dispatchEvent(new CustomEvent('corex:me', { detail: data })); // back-compat
             })
             .catch((err) => {
-                window.dispatchEvent(new CustomEvent('corex:me:error', { detail: err }));
+                window.dispatchEvent(new CustomEvent('corex:logged-user:error', { detail: err }));
             });
     }
 })();
