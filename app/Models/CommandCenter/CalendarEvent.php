@@ -2,6 +2,8 @@
 
 namespace App\Models\CommandCenter;
 
+use App\Models\Concerns\BelongsToAgency;
+use App\Models\Concerns\BelongsToBranch;
 use App\Models\Contact;
 use App\Models\Property;
 use App\Models\User;
@@ -13,7 +15,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class CalendarEvent extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes, BelongsToAgency, BelongsToBranch;
 
     protected $fillable = [
         'user_id', 'created_by_id', 'event_type', 'category', 'title', 'description',

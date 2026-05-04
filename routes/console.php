@@ -87,6 +87,10 @@ Schedule::command('notifications:scan-properties')->everyThirtyMinutes()->withou
 Schedule::command('notifications:scan-contacts')->hourly()->withoutOverlapping();
 Schedule::command('notifications:scan-deals')->everyThirtyMinutes()->withoutOverlapping();
 
+// ── Calendar Event Classes ──
+Schedule::command('corex:calendar:send-digests')->dailyAt('06:30')->withoutOverlapping()->onOneServer();
+Schedule::command('corex:calendar:reconcile')->dailyAt('03:00')->withoutOverlapping()->onOneServer();
+
 // ── Leave Management ──
 Schedule::command('corex:leave:accrue-daily')->dailyAt('02:00')->onOneServer()->withoutOverlapping();
 Schedule::command('corex:leave:cycle-rollover')->dailyAt('02:30')->onOneServer()->withoutOverlapping();

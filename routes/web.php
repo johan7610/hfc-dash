@@ -714,6 +714,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::prefix('command-center')->group(function () {
         Route::get('/calendar', [CommandCenterCalendarController::class, 'index'])->name('command-center.calendar');
         Route::get('/calendar/events', [CommandCenterCalendarController::class, 'events'])->name('command-center.calendar.events');
+        Route::get('/calendar/{calendarEvent}', [CommandCenterCalendarController::class, 'show'])->name('command-center.calendar.show');
         Route::post('/calendar', [CommandCenterCalendarController::class, 'store'])->name('command-center.calendar.store');
         Route::put('/calendar/{calendarEvent}', [CommandCenterCalendarController::class, 'update'])->name('command-center.calendar.update');
         Route::delete('/calendar/{calendarEvent}', [CommandCenterCalendarController::class, 'destroy'])->name('command-center.calendar.destroy');
@@ -739,7 +740,9 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::patch('/settings/rules/{rule}/toggle', [CommandCenterSettingsController::class, 'toggleRule'])->name('command-center.settings.toggle-rule');
         Route::post('/settings/expectations', [CommandCenterSettingsController::class, 'storeExpectation'])->name('command-center.settings.store-expectation');
         Route::delete('/settings/expectations/{expectation}', [CommandCenterSettingsController::class, 'destroyExpectation'])->name('command-center.settings.destroy-expectation');
-        Route::post('/settings/reminders', [CommandCenterSettingsController::class, 'storeReminderDefault'])->name('command-center.settings.store-reminder');
+        Route::get('/settings/event-classes', [CommandCenterSettingsController::class, 'eventClasses'])->name('command-center.settings.event-classes');
+        Route::put('/settings/event-classes/{eventClass}', [CommandCenterSettingsController::class, 'updateEventClass'])->name('command-center.settings.event-classes.update');
+        Route::delete('/settings/event-classes/{eventClass}', [CommandCenterSettingsController::class, 'resetEventClass'])->name('command-center.settings.event-classes.reset');
 
         Route::get('/user-settings', [CommandCenterUserSettingsController::class, 'index'])->name('command-center.user-settings');
         Route::put('/user-settings', [CommandCenterUserSettingsController::class, 'update'])->name('command-center.user-settings.update');
