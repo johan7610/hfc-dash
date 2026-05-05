@@ -131,6 +131,7 @@
                 ['key'=>'notes','label'=>'Notes <span class="ml-1 text-xs px-1.5 py-0.5 rounded-md" style="background:var(--surface-2);">'. $contact->contactNotes->count() .'</span>'],
                 ['key'=>'drive','label'=>'Drive <span class="ml-1 text-xs px-1.5 py-0.5 rounded-md" style="background:var(--surface-2);">'. $contact->documents->count() .'</span>'],
                 ['key'=>'fica','label'=>'FICA Compliance ' . $ficaIcon],
+                ['key'=>'consent','label'=>'Consent'],
                 ['key'=>'matches','label'=>'Core Matches <span class="ml-1 text-xs px-1.5 py-0.5 rounded-md" style="background:var(--surface-2);">'. $contact->matches->count() .'</span>'],
             ] as $t)
             @if($t['key'] === 'matches' && (!\App\Models\PerformanceSetting::get('matches_enabled', 1) || !auth()->user()->hasPermission('access_core_matches')))
@@ -927,6 +928,68 @@
                 </div>
             </div>
             @endif
+        </div>
+
+        {{-- ════════════════════════════
+             CONSENT & COMPLIANCE TAB (M3.4)
+             ════════════════════════════ --}}
+        <div x-show="activeTab === 'consent'" x-cloak class="p-6 space-y-4" id="tab-consent">
+            @php
+                $consentTypes = [
+                    'fica_processing' => 'FICA Processing',
+                    'marketing_communications' => 'Marketing Communications',
+                    'data_sharing' => 'Data Sharing',
+                    'channel_email' => 'Email Channel',
+                    'channel_sms' => 'SMS Channel',
+                    'channel_whatsapp' => 'WhatsApp Channel',
+                    'channel_call' => 'Phone Call Channel',
+                ];
+                $consentRecords = $contact->consentRecords;
+            @endphp
+
+            <div class="flex items-center justify-between">
+                <h3 class="text-sm font-semibold" style="color: var(--text-primary);">Consent Records</h3>
+                <span class="text-xs" style="color: var(--text-muted);">POPIA + CPA compliant</span>
+            </div>
+
+            <div class="space-y-2">
+                @foreach($consentTypes as $typeKey => $typeLabel)
+                    @php
+                        $activeRecord = $consentRecords->where('consent_type', $typeKey)->whereNull('revoked_at')->first();
+                        $hasConsent = (bool) $activeRecord;
+                    @endphp
+                    <div class="flex items-center justify-between px-3 py-2 rounded-md" style="background: var(--surface-2); border: 1px solid var(--border);">
+                        <div>
+                            <span class="text-xs font-medium" style="color: var(--text-primary);">{{ $typeLabel }}</span>
+                            @if($hasConsent)
+                                <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded" style="background: rgba(16,185,129,0.15); color: #10b981;">Active</span>
+                                <span class="ml-1 text-[10px]" style="color: var(--text-muted);">since {{ $activeRecord->given_at->format('d M Y') }}</span>
+                            @else
+                                <span class="ml-2 text-[10px] px-1.5 py-0.5 rounded" style="background: rgba(239,68,68,0.1); color: #ef4444;">Not given</span>
+                            @endif
+                        </div>
+                        <div class="flex items-center gap-1">
+                            @if(!$hasConsent)
+                                <form method="POST" action="{{ route('corex.contacts.consent.record', $contact) }}">
+                                    @csrf
+                                    <input type="hidden" name="consent_type" value="{{ $typeKey }}">
+                                    <input type="hidden" name="method" value="electronic">
+                                    <button type="submit" class="text-[10px] font-medium px-2 py-1 rounded hover:opacity-80"
+                                            style="background: var(--brand-button); color: #fff;">Record</button>
+                                </form>
+                            @else
+                                <form method="POST" action="{{ route('corex.contacts.consent.revoke', $contact) }}">
+                                    @csrf
+                                    <input type="hidden" name="consent_type" value="{{ $typeKey }}">
+                                    <input type="hidden" name="reason" value="User requested revocation">
+                                    <button type="submit" class="text-[10px] font-medium px-2 py-1 rounded hover:opacity-80"
+                                            style="background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);">Revoke</button>
+                                </form>
+                            @endif
+                        </div>
+                    </div>
+                @endforeach
+            </div>
         </div>
 
         {{-- ════════════════════════════

@@ -12,11 +12,13 @@ use Illuminate\Support\ServiceProvider;
 use App\Models\Agency;
 use App\Models\CommandCenter\CommandTask;
 use App\Models\Contact;
+use App\Models\ContactConsentRecord;
 use App\Models\Deal;
 use App\Models\DealSettlement;
 use App\Models\Property;
 use App\Observers\AgencyObserver;
 use App\Observers\CommandTaskObserver;
+use App\Observers\ContactConsentRecordObserver;
 use App\Observers\ContactObserver;
 use App\Observers\DealObserver;
 use App\Observers\DealSettlementObserver;
@@ -36,6 +38,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Agency::observe(AgencyObserver::class);
         Contact::observe(ContactObserver::class);
+        ContactConsentRecord::observe(ContactConsentRecordObserver::class);
         Deal::observe(DealObserver::class);
         DealSettlement::observe(DealSettlementObserver::class);
         Property::observe(PropertyObserver::class);

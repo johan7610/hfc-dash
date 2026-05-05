@@ -316,6 +316,38 @@ class ContactController extends Controller
         return redirect()->route('corex.contacts.index')->with('success', 'Contact deleted.');
     }
 
+    public function recordConsent(Request $request, Contact $contact)
+    {
+        $request->validate([
+            'consent_type' => 'required|in:fica_processing,marketing_communications,data_sharing,channel_email,channel_sms,channel_whatsapp,channel_call',
+            'method' => 'nullable|in:verbal,written,electronic,signed_document',
+        ]);
+
+        $contact->recordConsent(
+            $request->input('consent_type'),
+            $request->input('method', 'electronic'),
+            auth()->id()
+        );
+
+        return back()->with('success', 'Consent recorded.')->with('tab', 'consent');
+    }
+
+    public function revokeConsent(Request $request, Contact $contact)
+    {
+        $request->validate([
+            'consent_type' => 'required|in:fica_processing,marketing_communications,data_sharing,channel_email,channel_sms,channel_whatsapp,channel_call',
+            'reason' => 'nullable|string|max:500',
+        ]);
+
+        $contact->revokeConsent(
+            $request->input('consent_type'),
+            auth()->id(),
+            $request->input('reason')
+        );
+
+        return back()->with('success', 'Consent revoked.')->with('tab', 'consent');
+    }
+
     public function destroyAll()
     {
         $count = Contact::withTrashed()->count();

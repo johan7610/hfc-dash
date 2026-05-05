@@ -482,25 +482,78 @@
                 @endforeach
             </div>
 
-            {{-- All-day swim-lane --}}
-            @php $hasAnyAllDay = collect($weekDaySplits)->contains(fn ($d) => $d['all_day']->isNotEmpty()); @endphp
-            @if($hasAnyAllDay)
-                <div class="grid grid-cols-[56px_repeat(7,1fr)]" style="border-bottom: 1px solid var(--border); background: var(--surface-2);">
-                    <div class="text-[10px] uppercase pt-2 pl-1.5" style="color: var(--text-muted);">all day</div>
-                    @foreach($weekDaySplits as $day)
-                        <div class="px-0.5 py-1 space-y-0.5" style="border-left: 1px solid var(--border);">
-                            @foreach($day['all_day'] as $evt)
-                                @php $chipStyle = $ragChip[$evt->resolved_colour] ?? $defaultChip; @endphp
-                                <button type="button"
-                                        @click.stop="openEventPanel({{ $evt->id }})"
-                                        class="block w-full text-left px-1.5 py-0.5 rounded text-[10px] truncate transition hover:opacity-80"
-                                        style="{{ $chipStyle }}"
-                                        title="{{ $evt->title }}">
-                                    {{ \Illuminate\Support\Str::limit($evt->title, 18) }}
-                                </button>
+            {{-- All-day swim-lane (spanning bars + single-day all-day chips) --}}
+            @php
+                $hasSpanningBars = !empty($weekSpanningBars);
+                $hasAnyAllDay = collect($weekDaySplits)->contains(fn ($d) => $d['all_day']->isNotEmpty());
+                $weekBarCount = count($weekBarSlots ?? []);
+            @endphp
+            @if($hasSpanningBars || $hasAnyAllDay)
+                <div style="border-bottom: 1px solid var(--border); background: var(--surface-2);">
+                    {{-- Spanning bars (continuous, not repeated per-day) --}}
+                    @if($hasSpanningBars)
+                        <div class="grid grid-cols-[56px_1fr]">
+                            <div class="text-[10px] uppercase pt-2 pl-1.5" style="color: var(--text-muted);">all day</div>
+                            <div class="relative" style="min-height: {{ $weekBarCount * 22 + 4 }}px; padding: 2px 0;">
+                                @foreach($weekSpanningBars as $bar)
+                                    @php
+                                        $barEvt = $bar['event'];
+                                        $isInformational = ($barEvt->resolved_colour ?? 'neutral') === 'neutral';
+                                        $barBg = $isInformational ? '#0f172a' : match($barEvt->resolved_colour) {
+                                            'red'   => '#dc2626',
+                                            'amber' => '#d97706',
+                                            'green' => '#0d9488',
+                                            default => '#0f172a',
+                                        };
+                                        $barBorder = $isInformational ? '#1e293b' : match($barEvt->resolved_colour) {
+                                            'red'   => '#991b1b',
+                                            'amber' => '#92400e',
+                                            'green' => '#115e59',
+                                            default => '#1e293b',
+                                        };
+                                        $barSlot = $bar['slot'] ?? 0;
+                                    @endphp
+                                    <button type="button"
+                                            data-event-id="{{ $bar['event_id'] }}"
+                                            @click.stop="openEventPanel({{ $bar['event_id'] }})"
+                                            class="absolute text-[11px] text-white font-medium px-2 truncate hover:opacity-90 transition-opacity cursor-pointer"
+                                            style="top: {{ $barSlot * 22 + 2 }}px; height: 18px; line-height: 18px;
+                                                   left: calc(({{ $bar['start_col'] - 1 }} / 7) * 100% + 3px);
+                                                   width: calc(({{ $bar['span'] }} / 7) * 100% - 6px);
+                                                   background: {{ $barBg }};
+                                                   border: 2px solid {{ $barBorder }};
+                                                   border-radius: 3px;"
+                                            title="{{ $barEvt->title }}">
+                                        {{ \Illuminate\Support\Str::limit($barEvt->title, 30) }}
+                                    </button>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- Single-day all-day events (rendered per-cell below bars) --}}
+                    @if($hasAnyAllDay)
+                        <div class="grid grid-cols-[56px_repeat(7,1fr)]">
+                            <div class="@if(!$hasSpanningBars) text-[10px] uppercase pt-2 pl-1.5 @endif" style="color: var(--text-muted);">
+                                @if(!$hasSpanningBars) all day @endif
+                            </div>
+                            @foreach($weekDaySplits as $day)
+                                <div class="px-0.5 py-1 space-y-0.5" style="border-left: 1px solid var(--border);">
+                                    @foreach($day['all_day'] as $evt)
+                                        @php $chipStyle = $ragChip[$evt->resolved_colour] ?? $defaultChip; @endphp
+                                        <button type="button"
+                                                data-event-id="{{ $evt->id }}"
+                                                @click.stop="openEventPanel({{ $evt->id }})"
+                                                class="block w-full text-left px-1.5 py-0.5 rounded text-[10px] truncate transition hover:opacity-80"
+                                                style="{{ $chipStyle }}"
+                                                title="{{ $evt->title }}">
+                                            {{ \Illuminate\Support\Str::limit($evt->title, 18) }}
+                                        </button>
+                                    @endforeach
+                                </div>
                             @endforeach
                         </div>
-                    @endforeach
+                    @endif
                 </div>
             @endif
 
@@ -547,6 +600,7 @@
                                             $isDraggable = in_array($evt->source_type, ['manual', 'manual:demo']);
                                         @endphp
                                         <button type="button"
+                                                data-event-id="{{ $evt->id }}"
                                                 @click.stop="openEventPanel({{ $evt->id }})"
                                                 @mousedown.stop
                                                 @if($isDraggable)
@@ -625,8 +679,18 @@
                     <div class="text-[10px] uppercase pt-2 pl-1.5" style="color: var(--text-muted);">all day</div>
                     <div class="p-2 space-y-1" style="border-left: 1px solid var(--border);">
                         @foreach($dayAllDay as $evt)
-                            @php $chipStyle = $ragChip[$evt->resolved_colour] ?? $defaultChip; @endphp
+                            @php
+                                $chipStyle = $ragChip[$evt->resolved_colour] ?? $defaultChip;
+                                $isMultiDayEvt = $evt->end_date && $evt->end_date->copy()->startOfDay()->gt($evt->event_date->copy()->startOfDay());
+                                if ($isMultiDayEvt) {
+                                    $isInfo = ($evt->resolved_colour ?? 'neutral') === 'neutral';
+                                    $chipStyle = $isInfo
+                                        ? 'background:#0f172a; color:#ffffff; border:2px solid #1e293b; border-radius:3px;'
+                                        : $chipStyle;
+                                }
+                            @endphp
                             <button type="button"
+                                    data-event-id="{{ $evt->id }}"
                                     @click.stop="openEventPanel({{ $evt->id }})"
                                     class="block w-full text-left px-3 py-2 rounded transition hover:opacity-80"
                                     style="{{ $chipStyle }}">
@@ -675,6 +739,7 @@
                                         $isDraggable = in_array($evt->source_type, ['manual', 'manual:demo']);
                                     @endphp
                                     <button type="button"
+                                            data-event-id="{{ $evt->id }}"
                                             @click.stop="openEventPanel({{ $evt->id }})"
                                             @mousedown.stop
                                             @if($isDraggable)

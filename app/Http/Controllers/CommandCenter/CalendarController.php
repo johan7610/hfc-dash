@@ -68,27 +68,108 @@ class CalendarController extends Controller
         $raw = $this->service->getEventsForRange($user, $weekStart->toDateString(), $weekEnd->toDateString(), [], $scope);
         $filtered = $this->applyFilters($raw, $user, $typeFilter, $categoryFilter, $scope);
 
+        // Separate multi-day events (spanning bars) from single-day events
+        $weekSpanningBars = [];
+        $singleDayEvents = collect();
+
+        foreach ($filtered as $event) {
+            $eventStart = $event->event_date->copy()->startOfDay();
+            $eventEnd = $event->end_date ? $event->end_date->copy()->startOfDay() : $eventStart;
+            $isMultiDay = $event->end_date && $eventEnd->gt($eventStart);
+
+            if ($isMultiDay) {
+                // Clamp to visible week
+                $from = $eventStart->lt($weekStart) ? $weekStart->copy() : $eventStart->copy();
+                $to = $eventEnd->gt($weekEnd->copy()->startOfDay()) ? $weekEnd->copy()->startOfDay() : $eventEnd->copy();
+                $startCol = $from->dayOfWeekIso; // 1=Mon, 7=Sun
+                $endCol = $to->dayOfWeekIso;
+                $span = $endCol - $startCol + 1;
+                if ($span < 1) $span = 1;
+                $weekSpanningBars[] = [
+                    'event' => $event,
+                    'event_id' => $event->id,
+                    'title' => $event->title,
+                    'start_col' => $startCol,
+                    'end_col' => $endCol,
+                    'span' => $span,
+                ];
+            } else {
+                $singleDayEvents->push($event);
+            }
+        }
+
+        // Interval-partition spanning bars into slots (avoid overlap)
+        usort($weekSpanningBars, function ($a, $b) {
+            if ($a['start_col'] !== $b['start_col']) return $a['start_col'] - $b['start_col'];
+            return $b['span'] - $a['span'];
+        });
+        $weekBarSlots = [];
+        foreach ($weekSpanningBars as &$bar) {
+            $placed = false;
+            foreach ($weekBarSlots as $si => &$slotBars) {
+                $conflict = false;
+                foreach ($slotBars as $existing) {
+                    if ($bar['start_col'] <= $existing['end_col'] && $bar['end_col'] >= $existing['start_col']) {
+                        $conflict = true;
+                        break;
+                    }
+                }
+                if (!$conflict) {
+                    $bar['slot'] = $si;
+                    $slotBars[] = $bar;
+                    $placed = true;
+                    break;
+                }
+            }
+            unset($slotBars);
+            if (!$placed) {
+                $bar['slot'] = count($weekBarSlots);
+                $weekBarSlots[] = [$bar];
+            }
+        }
+        unset($bar);
+
         $weekDays = collect();
         for ($i = 0; $i < 7; $i++) {
             $day = $weekStart->copy()->addDays($i);
             $weekDays->push([
                 'date'     => $day,
                 'is_today' => $day->isSameDay(Carbon::today()),
-                'events'   => $filtered->filter(function ($e) use ($day) {
-                    $start = $e->event_date->copy()->startOfDay();
-                    $end = $e->end_date ? $e->end_date->copy()->startOfDay() : $start;
-                    return $day->between($start, $end);
+                'events'   => $singleDayEvents->filter(function ($e) use ($day) {
+                    return $e->event_date->copy()->startOfDay()->isSameDay($day);
                 })->values(),
             ]);
         }
 
+        // Build colour data for week view (same as month)
+        $allVisibleEvents = $filtered;
+        $colourMap = $this->buildColourMap($allVisibleEvents);
+        $colourPalettes = $this->buildColourPalettes($allVisibleEvents);
+        $classLabels = [];
+        foreach ($shared['availableCategories'] as $cat) {
+            $classLabels[$cat->event_class] = $cat->label;
+        }
+        $branchLabels = \App\Models\Branch::withoutGlobalScopes()
+            ->whereIn('id', $allVisibleEvents->pluck('branch_id')->unique()->filter())
+            ->pluck('name', 'id')->toArray();
+        $agentLabels = \App\Models\User::withoutGlobalScopes()
+            ->whereIn('id', $allVisibleEvents->pluck('user_id')->unique()->filter())
+            ->pluck('name', 'id')->toArray();
+
         return view('command-center.calendar.index', $shared + [
-            'weekStart'   => $weekStart,
-            'weekEnd'     => $weekEnd,
-            'weekDays'    => $weekDays,
-            'anchorDate'  => $anchor,
-            'prevAnchor'  => $weekStart->copy()->subWeek()->toDateString(),
-            'nextAnchor'  => $weekStart->copy()->addWeek()->toDateString(),
+            'weekStart'       => $weekStart,
+            'weekEnd'         => $weekEnd,
+            'weekDays'        => $weekDays,
+            'weekSpanningBars' => $weekSpanningBars,
+            'weekBarSlots'    => $weekBarSlots,
+            'anchorDate'      => $anchor,
+            'prevAnchor'      => $weekStart->copy()->subWeek()->toDateString(),
+            'nextAnchor'      => $weekStart->copy()->addWeek()->toDateString(),
+            'colourMap'       => $colourMap,
+            'colourPalettes'  => $colourPalettes,
+            'classLabels'     => $classLabels,
+            'branchLabels'    => $branchLabels,
+            'agentLabels'     => $agentLabels,
         ]);
     }
 
@@ -103,11 +184,30 @@ class CalendarController extends Controller
             ->sortBy('event_date')
             ->values();
 
+        // Colour data for Color By mode
+        $colourMap = $this->buildColourMap($dayEvents);
+        $colourPalettes = $this->buildColourPalettes($dayEvents);
+        $classLabels = [];
+        foreach ($shared['availableCategories'] as $cat) {
+            $classLabels[$cat->event_class] = $cat->label;
+        }
+        $branchLabels = \App\Models\Branch::withoutGlobalScopes()
+            ->whereIn('id', $dayEvents->pluck('branch_id')->unique()->filter())
+            ->pluck('name', 'id')->toArray();
+        $agentLabels = \App\Models\User::withoutGlobalScopes()
+            ->whereIn('id', $dayEvents->pluck('user_id')->unique()->filter())
+            ->pluck('name', 'id')->toArray();
+
         return view('command-center.calendar.index', $shared + [
-            'dayEvents'   => $dayEvents,
-            'anchorDate'  => $anchor,
-            'prevAnchor'  => $anchor->copy()->subDay()->toDateString(),
-            'nextAnchor'  => $anchor->copy()->addDay()->toDateString(),
+            'dayEvents'     => $dayEvents,
+            'anchorDate'    => $anchor,
+            'prevAnchor'    => $anchor->copy()->subDay()->toDateString(),
+            'nextAnchor'    => $anchor->copy()->addDay()->toDateString(),
+            'colourMap'     => $colourMap,
+            'colourPalettes' => $colourPalettes,
+            'classLabels'   => $classLabels,
+            'branchLabels'  => $branchLabels,
+            'agentLabels'   => $agentLabels,
         ]);
     }
 

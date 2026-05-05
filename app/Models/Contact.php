@@ -33,6 +33,8 @@ class Contact extends Model
         'whatsapp_count', 'email_count',
         'bank_name', 'bank_account_name', 'bank_account_number',
         'bank_branch_name', 'bank_branch_code', 'bank_account_type',
+        'opt_out_email', 'opt_out_sms', 'opt_out_whatsapp', 'opt_out_call',
+        'last_consent_check_at',
     ];
 
     protected $casts = [
@@ -171,6 +173,93 @@ class Contact extends Model
     public function getInitialsAttribute(): string
     {
         return strtoupper(substr($this->first_name, 0, 1) . substr($this->last_name, 0, 1));
+    }
+
+    // ── Consent & Compliance (M3.4) ──
+
+    public function consentRecords(): HasMany
+    {
+        return $this->hasMany(ContactConsentRecord::class)->latest('given_at');
+    }
+
+    public function hasActiveConsent(string $consentType): bool
+    {
+        return $this->consentRecords()
+            ->where('consent_type', $consentType)
+            ->whereNull('revoked_at')
+            ->exists();
+    }
+
+    public function recordConsent(string $type, string $method, int $userId, ?int $documentId = null): ContactConsentRecord
+    {
+        return ContactConsentRecord::create([
+            'contact_id' => $this->id,
+            'agency_id' => $this->agency_id,
+            'consent_type' => $type,
+            'given_at' => now(),
+            'given_by_user_id' => $userId,
+            'method' => $method,
+            'evidence_document_id' => $documentId,
+        ]);
+    }
+
+    public function revokeConsent(string $type, int $userId, ?string $reason = null): void
+    {
+        $this->consentRecords()
+            ->where('consent_type', $type)
+            ->whereNull('revoked_at')
+            ->update([
+                'revoked_at' => now(),
+                'revoked_by_user_id' => $userId,
+                'revoked_reason' => $reason,
+            ]);
+    }
+
+    public function accessLog(): HasMany
+    {
+        return $this->hasMany(ContactAccessLog::class)->latest('accessed_at');
+    }
+
+    // ── Channel opt-out (M3.6) ──
+
+    /**
+     * Check if this contact can be contacted via a given channel.
+     * Returns false if opted out (consent revoked or never given).
+     */
+    public function canSendVia(string $channel): bool
+    {
+        return match ($channel) {
+            'email' => !$this->opt_out_email,
+            'sms' => !$this->opt_out_sms,
+            'whatsapp' => !$this->opt_out_whatsapp,
+            'call' => !$this->opt_out_call,
+            default => true,
+        };
+    }
+
+    /**
+     * Recompute denormalised opt-out flags from consent records.
+     * Opted out = no active consent for that channel type.
+     */
+    public function recomputeChannelConsent(): void
+    {
+        $channelMap = [
+            'channel_email' => 'opt_out_email',
+            'channel_sms' => 'opt_out_sms',
+            'channel_whatsapp' => 'opt_out_whatsapp',
+            'channel_call' => 'opt_out_call',
+        ];
+
+        $updates = ['last_consent_check_at' => now()];
+        foreach ($channelMap as $consentType => $column) {
+            $hasActive = $this->consentRecords()
+                ->where('consent_type', $consentType)
+                ->whereNull('revoked_at')
+                ->exists();
+            $updates[$column] = !$hasActive;
+        }
+
+        $this->updateQuietly($updates);
     }
 
     // ── Calendar event links (M2.2) ──

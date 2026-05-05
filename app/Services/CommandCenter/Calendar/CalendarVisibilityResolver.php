@@ -2,6 +2,7 @@
 
 namespace App\Services\CommandCenter\Calendar;
 
+use App\Models\AgencyLeaveVisibilityMatrix;
 use App\Models\CommandCenter\CalendarEvent;
 use App\Models\CommandCenter\CalendarEventClassSetting;
 use App\Models\User;
@@ -46,12 +47,36 @@ class CalendarVisibilityResolver
             return true;
         }
 
+        // Leave visibility matrix check (M3.4) — consult agency-configured matrix
+        // for leave event classes before falling through to general class visibility.
+        $config = CalendarEventClassSetting::forAgencyAndClass($event->agency_id, $event->category ?? '');
+        if ($config && ($config->event_nature ?? 'actionable') === 'informational'
+            && str_contains($event->category ?? '', 'leave')
+            && $event->user_id && $event->agency_id) {
+            $leaveOwner = User::withoutGlobalScopes()->find($event->user_id);
+            if ($leaveOwner) {
+                $viewingRole = $user->effectiveRole();
+                $ownerRole = $leaveOwner->role ?? 'agent';
+                $sameBranch = $user->branch_id && $leaveOwner->branch_id
+                    && (int) $user->branch_id === (int) $leaveOwner->branch_id;
+                $canSeeLeave = AgencyLeaveVisibilityMatrix::canSee(
+                    $viewingRole, $ownerRole, $sameBranch, (int) $event->agency_id
+                );
+                if (!$canSeeLeave) {
+                    // Also check cross-branch (same_branch_only=false)
+                    $canSeeLeave = AgencyLeaveVisibilityMatrix::canSee(
+                        $viewingRole, $ownerRole, false, (int) $event->agency_id
+                    );
+                }
+                return $canSeeLeave;
+            }
+        }
+
         $colour = $this->thresholdResolver->resolveForEvent($event);
         if ($colour === null) {
             return false;
         }
 
-        $config = CalendarEventClassSetting::forAgencyAndClass($event->agency_id, $event->category ?? '');
         if (!$config) {
             return false;
         }
