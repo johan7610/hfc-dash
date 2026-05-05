@@ -11,11 +11,13 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use App\Models\Agency;
 use App\Models\CommandCenter\CommandTask;
+use App\Models\Contact;
 use App\Models\Deal;
 use App\Models\DealSettlement;
 use App\Models\Property;
 use App\Observers\AgencyObserver;
 use App\Observers\CommandTaskObserver;
+use App\Observers\ContactObserver;
 use App\Observers\DealObserver;
 use App\Observers\DealSettlementObserver;
 use App\Observers\PropertyObserver;
@@ -33,6 +35,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Agency::observe(AgencyObserver::class);
+        Contact::observe(ContactObserver::class);
         Deal::observe(DealObserver::class);
         DealSettlement::observe(DealSettlementObserver::class);
         Property::observe(PropertyObserver::class);

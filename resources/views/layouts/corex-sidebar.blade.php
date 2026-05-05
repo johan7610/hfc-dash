@@ -225,8 +225,6 @@
                 <a href="{{ route('command-center.calendar') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.calendar*') ? 'active' : '' }}">Calendar</a>
                 @if(auth()->user() && in_array(auth()->user()->role, ['admin', 'super_admin', 'owner']))
                     <a href="{{ route('command-center.settings.event-classes') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.settings.event-classes*') ? 'active' : '' }}">Event Classes</a>
-                    <a href="{{ route('command-center.settings.contact-governance') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.settings.contact-governance*') ? 'active' : '' }}">Contact Governance</a>
-                    <a href="{{ route('command-center.settings.leave-visibility') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.settings.leave-visibility*') ? 'active' : '' }}">Leave Visibility</a>
                 @endif
                 <a href="{{ route('command-center.tasks') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.tasks*') ? 'active' : '' }}">Tasks</a>
                 @permission('dashboard.oversight.view')
@@ -941,6 +939,23 @@
             <span>Finance Engine</span>
         </a>
         @endpermission
+
+        {{-- Contact Governance + Leave Visibility (admin/super_admin/owner) --}}
+        @if($user && in_array($user->role, ['admin', 'super_admin', 'owner']))
+        <a href="{{ route('command-center.settings.contact-governance') }}" class="corex-nav-item {{ request()->routeIs('command-center.settings.contact-governance*') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+            </svg>
+            <span>Contact Governance</span>
+        </a>
+        <a href="{{ route('command-center.settings.leave-visibility') }}" class="corex-nav-item {{ request()->routeIs('command-center.settings.leave-visibility*') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+            </svg>
+            <span>Leave Visibility</span>
+        </a>
+        @endif
 
         {{-- Payroll (expandable group) --}}
         @if($user && $user->hasAnyPermission(['manage_payroll', 'run_payroll', 'view_payroll_reports']))

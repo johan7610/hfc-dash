@@ -10,11 +10,21 @@ use Illuminate\Http\Request;
 class ContactGovernanceController extends Controller
 {
     /**
+     * Resolve the agency_id to manage settings for.
+     * Super_admin without agency falls back to agency_id=1 (HFC).
+     */
+    private function resolveAgencyId(): int
+    {
+        $agencyId = auth()->user()->effectiveAgencyId();
+        return $agencyId ?? 1;
+    }
+
+    /**
      * Contact Governance settings page.
      */
     public function contactGovernance()
     {
-        $agencyId = auth()->user()->effectiveAgencyId();
+        $agencyId = $this->resolveAgencyId();
         $settings = AgencyContactSettings::forAgency($agencyId);
 
         return view('command-center.settings.contact-governance', [
@@ -40,7 +50,7 @@ class ContactGovernanceController extends Controller
             'access_log_retention_years' => 'required|integer|min:5|max:99',
         ]);
 
-        $agencyId = auth()->user()->effectiveAgencyId();
+        $agencyId = $this->resolveAgencyId();
         $settings = AgencyContactSettings::forAgency($agencyId);
 
         $settings->update($request->only([
@@ -63,7 +73,7 @@ class ContactGovernanceController extends Controller
      */
     public function leaveVisibility()
     {
-        $agencyId = auth()->user()->effectiveAgencyId();
+        $agencyId = $this->resolveAgencyId();
         $matrix = AgencyLeaveVisibilityMatrix::matrixForAgency($agencyId);
 
         // Group by viewing_role for the grid display
@@ -99,7 +109,7 @@ class ContactGovernanceController extends Controller
      */
     public function updateLeaveVisibility(Request $request)
     {
-        $agencyId = auth()->user()->effectiveAgencyId();
+        $agencyId = $this->resolveAgencyId();
         $roles = ['agent', 'bm', 'admin', 'super_admin'];
 
         $matrixData = $request->input('matrix', []);

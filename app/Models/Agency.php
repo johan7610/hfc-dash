@@ -41,16 +41,23 @@ class Agency extends Model
         'split_branches_enabled',
         'p24_agency_id',
         'p24_agency_label',
+        'default_branch_id',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'split_branches_enabled' => 'boolean',
+        'default_branch_id' => 'integer',
     ];
 
     public function branches(): HasMany
     {
         return $this->hasMany(Branch::class);
+    }
+
+    public function defaultBranch(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Branch::class, 'default_branch_id');
     }
 
     public function users(): HasMany

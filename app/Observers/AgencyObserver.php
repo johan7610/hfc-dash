@@ -5,6 +5,7 @@ namespace App\Observers;
 use App\Models\Agency;
 use App\Models\AgencyContactSettings;
 use App\Models\AgencyLeaveVisibilityMatrix;
+use App\Models\Branch;
 
 class AgencyObserver
 {
@@ -29,6 +30,18 @@ class AgencyObserver
                 'access_log_retention_years' => 5,
             ]
         );
+
+        // Set default_branch_id if branches exist for this agency
+        if (!$agency->default_branch_id) {
+            $firstBranch = Branch::withoutGlobalScopes()
+                ->where('agency_id', $agency->id)
+                ->whereNull('deleted_at')
+                ->orderBy('id')
+                ->value('id');
+            if ($firstBranch) {
+                $agency->updateQuietly(['default_branch_id' => $firstBranch]);
+            }
+        }
 
         // Seed leave visibility matrix with defaults
         foreach (AgencyLeaveVisibilityMatrix::defaultRows() as $row) {

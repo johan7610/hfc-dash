@@ -6,6 +6,7 @@ use App\Models\CommandCenter\CalendarEvent;
 use App\Models\CommandCenter\CalendarEventLink;
 use App\Models\Concerns\BelongsToAgency;
 use App\Models\Concerns\BelongsToBranch;
+use App\Models\Scopes\ContactScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,6 +17,11 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 class Contact extends Model
 {
     use SoftDeletes, BelongsToAgency, BelongsToBranch;
+
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new ContactScope());
+    }
 
     protected $fillable = [
         'agency_id',

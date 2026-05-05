@@ -8,6 +8,17 @@
         <a href="{{ route('command-center.settings') }}" class="text-xs px-3 py-1.5 rounded-md" style="background:var(--surface-2); color:var(--text-secondary);">Back to Settings</a>
     </div>
 
+    {{-- Relationship to Role Manager --}}
+    <div class="flex items-start gap-3 px-4 py-3 rounded-lg" style="background: var(--surface-2); border: 1px solid var(--border);">
+        <svg class="w-4 h-4 mt-0.5 flex-shrink-0" style="color: #00d4aa;" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+        </svg>
+        <div class="text-xs" style="color: var(--text-secondary);">
+            <p>This matrix controls which roles can see whose leave entries on the calendar. Access to the leave calendar feature itself is controlled by Role Manager. When the two combine, the most restrictive rule wins.</p>
+            <a href="{{ route('corex.role-manager') }}" class="inline-block mt-1.5 font-medium hover:underline" style="color: #00d4aa;">Configure role permissions in Role Manager &rarr;</a>
+        </div>
+    </div>
+
     @if(session('success'))
         <div class="px-4 py-3 rounded-lg text-sm font-medium" style="background:rgba(16,185,129,0.1); color:#10b981; border:1px solid rgba(16,185,129,0.2);">
             {{ session('success') }}
