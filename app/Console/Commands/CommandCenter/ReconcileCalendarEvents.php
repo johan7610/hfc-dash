@@ -183,11 +183,19 @@ class ReconcileCalendarEvents extends Command
     {
         $cutoff = now()->subHours(self::FEEDBACK_GRACE_HOURS);
 
+        // Get informational event classes to exclude from auto-tasks
+        $informationalClasses = DB::table('calendar_event_class_settings')
+            ->whereNull('agency_id')
+            ->where('event_nature', 'informational')
+            ->pluck('event_class')
+            ->toArray();
+
         $eligibleEventIds = DB::table('calendar_events as ce')
             ->whereIn('ce.source_type', ['manual', 'manual:demo'])
             ->where('ce.event_date', '<', $cutoff)
             ->where('ce.status', '!=', 'completed')
             ->whereNull('ce.deleted_at')
+            ->whereNotIn('ce.category', $informationalClasses ?: ['__none__'])
             ->whereExists(function ($q) {
                 $q->select(DB::raw(1))
                   ->from('calendar_event_links')

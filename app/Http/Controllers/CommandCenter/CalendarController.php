@@ -74,7 +74,11 @@ class CalendarController extends Controller
             $weekDays->push([
                 'date'     => $day,
                 'is_today' => $day->isSameDay(Carbon::today()),
-                'events'   => $filtered->filter(fn ($e) => $e->event_date->isSameDay($day))->values(),
+                'events'   => $filtered->filter(function ($e) use ($day) {
+                    $start = $e->event_date->copy()->startOfDay();
+                    $end = $e->end_date ? $e->end_date->copy()->startOfDay() : $start;
+                    return $day->between($start, $end);
+                })->values(),
             ]);
         }
 
@@ -281,6 +285,7 @@ class CalendarController extends Controller
             'is_past' => $calendarEvent->event_date->isPast(),
             'has_contacts' => $calendarEvent->linkedContacts()->exists(),
             'is_editable' => $isManual,
+            'is_actionable' => ($cfg->event_nature ?? 'actionable') === 'actionable',
             'is_draggable' => $isManual,
             'linked_property' => $isManual && $calendarEvent->property_id ? [
                 'id' => $calendarEvent->property_id,

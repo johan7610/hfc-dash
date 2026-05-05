@@ -156,11 +156,21 @@ class CalendarEventService
 
         $events = $this->getEventsForRange($user, $start, $end, $filters, $scope);
 
-        // Group by date
+        // Group by date — multi-day events appear on every day they span
         $grouped = [];
         foreach ($events as $event) {
-            $dateKey = $event->event_date->toDateString();
-            $grouped[$dateKey][] = $event;
+            $eventStart = $event->event_date->copy()->startOfDay();
+            $eventEnd = $event->end_date ? $event->end_date->copy()->startOfDay() : $eventStart;
+
+            // Clamp to visible grid range
+            $from = $eventStart->lt($start) ? $start->copy() : $eventStart->copy();
+            $to = $eventEnd->gt($end) ? $end->copy()->startOfDay() : $eventEnd->copy();
+
+            $cursor = $from->copy();
+            while ($cursor->lte($to)) {
+                $grouped[$cursor->toDateString()][] = $event;
+                $cursor->addDay();
+            }
         }
 
         return [

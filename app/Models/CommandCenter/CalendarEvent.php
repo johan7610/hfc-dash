@@ -185,7 +185,14 @@ class CalendarEvent extends Model
 
     public function scopeInDateRange($query, $start, $end)
     {
-        return $query->whereBetween('event_date', [$start, $end]);
+        // Include events that START in range OR SPAN into range (multi-day)
+        return $query->where(function ($q) use ($start, $end) {
+            $q->whereBetween('event_date', [$start, $end])
+              ->orWhere(function ($q2) use ($start, $end) {
+                  $q2->where('event_date', '<', $start)
+                     ->where('end_date', '>=', $start);
+              });
+        });
     }
 
     public function scopeOfType($query, string $type)

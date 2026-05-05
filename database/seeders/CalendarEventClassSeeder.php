@@ -677,6 +677,7 @@ class CalendarEventClassSeeder extends Seeder
             // #33 agent_birthday
             [
                 'event_class'         => 'agent_birthday',
+                'event_nature'        => 'informational',
                 'label'               => 'Agent Birthday',
                 'description'         => 'Annual recurring. BM sees team birthdays.',
                 'is_active'           => true,
@@ -697,6 +698,7 @@ class CalendarEventClassSeeder extends Seeder
             // #34 contact_birthday
             [
                 'event_class'         => 'contact_birthday',
+                'event_nature'        => 'informational',
                 'label'               => 'Contact Birthday',
                 'description'         => 'Annual recurring. Personal relationship building.',
                 'is_active'           => true,
@@ -777,6 +779,7 @@ class CalendarEventClassSeeder extends Seeder
             // #38 office_closure
             [
                 'event_class'         => 'office_closure',
+                'event_nature'        => 'informational',
                 'label'               => 'Office Closure',
                 'description'         => 'SYSTEM-level. Everyone sees. No notifications (informational).',
                 'is_active'           => false,
@@ -925,6 +928,7 @@ class CalendarEventClassSeeder extends Seeder
             // BM + admin see all leave in agency (branch filter deferred to Module 3).
             [
                 'event_class'         => 'leave_annual',
+                'event_nature'        => 'informational',
                 'label'               => 'Annual Leave',
                 'description'         => 'Approved annual leave. Agents see own via creator bypass; BM+admin see all.',
                 'is_active'           => true,
@@ -945,6 +949,7 @@ class CalendarEventClassSeeder extends Seeder
             // #46 leave_sick
             [
                 'event_class'         => 'leave_sick',
+                'event_nature'        => 'informational',
                 'label'               => 'Sick Leave',
                 'description'         => 'Approved sick leave. Agents see own via creator bypass; BM+admin see all.',
                 'is_active'           => true,

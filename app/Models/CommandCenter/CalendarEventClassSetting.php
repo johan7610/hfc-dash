@@ -13,13 +13,16 @@ class CalendarEventClassSetting extends Model
     protected $table = 'calendar_event_class_settings';
 
     protected $fillable = [
-        'agency_id', 'event_class', 'is_active',
+        'agency_id', 'event_class', 'is_active', 'event_nature',
         'green_days', 'amber_days', 'red_days', 'show_days',
         'green_visibility', 'amber_visibility', 'red_visibility',
         'green_notifications', 'amber_notifications', 'red_notifications',
         'daily_digest_enabled', 'daily_digest_roles',
         'label', 'description',
     ];
+
+    public const NATURE_ACTIONABLE    = 'actionable';
+    public const NATURE_INFORMATIONAL = 'informational';
 
     protected $casts = [
         'is_active'             => 'boolean',

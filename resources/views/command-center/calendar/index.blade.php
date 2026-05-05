@@ -292,10 +292,31 @@
 
             {{-- Calendar grid --}}
             <div class="grid grid-cols-7">
-                {{-- Empty cells before first of month --}}
+                {{-- Pre-month cells (trailing days from previous month) --}}
                 @for($i = 1; $i < $firstDayOfWeek; $i++)
+                    @php
+                        $preDate = $carbon->copy()->day(1)->subDays($firstDayOfWeek - $i);
+                        $preDateStr = $preDate->toDateString();
+                        $preDayEvents = $byDate[$preDateStr] ?? [];
+                    @endphp
                     <div class="min-h-[6rem] p-1"
-                         style="background: var(--surface-2); border-bottom: 1px solid var(--border); {{ $i < 7 ? 'border-right: 1px solid var(--border);' : '' }} opacity: 0.5;"></div>
+                         style="background: var(--surface-2); border-bottom: 1px solid var(--border); {{ $i < 7 ? 'border-right: 1px solid var(--border);' : '' }} opacity: 0.6;">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs" style="color: var(--text-muted);">{{ $preDate->day }}</span>
+                        </div>
+                        <div class="space-y-0.5">
+                            @foreach(array_slice($preDayEvents, 0, 3) as $evt)
+                                @php $chipStyle = $ragChip[$evt->resolved_colour] ?? $defaultChip; @endphp
+                                <button type="button"
+                                        @click.stop="openEventPanel({{ $evt->id }})"
+                                        class="block w-full text-left text-[11px] leading-tight px-1.5 py-0.5 rounded truncate hover:opacity-80 transition-opacity {{ $evt->status === 'completed' ? 'line-through opacity-70' : '' }}"
+                                        style="{{ $chipStyle }}"
+                                        title="{{ $evt->title }}">
+                                    {{ $evt->all_day ? '' : $evt->event_date->format('H:i') . ' ' }}{{ \Illuminate\Support\Str::limit($evt->title, 20) }}
+                                </button>
+                            @endforeach
+                        </div>
+                    </div>
                 @endfor
 
                 @for($d = 1; $d <= $daysInMonth; $d++)
@@ -331,7 +352,7 @@
                                 @php $chipStyle = $ragChip[$evt->resolved_colour] ?? $defaultChip; @endphp
                                 <button type="button"
                                         @click.stop="openEventPanel({{ $evt->id }})"
-                                        class="block w-full text-left text-[11px] leading-tight px-1.5 py-0.5 rounded truncate hover:opacity-80 transition-opacity"
+                                        class="block w-full text-left text-[11px] leading-tight px-1.5 py-0.5 rounded truncate hover:opacity-80 transition-opacity {{ $evt->status === 'completed' ? 'line-through opacity-70' : '' }}"
                                         style="{{ $chipStyle }}"
                                         title="{{ $evt->title }}">
                                     {{ $evt->all_day ? '' : $evt->event_date->format('H:i') . ' ' }}{{ \Illuminate\Support\Str::limit($evt->title, 20) }}
@@ -1113,8 +1134,8 @@
                     </div>
                 </template>
 
-                {{-- Feedback CTA (past events with contacts) --}}
-                <template x-if="panelData.is_past && panelData.has_contacts">
+                {{-- Feedback CTA (past actionable events with contacts) --}}
+                <template x-if="panelData.is_actionable && panelData.is_past && panelData.has_contacts">
                     <div class="px-5 py-3" style="border-bottom: 1px solid var(--border);">
                         <button type="button" @click="openFeedbackModal(panelData.id)"
                                 class="text-xs font-medium transition-colors hover:underline" style="color: var(--brand-button);">
@@ -1135,22 +1156,26 @@
                         Edit
                     </button>
                 </template>
-                <form :action="'/corex/command-center/calendar/' + panelData.id + '/complete'" method="POST">
-                    @csrf
-                    <button type="submit" class="text-xs font-medium transition-colors hover:opacity-70 inline-flex items-center gap-1"
-                            style="color: var(--text-secondary);">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/></svg>
-                        Complete
-                    </button>
-                </form>
-                <form :action="'/corex/command-center/calendar/' + panelData.id + '/dismiss'" method="POST">
-                    @csrf
-                    <button type="submit" class="text-xs font-medium transition-colors hover:opacity-70 inline-flex items-center gap-1"
-                            style="color: var(--text-muted);">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
-                        Dismiss
-                    </button>
-                </form>
+                <template x-if="panelData.is_actionable">
+                    <form :action="'/corex/command-center/calendar/' + panelData.id + '/complete'" method="POST">
+                        @csrf
+                        <button type="submit" class="text-xs font-medium transition-colors hover:opacity-70 inline-flex items-center gap-1"
+                                style="color: var(--text-secondary);">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/></svg>
+                            Complete
+                        </button>
+                    </form>
+                </template>
+                <template x-if="panelData.is_actionable">
+                    <form :action="'/corex/command-center/calendar/' + panelData.id + '/dismiss'" method="POST">
+                        @csrf
+                        <button type="submit" class="text-xs font-medium transition-colors hover:opacity-70 inline-flex items-center gap-1"
+                                style="color: var(--text-muted);">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+                            Dismiss
+                        </button>
+                    </form>
+                </template>
             </div>
         </aside>
     </div>
@@ -1566,6 +1591,8 @@ function calendarPage() {
             return { red: '#ef4444', amber: '#f59e0b', green: '#14b8a6', neutral: '#94a3b8' }[colour] || '#64748b';
         },
         panelColourLabel(colour) {
+            if (this.panelData.status === 'completed') return 'Completed';
+            if (this.panelData.status === 'dismissed') return 'Dismissed';
             return { red: 'Urgent', amber: 'Approaching', green: 'Upcoming', neutral: 'Future' }[colour] || '';
         },
         panelDaysDiffLabel(days) {

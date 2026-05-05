@@ -66,12 +66,20 @@ class CalendarThresholdResolver
      */
     public function resolveForEvent(CalendarEvent $event): ?string
     {
+        $config = CalendarEventClassSetting::forAgencyAndClass($event->agency_id, $event->category ?? '');
+        if (!$config || !$config->is_active) {
+            return null;
+        }
+
+        // Informational events (leave, birthdays, holidays) — always neutral, no RAG progression
+        if (($config->event_nature ?? 'actionable') === CalendarEventClassSetting::NATURE_INFORMATIONAL) {
+            return 'neutral';
+        }
+
         // Completed/dismissed events are done — never show as red urgency
         $status = $event->status ?? 'pending';
         if (in_array($status, ['completed', 'dismissed'])) {
-            // Still need a valid class config to render at all
-            $config = CalendarEventClassSetting::forAgencyAndClass($event->agency_id, $event->category ?? '');
-            return ($config && $config->is_active) ? 'neutral' : null;
+            return 'neutral';
         }
 
         $overrides = $this->extractOverrides($event);
