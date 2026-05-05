@@ -17,9 +17,11 @@ class CalendarVisibilityResolver
      *
      * Rules:
      *  1. Cross-agency events are never visible (agency isolation).
-     *  2. Event must currently resolve to a colour (within show window + active).
-     *  3. User's role must appear in that colour's visibility list, OR the
-     *     user must be the assigned user_id (personal scope override).
+     *  2. Super_admin bypasses all further checks.
+     *  3. Admin/owner within the event's agency bypasses class visibility.
+     *  4. Event creator always sees their own events.
+     *  5. Event must currently resolve to a colour (within show window + active).
+     *  6. User's role must appear in that colour's visibility list.
      */
     public function canSee(CalendarEvent $event, User $user): bool
     {
@@ -29,14 +31,24 @@ class CalendarVisibilityResolver
             return false;
         }
 
+        // Super_admin sees everything (cross-agency allowed when effectiveAgencyId is null).
+        if ($user->role === 'super_admin') {
+            return true;
+        }
+
+        // Admin/owner within their own agency sees all events in that agency.
+        if (in_array($user->role, ['admin', 'owner'], true) && (int) ($user->agency_id ?? 0) === (int) ($event->agency_id ?? 0)) {
+            return true;
+        }
+
+        // Event creator always sees their own events.
+        if ($event->user_id !== null && (int) $event->user_id === (int) $user->id) {
+            return true;
+        }
+
         $colour = $this->thresholdResolver->resolveForEvent($event);
         if ($colour === null) {
             return false;
-        }
-
-        // Personal scope: assigned user always sees their own visible events.
-        if ($event->user_id !== null && (int) $event->user_id === (int) $user->id) {
-            return true;
         }
 
         $config = CalendarEventClassSetting::forAgencyAndClass($event->agency_id, $event->category ?? '');

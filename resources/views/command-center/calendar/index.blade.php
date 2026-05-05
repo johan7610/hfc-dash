@@ -12,22 +12,44 @@
         $firstDayOfWeek = $carbon->dayOfWeekIso;
     }
 
-    // RAG colour classes (dark theme)
+    // RAG colour classes — solid backgrounds, white text (WCAG AA compliant on any surface)
     $ragChip = [
-        'red'   => 'background:rgba(239,68,68,0.15); color:#fca5a5; border-left:2px solid #ef4444;',
-        'amber' => 'background:rgba(245,158,11,0.15); color:#fcd34d; border-left:2px solid #f59e0b;',
-        'green' => 'background:rgba(20,184,166,0.15); color:#5eead4; border-left:2px solid #14b8a6;',
+        'red'     => 'background:#dc2626; color:#ffffff; border-left:2px solid #991b1b;',
+        'amber'   => 'background:#d97706; color:#ffffff; border-left:2px solid #92400e;',
+        'green'   => 'background:#0d9488; color:#ffffff; border-left:2px solid #115e59;',
+        'neutral' => 'background:#475569; color:#ffffff; border-left:2px solid #334155;',
     ];
     $ragDot = [
-        'red'   => '#ef4444',
-        'amber' => '#f59e0b',
-        'green' => '#14b8a6',
+        'red'     => '#ef4444',
+        'amber'   => '#f59e0b',
+        'green'   => '#14b8a6',
+        'neutral' => '#94a3b8',
     ];
-    $defaultChip = 'background:rgba(100,116,139,0.15); color:#94a3b8; border-left:2px solid #64748b;';
+    $defaultChip = 'background:#475569; color:#ffffff; border-left:2px solid #334155;';
     $defaultDot  = '#64748b';
+
+    // Hour grid bounds for week + day views
+    $hourGridStart = 6;
+    $hourGridEnd   = 20;
+    $gridHours     = range($hourGridStart, $hourGridEnd - 1);
+
+    // Classify event as all-day vs timed
+    $isAllDayEvent = function ($e) {
+        if (!empty($e->all_day)) return true;
+        if (str_starts_with((string) ($e->source_type ?? ''), 'synthetic:')) return true;
+        return $e->event_date->format('H:i:s') === '00:00:00';
+    };
+
+    $eventHour = function ($e) use ($hourGridStart, $hourGridEnd) {
+        $h = (int) $e->event_date->format('H');
+        return ($h >= $hourGridStart && $h < $hourGridEnd) ? $h : null;
+    };
 @endphp
 
-<div class="space-y-6" x-data="calendarPage()">
+<div class="space-y-6" x-data="calendarPage()" x-init="if ({{ $autoOpenFeedbackEventId ?? 'null' }}) openFeedbackModal({{ $autoOpenFeedbackEventId ?? 'null' }})" @keydown.window="handleShortcut($event)" @mouseup.window="dragEnd()">
+
+    {{-- ══════ STICKY HEADER BAND (banner + toolbar + legend) ══════ --}}
+    <div class="sticky top-0 z-30 -mx-4 lg:-mx-6 px-4 lg:px-6 pb-3 space-y-3 pt-1" style="background: var(--bg);">
 
     {{-- ══════ PAGE HEADER (Pattern A — branded) ══════ --}}
     <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a);">
@@ -73,6 +95,19 @@
             $navLabel = $monthLabel ?? now()->format('F Y');
             $showToday = ($year ?? now()->year) !== now()->year || ($month ?? now()->month) !== now()->month;
         }
+
+        // Keyboard shortcut nav URLs
+        $kbParams = request()->only(['scope','types','categories']);
+        $kbDate = ($anchorDate ?? now())->toDateString();
+        $keyboardNavUrls = [
+            'today'  => $todayUrl,
+            'prev'   => $prevUrl,
+            'next'   => $nextUrl,
+            'month'  => route('command-center.calendar', array_merge($kbParams, ['view' => 'month', 'date' => $kbDate])),
+            'week'   => route('command-center.calendar', array_merge($kbParams, ['view' => 'week', 'date' => $kbDate])),
+            'day'    => route('command-center.calendar', array_merge($kbParams, ['view' => 'day', 'date' => $kbDate])),
+            'agenda' => route('command-center.calendar', array_merge($kbParams, ['view' => 'agenda', 'date' => $kbDate])),
+        ];
     @endphp
     <div class="rounded-md px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
          style="background: var(--surface); border: 1px solid var(--border);">
@@ -80,23 +115,61 @@
             <a href="{{ $prevUrl }}" class="corex-btn-outline" aria-label="Previous">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
             </a>
-            <span class="px-3 py-1.5 text-sm font-semibold" style="color: var(--text-primary);">{{ $navLabel }}</span>
+            @if($showToday)
+                <a href="{{ $todayUrl }}" class="corex-btn-outline">Today</a>
+            @else
+                <span class="corex-btn-outline opacity-40 cursor-default pointer-events-none" aria-disabled="true">Today</span>
+            @endif
+            {{-- Clickable date picker label --}}
+            <div x-data="{ pickerOpen: false }" class="relative inline-flex">
+                <button type="button"
+                        @click="pickerOpen = !pickerOpen; if (pickerOpen) $nextTick(() => $refs.calDatePicker.showPicker?.())"
+                        class="px-3 py-1.5 rounded text-sm font-semibold transition hover:opacity-80 inline-flex items-center gap-2"
+                        style="background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border);">
+                    {{ $navLabel }}
+                    <svg class="w-3.5 h-3.5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                </button>
+                <input type="date"
+                       x-ref="calDatePicker"
+                       class="absolute top-full left-0 mt-1 opacity-0 pointer-events-none h-0 w-0 overflow-hidden"
+                       tabindex="-1"
+                       value="{{ $anchorDate->toDateString() }}"
+                       @change="
+                           const d = $event.target.value;
+                           if (d) {
+                               const params = new URLSearchParams(window.location.search);
+                               params.set('date', d);
+                               params.set('view', '{{ $currentView }}');
+                               params.delete('month');
+                               params.delete('year');
+                               window.location.href = window.location.pathname + '?' + params.toString();
+                           }
+                           pickerOpen = false;
+                       ">
+            </div>
             <a href="{{ $nextUrl }}" class="corex-btn-outline" aria-label="Next">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
             </a>
-            @if($showToday)
-                <a href="{{ $todayUrl }}" class="corex-btn-outline">Today</a>
-            @endif
         </div>
 
-        <div class="inline-flex rounded-md overflow-hidden" style="background: var(--surface-2); border: 1px solid var(--border);">
-            @foreach(['month' => 'Month', 'week' => 'Week', 'day' => 'Day', 'agenda' => 'Agenda'] as $vKey => $vLabel)
-                <a href="{{ route('command-center.calendar', array_merge(request()->only(['scope','types','categories']), ['view' => $vKey])) }}"
-                   class="px-3 py-1.5 text-xs font-semibold transition-colors"
-                   style="{{ $currentView === $vKey ? 'background: var(--brand-button); color: #fff;' : 'color: var(--text-secondary);' }}">
-                    {{ $vLabel }}
-                </a>
-            @endforeach
+        <div class="flex items-center gap-2">
+            <div class="inline-flex rounded-md overflow-hidden" style="background: var(--surface-2); border: 1px solid var(--border);">
+                @foreach(['month' => 'Month', 'week' => 'Week', 'day' => 'Day', 'agenda' => 'Agenda'] as $vKey => $vLabel)
+                    <a href="{{ route('command-center.calendar', array_merge(request()->only(['scope','types','categories']), ['view' => $vKey])) }}"
+                       class="px-3 py-1.5 text-xs font-semibold transition-colors"
+                       style="{{ $currentView === $vKey ? 'background: var(--brand-button); color: #fff;' : 'color: var(--text-secondary);' }}">
+                        {{ $vLabel }}
+                    </a>
+                @endforeach
+            </div>
+            <button type="button" @click="helpOpen = !helpOpen" title="Keyboard shortcuts (?)"
+                    class="px-2 py-1.5 rounded text-xs font-bold transition hover:opacity-80"
+                    style="background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border);">
+                ?
+            </button>
         </div>
     </div>
 
@@ -116,6 +189,8 @@
             <span style="color: var(--text-secondary);">Upcoming</span>
         </span>
     </div>
+
+    </div>{{-- END sticky header band --}}
 
     {{-- ══════ FILTER BAR ══════ --}}
     <form method="GET" action="{{ route('command-center.calendar') }}" id="calendar-filters"
@@ -234,16 +309,12 @@
                             ? 'color-mix(in srgb, var(--brand-button) 8%, transparent)'
                             : ($isWeekend ? 'var(--surface-2)' : 'transparent');
                     @endphp
-                    <div role="button" tabindex="0"
-                         @click="openForDate('{{ $dateStr }}')"
-                         @keydown.enter.prevent="openForDate('{{ $dateStr }}')"
-                         @keydown.space.prevent="openForDate('{{ $dateStr }}')"
-                         class="min-h-[6rem] p-1 transition-colors cursor-pointer focus:outline-none"
-                         style="background: {{ $cellBg }}; border-bottom: 1px solid var(--border); {{ $cellCol < 6 ? 'border-right: 1px solid var(--border);' : '' }}"
-                         onmouseover="this.style.background='color-mix(in srgb, var(--brand-button) 6%, transparent)'"
-                         onmouseout="this.style.background='{{ $cellBg }}'"
-                         title="Click to add an event on {{ $carbon->copy()->day($d)->format('D, d M Y') }}">
-                        <div class="flex items-center justify-between mb-1 pointer-events-none">
+                    <div @click="selectedDate = '{{ $dateStr }}'"
+                         @dblclick="window.location.href='{{ route('command-center.calendar', array_merge(request()->only(['scope','types','categories']), ['view' => 'day', 'date' => $dateStr])) }}'"
+                         class="block min-h-[6rem] p-1 transition-colors cursor-pointer"
+                         :style="selectedDate === '{{ $dateStr }}' ? 'background: color-mix(in srgb, var(--brand-button) 15%, transparent); border-bottom: 1px solid var(--border); {{ $cellCol < 6 ? 'border-right: 1px solid var(--border);' : '' }} outline: 2px solid var(--brand-button); outline-offset: -2px;' : 'background: {{ $cellBg }}; border-bottom: 1px solid var(--border); {{ $cellCol < 6 ? 'border-right: 1px solid var(--border);' : '' }}'"
+                         title="{{ $carbon->copy()->day($d)->format('D, d M Y') }}">
+                        <div class="flex items-center justify-between mb-1">
                             <span class="text-xs font-semibold {{ $isToday ? 'px-1.5 py-0.5 rounded-md text-white' : '' }}"
                                   style="{{ $isToday ? 'background: var(--brand-button);' : 'color: var(--text-secondary);' }}">
                                 {{ $d }}
@@ -281,69 +352,287 @@
             </div>
         </div>
     @elseif($currentView === 'week')
-        {{-- ══════ WEEK VIEW ══════ --}}
-        <div class="grid grid-cols-7 gap-2">
-            @foreach($weekDays as $day)
-                <div class="rounded-md p-3 min-h-[20rem]"
-                     style="background: var(--surface); border: 1px solid {{ $day['is_today'] ? 'var(--brand-button)' : 'var(--border)' }};">
-                    <div class="text-[0.6875rem] uppercase tracking-wider mb-1" style="color: var(--text-muted);">{{ $day['date']->format('D') }}</div>
-                    <div class="text-lg font-semibold mb-3" style="color: {{ $day['is_today'] ? 'var(--brand-button)' : 'var(--text-primary)' }};">{{ $day['date']->format('j M') }}</div>
-                    <div class="space-y-1.5">
-                        @forelse($day['events'] as $evt)
-                            @php $chipStyle = $ragChip[$evt->resolved_colour] ?? $defaultChip; @endphp
-                            <button type="button" @click="openEventPanel({{ $evt->id }})"
-                                    class="block w-full text-left p-2 rounded text-xs transition hover:opacity-80"
-                                    style="{{ $chipStyle }}">
-                                <div class="truncate font-medium">{{ $evt->title }}</div>
-                                <div class="text-[10px] opacity-70 truncate mt-0.5">{{ $evt->category }}</div>
-                            </button>
-                        @empty
-                            <div class="text-xs italic" style="color: var(--text-muted);">&mdash;</div>
-                        @endforelse
-                    </div>
+        {{-- ══════ WEEK VIEW — Time-slot grid ══════ --}}
+        @php
+            $weekDaySplits = [];
+            foreach ($weekDays as $day) {
+                $allDay = collect();
+                $timedByHour = [];
+                foreach ($day['events'] as $evt) {
+                    if ($isAllDayEvent($evt)) {
+                        $allDay->push($evt);
+                    } else {
+                        $h = $eventHour($evt);
+                        if ($h === null) {
+                            $allDay->push($evt);
+                        } else {
+                            $timedByHour[$h] ??= collect();
+                            $timedByHour[$h]->push($evt);
+                        }
+                    }
+                }
+                $weekDaySplits[] = [
+                    'date'     => $day['date'],
+                    'is_today' => $day['is_today'],
+                    'all_day'  => $allDay,
+                    'timed'    => $timedByHour,
+                ];
+            }
+            $nowHour = now()->hour;
+            $nowMinute = now()->minute;
+            $nowOffsetPct = count($gridHours) > 0
+                ? (($nowHour - $hourGridStart) + ($nowMinute / 60)) / count($gridHours) * 100
+                : 0;
+        @endphp
+
+        <div class="rounded-md overflow-hidden overflow-y-auto" style="background: var(--surface); border: 1px solid var(--border); max-height: 70vh;">
+            {{-- Day headers (sticky inside week scroll container) --}}
+            <div class="grid grid-cols-[56px_repeat(7,1fr)] sticky top-0 z-10" style="border-bottom: 1px solid var(--border); background: var(--surface);">
+                <div></div>
+                @foreach($weekDaySplits as $day)
+                    <a href="{{ route('command-center.calendar', array_merge(request()->only(['scope','types','categories']), ['view' => 'day', 'date' => $day['date']->toDateString()])) }}"
+                       class="block text-center py-2 no-underline hover:opacity-80 transition-opacity"
+                       style="background: {{ $day['is_today'] ? 'color-mix(in srgb, var(--brand-button) 8%, transparent)' : 'var(--surface)' }}; border-left: 1px solid var(--border);">
+                        <div class="text-[10px] uppercase tracking-wider" style="color: var(--text-muted);">{{ $day['date']->format('D') }}</div>
+                        <div class="text-lg font-semibold" style="color: {{ $day['is_today'] ? 'var(--brand-button)' : 'var(--text-primary)' }};">{{ $day['date']->format('j') }}</div>
+                    </a>
+                @endforeach
+            </div>
+
+            {{-- All-day swim-lane --}}
+            @php $hasAnyAllDay = collect($weekDaySplits)->contains(fn ($d) => $d['all_day']->isNotEmpty()); @endphp
+            @if($hasAnyAllDay)
+                <div class="grid grid-cols-[56px_repeat(7,1fr)]" style="border-bottom: 1px solid var(--border); background: var(--surface-2);">
+                    <div class="text-[10px] uppercase pt-2 pl-1.5" style="color: var(--text-muted);">all day</div>
+                    @foreach($weekDaySplits as $day)
+                        <div class="px-0.5 py-1 space-y-0.5" style="border-left: 1px solid var(--border);">
+                            @foreach($day['all_day'] as $evt)
+                                @php $chipStyle = $ragChip[$evt->resolved_colour] ?? $defaultChip; @endphp
+                                <button type="button"
+                                        @click.stop="openEventPanel({{ $evt->id }})"
+                                        class="block w-full text-left px-1.5 py-0.5 rounded text-[10px] truncate transition hover:opacity-80"
+                                        style="{{ $chipStyle }}"
+                                        title="{{ $evt->title }}">
+                                    {{ \Illuminate\Support\Str::limit($evt->title, 18) }}
+                                </button>
+                            @endforeach
+                        </div>
+                    @endforeach
                 </div>
-            @endforeach
+            @endif
+
+            {{-- Hour grid --}}
+            <div class="relative">
+                {{-- Now-line (only when today is in view and within grid hours) --}}
+                @php
+                    $todayInWeekView = collect($weekDaySplits)->contains(fn ($d) => $d['is_today']);
+                    $nowInRange = $nowHour >= $hourGridStart && $nowHour < $hourGridEnd;
+                @endphp
+                @if($todayInWeekView && $nowInRange)
+                    <div class="absolute left-[56px] right-0 z-10 pointer-events-none"
+                         style="top: {{ $nowOffsetPct }}%; border-top: 2px solid #ef4444;">
+                        <div class="absolute -top-1.5 -left-1.5 w-3 h-3 rounded-full" style="background: #ef4444;"></div>
+                    </div>
+                @endif
+
+                @foreach($gridHours as $hour)
+                    <div class="grid grid-cols-[56px_repeat(7,1fr)]" style="border-bottom: 1px solid var(--border);">
+                        <div class="text-[10px] pt-1 pl-1.5 select-none" style="color: var(--text-muted);">
+                            {{ str_pad((string)$hour, 2, '0', STR_PAD_LEFT) }}:00
+                        </div>
+                        @foreach($weekDaySplits as $day)
+                            <div class="min-h-[3rem] relative select-none" style="border-left: 1px solid var(--border); cursor: cell;">
+                                {{-- Top half (HH:00-HH:30) --}}
+                                <div class="absolute inset-x-0 top-0 h-1/2 z-[1]"
+                                     @mousedown="dragStart('{{ $day['date']->toDateString() }}', {{ $hour }}, 0, $event)"
+                                     @mousemove="dragMove({{ $hour }}, 0)"
+                                     @dragover.prevent
+                                     @drop.prevent="rescheduleDrop('{{ $day['date']->toDateString() }}', {{ $hour }}, 0)"></div>
+                                {{-- Bottom half (HH:30-HH+1:00) --}}
+                                <div class="absolute inset-x-0 top-1/2 h-1/2 z-[1]"
+                                     @mousedown="dragStart('{{ $day['date']->toDateString() }}', {{ $hour }}, 1, $event)"
+                                     @mousemove="dragMove({{ $hour }}, 1)"
+                                     @dragover.prevent
+                                     @drop.prevent="rescheduleDrop('{{ $day['date']->toDateString() }}', {{ $hour }}, 1)"></div>
+                                {{-- Event chips (above drag layers, pass-through for drop) --}}
+                                <div class="relative z-[2] px-0.5 py-0.5 space-y-0.5"
+                                     :class="{ 'pointer-events-none': reschedule.dragging }"
+                                     @dragover.prevent>
+                                    @foreach($day['timed'][$hour] ?? [] as $evt)
+                                        @php
+                                            $chipStyle = $ragChip[$evt->resolved_colour] ?? $defaultChip;
+                                            $isDraggable = in_array($evt->source_type, ['manual', 'manual:demo']);
+                                        @endphp
+                                        <button type="button"
+                                                @click.stop="openEventPanel({{ $evt->id }})"
+                                                @mousedown.stop
+                                                @if($isDraggable)
+                                                    draggable="true"
+                                                    @dragstart="rescheduleStart({{ $evt->id }}, '{{ $day['date']->toDateString() }}', $event)"
+                                                    @dragend="rescheduleEnd()"
+                                                    style="cursor: grab; {{ $chipStyle }}"
+                                                @else
+                                                    style="{{ $chipStyle }}"
+                                                @endif
+                                                class="block w-full text-left px-1.5 py-0.5 rounded text-[10px] truncate transition hover:opacity-80"
+                                                title="{{ $evt->event_date->format('H:i') }} {{ $evt->title }}">
+                                            <span class="opacity-70">{{ $evt->event_date->format('H:i') }}</span>
+                                            <span class="font-medium ml-0.5">{{ \Illuminate\Support\Str::limit($evt->title, 14) }}</span>
+                                        </button>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                @endforeach
+
+                {{-- Drag overlay per day-column --}}
+                @foreach($weekDaySplits as $dIdx => $day)
+                    <div x-show="drag.active && drag.dayDate === '{{ $day['date']->toDateString() }}'"
+                         x-cloak
+                         class="absolute pointer-events-none z-[5]"
+                         :style="(() => {
+                             const ov = dragOverlay('{{ $day['date']->toDateString() }}');
+                             if (!ov) return 'display:none';
+                             return `top:${ov.top}%;height:${ov.height}%;left:calc(56px + (100% - 56px) * {{ $dIdx }} / 7);width:calc((100% - 56px) / 7);background:rgba(0,212,170,0.2);border:1px solid var(--brand-button);border-radius:4px;`;
+                         })()">
+                    </div>
+                @endforeach
+            </div>
         </div>
 
     @elseif($currentView === 'day')
-        {{-- ══════ DAY VIEW ══════ --}}
-        <div class="max-w-3xl mx-auto">
-            <div class="mb-4 text-center">
+        {{-- ══════ DAY VIEW — Time-slot grid ══════ --}}
+        @php
+            $dayAllDay = collect();
+            $dayTimedByHour = [];
+            foreach ($dayEvents as $evt) {
+                if ($isAllDayEvent($evt)) {
+                    $dayAllDay->push($evt);
+                } else {
+                    $h = $eventHour($evt);
+                    if ($h === null) {
+                        $dayAllDay->push($evt);
+                    } else {
+                        $dayTimedByHour[$h] ??= collect();
+                        $dayTimedByHour[$h]->push($evt);
+                    }
+                }
+            }
+            $dayIsToday = $anchorDate->isSameDay(now());
+            $dayNowHour = now()->hour;
+            $dayNowMinute = now()->minute;
+            $dayNowOffsetPct = count($gridHours) > 0
+                ? (($dayNowHour - $hourGridStart) + ($dayNowMinute / 60)) / count($gridHours) * 100
+                : 0;
+            $dayNowInRange = $dayNowHour >= $hourGridStart && $dayNowHour < $hourGridEnd;
+        @endphp
+
+        <div class="max-w-3xl mx-auto rounded-md overflow-hidden"
+             style="background: var(--surface); border: 1px solid var(--border);">
+            {{-- Date header --}}
+            <div class="text-center py-3" style="border-bottom: 1px solid var(--border);">
                 <div class="text-xs uppercase tracking-wider" style="color: var(--text-muted);">{{ $anchorDate->format('l') }}</div>
-                <div class="text-2xl font-semibold" style="color: {{ $anchorDate->isSameDay(now()) ? 'var(--brand-button)' : 'var(--text-primary)' }};">{{ $anchorDate->format('j F Y') }}</div>
+                <div class="text-2xl font-semibold" style="color: {{ $dayIsToday ? 'var(--brand-button)' : 'var(--text-primary)' }};">{{ $anchorDate->format('j F Y') }}</div>
             </div>
-            <div class="space-y-3">
-                @forelse($dayEvents as $evt)
-                    @php $chipStyle = $ragChip[$evt->resolved_colour] ?? $defaultChip; @endphp
-                    <button type="button" @click="openEventPanel({{ $evt->id }})"
-                            class="block w-full text-left p-4 rounded-lg transition hover:opacity-90"
-                            style="background: var(--surface); border: 1px solid var(--border);">
-                        <div class="flex items-start gap-3">
-                            <span class="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style="background: {{ $ragDot[$evt->resolved_colour] ?? $defaultDot }};"></span>
-                            <div class="flex-1 min-w-0">
-                                <div class="flex items-center gap-2 flex-wrap">
-                                    <span class="text-base font-semibold" style="color: var(--text-primary);">{{ $evt->title }}</span>
-                                    <span class="px-2 py-0.5 text-xs rounded" style="{{ $chipStyle }} border-left:none;">{{ ucfirst($evt->resolved_colour) }}</span>
-                                </div>
-                                <div class="text-xs mt-1" style="color: var(--text-muted);">
-                                    {{ $evt->category }}
-                                    @if(!$evt->all_day && $evt->event_date->format('Hi') !== '0000')
-                                        &middot; {{ $evt->event_date->format('H:i') }}
-                                    @endif
-                                </div>
-                                @if($evt->description)
-                                    <p class="text-sm mt-2" style="color: var(--text-secondary);">{{ \Illuminate\Support\Str::limit($evt->description, 200) }}</p>
-                                @endif
+
+            {{-- All-day swim-lane --}}
+            @if($dayAllDay->isNotEmpty())
+                <div class="grid grid-cols-[56px_1fr]" style="border-bottom: 1px solid var(--border); background: var(--surface-2);">
+                    <div class="text-[10px] uppercase pt-2 pl-1.5" style="color: var(--text-muted);">all day</div>
+                    <div class="p-2 space-y-1" style="border-left: 1px solid var(--border);">
+                        @foreach($dayAllDay as $evt)
+                            @php $chipStyle = $ragChip[$evt->resolved_colour] ?? $defaultChip; @endphp
+                            <button type="button"
+                                    @click.stop="openEventPanel({{ $evt->id }})"
+                                    class="block w-full text-left px-3 py-2 rounded transition hover:opacity-80"
+                                    style="{{ $chipStyle }}">
+                                <div class="font-medium text-sm">{{ $evt->title }}</div>
+                                <div class="text-[11px] opacity-70 mt-0.5">{{ $evt->category }}</div>
+                            </button>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
+            {{-- Hour grid --}}
+            <div class="relative">
+                @if($dayIsToday && $dayNowInRange)
+                    <div class="absolute left-[56px] right-0 z-10 pointer-events-none"
+                         style="top: {{ $dayNowOffsetPct }}%; border-top: 2px solid #ef4444;">
+                        <div class="absolute -top-1.5 -left-1.5 w-3 h-3 rounded-full" style="background: #ef4444;"></div>
+                    </div>
+                @endif
+
+                @foreach($gridHours as $hour)
+                    <div class="grid grid-cols-[56px_1fr]" style="border-bottom: 1px solid var(--border);">
+                        <div class="text-[10px] pt-1.5 pl-1.5 select-none" style="color: var(--text-muted);">
+                            {{ str_pad((string)$hour, 2, '0', STR_PAD_LEFT) }}:00
+                        </div>
+                        <div class="min-h-[3.5rem] relative select-none" style="border-left: 1px solid var(--border); cursor: cell;">
+                            {{-- Top half --}}
+                            <div class="absolute inset-x-0 top-0 h-1/2 z-[1]"
+                                 @mousedown="dragStart('{{ $anchorDate->toDateString() }}', {{ $hour }}, 0, $event)"
+                                 @mousemove="dragMove({{ $hour }}, 0)"
+                                 @dragover.prevent
+                                 @drop.prevent="rescheduleDrop('{{ $anchorDate->toDateString() }}', {{ $hour }}, 0)"></div>
+                            {{-- Bottom half --}}
+                            <div class="absolute inset-x-0 top-1/2 h-1/2 z-[1]"
+                                 @mousedown="dragStart('{{ $anchorDate->toDateString() }}', {{ $hour }}, 1, $event)"
+                                 @mousemove="dragMove({{ $hour }}, 1)"
+                                 @dragover.prevent
+                                 @drop.prevent="rescheduleDrop('{{ $anchorDate->toDateString() }}', {{ $hour }}, 1)"></div>
+                            {{-- Event chips (pass-through for drop) --}}
+                            <div class="relative z-[2] p-1.5 space-y-1"
+                                 :class="{ 'pointer-events-none': reschedule.dragging }"
+                                 @dragover.prevent>
+                                @foreach($dayTimedByHour[$hour] ?? [] as $evt)
+                                    @php
+                                        $chipStyle = $ragChip[$evt->resolved_colour] ?? $defaultChip;
+                                        $isDraggable = in_array($evt->source_type, ['manual', 'manual:demo']);
+                                    @endphp
+                                    <button type="button"
+                                            @click.stop="openEventPanel({{ $evt->id }})"
+                                            @mousedown.stop
+                                            @if($isDraggable)
+                                                draggable="true"
+                                                @dragstart="rescheduleStart({{ $evt->id }}, '{{ $anchorDate->toDateString() }}', $event)"
+                                                @dragend="rescheduleEnd()"
+                                                style="cursor: grab; {{ $chipStyle }}"
+                                            @else
+                                                style="{{ $chipStyle }}"
+                                            @endif
+                                            class="block w-full text-left px-3 py-2 rounded transition hover:opacity-80">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs opacity-80">{{ $evt->event_date->format('H:i') }}</span>
+                                            <span class="font-medium text-sm">{{ $evt->title }}</span>
+                                        </div>
+                                        <div class="text-[11px] opacity-70 mt-0.5">{{ $evt->category }}</div>
+                                    </button>
+                                @endforeach
                             </div>
                         </div>
-                    </button>
-                @empty
-                    <div class="text-center py-12" style="color: var(--text-muted);">
-                        <p>No events on this day.</p>
-                        <button type="button" @click="openBlank()" class="corex-btn-primary mt-3">Add Event</button>
                     </div>
-                @endforelse
+                @endforeach
+
+                {{-- Drag overlay --}}
+                <div x-show="drag.active && drag.dayDate === '{{ $anchorDate->toDateString() }}'"
+                     x-cloak
+                     class="absolute pointer-events-none z-[5]"
+                     :style="(() => {
+                         const ov = dragOverlay('{{ $anchorDate->toDateString() }}');
+                         if (!ov) return 'display:none';
+                         return `top:${ov.top}%;height:${ov.height}%;left:56px;right:0;background:rgba(0,212,170,0.2);border:1px solid var(--brand-button);border-radius:4px;`;
+                     })()">
+                </div>
             </div>
+
+            {{-- Empty state --}}
+            @if($dayAllDay->isEmpty() && empty($dayTimedByHour))
+                <div class="text-center py-8" style="color: var(--text-muted);">
+                    <p>No events on this day.</p>
+                </div>
+            @endif
         </div>
 
     @elseif($currentView === 'agenda')
@@ -424,10 +713,11 @@
                         @php $dateObj = \Carbon\Carbon::parse($dateKey); @endphp
                         <div class="py-3" style="{{ !$loop->first ? 'border-top: 1px solid var(--border);' : '' }}">
                             <div class="flex items-center gap-2 mb-2">
-                                <span class="text-sm font-semibold"
-                                      style="color: {{ $dateObj->isToday() ? 'var(--brand-icon)' : 'var(--text-primary)' }};">
+                                <a href="{{ route('command-center.calendar', array_merge(request()->only(['scope','types','categories']), ['view' => 'day', 'date' => $dateKey])) }}"
+                                   class="text-sm font-semibold no-underline hover:underline"
+                                   style="color: {{ $dateObj->isToday() ? 'var(--brand-icon)' : 'var(--text-primary)' }};">
                                     {{ $dateObj->format($dateObj->year === now()->year ? 'D, d M' : 'D, d M Y') }}
-                                </span>
+                                </a>
                                 @if($dateObj->isToday())
                                     <span class="ds-badge ds-badge-info">Today</span>
                                 @endif
@@ -486,96 +776,249 @@
         </div>
     @endif
 
-    {{-- ══════ CREATE EVENT MODAL ══════ --}}
+    {{-- ══════ CREATE EVENT MODAL V2 ══════ --}}
     <div x-show="showCreateEvent" x-cloak
-         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-         @keydown.escape.window="showCreateEvent = false; panelOpen = false">
-        <div class="w-full max-w-lg rounded-md"
-             style="background: var(--surface); border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.18);"
-             @click.outside="showCreateEvent = false">
-            <form method="POST" action="{{ route('command-center.calendar.store') }}">
+         class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="showCreateEvent = false"></div>
+        <div class="relative w-full max-w-2xl max-h-[90vh] flex flex-col rounded-md shadow-2xl"
+             style="background: var(--surface); border: 1px solid var(--border);">
+
+            {{-- Header --}}
+            <div class="px-6 py-4 flex items-center justify-between" style="border-bottom: 1px solid var(--border);">
+                <h2 class="text-lg font-semibold" style="color: var(--text-primary);" x-text="editMode ? 'Edit Event' : 'New Event'"></h2>
+                <button type="button" @click="showCreateEvent = false" class="text-xl leading-none px-2" style="color: var(--text-muted);">&times;</button>
+            </div>
+
+            {{-- Body (scrollable) --}}
+            <form id="createEventFormV2" method="POST"
+                  :action="editMode ? '/corex/command-center/calendar/' + editingEventId : '{{ route('command-center.calendar.store') }}'"
+                  class="flex-1 overflow-y-auto px-6 py-4 space-y-4" @submit="submitting = true">
                 @csrf
-                <div class="px-6 py-4" style="border-bottom: 1px solid var(--border);">
-                    <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Add Calendar Event</h3>
+                <template x-if="editMode"><input type="hidden" name="_method" value="PUT"></template>
+
+                {{-- Title --}}
+                <div>
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Title <span style="color:#ef4444">*</span></label>
+                    <input type="text" name="title" x-model="form.title" required
+                           class="w-full rounded-md px-3 py-2 text-sm"
+                           style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
                 </div>
-                <div class="px-6 py-4 space-y-4">
-                    <div>
-                        <label for="event-title" class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">
-                            Title <span class="text-red-500">*</span>
-                        </label>
-                        <input id="event-title" type="text" name="title" required
+
+                {{-- Category --}}
+                <div>
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Type <span style="color:#ef4444">*</span></label>
+                    <select name="category" x-model="form.category" required
+                            class="w-full rounded-md px-3 py-2 text-sm"
+                            style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
+                        <option value="">Select type…</option>
+                        @foreach($manualCreatableClasses as $cls)
+                            <option value="{{ $cls->event_class }}">{{ $cls->label }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                {{-- All day toggle --}}
+                <div>
+                    <label class="inline-flex items-center gap-2 text-sm cursor-pointer" style="color: var(--text-secondary);">
+                        <input type="checkbox" x-model="form.allDay" class="rounded">
+                        All day
+                    </label>
+                </div>
+
+                {{-- Start date + time --}}
+                <div>
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Start <span style="color:#ef4444">*</span></label>
+                    <div class="grid gap-2" :class="form.allDay ? 'grid-cols-1' : 'grid-cols-2'">
+                        <input type="date" x-model="form.startDate" required
                                class="w-full rounded-md px-3 py-2 text-sm"
                                style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label for="event-start" class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">
-                                Start <span class="text-red-500">*</span>
-                            </label>
-                            <input id="event-start" type="datetime-local" name="event_date" required
-                                   x-model="presetStart"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
-                        </div>
-                        <div>
-                            <label for="event-end" class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">End (optional)</label>
-                            <input id="event-end" type="datetime-local" name="end_date"
-                                   x-model="presetEnd"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label for="event-type" class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Type</label>
-                            <select id="event-type" name="event_type"
-                                    class="w-full rounded-md px-3 py-2 text-sm"
-                                    style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
-                                <option value="manual">Personal</option>
-                                <option value="deal">Deal</option>
-                                <option value="lease">Lease / Rental</option>
-                                <option value="compliance">Compliance</option>
-                                <option value="prospecting">Prospecting</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label for="event-priority" class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Priority</label>
-                            <select id="event-priority" name="priority"
-                                    class="w-full rounded-md px-3 py-2 text-sm"
-                                    style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
-                                <option value="normal">Normal</option>
-                                <option value="low">Low</option>
-                                <option value="high">High</option>
-                                <option value="critical">Critical</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div>
-                        <label for="event-description" class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Description</label>
-                        <textarea id="event-description" name="description" rows="4"
-                                  class="w-full rounded-md px-3 py-2 text-sm"
-                                  style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);"></textarea>
-                    </div>
-                    <div>
-                        <label class="inline-flex items-center gap-2 text-sm" style="color: var(--text-secondary);">
-                            <input type="hidden" name="send_reminder" value="0">
-                            <input type="checkbox" name="send_reminder" value="1" checked class="rounded">
-                            Send me a reminder before this event
-                        </label>
+                        <select x-show="!form.allDay" x-model="form.startTime" @change="onStartTimeChange()" required
+                                class="w-full rounded-md px-3 py-2 text-sm"
+                                style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
+                            @for($h = 6; $h <= 22; $h++)
+                                @foreach([0, 15, 30, 45] as $m)
+                                    @php
+                                        $val = str_pad($h, 2, '0', STR_PAD_LEFT) . ':' . str_pad($m, 2, '0', STR_PAD_LEFT);
+                                        $display = ($h > 12 ? $h - 12 : ($h === 0 ? 12 : $h)) . ':' . str_pad($m, 2, '0', STR_PAD_LEFT) . ' ' . ($h >= 12 ? 'PM' : 'AM');
+                                    @endphp
+                                    <option value="{{ $val }}">{{ $display }}</option>
+                                @endforeach
+                            @endfor
+                        </select>
                     </div>
                 </div>
-                <div class="px-6 py-4 flex justify-end gap-2" style="border-top: 1px solid var(--border);">
-                    <button type="button" @click="showCreateEvent = false" class="corex-btn-outline">Cancel</button>
-                    <button type="submit" class="corex-btn-primary">Add Event</button>
+
+                {{-- End date + time (hidden for all-day events) --}}
+                <div x-show="!form.allDay">
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">End</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="date" x-model="form.endDate"
+                               class="w-full rounded-md px-3 py-2 text-sm"
+                               style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
+                        <select x-model="form.endTime" @change="onEndTimeChange()"
+                                class="w-full rounded-md px-3 py-2 text-sm"
+                                style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
+                            <option value="">—</option>
+                            @for($h = 6; $h <= 22; $h++)
+                                @foreach([0, 15, 30, 45] as $m)
+                                    @php
+                                        $val = str_pad($h, 2, '0', STR_PAD_LEFT) . ':' . str_pad($m, 2, '0', STR_PAD_LEFT);
+                                        $display = ($h > 12 ? $h - 12 : ($h === 0 ? 12 : $h)) . ':' . str_pad($m, 2, '0', STR_PAD_LEFT) . ' ' . ($h >= 12 ? 'PM' : 'AM');
+                                    @endphp
+                                    <option value="{{ $val }}">{{ $display }}</option>
+                                @endforeach
+                            @endfor
+                        </select>
+                    </div>
+                </div>
+
+                {{-- Hidden datetime fields for backend (assembled from split pickers) --}}
+                <input type="hidden" name="event_date" :value="computedEventDate">
+                <input type="hidden" name="end_date" :value="computedEndDate">
+
+                {{-- Property search --}}
+                <div x-data="propertySearch()">
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Property</label>
+                    <template x-if="!selected">
+                        <div class="relative">
+                            <input type="text" x-model="query" @input.debounce.250ms="search()"
+                                   placeholder="Search address or suburb…"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
+                                   style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
+                            <div x-show="results.length > 0" x-cloak
+                                 class="absolute z-20 left-0 right-0 mt-1 rounded-md max-h-48 overflow-y-auto shadow-lg"
+                                 style="background: var(--surface); border: 1px solid var(--border);">
+                                <template x-for="r in results" :key="r.id">
+                                    <button type="button" @click="pick(r)"
+                                            class="block w-full text-left px-3 py-2 text-sm transition"
+                                            style="color: var(--text-primary);"
+                                            onmouseover="this.style.background='var(--surface-2)'"
+                                            onmouseout="this.style.background='transparent'">
+                                        <span x-text="r.address"></span>
+                                        <span class="text-xs opacity-60 ml-1" x-text="r.listing_agent_name ? '(' + r.listing_agent_name + ')' : ''"></span>
+                                    </button>
+                                </template>
+                            </div>
+                            <div x-show="query.length >= 2 && results.length === 0 && !loading" x-cloak
+                                 class="text-xs mt-1" style="color: var(--text-muted);">No properties found.</div>
+                        </div>
+                    </template>
+                    <template x-if="selected">
+                        <div class="flex items-center justify-between px-3 py-2 rounded-md text-sm"
+                             style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
+                            <span x-text="selected.address"></span>
+                            <button type="button" @click="clear()" class="text-sm px-1 opacity-60 hover:opacity-100">&times;</button>
+                        </div>
+                    </template>
+                    <input type="hidden" name="property_id" :value="selected ? selected.id : ''">
+                </div>
+
+                {{-- Attendees multi-select (contacts + agents) --}}
+                <div x-data="contactSearch()" x-ref="attendeePicker">
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Attendees</label>
+                    <div class="flex flex-wrap gap-1 mb-1.5">
+                        <template x-for="c in chosen" :key="(c.type||'contact') + ':' + c.id">
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs"
+                                  style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
+                                <span x-text="c.name"></span>
+                                <span class="text-[10px] opacity-50" x-text="c.type === 'agent' ? '(agent)' : ''"></span>
+                                <button type="button" @click="remove(c)" class="opacity-60 hover:opacity-100">&times;</button>
+                            </span>
+                        </template>
+                    </div>
+                    <div class="relative">
+                        <input type="text" x-model="query" @input.debounce.250ms="search()"
+                               placeholder="Search contacts or agents…"
+                               class="w-full rounded-md px-3 py-2 text-sm"
+                               style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
+                        <div x-show="results.length > 0" x-cloak
+                             class="absolute z-20 left-0 right-0 mt-1 rounded-md max-h-48 overflow-y-auto shadow-lg"
+                             style="background: var(--surface); border: 1px solid var(--border);">
+                            <template x-for="r in results" :key="(r.type||'contact') + ':' + r.id">
+                                <button type="button" @click="add(r)"
+                                        class="block w-full text-left px-3 py-2 text-sm transition"
+                                        style="color: var(--text-primary);"
+                                        onmouseover="this.style.background='var(--surface-2)'"
+                                        onmouseout="this.style.background='transparent'">
+                                    <span x-text="r.name"></span>
+                                    <span class="text-[10px] px-1 py-0.5 rounded ml-1"
+                                          :style="r.type === 'agent' ? 'background:#0d9488;color:#fff' : 'background:var(--surface-2);color:var(--text-muted)'"
+                                          x-text="r.type === 'agent' ? 'agent' : 'contact'"></span>
+                                    <span class="text-xs opacity-50 ml-1" x-text="r.phone || r.email || ''"></span>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                    {{-- Submit attendees as indexed array with type --}}
+                    <template x-for="(c, idx) in chosen" :key="(c.type||'contact') + ':' + c.id">
+                        <div>
+                            <input type="hidden" :name="'attendees[' + idx + '][id]'" :value="c.id">
+                            <input type="hidden" :name="'attendees[' + idx + '][type]'" :value="c.type || 'contact'">
+                        </div>
+                    </template>
+                </div>
+
+                {{-- Description --}}
+                <div>
+                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Description</label>
+                    <textarea name="description" x-model="form.description" rows="3"
+                              class="w-full rounded-md px-3 py-2 text-sm"
+                              style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);"></textarea>
                 </div>
             </form>
+
+            {{-- Footer --}}
+            <div class="px-6 py-4 flex items-center justify-end gap-2" style="border-top: 1px solid var(--border);">
+                <button type="button" @click="showCreateEvent = false" class="corex-btn-outline">Cancel</button>
+                <button type="submit" form="createEventFormV2" :disabled="submitting"
+                        class="corex-btn-primary disabled:opacity-50">
+                    <span x-show="!submitting" x-text="editMode ? 'Save Changes' : 'Create Event'"></span>
+                    <span x-show="submitting" x-cloak x-text="editMode ? 'Saving…' : 'Creating…'"></span>
+                </button>
+            </div>
         </div>
     </div>
 
-    {{-- ══════ EVENT DETAIL SIDE PANEL ══════ --}}
+    {{-- ══════ KEYBOARD SHORTCUT HELP ══════ --}}
+    <div x-show="helpOpen" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+         @click.self="helpOpen = false">
+        <div class="absolute inset-0 bg-black/40"></div>
+        <div class="relative rounded-md shadow-2xl w-full max-w-sm p-5"
+             style="background: var(--surface); border: 1px solid var(--border);">
+            <div class="flex items-start justify-between mb-4">
+                <h2 class="text-sm font-semibold" style="color: var(--text-primary);">Keyboard shortcuts</h2>
+                <button @click="helpOpen = false" class="text-lg leading-none px-1" style="color: var(--text-muted);">&times;</button>
+            </div>
+            <table class="w-full text-xs">
+                @php
+                    $shortcuts = [
+                        ['T', 'Jump to today'],
+                        ['M / W / D / A', 'Switch view'],
+                        ['← / →', 'Previous / next period'],
+                        ['N', 'New event'],
+                        ['Esc', 'Close panel / modal'],
+                        ['?', 'Show this help'],
+                    ];
+                @endphp
+                @foreach($shortcuts as [$key, $desc])
+                    <tr>
+                        <td class="py-1.5 pr-3 align-top">
+                            <kbd class="px-1.5 py-0.5 text-[11px] rounded font-mono"
+                                 style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">{{ $key }}</kbd>
+                        </td>
+                        <td class="py-1.5" style="color: var(--text-secondary);">{{ $desc }}</td>
+                    </tr>
+                @endforeach
+            </table>
+            <p class="mt-3 text-[11px]" style="color: var(--text-muted);">Disabled while typing in inputs.</p>
+        </div>
+    </div>
+
+    {{-- ══════ EVENT DETAIL SIDE PANEL (Redesigned) ══════ --}}
     <div x-show="panelOpen" x-cloak class="fixed inset-0 z-40">
         <div class="absolute inset-0 bg-black/40" @click="panelOpen = false"></div>
-        <aside class="absolute top-0 right-0 h-full w-full max-w-md shadow-2xl overflow-y-auto"
+        <aside class="absolute top-0 right-0 h-full w-full max-w-md flex flex-col shadow-2xl"
                style="background: var(--surface); border-left: 1px solid var(--border);"
                x-transition:enter="transition ease-out duration-200 transform"
                x-transition:enter-start="translate-x-full"
@@ -584,59 +1027,225 @@
                x-transition:leave-start="translate-x-0"
                x-transition:leave-end="translate-x-full">
 
-            <div class="p-5" style="border-bottom: 1px solid var(--border);">
-                <div class="flex items-start justify-between gap-3">
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-2 mb-2" x-show="panelData.colour">
-                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs"
-                                  :style="panelColourStyle(panelData.colour)">
-                                <span class="w-1.5 h-1.5 rounded-full" :style="'background:' + panelDotHex(panelData.colour)"></span>
-                                <span x-text="panelColourLabel(panelData.colour)"></span>
-                            </span>
-                            <span class="text-xs truncate" style="color: var(--text-muted);" x-text="panelData.class_label"></span>
-                        </div>
-                        <h2 class="text-lg font-semibold leading-tight" style="color: var(--text-primary);" x-text="panelData.title"></h2>
-                        <p class="text-sm mt-1" style="color: var(--text-secondary);" x-text="panelData.event_date_h"></p>
-                        <p class="text-xs mt-0.5" style="color: var(--text-muted);" x-text="panelDaysDiffLabel(panelData.days_diff)"></p>
+            {{-- Scrollable content --}}
+            <div class="flex-1 overflow-y-auto">
+
+                {{-- Header: class label + status + close --}}
+                <div class="px-5 pt-4 pb-3 flex items-center justify-between" style="border-bottom: 1px solid var(--border);">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="text-[10px] font-semibold uppercase tracking-wider" style="color: var(--text-muted);" x-text="panelData.class_label"></span>
+                        <span x-show="panelData.colour"
+                              class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold uppercase"
+                              :style="panelColourStyle(panelData.colour)">
+                            <span class="w-1.5 h-1.5 rounded-full" :style="'background:' + panelDotHex(panelData.colour)"></span>
+                            <span x-text="panelColourLabel(panelData.colour)"></span>
+                        </span>
                     </div>
-                    <button @click="panelOpen = false" class="p-1 rounded" style="color: var(--text-muted);"
+                    <button @click="panelOpen = false" class="p-1 rounded transition-colors" style="color: var(--text-muted);"
                             onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
                 </div>
+
+                {{-- Title + date --}}
+                <div class="px-5 py-4" style="border-bottom: 1px solid var(--border);">
+                    <h2 class="text-xl font-semibold leading-tight" style="color: var(--text-primary);" x-text="panelData.title"></h2>
+                    <p class="text-sm mt-1.5" style="color: var(--text-secondary);" x-text="panelData.event_date_h"></p>
+                    <p class="text-xs mt-0.5" style="color: var(--text-muted);" x-text="panelDaysDiffLabel(panelData.days_diff)"></p>
+                </div>
+
+                {{-- Linked property --}}
+                <template x-if="panelData.linked_property">
+                    <div class="px-5 py-3" style="border-bottom: 1px solid var(--border);">
+                        <div class="text-[10px] font-semibold uppercase tracking-wider mb-1" style="color: var(--text-muted);">Property</div>
+                        <a :href="'/corex/properties/' + panelData.linked_property.id"
+                           class="text-sm font-medium transition-colors hover:underline" style="color: var(--brand-button);"
+                           x-text="panelData.linked_property.address"></a>
+                    </div>
+                </template>
+
+                {{-- Attendees --}}
+                <template x-if="panelData.attendees && panelData.attendees.length > 0">
+                    <div class="px-5 py-3" style="border-bottom: 1px solid var(--border);">
+                        <div class="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style="color: var(--text-muted);">Attendees</div>
+                        <div class="flex flex-wrap gap-1.5">
+                            <template x-for="att in panelData.attendees" :key="(att.type||'contact') + ':' + att.id">
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs transition-colors"
+                                      style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);"
+                                      onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='var(--surface-2)'">
+                                    <span x-text="att.name"></span>
+                                    <span x-show="att.type === 'agent'" class="text-[9px] uppercase" style="color: var(--text-muted);">agent</span>
+                                </span>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
+                {{-- Description --}}
+                <template x-if="panelData.description">
+                    <div class="px-5 py-3" style="border-bottom: 1px solid var(--border);">
+                        <div class="text-[10px] font-semibold uppercase tracking-wider mb-1" style="color: var(--text-muted);">Description</div>
+                        <p class="text-sm leading-relaxed" style="color: var(--text-primary);" x-text="panelData.description"></p>
+                    </div>
+                </template>
+
+                {{-- Source link --}}
+                <template x-if="panelData.source_link">
+                    <div class="px-5 py-3" style="border-bottom: 1px solid var(--border);">
+                        <a :href="panelData.source_link.url" class="text-xs font-medium hover:underline" style="color: var(--brand-button);">
+                            <span x-text="panelData.source_link.label"></span> &rarr;
+                        </a>
+                    </div>
+                </template>
+
+                {{-- Activity timeline --}}
+                <template x-if="panelData.audit_log && panelData.audit_log.length > 0">
+                    <div class="px-5 py-3" style="border-bottom: 1px solid var(--border);">
+                        <div class="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style="color: var(--text-muted);">Activity</div>
+                        <ul class="space-y-1">
+                            <template x-for="entry in panelData.audit_log" :key="entry.when + entry.action">
+                                <li class="flex justify-between gap-2 text-[11px]">
+                                    <span x-text="formatAuditAction(entry)" style="color: var(--text-secondary);"></span>
+                                    <span x-text="entry.when" class="whitespace-nowrap" style="color: var(--text-muted);"></span>
+                                </li>
+                            </template>
+                        </ul>
+                    </div>
+                </template>
+
+                {{-- Feedback CTA (past events with contacts) --}}
+                <template x-if="panelData.is_past && panelData.has_contacts">
+                    <div class="px-5 py-3" style="border-bottom: 1px solid var(--border);">
+                        <button type="button" @click="openFeedbackModal(panelData.id)"
+                                class="text-xs font-medium transition-colors hover:underline" style="color: var(--brand-button);">
+                            Capture feedback &rarr;
+                        </button>
+                    </div>
+                </template>
+
             </div>
 
-            <template x-if="panelData.description">
-                <div class="p-5" style="border-bottom: 1px solid var(--border);">
-                    <h3 class="text-[0.6875rem] font-semibold uppercase tracking-wider mb-2" style="color: var(--text-muted);">Description</h3>
-                    <p class="text-sm" style="color: var(--text-primary);" x-text="panelData.description"></p>
-                </div>
-            </template>
-
-            <template x-if="panelData.source_link">
-                <div class="p-5" style="border-bottom: 1px solid var(--border);">
-                    <a :href="panelData.source_link.url" class="text-sm font-medium hover:underline" style="color: var(--brand-button);">
-                        <span x-text="panelData.source_link.label"></span> &rarr;
-                    </a>
-                </div>
-            </template>
-
-            <div class="p-5 flex items-center gap-2">
-                <form :action="'/corex/command-center/calendar/' + panelData.id + '/complete'" method="POST" class="flex-1">
+            {{-- Sticky footer action bar --}}
+            <div class="px-5 py-2.5 flex items-center gap-4" style="border-top: 1px solid var(--border); background: var(--surface);">
+                <template x-if="panelData.is_editable">
+                    <button type="button" @click="openEditModal(panelData.id)"
+                            class="text-xs font-medium transition-colors hover:opacity-70 inline-flex items-center gap-1"
+                            style="color: var(--text-primary);">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Z"/></svg>
+                        Edit
+                    </button>
+                </template>
+                <form :action="'/corex/command-center/calendar/' + panelData.id + '/complete'" method="POST">
                     @csrf
-                    <button type="submit" class="w-full px-4 py-2 text-sm font-medium rounded-md" style="background: var(--brand-button); color: #fff;">
-                        Mark complete
+                    <button type="submit" class="text-xs font-medium transition-colors hover:opacity-70 inline-flex items-center gap-1"
+                            style="color: var(--text-secondary);">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/></svg>
+                        Complete
                     </button>
                 </form>
                 <form :action="'/corex/command-center/calendar/' + panelData.id + '/dismiss'" method="POST">
                     @csrf
-                    <button type="submit" class="px-4 py-2 text-sm rounded-md"
-                            style="background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border);">
+                    <button type="submit" class="text-xs font-medium transition-colors hover:opacity-70 inline-flex items-center gap-1"
+                            style="color: var(--text-muted);">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
                         Dismiss
                     </button>
                 </form>
             </div>
         </aside>
+    </div>
+
+    {{-- ══════ FEEDBACK CAPTURE MODAL ══════ --}}
+    <div x-show="feedbackOpen" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="feedbackOpen = false"></div>
+        <div class="relative w-full max-w-2xl max-h-[90vh] flex flex-col rounded-md shadow-2xl"
+             style="background: var(--surface); border: 1px solid var(--border);">
+
+            {{-- Header --}}
+            <div class="px-6 py-4 flex items-center justify-between" style="border-bottom: 1px solid var(--border);">
+                <div>
+                    <h2 class="text-lg font-semibold" style="color: var(--text-primary);">Capture Feedback</h2>
+                    <p class="text-xs mt-0.5" style="color: var(--text-muted);" x-text="feedbackData.event?.title + ' — ' + feedbackData.event?.date"></p>
+                </div>
+                <button type="button" @click="feedbackOpen = false" class="text-xl leading-none px-2" style="color: var(--text-muted);">&times;</button>
+            </div>
+
+            {{-- Body --}}
+            <div class="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+                <template x-for="contact in feedbackData.contacts" :key="contact.id">
+                    <div class="rounded-md p-4" style="background: var(--surface-2); border: 1px solid var(--border);">
+                        <h3 class="text-sm font-semibold mb-3" style="color: var(--text-primary);" x-text="contact.label"></h3>
+
+                        {{-- Outcome --}}
+                        <div class="mb-3">
+                            <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Outcome</label>
+                            <select x-model="feedbackForm[contact.id].outcome_id"
+                                    class="w-full rounded-md px-3 py-2 text-sm"
+                                    style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);">
+                                <option value="">Select…</option>
+                                <template x-for="o in feedbackData.outcomes" :key="o.id">
+                                    <option :value="o.id" x-text="o.label"></option>
+                                </template>
+                            </select>
+                        </div>
+
+                        {{-- Concerns --}}
+                        <div class="mb-3">
+                            <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Concerns</label>
+                            <div class="flex flex-wrap gap-2">
+                                <template x-for="c in feedbackData.concerns" :key="c.id">
+                                    <label class="inline-flex items-center gap-1.5 text-xs cursor-pointer"
+                                           style="color: var(--text-primary);">
+                                        <input type="checkbox" :value="c.id"
+                                               x-model="feedbackForm[contact.id].concern_ids"
+                                               class="rounded">
+                                        <span x-text="c.label"></span>
+                                    </label>
+                                </template>
+                            </div>
+                        </div>
+
+                        {{-- Seller-visible notes --}}
+                        <div class="mb-3">
+                            <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Seller-visible notes</label>
+                            <textarea x-model="feedbackForm[contact.id].seller_visible_notes" rows="2"
+                                      class="w-full rounded-md px-3 py-2 text-sm"
+                                      style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);"
+                                      placeholder="Shown to seller on live link…"></textarea>
+                        </div>
+
+                        {{-- Internal notes --}}
+                        <div class="mb-3">
+                            <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Internal notes</label>
+                            <textarea x-model="feedbackForm[contact.id].internal_notes" rows="2"
+                                      class="w-full rounded-md px-3 py-2 text-sm"
+                                      style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);"
+                                      placeholder="Agent-only notes…"></textarea>
+                        </div>
+
+                        {{-- Next action --}}
+                        <div>
+                            <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Next action</label>
+                            <input type="text" x-model="feedbackForm[contact.id].next_action_notes"
+                                   class="w-full rounded-md px-3 py-2 text-sm"
+                                   style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);"
+                                   placeholder="Follow-up action…">
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            {{-- Footer --}}
+            <div class="px-6 py-4 flex items-center justify-end gap-2" style="border-top: 1px solid var(--border);">
+                <button type="button" @click="feedbackOpen = false" class="corex-btn-outline">Cancel</button>
+                <button type="button" @click="saveFeedback()" :disabled="feedbackSaving"
+                        class="corex-btn-primary disabled:opacity-50">
+                    <span x-show="!feedbackSaving">Save Feedback</span>
+                    <span x-show="feedbackSaving" x-cloak>Saving…</span>
+                </button>
+            </div>
+        </div>
     </div>
 
 </div>
@@ -645,20 +1254,287 @@
 function calendarPage() {
     return {
         showCreateEvent: false,
-        presetStart: '',
-        presetEnd: '',
+        form: { title: '', category: '', startDate: '', startTime: '', endDate: '', endTime: '', description: '', allDay: false },
+        endManuallyEdited: false,
+        selectedDate: null,
+        editMode: false,
+        editingEventId: null,
+        submitting: false,
         panelOpen: false,
         panelData: {},
+        helpOpen: false,
+        drag: { active: false, dayDate: null, startHour: null, startHalf: null, currentHour: null, currentHalf: null },
+        reschedule: { dragging: false, eventId: null, originalDate: null },
+        feedbackOpen: false,
+        feedbackData: { event: null, contacts: [], outcomes: [], concerns: [] },
+        feedbackForm: {},
+        feedbackSaving: false,
+
+        // Navigation URLs for keyboard shortcuts (rendered by Blade)
+        navUrls: {!! json_encode($keyboardNavUrls) !!},
+
+        handleShortcut(e) {
+            const tag = (e.target.tagName || '').toUpperCase();
+            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+            if (e.target.isContentEditable) return;
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+            const key = e.key;
+
+            if (key === 'Escape') {
+                if (this.panelOpen)       { this.panelOpen = false; e.preventDefault(); return; }
+                if (this.showCreateEvent) { this.showCreateEvent = false; e.preventDefault(); return; }
+                if (this.helpOpen)        { this.helpOpen = false; e.preventDefault(); return; }
+                if (this.selectedDate)    { this.selectedDate = null; e.preventDefault(); return; }
+                return;
+            }
+
+            const k = key.toLowerCase();
+            const nav = {
+                't': this.navUrls.today,
+                'm': this.navUrls.month,
+                'w': this.navUrls.week,
+                'd': this.navUrls.day,
+                'a': this.navUrls.agenda,
+            };
+
+            if (nav[k]) { window.location.href = nav[k]; e.preventDefault(); return; }
+            if (key === 'ArrowLeft'  && this.navUrls.prev) { window.location.href = this.navUrls.prev; e.preventDefault(); return; }
+            if (key === 'ArrowRight' && this.navUrls.next) { window.location.href = this.navUrls.next; e.preventDefault(); return; }
+            if (k === 'n') { this.openBlank(); e.preventDefault(); return; }
+            if (k === '?') { this.helpOpen = !this.helpOpen; e.preventDefault(); return; }
+        },
 
         openForDate(dateStr) {
-            this.presetStart = dateStr + 'T09:00';
-            this.presetEnd = '';
+            const nextQ = this.nextQuarterHour();
+            this.form = { title: '', category: '', startDate: dateStr, startTime: nextQ, endDate: dateStr, endTime: this.addHour(nextQ), description: '', allDay: false };
+            this.endManuallyEdited = false;
+            this.editMode = false;
+            this.editingEventId = null;
+            this.submitting = false;
             this.showCreateEvent = true;
         },
         openBlank() {
-            this.presetStart = '';
-            this.presetEnd = '';
+            const today = new Date().toISOString().slice(0, 10);
+            const dateToUse = this.selectedDate || today;
+            const nextQ = this.nextQuarterHour();
+            this.form = { title: '', category: '', startDate: dateToUse, startTime: nextQ, endDate: dateToUse, endTime: this.addHour(nextQ), description: '', allDay: false };
+            this.endManuallyEdited = false;
+            this.editMode = false;
+            this.editingEventId = null;
+            this.submitting = false;
             this.showCreateEvent = true;
+        },
+        nextQuarterHour() {
+            const now = new Date();
+            let m = Math.ceil(now.getMinutes() / 15) * 15;
+            let h = now.getHours();
+            if (m >= 60) { m = 0; h++; }
+            if (h >= 22) { h = 9; m = 0; }
+            return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+        },
+        addHour(timeStr) {
+            if (!timeStr) return '';
+            const [h, m] = timeStr.split(':').map(Number);
+            const nh = h + 1 > 22 ? 22 : h + 1;
+            return String(nh).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+        },
+        onStartTimeChange() {
+            if (!this.endManuallyEdited && this.form.startTime) {
+                this.form.endTime = this.addHour(this.form.startTime);
+                if (!this.form.endDate) this.form.endDate = this.form.startDate;
+            }
+        },
+        onEndTimeChange() {
+            this.endManuallyEdited = true;
+        },
+        get computedEventDate() {
+            if (!this.form.startDate) return '';
+            if (this.form.allDay) return this.form.startDate + 'T00:00';
+            return this.form.startDate + 'T' + (this.form.startTime || '09:00');
+        },
+        get computedEndDate() {
+            if (this.form.allDay) return '';
+            if (!this.form.endDate || !this.form.endTime) return '';
+            return this.form.endDate + 'T' + this.form.endTime;
+        },
+
+        async openEditModal(eventId) {
+            const r = await fetch('/corex/command-center/calendar/' + eventId, {
+                headers: { 'Accept': 'application/json' }, credentials: 'same-origin',
+            });
+            if (!r.ok) return;
+            const d = await r.json();
+
+            // Populate form with split date/time fields
+            const ed = d.event_date ? new Date(d.event_date) : null;
+            const endD = d.end_date ? new Date(d.end_date) : null;
+            const toDate = (dt) => dt ? dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0') : '';
+            const toTime = (dt) => dt ? String(dt.getHours()).padStart(2,'0') + ':' + String(Math.floor(dt.getMinutes()/15)*15).padStart(2,'0') : '';
+
+            const isAllDay = ed && ed.getHours() === 0 && ed.getMinutes() === 0 && !endD;
+            this.form = {
+                title: d.title || '',
+                category: d.category || '',
+                startDate: toDate(ed),
+                startTime: toTime(ed) || '09:00',
+                endDate: toDate(endD) || toDate(ed),
+                endTime: toTime(endD) || '',
+                description: d.description || '',
+                allDay: isAllDay,
+            };
+            this.endManuallyEdited = !!endD;
+            this.editMode = true;
+            this.editingEventId = eventId;
+            this.submitting = false;
+            this.panelOpen = false;
+            this.showCreateEvent = true;
+
+            // Pre-populate property + attendees after modal renders
+            this.$nextTick(() => {
+                const form = document.getElementById('createEventFormV2');
+                if (!form) return;
+
+                // Property
+                const propPicker = form.querySelector('[x-data*="propertySearch"]');
+                if (propPicker && d.linked_property) {
+                    Alpine.$data(propPicker).selected = d.linked_property;
+                }
+
+                // Attendees
+                const attPicker = form.querySelector('[x-ref="attendeePicker"]');
+                if (attPicker && d.attendees && d.attendees.length) {
+                    Alpine.$data(attPicker).chosen = d.attendees;
+                }
+            });
+        },
+
+        // Drag-to-create on time grid
+        dragStart(dayDate, hour, half, e) {
+            if (e.target.closest('button') || e.target.closest('a')) return;
+            this.drag = { active: true, dayDate, startHour: hour, startHalf: half, currentHour: hour, currentHalf: half };
+            e.preventDefault();
+        },
+        dragMove(hour, half) {
+            if (!this.drag.active) return;
+            this.drag.currentHour = hour;
+            this.drag.currentHalf = half;
+        },
+        dragEnd() {
+            if (!this.drag.active) return;
+            const d = this.drag;
+            const startMin = d.startHour * 60 + d.startHalf * 30;
+            const endMin = d.currentHour * 60 + d.currentHalf * 30 + 30;
+            let s = Math.min(startMin, endMin);
+            let e = Math.max(startMin, endMin);
+            if (e - s < 30) e = s + 60;
+            const pad = n => n.toString().padStart(2, '0');
+            const fmt = m => pad(Math.floor(m / 60)) + ':' + pad(m % 60);
+            this.drag.active = false;
+            this.openBlank();
+            this.form.startDate = d.dayDate;
+            this.form.startTime = fmt(s);
+            this.form.endDate = d.dayDate;
+            this.form.endTime = fmt(e);
+            this.endManuallyEdited = true;
+            this.showCreateEvent = true;
+        },
+        dragOverlay(dayDate) {
+            if (!this.drag.active || this.drag.dayDate !== dayDate) return null;
+            const d = this.drag;
+            const startMin = d.startHour * 60 + d.startHalf * 30;
+            const endMin = d.currentHour * 60 + d.currentHalf * 30 + 30;
+            const s = Math.min(startMin, endMin);
+            const e = Math.max(startMin, endMin);
+            const gridStart = {{ $hourGridStart }} * 60;
+            const gridSpan = {{ count($gridHours) }} * 60;
+            return { top: ((s - gridStart) / gridSpan) * 100, height: ((e - s) / gridSpan) * 100 };
+        },
+
+        // Drag-to-reschedule (HTML5 native drag on existing chips)
+        rescheduleStart(eventId, dayDate, e) {
+            this.reschedule = { dragging: true, eventId, originalDate: dayDate };
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', String(eventId));
+        },
+        rescheduleEnd() {
+            this.reschedule = { dragging: false, eventId: null, originalDate: null };
+        },
+        async rescheduleDrop(dayDate, hour, half) {
+            if (!this.reschedule.dragging || !this.reschedule.eventId) return;
+            if (dayDate !== this.reschedule.originalDate) return;
+
+            const mins = hour * 60 + half * 30;
+            const h = Math.floor(mins / 60).toString().padStart(2, '0');
+            const m = (mins % 60).toString().padStart(2, '0');
+            const newStart = `${dayDate}T${h}:${m}:00`;
+
+            try {
+                const r = await fetch(`/corex/command-center/calendar/${this.reschedule.eventId}/reschedule`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ event_date: newStart }),
+                });
+                if (r.ok) { window.location.reload(); }
+                else { const err = await r.json().catch(() => ({})); alert(err.error || 'Could not reschedule.'); }
+            } catch (e) { alert('Network error during reschedule.'); }
+        },
+
+        formatAuditAction(entry) {
+            const labels = { created: 'Event created', rescheduled: 'Rescheduled', cancelled: 'Cancelled', completed: 'Marked complete', feedback_captured: 'Feedback captured', feedback_task_created: 'Auto-task created' };
+            const base = labels[entry.action] || entry.action;
+            return entry.by ? `${base} by ${entry.by}` : base;
+        },
+
+        async openFeedbackModal(eventId) {
+            const r = await fetch('/corex/command-center/calendar/' + eventId + '/feedback', {
+                headers: { 'Accept': 'application/json' }, credentials: 'same-origin',
+            });
+            if (!r.ok) return;
+            const data = await r.json();
+            this.feedbackData = data;
+            this.feedbackForm = {};
+            data.contacts.forEach(c => {
+                this.feedbackForm[c.id] = {
+                    outcome_id: c.outcome_id ? String(c.outcome_id) : '',
+                    concern_ids: (c.concerns || []).map(String),
+                    seller_visible_notes: c.seller_notes || '',
+                    internal_notes: c.internal_notes || '',
+                    next_action_notes: c.next_action || '',
+                };
+            });
+            this.panelOpen = false;
+            this.feedbackOpen = true;
+        },
+        async saveFeedback() {
+            this.feedbackSaving = true;
+            const payload = {
+                feedback: Object.entries(this.feedbackForm).map(([cid, f]) => ({
+                    contact_id: parseInt(cid),
+                    outcome_id: f.outcome_id ? parseInt(f.outcome_id) : null,
+                    concern_ids: (f.concern_ids || []).map(Number),
+                    seller_visible_notes: f.seller_visible_notes || null,
+                    internal_notes: f.internal_notes || null,
+                    next_action_notes: f.next_action_notes || null,
+                })),
+            };
+            const r = await fetch('/corex/command-center/calendar/' + this.feedbackData.event.id + '/feedback', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify(payload),
+            });
+            this.feedbackSaving = false;
+            if (r.ok) { this.feedbackOpen = false; window.location.reload(); }
         },
 
         openEventPanel(eventId) {
@@ -679,17 +1555,18 @@ function calendarPage() {
 
         panelColourStyle(colour) {
             const m = {
-                red:   'background:rgba(239,68,68,0.15); color:#fca5a5; border:1px solid rgba(239,68,68,0.4);',
-                amber: 'background:rgba(245,158,11,0.15); color:#fde68a; border:1px solid rgba(245,158,11,0.4);',
-                green: 'background:rgba(20,184,166,0.15); color:#99f6e4; border:1px solid rgba(20,184,166,0.4);',
+                red:     'background:#dc2626; color:#ffffff; border:1px solid #991b1b;',
+                amber:   'background:#d97706; color:#ffffff; border:1px solid #92400e;',
+                green:   'background:#0d9488; color:#ffffff; border:1px solid #115e59;',
+                neutral: 'background:#475569; color:#ffffff; border:1px solid #334155;',
             };
             return m[colour] || '';
         },
         panelDotHex(colour) {
-            return { red: '#ef4444', amber: '#f59e0b', green: '#14b8a6' }[colour] || '#64748b';
+            return { red: '#ef4444', amber: '#f59e0b', green: '#14b8a6', neutral: '#94a3b8' }[colour] || '#64748b';
         },
         panelColourLabel(colour) {
-            return { red: 'Urgent', amber: 'Approaching', green: 'Upcoming' }[colour] || '';
+            return { red: 'Urgent', amber: 'Approaching', green: 'Upcoming', neutral: 'Future' }[colour] || '';
         },
         panelDaysDiffLabel(days) {
             if (days == null) return '';
@@ -698,6 +1575,74 @@ function calendarPage() {
             if (days === -1) return 'Yesterday';
             if (days > 0) return 'In ' + days + ' days';
             return Math.abs(days) + ' days ago';
+        },
+    };
+}
+
+function propertySearch() {
+    return {
+        query: '', results: [], selected: null, loading: false,
+        async search() {
+            if (this.query.length < 2) { this.results = []; return; }
+            this.loading = true;
+            try {
+                const r = await fetch('/deals-v2/search/properties?q=' + encodeURIComponent(this.query), {
+                    headers: { 'Accept': 'application/json' }, credentials: 'same-origin',
+                });
+                this.results = r.ok ? await r.json() : [];
+            } finally { this.loading = false; }
+        },
+        async pick(r) {
+            this.selected = r; this.results = []; this.query = '';
+            await this.autoPopulateOwners(r.id);
+        },
+        clear() { this.selected = null; },
+        async autoPopulateOwners(propertyId) {
+            // Auto-populate attendees for seller-side event classes
+            const form = this.$el?.closest?.('form');
+            const catSelect = form?.querySelector('[name="category"]');
+            const category = catSelect?.value || '';
+            const sellerClasses = ['property_evaluation', 'listing_presentation'];
+            if (!sellerClasses.includes(category)) return;
+            try {
+                const r = await fetch('/corex/command-center/calendar/properties/' + propertyId + '/owners', {
+                    headers: { 'Accept': 'application/json' }, credentials: 'same-origin',
+                });
+                if (!r.ok) return;
+                const owners = await r.json();
+                // Find the attendee picker and call setOwners
+                const picker = form?.querySelector('[x-ref="attendeePicker"]');
+                if (picker) {
+                    Alpine.$data(picker).setOwners(owners);
+                }
+            } catch (e) { console.warn('Auto-populate owners failed:', e); }
+        },
+    };
+}
+
+function contactSearch() {
+    return {
+        query: '', results: [], chosen: [],
+        async search() {
+            if (this.query.length < 2) { this.results = []; return; }
+            const r = await fetch('/corex/command-center/calendar/search/attendees?q=' + encodeURIComponent(this.query), {
+                headers: { 'Accept': 'application/json' }, credentials: 'same-origin',
+            });
+            const data = r.ok ? await r.json() : [];
+            const keys = this.chosen.map(c => c.type + ':' + c.id);
+            this.results = data.filter(d => !keys.includes((d.type || 'contact') + ':' + d.id));
+        },
+        add(c) { if (!c.type) c.type = 'contact'; this.chosen.push(c); this.query = ''; this.results = []; },
+        remove(c) { this.chosen = this.chosen.filter(x => !(x.id === c.id && x.type === c.type)); },
+        setOwners(owners) {
+            // Auto-populate with property owners (additive, don't duplicate)
+            owners.forEach(o => {
+                if (!o.type) o.type = 'contact';
+                const key = o.type + ':' + o.id;
+                if (!this.chosen.some(c => c.type + ':' + c.id === key)) {
+                    this.chosen.push(o);
+                }
+            });
         },
     };
 }

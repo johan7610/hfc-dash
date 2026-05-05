@@ -381,9 +381,10 @@
         <div class="corex-panel-body">
             @php
                 $widgetRagChip = [
-                    'red'   => 'background:rgba(239,68,68,0.15); color:#fca5a5; border:1px solid rgba(239,68,68,0.4);',
-                    'amber' => 'background:rgba(245,158,11,0.15); color:#fde68a; border:1px solid rgba(245,158,11,0.4);',
-                    'green' => 'background:rgba(20,184,166,0.15); color:#99f6e4; border:1px solid rgba(20,184,166,0.4);',
+                    'red'     => 'background:#dc2626; color:#ffffff; border:1px solid #991b1b;',
+                    'amber'   => 'background:#d97706; color:#ffffff; border:1px solid #92400e;',
+                    'green'   => 'background:#0d9488; color:#ffffff; border:1px solid #115e59;',
+                    'neutral' => 'background:#475569; color:#ffffff; border:1px solid #334155;',
                 ];
                 $widgetRagDot = [
                     'red'   => 'background:#ef4444;',

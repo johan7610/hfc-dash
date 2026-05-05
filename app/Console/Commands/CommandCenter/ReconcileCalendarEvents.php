@@ -3,11 +3,15 @@
 namespace App\Console\Commands\CommandCenter;
 
 use App\Models\CommandCenter\CalendarEvent;
+use App\Models\CommandCenter\CalendarEventAuditEntry;
+use App\Models\CommandCenter\CommandTask;
+use App\Models\Contact;
 use App\Services\CommandCenter\Calendar\CalendarNotificationDispatcher;
 use App\Services\CommandCenter\Calendar\CalendarSourceRegistry;
 use App\Services\CommandCenter\Calendar\CalendarThresholdResolver;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -73,6 +77,10 @@ class ReconcileCalendarEvents extends Command
         $cleaned = $this->cleanupSyntheticOrphans($dry);
         $this->info("Synthetic orphans soft-deleted: {$cleaned}");
 
+        // Auto-task creation for missed feedback (M2.5)
+        $taskCount = $this->createMissedFeedbackTasks($dry);
+        $this->info("Missed-feedback tasks created: {$taskCount}" . ($dry ? ' (dry)' : ''));
+
         return self::SUCCESS;
     }
 
@@ -134,7 +142,7 @@ class ReconcileCalendarEvents extends Command
         CalendarEvent $event,
         Carbon $asOf,
     ): ?string {
-        if (!$event->event_date) {
+        if (!$event->event_date || !$event->category) {
             return null;
         }
         $deltaDays = (int) now()->startOfDay()->diffInDays($asOf->copy()->startOfDay(), false);
@@ -162,5 +170,91 @@ class ReconcileCalendarEvents extends Command
         }
 
         return $query->delete();
+    }
+
+    /** Grace period before creating a missed-feedback task. */
+    private const FEEDBACK_GRACE_HOURS = 24;
+
+    /**
+     * Create CommandTask for manual events that are past the grace period,
+     * have linked contacts, no feedback captured, and no existing open task.
+     */
+    private function createMissedFeedbackTasks(bool $dry): int
+    {
+        $cutoff = now()->subHours(self::FEEDBACK_GRACE_HOURS);
+
+        $eligibleEventIds = DB::table('calendar_events as ce')
+            ->whereIn('ce.source_type', ['manual', 'manual:demo'])
+            ->where('ce.event_date', '<', $cutoff)
+            ->where('ce.status', '!=', 'completed')
+            ->whereNull('ce.deleted_at')
+            ->whereExists(function ($q) {
+                $q->select(DB::raw(1))
+                  ->from('calendar_event_links')
+                  ->whereColumn('calendar_event_links.calendar_event_id', 'ce.id')
+                  ->where('linkable_type', Contact::class)
+                  ->whereNull('deleted_at');
+            })
+            ->whereNotExists(function ($q) {
+                $q->select(DB::raw(1))
+                  ->from('calendar_event_feedback')
+                  ->whereColumn('calendar_event_feedback.calendar_event_id', 'ce.id')
+                  ->whereNull('deleted_at');
+            })
+            ->whereNotExists(function ($q) {
+                $q->select(DB::raw(1))
+                  ->from('command_tasks')
+                  ->whereColumn('command_tasks.calendar_event_id', 'ce.id')
+                  ->where('source_type', 'calendar:missed_feedback')
+                  ->whereIn('status', [CommandTask::STATUS_TODO, CommandTask::STATUS_IN_PROGRESS, CommandTask::STATUS_AWAITING]);
+            })
+            ->pluck('ce.id');
+
+        if ($eligibleEventIds->isEmpty() || $dry) {
+            return $eligibleEventIds->count();
+        }
+
+        $created = 0;
+        foreach ($eligibleEventIds as $eventId) {
+            $evt = CalendarEvent::withoutGlobalScopes()->find($eventId);
+            if (!$evt) {
+                continue;
+            }
+
+            $contactCount = $evt->linkedContacts->count();
+            $contactLabel = $contactCount === 1 ? 'contact' : 'contacts';
+
+            CommandTask::create([
+                'title'            => 'Capture feedback — ' . $evt->title,
+                'description'      => "Feedback not yet captured for {$contactCount} {$contactLabel} from this event on " . $evt->event_date->format('j M, H:i') . '.',
+                'task_type'        => 'feedback',
+                'status'           => CommandTask::STATUS_TODO,
+                'priority'         => 'normal',
+                'due_date'         => now()->addDays(2),
+                'assigned_to'      => $evt->user_id,
+                'source_type'      => 'calendar:missed_feedback',
+                'calendar_event_id' => $evt->id,
+                'agency_id'        => $evt->agency_id,
+                'branch_id'        => $evt->branch_id,
+                'metadata'         => [
+                    'calendar_event_id' => $evt->id,
+                    'auto_created'      => true,
+                    'created_via'       => 'reconcile_command',
+                ],
+            ]);
+
+            CalendarEventAuditEntry::create([
+                'calendar_event_id'    => $evt->id,
+                'action'               => 'feedback_task_created',
+                'new_values'           => ['reason' => 'feedback_missed_24h_grace'],
+                'performed_by_user_id' => null,
+                'performed_at'         => now(),
+                'notes'                => 'Auto-task created by reconciliation command',
+            ]);
+
+            $created++;
+        }
+
+        return $created;
     }
 }

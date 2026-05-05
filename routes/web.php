@@ -720,6 +720,11 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::delete('/calendar/{calendarEvent}', [CommandCenterCalendarController::class, 'destroy'])->name('command-center.calendar.destroy');
         Route::post('/calendar/{calendarEvent}/complete', [CommandCenterCalendarController::class, 'complete'])->name('command-center.calendar.complete');
         Route::post('/calendar/{calendarEvent}/dismiss', [CommandCenterCalendarController::class, 'dismiss'])->name('command-center.calendar.dismiss');
+        Route::patch('/calendar/{calendarEvent}/reschedule', [CommandCenterCalendarController::class, 'reschedule'])->name('command-center.calendar.reschedule');
+        Route::get('/calendar/{calendarEvent}/feedback', [CommandCenterCalendarController::class, 'showFeedback'])->name('command-center.calendar.feedback.show');
+        Route::post('/calendar/{calendarEvent}/feedback', [CommandCenterCalendarController::class, 'storeFeedback'])->name('command-center.calendar.feedback.store');
+        Route::get('/calendar/search/attendees', [CommandCenterCalendarController::class, 'searchAttendees'])->name('command-center.calendar.search.attendees');
+        Route::get('/calendar/properties/{property}/owners', [CommandCenterCalendarController::class, 'propertyOwners'])->name('command-center.calendar.property-owners');
 
         Route::post('/resolve-task/{task}', [CommandCenterDashboardController::class, 'resolveTask'])->name('command-center.resolve-task');
         Route::post('/resolve-event/{calendarEvent}', [CommandCenterDashboardController::class, 'resolveEvent'])->name('command-center.resolve-event');

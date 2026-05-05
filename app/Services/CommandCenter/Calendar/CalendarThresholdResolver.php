@@ -38,11 +38,6 @@ class CalendarThresholdResolver
             return 'red';
         }
 
-        // Outside show window — don't display.
-        if ($config->show_days !== null && $daysUntil > $config->show_days) {
-            return null;
-        }
-
         // Apply per-event overrides for threshold day numbers only.
         $redDays   = $overrides['red_days']   ?? $config->red_days;
         $amberDays = $overrides['amber_days'] ?? $config->amber_days;
@@ -60,8 +55,9 @@ class CalendarThresholdResolver
             return 'green';
         }
 
-        // Inside show window but beyond green threshold — still show as green.
-        return 'green';
+        // Beyond green threshold — render as neutral (no RAG urgency).
+        // show_days is now used only for notification/digest surfacing, not calendar render.
+        return 'neutral';
     }
 
     /**
@@ -70,6 +66,14 @@ class CalendarThresholdResolver
      */
     public function resolveForEvent(CalendarEvent $event): ?string
     {
+        // Completed/dismissed events are done — never show as red urgency
+        $status = $event->status ?? 'pending';
+        if (in_array($status, ['completed', 'dismissed'])) {
+            // Still need a valid class config to render at all
+            $config = CalendarEventClassSetting::forAgencyAndClass($event->agency_id, $event->category ?? '');
+            return ($config && $config->is_active) ? 'neutral' : null;
+        }
+
         $overrides = $this->extractOverrides($event);
 
         return $this->resolve(

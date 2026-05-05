@@ -5,12 +5,14 @@ namespace App\Models\CommandCenter;
 use App\Models\Concerns\BelongsToAgency;
 use App\Models\Concerns\BelongsToBranch;
 use App\Models\Contact;
+use App\Models\DealV2\DealV2;
 use App\Models\Property;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class CalendarEvent extends Model
@@ -109,6 +111,46 @@ class CalendarEvent extends Model
     public function task(): BelongsTo
     {
         return $this->belongsTo(CommandTask::class, 'id', 'calendar_event_id');
+    }
+
+    // ── Polymorphic links (M2.2) ──
+
+    public function links(): HasMany
+    {
+        return $this->hasMany(CalendarEventLink::class, 'calendar_event_id');
+    }
+
+    public function linkedProperties(): MorphToMany
+    {
+        return $this->morphedByMany(Property::class, 'linkable', 'calendar_event_links', 'calendar_event_id')
+            ->wherePivot('role', CalendarEventLink::ROLE_SUBJECT_PROPERTY);
+    }
+
+    public function linkedContacts(): MorphToMany
+    {
+        return $this->morphedByMany(Contact::class, 'linkable', 'calendar_event_links', 'calendar_event_id')
+            ->wherePivot('role', CalendarEventLink::ROLE_ATTENDEE);
+    }
+
+    public function linkedDeals(): MorphToMany
+    {
+        return $this->morphedByMany(DealV2::class, 'linkable', 'calendar_event_links', 'calendar_event_id')
+            ->wherePivot('role', CalendarEventLink::ROLE_RELATED_DEAL);
+    }
+
+    public function getLinkedPropertyAttribute()
+    {
+        return $this->linkedProperties->first();
+    }
+
+    public function getLinkedDealAttribute()
+    {
+        return $this->linkedDeals->first();
+    }
+
+    public function auditEntries(): HasMany
+    {
+        return $this->hasMany(CalendarEventAuditEntry::class)->orderBy('performed_at', 'desc');
     }
 
     // ── Scopes ──

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\CommandCenter\CalendarEvent;
+use App\Models\CommandCenter\CalendarEventLink;
 use App\Models\Concerns\BelongsToAgency;
 use App\Models\Concerns\BelongsToBranch;
 use Illuminate\Database\Eloquent\Model;
@@ -9,6 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class Contact extends Model
 {
@@ -162,5 +165,17 @@ class Contact extends Model
     public function getInitialsAttribute(): string
     {
         return strtoupper(substr($this->first_name, 0, 1) . substr($this->last_name, 0, 1));
+    }
+
+    // ── Calendar event links (M2.2) ──
+
+    public function calendarEventLinks(): MorphMany
+    {
+        return $this->morphMany(CalendarEventLink::class, 'linkable');
+    }
+
+    public function calendarEvents()
+    {
+        return $this->morphToMany(CalendarEvent::class, 'linkable', 'calendar_event_links', null, 'calendar_event_id');
     }
 }

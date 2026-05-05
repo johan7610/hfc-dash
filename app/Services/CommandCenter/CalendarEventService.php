@@ -46,11 +46,22 @@ class CalendarEventService
 
     /**
      * Get events for a user in a date range.
+     *
+     * Scope controls the user filter:
+     *   'own'    — only events assigned to this user (user_id = $user->id)
+     *   'branch' — events in the user's branch (downstream VisibilityResolver handles per-event checks)
+     *   'all'    — no user filter (downstream VisibilityResolver handles per-event checks)
      */
-    public function getEventsForRange(User $user, string $start, string $end, array $filters = []): Collection
+    public function getEventsForRange(User $user, string $start, string $end, array $filters = [], string $scope = 'all'): Collection
     {
-        $query = CalendarEvent::forUser($user->id)
-            ->inDateRange($start, $end);
+        $query = CalendarEvent::query()->inDateRange($start, $end);
+
+        if ($scope === 'own') {
+            $query->forUser($user->id);
+        } elseif ($scope === 'branch' && $user->branch_id) {
+            $query->where('branch_id', $user->branch_id);
+        }
+        // scope 'all' — no user/branch filter; VisibilityResolver handles access
 
         if (!empty($filters['event_type'])) {
             $query->ofType($filters['event_type']);
@@ -138,12 +149,12 @@ class CalendarEventService
     /**
      * Get events for a month calendar grid (includes surrounding weeks).
      */
-    public function getMonthGrid(User $user, int $year, int $month, array $filters = []): array
+    public function getMonthGrid(User $user, int $year, int $month, array $filters = [], string $scope = 'all'): array
     {
         $start = \Carbon\Carbon::create($year, $month, 1)->startOfWeek();
         $end   = \Carbon\Carbon::create($year, $month, 1)->endOfMonth()->endOfWeek();
 
-        $events = $this->getEventsForRange($user, $start, $end, $filters);
+        $events = $this->getEventsForRange($user, $start, $end, $filters, $scope);
 
         // Group by date
         $grouped = [];

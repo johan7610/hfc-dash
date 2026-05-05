@@ -793,6 +793,174 @@ class CalendarEventClassSeeder extends Seeder
                 'daily_digest_enabled'=> false,
                 'daily_digest_roles'  => null,
             ],
+
+            // ========== GROUP D — Manual Activity Events (3) ==========
+
+            // #39 viewing
+            [
+                'event_class'         => 'viewing',
+                'label'               => 'Property viewing',
+                'description'         => 'Buyer viewing a property. Short cycle, same-day actionable. Red on event day = capture feedback after.',
+                'is_active'           => true,
+                'green_days'          => 7,
+                'amber_days'          => 2,
+                'red_days'            => 0,
+                'show_days'           => 14,
+                'green_visibility'    => ['agent'],
+                'amber_visibility'    => ['agent', 'bm'],
+                'red_visibility'      => ['agent', 'bm', 'admin'],
+                'green_notifications' => [],
+                'amber_notifications' => ['agent' => ['in_app']],
+                'red_notifications'   => ['agent' => ['in_app'], 'bm' => ['in_app']],
+                'daily_digest_enabled'=> true,
+                'daily_digest_roles'  => ['agent', 'bm'],
+            ],
+
+            // #40 property_evaluation
+            [
+                'event_class'         => 'property_evaluation',
+                'label'               => 'Property evaluation',
+                'description'         => 'Agent evaluating property for potential seller. Longer planning cycle, booked days/weeks ahead.',
+                'is_active'           => true,
+                'green_days'          => 14,
+                'amber_days'          => 5,
+                'red_days'            => 1,
+                'show_days'           => 21,
+                'green_visibility'    => ['agent'],
+                'amber_visibility'    => ['agent', 'bm'],
+                'red_visibility'      => ['agent', 'bm', 'admin'],
+                'green_notifications' => [],
+                'amber_notifications' => ['agent' => ['in_app']],
+                'red_notifications'   => ['agent' => ['in_app'], 'bm' => ['in_app']],
+                'daily_digest_enabled'=> true,
+                'daily_digest_roles'  => ['agent', 'bm'],
+            ],
+
+            // #41 listing_presentation
+            [
+                'event_class'         => 'listing_presentation',
+                'label'               => 'Listing presentation',
+                'description'         => 'Agent presenting CMA/market analysis to potential seller. Longer planning cycle.',
+                'is_active'           => true,
+                'green_days'          => 14,
+                'amber_days'          => 5,
+                'red_days'            => 1,
+                'show_days'           => 21,
+                'green_visibility'    => ['agent'],
+                'amber_visibility'    => ['agent', 'bm'],
+                'red_visibility'      => ['agent', 'bm', 'admin'],
+                'green_notifications' => [],
+                'amber_notifications' => ['agent' => ['in_app']],
+                'red_notifications'   => ['agent' => ['in_app'], 'bm' => ['in_app']],
+                'daily_digest_enabled'=> true,
+                'daily_digest_roles'  => ['agent', 'bm'],
+            ],
+
+            // #42 meeting
+            [
+                'event_class'         => 'meeting',
+                'label'               => 'Meeting',
+                'description'         => 'General meeting — team, client, or external. Manual-creatable.',
+                'is_active'           => true,
+                'green_days'          => 7,
+                'amber_days'          => 2,
+                'red_days'            => 0,
+                'show_days'           => 14,
+                'green_visibility'    => ['agent'],
+                'amber_visibility'    => ['agent', 'bm'],
+                'red_visibility'      => ['agent', 'bm'],
+                'green_notifications' => [],
+                'amber_notifications' => ['agent' => ['in_app']],
+                'red_notifications'   => ['agent' => ['in_app']],
+                'daily_digest_enabled'=> true,
+                'daily_digest_roles'  => ['agent'],
+            ],
+
+            // #43 task
+            [
+                'event_class'         => 'task',
+                'label'               => 'Task / To-do',
+                'description'         => 'Personal task with a deadline. Manual-creatable.',
+                'is_active'           => true,
+                'green_days'          => 7,
+                'amber_days'          => 2,
+                'red_days'            => 0,
+                'show_days'           => 14,
+                'green_visibility'    => ['agent'],
+                'amber_visibility'    => ['agent'],
+                'red_visibility'      => ['agent'],
+                'green_notifications' => [],
+                'amber_notifications' => ['agent' => ['in_app']],
+                'red_notifications'   => ['agent' => ['in_app']],
+                'daily_digest_enabled'=> false,
+                'daily_digest_roles'  => null,
+            ],
+
+            // #44 other
+            [
+                'event_class'         => 'other',
+                'label'               => 'Other',
+                'description'         => 'Catch-all for events that do not fit other classes. Manual-creatable.',
+                'is_active'           => true,
+                'green_days'          => 7,
+                'amber_days'          => 2,
+                'red_days'            => 0,
+                'show_days'           => 14,
+                'green_visibility'    => ['agent'],
+                'amber_visibility'    => ['agent'],
+                'red_visibility'      => ['agent'],
+                'green_notifications' => [],
+                'amber_notifications' => [],
+                'red_notifications'   => [],
+                'daily_digest_enabled'=> false,
+                'daily_digest_roles'  => null,
+            ],
+
+            // ========== GROUP E — Leave Events (2) ==========
+
+            // #45 leave_annual
+            // NOTE: Leave visibility is interim. Module 3 (Contact Governance) will
+            // introduce agency_leave_settings for proper per-role configuration.
+            // Agents see only their own leave via creator bypass (user_id match in canSee).
+            // BM + admin see all leave in agency (branch filter deferred to Module 3).
+            [
+                'event_class'         => 'leave_annual',
+                'label'               => 'Annual Leave',
+                'description'         => 'Approved annual leave. Agents see own via creator bypass; BM+admin see all.',
+                'is_active'           => true,
+                'green_days'          => 14,
+                'amber_days'          => 3,
+                'red_days'            => 0,
+                'show_days'           => 60,
+                'green_visibility'    => ['bm', 'admin'],
+                'amber_visibility'    => ['bm', 'admin'],
+                'red_visibility'      => ['bm', 'admin'],
+                'green_notifications' => [],
+                'amber_notifications' => [],
+                'red_notifications'   => [],
+                'daily_digest_enabled'=> true,
+                'daily_digest_roles'  => ['bm'],
+            ],
+
+            // #46 leave_sick
+            [
+                'event_class'         => 'leave_sick',
+                'label'               => 'Sick Leave',
+                'description'         => 'Approved sick leave. Agents see own via creator bypass; BM+admin see all.',
+                'is_active'           => true,
+                'green_days'          => 14,
+                'amber_days'          => 3,
+                'red_days'            => 0,
+                'show_days'           => 60,
+                'green_visibility'    => ['bm', 'admin'],
+                'amber_visibility'    => ['bm', 'admin'],
+                'red_visibility'      => ['bm', 'admin'],
+                'green_notifications' => [],
+                'amber_notifications' => [],
+                'red_notifications'   => [],
+                'daily_digest_enabled'=> true,
+                'daily_digest_roles'  => ['bm'],
+            ],
         ];
     }
 }
