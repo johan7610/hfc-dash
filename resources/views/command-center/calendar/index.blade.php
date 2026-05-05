@@ -310,8 +310,45 @@
                         $weekSlots = $barSlotsByWeek[$weekIdx] ?? [];
                         $barCount = count($weekSlots);
                     @endphp
+                    {{-- WEEK ROW STRUCTURE — do not change ordering:
+                         1. Date numbers strip (7-col grid with day numbers)
+                         2. Spanning bar zone (sits INSIDE row, between dates and chips)
+                         3. Cell grid with single-day chips
+
+                         Bug history: the bar zone has regressed THREE times when
+                         restructured. Bars MUST sit inside the row, between dates
+                         and chips. Never above the date numbers. Never in the gap
+                         between rows. This ordering is final. --}}
                     <div style="border-bottom: 1px solid var(--border);">
-                        {{-- ZONE 1: Spanning bars (row-wide, separate from cells) --}}
+
+                        {{-- 1. DATE NUMBER STRIP --}}
+                        <div class="grid grid-cols-7">
+                            @foreach($weekDates as $colIdx => $cellDate)
+                                @php
+                                    $isCurrentMonth = $cellDate->month === $month;
+                                    $isToday = $cellDate->isSameDay($today);
+                                    $isWeekend = in_array($cellDate->dayOfWeekIso, [6, 7]);
+                                    $dateBg = $isWeekend ? 'var(--surface-2)' : 'transparent';
+                                @endphp
+                                <div @click="selectedDate = '{{ $cellDate->toDateString() }}'"
+                                     class="px-1.5 pt-1 pb-0.5 cursor-pointer"
+                                     style="opacity: {{ $isCurrentMonth ? '1' : '0.5' }}; background: {{ $dateBg }}; {{ $colIdx < 6 ? 'border-right: 1px solid var(--border);' : '' }}"
+                                     :class="selectedDate === '{{ $cellDate->toDateString() }}' && 'ring-2 ring-inset ring-[#00d4aa]'">
+                                    @if($isToday)
+                                        <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold"
+                                              style="background: #00d4aa; color: #0f172a;">
+                                            {{ $cellDate->day }}
+                                        </span>
+                                    @else
+                                        <span class="text-xs font-semibold" style="color: var(--text-secondary);">
+                                            {{ $cellDate->day }}
+                                        </span>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </div>
+
+                        {{-- 2. SPANNING BAR ZONE (between dates and chips — NEVER move this) --}}
                         @if($barCount > 0)
                             <div class="relative" style="min-height: {{ $barCount * 22 + 4 }}px; padding: 2px 0;">
                                 @foreach($weekSlots as $slotIdx => $slotBars)
@@ -350,14 +387,13 @@
                             </div>
                         @endif
 
-                        {{-- ZONE 2: Cell grid (date numbers + single-day chips) --}}
+                        {{-- 3. CELL GRID (single-day chips only — no date numbers, no bars) --}}
                         <div class="grid grid-cols-7">
                             @foreach($weekDates as $colIdx => $cellDate)
                                 @php
                                     $dateStr = $cellDate->toDateString();
                                     $dayEvents = $byDate[$dateStr] ?? [];
                                     $isCurrentMonth = $cellDate->month === $month;
-                                    $isToday = $cellDate->isSameDay($today);
                                     $isWeekend = in_array($cellDate->dayOfWeekIso, [6, 7]);
                                     $cellBg = $isWeekend ? 'var(--surface-2)' : 'transparent';
                                     $cellOpacity = $isCurrentMonth ? '1' : '0.5';
@@ -365,31 +401,18 @@
                                 @endphp
                                 <div @click="selectedDate = '{{ $dateStr }}'"
                                      @dblclick="window.location.href='{{ route('command-center.calendar', array_merge(request()->only(['scope','types','categories']), ['view' => 'day', 'date' => $dateStr])) }}'"
-                                     class="relative min-h-[3.5rem] px-1 pt-1 pb-1 cursor-pointer transition-colors hover:brightness-110"
+                                     class="relative min-h-[2.5rem] px-1 pt-0.5 pb-1 cursor-pointer transition-colors hover:brightness-110"
                                      style="opacity: {{ $cellOpacity }}; {{ $colIdx < 6 ? 'border-right: 1px solid var(--border);' : '' }}"
                                      :class="selectedDate === '{{ $dateStr }}' && 'ring-2 ring-inset ring-[#00d4aa]'"
                                      :style="selectedDate === '{{ $dateStr }}' ? 'background: color-mix(in srgb, #00d4aa 8%, {{ $cellBg === 'transparent' ? 'var(--surface)' : $cellBg }});' : 'background: {{ $cellBg }};'">
-                                    {{-- Date number --}}
-                                    <div class="flex items-center justify-between mb-0.5">
-                                        @if($isToday)
-                                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold"
-                                                  style="background: #00d4aa; color: #0f172a;">
-                                                {{ $cellDate->day }}
-                                            </span>
-                                        @else
-                                            <span class="text-xs font-semibold px-0.5" style="color: var(--text-secondary);">
-                                                {{ $cellDate->day }}
-                                            </span>
-                                        @endif
-                                        @if(count($dayEvents) > $chipCap)
+                                    @if(count($dayEvents) > $chipCap)
+                                        <div class="flex justify-end mb-0.5">
                                             <span class="text-[10px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap"
                                                   style="background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border);">
                                                 +{{ count($dayEvents) - $chipCap }}
                                             </span>
-                                        @endif
-                                    </div>
-
-                                    {{-- Single-day chips --}}
+                                        </div>
+                                    @endif
                                     <div class="space-y-0.5">
                                         @foreach(array_slice($dayEvents, 0, $chipCap) as $evt)
                                             @php $chipStyle = $ragChip[$evt->resolved_colour] ?? $defaultChip; @endphp
@@ -406,6 +429,7 @@
                                 </div>
                             @endforeach
                         </div>
+
                     </div>
                 @endforeach
             </div>
