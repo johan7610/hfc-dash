@@ -416,16 +416,21 @@ class CalendarController extends Controller
             'event_type' => $calendarEvent->event_type, 'status' => $calendarEvent->status,
             'source_type' => $calendarEvent->source_type,
             'source_link' => $this->resolveSourceLink($calendarEvent),
+            'linked_records' => $this->buildLinkedRecords($calendarEvent, $user),
             'metadata' => $calendarEvent->metadata,
             'is_past' => $calendarEvent->event_date->isPast(),
             'has_contacts' => $calendarEvent->linkedContacts()->exists(),
             'is_editable' => $isManual,
             'is_actionable' => ($cfg->event_nature ?? 'actionable') === 'actionable',
             'is_draggable' => $isManual,
-            'linked_property' => $isManual && $calendarEvent->property_id ? [
+            'linked_property' => $calendarEvent->property_id ? [
                 'id' => $calendarEvent->property_id,
                 'address' => $calendarEvent->property?->address ?? ('Property #' . $calendarEvent->property_id),
             ] : null,
+            'linked_properties' => $calendarEvent->linkedProperties->map(fn ($p) => [
+                'id' => $p->id,
+                'address' => method_exists($p, 'buildDisplayAddress') ? $p->buildDisplayAddress() : ($p->title ?? "Property #{$p->id}"),
+            ])->values(),
             'attendees' => $isManual ? $calendarEvent->links()
                 ->where('role', 'attendee')
                 ->get()
@@ -479,6 +484,9 @@ class CalendarController extends Controller
             ->orderBy('sort_order')
             ->get(['id', 'label']);
 
+        // Multi-property support: include linked properties for per-property feedback
+        $properties = $calendarEvent->linkedProperties;
+
         return response()->json([
             'event' => [
                 'id'    => $calendarEvent->id,
@@ -495,6 +503,11 @@ class CalendarController extends Controller
                 'internal_notes' => optional($existing->get($c->id))->internal_notes,
                 'next_action'    => optional($existing->get($c->id))->next_action_notes,
             ]),
+            'properties' => $properties->map(fn ($p) => [
+                'id'      => $p->id,
+                'address' => method_exists($p, 'buildDisplayAddress') ? $p->buildDisplayAddress() : ($p->title ?? "Property #{$p->id}"),
+            ]),
+            'is_multi_property' => $properties->count() > 1,
             'outcomes' => $outcomes,
             'concerns' => $concerns,
         ]);
@@ -510,6 +523,7 @@ class CalendarController extends Controller
         $data = $request->validate([
             'feedback'                        => 'required|array',
             'feedback.*.contact_id'           => 'required|integer|exists:contacts,id',
+            'feedback.*.property_id'          => 'nullable|integer|exists:properties,id',
             'feedback.*.outcome_id'           => 'nullable|integer|exists:agency_feedback_options,id',
             'feedback.*.concern_ids'          => 'nullable|array',
             'feedback.*.concern_ids.*'        => 'integer|exists:agency_feedback_options,id',
@@ -524,6 +538,7 @@ class CalendarController extends Controller
                     [
                         'calendar_event_id' => $calendarEvent->id,
                         'contact_id'        => $row['contact_id'],
+                        'property_id'       => $row['property_id'] ?? null,
                     ],
                     [
                         'outcome_option_id'    => $row['outcome_id'] ?? null,
@@ -812,6 +827,73 @@ class CalendarController extends Controller
             'branch' => $branchColours,
             'agent'  => $agentColours,
         ];
+    }
+
+    /**
+     * Build linked records array for the detail panel deep-links.
+     * Returns all navigable entities linked to this event.
+     */
+    private function buildLinkedRecords(CalendarEvent $event, $user): array
+    {
+        $records = [];
+
+        // Linked properties (via calendar_event_links pivot)
+        $properties = $event->linkedProperties;
+        foreach ($properties as $p) {
+            try {
+                $records[] = [
+                    'type' => 'property',
+                    'icon' => 'building',
+                    'label' => 'Property',
+                    'name' => method_exists($p, 'buildDisplayAddress') ? $p->buildDisplayAddress() : ($p->title ?? "Property #{$p->id}"),
+                    'url' => route('corex.properties.show', $p->id),
+                ];
+            } catch (\Throwable $e) { /* route doesn't exist */ }
+        }
+
+        // Linked contacts (attendees)
+        if ($user->hasPermission('access_contacts')) {
+            $contacts = $event->linkedContacts;
+            foreach ($contacts as $c) {
+                try {
+                    $records[] = [
+                        'type' => 'contact',
+                        'icon' => 'person',
+                        'label' => 'Contact',
+                        'name' => trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '')) ?: "Contact #{$c->id}",
+                        'url' => route('corex.contacts.show', $c->id),
+                    ];
+                } catch (\Throwable $e) { /* route doesn't exist */ }
+            }
+        }
+
+        // Linked deals
+        $deals = $event->linkedDeals;
+        foreach ($deals as $d) {
+            try {
+                $records[] = [
+                    'type' => 'deal',
+                    'icon' => 'briefcase',
+                    'label' => 'Deal',
+                    'name' => $d->reference ?? "Deal #{$d->id}",
+                    'url' => route('deals-v2.show', $d->id),
+                ];
+            } catch (\Throwable $e) { /* route doesn't exist */ }
+        }
+
+        // Source entity (if different from above and has a resolvable link)
+        $sourceLink = $this->resolveSourceLink($event);
+        if ($sourceLink && !collect($records)->contains('url', $sourceLink['url'])) {
+            $records[] = [
+                'type' => 'source',
+                'icon' => 'link',
+                'label' => $sourceLink['label'],
+                'name' => $event->title,
+                'url' => $sourceLink['url'],
+            ];
+        }
+
+        return $records;
     }
 
     private function resolveSourceLink(CalendarEvent $event): ?array

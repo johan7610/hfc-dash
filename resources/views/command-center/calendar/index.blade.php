@@ -1237,10 +1237,47 @@
                     </div>
                 </template>
 
-                {{-- Source link --}}
-                <template x-if="panelData.source_link">
+                {{-- Linked Records (deep-links to entities — open in new tab) --}}
+                <template x-if="panelData.linked_records && panelData.linked_records.length > 0">
                     <div class="px-5 py-3" style="border-bottom: 1px solid var(--border);">
-                        <a :href="panelData.source_link.url" class="text-xs font-medium hover:underline" style="color: var(--brand-button);">
+                        <div class="text-[10px] font-semibold uppercase tracking-wider mb-2" style="color: var(--text-muted);">Linked Records</div>
+                        <div class="space-y-1">
+                            <template x-for="rec in panelData.linked_records" :key="rec.url">
+                                <a :href="rec.url" target="_blank" rel="noopener"
+                                   class="flex items-center gap-2 px-2 py-1.5 rounded transition hover:opacity-80 no-underline"
+                                   style="background: var(--surface-2);"
+                                   title="Open in new tab">
+                                    <svg class="w-3.5 h-3.5 flex-shrink-0" style="color: var(--brand-icon);" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                        <template x-if="rec.icon === 'building'">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5M3.75 3v18h6V12h4.5v9h6V3H3.75Z" />
+                                        </template>
+                                        <template x-if="rec.icon === 'person'">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0" />
+                                        </template>
+                                        <template x-if="rec.icon === 'briefcase'">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 0 0 .75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 0 0-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0 1 12 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 0 1-.673-.38m0 0A2.18 2.18 0 0 1 3 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 0 1 3.413-.387m7.5 0V5.25A2.25 2.25 0 0 0 13.5 3h-3a2.25 2.25 0 0 0-2.25 2.25v.894m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                                        </template>
+                                        <template x-if="rec.icon === 'link'">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                                        </template>
+                                    </svg>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="text-[11px] font-medium truncate" style="color: var(--text-primary);" x-text="rec.name"></div>
+                                        <div class="text-[10px]" style="color: var(--text-muted);" x-text="rec.label"></div>
+                                    </div>
+                                    <svg class="w-3 h-3 flex-shrink-0 opacity-50" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                                    </svg>
+                                </a>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
+                {{-- Legacy source link fallback (if no linked_records) --}}
+                <template x-if="panelData.source_link && (!panelData.linked_records || panelData.linked_records.length === 0)">
+                    <div class="px-5 py-3" style="border-bottom: 1px solid var(--border);">
+                        <a :href="panelData.source_link.url" target="_blank" class="text-xs font-medium hover:underline" style="color: var(--brand-button);">
                             <span x-text="panelData.source_link.label"></span> &rarr;
                         </a>
                     </div>
