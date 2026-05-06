@@ -55,8 +55,7 @@
                 'label' => 'Agency',
                 'items' => array_values(array_filter([
                     ['key'=>'agency',                'label'=>'Agency Settings',       'type'=>'section', 'keywords'=>'company branding logo signature'],
-                    ['key'=>'company',               'label'=>'Company Details',       'type'=>'link', 'href'=>route('admin.company-settings'), 'keywords'=>'trading name address logo'],
-                    ['key'=>'branches',              'label'=>'Branches & Assignments','type'=>'link', 'href'=>route('admin.branch-assignments'), 'keywords'=>'users branch assignment'],
+                    ['key'=>'company',               'label'=>'Company Settings',      'type'=>'link', 'href'=>route('admin.company-settings'), 'keywords'=>'trading name address logo branches assignments performance vat'],
                 ])),
             ],
             [
@@ -78,7 +77,6 @@
                 'label' => 'Operations',
                 'items' => [
                     ['key'=>'commission',            'label'=>'Commission & Revenue Share','type'=>'link', 'href'=>route('corex.settings.commission'), 'keywords'=>'splits caps fees tiers'],
-                    ['key'=>'performance',           'label'=>'Performance Settings',  'type'=>'link', 'href'=>route('admin.performance-settings.edit'), 'keywords'=>'vat targets'],
                     ['key'=>'command-center',        'label'=>'Command Center Rules',  'type'=>'link', 'href'=>route('command-center.settings'), 'keywords'=>'expectations reminders'],
                 ],
             ],
@@ -150,24 +148,7 @@
              ============================================================ --}}
         <div x-show="activeSection === 'agency'" x-cloak class="p-6 space-y-6">
 
-            {{-- Branch Assignments link --}}
-            <div>
-                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Structure</h3>
-                <a href="{{ route('admin.branch-assignments') }}"
-                   class="flex items-center gap-3 p-3 rounded-md transition-all duration-300 no-underline group hover:bg-white/5"
-                   style="border:1px solid var(--border);">
-                    <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent);">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="color: var(--brand-icon, #0ea5e9);" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" /></svg>
-                    </div>
-                    <div class="flex-1">
-                        <div class="text-sm font-semibold" style="color:var(--text-primary);">Branch Assignments</div>
-                        <div class="text-xs" style="color:var(--text-secondary);">Manage branches and user assignments</div>
-                    </div>
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" class="w-4 h-4 flex-shrink-0" style="color:var(--border-hover);"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
-                </a>
-            </div>
-
-            {{-- Company Settings — moved to its own admin page (mirrors Branch Assignments) --}}
+            {{-- Company Settings — moved to its own admin page (now contains Branches & Performance tabs) --}}
             @if(isset($agency) && $agency)
             <div>
                 <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Company</h3>
@@ -186,57 +167,7 @@
             </div>
             @endif
 
-            {{-- Data Isolation — Split Branches toggle (branch-isolation phase 2) --}}
-            @if(isset($agency) && $agency && auth()->user()?->hasPermission('manage_performance_settings'))
-            <div>
-                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Data Isolation</h3>
-                <form method="POST" action="{{ route('corex.settings.split-branches') }}"
-                      class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
-                    @csrf
-                    @method('PUT')
-
-                    <div class="flex items-start gap-4">
-                        <div class="flex-1">
-                            <div class="text-sm font-semibold mb-1" style="color:var(--text-primary);">Split Branches</div>
-                            <div class="text-xs leading-relaxed" style="color:var(--text-secondary);">
-                                When ON, users only see data belonging to their own branch (contacts, properties, deals, documents, etc.).
-                                Principals and users with <code>branches.view_all</code> continue to see everything across the agency.
-                                Flip freely — no data loss.
-                            </div>
-                        </div>
-
-                        {{-- Toggle switch bound to a hidden value the controller reads as a boolean --}}
-                        <label class="relative inline-flex items-center cursor-pointer flex-shrink-0 mt-1">
-                            <input type="hidden" name="split_branches_enabled" value="0">
-                            <input type="checkbox" name="split_branches_enabled" value="1"
-                                   {{ $agency->split_branches_enabled ? 'checked' : '' }}
-                                   onchange="this.form.submit()"
-                                   class="sr-only peer">
-                            <div class="w-11 h-6 rounded-full transition-colors duration-300"
-                                 style="background:var(--border);"
-                                 :class=""></div>
-                            <style>
-                                input[type=checkbox]:checked + div { background: var(--brand-icon, #0ea5e9) !important; }
-                                input[type=checkbox] + div::after {
-                                    content:''; position:absolute; top:2px; left:2px; width:20px; height:20px;
-                                    border-radius:50%; background:#fff; transition:transform .25s ease;
-                                }
-                                input[type=checkbox]:checked + div::after { transform: translateX(20px); }
-                            </style>
-                        </label>
-                    </div>
-
-                    <div class="mt-3 text-xs" style="color:var(--text-muted);">
-                        Currently: <strong style="color:{{ $agency->split_branches_enabled ? 'var(--brand-icon, #0ea5e9)' : 'var(--text-secondary)' }};">
-                            {{ $agency->split_branches_enabled ? 'ON' : 'OFF' }}
-                        </strong>
-                        — {{ $agency->split_branches_enabled
-                            ? 'Branch isolation is active.'
-                            : 'All users see all agency data (current/default behaviour).' }}
-                    </div>
-                </form>
-            </div>
-            @endif
+            {{-- Data Isolation moved to Company Settings → Branches tab --}}
             @if(false)
             <div>
                 <form method="POST" action="{{ route('corex.settings.agency.update') }}" enctype="multipart/form-data"
@@ -421,40 +352,7 @@
             </div>
             @endif
 
-            {{-- Performance Settings (VAT, Listings per Sale) --}}
-            @if(isset($vatRate))
-            <div>
-                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Performance Settings</h3>
-                <form method="POST" action="{{ route('admin.performance-settings.update') }}"
-                      class="space-y-4 p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
-                    @csrf
-                    {{-- Hidden fields to satisfy PerformanceSettingsController validation --}}
-                    <input type="hidden" name="company_name" value="">
-                    <input type="hidden" name="company_address" value="">
-                    <input type="hidden" name="company_tel" value="">
-                    <input type="hidden" name="company_ffc" value="">
-                    <input type="hidden" name="clear_company_logo" value="0">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">VAT Rate (%)</label>
-                            <input type="number" step="0.01" min="0" max="100" name="vat_rate" value="{{ old('vat_rate', $vatRate) }}"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Listings per Sale</label>
-                            <input type="number" step="0.01" min="0.01" name="listings_per_sale" value="{{ old('listings_per_sale', $listingsPerSale) }}"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                            <p class="text-xs mt-1" style="color:var(--text-muted);">Used to calculate how many listings are needed for the target sales.</p>
-                        </div>
-                    </div>
-                    <div class="flex justify-end pt-1">
-                        <button type="submit" class="corex-btn-primary text-sm">Save Performance Settings</button>
-                    </div>
-                </form>
-            </div>
-            @endif
+            {{-- Performance Settings moved to Company Settings → Performance tab --}}
 
             {{-- Agency Management (owner role only) --}}
             @if(auth()->user()?->isOwnerRole())

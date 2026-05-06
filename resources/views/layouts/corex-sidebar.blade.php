@@ -90,8 +90,30 @@
         $activeGroup = 'rentals';
     } elseif (request()->routeIs('compliance.*')) {
         $activeGroup = 'compliance';
-    } elseif (request()->routeIs('command-center.*', 'corex.dashboard')) {
+    } elseif (request()->routeIs('command-center.*')) {
         $activeGroup = 'command-center';
+    } elseif (request()->routeIs('corex.dashboard', 'corex.dashboard.oversight')) {
+        // Today / Oversight live in the Command Center submenu but are also
+        // landing pages. Only auto-expand the submenu if the user navigated
+        // here from another Command Center page — otherwise show the main bar.
+        $_ref = request()->headers->get('referer');
+        if ($_ref) {
+            try {
+                $_refPath = parse_url($_ref, PHP_URL_PATH) ?: '/';
+                $_refRoute = app('router')->getRoutes()->match(
+                    \Illuminate\Http\Request::create($_refPath, 'GET')
+                );
+                $_refName = $_refRoute?->getName();
+                if ($_refName && (
+                    \Illuminate\Support\Str::startsWith($_refName, 'command-center.')
+                    || in_array($_refName, ['corex.dashboard', 'corex.dashboard.oversight'], true)
+                )) {
+                    $activeGroup = 'command-center';
+                }
+            } catch (\Throwable $e) {
+                // Referer didn't match a route — leave $activeGroup null
+            }
+        }
     } elseif (request()->routeIs(
         'prospecting.*',
         'corex.properties.*',
@@ -106,6 +128,8 @@
         $activeGroup = 'payroll';
     } elseif (request()->routeIs('leave.*')) {
         $activeGroup = 'leave';
+    } elseif (request()->routeIs('admin.importer.*')) {
+        $activeGroup = 'importer';
     }
 @endphp
 
@@ -215,11 +239,16 @@
             stack: @js($activeGroup ? [$activeGroup] : []),
             push(g) { if (this.stack[this.stack.length - 1] !== g) this.stack.push(g) },
             pop() { this.stack.pop() },
-            inStack(g) { return this.stack.includes(g) }
+            inStack(g) { return this.stack.includes(g) },
+            openGroup: @js($activeGroup),
+            toggle(g) { this.openGroup = (this.openGroup === g) ? null : g }
          }">
         <div class="corex-nav-root"
              x-init="$el.scrollTop = sessionStorage.getItem('sidebarScroll') || 0"
              @scroll.debounce.100ms="sessionStorage.setItem('sidebarScroll', $el.scrollTop)">
+
+        @permission('sidebar.section.agents')
+        <div class="corex-nav-section-label">Agents</div>
 
         {{-- ═══════════════════════════════════════════
              DASHBOARD (expandable — Calendar & Tasks as sub-items)
@@ -700,21 +729,6 @@
 
         {{-- Training (LMS) — moved to agent section above as "Training" --}}
 
-        {{-- Sales Documents — visible to system owners only (hidden from agency users) --}}
-        @if($isOwner)
-        @if(\Illuminate\Support\Facades\Route::has('docuperfect.sales'))
-        <a href="{{ route('docuperfect.sales') }}" class="corex-nav-item {{ request()->routeIs('docuperfect.sales*') ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v7.5M12 12.75h3m-3 0h-3m-2.25 0H5.625c-.621 0-1.125-.504-1.125-1.125V4.125c0-.621.504-1.125 1.125-1.125h5.25a2.25 2.25 0 0 1 2.25 2.25v1.5m-6 9V21m0-6.75h9" />
-            </svg>
-            <span>Sales Documents</span>
-            <span class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-[0.625rem] font-semibold uppercase tracking-wider flex-shrink-0"
-                  style="background:color-mix(in srgb, var(--ds-amber, #f59e0b) 15%, transparent); color:var(--ds-amber, #f59e0b); letter-spacing:0.06em;"
-                  title="Hidden from agency users — visible to system owners only">Hidden</span>
-        </a>
-        @endif
-        @endif
-
         {{-- Filing Register --}}
         @permission('access_filing_register')
         <a href="{{ route('filing-register.index') }}" class="corex-nav-item {{ request()->routeIs('filing-register.*') ? 'active' : '' }}">
@@ -753,9 +767,20 @@
         </div>
         @endpermission
 
+        @endpermission {{-- /sidebar.section.agents --}}
+
+        {{-- ═══════════════════════════════════════════
+             BRANCH MANAGER SECTION (placeholder)
+             ═══════════════════════════════════════════ --}}
+        @permission('sidebar.section.branch_manager')
+        <div class="corex-nav-divider"></div>
+        <div class="corex-nav-section-label">Branch Manager</div>
+        @endpermission {{-- /sidebar.section.branch_manager --}}
+
         {{-- ═══════════════════════════════════════════
              TOOLS SECTION
              ═══════════════════════════════════════════ --}}
+        @permission('sidebar.section.tools')
         <div class="corex-nav-divider"></div>
         <div class="corex-nav-section-label">Tools</div>
 
@@ -874,53 +899,23 @@
         @endif
         @endpermission
 
+        @endpermission {{-- /sidebar.section.tools --}}
+
         {{-- ═══════════════════════════════════════════
-             PLATFORM ADMIN (System Owners only)
-             Kept separate from the regular Admin section because System
-             Owners are platform identities, not agency members.
+             ADMIN SECTION (agency-level admins — BMs, super_admin)
              ═══════════════════════════════════════════ --}}
-        @if($isOwner)
+        @permission('sidebar.section.admin')
+        @if($user && $user->hasAnyPermission(['access_knowledge_base', 'access_role_manager', 'access_finance_engine', 'access_settings', 'manage_payroll', 'run_payroll', 'view_payroll_reports']))
         <div class="corex-nav-divider"></div>
-        <div class="corex-nav-section-label">Platform Admin</div>
+        <div class="corex-nav-section-label">Admin</div>
 
-        {{-- Agency Management --}}
-        <a href="{{ route('agencies.index') }}" class="corex-nav-item {{ request()->routeIs('agencies.*') ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/>
-            </svg>
-            <span>Agency Management</span>
-        </a>
-
-        {{-- Company Settings — per-agency identity, lives here because
-             Owners toggle between agencies and edit each one. --}}
+        {{-- Company Settings --}}
         <a href="{{ route('admin.company-settings') }}" class="corex-nav-item {{ request()->routeIs('admin.company-settings*') ? 'active' : '' }}">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" />
             </svg>
             <span>Company Settings</span>
         </a>
-
-        {{-- P24 Importer — owner-only (cross-agency bulk onboarding tool) --}}
-        <a href="{{ route('admin.importer.index') }}" class="corex-nav-item {{ request()->routeIs('admin.importer.index') ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-            </svg>
-            <span>P24 Importer</span>
-        </a>
-        <a href="{{ route('admin.importer.review') }}" class="corex-nav-item {{ request()->routeIs('admin.importer.review') ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-            </svg>
-            <span>Property Review</span>
-        </a>
-        @endif
-
-        {{-- ═══════════════════════════════════════════
-             ADMIN SECTION (agency-level admins — BMs, super_admin)
-             ═══════════════════════════════════════════ --}}
-        @if($user && $user->hasAnyPermission(['access_knowledge_base', 'access_role_manager', 'access_finance_engine', 'access_settings', 'manage_payroll', 'run_payroll', 'view_payroll_reports']))
-        <div class="corex-nav-divider"></div>
-        <div class="corex-nav-section-label">Admin</div>
 
         {{-- Knowledge Base --}}
         @permission('access_knowledge_base')
@@ -929,16 +924,6 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
             </svg>
             <span>Knowledge Base</span>
-        </a>
-        @endpermission
-
-        {{-- API Catalog --}}
-        @permission('manage_users')
-        <a href="{{ route('admin.api.catalog') }}" class="corex-nav-item {{ request()->routeIs('admin.api.catalog') ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
-            </svg>
-            <span>API</span>
         </a>
         @endpermission
 
@@ -1013,30 +998,26 @@
             </svg>
             <span>Market Intelligence</span>
         </a>
-        @php $feedbackCount = DB::table('feedback_reports')->where('agency_id', auth()->user()->effectiveAgencyId() ?? 1)->where('status', 'new')->count(); @endphp
-        <a href="{{ route('command-center.feedback-reports') }}" class="corex-nav-item {{ request()->routeIs('command-center.feedback-reports*') ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" /></svg>
-            <span>Feedback Reports</span>
-            @if($feedbackCount > 0)<span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold" style="background:#ef444420;color:#ef4444;">{{ $feedbackCount }}</span>@endif
-        </a>
         @endif
 
-        {{-- Payroll (expandable group) --}}
+        {{-- Payroll (slide-panel group) --}}
         @if($user && $user->hasAnyPermission(['manage_payroll', 'run_payroll', 'view_payroll_reports']))
         <div>
-            <button type="button" @click="toggle('payroll')"
+            <button type="button" @click="push('payroll')"
                     class="corex-nav-item corex-nav-group-toggle {{ $activeGroup === 'payroll' ? 'active' : '' }}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" />
                 </svg>
                 <span>Payroll</span>
-                <svg class="corex-chevron transition-transform duration-200" :class="openGroup === 'payroll' && 'rotate-90'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+                <svg class="corex-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
             </button>
 
-            <div x-show="openGroup === 'payroll'" @unless($activeGroup === 'payroll') x-cloak @endunless
-                 x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
-                 x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-                 class="corex-nav-children">
+            <div class="corex-nav-panel {{ $activeGroup === 'payroll' ? 'is-open' : '' }}" :class="{ 'is-open': inStack('payroll') }">
+                <button type="button" @click="pop()" class="corex-nav-back">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
+                    <span>Back</span>
+                </button>
+                <div class="corex-nav-panel-title">Payroll</div>
 
                 @permission('manage_payroll')
                 <a href="{{ route('payroll.employees.index') }}" class="corex-nav-subitem {{ request()->routeIs('payroll.employees.*') ? 'active' : '' }}">Employees</a>
@@ -1051,22 +1032,24 @@
         </div>
         @endif
 
-        {{-- Leave Management (expandable group) --}}
+        {{-- Leave Management (slide-panel group) --}}
         @if($user && $user->hasAnyPermission(['manage_leave', 'approve_leave', 'view_leave_reports', 'manage_leave_types', 'adjust_leave_balances']))
         <div>
-            <button type="button" @click="toggle('leave')"
+            <button type="button" @click="push('leave')"
                     class="corex-nav-item corex-nav-group-toggle {{ $activeGroup === 'leave' ? 'active' : '' }}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5m-9-6h.008v.008H12v-.008ZM12 15h.008v.008H12V15Zm0 2.25h.008v.008H12v-.008ZM9.75 15h.008v.008H9.75V15Zm0 2.25h.008v.008H9.75v-.008ZM7.5 15h.008v.008H7.5V15Zm0 2.25h.008v.008H7.5v-.008Zm6.75-4.5h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V15Zm0 2.25h.008v.008h-.008v-.008Zm2.25-4.5h.008v.008H16.5v-.008Zm0 2.25h.008v.008H16.5V15Z" />
                 </svg>
                 <span>Leave Management</span>
-                <svg class="corex-chevron transition-transform duration-200" :class="openGroup === 'leave' && 'rotate-90'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+                <svg class="corex-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
             </button>
 
-            <div x-show="openGroup === 'leave'" @unless($activeGroup === 'leave') x-cloak @endunless
-                 x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
-                 x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-                 class="corex-nav-children">
+            <div class="corex-nav-panel {{ $activeGroup === 'leave' ? 'is-open' : '' }}" :class="{ 'is-open': inStack('leave') }">
+                <button type="button" @click="pop()" class="corex-nav-back">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
+                    <span>Back</span>
+                </button>
+                <div class="corex-nav-panel-title">Leave Management</div>
 
                 @permission('manage_leave')
                 <a href="{{ route('payroll.leave.dashboard') }}" class="corex-nav-subitem {{ request()->routeIs('payroll.leave.dashboard') ? 'active' : '' }}">Dashboard</a>
@@ -1105,19 +1088,6 @@
         </a>
         @endpermission
 
-        {{-- Fault Reports (super_admin / owner only) --}}
-        @if($isOwner || $effectiveRole === 'super_admin')
-        @php $faultNewCount = \App\Models\FaultReport::whereIn('status', ['new', 'investigating'])->count(); @endphp
-        <a href="{{ route('admin.fault-reports') }}" class="corex-nav-item {{ request()->routeIs('admin.fault-reports*') ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 12.75c1.148 0 2.278.08 3.383.237 1.037.146 1.866.966 1.866 2.013 0 3.728-2.35 6.75-5.25 6.75S6.75 18.728 6.75 15c0-1.046.83-1.867 1.866-2.013A24.204 24.204 0 0 1 12 12.75Zm0 0c2.883 0 5.647.508 8.207 1.44a23.91 23.91 0 0 1-1.152-6.135c-.117-1.427-.245-2.88-.465-4.305-.074-.477-.513-.826-.998-.826H6.408c-.485 0-.924.35-.998.826-.22 1.424-.348 2.878-.465 4.305A23.91 23.91 0 0 1 3.793 14.19 24.467 24.467 0 0 1 12 12.75ZM2.695 18.678a25.411 25.411 0 0 1 .122-2.428c.24-.84.598-1.628 1.058-2.347M21.305 18.678a25.12 25.12 0 0 0-.122-2.428 7.667 7.667 0 0 0-1.058-2.347" />
-            </svg>
-            <span>Fault Reports</span>
-            @if($faultNewCount > 0)
-            <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[0.6875rem] font-bold" style="background:color-mix(in srgb, var(--ds-crimson) 15%, transparent); color:var(--ds-crimson);">{{ number_format($faultNewCount) }}</span>
-            @endif
-        </a>
-        @endif
 
         {{-- Deal Register V2 --}}
         @permission('access_deal_register_v2')
@@ -1165,6 +1135,86 @@
             <span>Settings</span>
         </a>
         @endpermission
+        @endif
+        @endpermission {{-- /sidebar.section.admin --}}
+
+        {{-- ═══════════════════════════════════════════
+             SYSTEM DEVELOPER (System Owners only — placeholder)
+             ═══════════════════════════════════════════ --}}
+        @if($isOwner)
+        <div class="corex-nav-divider"></div>
+        <div class="corex-nav-section-label">System Developer</div>
+
+        {{-- Agency Management --}}
+        <a href="{{ route('agencies.index') }}" class="corex-nav-item {{ request()->routeIs('agencies.*') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/>
+            </svg>
+            <span>Agency Management</span>
+        </a>
+
+        {{-- API Catalog --}}
+        <a href="{{ route('admin.api.catalog') }}" class="corex-nav-item {{ request()->routeIs('admin.api.catalog') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+            <span>API</span>
+        </a>
+
+        {{-- Feedback Reports --}}
+        @php $feedbackCount = DB::table('feedback_reports')->where('agency_id', auth()->user()->effectiveAgencyId() ?? 1)->where('status', 'new')->count(); @endphp
+        <a href="{{ route('command-center.feedback-reports') }}" class="corex-nav-item {{ request()->routeIs('command-center.feedback-reports*') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" /></svg>
+            <span>Feedback Reports</span>
+            @if($feedbackCount > 0)<span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold" style="background:#ef444420;color:#ef4444;">{{ $feedbackCount }}</span>@endif
+        </a>
+
+        {{-- Importer (slide-panel group: P24 Importer + Property Review) --}}
+        <div>
+            <button type="button" @click="push('importer')"
+                    class="corex-nav-item corex-nav-group-toggle {{ $activeGroup === 'importer' ? 'active' : '' }}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                </svg>
+                <span>Importer</span>
+                <svg class="corex-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+            </button>
+
+            <div class="corex-nav-panel {{ $activeGroup === 'importer' ? 'is-open' : '' }}" :class="{ 'is-open': inStack('importer') }">
+                <button type="button" @click="pop()" class="corex-nav-back">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
+                    <span>Back</span>
+                </button>
+                <div class="corex-nav-panel-title">Importer</div>
+                <a href="{{ route('admin.importer.index') }}" class="corex-nav-subitem {{ request()->routeIs('admin.importer.index') ? 'active' : '' }}">P24 Importer</a>
+                <a href="{{ route('admin.importer.review') }}" class="corex-nav-subitem {{ request()->routeIs('admin.importer.review') ? 'active' : '' }}">Property Review</a>
+            </div>
+        </div>
+
+        {{-- Fault Reports --}}
+        @php $faultNewCount = \App\Models\FaultReport::whereIn('status', ['new', 'investigating'])->count(); @endphp
+        <a href="{{ route('admin.fault-reports') }}" class="corex-nav-item {{ request()->routeIs('admin.fault-reports*') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+            </svg>
+            <span>Fault Reports</span>
+            @if($faultNewCount > 0)
+            <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[0.6875rem] font-bold" style="background:color-mix(in srgb, var(--ds-crimson) 15%, transparent); color:var(--ds-crimson);">{{ number_format($faultNewCount) }}</span>
+            @endif
+        </a>
+
+        {{-- Sales Documents — hidden from agency users, visible to system owners only --}}
+        @if(\Illuminate\Support\Facades\Route::has('docuperfect.sales'))
+        <a href="{{ route('docuperfect.sales') }}" class="corex-nav-item {{ request()->routeIs('docuperfect.sales*') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v7.5M12 12.75h3m-3 0h-3m-2.25 0H5.625c-.621 0-1.125-.504-1.125-1.125V4.125c0-.621.504-1.125 1.125-1.125h5.25a2.25 2.25 0 0 1 2.25 2.25v1.5m-6 9V21m0-6.75h9" />
+            </svg>
+            <span>Sales Documents</span>
+            <span class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-[0.625rem] font-semibold uppercase tracking-wider flex-shrink-0"
+                  style="background:color-mix(in srgb, var(--ds-amber, #f59e0b) 15%, transparent); color:var(--ds-amber, #f59e0b); letter-spacing:0.06em;"
+                  title="Hidden from agency users — visible to system owners only">Hidden</span>
+        </a>
+        @endif
         @endif
         </div>{{-- /corex-nav-root --}}
     </nav>

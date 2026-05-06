@@ -396,6 +396,15 @@ return [
         ['key' => 'branches.view_all',               'label' => 'View Across All Branches',      'section' => 'branches',        'type' => 'access',  'module' => 'branches',         'sort_order' => 1],
         ['key' => 'branches.switch',                 'label' => 'Switch Branch View',            'section' => 'branches',        'type' => 'access',  'module' => 'branches',         'sort_order' => 2],
         ['key' => 'branches.edit_all',               'label' => 'Edit Across All Branches',      'section' => 'branches',        'type' => 'action',  'module' => 'branches',         'sort_order' => 3],
+
+        // ── Sidebar — section visibility (entire sidebar groups) ──
+        // When OFF, the sidebar heading and every item under it (until the
+        // next heading) is hidden. Per-feature permissions still gate the
+        // underlying routes — this is purely visual grouping.
+        ['key' => 'sidebar.section.agents',          'label' => 'Show Agents Section',           'section' => 'sidebar',         'type' => 'access',  'module' => 'sidebar',          'sort_order' => 1],
+        ['key' => 'sidebar.section.branch_manager',  'label' => 'Show Branch Manager Section',   'section' => 'sidebar',         'type' => 'access',  'module' => 'sidebar',          'sort_order' => 2],
+        ['key' => 'sidebar.section.tools',           'label' => 'Show Tools Section',            'section' => 'sidebar',         'type' => 'access',  'module' => 'sidebar',          'sort_order' => 3],
+        ['key' => 'sidebar.section.admin',           'label' => 'Show Admin Section',            'section' => 'sidebar',         'type' => 'access',  'module' => 'sidebar',          'sort_order' => 5],
     ],
 
     // ──────────────────────────────────────────────────────────
@@ -416,6 +425,9 @@ return [
                 'manage_leave', 'approve_leave', 'apply_for_leave', 'view_leave_reports',
                 'manage_leave_types', 'manage_staff_take_on', 'view_team_leave_calendar',
                 'adjust_leave_balances',
+                // Sidebar sections — admin sees all
+                'sidebar.section.agents', 'sidebar.section.branch_manager',
+                'sidebar.section.tools', 'sidebar.section.admin',
             ],
         ],
 
@@ -491,6 +503,9 @@ return [
                 // Leave
                 'manage_leave', 'approve_leave', 'apply_for_leave', 'view_leave_reports',
                 'view_team_leave_calendar',
+                // Sidebar sections
+                'sidebar.section.agents', 'sidebar.section.branch_manager',
+                'sidebar.section.tools',
             ],
         ],
 
@@ -546,6 +561,8 @@ return [
                 'view_own_payslips',
                 // Leave
                 'apply_for_leave', 'view_team_leave_calendar',
+                // Sidebar sections
+                'sidebar.section.agents', 'sidebar.section.tools',
             ],
         ],
 
@@ -577,6 +594,8 @@ return [
                 'view_own_stats',
                 'access_rmcp',
                 'view_own_screening',
+                // Sidebar sections
+                'sidebar.section.agents', 'sidebar.section.tools',
             ],
         ],
     ],

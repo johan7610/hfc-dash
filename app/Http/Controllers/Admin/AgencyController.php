@@ -92,11 +92,13 @@ class AgencyController extends Controller
 
     public function edit(Agency $agency)
     {
+        $this->authorizeAgencyScope($agency);
         return view('admin.agencies.create-edit', compact('agency'));
     }
 
     public function update(Request $request, Agency $agency)
     {
+        $this->authorizeAgencyScope($agency);
         $data = $request->validate([
             'name'            => 'required|string|max:100',
             'sidebar_color'   => 'nullable|string|max:20',
@@ -148,7 +150,26 @@ class AgencyController extends Controller
 
         $agency->update($data);
 
+        $user = auth()->user();
+        if ($user && !$user->isOwnerRole()) {
+            return redirect()->route('admin.company-settings')->with('success', "Agency \"{$agency->name}\" updated.");
+        }
+
         return redirect()->route('agencies.index')->with('success', "Agency \"{$agency->name}\" updated.");
+    }
+
+    private function authorizeAgencyScope(Agency $agency): void
+    {
+        $user = auth()->user();
+        if (!$user) {
+            abort(403);
+        }
+        if ($user->isOwnerRole()) {
+            return;
+        }
+        if ((int) $user->effectiveAgencyId() !== (int) $agency->id) {
+            abort(403, 'You can only edit your own agency.');
+        }
     }
 
     /**

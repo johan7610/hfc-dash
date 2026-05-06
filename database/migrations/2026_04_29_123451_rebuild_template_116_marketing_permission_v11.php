@@ -27,6 +27,11 @@ return new class extends Migration
         ];
 
         // ─── 2. Update template-116 record ──────────────────────────────────
+        if (!DB::table('docuperfect_templates')->where('id', 116)->exists()) {
+            // Template 116 doesn't exist in this environment — skip the entire migration.
+            // (Local dev DBs may not have the prod template seed data.)
+            return;
+        }
         DB::table('docuperfect_templates')->where('id', 116)->update([
             'name'                   => 'Marketing Permission v11',
             'template_type'          => 'mandate',
@@ -96,38 +101,35 @@ return new class extends Migration
             ->whereNull('deleted_at')
             ->update(['deleted_at' => now()]);
 
-        DB::table('web_pack_items')->insert([
-            [
-                'web_pack_id'  => $packId,
-                'template_id'  => 116,
-                'sort_order'   => 0,
-                'slot_type'    => 'required',
-                'slot_group'   => null,
-                'slot_label'   => 'Marketing Permission v11',
-                'created_at'   => now(),
-                'updated_at'   => now(),
-            ],
-            [
-                'web_pack_id'  => $packId,
-                'template_id'  => 117,
-                'sort_order'   => 10,
-                'slot_type'    => 'required',
-                'slot_group'   => null,
-                'slot_label'   => 'Sales Mandatory Disclosure',
-                'created_at'   => now(),
-                'updated_at'   => now(),
-            ],
-            [
-                'web_pack_id'  => $packId,
-                'template_id'  => 119,
-                'sort_order'   => 20,
-                'slot_type'    => 'required',
-                'slot_group'   => null,
-                'slot_label'   => 'Sales Addendum B',
-                'created_at'   => now(),
-                'updated_at'   => now(),
-            ],
-        ]);
+        $candidateItems = [
+            ['template_id' => 116, 'sort_order' => 0,  'slot_label' => 'Marketing Permission v11'],
+            ['template_id' => 117, 'sort_order' => 10, 'slot_label' => 'Sales Mandatory Disclosure'],
+            ['template_id' => 119, 'sort_order' => 20, 'slot_label' => 'Sales Addendum B'],
+        ];
+        $existingTemplateIds = DB::table('docuperfect_templates')
+            ->whereIn('id', array_column($candidateItems, 'template_id'))
+            ->pluck('id')->all();
+
+        $rows = [];
+        foreach ($candidateItems as $item) {
+            if (!in_array($item['template_id'], $existingTemplateIds, true)) {
+                continue;
+            }
+            $rows[] = [
+                'web_pack_id' => $packId,
+                'template_id' => $item['template_id'],
+                'sort_order'  => $item['sort_order'],
+                'slot_type'   => 'required',
+                'slot_group'  => null,
+                'slot_label'  => $item['slot_label'],
+                'created_at'  => now(),
+                'updated_at'  => now(),
+            ];
+        }
+
+        if (!empty($rows)) {
+            DB::table('web_pack_items')->insert($rows);
+        }
     }
 
     public function down(): void

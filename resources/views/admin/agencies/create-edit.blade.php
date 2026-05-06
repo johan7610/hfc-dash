@@ -335,7 +335,8 @@
                     onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
                 {{ $agency ? 'Update Agency' : 'Create Agency' }}
             </button>
-            <a href="{{ route('agencies.index') }}"
+            @php $cancelUrl = auth()->user()?->isOwnerRole() ? route('agencies.index') : route('admin.company-settings'); @endphp
+            <a href="{{ $cancelUrl }}"
                class="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 border border-slate-300 hover:bg-slate-50 transition-colors">
                 Cancel
             </a>
