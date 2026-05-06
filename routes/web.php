@@ -809,6 +809,13 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
             return response()->json($svc->checkUserConflicts((int)$request->get('user_id'), $request->get('start'), $request->get('end'), $request->get('exclude_event_id')));
         })->name('command-center.calendar.check-conflicts');
 
+        // Feedback Reports
+        Route::post('/feedback', [\App\Http\Controllers\FeedbackReportController::class, 'store'])->name('command-center.feedback.store');
+        Route::get('/feedback-reports', [\App\Http\Controllers\FeedbackReportController::class, 'index'])->middleware('permission:command_center.settings')->name('command-center.feedback-reports');
+        Route::get('/feedback-reports/export', [\App\Http\Controllers\FeedbackReportController::class, 'export'])->middleware('permission:command_center.settings')->name('command-center.feedback-reports.export');
+        Route::get('/feedback-reports/{id}', [\App\Http\Controllers\FeedbackReportController::class, 'show'])->middleware('permission:command_center.settings')->name('command-center.feedback-reports.show');
+        Route::post('/feedback-reports/{id}/status', [\App\Http\Controllers\FeedbackReportController::class, 'updateStatus'])->middleware('permission:command_center.settings')->name('command-center.feedback-reports.update-status');
+
         Route::get('/reporting/agent', [\App\Http\Controllers\CommandCenter\ReportingController::class, 'agentDashboard'])->name('command-center.reporting.agent');
         Route::get('/reporting/branch', [\App\Http\Controllers\CommandCenter\ReportingController::class, 'branchDashboard'])->middleware('permission:dashboard.oversight.view')->name('command-center.reporting.branch');
         Route::get('/reporting/agency', [\App\Http\Controllers\CommandCenter\ReportingController::class, 'agencyDashboard'])->name('command-center.reporting.agency');
