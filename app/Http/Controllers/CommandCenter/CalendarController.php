@@ -339,16 +339,51 @@ class CalendarController extends Controller
 
     private function sharedViewData($user, string $view, array $typeFilter, array $categoryFilter, string $scope): array
     {
+        $allClasses = CalendarEventClassSetting::withoutGlobalScopes()
+            ->where('is_active', true)->orderBy('label')
+            ->get()->unique('event_class');
+
+        // Filter to classes the current user can see (super_admin/admin see all)
+        $userRole = $user->role ?? 'agent';
+        $isBypass = in_array($userRole, ['super_admin', 'admin', 'owner']);
+
+        $visibleClasses = $isBypass ? $allClasses : $allClasses->filter(function ($cls) use ($userRole) {
+            // Check if user's role appears in ANY colour visibility list
+            $allVisibleRoles = array_merge(
+                $cls->green_visibility ?? [],
+                $cls->amber_visibility ?? [],
+                $cls->red_visibility ?? []
+            );
+            // Role widening: 'bm' matches 'branch_manager'
+            if (in_array('all', $allVisibleRoles)) return true;
+            if (in_array($userRole, $allVisibleRoles)) return true;
+            if ($userRole === 'branch_manager' && in_array('bm', $allVisibleRoles)) return true;
+            return false;
+        });
+
+        // Derive available event types from visible classes (only show types that have visible classes)
+        $visibleClassKeys = $visibleClasses->pluck('event_class')->toArray();
+        $availableTypes = $isBypass
+            ? ['compliance', 'deal', 'document', 'lease', 'leave', 'payroll', 'people', 'property', 'recurring', 'manual']
+            : \App\Models\CommandCenter\CalendarEvent::withoutGlobalScopes()
+                ->whereIn('category', $visibleClassKeys)
+                ->whereNotNull('event_type')
+                ->distinct()
+                ->pluck('event_type')
+                ->merge(['manual']) // manual events always visible to creator
+                ->unique()
+                ->sort()
+                ->values()
+                ->toArray();
+
         return [
             'user'                => $user,
             'currentView'         => $view,
             'typeFilter'          => $typeFilter,
             'categoryFilter'      => $categoryFilter,
             'scope'               => $scope,
-            'availableTypes'      => ['compliance', 'deal', 'document', 'lease', 'leave', 'payroll', 'people', 'property', 'recurring'],
-            'availableCategories' => CalendarEventClassSetting::withoutGlobalScopes()
-                ->where('is_active', true)->orderBy('label')
-                ->get(['event_class', 'label'])->unique('event_class')->values(),
+            'availableTypes'      => $availableTypes,
+            'availableCategories' => $visibleClasses->map(fn($c) => (object)['event_class' => $c->event_class, 'label' => $c->label])->values(),
             'manualCreatableClasses' => CalendarEventClassSetting::withoutGlobalScopes()
                 ->whereNull('agency_id')
                 ->where('is_active', true)
