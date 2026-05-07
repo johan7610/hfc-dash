@@ -439,6 +439,11 @@ class CalendarController extends Controller
 
         $isManual = in_array($calendarEvent->source_type, ['manual', 'manual:demo']);
 
+        // Check current user's invitation status for this event
+        $userInvitation = \App\Models\CommandCenter\CalendarEventInvitation::where('event_id', $calendarEvent->id)
+            ->where('invitee_user_id', $user->id)->first();
+        $isOrganizer = (int) ($calendarEvent->user_id ?? 0) === (int) $user->id;
+
         return response()->json([
             'id' => $calendarEvent->id, 'title' => $calendarEvent->title,
             'description' => $calendarEvent->description,
@@ -490,6 +495,14 @@ class CalendarController extends Controller
                     'when'   => $a->performed_at->format('j M Y, H:i'),
                     'by'     => optional($a->performer)->name,
                 ]),
+            'is_organizer' => $isOrganizer,
+            'invitation' => $userInvitation ? [
+                'id' => $userInvitation->id,
+                'status' => $userInvitation->status,
+                'response_at' => $userInvitation->response_at?->format('j M Y'),
+                'inviter_name' => \App\Models\User::withoutGlobalScopes()->find($userInvitation->inviter_user_id)?->name ?? 'Unknown',
+                'respond_url' => route('command-center.calendar.invitations.respond', $userInvitation->id),
+            ] : null,
         ]);
     }
 
@@ -851,10 +864,31 @@ class CalendarController extends Controller
         return $request->wantsJson() ? response()->json(['ok' => true]) : back()->with('success', 'Event removed.');
     }
 
-    public function complete(CalendarEvent $calendarEvent)
+    public function complete(Request $request, CalendarEvent $calendarEvent)
     {
+        // Deal step bridge: if this calendar event is linked to a DealStepInstance,
+        // complete the deal step instead (observer will cascade to calendar event)
+        if ($calendarEvent->source_type === \App\Models\DealV2\DealStepInstance::class && $calendarEvent->source_id) {
+            $step = \App\Models\DealV2\DealStepInstance::find($calendarEvent->source_id);
+            if ($step && in_array($step->status, ['active', 'not_started'])) {
+                $pipelineService = app(\App\Services\DealV2\DealPipelineService::class);
+                $pipelineService->completeStep($step, $request->user(), [
+                    'outcome' => 'positive',
+                    'notes' => $request->input('notes', 'Completed from calendar'),
+                ]);
+
+                $msg = "Deal step \"{$step->name}\" completed — deal pipeline advanced.";
+                return $request->wantsJson()
+                    ? response()->json(['ok' => true, 'message' => $msg])
+                    : back()->with('success', $msg);
+            }
+        }
+
+        // Default: mark calendar event complete directly (non-deal events)
         $calendarEvent->markCompleted();
-        return back()->with('success', 'Event completed.');
+        return $request->wantsJson()
+            ? response()->json(['ok' => true])
+            : back()->with('success', 'Event completed.');
     }
 
     public function dismiss(CalendarEvent $calendarEvent)

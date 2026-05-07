@@ -52,6 +52,9 @@ class AppServiceProvider extends ServiceProvider
         DealSettlement::observe(DealSettlementObserver::class);
         Property::observe(PropertyObserver::class);
         CommandTask::observe(CommandTaskObserver::class);
+        \App\Models\ProspectingListing::observe(\App\Observers\ProspectingListingObserver::class);
+        \App\Models\DealV2\DealV2::observe(\App\Observers\DealV2Observer::class);
+        \App\Models\DealV2\DealStepInstance::observe(\App\Observers\DealStepInstanceObserver::class);
 
         // Register calendar source services (Phase 1)
         $registry = $this->app->make(\App\Services\CommandCenter\Calendar\CalendarSourceRegistry::class);

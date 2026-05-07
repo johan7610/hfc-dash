@@ -419,8 +419,11 @@
                                         @foreach(array_slice($dayEvents, 0, $chipCap) as $evt)
                                             @php
                                                 $chipStyle = $ragChip[$evt->resolved_colour] ?? $defaultChip;
-                                                $isTentative = ($evt->user_invitation_status ?? null) === 'tentative';
+                                                $invStatus = $evt->user_invitation_status ?? null;
+                                                $isTentative = $invStatus === 'tentative';
+                                                $isPending = $invStatus === 'pending';
                                                 if ($isTentative) $chipStyle .= ' border: 2px dashed rgba(255,255,255,0.5); opacity: 0.75;';
+                                                if ($isPending) $chipStyle .= ' border: 2px dotted rgba(255,255,255,0.4); opacity: 0.6;';
                                             @endphp
                                             <button type="button"
                                                     data-event-id="{{ $evt->id }}"
@@ -430,8 +433,8 @@
                                                     @click.stop="openEventPanel({{ $evt->id }})"
                                                     class="block w-full text-left text-[11px] leading-tight px-1.5 py-0.5 rounded truncate hover:opacity-80 transition-opacity cursor-grab active:cursor-grabbing {{ $evt->status === 'completed' ? 'line-through opacity-70' : '' }}"
                                                     style="{{ $chipStyle }}"
-                                                    title="{{ $evt->title }}{{ $isTentative ? ' (Tentative)' : '' }}">
-                                                <span class="rag-dot w-1.5 h-1.5 rounded-full inline-block mr-0.5 align-middle" style="display:none;"></span>{{ $evt->all_day ? '' : $evt->event_date->format('H:i') . ' ' }}{{ \Illuminate\Support\Str::limit($evt->title, 20) }}
+                                                    title="{{ $evt->title }}{{ $isTentative ? ' (Tentative)' : '' }}{{ $isPending ? ' (Pending — accept to confirm)' : '' }}">
+                                                <span class="rag-dot w-1.5 h-1.5 rounded-full inline-block mr-0.5 align-middle" style="display:none;"></span>@if($isPending)<span class="text-[9px] font-bold uppercase mr-0.5" style="opacity:0.7;">PENDING</span> @endif{{ $evt->all_day ? '' : $evt->event_date->format('H:i') . ' ' }}{{ \Illuminate\Support\Str::limit($evt->title, $isPending ? 14 : 20) }}
                                             </button>
                                         @endforeach
                                     </div>
@@ -1224,6 +1227,42 @@
                     </button>
                 </div>
 
+                {{-- Invitation status pill + respond buttons (invitee only) --}}
+                <template x-if="panelData.invitation && !panelData.is_organizer">
+                    <div class="px-5 py-3" style="border-bottom: 1px solid var(--border);">
+                        {{-- Status pill --}}
+                        <template x-if="panelData.invitation.status === 'pending'">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded" style="background:rgba(245,158,11,0.15); color:#f59e0b;">Pending</span>
+                                <span class="text-xs" style="color:var(--text-muted);">Invitation from <span x-text="panelData.invitation.inviter_name" style="color:var(--text-secondary);"></span></span>
+                            </div>
+                        </template>
+                        <template x-if="panelData.invitation.status === 'tentative'">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded" style="background:rgba(245,158,11,0.15); color:#f59e0b;">Tentative</span>
+                                <span class="text-xs" style="color:var(--text-muted);">You marked tentative<template x-if="panelData.invitation.response_at"> on <span x-text="panelData.invitation.response_at"></span></template></span>
+                            </div>
+                        </template>
+                        <template x-if="panelData.invitation.status === 'accepted'">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded" style="background:rgba(16,185,129,0.15); color:#10b981;">Accepted</span>
+                                <span class="text-xs" style="color:var(--text-muted);">You accepted this invitation</span>
+                            </div>
+                        </template>
+                        {{-- Respond buttons --}}
+                        <template x-if="panelData.invitation.status === 'pending' || panelData.invitation.status === 'tentative'">
+                            <div class="flex items-center gap-1.5">
+                                <button type="button" @click="respondInvitation('accepted')" class="text-[11px] font-medium px-3 py-1 rounded text-white" style="background:#10b981;">Accept</button>
+                                <button type="button" @click="respondInvitation('tentative')" class="text-[11px] font-medium px-3 py-1 rounded" style="background:var(--surface-2); color:#f59e0b; border:1px solid rgba(245,158,11,0.3);">Tentative</button>
+                                <button type="button" @click="respondInvitation('declined')" class="text-[11px] font-medium px-3 py-1 rounded" style="background:var(--surface-2); color:#ef4444; border:1px solid rgba(239,68,68,0.3);">Decline</button>
+                            </div>
+                        </template>
+                        <template x-if="panelData.invitation.status === 'accepted'">
+                            <button type="button" @click="respondInvitation('pending')" class="text-[10px] underline" style="color:var(--text-muted);">Change response</button>
+                        </template>
+                    </div>
+                </template>
+
                 {{-- Title + date --}}
                 <div class="px-5 py-4" style="border-bottom: 1px solid var(--border);">
                     <h2 class="text-xl font-semibold leading-tight" style="color: var(--text-primary);" x-text="panelData.title"></h2>
@@ -1364,10 +1403,16 @@
                 <template x-if="panelData.is_actionable && (!panelData.completion_behaviour || panelData.completion_behaviour === 'freeform')">
                     <form :action="'/corex/command-center/calendar/' + panelData.id + '/complete'" method="POST">
                         @csrf
+                        {{-- Deal step context badge --}}
+                        <template x-if="panelData.metadata && panelData.metadata.deal_ref">
+                            <div class="mb-2 px-2 py-1 rounded text-[10px] inline-flex items-center gap-1" style="background:rgba(245,158,11,0.1);color:#f59e0b;border:1px solid rgba(245,158,11,0.2);">
+                                <span>Deal Step:</span> <span x-text="(panelData.metadata.step_name || 'Step') + ' — ' + panelData.metadata.deal_ref"></span>
+                            </div>
+                        </template>
                         <button type="submit" class="text-xs font-medium transition-colors hover:opacity-70 inline-flex items-center gap-1"
                                 style="color: var(--text-secondary);">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/></svg>
-                            Complete
+                            <span x-text="(panelData.metadata && panelData.metadata.deal_ref) ? 'Mark Step Complete' : 'Complete'"></span>
                         </button>
                     </form>
                 </template>
@@ -2350,6 +2395,26 @@ function calendarPage() {
                 this.panelData = { title: 'Could not load event', colour: null, days_diff: 0 };
                 console.warn('Calendar event load failed:', err);
             });
+        },
+
+        async respondInvitation(action) {
+            if (!this.panelData?.invitation?.respond_url) return;
+            try {
+                const r = await fetch(this.panelData.invitation.respond_url, {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+                    body: JSON.stringify({ action: action, _token: document.querySelector('meta[name="csrf-token"]').content }),
+                    credentials: 'same-origin',
+                });
+                if (r.ok || r.status === 302) {
+                    // Refresh panel data
+                    this.openEventPanel(this.panelData.id);
+                    // If declined, close panel after brief delay
+                    if (action === 'declined') {
+                        setTimeout(() => { this.panelOpen = false; }, 800);
+                    }
+                }
+            } catch (e) { console.error('Invitation respond failed:', e); }
         },
 
         panelColourStyle(colour) {
