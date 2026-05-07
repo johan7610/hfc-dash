@@ -214,7 +214,7 @@ class AgencyController extends Controller
         ));
 
         $counts = [];
-        DB::transaction(function () use ($cascadeTables, $tables, $agencyId, $ownerRoleNames, &$counts, $agency) {
+        DB::transaction(function () use ($cascadeTables, $tables, $agencyId, $ownerRoleNames, &$counts, $agency, $driver) {
             // Cascade rows referencing users we're about to delete (e.g. agent_scorecards)
             // which don't carry agency_id directly and would otherwise trip FK constraints.
             $userIdsToDelete = DB::table('users')
