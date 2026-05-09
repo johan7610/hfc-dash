@@ -189,6 +189,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/admin/users/{user}/delete', [App\Http\Controllers\Admin\UserManagementController::class, 'delete'])
         ->middleware('permission:manage_users')->name('admin.users.delete');
 
+    Route::get('/api/v1/admin/users/{user}/delete-preview', [App\Http\Controllers\Admin\UserManagementController::class, 'deletePreview'])
+        ->middleware('permission:manage_users')->name('api.v1.admin.users.delete-preview');
+
     Route::post('/admin/users/{user}/defaults', [App\Http\Controllers\Admin\UserManagementController::class, 'updateDefaults'])
         ->middleware('permission:manage_users')->name('admin.users.defaults.update');
     Route::post('/admin/users/{user}/role', [App\Http\Controllers\Admin\UserManagementController::class, 'updateRole'])->middleware('permission:manage_users')->name('admin.users.role.update');
@@ -451,6 +454,7 @@ require __DIR__.'/auth.php';
 use App\Http\Controllers\Admin\TargetController;
 use App\Http\Controllers\ToolsController;
 use App\Http\Controllers\Tools\PdfSplitterController;
+use App\Http\Controllers\Tools\PdfSuiteController;
 
 Route::middleware(['auth'])->group(function () {
 
@@ -472,6 +476,32 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/tools/pdf-splitter/confirm', [PdfSplitterController::class, 'confirm'])->middleware('permission:access_pdf_splitter')->name('tools.pdf_splitter.confirm');
     Route::get('/tools/pdf-splitter/thumb/{page}', [PdfSplitterController::class, 'serveThumb'])->middleware('permission:access_pdf_splitter')->name('tools.pdf_splitter.thumb')->where('page', '[0-9]+');
     Route::get('/tools/pdf-splitter/download', [PdfSplitterController::class, 'downloadLastZip'])->middleware('permission:access_pdf_splitter')->name('tools.pdf_splitter.download');
+
+    // PDF Suite — hub + 7 sibling tools (Splitter is reachable from the hub)
+    Route::middleware('permission:access_pdf_suite')->prefix('tools/pdf-suite')->name('tools.pdf_suite.')->group(function () {
+        Route::get('/',              [PdfSuiteController::class, 'hub'])->name('hub');
+
+        Route::get('/compress',      [PdfSuiteController::class, 'compress'])->name('compress');
+        Route::post('/compress',     [PdfSuiteController::class, 'compressRun'])->name('compress.run');
+
+        Route::get('/merge',         [PdfSuiteController::class, 'merge'])->name('merge');
+        Route::post('/merge',        [PdfSuiteController::class, 'mergeRun'])->name('merge.run');
+
+        Route::get('/image-to-pdf',  [PdfSuiteController::class, 'imageToPdf'])->name('image-to-pdf');
+        Route::post('/image-to-pdf', [PdfSuiteController::class, 'imageToPdfRun'])->name('image-to-pdf.run');
+
+        Route::get('/rotate',        [PdfSuiteController::class, 'rotate'])->name('rotate');
+        Route::post('/rotate',       [PdfSuiteController::class, 'rotateRun'])->name('rotate.run');
+
+        Route::get('/reorder',       [PdfSuiteController::class, 'reorder'])->name('reorder');
+        Route::post('/reorder',      [PdfSuiteController::class, 'reorderRun'])->name('reorder.run');
+
+        Route::get('/protect',       [PdfSuiteController::class, 'protect'])->name('protect');
+        Route::post('/protect',      [PdfSuiteController::class, 'protectRun'])->name('protect.run');
+
+        Route::get('/redact',        [PdfSuiteController::class, 'redact'])->name('redact');
+        Route::post('/redact',       [PdfSuiteController::class, 'redactRun'])->name('redact.run');
+    });
 
     // Splitter Doc Type Admin (legacy routes — kept so PDF Splitter links still work)
     Route::get('/admin/splitter/doc-types', [\App\Http\Controllers\Admin\SplitterDocTypeController::class, 'index'])->middleware('permission:access_pdf_splitter')->name('admin.splitter.doc-types.index');

@@ -745,15 +745,14 @@
                                 {{ $user->is_active ? 'Deactivate User' : 'Activate User' }}
                             </button>
                         </form>
-                        <form method="POST" action="{{ route('admin.users.delete', $user) }}" class="inline"
-                              onsubmit="return confirm('Delete {{ addslashes($user->name) }}? This cannot be undone.');">
-                            @csrf
-                            <button type="submit"
-                                    class="px-4 py-2 rounded-md text-sm font-medium w-full sm:w-auto"
-                                    style="background:color-mix(in srgb, var(--ds-crimson) 10%, transparent); color:var(--ds-crimson); border:1px solid color-mix(in srgb, var(--ds-crimson) 25%, transparent);">
-                                Delete User
-                            </button>
-                        </form>
+                        <button type="button"
+                                data-agent-delete
+                                data-user-id="{{ $user->id }}"
+                                data-user-name="{{ $user->name }}"
+                                class="px-4 py-2 rounded-md text-sm font-medium w-full sm:w-auto"
+                                style="background:color-mix(in srgb, var(--ds-crimson) 10%, transparent); color:var(--ds-crimson); border:1px solid color-mix(in srgb, var(--ds-crimson) 25%, transparent);">
+                            Delete User
+                        </button>
                     </div>
                 </div>
                 @endif
@@ -792,4 +791,8 @@
     </form>
 
 </div>
+
+@isset($user)
+@include('admin.users._delete-modal')
+@endisset
 @endsection

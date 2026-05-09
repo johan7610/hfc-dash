@@ -883,10 +883,10 @@
         </div>
         @endif
 
-        {{-- PDF Splitter --}}
-        @permission('access_pdf_splitter')
-        @if(\Illuminate\Support\Facades\Route::has('tools.pdf_splitter.index'))
-        <a href="{{ route('tools.pdf_splitter.index') }}" class="corex-nav-item {{ request()->routeIs('tools.pdf_splitter.*') ? 'active' : '' }}">
+        {{-- PDF Suite --}}
+        @if(auth()->check() && (auth()->user()->hasPermission('access_pdf_suite') || auth()->user()->hasPermission('access_pdf_splitter')))
+        @if(\Illuminate\Support\Facades\Route::has('tools.pdf_suite.hub'))
+        <a href="{{ route('tools.pdf_suite.hub') }}" class="corex-nav-item {{ (request()->routeIs('tools.pdf_suite.*') || request()->routeIs('tools.pdf_splitter.*')) ? 'active' : '' }}">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                 <path d="M14 2v6h6"/>
@@ -894,10 +894,10 @@
                 <path d="M8 17h8"/>
                 <path d="M8 9h2"/>
             </svg>
-            <span>PDF Splitter</span>
+            <span>PDF Suite</span>
         </a>
         @endif
-        @endpermission
+        @endif
 
         {{-- Document Library --}}
         @permission('access_document_library')

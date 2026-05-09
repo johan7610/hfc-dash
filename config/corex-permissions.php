@@ -294,8 +294,11 @@ return [
         ['key' => 'access_deposit_calculator',   'label' => 'Access Deposit Interest Calculator', 'section' => 'trust-interest', 'type' => 'access',  'module' => 'trust_interest',   'sort_order' => 2],
         ['key' => 'access_deposit_calc_history', 'label' => 'Access Calculation History',        'section' => 'trust-interest', 'type' => 'access',  'module' => 'trust_interest',   'sort_order' => 3],
 
-        // ── PDF Splitter ──
+        // ── PDF Splitter (legacy key — kept for backwards compatibility with existing role assignments) ──
         ['key' => 'access_pdf_splitter',         'label' => 'Access PDF Splitter',         'section' => 'pdf-splitter',     'type' => 'access',  'module' => 'pdf_splitter',     'sort_order' => 1],
+
+        // ── PDF Suite ──
+        ['key' => 'access_pdf_suite',            'label' => 'Access PDF Suite',            'section' => 'pdf-suite',        'type' => 'access',  'module' => 'pdf_suite',        'sort_order' => 1],
 
         // ── Knowledge Base ──
         ['key' => 'access_knowledge_base',       'label' => 'Access Knowledge Base',       'section' => 'knowledge-base',   'type' => 'access',  'module' => 'knowledge',        'sort_order' => 1],
@@ -478,7 +481,8 @@ return [
                 'access_sales_documents',
                 'sales_docs.view', 'sales_docs.create', 'sales_docs.edit',
                 'access_calculators', 'access_ellie',
-                'access_pdf_splitter', 'access_deposit_calculator', 'access_deposit_calc_history',
+                'access_pdf_splitter', 'access_pdf_suite',
+                'access_deposit_calculator', 'access_deposit_calc_history',
                 'access_prospecting', 'access_evaluation',
                 'access_properties', 'create_properties', 'publish_properties', 'delete_properties',
                 'properties.view', 'properties.create', 'properties.edit',
@@ -541,7 +545,7 @@ return [
                 'access_sales_documents',
                 'sales_docs.view', 'sales_docs.create',
                 'access_calculators', 'access_ellie',
-                'access_pdf_splitter',
+                'access_pdf_splitter', 'access_pdf_suite',
                 'access_prospecting', 'access_evaluation',
                 'access_properties', 'create_properties',
                 'properties.view', 'properties.create', 'properties.edit',
