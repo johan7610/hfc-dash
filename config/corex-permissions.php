@@ -272,6 +272,14 @@ return [
         ['key' => 'core_matches.manage',         'label' => 'Manage (edit, archive)',      'section' => 'core-matches',     'type' => 'action',  'module' => 'core_matches',     'sort_order' => 13],
         ['key' => 'core_matches.convert_to_deal','label' => 'Convert to Deal',             'section' => 'core-matches',     'type' => 'action',  'module' => 'core_matches',     'sort_order' => 14],
 
+        // ── Client App (mobile client portal) ──
+        // Spec: .ai/specs/client-auth.md
+        ['key' => 'client_app.create_login',     'label' => 'Create Client App Login',     'section' => 'contacts',         'type' => 'action',  'module' => 'client_app',       'sort_order' => 50],
+        ['key' => 'client_app.reset_password',   'label' => 'Reset Client App Password',   'section' => 'contacts',         'type' => 'action',  'module' => 'client_app',       'sort_order' => 51],
+        ['key' => 'client_app.force_logout',     'label' => 'Force Client Logout',         'section' => 'contacts',         'type' => 'action',  'module' => 'client_app',       'sort_order' => 52],
+        ['key' => 'client_app.remove_access',    'label' => 'Remove Client App Access',    'section' => 'contacts',         'type' => 'action',  'module' => 'client_app',       'sort_order' => 53],
+        ['key' => 'client_app.view_logs',        'label' => 'View Client App Activity',    'section' => 'admin',            'type' => 'access',  'module' => 'client_app',       'sort_order' => 54],
+
         // ── Calculators / Tools ──
         ['key' => 'access_calculators',          'label' => 'Access Calculators & Tools',  'section' => 'calculators',      'type' => 'access',  'module' => 'calculators',      'sort_order' => 1],
 

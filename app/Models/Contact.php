@@ -27,6 +27,7 @@ class Contact extends Model
         'agency_id',
         'branch_id',
         'contact_type_id', 'contact_source_id', 'created_by_user_id',
+        'client_user_id',
         'first_name', 'last_name', 'phone', 'email', 'notes',
         'birthday', 'id_number', 'address',
         'loaded_at', 'modified_at', 'last_contacted_at',
@@ -68,6 +69,16 @@ class Contact extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    public function clientUser(): BelongsTo
+    {
+        return $this->belongsTo(ClientUser::class);
+    }
+
+    public function hasClientLogin(): bool
+    {
+        return $this->client_user_id !== null;
     }
 
     public function contactNotes(): HasMany

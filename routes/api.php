@@ -12,6 +12,8 @@ use App\Http\Controllers\Api\MobilePropertyController;
 use App\Http\Controllers\Api\MobileContactController;
 use App\Http\Controllers\Api\MobileCoreMatchController;
 use App\Http\Controllers\Api\PropertyPullController;
+use App\Http\Controllers\Api\V1\ClientAuthController;
+use App\Http\Controllers\Api\V1\ClientPortalController;
 use App\Http\Controllers\FaultReportController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
@@ -61,6 +63,35 @@ Route::post('/fault-report', [FaultReportController::class, 'capture'])
 // Authentication is HMAC (X-Signature header) verified inside the controller.
 Route::post('/pp/webhook', [\App\Http\Controllers\PrivateProperty\PpWebhookController::class, 'receive'])
     ->name('pp.webhook');
+
+// ════════════════════════════════════════════════════════════════
+// API v1 — Client Auth (mobile client portal)
+// Spec: .ai/specs/client-auth.md
+// ════════════════════════════════════════════════════════════════
+Route::prefix('v1/client-auth')->group(function () {
+    Route::post('/lookup',          [ClientAuthController::class, 'lookup'])->name('client-auth.lookup');
+    Route::post('/otp/send',        [ClientAuthController::class, 'sendOtp'])->name('client-auth.otp.send');
+    Route::post('/otp/verify',      [ClientAuthController::class, 'verifyOtp'])->name('client-auth.otp.verify');
+    Route::post('/login',           [ClientAuthController::class, 'login'])->name('client-auth.login');
+    Route::post('/password/forgot', [ClientAuthController::class, 'forgotPassword'])->name('client-auth.password.forgot');
+
+    // Activation token OR client sanctum token (both checked in controller)
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/password/set', [ClientAuthController::class, 'setPassword'])->name('client-auth.password.set');
+    });
+
+    // Client sanctum token only
+    Route::middleware(['auth:sanctum', 'client.ability'])->group(function () {
+        Route::post('/password/change', [ClientAuthController::class, 'changePassword'])->name('client-auth.password.change');
+        Route::post('/agency/select',   [ClientAuthController::class, 'selectAgency'])->name('client-auth.agency.select');
+        Route::post('/logout',          [ClientAuthController::class, 'logout'])->name('client-auth.logout');
+    });
+});
+
+Route::prefix('v1/client')->middleware(['auth:sanctum', 'client.ability'])->group(function () {
+    Route::get('/me',      [ClientPortalController::class, 'me'])->name('client.me');
+    Route::get('/matches', [ClientPortalController::class, 'matches'])->name('client.matches');
+});
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/profile', function (Request $request) {

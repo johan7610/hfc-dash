@@ -29,6 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 'onboarding.portal' => \App\Http\Middleware\ResolveOnboardingPortal::class,
                 'agency.required' => \App\Http\Middleware\RequireAgencyContext::class,
                 'branch.required' => \App\Http\Middleware\RequiresBranchAssignment::class,
+                'client.ability' => \App\Http\Middleware\EnsureClientAbility::class,
         ]);
 
         $middleware->validateCsrfTokens(except: [

@@ -536,6 +536,8 @@
                     <a href="{{ route('corex.contacts.index') }}" class="text-sm" style="color:var(--text-muted);">Cancel</a>
                 </div>
             </form>
+
+            @include('corex.contacts.partials.client-app-access', ['contact' => $contact])
         </div>
 
         {{-- ════════════════════════════

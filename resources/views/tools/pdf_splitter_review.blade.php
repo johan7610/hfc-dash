@@ -197,6 +197,8 @@
 #spr .btn-back:hover { color:var(--brand-icon, #0ea5e9); }
 </style>
 
+@include('tools.pdf-suite._switcher')
+
 <div id="spr">
 <div class="wrap">
 

@@ -61,6 +61,11 @@ Route::middleware('auth')->group(function () {
         ->middleware('permission:manage_users')
         ->name('admin.api.catalog');
 
+    // ── Admin: Client App Activity ── Spec: .ai/specs/client-auth.md
+    Route::get('/admin/client-app-activity', [\App\Http\Controllers\Admin\ClientAppActivityController::class, 'index'])
+        ->middleware('permission:client_app.view_logs')
+        ->name('admin.client-app-activity');
+
     // ── CoreX Global API v1 (session-authenticated, browser-visible XHR) ──
     Route::prefix('api/v1')->name('api.v1.')->group(function () {
         Route::get('/logged-user', [\App\Http\Controllers\Api\V1\MeController::class, 'show'])->name('logged-user');
@@ -1624,6 +1629,12 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/{contact}/matches/{match}/hide/{property}',      [\App\Http\Controllers\CoreX\ContactMatchController::class, 'toggleHide'])->name('matches.toggleHide');
         Route::post('/{contact}/matches/{match}/convert/{property}',   [\App\Http\Controllers\CoreX\ContactMatchController::class, 'convertToDeal'])->middleware('permission:core_matches.convert_to_deal')->name('matches.convertToDeal');
         Route::delete('/{contact}/matches/{match}',                    [\App\Http\Controllers\CoreX\ContactMatchController::class, 'destroy'])->name('matches.destroy');
+
+        // Client App Login — Spec: .ai/specs/client-auth.md
+        Route::post('/{contact}/client-login',                  [\App\Http\Controllers\Contacts\ClientLoginController::class, 'create'])->name('client-login.create');
+        Route::post('/{contact}/client-login/reset',            [\App\Http\Controllers\Contacts\ClientLoginController::class, 'reset'])->name('client-login.reset');
+        Route::post('/{contact}/client-login/force-logout',     [\App\Http\Controllers\Contacts\ClientLoginController::class, 'forceLogout'])->name('client-login.force-logout');
+        Route::delete('/{contact}/client-login',                [\App\Http\Controllers\Contacts\ClientLoginController::class, 'remove'])->name('client-login.remove');
     });
 
     // Contact Types (settings)
