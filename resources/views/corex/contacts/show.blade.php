@@ -591,6 +591,18 @@
                         <button type="submit" class="text-xs font-semibold text-red-500 hover:text-red-600 px-3 py-1.5 rounded-md hover:bg-red-500/10 transition-all duration-300 flex-shrink-0">Unlink</button>
                     </form>
                 </div>
+                @if(in_array($prop->pivot->role, ['owner', 'seller', 'landlord', 'lessor']))
+                    @php
+                        $sellerLink = \App\Models\PropertySellerLink::ensureExists($prop->id, $contact->id);
+                        $sellerLinkUrl = url('/property/live/' . $sellerLink->token);
+                    @endphp
+                    <div class="flex items-center gap-2 px-4 pb-2 -mt-1 text-[10px]" style="color:var(--text-muted);">
+                        <span style="color:var(--brand-icon);">Seller Live Link</span>
+                        <span class="truncate max-w-[200px]" title="{{ $sellerLinkUrl }}">{{ $sellerLinkUrl }}</span>
+                        <button type="button" onclick="navigator.clipboard.writeText('{{ $sellerLinkUrl }}'); this.textContent='Copied!';"
+                                class="font-medium px-1.5 py-0.5 rounded flex-shrink-0" style="color: #00d4aa; background: color-mix(in srgb, #00d4aa 10%, transparent);">Copy</button>
+                    </div>
+                @endif
                 @empty
                 <div class="rounded-md p-6 text-center" style="background:var(--surface-2); border:1px dashed var(--border-hover);">
                     <div class="text-sm" style="color:var(--text-secondary);">No properties linked yet.</div>
