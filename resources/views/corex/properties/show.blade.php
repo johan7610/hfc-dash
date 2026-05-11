@@ -100,7 +100,7 @@
                     <div class="flex items-center gap-1.5 flex-wrap">
                         <span class="ds-badge {{ $scBadge }}">{{ ucfirst($property->status ?: 'Draft') }}</span>
                         @if($property->isPublished())
-                            <span class="ds-badge ds-badge-success">Live</span>
+                            <span class="ds-badge ds-badge-success">Published</span>
                         @endif
                     </div>
                     <div class="text-sm font-bold mt-1 truncate" style="color:var(--text-primary);">{{ $property->title ?: 'New Property' }}</div>
@@ -119,12 +119,20 @@
                     <span x-text="formDirty ? 'Save Changes *' : 'Save Changes'"></span>
                 </button>
 
-                <button type="button" @click="synOpen=true; synStep='main'" class="prop-action-btn prop-action-btn-neutral">
+                @php $isMarketable = ($readinessReport->snapshotAt !== null) || $readinessReport->ready; @endphp
+
+                <button type="button" @click="synOpen=true; synStep='main'"
+                        class="prop-action-btn prop-action-btn-neutral {{ !$isMarketable ? 'opacity-50 cursor-not-allowed' : '' }}"
+                        {{ !$isMarketable ? 'aria-disabled=true' : '' }}
+                        title="{{ !$isMarketable ? 'Marketing blocked — see Compliance Status panel' : 'Manage portal syndication' }}">
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 0 1 7.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 0 1 1.06 0Z"/></svg>
                     Syndication
                 </button>
 
-                <button type="button" @click="synOpen=true; synStep='preview'" class="prop-action-btn prop-action-btn-neutral">
+                <button type="button" @click="synOpen=true; synStep='preview'"
+                        class="prop-action-btn prop-action-btn-neutral {{ !$isMarketable ? 'opacity-50 cursor-not-allowed' : '' }}"
+                        {{ !$isMarketable ? 'aria-disabled=true' : '' }}
+                        title="{{ !$isMarketable ? 'Marketing blocked — see Compliance Status panel' : 'Open public listing preview' }}">
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.641 0-8.58-3.007-9.964-7.178Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>
                     Live Preview
                 </button>
@@ -135,7 +143,10 @@
                 </a>
 
                 @if(\Illuminate\Support\Facades\Route::has('corex.properties.marketing.index') && \App\Models\PerformanceSetting::get('marketing_enabled', 1))
-                <a href="{{ route('corex.properties.marketing.index', $property) }}" class="prop-action-btn prop-action-btn-fb">
+                <a href="{{ route('corex.properties.marketing.index', $property) }}"
+                   class="prop-action-btn prop-action-btn-fb {{ !$isMarketable ? 'opacity-50 cursor-not-allowed pointer-events-none' : '' }}"
+                   {{ !$isMarketable ? 'aria-disabled=true' : '' }}
+                   title="{{ !$isMarketable ? 'Marketing blocked — see Compliance Status panel' : 'Social media marketing' }}">
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 1 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 0 1-1.44-4.282m3.102.069a18.03 18.03 0 0 1-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 0 1 8.835 2.535M10.34 6.66a23.847 23.847 0 0 1 8.835-2.535"/></svg>
                     Market Property
                 </a>
