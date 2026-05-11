@@ -268,6 +268,12 @@ class PrivatePropertySyndicationService
 
     /**
      * Register or update an agent on PP. Public method for controller use.
+     *
+     * Duplicate-safe: if PP already holds a profile for this user's email
+     * under a different External Ref (AgentId), we remap it to $user->id
+     * via UpdateUniqueAgentID first. Without that step, calling UpdateAgent
+     * with an AgentId PP doesn't recognise creates a brand-new profile —
+     * which is how the duplicate Andre/Elize records were generated.
      */
     public function registerAgent(User $user, bool $active = true): array
     {
@@ -278,6 +284,14 @@ class PrivatePropertySyndicationService
                 'success' => false,
                 'message' => 'Agent has no phone/cell number — required by Private Property',
             ];
+        }
+
+        $remapNote = null;
+        if ($active) {
+            $remap = $this->ensureNoDuplicateBeforeUpdateAgent($user);
+            if ($remap !== null) {
+                $remapNote = $remap;
+            }
         }
 
         $result = $this->client->updateAgent($agentData);
@@ -291,11 +305,88 @@ class PrivatePropertySyndicationService
 
         $this->log('info', "Agent #{$user->id} ({$user->name}) " . ($active ? 'registered' : 'deactivated') . " on PP");
 
+        $message = $active ? 'Agent registered on PP' : 'Agent deactivated on PP';
+        if ($remapNote) {
+            $message .= ' (' . $remapNote . ')';
+        }
+
         return [
             'success' => true,
-            'message' => $active ? 'Agent registered on PP' : 'Agent deactivated on PP',
+            'message' => $message,
             'result'  => $result,
         ];
+    }
+
+    /**
+     * Look up the user's email on PP. If a profile exists with a different
+     * AgentId, call UpdateUniqueAgentID to remap PP's existing record onto
+     * $user->id BEFORE we send UpdateAgent. Returns a human-readable note,
+     * or null if no remap was needed.
+     */
+    private function ensureNoDuplicateBeforeUpdateAgent(User $user): ?string
+    {
+        $email = strtolower(trim((string) $user->email));
+        if ($email === '') return null;
+
+        $resp = $this->client->getAllAgentsForBranch();
+        if (isset($resp['error']) && $resp['error'] === true) {
+            return null;
+        }
+
+        $xml = $resp['GetAllAgentsForBranchResult']['any'] ?? '';
+        if (!is_string($xml) || $xml === '') {
+            return null;
+        }
+
+        if (!preg_match_all('/<Agents\b[^>]*>(.*?)<\/Agents>/s', $xml, $matches)) {
+            return null;
+        }
+
+        // Canonical AgentId: pp_external_ref takes precedence over user->id.
+        $expectedId = (string) ($user->pp_external_ref ?: $user->id);
+        $existingForEmail = [];
+
+        foreach ($matches[1] as $inner) {
+            preg_match('/<email\b[^>]*>(.*?)<\/email>/s', $inner, $em);
+            preg_match('/<AgentId\b[^>]*>(.*?)<\/AgentId>/s', $inner, $am);
+            preg_match('/<PrivatePropertyAgentId\b[^>]*>(.*?)<\/PrivatePropertyAgentId>/s', $inner, $pm);
+
+            $rowEmail = strtolower(trim($em[1] ?? ''));
+            if ($rowEmail !== $email) continue;
+
+            $existingForEmail[] = [
+                'agent_id'        => trim($am[1] ?? ''),
+                'pp_encrypted_id' => trim($pm[1] ?? ''),
+            ];
+        }
+
+        if (empty($existingForEmail)) {
+            return null; // No existing profile — UpdateAgent will create the first one.
+        }
+
+        // If any existing record already matches user->id, nothing to remap.
+        foreach ($existingForEmail as $rec) {
+            if ($rec['agent_id'] === $expectedId) {
+                return null;
+            }
+        }
+
+        // Pick the first record and remap it to user->id.
+        $rec = $existingForEmail[0];
+        if ($rec['pp_encrypted_id'] === '') {
+            return 'PP has profile(s) for ' . $email . ' under different External Refs but no encrypted ID was returned — cannot auto-remap';
+        }
+
+        $remap = $this->client->updateUniqueAgentId($rec['pp_encrypted_id'], $expectedId);
+        if (isset($remap['error']) && $remap['error'] === true) {
+            return 'auto-remap UpdateUniqueAgentID failed: ' . ($remap['message'] ?? 'unknown error');
+        }
+
+        $user->update(['pp_unique_agent_id' => $rec['pp_encrypted_id']]);
+
+        $this->log('info', "Remapped PP profile for {$email} from External Ref {$rec['agent_id']} to {$expectedId} before UpdateAgent");
+
+        return "remapped PP External Ref {$rec['agent_id']} → {$expectedId} to avoid duplicate";
     }
 
     /**
@@ -361,13 +452,17 @@ class PrivatePropertySyndicationService
                 continue;
             }
 
-            // Check file size if stored locally
+            // Check file size if stored locally.
+            // Note: PP also requires minimum 160x120px. We do not validate
+            // dimensions server-side (would need GD/Imagick); ensure agent
+            // photos uploaded through CoreX meet this minimum.
             $localPath = storage_path('app/public/' . $user->agent_photo_path);
             if (file_exists($localPath) && filesize($localPath) > 1048576) {
                 $skipped[] = ['user_id' => $user->id, 'name' => $user->name, 'reason' => 'Image exceeds 1MB limit'];
                 $this->log('warning', "Skipping agent image for #{$user->id} — exceeds 1MB");
                 continue;
             }
+            $this->log('info', "Agent image push for #{$user->id}: ensure source image is ≥160x120px (PP minimum).");
 
             $result = $this->uploadAgentImage($user, $imageUrl);
 
@@ -386,10 +481,13 @@ class PrivatePropertySyndicationService
      */
     public function pushVideoOrMatterport(Property $property): array
     {
-        if (empty($property->pp_ref)) {
+        if (empty($property->pp_listing_feed_ref)) {
             return [
                 'success' => false,
-                'message' => 'Listing has no PP Ref — must be active on PP before video/Matterport can be added.',
+                'message' => 'Cannot push video — PP internal listing UUID (pp_listing_feed_ref) is not set on this property. '
+                           . 'This UUID is provided by PP via the Listing Event Feed when the listing activates. '
+                           . 'Ensure the Event Feed consumer is running, or contact PP to supply the UUID manually '
+                           . 'and store it via: php artisan pp:manage set-listing-uuid --property=ID --uuid=UUID',
             ];
         }
 
@@ -406,7 +504,7 @@ class PrivatePropertySyndicationService
         $listingType = in_array(strtolower($property->listing_type ?? ''), ['rental']) ? 'Rental' : 'Sale';
 
         $result = $this->client->updateListingVideoOrMatterport(
-            $property->pp_ref,
+            $property->pp_listing_feed_ref,
             $listingType,
             $youtube,
             $matterport
@@ -510,13 +608,13 @@ class PrivatePropertySyndicationService
         }
 
         $agentData = [
-            'AgentId'               => (string) $user->id,
+            'AgentId'               => (string) ($user->pp_external_ref ?: $user->id),
             'FirstName'             => $firstName,
             'LastName'              => $lastName,
             'Email'                 => $user->email ?? '',
             'TelCell'               => $cellPhone,
             'TelWork'               => $user->phone ?? $cellPhone,
-            'TelHome'               => $cellPhone,
+            'TelHome'               => '', // PP only recognises TelCell + TelWork
             'Active'                => true,
             'BranchId'              => config('services.private_property.branch_guid'),
             'PrivatePropertyAgentId' => '',

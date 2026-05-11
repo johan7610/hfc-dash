@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\NotificationPreferenceController;
 use App\Http\Controllers\Api\DeviceTokenController;
 use App\Http\Controllers\Api\ProspectingApiController;
 use App\Http\Controllers\Api\MobilePropertyController;
+use App\Http\Controllers\Api\MobileContactController;
+use App\Http\Controllers\Api\MobileCoreMatchController;
 use App\Http\Controllers\Api\PropertyPullController;
 use App\Http\Controllers\FaultReportController;
 use Illuminate\Support\Facades\Route;
@@ -44,6 +46,11 @@ Route::post('/login', function (Request $request) {
 
 Route::post('/fault-report', [FaultReportController::class, 'capture'])
     ->middleware('throttle:30,1');
+
+// Private Property webhook — leads delivered by PP.
+// Authentication is HMAC (X-Signature header) verified inside the controller.
+Route::post('/pp/webhook', [\App\Http\Controllers\PrivateProperty\PpWebhookController::class, 'receive'])
+    ->name('pp.webhook');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/profile', function (Request $request) {
@@ -84,12 +91,42 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{property}',  [MobilePropertyController::class, 'update']);
         Route::post('/{property}/images', [MobilePropertyController::class, 'uploadImage']);
 
-        // Gallery tags (derived live from this property's spaces)
-        Route::get('/{property}/gallery/tags', [MobilePropertyController::class, 'galleryTags']);
+        // Overview screen (everything the Overview tab needs in one call,
+        // including the live portal placements)
+        Route::get('/{property}/overview', [MobilePropertyController::class, 'overview']);
+
+        // Gallery tags (derived live from this property's spaces + custom tags)
+        Route::get('/{property}/gallery/tags',          [MobilePropertyController::class, 'galleryTags']);
+        Route::post('/{property}/gallery/tags',         [MobilePropertyController::class, 'addCustomTag']);
+        Route::delete('/{property}/gallery/tags',       [MobilePropertyController::class, 'removeCustomTag']);
 
         // Spaces & features (Bedroom, Bathroom, Kitchen, …)
         Route::get('/{property}/spaces', [MobilePropertyController::class, 'spacesShow']);
         Route::put('/{property}/spaces', [MobilePropertyController::class, 'spacesUpdate']);
+    });
+
+    // ── Mobile Contacts ─────────────────────────────────────────
+    Route::prefix('mobile/contacts')->group(function () {
+        Route::get('/',         [MobileContactController::class, 'index']);
+        Route::post('/',        [MobileContactController::class, 'store']);
+        Route::get('/options',  [MobileContactController::class, 'options']);
+        Route::get('/{contact}',[MobileContactController::class, 'show']);
+        Route::put('/{contact}',[MobileContactController::class, 'update']);
+        Route::post('/{contact}/whatsapp', [MobileContactController::class, 'whatsapp']);
+        Route::post('/{contact}/matches',  [MobileContactController::class, 'storeMatch']);
+    });
+
+    // ── Mobile Core Matches ─────────────────────────────────────
+    Route::prefix('mobile/core-matches')->group(function () {
+        Route::get('/settings',               [MobileCoreMatchController::class, 'settings']);
+        Route::get('/',                       [MobileCoreMatchController::class, 'index']);
+        Route::get('/{match}',                [MobileCoreMatchController::class, 'show']);
+        Route::put('/{match}',                [MobileCoreMatchController::class, 'update']);
+        Route::patch('/{match}/status',       [MobileCoreMatchController::class, 'setStatus']);
+        Route::post('/{match}/hide/{property}', [MobileCoreMatchController::class, 'toggleHide']);
+        Route::get('/{match}/share-whatsapp',  [MobileCoreMatchController::class, 'shareWhatsApp']);
+        Route::post('/{match}/share-whatsapp', [MobileCoreMatchController::class, 'shareWhatsApp']);
+        Route::delete('/{match}',             [MobileCoreMatchController::class, 'destroy']);
     });
 
     // ── Command Center ────────────────────────────────────────────

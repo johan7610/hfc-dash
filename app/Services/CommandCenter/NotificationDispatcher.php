@@ -9,6 +9,7 @@ use App\Notifications\PillarEventNotification;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification as NotificationFacade;
+use Illuminate\Support\Str;
 
 class NotificationDispatcher
 {
@@ -58,6 +59,10 @@ class NotificationDispatcher
             payload:      $args['payload']       ?? [],
             channels:     array_intersect($channels, ['database', 'mail']), // FCM handled below
         );
+
+        // Pre-assign the notification UUID so the same id flows to both the
+        // saved database row and the FCM data payload (notification_id).
+        $notification->id = (string) Str::uuid();
 
         // 1) Database + mail via Laravel notifications
         try {

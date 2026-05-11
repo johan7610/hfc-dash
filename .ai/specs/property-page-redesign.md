@@ -1,7 +1,120 @@
 # Spec: Property Page Redesign + Creation Flow Improvements
 
-**Status:** Draft — Awaiting Johan's review
-**Date:** 2026-03-30
+**Status:** Phase 1a in build (Andre, 2026-04-28) — Overview redesign live; Sticky Readiness Bar + remaining phases still pending review
+**Date:** 2026-03-30 (orig), 2026-04-28 (Phase 1a build start)
+
+---
+
+## 2026-04-28 Addendum: Overview Redesign (Phase 1a)
+
+The original A2 spec described a "Live Preview Card" replacing the stat boxes. After review with Andre on 2026-04-28, the Overview tab was found to be visually flat and chaotic — equally-weighted card grids, no hero, no pillar surfacing, cover image computed but never rendered, and inline forms styled identically to navigation tiles.
+
+The Overview tab is now restructured as three zones:
+
+1. **Hero band** (top) — cover image left (40%), details right (60%): title, suburb, price (XL right), status pill + listing-type badge over image, photo count chip, days-on-market, at-a-glance stats strip (single inline row, no boxes, dot separators), property/mandate/category chips, description preview (first 220 chars), action button row (Edit Details, Add Photos, Contacts, Call Agent).
+2. **Activity column** (left 2/3) — Recent Activity timeline (existing `$activityTimeline`) + Key Dates as a 4-up label/value grid in a single panel.
+3. **Pillar column** (right 1/3) — Listing Agent (Agent pillar), Owner/Seller/Landlord linked contact (Contact pillar, links to `corex.contacts.show`), Upcoming Showdays.
+
+### Changes from original A2
+- No collapse/expand toggle on hero — it IS the page now, not an extra widget.
+- Quick Actions inline price/status forms removed (they reloaded the whole page; status change belongs in the sidebar header dropdown which already exists).
+- Pillar surfacing made explicit — Owner contact and Listing Agent are now first-class on Overview, addressing CLAUDE.md non-negotiable #4 ("Pillars are the spine"). Empty-state for owner deep-links to Contacts tab.
+
+### Files touched (Phase 1a)
+- `resources/views/corex/properties/show.blade.php` — Overview tab block (lines ~832–984) replaced.
+- `.ai/specs/property-page-redesign.md` — this addendum.
+
+### Still pending (Phase 1c–4)
+- A3 Info Tab Reorganisation
+- A4 Smart Gallery
+- B1–B5 Creation flow improvements
+
+---
+
+## 2026-04-28 Addendum: Sidebar Redesign (Phase 1b)
+
+After the Overview redesign landed, the 280px left sidebar at [show.blade.php:44-177] became almost entirely redundant — cover image, status pill, LIVE chip, title, price, suburb, beds/baths/garages, floor/erf m², property type, category, mandate, agent, listed/expires were duplicated in the new hero.
+
+The sidebar is restructured as a **command rail** focused on actions and readiness — content the rest of the page doesn't surface.
+
+### New sidebar structure
+
+1. **Identity strip (compact)** — 60-ish px row: thumb + status pill + LIVE chip (when published) + title. Just enough to anchor on long Info-tab scrolls.
+2. **Action stack** — vertical button group:
+   - Ad Builder (primary brand colour)
+   - Market Property (Facebook blue, gated by `marketing_enabled`)
+   - Live Preview (opens syndication modal at preview step)
+   - Syndication (opens syndication modal at main step)
+   - Duplicate (`POST corex.properties.duplicate`)
+   - Archive (soft delete via `DELETE corex.properties.destroy` — confirms with user, recoverable per non-negotiable #1)
+3. **Readiness panel** — A1's content reframed as a rail panel rather than a sticky top bar:
+   - Completeness percentage (10 checks: title, price, status, suburb, description, beds, baths, listing agent, photos, listed_date)
+   - Colour-coded bar (red <50%, amber 50–80%, green >80%)
+   - Top 5 missing-fields checklist
+   - Portal status: HFC Premium / Private Property / Property24 — Live / N fix / Off
+
+### Architectural change: x-data hoisting
+
+The right-pane "Syndication bar" originally owned its own `x-data="{ synOpen, synStep }"` scope. To trigger the same modal from the sidebar, that state was hoisted to the page-root x-data on [show.blade.php:6]:
+
+```js
+x-data="{ activeTab: '...', synOpen: false, synStep: 'main' }"
+```
+
+The visible bar (Live Preview + Syndication trigger buttons) was deleted — those triggers now live in the sidebar Action stack. The teleported modal (`<template x-teleport="body">`) stays where it was; it now inherits synOpen/synStep from the root scope.
+
+### Files touched (Phase 1b)
+- `resources/views/corex/properties/show.blade.php` — root x-data extended; aside (lines 44-177) replaced; syndication bar wrapper + duplicated trigger buttons removed; modal teleport retained.
+
+### Pending (separate ticket)
+- **Linked Deal pillar card** — sidebar should show the active linked Deal/mandate/offer when one exists. Property model has no `deals()` relation yet; deferred until [.ai/specs/deals.md](.ai/specs/deals.md) defines the Property↔Deal binding.
+
+---
+
+## 2026-04-28 Addendum: Info Tab Restructure (Phase 1c)
+
+The Info tab was a single 1,300-line scroll with 7 ad-hoc sections, no visual hierarchy, no navigation, every input `w-full` (so a "Category" dropdown stretched 480px), inputs on `--surface-2` (inverted from spec §3.6), hardcoded hex (`#c97a2e`, `#ef4444`, `#00d4aa`, `text-red-500`, etc.), and Status / Mandate / Listing-Type all dumped in "Classification" alongside category and type.
+
+Restructured to four logical, collapsible sections with a sticky section nav:
+
+```
+┌─ Identity · Pricing · Property · Mandate & Assignment       [Save Changes] ─┐
+│
+│  IDENTITY        Title · Property Type · Category · Listing Type
+│  PRICING         Price · Rates · Levy · Special Levy   (+ pricing modal)
+│  PROPERTY        Sizes · Spaces & Features · Description · Address
+│  MANDATE & …     Lifecycle (Status, Mandate, Listed/Expiry, Loaded/Modified)
+│                  Showday Events · Assignment (agents) · Video & VR · Branch
+│  RENTAL          (only when listing type = rental)
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### What changed
+
+- **CSS helpers** added in [resources/css/corex.css](resources/css/corex.css) — `.prop-info-nav` (sticky strip), `.prop-section-heading` (3px brand-icon left bar + 14px bold), `.prop-subsection-heading` (uppercase muted), `.prop-input/.prop-select/.prop-textarea` (token-correct surface bg), `.prop-label`, `.prop-required`, plus width buckets `.prop-field-{enum,count,m2,money,short,date,id}`.
+- **Section nav strip** — sticky at the top of the Info tab, anchor links jump to each section + Expand-all / Collapse-all + a duplicate Save Changes button (mirrors the sidebar so long edit sessions can save without scrolling back to the rail).
+- **Collapsible sections** — Alpine `info` state at the form root tracks open/closed per section, persisted only in memory (lifecycle is a single edit session). Chevron rotates when open.
+- **Width caps** — every Identity / Pricing / Mandate / Rental input now has a width bucket. Category/Type/Status/Mandate/Listing Type are all 14rem; Beds/Baths/Garages are 6rem and centered; Floor/Erf are 8rem; money fields 12rem; dates 12rem; Branch / external IDs cap at 18-22rem; long text (Title, descriptions, addresses) stays full-width.
+- **Section grouping reorganised** — `Status`, `Mandate Type`, `Listed Date`, `Expiry Date` moved out of "Classification" / "Listing Details" / "Dates & Meta" into a single new **Lifecycle** subsection inside Mandate & Assignment. `Listing Type` moved out of Classification into Identity (locked after first save, per Phase 1b). `Description` and `Address` moved into the **Property** section.
+- **Token cleanup** — every input/select/textarea inside the new sections uses `--surface` (per spec §3.6, was inverted to `--surface-2`). `text-red-500 *` asterisks replaced with `.prop-required` (`--ds-crimson`). Internal-address tag `#c97a2e` → `var(--ds-amber)`. Showday `#00d4aa` and "Create Showday" button replaced with `var(--ds-green)`. Showday remove button `#ef4444` → `var(--ds-crimson)`.
+- **Visual hierarchy** — primary section headings get the brand-icon left bar + 14px bold; sub-headings inside a section use the existing 11px uppercase muted style. Reading the page now communicates the major divisions at a glance.
+
+### What did NOT change (intentionally)
+- The Spaces & Features Alpine widget internals (`spacesAndFeaturesManager`) — too risky to restructure mid-cycle and visually it works.
+- The Property Address Alpine widget internals (`propertyAddress`) — only the heading was retitled.
+- The Pricing Details modal triggered from the Price field — content + behaviour preserved verbatim.
+- All `name="..."` attributes — controller validation contract unchanged. Form submits identically.
+- Showday create/delete REST endpoints — only chrome restyled.
+
+### Recommendation E (per-field click-to-edit) — deferred
+Recommendation E from the audit (each field renders as a read-row by default, click → inline edit) was not implemented. The collapsible sections deliver most of the same density benefit at a fraction of the implementation risk. Per-field inline edit can be re-evaluated once usage feedback comes back.
+
+### Files touched (Phase 1c)
+- `resources/views/corex/properties/show.blade.php` — Info tab rewritten in-place from `<form id="prop-update-form">` to the closing `</section>` of Rental. ~600 lines of restructure.
+- `resources/css/corex.css` — `.prop-info-nav`, `.prop-section-heading`, `.prop-subsection-heading`, `.prop-input/select/textarea`, `.prop-label`, `.prop-required`, `.prop-field-*` width buckets, `.prop-section-toggle` / `.prop-section-chevron`.
+- `.ai/specs/property-page-redesign.md` — this addendum.
+
+---
 
 ---
 

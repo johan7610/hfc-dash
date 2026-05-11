@@ -69,12 +69,13 @@ class PillarEventNotification extends Notification
                 'body'  => $this->body,
             ],
             'data' => [
-                'event_key'    => $this->eventKey,
-                'pillar'       => $this->pillar,
-                'subject_type' => (string) $this->subjectType,
-                'subject_id'   => (string) $this->subjectId,
-                'action_url'   => (string) $this->actionUrl,
-                'severity'     => $this->severity,
+                'event_key'       => $this->eventKey,
+                'pillar'          => $this->pillar,
+                'subject_type'    => (string) $this->subjectType,
+                'subject_id'      => (string) $this->subjectId,
+                'action_url'      => (string) $this->actionUrl,
+                'severity'        => $this->severity,
+                'notification_id' => (string) $this->id,
             ],
         ];
     }

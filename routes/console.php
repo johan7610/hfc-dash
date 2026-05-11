@@ -56,8 +56,19 @@ Schedule::command('prospecting:maintain-claims')->hourly();
 // Carry forward targets from previous month — runs on the 1st at 00:05
 Schedule::command('targets:carry-forward')->monthlyOn(1, '00:05')->withoutOverlapping();
 
+// Core Matches — archive matches with no engagement, mark fulfilled where the
+// contact has a recent deal. Daily at 03:00.
+Schedule::command('corex:matches:archive-stale')->dailyAt('03:00')->withoutOverlapping();
+
 // Private Property activation polling — runs every 15 minutes
 Schedule::job(new \App\Jobs\SyncPrivatePropertyActivations())->everyFifteenMinutes()->withoutOverlapping();
+
+// Private Property listing event feed — authoritative source for activations,
+// deactivations and image errors. Runs every 15 minutes.
+Schedule::job(new \App\Jobs\ProcessPrivatePropertyEventFeed())
+    ->everyFifteenMinutes()
+    ->withoutOverlapping()
+    ->name('pp-event-feed');
 
 // Property24 ExDev activation polling — runs every 15 minutes
 Schedule::job(new \App\Jobs\SyncProperty24Activations())->everyFifteenMinutes()->withoutOverlapping();

@@ -188,13 +188,12 @@ class PrivatePropertyListingMapper
             $errors[] = 'Province is not a valid PP enum value: ' . $payload['Province'];
         }
 
-        // All photo URLs must be HTTPS
+        // All photo URLs must be HTTPS — report every offender, not just the first
         $photoUrls = $payload['PhotoUrls'] ?? null;
         if (is_array($photoUrls) && isset($photoUrls['string'])) {
             foreach ((array) $photoUrls['string'] as $url) {
                 if (!str_starts_with($url, 'https://')) {
                     $errors[] = 'Photo URL must use HTTPS: ' . $url;
-                    break;
                 }
             }
         }
@@ -507,14 +506,15 @@ class PrivatePropertyListingMapper
         $lastName  = $parts[1] ?? $parts[0] ?? '';
         $cellPhone = $user->cell ?? $user->phone ?? '';
 
+        // AgentId prefers pp_external_ref (admin-set on PP) over user->id.
         return [
-            'AgentId'               => (string) $user->id,
+            'AgentId'               => (string) ($user->pp_external_ref ?: $user->id),
             'FirstName'             => $firstName,
             'LastName'              => $lastName,
             'Email'                 => $user->email ?? '',
             'TelCell'               => $cellPhone,
             'TelWork'               => $user->phone ?? $cellPhone,
-            'TelHome'               => $cellPhone,
+            'TelHome'               => '', // PP only recognises TelCell + TelWork
             'Active'                => $active,
             'BranchId'              => config('services.private_property.branch_guid'),
             'PrivatePropertyAgentId' => '',

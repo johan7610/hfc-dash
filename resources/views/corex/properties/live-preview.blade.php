@@ -41,15 +41,15 @@
     <title>{{ $property->title }} — {{ $agency->name ?? 'Home Finders Coastal' }}</title>
     <meta name="description" content="{{ Str::limit($property->excerpt ?? $property->description ?? $property->title, 160) }}">
 
-    {{-- Figtree + JetBrains Mono per design system §1.6 --}}
+    {{-- Inter + JetBrains Mono — matches corex.css body font --}}
     <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700,800|jetbrains-mono:400,500,600&display=swap" rel="stylesheet">
+    <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800|jetbrains-mono:400,500,600&display=swap" rel="stylesheet">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
             theme: { extend: { fontFamily: {
-                sans: ['Figtree', 'system-ui', 'sans-serif'],
+                sans: ['Inter', 'system-ui', 'sans-serif'],
                 mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
             }}}
         }
@@ -76,12 +76,14 @@
         * { box-sizing: border-box; }
         html { scroll-behavior: smooth; }
         body {
-            font-family: 'Figtree', system-ui, sans-serif;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
             background: var(--bg);
             color: var(--text-primary);
             margin: 0;
             -webkit-font-smoothing: antialiased;
-            font-size: 0.875rem; /* design system base 14px */
+            -moz-osx-font-smoothing: grayscale;
+            font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+            font-size: 0.875rem;
         }
         .num { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; font-weight: 600; }
 
@@ -125,10 +127,24 @@
         .panel-pad { padding: 1.5rem; }
 
         /* Hero */
-        .hero { position:relative; height: 84vh; min-height:560px; max-height:880px; overflow:hidden; background:#0a0a0a; }
-        .hero-img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transition: opacity 700ms ease, transform 8s ease; }
-        .hero-img.active { opacity:1; transform: scale(1.04); }
-        .hero-img.idle   { opacity:0; }
+        .hero { position:relative; height: 64vh; min-height:460px; max-height:720px; overflow:hidden; background:#0a0a0a; }
+        .hero-bg {
+            position:absolute; inset:-24px; width:calc(100% + 48px); height:calc(100% + 48px);
+            object-fit:cover; filter: blur(28px) brightness(.6); transform: scale(1.08) translateZ(0);
+            transition: opacity 1400ms cubic-bezier(0.4, 0, 0.2, 1);
+            will-change: opacity; opacity:0;
+        }
+        .hero-img {
+            position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+            transition: opacity 1400ms cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateZ(0);
+            backface-visibility: hidden;
+            will-change: opacity; opacity:0;
+        }
+        .hero-img.active, .hero-bg.active { opacity:1; }
+        .hero-img.idle,   .hero-bg.idle   { opacity:0; }
+        /* If the source image is small, fall back to contained rendering on top of the blurred backdrop */
+        .hero-img.contain { object-fit: contain; }
         .hero-scrim { position:absolute; inset:0; background:
             linear-gradient(180deg, rgba(0,0,0,.5) 0%, rgba(0,0,0,0) 28%, rgba(0,0,0,0) 55%, rgba(0,0,0,.85) 100%); }
         .glass-pill {
@@ -216,7 +232,7 @@
         input[type=range]::-moz-range-thumb { width:16px; height:16px; border-radius:9999px; background: var(--brand-button); cursor:pointer; border:0; }
 
         @media (max-width: 1023px) {
-            .hero { height: 70vh; min-height: 480px; }
+            .hero { height: 56vh; min-height: 380px; }
             .gallery-grid { grid-template-columns: 1fr 1fr; height:340px; }
             .gallery-grid > div:nth-child(n+5) { display:none; }
             .layout-grid { grid-template-columns: 1fr !important; }
@@ -275,8 +291,13 @@
 <section class="hero">
     @if(count($allImages) > 0)
         @foreach($allImages as $i => $img)
+            <img :class="slide === {{ $i }} ? 'hero-bg active' : 'hero-bg idle'"
+                 src="{{ $img }}" alt="" aria-hidden="true" loading="{{ $i === 0 ? 'eager' : 'lazy' }}">
             <img :class="slide === {{ $i }} ? 'hero-img active' : 'hero-img idle'"
-                 src="{{ $img }}" alt="" loading="{{ $i === 0 ? 'eager' : 'lazy' }}">
+                 :style="(slide === {{ $i }} && imgSmall[{{ $i }}]) ? 'object-fit:contain' : ''"
+                 src="{{ $img }}" alt=""
+                 @load="checkSize($event, {{ $i }})"
+                 loading="{{ $i === 0 ? 'eager' : 'lazy' }}">
         @endforeach
     @else
         <div class="absolute inset-0 flex items-center justify-center" style="color:rgba(255,255,255,.4);">
@@ -485,6 +506,24 @@
                 </div>
             </div>
 
+            {{-- Other Virtual Tour (iPanorama / Kuula / custom) --}}
+            @if($property->virtual_tour_url)
+            <div class="card overflow-hidden">
+                <div class="panel-pad" style="padding-bottom:1rem;">
+                    <h2 class="section-h" style="margin-bottom:.25rem;">Virtual Tour</h2>
+                    <p style="font-size:.8125rem; color:var(--text-muted);">Interactive 360° tour of the property.</p>
+                </div>
+                <iframe
+                    src="{{ $property->virtual_tour_url }}"
+                    width="100%" height="520"
+                    style="border:0; display:block;"
+                    allow="fullscreen; xr-spatial-tracking; gyroscope; accelerometer; vr"
+                    allowfullscreen
+                    loading="lazy"
+                    referrerpolicy="no-referrer-when-downgrade"></iframe>
+            </div>
+            @endif
+
             {{-- Map --}}
             @if($locationQuery)
             <div class="card overflow-hidden">
@@ -613,6 +652,14 @@
             slide: 0,
             scrolled: false,
             lightboxOpen: false,
+            imgSmall: {},
+            checkSize(e, i) {
+                const el = e.target;
+                // If the source resolution is too small to fill the hero crisply, render contained.
+                if (el.naturalWidth && el.naturalWidth < 1400) {
+                    this.imgSmall[i] = true;
+                }
+            },
             init() {
                 window.addEventListener('scroll', () => { this.scrolled = window.scrollY > 320; });
                 window.addEventListener('keydown', (e) => {
@@ -620,7 +667,7 @@
                     if (e.key === 'ArrowRight') this.next();
                 });
                 if (this.images.length > 1) {
-                    setInterval(() => { if (!this.lightboxOpen) this.next(); }, 6500);
+                    setInterval(() => { if (!this.lightboxOpen) this.next(); }, 8000);
                 }
             },
             prev() { if (this.images.length) this.slide = (this.slide - 1 + this.images.length) % this.images.length; },

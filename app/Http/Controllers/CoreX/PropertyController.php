@@ -44,22 +44,14 @@ class PropertyController extends Controller
 
         $canPickAgent = in_array($dataScope, ['all', 'branch']);
 
-        // Agent filter with session persistence (admin/BM only)
+        // Agent filter (admin/BM only) — defaults to self on every fresh load.
+        // The user only sees other agents (or "All agents") when they explicitly
+        // switch via the picker (which sets ?agent_id= in the URL).
         if ($canPickAgent) {
             if ($request->has('agent_id')) {
-                $raw           = $request->query('agent_id', '');
-                $filterAgentId = $raw;
-                session(['corex_properties_agent_id' => $raw === '' ? 'all' : $raw]);
+                $filterAgentId = $request->query('agent_id', '');
             } else {
-                $saved = session('corex_properties_agent_id');
-                if ($saved === null) {
-                    $filterAgentId = (string) $user->id;
-                    session(['corex_properties_agent_id' => $filterAgentId]);
-                } elseif ($saved === 'all') {
-                    $filterAgentId = '';
-                } else {
-                    $filterAgentId = $saved;
-                }
+                $filterAgentId = (string) $user->id;
             }
         }
 
@@ -164,34 +156,11 @@ class PropertyController extends Controller
         $agents   = $this->agentList();
         $activeTab = request('tab', 'overview');
 
-        // Find all Core Matches where this property satisfies the criteria
-        $coreMatches = ContactMatch::with(['contact.type', 'createdBy'])
-            ->get()
-            ->filter(function (ContactMatch $m) use ($property) {
-                // Skip if property is explicitly hidden in this match
-                if (in_array($property->id, $m->hidden_property_ids ?? [])) return false;
-                // Category
-                if ($m->category && $property->category !== $m->category) return false;
-                // Property type
-                if ($m->property_type && $property->property_type !== $m->property_type) return false;
-                // Suburb (case-insensitive contains)
-                if ($m->suburb && stripos($property->suburb ?? '', $m->suburb) === false) return false;
-                // Price
-                if ($m->price_min && ($property->price ?? 0) < $m->price_min) return false;
-                if ($m->price_max && ($property->price ?? 0) > $m->price_max) return false;
-                // Beds / baths / garages
-                if ($m->beds_min && ($property->beds ?? 0) < $m->beds_min) return false;
-                if ($m->baths_min && ($property->baths ?? 0) < $m->baths_min) return false;
-                if ($m->garages_min && ($property->garages ?? 0) < $m->garages_min) return false;
-                // Floor size
-                if ($m->floor_size_min && ($property->size_m2 ?? 0) < $m->floor_size_min) return false;
-                if ($m->floor_size_max && ($property->size_m2 ?? 0) > $m->floor_size_max) return false;
-                // Erf size
-                if ($m->erf_size_min && ($property->erf_size_m2 ?? 0) < $m->erf_size_min) return false;
-                if ($m->erf_size_max && ($property->erf_size_m2 ?? 0) > $m->erf_size_max) return false;
-                return true;
-            })
-            ->values();
+        // Find all Core Matches where this property satisfies the criteria.
+        // Hard filters run in SQL (indexed); scoring runs in PHP and the result is sorted.
+        $coreMatches = $property->exists
+            ? app(\App\Services\Matching\MatchingService::class)->matchesForProperty($property)
+            : collect();
 
         // PP feed readiness check for syndication panel
         $ppMissingFields = $property->exists
@@ -390,12 +359,13 @@ class PropertyController extends Controller
             'lease_start_date' => 'nullable|date',
             'lease_end_date'   => 'nullable|date',
             'branch_id'        => 'nullable|exists:branches,id',
-            'agent_id'         => 'nullable|exists:users,id',
+            'agent_id'         => 'required|exists:users,id',
             'pp_second_agent_id' => 'nullable|exists:users,id',
             'pp_agent_image'           => 'nullable|image|max:1024',
             'pp_second_agent_image'    => 'nullable|image|max:1024',
             'youtube_video_id'   => 'nullable|string|max:500',
             'matterport_id'      => 'nullable|string|max:100',
+            'virtual_tour_url'   => 'nullable|url|max:1000',
             'rental_price_type'  => 'nullable|string|max:50',
             'pp_hide_street_name'   => 'nullable|boolean',
             'pp_hide_street_number' => 'nullable|boolean',
@@ -431,6 +401,14 @@ class PropertyController extends Controller
             $data['agent_id'] = $user->id;
         }
         $data['agency_id'] = $user->effectiveAgencyId();
+
+        // Branch follows the primary agent — every property is owned by its agent's branch.
+        // If the agent has no branch, leave whatever the form/default supplied so we don't null it out.
+        $assignedAgent = User::find($data['agent_id']);
+        $derivedBranchId = $assignedAgent ? ($assignedAgent->effectiveBranchId() ?? $assignedAgent->branch_id) : null;
+        if ($derivedBranchId) {
+            $data['branch_id'] = $derivedBranchId;
+        }
 
         if (! empty($data['publish'])) {
             $data['published_at'] = now();
@@ -590,12 +568,13 @@ class PropertyController extends Controller
             'lease_start_date' => 'nullable|date',
             'lease_end_date'   => 'nullable|date',
             'branch_id'        => 'nullable|exists:branches,id',
-            'agent_id'         => 'nullable|exists:users,id',
+            'agent_id'         => 'required|exists:users,id',
             'pp_second_agent_id' => 'nullable|exists:users,id',
             'pp_agent_image'           => 'nullable|image|max:1024',
             'pp_second_agent_image'    => 'nullable|image|max:1024',
             'youtube_video_id'   => 'nullable|string|max:500',
             'matterport_id'      => 'nullable|string|max:100',
+            'virtual_tour_url'   => 'nullable|url|max:1000',
             'rental_price_type'  => 'nullable|string|max:50',
             'pp_hide_street_name'   => 'nullable|boolean',
             'pp_hide_street_number' => 'nullable|boolean',
@@ -618,6 +597,25 @@ class PropertyController extends Controller
         }
         if ($request->hasFile('pp_second_agent_image')) {
             $data['pp_second_agent_image_path'] = $request->file('pp_second_agent_image')->store("properties/{$property->id}/agents", 'public');
+        }
+
+        // Listing Agent ≡ Primary Agent invariant: when the primary agent changes,
+        // clear the portal-feed photo snapshot so portal feeds + Ad Builder fall back to
+        // the new agent's profile photo. Same for second agent.
+        if (isset($data['agent_id']) && (int) $data['agent_id'] !== (int) $property->agent_id && !$request->hasFile('pp_agent_image')) {
+            $data['pp_agent_image_path'] = null;
+        }
+        // Branch follows the primary agent — re-derive on every save so it stays in sync.
+        // Preserve existing branch when the agent has no branch of their own.
+        if (isset($data['agent_id'])) {
+            $assignedAgent = User::find($data['agent_id']);
+            $derivedBranchId = $assignedAgent ? ($assignedAgent->effectiveBranchId() ?? $assignedAgent->branch_id) : null;
+            if ($derivedBranchId) {
+                $data['branch_id'] = $derivedBranchId;
+            }
+        }
+        if (array_key_exists('pp_second_agent_id', $data) && (int) ($data['pp_second_agent_id'] ?? 0) !== (int) ($property->pp_second_agent_id ?? 0) && !$request->hasFile('pp_second_agent_image')) {
+            $data['pp_second_agent_image_path'] = null;
         }
 
         // Extract YouTube video ID from full URL if pasted
@@ -672,6 +670,11 @@ class PropertyController extends Controller
         }
 
         $property->update($data);
+        // Force-touch updated_at even when no fillable attribute changed (e.g. only photos uploaded),
+        // so the Modified column always reflects the latest save action.
+        if (! $property->wasChanged()) {
+            $property->touch();
+        }
 
         return redirect()->route('corex.properties.show', $property)
             ->with('success', 'Property updated.')
@@ -838,14 +841,15 @@ class PropertyController extends Controller
 
     public function livePreview(Property $property, \Illuminate\Http\Request $request)
     {
-        $this->authorizeProperty($property);
         $property->load(['agent', 'branch', 'agency']);
 
-        /** @var User $authUser */
+        /** @var User|null $authUser */
         $authUser = auth()->user();
 
         $agentChoice  = $request->query('agent', 'listing');
-        $displayAgent = ($agentChoice === 'me') ? $authUser : ($property->agent ?? $authUser);
+        $displayAgent = ($agentChoice === 'me' && $authUser)
+            ? $authUser
+            : ($property->agent ?? $authUser);
 
         return view('corex.properties.live-preview', compact('property', 'displayAgent', 'agentChoice'));
     }
