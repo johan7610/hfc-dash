@@ -135,7 +135,7 @@
 
     {{-- Tab bar --}}
     <div style="background:var(--surface); border:1px solid var(--border); border-radius:6px; overflow:hidden;">
-        <div class="flex" style="border-bottom:1px solid var(--border);" id="tab-bar">
+        <div class="flex overflow-x-auto" style="border-bottom:1px solid var(--border);" id="tab-bar">
             @php
                 $ficaStatus = $contact->ficaStatus();
                 $ficaIcon = match($ficaStatus) {
