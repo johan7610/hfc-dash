@@ -144,7 +144,10 @@ class MatchingService
                 $q2->whereNull($col)->orWhere($col, $val);
             });
         };
-        if ($listingType)  $strLoose($query, 'listing_type', $listingType);
+        // listing_type uses STRICT equality — sale vs rental are different markets and
+        // properties with NULL listing_type are bad data, not legitimate ambiguity.
+        if ($listingType)  $query->where('listing_type', $listingType);
+        // category / property_type stay loose — half-filled listings still appear.
         if ($category)     $strLoose($query, 'category', $category);
         if ($propertyType) $strLoose($query, 'property_type', $propertyType);
 
