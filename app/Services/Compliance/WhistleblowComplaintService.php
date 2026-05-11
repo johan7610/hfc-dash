@@ -308,7 +308,8 @@ class WhistleblowComplaintService
             'flagged_at'   => now()->toIso8601String(),
         ];
 
-        $property->update(['compliance_evidence_flags' => $flags]);
+        $property->compliance_evidence_flags = $flags;
+        $property->saveQuietly();
 
         $this->writeAudit($complaint, 'property_flagged', null, [
             'property_id' => $property->id,
