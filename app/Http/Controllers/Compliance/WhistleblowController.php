@@ -47,23 +47,62 @@ class WhistleblowController extends Controller
     }
 
     /**
-     * Store — from property page modal. Creates draft + attaches evidence + submits.
+     * Standalone filing form page.
+     */
+    public function create(Request $request)
+    {
+        $user = Auth::user();
+
+        // Pre-fill from property if linked
+        $property = null;
+        if ($request->filled('property_id')) {
+            $property = \App\Models\Property::withoutGlobalScopes()->find($request->property_id);
+        }
+
+        // Agency properties for picker
+        $properties = \App\Models\Property::withoutGlobalScopes()
+            ->where('agency_id', $user->effectiveAgencyId() ?? $user->agency_id)
+            ->whereNotNull('address')
+            ->orderBy('address')
+            ->select('id', 'address', 'suburb', 'title')
+            ->limit(200)
+            ->get();
+
+        return view('compliance.whistleblow.create', compact('property', 'properties'));
+    }
+
+    /**
+     * Store — from property page modal OR standalone form.
      */
     public function store(Request $request)
     {
         $request->validate([
             'tier'                 => 'required|in:tier_1,tier_2,tier_3',
             'subject_agency_name'  => 'required|string|max:255',
-            'property_address'     => 'required|string|max:255',
+            'subject_practitioner_name' => 'nullable|string|max:255',
+            'subject_ffc_number'   => 'nullable|string|max:100',
+            'property_address'     => 'required_without:property_id|nullable|string|max:255',
             'property_portal_url'  => 'nullable|url|max:500',
             'portal_source'        => 'nullable|in:p24,pp,other',
             'agent_notes'          => 'nullable|string|max:5000',
+            'seller_statement'     => 'nullable|string|max:5000',
             'seller_consents_to_named_complaint' => 'nullable|boolean',
             'screenshot'           => 'nullable|file|image|max:5120',
-            'property_id'         => 'nullable|integer|exists:properties,id',
+            'evidence_files'       => 'nullable|array|max:5',
+            'evidence_files.*'     => 'file|max:10240',
+            'property_id'          => 'nullable|integer|exists:properties,id',
         ]);
 
         $user = Auth::user();
+
+        // Derive property_address from property if linked
+        $propertyAddress = $request->property_address;
+        if ($request->property_id) {
+            $prop = \App\Models\Property::withoutGlobalScopes()->find($request->property_id);
+            if ($prop) {
+                $propertyAddress = $prop->address ?? $prop->title ?? $propertyAddress;
+            }
+        }
 
         // Build complaint data
         $data = [
@@ -71,7 +110,9 @@ class WhistleblowController extends Controller
             'branch_id'            => $user->branch_id,
             'tier'                 => $request->tier,
             'subject_agency_name'  => $request->subject_agency_name,
-            'property_address'     => $request->property_address,
+            'subject_practitioner_name' => $request->subject_practitioner_name,
+            'subject_ffc_number'   => $request->subject_ffc_number,
+            'property_address'     => $propertyAddress,
             'property_portal_url'  => $request->property_portal_url,
             'portal_source'        => $request->portal_source,
             'agent_notes'          => $request->agent_notes,
@@ -79,14 +120,14 @@ class WhistleblowController extends Controller
             'seller_consents_to_named_complaint' => (bool) $request->seller_consents_to_named_complaint,
         ];
 
-        // Tier 1 needs seller_statement from agent_notes
+        // Tier 1: seller_statement is its own field (or fallback to agent_notes for modal)
         if ($request->tier === 'tier_1') {
-            $data['seller_statement'] = $request->agent_notes;
+            $data['seller_statement'] = $request->seller_statement ?: $request->agent_notes;
         }
 
         $complaint = $this->service->createDraft($data, $user);
 
-        // Handle screenshot upload
+        // Handle screenshot upload (modal shortcut)
         if ($request->hasFile('screenshot')) {
             $file = $request->file('screenshot');
             $path = $file->store("whistleblow/evidence/{$user->id}", 'local');
@@ -102,6 +143,26 @@ class WhistleblowController extends Controller
                 'Screenshot uploaded with report',
                 $user
             );
+        }
+
+        // Handle multiple evidence files (standalone form)
+        if ($request->hasFile('evidence_files')) {
+            foreach ($request->file('evidence_files') as $file) {
+                $path = $file->store("whistleblow/evidence/{$user->id}", 'local');
+                $fullPath = storage_path('app/' . $path);
+                $isImage = str_starts_with($file->getMimeType(), 'image/');
+
+                $this->service->attachEvidence(
+                    $complaint,
+                    $isImage ? 'screenshot' : 'document_upload',
+                    $fullPath,
+                    $file->getClientOriginalName(),
+                    $file->getMimeType(),
+                    $file->getSize(),
+                    'Evidence file uploaded with report',
+                    $user
+                );
+            }
         }
 
         // Auto-submit (skip draft — agent's report modal goes straight to pending)
