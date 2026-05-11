@@ -117,7 +117,13 @@ class BuyerIntelligenceService
             ]);
         }
 
-        return $rows->sortByDesc('last_viewed_at')->values();
+        $now = now();
+        return collect([
+            'upcoming' => $rows->filter(fn ($r) => \Carbon\Carbon::parse($r['event_date'])->gte($now))
+                ->sortBy('event_date')->values(),
+            'past' => $rows->filter(fn ($r) => \Carbon\Carbon::parse($r['event_date'])->lt($now))
+                ->sortByDesc('event_date')->values(),
+        ]);
     }
 
     public function getPreferencePatterns(int $contactId): array

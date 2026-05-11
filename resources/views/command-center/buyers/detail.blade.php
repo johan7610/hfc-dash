@@ -37,7 +37,12 @@
 
     {{-- Tabs --}}
     <div class="flex overflow-x-auto" style="border-bottom: 1px solid var(--border);">
-        @foreach(['overview' => 'Overview', 'timeline' => 'Activity', 'properties' => 'Properties Viewed', 'matched' => 'Matched', 'preferences' => 'Preferences', 'playbook' => 'Retention'] as $key => $label)
+        @php
+            $upcomingViewings = $propertiesViewed['upcoming'] ?? collect();
+            $pastViewings = $propertiesViewed['past'] ?? collect();
+            $allViewingsFlat = $upcomingViewings->concat($pastViewings);
+        @endphp
+        @foreach(['overview' => 'Overview', 'timeline' => 'Activity', 'properties' => 'Viewings & Feedback', 'matched' => 'Matched', 'preferences' => 'Preferences', 'playbook' => 'Retention'] as $key => $label)
             <button @click="activeTab = '{{ $key }}'"
                     :class="activeTab === '{{ $key }}' ? 'border-b-2' : 'border-b-2 border-transparent'"
                     :style="activeTab === '{{ $key }}' ? 'color: #00d4aa; border-color: #00d4aa;' : 'color: var(--text-secondary);'"
@@ -49,11 +54,11 @@
     <div x-show="activeTab === 'overview'" class="space-y-4">
         <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
             <div class="rounded-md p-3 text-center" style="background: var(--surface); border: 1px solid var(--border);">
-                <div class="text-xl font-bold" style="color: var(--text-primary);">{{ $propertiesViewed->sum('view_count') }}</div>
+                <div class="text-xl font-bold" style="color: var(--text-primary);">{{ $allViewingsFlat->sum('view_count') }}</div>
                 <div class="text-[10px] uppercase" style="color: var(--text-muted);">Total Viewings</div>
             </div>
             <div class="rounded-md p-3 text-center" style="background: var(--surface); border: 1px solid var(--border);">
-                <div class="text-xl font-bold" style="color: var(--text-primary);">{{ $propertiesViewed->count() }}</div>
+                <div class="text-xl font-bold" style="color: var(--text-primary);">{{ $allViewingsFlat->count() }}</div>
                 <div class="text-[10px] uppercase" style="color: var(--text-muted);">Properties</div>
             </div>
             <div class="rounded-md p-3 text-center" style="background: var(--surface); border: 1px solid var(--border);">
@@ -138,43 +143,72 @@
         @endforelse
     </div>
 
-    {{-- Properties Viewed Tab --}}
-    <div x-show="activeTab === 'properties'" x-cloak class="space-y-3">
-        @forelse($propertiesViewed as $pv)
-            <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
-                <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0 flex-1">
-                        <a href="{{ route('corex.properties.show', $pv['property_id']) }}" target="_blank"
-                           class="text-sm font-semibold truncate block no-underline hover:underline" style="color: var(--text-primary);">{{ $pv['address'] }}</a>
-                        <div class="text-[10px] mt-0.5" style="color: var(--text-muted);">{{ $pv['suburb'] }} · R {{ number_format($pv['price'] ?? 0) }}</div>
-                    </div>
-                    <div class="text-right flex-shrink-0">
-                        <div class="text-[10px]" style="color: var(--text-muted);">{{ \Carbon\Carbon::parse($pv['event_date'])->format('D, j M Y') }}</div>
-                        <div class="text-[10px]" style="color: var(--text-muted);">Agent: {{ $pv['agent_name'] ?? '—' }}</div>
+    {{-- Viewings & Feedback Tab --}}
+    <div x-show="activeTab === 'properties'" x-cloak class="space-y-6">
+
+        {{-- Upcoming Viewings --}}
+        <div>
+            <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Upcoming Viewings ({{ $upcomingViewings->count() }})</h3>
+            @forelse($upcomingViewings as $pv)
+                <div class="rounded-md p-4 mb-2" style="background: var(--surface); border: 1px solid var(--border);">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0 flex-1">
+                            <a href="{{ route('corex.properties.show', $pv['property_id']) }}" target="_blank"
+                               class="text-sm font-semibold truncate block no-underline hover:underline" style="color: var(--text-primary);">{{ $pv['address'] }}</a>
+                            <div class="text-[10px] mt-0.5" style="color: var(--text-muted);">{{ $pv['suburb'] }} · R {{ number_format($pv['price'] ?? 0) }}</div>
+                        </div>
+                        <div class="text-right flex-shrink-0">
+                            <div class="text-[10px]" style="color: var(--text-muted);">{{ \Carbon\Carbon::parse($pv['event_date'])->format('D, j M Y') }}</div>
+                            <div class="text-[10px]" style="color: var(--text-muted);">Agent: {{ $pv['agent_name'] ?? '—' }}</div>
+                            <span class="text-[9px] px-1.5 py-0.5 rounded mt-0.5 inline-block" style="background:rgba(59,130,246,.15); color:#2563eb;">Scheduled</span>
+                        </div>
                     </div>
                 </div>
-                @if($pv['feedback'] ?? null)
-                    <div class="mt-2 rounded px-3 py-2" style="background: var(--surface-2); border: 1px solid var(--border);">
-                        @if($pv['feedback']['outcome_label'] ?? null)
-                            <span class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded" style="background:rgba(16,185,129,.15); color:#059669;">{{ $pv['feedback']['outcome_label'] }}</span>
-                        @endif
-                        @if($pv['feedback']['seller_notes'] ?? null)
-                            <p class="text-xs mt-1" style="color: var(--text-secondary);">{{ $pv['feedback']['seller_notes'] }}</p>
-                        @endif
-                        @if($pv['feedback']['internal_notes'] ?? null)
-                            <p class="text-[11px] mt-1" style="color: var(--text-muted);"><span class="font-medium">Internal:</span> {{ $pv['feedback']['internal_notes'] }}</p>
-                        @endif
-                        <div class="text-[10px] mt-1" style="color: var(--text-muted);">Captured {{ \Carbon\Carbon::parse($pv['feedback']['captured_at'])->diffForHumans() }}</div>
+            @empty
+                <p class="text-xs py-3" style="color: var(--text-muted);">None</p>
+            @endforelse
+        </div>
+
+        {{-- Past Viewings --}}
+        <div>
+            <h3 class="text-xs font-bold uppercase tracking-widest mb-3" style="color:var(--text-muted);">Past Viewings ({{ $pastViewings->count() }})</h3>
+            @forelse($pastViewings as $pv)
+                <div class="rounded-md p-4 mb-2" style="background: var(--surface); border: 1px solid var(--border);">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0 flex-1">
+                            <a href="{{ route('corex.properties.show', $pv['property_id']) }}" target="_blank"
+                               class="text-sm font-semibold truncate block no-underline hover:underline" style="color: var(--text-primary);">{{ $pv['address'] }}</a>
+                            <div class="text-[10px] mt-0.5" style="color: var(--text-muted);">{{ $pv['suburb'] }} · R {{ number_format($pv['price'] ?? 0) }}</div>
+                        </div>
+                        <div class="text-right flex-shrink-0">
+                            <div class="text-[10px]" style="color: var(--text-muted);">{{ \Carbon\Carbon::parse($pv['event_date'])->format('D, j M Y') }}</div>
+                            <div class="text-[10px]" style="color: var(--text-muted);">Agent: {{ $pv['agent_name'] ?? '—' }}</div>
+                        </div>
                     </div>
-                @else
-                    <div class="mt-2">
-                        <span class="text-[10px] px-1.5 py-0.5 rounded" style="background:rgba(107,114,128,.15); color:#6b7280;">No feedback captured</span>
-                    </div>
-                @endif
-            </div>
-        @empty
-            <p class="text-sm py-8 text-center" style="color: var(--text-muted);">No properties viewed yet.</p>
-        @endforelse
+                    @if($pv['feedback'] ?? null)
+                        <div class="mt-2 rounded px-3 py-2" style="background: var(--surface-2); border: 1px solid var(--border);">
+                            @if($pv['feedback']['outcome_label'] ?? null)
+                                <span class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded" style="background:rgba(16,185,129,.15); color:#059669;">{{ $pv['feedback']['outcome_label'] }}</span>
+                            @endif
+                            @if($pv['feedback']['seller_notes'] ?? null)
+                                <p class="text-xs mt-1" style="color: var(--text-secondary);">{{ $pv['feedback']['seller_notes'] }}</p>
+                            @endif
+                            @if($pv['feedback']['internal_notes'] ?? null)
+                                <p class="text-[11px] mt-1" style="color: var(--text-muted);"><span class="font-medium">Internal:</span> {{ $pv['feedback']['internal_notes'] }}</p>
+                            @endif
+                            <div class="text-[10px] mt-1" style="color: var(--text-muted);">Captured {{ \Carbon\Carbon::parse($pv['feedback']['captured_at'])->diffForHumans() }}</div>
+                        </div>
+                    @else
+                        <div class="mt-2">
+                            <span class="text-[10px] px-1.5 py-0.5 rounded" style="background:rgba(107,114,128,.15); color:#6b7280;">No feedback captured</span>
+                        </div>
+                    @endif
+                </div>
+            @empty
+                <p class="text-xs py-3" style="color: var(--text-muted);">None</p>
+            @endforelse
+        </div>
+
     </div>
 
     {{-- Matched Properties Tab --}}

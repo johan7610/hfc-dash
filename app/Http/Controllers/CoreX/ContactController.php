@@ -227,9 +227,14 @@ class ContactController extends Controller
             }
         }
 
+        $now = now();
+        $buyerUpcoming = $buyerViewings->filter(fn ($v) => \Carbon\Carbon::parse($v['event_date'])->gte($now))->sortBy('event_date')->values();
+        $buyerPast = $buyerViewings->filter(fn ($v) => \Carbon\Carbon::parse($v['event_date'])->lt($now))->sortByDesc('event_date')->values();
+        $sellerUpcoming = $sellerViewings->filter(fn ($v) => \Carbon\Carbon::parse($v['event_date'])->gte($now))->sortBy('event_date')->values();
+        $sellerPast = $sellerViewings->filter(fn ($v) => \Carbon\Carbon::parse($v['event_date'])->lt($now))->sortByDesc('event_date')->values();
         $viewingsCount = $buyerViewings->count() + $sellerViewings->count();
 
-        return view('corex.contacts.show', compact('contact', 'contactTypes', 'contactTags', 'matchCategories', 'matchTypes', 'documentTypes', 'driveLinkedGroups', 'driveUnlinkedDocs', 'drivePropertyMap', 'buyerViewings', 'sellerViewings', 'viewingsCount'));
+        return view('corex.contacts.show', compact('contact', 'contactTypes', 'contactTags', 'matchCategories', 'matchTypes', 'documentTypes', 'driveLinkedGroups', 'driveUnlinkedDocs', 'drivePropertyMap', 'buyerViewings', 'sellerViewings', 'buyerUpcoming', 'buyerPast', 'sellerUpcoming', 'sellerPast', 'viewingsCount'));
     }
 
     public function checkDuplicate(Request $request)
