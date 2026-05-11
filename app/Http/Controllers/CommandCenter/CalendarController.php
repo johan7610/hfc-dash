@@ -476,14 +476,34 @@ class CalendarController extends Controller
             'attendees' => $isManual ? $calendarEvent->links()
                 ->whereIn('role', ['attendee', 'buyer_contact', 'seller_contact', 'agent_contact'])
                 ->get()
-                ->map(fn ($l) => [
+                ->map(function ($l) use ($calendarEvent) {
+                    $inv = null;
+                    if ($l->linkable_type === \App\Models\User::class) {
+                        $inv = \App\Models\CommandCenter\CalendarEventInvitation::where('event_id', $calendarEvent->id)
+                            ->where('invitee_user_id', $l->linkable_id)->first();
+                    }
+                    return [
                     'id'   => $l->linkable_id,
                     'type' => $l->linkable_type === \App\Models\User::class ? 'agent' : 'contact',
                     'role' => $l->role,
+                    'invitation_status' => $inv?->status,
+                    'invitation_id' => $inv?->id,
+                    'response_notes' => $inv?->response_notes,
                     'name' => $l->linkable_type === \App\Models\User::class
-                        ? optional(\App\Models\User::find($l->linkable_id))->name
+                        ? optional(\App\Models\User::withoutGlobalScopes()->find($l->linkable_id))->name
                         : optional(\App\Models\Contact::withoutGlobalScopes()->find($l->linkable_id), fn ($c) => trim($c->first_name . ' ' . $c->last_name)) ?? ('Contact #' . $l->linkable_id),
-                ]) : [],
+                    ];
+                }) : [],
+            'unack_declines' => $isOrganizer ? \App\Models\CommandCenter\CalendarEventInvitation::where('event_id', $calendarEvent->id)
+                ->where('status', 'declined')
+                ->whereNull('acknowledged_at')
+                ->get()
+                ->map(fn ($inv) => [
+                    'invitation_id' => $inv->id,
+                    'invitee_name' => optional(\App\Models\User::withoutGlobalScopes()->find($inv->invitee_user_id))->name ?? 'Unknown',
+                    'reason' => $inv->response_notes ?: 'Not provided',
+                    'acknowledge_url' => route('command-center.calendar.invitations.acknowledge', $inv->id),
+                ])->values() : [],
             'audit_log' => $calendarEvent->auditEntries()
                 ->orderBy('performed_at', 'desc')
                 ->limit(10)
@@ -513,13 +533,11 @@ class CalendarController extends Controller
             abort(403);
         }
 
-        $contacts = $calendarEvent->linkedContacts;
-        $existing = \App\Models\CommandCenter\CalendarEventFeedback::query()
-            ->where('calendar_event_id', $calendarEvent->id)
-            ->get()
-            ->keyBy('contact_id');
-
         $agencyId = $calendarEvent->agency_id;
+        $cfg = CalendarEventClassSetting::forAgencyAndClass($agencyId, $calendarEvent->category);
+        $feedbackMode = $cfg->feedback_mode ?? 'per_contact';
+
+        $properties = $calendarEvent->linkedProperties;
 
         $outcomes = \App\Models\CommandCenter\AgencyFeedbackOption::withoutGlobalScopes()
             ->where('category', 'outcome')
@@ -535,8 +553,46 @@ class CalendarController extends Controller
             ->orderBy('sort_order')
             ->get(['id', 'label']);
 
-        // Multi-property support: include linked properties for per-property feedback
-        $properties = $calendarEvent->linkedProperties;
+        // Per-property mode (listing_presentation): iterate properties, not contacts
+        if ($feedbackMode === 'per_property') {
+            $existing = \App\Models\CommandCenter\CalendarEventFeedback::query()
+                ->where('calendar_event_id', $calendarEvent->id)
+                ->get()
+                ->keyBy('property_id');
+
+            return response()->json([
+                'event' => [
+                    'id'    => $calendarEvent->id,
+                    'title' => $calendarEvent->title,
+                    'date'  => $calendarEvent->event_date->format('D, j M Y H:i'),
+                ],
+                'feedback_mode' => 'per_property',
+                'feedback_kind' => 'listing_presentation',
+                'items' => $properties->map(fn ($p) => [
+                    'property_id'    => $p->id,
+                    'label'          => method_exists($p, 'buildDisplayAddress') ? $p->buildDisplayAddress() : ($p->title ?? "Property #{$p->id}"),
+                    'feedback_id'    => optional($existing->get($p->id))->id,
+                    'kind_data'      => optional($existing->get($p->id))->kind_specific_data ?? [],
+                    'internal_notes' => optional($existing->get($p->id))->internal_notes,
+                    'next_action'    => optional($existing->get($p->id))->next_action_notes,
+                ]),
+                'lp_outcomes' => [
+                    'Mandate signed', 'Considering', 'Lost', 'Other agent',
+                    'Pricing too far', 'Not ready', 'Reschedule',
+                ],
+                'lp_mandate_types' => ['Sole', 'Open', 'N/A'],
+                'lp_concerns' => $concerns,
+                'outcomes' => $outcomes,
+                'concerns' => $concerns,
+            ]);
+        }
+
+        // Default: per-contact mode (viewings)
+        $contacts = $calendarEvent->linkedContacts;
+        $existing = \App\Models\CommandCenter\CalendarEventFeedback::query()
+            ->where('calendar_event_id', $calendarEvent->id)
+            ->get()
+            ->keyBy('contact_id');
 
         return response()->json([
             'event' => [
@@ -544,6 +600,8 @@ class CalendarController extends Controller
                 'title' => $calendarEvent->title,
                 'date'  => $calendarEvent->event_date->format('D, j M Y H:i'),
             ],
+            'feedback_mode' => 'per_contact',
+            'feedback_kind' => 'viewing',
             'contacts' => $contacts->map(fn ($c) => [
                 'id'             => $c->id,
                 'label'          => trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '')) ?: ('Contact #' . $c->id),
@@ -571,38 +629,74 @@ class CalendarController extends Controller
             abort(403);
         }
 
-        $data = $request->validate([
-            'feedback'                        => 'required|array',
-            'feedback.*.contact_id'           => 'required|integer|exists:contacts,id',
-            'feedback.*.property_id'          => 'nullable|integer|exists:properties,id',
-            'feedback.*.outcome_id'           => 'nullable|integer|exists:agency_feedback_options,id',
-            'feedback.*.concern_ids'          => 'nullable|array',
-            'feedback.*.concern_ids.*'        => 'integer|exists:agency_feedback_options,id',
-            'feedback.*.seller_visible_notes' => 'nullable|string|max:5000',
-            'feedback.*.internal_notes'       => 'nullable|string|max:5000',
-            'feedback.*.next_action_notes'    => 'nullable|string|max:2000',
-        ]);
+        $feedbackKind = $request->input('feedback_kind', 'viewing');
 
-        DB::transaction(function () use ($data, $calendarEvent, $user) {
+        // Listing presentation mode: per-property feedback
+        if ($feedbackKind === 'listing_presentation') {
+            $data = $request->validate([
+                'feedback'                        => 'required|array',
+                'feedback.*.property_id'          => 'required|integer|exists:properties,id',
+                'feedback.*.kind_specific_data'   => 'nullable|array',
+                'feedback.*.internal_notes'       => 'nullable|string|max:5000',
+                'feedback.*.next_action_notes'    => 'nullable|string|max:2000',
+            ]);
+        } else {
+            $data = $request->validate([
+                'feedback'                        => 'required|array',
+                'feedback.*.contact_id'           => 'required|integer|exists:contacts,id',
+                'feedback.*.property_id'          => 'nullable|integer|exists:properties,id',
+                'feedback.*.outcome_id'           => 'nullable|integer|exists:agency_feedback_options,id',
+                'feedback.*.concern_ids'          => 'nullable|array',
+                'feedback.*.concern_ids.*'        => 'integer|exists:agency_feedback_options,id',
+                'feedback.*.seller_visible_notes' => 'nullable|string|max:5000',
+                'feedback.*.internal_notes'       => 'nullable|string|max:5000',
+                'feedback.*.next_action_notes'    => 'nullable|string|max:2000',
+            ]);
+        }
+
+        DB::transaction(function () use ($data, $calendarEvent, $user, $feedbackKind) {
             foreach ($data['feedback'] as $row) {
-                \App\Models\CommandCenter\CalendarEventFeedback::updateOrCreate(
-                    [
-                        'calendar_event_id' => $calendarEvent->id,
-                        'contact_id'        => $row['contact_id'],
-                        'property_id'       => $row['property_id'] ?? null,
-                    ],
-                    [
-                        'outcome_option_id'    => $row['outcome_id'] ?? null,
-                        'concern_option_ids'   => $row['concern_ids'] ?? [],
-                        'seller_visible_notes' => $row['seller_visible_notes'] ?? null,
-                        'internal_notes'       => $row['internal_notes'] ?? null,
-                        'next_action_notes'    => $row['next_action_notes'] ?? null,
-                        'captured_by_user_id'  => $user->id,
-                        'captured_at'          => now(),
-                        'agency_id'            => $calendarEvent->agency_id,
-                        'branch_id'            => $calendarEvent->branch_id,
-                    ]
-                );
+                if ($feedbackKind === 'listing_presentation') {
+                    \App\Models\CommandCenter\CalendarEventFeedback::updateOrCreate(
+                        [
+                            'calendar_event_id' => $calendarEvent->id,
+                            'property_id'       => $row['property_id'],
+                            'feedback_kind'     => 'listing_presentation',
+                        ],
+                        [
+                            'contact_id'         => null,
+                            'visibility'         => 'internal_only',
+                            'kind_specific_data' => $row['kind_specific_data'] ?? [],
+                            'internal_notes'     => $row['internal_notes'] ?? null,
+                            'next_action_notes'  => $row['next_action_notes'] ?? null,
+                            'captured_by_user_id' => $user->id,
+                            'captured_at'        => now(),
+                            'agency_id'          => $calendarEvent->agency_id,
+                            'branch_id'          => $calendarEvent->branch_id,
+                        ]
+                    );
+                } else {
+                    \App\Models\CommandCenter\CalendarEventFeedback::updateOrCreate(
+                        [
+                            'calendar_event_id' => $calendarEvent->id,
+                            'contact_id'        => $row['contact_id'],
+                            'property_id'       => $row['property_id'] ?? null,
+                        ],
+                        [
+                            'feedback_kind'        => 'viewing',
+                            'visibility'           => 'public_to_seller',
+                            'outcome_option_id'    => $row['outcome_id'] ?? null,
+                            'concern_option_ids'   => $row['concern_ids'] ?? [],
+                            'seller_visible_notes' => $row['seller_visible_notes'] ?? null,
+                            'internal_notes'       => $row['internal_notes'] ?? null,
+                            'next_action_notes'    => $row['next_action_notes'] ?? null,
+                            'captured_by_user_id'  => $user->id,
+                            'captured_at'          => now(),
+                            'agency_id'            => $calendarEvent->agency_id,
+                            'branch_id'            => $calendarEvent->branch_id,
+                        ]
+                    );
+                }
             }
 
             \App\Models\CommandCenter\CalendarEventAuditEntry::create([
@@ -612,6 +706,44 @@ class CalendarController extends Controller
                 'performed_by_user_id' => $user->id,
                 'performed_at'         => now(),
             ]);
+
+            // Fan-out: log feedback_captured to buyer activity timelines
+            $linkedPropertyIds = $calendarEvent->linkedProperties()->pluck('properties.id')->toArray();
+            foreach ($data['feedback'] as $row) {
+                $contactId = $row['contact_id'];
+                $contact = \App\Models\Contact::withoutGlobalScopes()->find($contactId);
+                if ($contact && $contact->is_buyer) {
+                    \App\Models\BuyerActivityLog::create([
+                        'contact_id' => $contactId,
+                        'agency_id' => $calendarEvent->agency_id ?? 1,
+                        'activity_type' => 'feedback_captured',
+                        'activity_date' => now(),
+                        'related_event_id' => $calendarEvent->id,
+                        'related_property_id' => $row['property_id'] ?? ($linkedPropertyIds[0] ?? null),
+                        'metadata' => [
+                            'event_title' => $calendarEvent->title,
+                            'outcome_id' => $row['outcome_id'] ?? null,
+                            'captured_by' => $user->name,
+                        ],
+                        'logged_by_user_id' => $user->id,
+                    ]);
+
+                    // Sync buyer_property_views for each linked property
+                    foreach ($linkedPropertyIds as $propId) {
+                        DB::table('buyer_property_views')->updateOrInsert(
+                            ['contact_id' => $contactId, 'property_id' => $propId],
+                            [
+                                'last_viewed_at' => $calendarEvent->event_date,
+                                'view_count' => DB::raw('COALESCE(view_count, 0) + 1'),
+                                'updated_at' => now(),
+                                'created_at' => DB::raw('COALESCE(created_at, NOW())'),
+                            ]
+                        );
+                    }
+
+                    $contact->updateQuietly(['last_activity_at' => now()]);
+                }
+            }
 
             // Close any open missed-feedback tasks for this event
             \App\Models\CommandCenter\CommandTask::query()
@@ -925,6 +1057,44 @@ class CalendarController extends Controller
             }
         }
 
+        // Conflict markers: mark events that overlap another appointment-type event for this user.
+        // Single sweep — no additional queries.
+        $informationalClasses = CalendarEventClassSetting::withoutGlobalScopes()
+            ->where('actor_role', 'neither')->pluck('event_class')->toArray();
+        $appointments = $result->filter(fn($e) => !in_array($e->category, $informationalClasses))
+            ->sortBy('event_date')->values();
+        $conflictIds = [];
+        for ($i = 0; $i < $appointments->count(); $i++) {
+            for ($j = $i + 1; $j < $appointments->count(); $j++) {
+                $a = $appointments[$i];
+                $b = $appointments[$j];
+                if ($b->event_date < ($a->end_date ?? $a->event_date)) {
+                    $conflictIds[$a->id] = true;
+                    $conflictIds[$b->id] = true;
+                } else {
+                    break; // sorted, no further overlaps for $i
+                }
+            }
+        }
+        // Unacknowledged decline markers (batch lookup)
+        $unackDeclines = [];
+        if (!empty($eventIds)) {
+            $unackDeclines = DB::table('calendar_event_invitations')
+                ->where('status', 'declined')
+                ->whereNull('acknowledged_at')
+                ->whereIn('event_id', $eventIds)
+                ->select('event_id', DB::raw('COUNT(*) as cnt'))
+                ->groupBy('event_id')
+                ->pluck('cnt', 'event_id')
+                ->toArray();
+        }
+
+        foreach ($result as $event) {
+            $event->has_conflict = isset($conflictIds[$event->id]);
+            $event->has_unack_decline = isset($unackDeclines[$event->id]);
+            $event->unack_decline_count = $unackDeclines[$event->id] ?? 0;
+        }
+
         return $result;
     }
 
@@ -1022,6 +1192,7 @@ class CalendarController extends Controller
                 try {
                     $records[] = [
                         'type' => 'contact', 'group' => $group, 'icon' => 'person',
+                        'id' => $c->id,
                         'label' => $badge ?? 'Attendee',
                         'name' => trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '')) ?: "Contact #{$c->id}",
                         'url' => $c->is_buyer ? route('command-center.buyers.show', $c->id) : route('corex.contacts.show', $c->id),
@@ -1031,17 +1202,22 @@ class CalendarController extends Controller
             }
 
             // Auto-derive sellers from linked properties (even if not on attendee list)
-            $sellerContactIds = collect($records)->where('group', 'sellers')->pluck('url')->toArray();
+            // Dedup by contact ID across ALL groups (sellers, attendees, buyers)
+            $seenContactIds = collect($records)
+                ->where('type', 'contact')
+                ->pluck('id')
+                ->filter()
+                ->toArray();
             foreach ($properties as $p) {
                 $owners = $p->contacts()->wherePivotIn('role', ['owner', 'seller', 'landlord', 'lessor'])->get();
                 foreach ($owners as $owner) {
-                    $ownerUrl = route('corex.contacts.show', $owner->id);
-                    if (in_array($ownerUrl, $sellerContactIds)) continue; // dedup
-                    $sellerContactIds[] = $ownerUrl;
+                    if (in_array($owner->id, $seenContactIds)) continue;
+                    $seenContactIds[] = $owner->id;
                     $records[] = [
                         'type' => 'contact', 'group' => 'sellers', 'icon' => 'person',
+                        'id' => $owner->id,
                         'label' => 'Seller', 'name' => $owner->full_name,
-                        'url' => $ownerUrl, 'badge' => 'Seller',
+                        'url' => route('corex.contacts.show', $owner->id), 'badge' => 'Seller',
                     ];
                 }
             }

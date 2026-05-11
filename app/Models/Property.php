@@ -122,6 +122,9 @@ class Property extends Model
         'p24_last_error',
         'p24_images_last_synced_at',
         'p24_listing_last_synced_at',
+        'compliance_snapshot_at',
+        'compliance_snapshot_data',
+        'first_marketed_at',
     ];
 
     protected $casts = [
@@ -177,6 +180,9 @@ class Property extends Model
         'p24_activated_at'            => 'datetime',
         'p24_images_last_synced_at'   => 'datetime',
         'p24_listing_last_synced_at'  => 'datetime',
+        'compliance_snapshot_at'      => 'datetime',
+        'compliance_snapshot_data'    => 'array',
+        'first_marketed_at'           => 'datetime',
     ];
 
     protected static function boot(): void

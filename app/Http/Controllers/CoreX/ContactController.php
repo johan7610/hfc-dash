@@ -120,7 +120,121 @@ class ContactController extends Controller
         }
         $drivePropertyMap = $contact->properties->keyBy('id');
 
-        return view('corex.contacts.show', compact('contact', 'contactTypes', 'contactTags', 'matchCategories', 'matchTypes', 'documentTypes', 'driveLinkedGroups', 'driveUnlinkedDocs', 'drivePropertyMap'));
+        // Viewings & Feedback — buyer perspective: events where this contact is buyer/attendee
+        $buyerViewings = collect();
+        $buyerEventIds = \DB::table('calendar_event_links')
+            ->where('linkable_type', \App\Models\Contact::class)
+            ->where('linkable_id', $contact->id)
+            ->whereIn('role', ['buyer_contact', 'attendee'])
+            ->pluck('calendar_event_id');
+
+        if ($buyerEventIds->isNotEmpty()) {
+            $propLinks = \DB::table('calendar_event_links')
+                ->whereIn('calendar_event_id', $buyerEventIds)
+                ->where('role', 'subject_property')
+                ->where('linkable_type', \App\Models\Property::class)
+                ->get(['calendar_event_id', 'linkable_id']);
+
+            $events = \App\Models\CommandCenter\CalendarEvent::withoutGlobalScopes()
+                ->whereIn('id', $buyerEventIds)->get()->keyBy('id');
+            $props = \App\Models\Property::withoutGlobalScopes()
+                ->whereIn('id', $propLinks->pluck('linkable_id')->unique())->get()->keyBy('id');
+            $feedbackRows = \DB::table('calendar_event_feedback')
+                ->where('contact_id', $contact->id)
+                ->whereIn('calendar_event_id', $buyerEventIds)->get()->groupBy('calendar_event_id');
+            $agents = \App\Models\User::withoutGlobalScopes()
+                ->whereIn('id', $events->pluck('user_id')->unique()->filter())->pluck('name', 'id');
+            $outcomeLabels = \DB::table('agency_feedback_options')->where('category', 'outcome')->pluck('label', 'id');
+
+            foreach ($propLinks as $pl) {
+                $ev = $events->get($pl->calendar_event_id);
+                $pr = $props->get($pl->linkable_id);
+                if (!$ev || !$pr) continue;
+                $fb = ($feedbackRows->get($pl->calendar_event_id, collect()))->firstWhere('property_id', $pl->linkable_id)
+                    ?? ($feedbackRows->get($pl->calendar_event_id, collect()))->first();
+                $buyerViewings->push([
+                    'property_id' => $pr->id,
+                    'address' => method_exists($pr, 'buildDisplayAddress') ? $pr->buildDisplayAddress() : ($pr->title ?? "Property #{$pr->id}"),
+                    'event_date' => $ev->event_date,
+                    'agent_name' => $agents->get($ev->user_id, 'Unknown'),
+                    'feedback' => $fb ? [
+                        'outcome_label' => $outcomeLabels->get($fb->outcome_option_id),
+                        'seller_notes' => $fb->seller_visible_notes,
+                        'internal_notes' => $fb->internal_notes,
+                        'captured_at' => $fb->captured_at,
+                    ] : null,
+                ]);
+            }
+            $buyerViewings = $buyerViewings->sortByDesc('event_date')->values();
+        }
+
+        // Seller perspective: properties this contact owns, and feedback from buyers on those
+        $sellerViewings = collect();
+        $ownedPropertyIds = \DB::table('contact_property')
+            ->where('contact_id', $contact->id)
+            ->whereIn('role', ['owner', 'seller', 'landlord', 'lessor'])
+            ->pluck('property_id');
+
+        if ($ownedPropertyIds->isNotEmpty()) {
+            $sellerEventIds = \DB::table('calendar_event_links')
+                ->where('linkable_type', \App\Models\Property::class)
+                ->whereIn('linkable_id', $ownedPropertyIds)
+                ->where('role', 'subject_property')
+                ->pluck('calendar_event_id')->unique();
+
+            if ($sellerEventIds->isNotEmpty()) {
+                $sEvents = \App\Models\CommandCenter\CalendarEvent::withoutGlobalScopes()
+                    ->whereIn('id', $sellerEventIds)->get()->keyBy('id');
+                $sProps = \App\Models\Property::withoutGlobalScopes()
+                    ->whereIn('id', $ownedPropertyIds)->get()->keyBy('id');
+                // Filter internal_only feedback: only BM/admin/super_admin can see
+                $viewerCanSeeInternal = in_array($request->user()->role ?? 'agent', ['super_admin', 'admin', 'owner', 'branch_manager']);
+                $sFeedbackQuery = \DB::table('calendar_event_feedback')
+                    ->whereIn('calendar_event_id', $sellerEventIds);
+                if (!$viewerCanSeeInternal) {
+                    $sFeedbackQuery->where('visibility', '!=', 'internal_only');
+                }
+                $sFeedback = $sFeedbackQuery->get()->groupBy('calendar_event_id');
+                $sAgents = \App\Models\User::withoutGlobalScopes()
+                    ->whereIn('id', $sEvents->pluck('user_id')->unique()->filter())->pluck('name', 'id');
+                $sOutcomes = \DB::table('agency_feedback_options')->where('category', 'outcome')->pluck('label', 'id');
+
+                $sPropLinks = \DB::table('calendar_event_links')
+                    ->whereIn('calendar_event_id', $sellerEventIds)
+                    ->where('role', 'subject_property')
+                    ->whereIn('linkable_id', $ownedPropertyIds)
+                    ->get(['calendar_event_id', 'linkable_id']);
+
+                foreach ($sPropLinks as $sl) {
+                    $sEv = $sEvents->get($sl->calendar_event_id);
+                    $sPr = $sProps->get($sl->linkable_id);
+                    if (!$sEv || !$sPr) continue;
+                    $sFb = ($sFeedback->get($sl->calendar_event_id, collect()))->first();
+                    $sellerViewings->push([
+                        'property_id' => $sPr->id,
+                        'address' => method_exists($sPr, 'buildDisplayAddress') ? $sPr->buildDisplayAddress() : ($sPr->title ?? "Property #{$sPr->id}"),
+                        'event_date' => $sEv->event_date,
+                        'agent_name' => $sAgents->get($sEv->user_id, 'Unknown'),
+                        'buyer_label' => 'Interested Buyer',
+                        'feedback' => $sFb ? [
+                            'outcome_label' => $sOutcomes->get($sFb->outcome_option_id),
+                            'seller_notes' => $sFb->seller_visible_notes,
+                            'captured_at' => $sFb->captured_at,
+                        ] : null,
+                    ]);
+                }
+                $sellerViewings = $sellerViewings->sortByDesc('event_date')->values();
+            }
+        }
+
+        $now = now();
+        $buyerUpcoming = $buyerViewings->filter(fn ($v) => \Carbon\Carbon::parse($v['event_date'])->gte($now))->sortBy('event_date')->values();
+        $buyerPast = $buyerViewings->filter(fn ($v) => \Carbon\Carbon::parse($v['event_date'])->lt($now))->sortByDesc('event_date')->values();
+        $sellerUpcoming = $sellerViewings->filter(fn ($v) => \Carbon\Carbon::parse($v['event_date'])->gte($now))->sortBy('event_date')->values();
+        $sellerPast = $sellerViewings->filter(fn ($v) => \Carbon\Carbon::parse($v['event_date'])->lt($now))->sortByDesc('event_date')->values();
+        $viewingsCount = $buyerViewings->count() + $sellerViewings->count();
+
+        return view('corex.contacts.show', compact('contact', 'contactTypes', 'contactTags', 'matchCategories', 'matchTypes', 'documentTypes', 'driveLinkedGroups', 'driveUnlinkedDocs', 'drivePropertyMap', 'buyerViewings', 'sellerViewings', 'buyerUpcoming', 'buyerPast', 'sellerUpcoming', 'sellerPast', 'viewingsCount'));
     }
 
     public function checkDuplicate(Request $request)
