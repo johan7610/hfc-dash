@@ -184,6 +184,17 @@ class WhistleblowController extends Controller
     }
 
     /**
+     * Download the lawyer review pack (ZIP with 3 PDFs + cover email + README).
+     */
+    public function lawyerReviewPack(Request $request)
+    {
+        $zipPath = $this->service->generateLawyerReviewPack(Auth::user());
+        $filename = 'whistleblow-lawyer-review-pack-' . now()->format('Y-m-d') . '.zip';
+
+        return response()->download($zipPath, $filename)->deleteFileAfterSend(true);
+    }
+
+    /**
      * Check if user can approve complaints for this agency.
      */
     private function canApprove(WhistleblowComplaint $complaint, $user): bool

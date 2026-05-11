@@ -507,6 +507,239 @@ class WhistleblowComplaintService
     // Audit log
     // ══════════════════════════════════════════════════════════════
 
+    // ══════════════════════════════════════════════════════════════
+    // Lawyer review pack
+    // ══════════════════════════════════════════════════════════════
+
+    /**
+     * Generate a ZIP file containing 3 tier-specific PDF templates + cover email + README
+     * for lawyer review. Uses placeholder/sample data — nothing persisted to DB.
+     */
+    public function generateLawyerReviewPack(User $requestedBy): string
+    {
+        $agency = Agency::withoutGlobalScopes()->find($requestedBy->agency_id ?? 1)
+            ?? Agency::withoutGlobalScopes()->first();
+
+        $timestamp = now()->format('Ymd-His');
+        $packDir = storage_path("app/temp/lawyer-review-{$timestamp}");
+        mkdir($packDir, 0755, true);
+
+        // Build 3 synthetic complaints (in-memory only)
+        $tiers = [
+            'tier_1' => [
+                'subject_agency_name'  => '[SAMPLE] Competing Realty Group',
+                'subject_practitioner_name' => '[SAMPLE] John Smith',
+                'subject_ffc_number'   => null,
+                'property_address'     => '[SAMPLE] 14 Marine Drive, Margate',
+                'property_portal_url'  => 'https://www.privateproperty.co.za/for-sale/sample-listing/T12345',
+                'portal_source'        => 'pp',
+                'portal_listing_ref'   => 'PP-SAMPLE-12345',
+                'seller_statement'     => '[Verbatim seller statement would appear here. This is a sample for legal review. The actual complaint captures the seller\'s words directly from the agent\'s conversation with the property owner.]',
+                'seller_consents_to_named_complaint' => true,
+                'agent_notes'          => '[Internal agent notes from the conversation go here. Used to inform the legal team but not included in the PPRA-facing document.]',
+            ],
+            'tier_2' => [
+                'subject_agency_name'  => '[SAMPLE] Beachfront Brokers SA',
+                'subject_practitioner_name' => '[SAMPLE] Jane Doe',
+                'subject_ffc_number'   => null,
+                'property_address'     => '[SAMPLE] 7 Ocean View Road, Uvongo',
+                'property_portal_url'  => 'https://www.property24.com/for-sale/sample-listing/12345678',
+                'portal_source'        => 'p24',
+                'portal_listing_ref'   => 'P24-SAMPLE-67890',
+                'seller_statement'     => null,
+                'seller_consents_to_named_complaint' => false,
+                'agent_notes'          => 'The attached advertisement on Property24 for the subject property displays no Fidelity Fund Certificate number for the practitioner or the agency.',
+            ],
+            'tier_3' => [
+                'subject_agency_name'  => '[SAMPLE] Unregistered Property Services',
+                'subject_practitioner_name' => '[SAMPLE] Daniel Mokoena',
+                'subject_ffc_number'   => null,
+                'property_address'     => '[SAMPLE] 22 King George Street, Port Edward',
+                'property_portal_url'  => 'https://www.property24.com/for-sale/sample-listing/99999999',
+                'portal_source'        => 'p24',
+                'portal_listing_ref'   => 'P24-SAMPLE-99999',
+                'seller_statement'     => null,
+                'seller_consents_to_named_complaint' => false,
+                'agent_notes'          => 'We attempted to verify the advertising practitioner against the PPRA "Find a Property Practitioner" register. No record was found for the name displayed on the advertisement.',
+            ],
+        ];
+
+        $templateMap = [
+            'tier_1' => 'compliance.whistleblow.pdf.tier1',
+            'tier_2' => 'compliance.whistleblow.pdf.tier2',
+            'tier_3' => 'compliance.whistleblow.pdf.tier3',
+        ];
+
+        // Synthetic evidence + audit data (not persisted)
+        $fakeEvidence = collect([
+            (object) [
+                'evidence_type'    => 'screenshot',
+                'description'      => 'Screenshot of portal listing showing the subject property advertised without proper compliance',
+                'original_filename' => 'portal-listing-screenshot.png',
+                'size_bytes'       => 245000,
+                'created_at'       => now()->subHours(2),
+            ],
+            (object) [
+                'evidence_type'    => 'other',
+                'description'      => 'Notes from telephone conversation with property owner',
+                'original_filename' => 'call-notes.txt',
+                'size_bytes'       => 1024,
+                'created_at'       => now()->subHours(1),
+            ],
+        ]);
+
+        $fakeAuditLog = collect([
+            (object) ['action' => 'created',          'created_at' => now()->subDay(), 'user' => $requestedBy],
+            (object) ['action' => 'evidence_attached', 'created_at' => now()->subDay()->addMinutes(5), 'user' => $requestedBy],
+            (object) ['action' => 'submitted',         'created_at' => now()->subDay()->addMinutes(10), 'user' => $requestedBy],
+            (object) ['action' => 'approved',          'created_at' => now()->subHours(20), 'user' => $requestedBy],
+            (object) ['action' => 'pdf_generated',     'created_at' => now()->subHours(20)->addSeconds(3), 'user' => $requestedBy],
+            (object) ['action' => 'emailed_to_ppra',   'created_at' => now()->subHours(20)->addMinutes(1), 'user' => null],
+        ]);
+
+        $pdfFiles = [];
+
+        foreach ($tiers as $tier => $data) {
+            // Build a synthetic complaint object for the view
+            $complaint = new WhistleblowComplaint(array_merge($data, [
+                'agency_id'            => $agency->id,
+                'reported_by_user_id'  => $requestedBy->id,
+                'tier'                 => $tier,
+                'status'               => 'sent',
+                'approved_by_user_id'  => $requestedBy->id,
+            ]));
+            // Set timestamps + fake ID directly (not mass-assignable)
+            $complaint->id = 999;
+            $complaint->created_at = now()->subDay();
+            $complaint->updated_at = now();
+            $complaint->approved_at = now()->subHours(20);
+            $complaint->sent_to_ppra_at = now()->subHours(20)->addMinutes(1);
+
+            // Build reporter relation manually
+            $complaint->setRelation('reporter', $requestedBy);
+            $complaint->setRelation('approvedBy', $requestedBy);
+            $complaint->setRelation('sellerContact', null);
+            $complaint->setRelation('evidence', $fakeEvidence);
+
+            $viewName = $templateMap[$tier];
+            $html = view($viewName, [
+                'complaint' => $complaint,
+                'agency'    => $agency,
+                'reporter'  => $requestedBy,
+                'evidence'  => $fakeEvidence,
+                'auditLog'  => $fakeAuditLog,
+            ])->render();
+
+            // Write temp HTML
+            $tempDir = storage_path('app/temp');
+            $htmlPath = $tempDir . '/lr-' . $tier . '-' . uniqid() . '.html';
+            file_put_contents($htmlPath, $html);
+
+            $pdfFilename = str_replace('_', '', $tier) . '-template.pdf';
+            $pdfPath = $packDir . '/' . $pdfFilename;
+
+            $this->invokePuppeteer($htmlPath, $pdfPath, 999);
+            @unlink($htmlPath);
+
+            $pdfFiles[] = $pdfFilename;
+        }
+
+        // Render cover email HTML
+        $coverComplaint = new WhistleblowComplaint([
+            'agency_id'            => $agency->id,
+            'tier'                 => 'tier_1',
+            'subject_agency_name'  => '[SAMPLE] Competing Realty Group',
+            'status'               => 'sent',
+            'approved_by_user_id'  => $requestedBy->id,
+        ]);
+        $coverComplaint->id = 999;
+        $coverComplaint->created_at = now()->subDay();
+        $coverComplaint->setRelation('approvedBy', $requestedBy);
+
+        $coverHtml = view('emails.compliance.whistleblow-complaint', [
+            'complaint' => $coverComplaint,
+            'agency'    => $agency,
+            'tierLabel' => 'Tier 1 — Seller-Confirmed Paperwork Breach',
+            'isDemoMode' => true,
+        ])->render();
+
+        file_put_contents($packDir . '/cover-email.html', $coverHtml);
+        file_put_contents($packDir . '/cover-email.txt', strip_tags(str_replace(['<br>', '<br/>', '<br />', '</p>', '</div>'], "\n", $coverHtml)));
+
+        // Generate README.md
+        $coEmail = $agency->whistleblow_compliance_officer_email ?? $agency->email ?? 'compliance@agency.co.za';
+        $readme = <<<MD
+# Whistleblower Compliance Reporting — Legal Review Pack
+
+Generated: {$timestamp}
+For: {$agency->trading_name} ({$agency->name})
+By: {$requestedBy->name}
+
+## Contents
+
+This pack contains the three tier-specific PPRA complaint PDF templates used by the CoreX OS Whistleblower Compliance Module, plus the cover email body that accompanies each submission.
+
+- `tier1-template.pdf` — Used when a seller confirms a competing agency is marketing their property without proper mandate, FICA, or MDF. Cites Property Practitioners Act §47, §67 and FICA §21A.
+
+- `tier2-template.pdf` — Used when an advert is observed to lack a valid FFC number in contravention of PPA §61.
+
+- `tier3-template.pdf` — Used when an advertising practitioner cannot be located on the PPRA register, citing PPA §49 (operating without FFC — criminal offence).
+
+- `cover-email.html` / `cover-email.txt` — The short cover email body sent to PPRA with the complaint PDF attached.
+
+## What we'd like from you
+
+1. Review the language in each template for legal accuracy and tone.
+2. Confirm the sections of the Act cited are correct in context.
+3. Suggest any wording changes that strengthen the complaint or reduce litigation risk to the lodging agency.
+4. Review the seller-consent language in tier 1 for POPIA compliance.
+5. Review the cover email for tone and accuracy.
+
+## Disclaimer
+
+The pack shows placeholder content marked [SAMPLE]. Real complaints use real agent / seller / property data captured in CoreX at the time of submission. The legal framework remains constant — only the variable content changes per complaint.
+
+## Submission process (for context)
+
+- Agent files a report from inside CoreX
+- Configured approvers (admin / branch manager / designated users) review and approve
+- On approval, CoreX generates the tier-specific PDF and emails it to PPRA at complaints@theppra.org.za with the agency's compliance officer copied
+- System currently runs in demo mode — no real PPRA submissions until your review is complete
+
+## Contact
+
+{$coEmail}
+MD;
+
+        file_put_contents($packDir . '/README.md', $readme);
+
+        // Bundle into ZIP
+        $zipPath = storage_path("app/temp/lawyer-review-{$timestamp}.zip");
+        $zip = new \ZipArchive();
+        if ($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            throw new \RuntimeException('Failed to create ZIP file at ' . $zipPath);
+        }
+
+        foreach (glob($packDir . '/*') as $file) {
+            $zip->addFile($file, basename($file));
+        }
+        $zip->close();
+
+        // Clean up the temp directory (files are now in ZIP)
+        foreach (glob($packDir . '/*') as $file) {
+            @unlink($file);
+        }
+        @rmdir($packDir);
+
+        Log::info('Lawyer review pack generated', [
+            'user_id' => $requestedBy->id,
+            'path'    => $zipPath,
+            'size'    => filesize($zipPath),
+        ]);
+
+        return $zipPath;
+    }
+
     /**
      * Convenience wrapper for audit row creation.
      */
