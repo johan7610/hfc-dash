@@ -389,6 +389,13 @@ return [
         ['key' => 'view_team_leave_calendar', 'label' => 'View Team Leave Calendar',                'section' => 'leave', 'type' => 'action', 'module' => 'leave', 'sort_order' => 136],
         ['key' => 'adjust_leave_balances',    'label' => 'Manually Adjust Leave Balances (admin)',   'section' => 'leave', 'type' => 'action', 'module' => 'leave', 'sort_order' => 137],
 
+        // ── Whistleblower Compliance Reporting ──
+        ['key' => 'compliance.whistleblow.view',           'label' => 'View Whistleblow Module',               'section' => 'compliance', 'type' => 'action', 'module' => 'compliance_whistleblow', 'sort_order' => 50],
+        ['key' => 'compliance.whistleblow.create',         'label' => 'File New Complaints',                   'section' => 'compliance', 'type' => 'action', 'module' => 'compliance_whistleblow', 'sort_order' => 51],
+        ['key' => 'compliance.whistleblow.approve',        'label' => 'Approve / Reject Complaints',           'section' => 'compliance', 'type' => 'action', 'module' => 'compliance_whistleblow', 'sort_order' => 52],
+        ['key' => 'compliance.whistleblow.view_all_agency','label' => 'View All Agency Complaints',            'section' => 'compliance', 'type' => 'action', 'module' => 'compliance_whistleblow', 'sort_order' => 53],
+        ['key' => 'compliance.whistleblow.configure',      'label' => 'Configure Approvers & PPRA Email',      'section' => 'compliance', 'type' => 'action', 'module' => 'compliance_whistleblow', 'sort_order' => 54],
+
         // ── Branches — Split Branches (Phase 2 branch isolation) ──
         // view_all = bypass BranchScope (see all branches in the agency)
         // switch   = use the "View as Branch" dropdown to impersonate a branch
@@ -416,6 +423,10 @@ return [
                 'manage_leave', 'approve_leave', 'apply_for_leave', 'view_leave_reports',
                 'manage_leave_types', 'manage_staff_take_on', 'view_team_leave_calendar',
                 'adjust_leave_balances',
+                // Whistleblower
+                'compliance.whistleblow.view', 'compliance.whistleblow.create',
+                'compliance.whistleblow.approve', 'compliance.whistleblow.view_all_agency',
+                'compliance.whistleblow.configure',
             ],
         ],
 
@@ -491,6 +502,9 @@ return [
                 // Leave
                 'manage_leave', 'approve_leave', 'apply_for_leave', 'view_leave_reports',
                 'view_team_leave_calendar',
+                // Whistleblower
+                'compliance.whistleblow.view', 'compliance.whistleblow.create',
+                'compliance.whistleblow.approve', 'compliance.whistleblow.view_all_agency',
             ],
         ],
 
@@ -546,6 +560,8 @@ return [
                 'view_own_payslips',
                 // Leave
                 'apply_for_leave', 'view_team_leave_calendar',
+                // Whistleblower
+                'compliance.whistleblow.view', 'compliance.whistleblow.create',
             ],
         ],
 
