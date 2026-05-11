@@ -1364,6 +1364,9 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         return redirect('/corex/settings?tab=user');
     })->middleware('permission:access_settings')->name('corex.settings.compliance-officers');
 
+    // ── Whistleblower Settings ──
+    Route::post('/settings/whistleblow', [CoreXSettingsController::class, 'saveWhistleblowSettings'])->middleware('permission:compliance.whistleblow.configure')->name('corex.settings.whistleblow.save');
+
     // ── FICA Officer Appointments (unified) ──
     Route::post('/settings/fica-officers/primary', [\App\Http\Controllers\Compliance\FicaOfficerAppointmentsController::class, 'savePrimary'])
         ->middleware('permission:manage_compliance_officer')->name('corex.settings.fica-officers.primary');

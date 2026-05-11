@@ -313,6 +313,35 @@
             </div>
             @endif
 
+            {{-- Compliance evidence flags panel --}}
+            @if(!$isNew && isset($propertyComplianceComplaints) && $propertyComplianceComplaints->count() > 0)
+            <div class="rounded-md p-3 space-y-2" style="background:color-mix(in srgb, var(--ds-amber) 6%, var(--surface)); border:1px solid color-mix(in srgb, var(--ds-amber) 30%, var(--border));">
+                <div class="flex items-center gap-2">
+                    <svg class="w-4 h-4 flex-shrink-0" style="color:var(--ds-amber);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/></svg>
+                    <p class="text-[0.6875rem] font-bold uppercase tracking-wider" style="color:var(--ds-amber);">Compliance Flags &mdash; {{ $propertyComplianceComplaints->count() }} report{{ $propertyComplianceComplaints->count() > 1 ? 's' : '' }}</p>
+                </div>
+                @foreach($propertyComplianceComplaints as $wbC)
+                @php
+                    $wbTierBadge = match($wbC->tier) { 'tier_1' => 'ds-badge-warning', 'tier_2' => 'ds-badge-info', 'tier_3' => 'ds-badge-danger', default => '' };
+                    $wbTierLabel = match($wbC->tier) { 'tier_1' => 'Paperwork breach', 'tier_2' => 'No FFC displayed', 'tier_3' => 'Unregistered practitioner', default => $wbC->tier };
+                    $wbStatusLabel = str_replace('_', ' ', ucfirst($wbC->status));
+                @endphp
+                <div class="rounded p-2" style="background:var(--surface); border:1px solid var(--border);">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="text-xs font-mono font-bold" style="color:var(--text-primary);">HFC-WB-{{ $wbC->id }}</span>
+                        <span class="ds-badge {{ $wbTierBadge }}" style="font-size:0.6rem;">{{ $wbTierLabel }}</span>
+                    </div>
+                    <div class="text-[0.6875rem] mt-1" style="color:var(--text-secondary);">
+                        {{ $wbC->created_at->format('d M Y') }} &middot; {{ $wbC->reporter?->name ?? 'Unknown' }} &middot; {{ $wbStatusLabel }}
+                    </div>
+                    @permission('compliance.whistleblow.view')
+                    <a href="{{ route('compliance.whistleblow.show', $wbC) }}" class="text-[0.6875rem] font-semibold no-underline mt-1 inline-block" style="color:var(--brand-default);">View complaint &rarr;</a>
+                    @endpermission
+                </div>
+                @endforeach
+            </div>
+            @endif
+
         </aside>
 
         {{-- RIGHT: tabs --}}

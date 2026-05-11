@@ -310,9 +310,19 @@ class PropertyController extends Controller
 
         $readinessReport = app(\App\Services\Compliance\MarketingReadinessService::class)->statusFor($property);
 
+        // Whistleblower compliance flags linked to this property
+        $propertyComplianceComplaints = $property->exists
+            ? \App\Models\Compliance\WhistleblowComplaint::withoutGlobalScopes()
+                ->where('property_id', $property->id)
+                ->whereIn('status', ['sent', 'acknowledged_by_ppra', 'approved'])
+                ->with('reporter')
+                ->orderByDesc('created_at')
+                ->get()
+            : collect();
+
         return view('corex.properties.show', compact(
             'property', 'settingItems', 'branches', 'agents', 'activeTab', 'coreMatches', 'ppMissingFields', 'p24MissingFields', 'hfcMissingFields',
-            'allDriveDocs', 'documentTypes', 'driveFolders', 'activityTimeline', 'fullAuditLog', 'readinessReport'
+            'allDriveDocs', 'documentTypes', 'driveFolders', 'activityTimeline', 'fullAuditLog', 'readinessReport', 'propertyComplianceComplaints'
         ));
     }
 
