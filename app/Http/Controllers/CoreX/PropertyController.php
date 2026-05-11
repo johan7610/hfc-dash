@@ -74,7 +74,11 @@ class PropertyController extends Controller
             }
         }
 
-        if ($status !== '')        $query->where('status', $status);
+        if ($status === 'published') {
+            $query->whereNotNull('published_at');
+        } elseif ($status !== '') {
+            $query->where('status', $status);
+        }
         if ($listingType !== '')   $query->where('listing_type', $listingType);
         if ($propertyType !== '')  $query->where('property_type', $propertyType);
         if ($category !== '')      $query->where('category', $category);

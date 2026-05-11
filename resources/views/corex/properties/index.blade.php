@@ -44,17 +44,29 @@
             'Published' => ['bg' => 'color-mix(in srgb, var(--brand-icon) 12%, transparent)',  'fg' => 'var(--brand-icon)'],
         ];
     @endphp
+    @php
+        $kpiTiles = [
+            ['label' => 'Total',     'value' => $stats['total'],  'filter' => ''],
+            ['label' => 'Active',    'value' => $stats['active'], 'filter' => 'active'],
+            ['label' => 'Draft',     'value' => $stats['draft'],  'filter' => 'draft'],
+            ['label' => 'Sold',      'value' => $stats['sold'],   'filter' => 'sold'],
+            ['label' => 'Published', 'value' => $stats['synced'], 'filter' => 'published'],
+        ];
+        $currentStatus = $status ?? '';
+        $baseUrl = request()->url();
+        $preserveParams = collect(request()->query())->except('status', 'page')->toArray();
+    @endphp
     <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 xl:gap-4">
-        @foreach([
-            ['label' => 'Total',     'value' => $stats['total']],
-            ['label' => 'Active',    'value' => $stats['active']],
-            ['label' => 'Draft',     'value' => $stats['draft']],
-            ['label' => 'Sold',      'value' => $stats['sold']],
-            ['label' => 'Published', 'value' => $stats['synced']],
-        ] as $kpi)
-        @php $c = $kpiColors[$kpi['label']] ?? ['bg' => 'var(--surface-2)', 'fg' => 'var(--text-muted)']; @endphp
-        <div class="rounded-md px-4 py-3 flex items-center gap-3 transition-all duration-300"
-             style="background:var(--surface); border:1px solid var(--border);">
+        @foreach($kpiTiles as $kpi)
+        @php
+            $c = $kpiColors[$kpi['label']] ?? ['bg' => 'var(--surface-2)', 'fg' => 'var(--text-muted)'];
+            $isActive = ($kpi['filter'] === '' && $currentStatus === '') || $kpi['filter'] === $currentStatus;
+            $tileUrl = $kpi['filter'] === ''
+                ? $baseUrl . '?' . http_build_query($preserveParams)
+                : $baseUrl . '?' . http_build_query(array_merge($preserveParams, ['status' => $kpi['filter']]));
+        @endphp
+        <a href="{{ $tileUrl }}" class="rounded-md px-4 py-3 flex items-center gap-3 transition-all duration-300 no-underline cursor-pointer hover:opacity-80"
+             style="background:var(--surface); border:{{ $isActive ? '2px' : '1px' }} solid {{ $isActive ? $c['fg'] : 'var(--border)' }};">
             <span class="inline-flex items-center justify-center w-10 h-10 rounded-md flex-shrink-0" style="background:{{ $c['bg'] }};color:{{ $c['fg'] }};">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     {!! $kpiIcons[$kpi['label']] ?? '' !!}
@@ -64,7 +76,7 @@
                 <div class="text-[1.625rem] font-semibold leading-none" style="color:var(--text-primary);">{{ number_format((int) $kpi['value']) }}</div>
                 <div class="text-[0.6875rem] font-medium mt-1 uppercase tracking-wider" style="color:var(--text-muted);">{{ $kpi['label'] }}</div>
             </div>
-        </div>
+        </a>
         @endforeach
     </div>
 
