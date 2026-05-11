@@ -8,7 +8,9 @@ use App\Models\Compliance\WhistleblowComplaint;
 use App\Models\Compliance\WhistleblowComplaintEvidence;
 use App\Models\Property;
 use App\Models\User;
+use App\Mail\Compliance\WhistleblowComplaintMail;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class WhistleblowComplaintService
 {
@@ -121,6 +123,10 @@ class WhistleblowComplaintService
             $this->flagPropertyEvidence($complaint);
         }
 
+        // Auto-send email to PPRA (or demo recipient)
+        $complaint->refresh();
+        $this->sendToPpra($complaint);
+
         return $complaint->fresh();
     }
 
@@ -208,6 +214,76 @@ class WhistleblowComplaintService
         ]);
 
         return $complaint->fresh();
+    }
+
+    /**
+     * Send the complaint email to PPRA (or demo recipient).
+     * Called automatically from approve(). Can also be called manually for retries.
+     */
+    public function sendToPpra(WhistleblowComplaint $complaint): void
+    {
+        if ($complaint->status !== 'approved') {
+            throw new \InvalidArgumentException(
+                "Complaint #{$complaint->id} must be in 'approved' status to send (current: {$complaint->status})."
+            );
+        }
+
+        $complaint->loadMissing('approvedBy');
+        $isDemoMode = !config('compliance.whistleblow.ppra_live_send', false);
+
+        try {
+            if (!$complaint->complaint_pdf_path || !file_exists($complaint->complaint_pdf_path)) {
+                throw new \RuntimeException(
+                    "PDF not found at '{$complaint->complaint_pdf_path}' for complaint #{$complaint->id}."
+                );
+            }
+            $mailable = new WhistleblowComplaintMail($complaint);
+
+            // Determine the actual recipient used (for audit)
+            $agency = Agency::withoutGlobalScopes()->find($complaint->agency_id);
+            $recipientTo = $isDemoMode
+                ? config('compliance.whistleblow.demo_recipient', 'johan@hfcoastal.co.za')
+                : ($agency->whistleblow_ppra_recipient_email ?? 'complaints@theppra.org.za');
+
+            $recipientCc = [];
+            if ($agency->whistleblow_compliance_officer_email) {
+                $recipientCc[] = $agency->whistleblow_compliance_officer_email;
+            }
+            if ($complaint->approvedBy?->email) {
+                $recipientCc[] = $complaint->approvedBy->email;
+            }
+
+            Mail::send($mailable);
+
+            $complaint->update([
+                'status'          => 'sent',
+                'sent_to_ppra_at' => now(),
+            ]);
+
+            $this->writeAudit($complaint, 'emailed_to_ppra', null, [
+                'recipient_to' => $recipientTo,
+                'recipient_cc' => $recipientCc,
+                'demo_mode'    => $isDemoMode,
+            ]);
+
+            Log::info('Whistleblow complaint email sent', [
+                'complaint_id' => $complaint->id,
+                'to'           => $recipientTo,
+                'demo_mode'    => $isDemoMode,
+            ]);
+        } catch (\Throwable $e) {
+            $this->writeAudit($complaint, 'email_send_failed', null, [
+                'error'     => $e->getMessage(),
+                'demo_mode' => $isDemoMode,
+            ]);
+
+            Log::error('Whistleblow complaint email failed', [
+                'complaint_id' => $complaint->id,
+                'error'        => $e->getMessage(),
+            ]);
+
+            throw $e;
+        }
     }
 
     /**
