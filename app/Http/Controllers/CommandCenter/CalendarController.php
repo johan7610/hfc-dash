@@ -476,14 +476,34 @@ class CalendarController extends Controller
             'attendees' => $isManual ? $calendarEvent->links()
                 ->whereIn('role', ['attendee', 'buyer_contact', 'seller_contact', 'agent_contact'])
                 ->get()
-                ->map(fn ($l) => [
+                ->map(function ($l) use ($calendarEvent) {
+                    $inv = null;
+                    if ($l->linkable_type === \App\Models\User::class) {
+                        $inv = \App\Models\CommandCenter\CalendarEventInvitation::where('event_id', $calendarEvent->id)
+                            ->where('invitee_user_id', $l->linkable_id)->first();
+                    }
+                    return [
                     'id'   => $l->linkable_id,
                     'type' => $l->linkable_type === \App\Models\User::class ? 'agent' : 'contact',
                     'role' => $l->role,
+                    'invitation_status' => $inv?->status,
+                    'invitation_id' => $inv?->id,
+                    'response_notes' => $inv?->response_notes,
                     'name' => $l->linkable_type === \App\Models\User::class
-                        ? optional(\App\Models\User::find($l->linkable_id))->name
+                        ? optional(\App\Models\User::withoutGlobalScopes()->find($l->linkable_id))->name
                         : optional(\App\Models\Contact::withoutGlobalScopes()->find($l->linkable_id), fn ($c) => trim($c->first_name . ' ' . $c->last_name)) ?? ('Contact #' . $l->linkable_id),
-                ]) : [],
+                    ];
+                }) : [],
+            'unack_declines' => $isOrganizer ? \App\Models\CommandCenter\CalendarEventInvitation::where('event_id', $calendarEvent->id)
+                ->where('status', 'declined')
+                ->whereNull('acknowledged_at')
+                ->get()
+                ->map(fn ($inv) => [
+                    'invitation_id' => $inv->id,
+                    'invitee_name' => optional(\App\Models\User::withoutGlobalScopes()->find($inv->invitee_user_id))->name ?? 'Unknown',
+                    'reason' => $inv->response_notes ?: 'Not provided',
+                    'acknowledge_url' => route('command-center.calendar.invitations.acknowledge', $inv->id),
+                ])->values() : [],
             'audit_log' => $calendarEvent->auditEntries()
                 ->orderBy('performed_at', 'desc')
                 ->limit(10)
@@ -923,6 +943,44 @@ class CalendarController extends Controller
             foreach ($result as $event) {
                 $event->user_invitation_status = $invitationStatuses[$event->id] ?? null;
             }
+        }
+
+        // Conflict markers: mark events that overlap another appointment-type event for this user.
+        // Single sweep — no additional queries.
+        $informationalClasses = CalendarEventClassSetting::withoutGlobalScopes()
+            ->where('actor_role', 'neither')->pluck('event_class')->toArray();
+        $appointments = $result->filter(fn($e) => !in_array($e->category, $informationalClasses))
+            ->sortBy('event_date')->values();
+        $conflictIds = [];
+        for ($i = 0; $i < $appointments->count(); $i++) {
+            for ($j = $i + 1; $j < $appointments->count(); $j++) {
+                $a = $appointments[$i];
+                $b = $appointments[$j];
+                if ($b->event_date < ($a->end_date ?? $a->event_date)) {
+                    $conflictIds[$a->id] = true;
+                    $conflictIds[$b->id] = true;
+                } else {
+                    break; // sorted, no further overlaps for $i
+                }
+            }
+        }
+        // Unacknowledged decline markers (batch lookup)
+        $unackDeclines = [];
+        if (!empty($eventIds)) {
+            $unackDeclines = DB::table('calendar_event_invitations')
+                ->where('status', 'declined')
+                ->whereNull('acknowledged_at')
+                ->whereIn('event_id', $eventIds)
+                ->select('event_id', DB::raw('COUNT(*) as cnt'))
+                ->groupBy('event_id')
+                ->pluck('cnt', 'event_id')
+                ->toArray();
+        }
+
+        foreach ($result as $event) {
+            $event->has_conflict = isset($conflictIds[$event->id]);
+            $event->has_unack_decline = isset($unackDeclines[$event->id]);
+            $event->unack_decline_count = $unackDeclines[$event->id] ?? 0;
         }
 
         return $result;

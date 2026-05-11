@@ -713,6 +713,37 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::get('/command-center/today/cards', [CommandCenterDashboardController::class, 'todayCards'])->name('command-center.today.cards');
     Route::get('/legacy-dashboard', [CommandCenterDashboardController::class, 'index'])->middleware('permission:view_dashboard')->name('corex.dashboard.legacy');
 
+    // ── Notifications ──
+    Route::get('/notifications', function () {
+        $notifications = \Illuminate\Support\Facades\DB::table('notifications')
+            ->where('notifiable_type', 'App\\Models\\User')
+            ->where('notifiable_id', auth()->id())
+            ->orderByDesc('created_at')
+            ->paginate(30);
+        return view('command-center.notifications', ['notifications' => $notifications]);
+    })->name('command-center.notifications');
+    Route::post('/notifications/mark-all-read', function () {
+        \Illuminate\Support\Facades\DB::table('notifications')
+            ->where('notifiable_type', 'App\\Models\\User')
+            ->where('notifiable_id', auth()->id())
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+        return back()->with('success', 'All notifications marked as read.');
+    })->name('command-center.notifications.mark-all-read');
+    Route::post('/notifications/{id}/mark-read', function (string $id) {
+        $updated = \Illuminate\Support\Facades\DB::table('notifications')
+            ->where('id', $id)
+            ->where('notifiable_type', 'App\\Models\\User')
+            ->where('notifiable_id', auth()->id())
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+        if (!$updated) abort(403);
+        if (request()->wantsJson()) {
+            return response()->json(['ok' => true]);
+        }
+        return back()->with('success', 'Notification marked as read.');
+    })->name('command-center.notifications.mark-read');
+
     // ── Manager Oversight ──
     Route::middleware('permission:dashboard.oversight.view')->group(function () {
         Route::get('/dashboard/oversight', [\App\Http\Controllers\CoreX\Dashboard\OversightController::class, 'index'])->name('corex.dashboard.oversight');
@@ -724,19 +755,51 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     });
 
     // ── Command Center ──
+    // Lightweight contact lookup for calendar prefill (no agency.required middleware)
+    Route::get('/api/contact-lookup/{id}', function (int $id) {
+        $contact = \App\Models\Contact::withoutGlobalScopes()->find($id);
+        if (!$contact) return response()->json(['error' => 'Not found'], 404);
+        return response()->json([
+            'id' => $contact->id,
+            'first_name' => $contact->first_name,
+            'last_name' => $contact->last_name,
+            'phone' => $contact->phone,
+            'email' => $contact->email,
+            'is_buyer' => $contact->is_buyer,
+        ]);
+    })->name('corex.api.contact-lookup');
+
     Route::prefix('command-center')->group(function () {
         Route::get('/calendar', [CommandCenterCalendarController::class, 'index'])->name('command-center.calendar');
         Route::get('/calendar/events', [CommandCenterCalendarController::class, 'events'])->name('command-center.calendar.events');
 
         // Calendar Invitations — MUST be before /calendar/{calendarEvent} wildcard
         Route::get('/calendar/invitations', function () {
-            $invitations = \App\Models\CommandCenter\CalendarEventInvitation::forUser(auth()->id())
+            $userId = auth()->id();
+            $invitations = \App\Models\CommandCenter\CalendarEventInvitation::forUser($userId)
                 ->with([
                     'event' => fn($q) => $q->withoutGlobalScopes(),
                     'inviter',
                 ])
                 ->whereIn('status', ['pending', 'tentative'])
                 ->orderByDesc('created_at')->paginate(20);
+
+            // Live conflict check for each invitation
+            $conflictSvc = app(\App\Services\CommandCenter\Calendar\ConflictDetectionService::class);
+            foreach ($invitations as $inv) {
+                $inv->live_conflicts = [];
+                if ($inv->event && $inv->event->event_date && $inv->event->end_date) {
+                    try {
+                        $inv->live_conflicts = $conflictSvc->checkUserConflicts(
+                            $userId,
+                            $inv->event->event_date->toIso8601String(),
+                            $inv->event->end_date->toIso8601String(),
+                            $inv->event_id // exclude this invitation's own event
+                        );
+                    } catch (\Throwable $e) {}
+                }
+            }
+
             return view('command-center.calendar.invitations', ['invitations' => $invitations]);
         })->name('command-center.calendar.invitations');
         Route::post('/calendar/invitations/{invitation}/respond', function (\Illuminate\Http\Request $request, \App\Models\CommandCenter\CalendarEventInvitation $invitation) {
@@ -751,6 +814,24 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
             ]);
             return back()->with('success', 'Response recorded.');
         })->name('command-center.calendar.invitations.respond');
+
+        Route::post('/calendar/invitations/{invitation}/acknowledge', function (\Illuminate\Http\Request $request, \App\Models\CommandCenter\CalendarEventInvitation $invitation) {
+            $event = $invitation->event;
+            if (!$event) abort(404);
+            $user = auth()->user();
+            // Only organizer or super_admin can acknowledge
+            if ((int) $event->user_id !== (int) $user->id && !in_array($user->role, ['super_admin', 'owner'])) {
+                abort(403);
+            }
+            $invitation->update(['acknowledged_at' => now()]);
+            return response()->json(['ok' => true, 'invitation_id' => $invitation->id, 'acknowledged_at' => $invitation->fresh()->acknowledged_at->toIso8601String()]);
+        })->name('command-center.calendar.invitations.acknowledge');
+
+        // Conflict check — MUST be before /calendar/{calendarEvent} wildcard
+        Route::get('/calendar/check-conflicts', function (\Illuminate\Http\Request $request) {
+            $svc = app(\App\Services\CommandCenter\Calendar\ConflictDetectionService::class);
+            return response()->json($svc->checkUserConflicts((int)$request->get('user_id'), $request->get('start'), $request->get('end'), $request->get('exclude_event_id')));
+        })->name('command-center.calendar.check-conflicts');
 
         Route::get('/calendar/{calendarEvent}', [CommandCenterCalendarController::class, 'show'])->name('command-center.calendar.show');
         Route::post('/calendar', [CommandCenterCalendarController::class, 'store'])->name('command-center.calendar.store');
@@ -812,11 +893,6 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
             \Illuminate\Support\Facades\DB::table('buyer_portal_links')->where('id', $id)->update(['revoked_at' => now(), 'revoked_by_user_id' => auth()->id()]);
             return back()->with('success', 'Buyer portal link revoked.');
         })->name('command-center.buyers.portal-links.revoke');
-
-        Route::get('/calendar/check-conflicts', function (\Illuminate\Http\Request $request) {
-            $svc = app(\App\Services\CommandCenter\Calendar\ConflictDetectionService::class);
-            return response()->json($svc->checkUserConflicts((int)$request->get('user_id'), $request->get('start'), $request->get('end'), $request->get('exclude_event_id')));
-        })->name('command-center.calendar.check-conflicts');
 
         // Feedback Reports
         Route::post('/feedback', [\App\Http\Controllers\FeedbackReportController::class, 'store'])->name('command-center.feedback.store');
