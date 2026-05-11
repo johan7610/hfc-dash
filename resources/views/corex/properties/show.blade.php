@@ -3,7 +3,7 @@
 @section('corex-content')
 @php $isNew = !$property->exists; @endphp
 <div class="w-full space-y-4"
-     x-data="{ activeTab: '{{ $isNew ? 'info' : session('tab', $activeTab) }}', synOpen: false, synStep: 'main', sbCollapsed: (localStorage.getItem('hfc.propSidebar.collapsed') === '1'), formDirty: false }"
+     x-data="{ activeTab: '{{ $isNew ? 'info' : session('tab', $activeTab) }}', synOpen: false, synStep: 'main', sbCollapsed: (localStorage.getItem('hfc.propSidebar.collapsed') === '1'), formDirty: false, wbReportOpen: false }"
      x-effect="localStorage.setItem('hfc.propSidebar.collapsed', sbCollapsed ? '1' : '0')"
      @beforeunload.window="if (formDirty) { $event.preventDefault(); $event.returnValue = ''; }">
 
@@ -167,6 +167,13 @@
                         Archive
                     </button>
                 </form>
+
+                @permission('compliance.whistleblow.create')
+                <button type="button" @click="wbReportOpen = true" class="prop-action-btn prop-action-btn-neutral">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/></svg>
+                    Report Non-Compliance
+                </button>
+                @endpermission
             </div>
             @endif
 
@@ -5228,4 +5235,111 @@ function p24Syndication(config) {
         </div>
     </div>
 </div>
+{{-- ═══════════ Whistleblower Report Modal ═══════════ --}}
+@permission('compliance.whistleblow.create')
+@if(!$isNew)
+<template x-teleport="body">
+<div x-show="wbReportOpen" x-cloak class="fixed inset-0 z-[100] flex items-center justify-center p-4" x-transition.opacity>
+    <div class="absolute inset-0" style="background:rgba(0,0,0,0.55); backdrop-filter:blur(2px);" @click="wbReportOpen = false"></div>
+    <div class="relative rounded-md shadow-2xl" style="width:520px; max-width:95vw; max-height:88vh; overflow-y:auto; background:var(--surface); border:1px solid var(--border);"
+         x-data="{
+            tier: 'tier_1', submitting: false, errorMsg: '', successMsg: '',
+            async submitReport() {
+                this.submitting = true; this.errorMsg = '';
+                const fd = new FormData(document.getElementById('wb-report-form'));
+                try {
+                    const resp = await fetch('{{ route("compliance.whistleblow.store") }}', {
+                        method: 'POST', body: fd,
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+                    });
+                    const data = await resp.json();
+                    if (data.ok) {
+                        this.successMsg = 'Report submitted. Reference: ' + data.reference;
+                        setTimeout(() => { wbReportOpen = false; this.successMsg = ''; }, 2500);
+                    } else {
+                        this.errorMsg = data.message || 'Submission failed.';
+                    }
+                } catch (e) { this.errorMsg = 'Network error. Please try again.'; }
+                this.submitting = false;
+            }
+         }">
+        <form id="wb-report-form" @submit.prevent="submitReport()">
+            @csrf
+            <input type="hidden" name="property_id" value="{{ $property->id }}">
+            <input type="hidden" name="property_address" value="{{ $property->address ?? $property->title }}">
+            <input type="hidden" name="portal_source" value="other">
+
+            <div class="p-5 border-b" style="border-color:var(--border);">
+                <h3 class="text-base font-bold" style="color:var(--text-primary);">Report Non-Compliant Listing</h3>
+                <p class="text-xs mt-1" style="color:var(--text-muted);">{{ $property->address ?? $property->title }}</p>
+            </div>
+
+            <div class="p-5 space-y-4">
+                <template x-if="successMsg">
+                    <div class="rounded-md p-3 text-sm font-medium" style="background:color-mix(in srgb, var(--ds-green) 10%, transparent); color:var(--ds-green);" x-text="successMsg"></div>
+                </template>
+                <template x-if="errorMsg">
+                    <div class="rounded-md p-3 text-sm font-medium" style="background:color-mix(in srgb, var(--ds-red) 10%, transparent); color:var(--ds-red);" x-text="errorMsg"></div>
+                </template>
+
+                {{-- Tier selection --}}
+                <fieldset>
+                    <legend class="text-xs font-bold uppercase tracking-wider mb-2" style="color:var(--text-muted);">Complaint Type</legend>
+                    <div class="space-y-2">
+                        <label class="flex items-start gap-2 cursor-pointer">
+                            <input type="radio" name="tier" value="tier_1" x-model="tier" class="mt-0.5">
+                            <span><span class="text-sm font-semibold" style="color:var(--text-primary);">Paperwork breach</span><br><span class="text-xs" style="color:var(--text-muted);">Seller confirmed no mandate / FICA signed</span></span>
+                        </label>
+                        <label class="flex items-start gap-2 cursor-pointer">
+                            <input type="radio" name="tier" value="tier_2" x-model="tier" class="mt-0.5">
+                            <span><span class="text-sm font-semibold" style="color:var(--text-primary);">No FFC displayed</span><br><span class="text-xs" style="color:var(--text-muted);">Advert missing valid FFC number</span></span>
+                        </label>
+                        <label class="flex items-start gap-2 cursor-pointer">
+                            <input type="radio" name="tier" value="tier_3" x-model="tier" class="mt-0.5">
+                            <span><span class="text-sm font-semibold" style="color:var(--text-primary);">Unregistered practitioner</span><br><span class="text-xs" style="color:var(--text-muted);">Not found on PPRA register</span></span>
+                        </label>
+                    </div>
+                </fieldset>
+
+                <div>
+                    <label class="text-xs font-bold uppercase tracking-wider" style="color:var(--text-muted);">Subject Agency / Practitioner *</label>
+                    <input type="text" name="subject_agency_name" required class="mt-1 w-full rounded-md text-sm px-3 py-2" style="background:var(--input-bg); border:1px solid var(--border); color:var(--text-primary);" placeholder="Agency or practitioner name">
+                </div>
+
+                <div>
+                    <label class="text-xs font-bold uppercase tracking-wider" style="color:var(--text-muted);">Portal URL</label>
+                    <input type="url" name="property_portal_url" class="mt-1 w-full rounded-md text-sm px-3 py-2" style="background:var(--input-bg); border:1px solid var(--border); color:var(--text-primary);" placeholder="https://...">
+                </div>
+
+                <div>
+                    <label class="text-xs font-bold uppercase tracking-wider" style="color:var(--text-muted);">Notes</label>
+                    <textarea name="agent_notes" rows="3" class="mt-1 w-full rounded-md text-sm px-3 py-2" style="background:var(--input-bg); border:1px solid var(--border); color:var(--text-primary);" placeholder="What did the seller say, what did you observe..."></textarea>
+                </div>
+
+                {{-- Tier 1 only: seller consent --}}
+                <div x-show="tier === 'tier_1'" x-cloak>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" name="seller_consents_to_named_complaint" value="1">
+                        <span class="text-sm" style="color:var(--text-primary);">Seller consents to being named in the complaint</span>
+                    </label>
+                </div>
+
+                <div>
+                    <label class="text-xs font-bold uppercase tracking-wider" style="color:var(--text-muted);">Attach Screenshot</label>
+                    <input type="file" name="screenshot" accept="image/*" class="mt-1 w-full text-sm" style="color:var(--text-primary);">
+                </div>
+            </div>
+
+            <div class="p-5 border-t flex justify-end gap-3" style="border-color:var(--border);">
+                <button type="button" @click="wbReportOpen = false" class="px-4 py-2 rounded-md text-sm font-medium" style="color:var(--text-secondary);">Cancel</button>
+                <button type="submit" :disabled="submitting" class="px-4 py-2 rounded-md text-sm font-semibold text-white" style="background:var(--brand-default);">
+                    <span x-text="submitting ? 'Submitting...' : 'Submit Report'"></span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+</template>
+@endif
+@endpermission
 @endsection
