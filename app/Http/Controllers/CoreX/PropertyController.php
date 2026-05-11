@@ -44,12 +44,13 @@ class PropertyController extends Controller
 
         $canPickAgent = in_array($dataScope, ['all', 'branch']);
 
-        // Agent filter (admin/BM only) — defaults to self on every fresh load.
-        // The user only sees other agents (or "All agents") when they explicitly
-        // switch via the picker (which sets ?agent_id= in the URL).
+        // Agent filter (admin/BM only) — defaults to self on fresh load UNLESS
+        // a compliance filter is active (card click-through shows full scope).
         if ($canPickAgent) {
             if ($request->has('agent_id')) {
                 $filterAgentId = $request->query('agent_id', '');
+            } elseif ($request->query('filter') === 'marketing_pending') {
+                $filterAgentId = '';
             } else {
                 $filterAgentId = (string) $user->id;
             }
