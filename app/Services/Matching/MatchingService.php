@@ -125,7 +125,7 @@ class MatchingService
             $query->whereNotIn('id', $match->hidden_property_ids);
         }
 
-        $listingType  = $overrides['listing_type']  ?? null; // do not auto-restrict; let scoring weight it
+        $listingType  = $overrides['listing_type']  ?? $match->listing_type; // sale vs rental is a hard filter — never mix the two
         $category     = $overrides['category']      ?? $match->category;
         $propertyType = $overrides['property_type'] ?? $match->property_type;
         $priceMin     = $overrides['price_min']     ?? $match->price_min;
