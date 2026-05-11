@@ -84,6 +84,12 @@ class PropertyController extends Controller
         if ($bedsMin !== ''  && is_numeric($bedsMin))  $query->where('beds', '>=', (int) $bedsMin);
         if ($bathsMin !== '' && is_numeric($bathsMin)) $query->where('baths', '>=', (int) $bathsMin);
 
+        // Marketing status filter
+        $marketingFilter = $request->query('filter', '');
+        if ($marketingFilter === 'marketing_pending') {
+            $query->whereNull('compliance_snapshot_at')->whereNotIn('status', ['sold', 'withdrawn', 'draft']);
+        }
+
         if ($search !== '') {
             $query->searchAddress($search);
         }
@@ -99,6 +105,22 @@ class PropertyController extends Controller
         }
 
         $properties = $query->get();
+
+        // Compute marketing status per property (batch-friendly for Phase 1)
+        $readinessSvc = app(\App\Services\Compliance\MarketingReadinessService::class);
+        foreach ($properties as $p) {
+            if ($p->compliance_snapshot_at !== null) {
+                $p->marketing_status = 'live';
+                $p->marketing_status_detail = 'Live since ' . $p->compliance_snapshot_at->format('j M Y');
+            } elseif (in_array($p->status, ['sold', 'withdrawn', 'draft'])) {
+                $p->marketing_status = 'n/a';
+                $p->marketing_status_detail = '';
+            } else {
+                $report = $readinessSvc->statusFor($p);
+                $p->marketing_status = $report->ready ? 'ready' : 'blocked';
+                $p->marketing_status_detail = $report->ready ? 'All gates passed' : implode(', ', array_map(fn ($b) => \Illuminate\Support\Str::limit($b, 30), $report->blockedBy));
+            }
+        }
 
         // Stats for the header KPIs
         $stats = [

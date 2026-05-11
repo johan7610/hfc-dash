@@ -595,6 +595,7 @@
                     <th class="text-center px-4 py-2.5 text-xs font-semibold uppercase tracking-wider hidden md:table-cell" style="color:var(--text-muted);">Bed</th>
                     <th class="text-center px-4 py-2.5 text-xs font-semibold uppercase tracking-wider hidden md:table-cell" style="color:var(--text-muted);">Bath</th>
                     <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider hidden lg:table-cell" style="color:var(--text-muted);">Agent</th>
+                    <th class="text-center px-4 py-2.5 text-xs font-semibold uppercase tracking-wider hidden md:table-cell" style="color:var(--text-muted);">Marketing</th>
                     <th class="text-center px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color:var(--text-muted);">Status</th>
                     <th class="px-4 py-2.5 text-xs font-semibold text-right" style="color:var(--text-muted);"></th>
                 </tr>
@@ -632,6 +633,22 @@
                     <td class="px-4 py-2.5 text-xs text-center hidden md:table-cell" style="color:var(--text-secondary);">{{ $property->beds ?? '—' }}</td>
                     <td class="px-4 py-2.5 text-xs text-center hidden md:table-cell" style="color:var(--text-secondary);">{{ $property->baths ?? '—' }}</td>
                     <td class="px-4 py-2.5 text-xs hidden lg:table-cell" style="color:var(--text-muted);">{{ $property->agent?->name ?? '—' }}</td>
+                    <td class="px-4 py-2.5 text-center hidden md:table-cell">
+                        @php
+                            $ms = $property->marketing_status ?? 'n/a';
+                            $msStyle = match($ms) {
+                                'live' => 'background:#10b981; color:#fff;',
+                                'ready' => 'background:rgba(0,212,170,.15); color:#047857;',
+                                'blocked' => 'background:rgba(245,158,11,.15); color:#b45309;',
+                                default => '',
+                            };
+                        @endphp
+                        @if($ms !== 'n/a')
+                            <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded" style="{{ $msStyle }}" title="{{ $property->marketing_status_detail ?? '' }}">{{ ucfirst($ms) }}</span>
+                        @else
+                            <span class="text-[10px]" style="color:var(--text-muted);">—</span>
+                        @endif
+                    </td>
                     <td class="px-4 py-2.5 text-center">
                         <span class="ds-badge {{ $sc['variant'] }}">{{ $sc['label'] }}</span>
                     </td>
