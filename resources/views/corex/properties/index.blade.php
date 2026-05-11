@@ -598,17 +598,37 @@
     <div x-show="view === 'list'" x-cloak class="rounded-md overflow-hidden" style="background:var(--surface);border:1px solid var(--border);">
       <div class="overflow-x-auto">
         <table class="min-w-full text-sm ds-table">
+            @php
+                $sortParams = collect(request()->query())->except('sort', 'dir', 'page')->toArray();
+                $sortCols = [
+                    ['key' => 'title',            'label' => 'Property',  'align' => 'text-left',   'hide' => ''],
+                    ['key' => 'suburb',            'label' => 'Location',  'align' => 'text-left',   'hide' => ''],
+                    ['key' => 'property_type',     'label' => 'Type',      'align' => 'text-left',   'hide' => 'hidden sm:table-cell'],
+                    ['key' => 'price',             'label' => 'Price',     'align' => 'text-right',  'hide' => ''],
+                    ['key' => 'beds',              'label' => 'Bed',       'align' => 'text-center', 'hide' => 'hidden md:table-cell'],
+                    ['key' => 'baths',             'label' => 'Bath',      'align' => 'text-center', 'hide' => 'hidden md:table-cell'],
+                    ['key' => null,                'label' => 'Agent',     'align' => 'text-left',   'hide' => 'hidden lg:table-cell'],
+                    ['key' => 'marketing_status',  'label' => 'Marketing', 'align' => 'text-center', 'hide' => 'hidden md:table-cell'],
+                    ['key' => 'status',            'label' => 'Status',    'align' => 'text-center', 'hide' => ''],
+                ];
+            @endphp
             <thead>
                 <tr style="background: var(--surface-2);">
-                    <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color:var(--text-muted);">Property</th>
-                    <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color:var(--text-muted);">Location</th>
-                    <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider hidden sm:table-cell" style="color:var(--text-muted);">Type</th>
-                    <th class="text-right px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color:var(--text-muted);">Price</th>
-                    <th class="text-center px-4 py-2.5 text-xs font-semibold uppercase tracking-wider hidden md:table-cell" style="color:var(--text-muted);">Bed</th>
-                    <th class="text-center px-4 py-2.5 text-xs font-semibold uppercase tracking-wider hidden md:table-cell" style="color:var(--text-muted);">Bath</th>
-                    <th class="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider hidden lg:table-cell" style="color:var(--text-muted);">Agent</th>
-                    <th class="text-center px-4 py-2.5 text-xs font-semibold uppercase tracking-wider hidden md:table-cell" style="color:var(--text-muted);">Marketing</th>
-                    <th class="text-center px-4 py-2.5 text-xs font-semibold uppercase tracking-wider" style="color:var(--text-muted);">Status</th>
+                    @foreach($sortCols as $col)
+                        <th class="{{ $col['align'] }} px-4 py-2.5 text-xs font-semibold uppercase tracking-wider {{ $col['hide'] }}" style="color:var(--text-muted);">
+                            @if($col['key'])
+                                @php
+                                    $isCurrentSort = ($currentSort ?? '') === $col['key'];
+                                    $nextDir = $isCurrentSort && ($currentDir ?? 'desc') === 'asc' ? 'desc' : 'asc';
+                                    $arrow = $isCurrentSort ? (($currentDir ?? 'desc') === 'asc' ? '&#9650;' : '&#9660;') : '';
+                                @endphp
+                                <a href="{{ request()->url() }}?{{ http_build_query(array_merge($sortParams, ['sort' => $col['key'], 'dir' => $nextDir])) }}"
+                                   class="no-underline hover:opacity-70 transition" style="color:{{ $isCurrentSort ? 'var(--brand-icon)' : 'var(--text-muted)' }};">{{ $col['label'] }}{!! $arrow !!}</a>
+                            @else
+                                {{ $col['label'] }}
+                            @endif
+                        </th>
+                    @endforeach
                     <th class="px-4 py-2.5 text-xs font-semibold text-right" style="color:var(--text-muted);"></th>
                 </tr>
             </thead>

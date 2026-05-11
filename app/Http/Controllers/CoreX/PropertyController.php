@@ -99,14 +99,26 @@ class PropertyController extends Controller
             $query->searchAddress($search);
         }
 
-        // Sorting
+        // Sorting — whitelisted columns only
+        $dir = strtolower($request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+        $sortableColumns = [
+            'title' => 'title', 'suburb' => 'suburb', 'property_type' => 'property_type',
+            'price' => 'price', 'beds' => 'beds', 'baths' => 'baths',
+            'status' => 'status', 'created_at' => 'created_at',
+        ];
+        // Legacy sort param support
         switch ($sort) {
-            case 'oldest':     $query->orderBy('created_at', 'asc'); break;
-            case 'price_asc':  $query->orderBy('price', 'asc'); break;
-            case 'price_desc': $query->orderBy('price', 'desc'); break;
-            case 'title':      $query->orderBy('title', 'asc'); break;
-            case 'newest':
-            default:           $query->orderByDesc('created_at');
+            case 'oldest':     $sort = 'created_at'; $dir = 'asc'; break;
+            case 'price_asc':  $sort = 'price'; $dir = 'asc'; break;
+            case 'price_desc': $sort = 'price'; $dir = 'desc'; break;
+            case 'newest':     $sort = 'created_at'; $dir = 'desc'; break;
+        }
+        if (isset($sortableColumns[$sort])) {
+            $query->orderBy($sortableColumns[$sort], $dir);
+        } else {
+            $query->orderByDesc('created_at');
+            $sort = 'created_at';
+            $dir = 'desc';
         }
 
         $properties = $query->get();
@@ -125,6 +137,11 @@ class PropertyController extends Controller
                 $p->marketing_status = $report->ready ? 'ready' : 'blocked';
                 $p->marketing_status_detail = $report->ready ? 'All gates passed' : implode(', ', array_map(fn ($b) => \Illuminate\Support\Str::limit($b, 30), $report->blockedBy));
             }
+        }
+
+        // Sort by marketing_status (derived — PHP sort)
+        if ($sort === 'marketing_status') {
+            $properties = $properties->sortBy('marketing_status', SORT_REGULAR, $dir === 'desc')->values();
         }
 
         // Stats for the header KPIs
@@ -160,10 +177,13 @@ class PropertyController extends Controller
 
         $scope = $viewScope;
 
+        $currentSort = $sort;
+        $currentDir = $dir;
+
         return view('corex.properties.index', compact(
             'properties', 'stats', 'scope', 'status', 'search',
             'filterAgentId', 'agentList', 'selectedAgent', 'canPickAgent',
-            'filterOptions', 'filters'
+            'filterOptions', 'filters', 'currentSort', 'currentDir'
         ));
     }
 
