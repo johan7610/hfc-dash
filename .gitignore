@@ -36,3 +36,12 @@ check_dedup.php
 docuperfect.db
 nexus_os
 *.xlsx
+
+# Disposable curl-render test outputs
+storage/rendered_*.html
+storage/rendered_*
+storage/rendered.html
+storage/contact*.html
+storage/buyer*.html
+storage/panel_*.html
+storage/p17_*.html
