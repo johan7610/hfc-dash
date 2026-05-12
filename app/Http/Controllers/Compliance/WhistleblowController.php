@@ -181,13 +181,14 @@ class WhistleblowController extends Controller
      */
     public function show(WhistleblowComplaint $complaint)
     {
-        $complaint->load(['reporter', 'approvedBy', 'rejectedBy', 'evidence', 'sellerContact', 'subjects']);
+        $complaint->load(['reporter', 'approvedBy', 'rejectedBy', 'evidence', 'sellerContact', 'subjects', 'emailLogs.sentBy']);
         $auditLog = $complaint->auditLog()->with('user')->orderBy('created_at')->get();
+        $agency = \App\Models\Agency::withoutGlobalScopes()->find($complaint->agency_id);
 
         $user = Auth::user();
         $isApprover = $this->canApprove($complaint, $user);
 
-        return view('compliance.whistleblow.show', compact('complaint', 'auditLog', 'isApprover'));
+        return view('compliance.whistleblow.show', compact('complaint', 'auditLog', 'isApprover', 'agency'));
     }
 
     /**

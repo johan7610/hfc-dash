@@ -521,7 +521,10 @@ class SettingsController extends Controller
             'whistleblow_approver_user_ids'        => 'nullable|array',
             'whistleblow_approver_user_ids.*'      => 'integer|exists:users,id',
             'whistleblow_compliance_officer_email'  => 'nullable|email|max:255',
-            'whistleblow_ppra_recipient_email'      => 'nullable|email|max:255',
+            'tier_recipients'                       => 'nullable|array',
+            'tier_recipients.tier_1'                => 'nullable|string',
+            'tier_recipients.tier_2'                => 'nullable|string',
+            'tier_recipients.tier_3'                => 'nullable|string',
         ]);
 
         $agency = \App\Models\Agency::withoutGlobalScopes()->find(auth()->user()->agency_id);
@@ -531,10 +534,18 @@ class SettingsController extends Controller
 
         $approverIds = $request->input('whistleblow_approver_user_ids', []);
 
+        // Parse tier recipients from textareas (one email per line)
+        $tierRecipients = [];
+        foreach (['tier_1', 'tier_2', 'tier_3'] as $tier) {
+            $raw = $request->input("tier_recipients.{$tier}", '');
+            $emails = array_filter(array_map('trim', preg_split('/[\r\n]+/', $raw)));
+            $tierRecipients[$tier] = array_values($emails);
+        }
+
         $agency->update([
             'whistleblow_approver_user_ids'        => !empty($approverIds) ? array_map('intval', $approverIds) : null,
             'whistleblow_compliance_officer_email'  => $request->input('whistleblow_compliance_officer_email'),
-            'whistleblow_ppra_recipient_email'      => $request->input('whistleblow_ppra_recipient_email'),
+            'whistleblow_tier_recipients'           => !empty(array_filter($tierRecipients, fn($a) => !empty($a))) ? $tierRecipients : null,
         ]);
 
         \Illuminate\Support\Facades\Log::info('Whistleblow settings updated', [
@@ -542,7 +553,7 @@ class SettingsController extends Controller
             'agency_id' => $agency->id,
             'approvers' => $approverIds,
             'co_email'  => $request->input('whistleblow_compliance_officer_email'),
-            'ppra_email' => $request->input('whistleblow_ppra_recipient_email'),
+            'tier_recipients' => $tierRecipients,
         ]);
 
         return redirect()->route('corex.settings', ['s' => 'whistleblow-settings'])

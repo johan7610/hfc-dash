@@ -7,6 +7,7 @@ use App\Models\Compliance\WhistleblowAuditLog;
 use App\Models\Compliance\WhistleblowComplaint;
 use App\Models\Compliance\WhistleblowComplaintEvidence;
 use App\Models\Compliance\WhistleblowComplaintSubject;
+use App\Models\Compliance\WhistleblowEmailLog;
 use App\Models\Property;
 use App\Models\User;
 use App\Mail\Compliance\WhistleblowComplaintMail;
@@ -242,8 +243,9 @@ class WhistleblowComplaintService
             );
         }
 
-        $complaint->loadMissing('approvedBy');
+        $complaint->loadMissing(['approvedBy', 'subjects']);
         $isDemoMode = !config('compliance.whistleblow.ppra_live_send', false);
+        $agency = Agency::withoutGlobalScopes()->find($complaint->agency_id);
 
         try {
             if (!$complaint->complaint_pdf_path || !file_exists($complaint->complaint_pdf_path)) {
@@ -251,13 +253,23 @@ class WhistleblowComplaintService
                     "PDF not found at '{$complaint->complaint_pdf_path}' for complaint #{$complaint->id}."
                 );
             }
+
             $mailable = new WhistleblowComplaintMail($complaint);
 
-            // Determine the actual recipient used (for audit)
-            $agency = Agency::withoutGlobalScopes()->find($complaint->agency_id);
-            $recipientTo = $isDemoMode
-                ? config('compliance.whistleblow.demo_recipient', 'johan@hfcoastal.co.za')
-                : ($agency->whistleblow_ppra_recipient_email ?? 'complaints@theppra.org.za');
+            // Pre-render HTML + text for email log
+            $renderedHtml = $mailable->render();
+            $renderedText = strip_tags(str_replace(['<br>', '<br/>', '<br />', '</p>', '</div>'], "\n", $renderedHtml));
+
+            // Determine actual recipients for logging
+            if ($isDemoMode) {
+                $recipientTo = [config('compliance.whistleblow.demo_recipient', 'johan@hfcoastal.co.za')];
+            } else {
+                $tierRecipients = $agency->whistleblow_tier_recipients ?? [];
+                $recipientTo = $tierRecipients[$complaint->tier] ?? ['complaints@theppra.org.za'];
+                if (empty($recipientTo)) {
+                    $recipientTo = ['complaints@theppra.org.za'];
+                }
+            }
 
             $recipientCc = [];
             if ($agency->whistleblow_compliance_officer_email) {
@@ -267,7 +279,40 @@ class WhistleblowComplaintService
                 $recipientCc[] = $complaint->approvedBy->email;
             }
 
+            // Build subject line for log
+            $agencyShort = $agency->trading_name ?? $agency->name;
+            $tierNumber = str_replace('tier_', '', $complaint->tier);
+            $emailSubject = "[{$agencyShort}] PPRA Complaint — Tier {$tierNumber} — {$complaint->subjects_summary}";
+            if ($isDemoMode) {
+                $emailSubject = '[DEMO] ' . $emailSubject;
+            }
+
+            // Attachment info for log
+            $attachmentInfo = [];
+            if ($complaint->complaint_pdf_path && file_exists($complaint->complaint_pdf_path)) {
+                $attachmentInfo[] = [
+                    'filename' => 'HFC-WB-' . $complaint->id . '.pdf',
+                    'path' => $complaint->complaint_pdf_path,
+                    'size' => filesize($complaint->complaint_pdf_path),
+                ];
+            }
+
             Mail::send($mailable);
+
+            // Write email log row — success
+            WhistleblowEmailLog::create([
+                'complaint_id'    => $complaint->id,
+                'sent_at'         => now(),
+                'email_type'      => 'ppra_submission',
+                'subject'         => $emailSubject,
+                'recipients_to'   => $recipientTo,
+                'recipients_cc'   => $recipientCc,
+                'rendered_html'   => $renderedHtml,
+                'rendered_text'   => $renderedText,
+                'attachments'     => $attachmentInfo,
+                'sent_by_user_id' => $complaint->approved_by_user_id,
+                'status'          => 'sent',
+            ]);
 
             $complaint->update([
                 'status'          => 'sent',
@@ -286,6 +331,21 @@ class WhistleblowComplaintService
                 'demo_mode'    => $isDemoMode,
             ]);
         } catch (\Throwable $e) {
+            // Write email log row — failure
+            WhistleblowEmailLog::create([
+                'complaint_id'    => $complaint->id,
+                'sent_at'         => now(),
+                'email_type'      => 'ppra_submission',
+                'subject'         => $emailSubject ?? 'Failed to generate subject',
+                'recipients_to'   => $recipientTo ?? [],
+                'recipients_cc'   => $recipientCc ?? [],
+                'rendered_html'   => $renderedHtml ?? '',
+                'rendered_text'   => $renderedText ?? '',
+                'sent_by_user_id' => $complaint->approved_by_user_id,
+                'status'          => 'failed',
+                'error_message'   => $e->getMessage(),
+            ]);
+
             $this->writeAudit($complaint, 'email_send_failed', null, [
                 'error'     => $e->getMessage(),
                 'demo_mode' => $isDemoMode,

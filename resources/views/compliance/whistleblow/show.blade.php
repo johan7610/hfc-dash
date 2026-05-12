@@ -125,6 +125,60 @@
     </div>
     @endif
 
+    {{-- Email History --}}
+    @php $emailLogs = $complaint->emailLogs()->orderByDesc('sent_at')->get(); @endphp
+    <div class="rounded-md" style="background:var(--surface); border:1px solid var(--border);" x-data="{ viewingEmailId: null }">
+        <div class="p-5">
+            <h3 class="text-xs font-bold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Email History ({{ $emailLogs->count() }})</h3>
+            @forelse($emailLogs as $elog)
+            <div class="py-3 {{ !$loop->last ? 'border-b' : '' }}" style="border-color:var(--border);">
+                <div class="flex items-center gap-2 flex-wrap">
+                    @if($elog->status === 'sent')
+                    <span class="text-xs font-bold" style="color:var(--ds-green);">Sent</span>
+                    @else
+                    <span class="text-xs font-bold" style="color:var(--ds-red);">Failed</span>
+                    @endif
+                    <span class="text-xs" style="color:var(--text-muted);">{{ $elog->sent_at->format('d M Y, H:i') }}</span>
+                    <button type="button" @click="viewingEmailId = viewingEmailId === {{ $elog->id }} ? null : {{ $elog->id }}" class="ml-auto text-xs font-semibold px-2 py-1 rounded" style="color:var(--brand-default); background:color-mix(in srgb, var(--brand-default) 8%, transparent);">
+                        {{ $elog->status === 'sent' ? 'View email' : 'View error' }}
+                    </button>
+                </div>
+                <div class="text-xs mt-1" style="color:var(--text-secondary);">
+                    To: {{ implode(', ', $elog->recipients_to ?? []) }}
+                    @if(!empty($elog->recipients_cc))
+                    &middot; CC: {{ implode(', ', $elog->recipients_cc) }}
+                    @endif
+                </div>
+                <div class="text-xs" style="color:var(--text-muted);">{{ Str::limit($elog->subject, 80) }}</div>
+                @if($elog->status === 'failed' && $elog->error_message)
+                <div class="text-xs mt-1 rounded p-2" style="color:var(--ds-red); background:color-mix(in srgb, var(--ds-red) 6%, transparent);">{{ $elog->error_message }}</div>
+                @endif
+
+                {{-- Inline email viewer --}}
+                <div x-show="viewingEmailId === {{ $elog->id }}" x-cloak class="mt-3 rounded-md overflow-hidden" style="border:1px solid var(--border);">
+                    <div class="p-3 text-xs space-y-1" style="background:var(--surface-2);">
+                        <div><strong>From:</strong> {{ $agency->whistleblow_compliance_officer_email ?? $agency->email }}</div>
+                        <div><strong>To:</strong> {{ implode(', ', $elog->recipients_to ?? []) }}</div>
+                        @if(!empty($elog->recipients_cc))<div><strong>CC:</strong> {{ implode(', ', $elog->recipients_cc) }}</div>@endif
+                        <div><strong>Subject:</strong> {{ $elog->subject }}</div>
+                        <div><strong>Sent:</strong> {{ $elog->sent_at->format('d M Y H:i:s') }} by {{ $elog->sentBy?->name ?? 'System' }}</div>
+                        @if(!empty($elog->attachments))
+                        <div><strong>Attachments:</strong>
+                            @foreach($elog->attachments as $att)
+                            {{ $att['filename'] ?? 'attachment' }} ({{ isset($att['size']) ? number_format($att['size'] / 1024, 1) . ' KB' : '' }}){{ !$loop->last ? ', ' : '' }}
+                            @endforeach
+                        </div>
+                        @endif
+                    </div>
+                    <iframe srcdoc="{{ e($elog->rendered_html) }}" sandbox class="w-full" style="height:400px; border:none; background:#fff;"></iframe>
+                </div>
+            </div>
+            @empty
+            <p class="text-xs" style="color:var(--text-muted);">No emails sent yet. Email will be sent when this complaint is approved.</p>
+            @endforelse
+        </div>
+    </div>
+
     {{-- Action footer — only for pending_approval + approver --}}
     @if($complaint->status === 'pending_approval' && $isApprover)
     <div class="rounded-md p-5 flex items-center gap-3 flex-wrap" style="background:var(--surface); border:1px solid var(--border);">

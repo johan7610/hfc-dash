@@ -96,6 +96,11 @@ class WhistleblowComplaint extends Model
         return $this->hasMany(WhistleblowAuditLog::class, 'complaint_id');
     }
 
+    public function emailLogs(): HasMany
+    {
+        return $this->hasMany(WhistleblowEmailLog::class, 'complaint_id');
+    }
+
     // ── Accessors ──
 
     public function getSubjectsSummaryAttribute(): string
