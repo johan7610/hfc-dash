@@ -168,12 +168,8 @@ return [
         ['key' => 'access_client_portal',    'label' => 'Access Client Portal',            'section' => 'client-portal',    'type' => 'access',  'module' => 'client_portal',    'sort_order' => 1],
         ['key' => 'manage_clients',          'label' => 'Manage Client Records',           'section' => 'client-portal',    'type' => 'access',  'module' => 'client_portal',    'sort_order' => 2],
 
-        // ── P24 Importer ──
-        ['key' => 'access_importer',         'label' => 'Access P24 Importer',             'section' => 'importer',         'type' => 'access',  'module' => 'importer',         'sort_order' => 1],
-        ['key' => 'importer.import_agents',   'label' => 'Import Agents (P24)',             'section' => 'importer',         'type' => 'action',  'module' => 'importer',         'sort_order' => 2],
-        ['key' => 'importer.import_listings', 'label' => 'Import Listings (P24)',           'section' => 'importer',         'type' => 'action',  'module' => 'importer',         'sort_order' => 3],
-        ['key' => 'confirm_properties',      'label' => 'Confirm Properties (Review)',     'section' => 'importer',         'type' => 'action',  'module' => 'importer',         'sort_order' => 4],
-        ['key' => 'send_agent_invites',      'label' => 'Send Agent Invites',              'section' => 'importer',         'type' => 'action',  'module' => 'importer',         'sort_order' => 5],
+        // ── P24 Importer ── REMOVED 2026-05-07: System Owner only (see agency-admin-rule.md).
+        // Routes now gated by `owner_only` middleware. No permission keys needed.
 
         // ── Franchise Admin ──
         ['key' => 'access_franchise_admin',  'label' => 'Access Franchise Admin',          'section' => 'franchise-admin',  'type' => 'access',  'module' => 'franchise_admin',  'sort_order' => 1],
@@ -276,6 +272,14 @@ return [
         ['key' => 'core_matches.manage',         'label' => 'Manage (edit, archive)',      'section' => 'core-matches',     'type' => 'action',  'module' => 'core_matches',     'sort_order' => 13],
         ['key' => 'core_matches.convert_to_deal','label' => 'Convert to Deal',             'section' => 'core-matches',     'type' => 'action',  'module' => 'core_matches',     'sort_order' => 14],
 
+        // ── Client App (mobile client portal) ──
+        // Spec: .ai/specs/client-auth.md
+        ['key' => 'client_app.create_login',     'label' => 'Create Client App Login',     'section' => 'contacts',         'type' => 'action',  'module' => 'client_app',       'sort_order' => 50],
+        ['key' => 'client_app.reset_password',   'label' => 'Reset Client App Password',   'section' => 'contacts',         'type' => 'action',  'module' => 'client_app',       'sort_order' => 51],
+        ['key' => 'client_app.force_logout',     'label' => 'Force Client Logout',         'section' => 'contacts',         'type' => 'action',  'module' => 'client_app',       'sort_order' => 52],
+        ['key' => 'client_app.remove_access',    'label' => 'Remove Client App Access',    'section' => 'contacts',         'type' => 'action',  'module' => 'client_app',       'sort_order' => 53],
+        ['key' => 'client_app.view_logs',        'label' => 'View Client App Activity',    'section' => 'admin',            'type' => 'access',  'module' => 'client_app',       'sort_order' => 54],
+
         // ── Calculators / Tools ──
         ['key' => 'access_calculators',          'label' => 'Access Calculators & Tools',  'section' => 'calculators',      'type' => 'access',  'module' => 'calculators',      'sort_order' => 1],
 
@@ -298,8 +302,11 @@ return [
         ['key' => 'access_deposit_calculator',   'label' => 'Access Deposit Interest Calculator', 'section' => 'trust-interest', 'type' => 'access',  'module' => 'trust_interest',   'sort_order' => 2],
         ['key' => 'access_deposit_calc_history', 'label' => 'Access Calculation History',        'section' => 'trust-interest', 'type' => 'access',  'module' => 'trust_interest',   'sort_order' => 3],
 
-        // ── PDF Splitter ──
+        // ── PDF Splitter (legacy key — kept for backwards compatibility with existing role assignments) ──
         ['key' => 'access_pdf_splitter',         'label' => 'Access PDF Splitter',         'section' => 'pdf-splitter',     'type' => 'access',  'module' => 'pdf_splitter',     'sort_order' => 1],
+
+        // ── PDF Suite ──
+        ['key' => 'access_pdf_suite',            'label' => 'Access PDF Suite',            'section' => 'pdf-suite',        'type' => 'access',  'module' => 'pdf_suite',        'sort_order' => 1],
 
         // ── Knowledge Base ──
         ['key' => 'access_knowledge_base',       'label' => 'Access Knowledge Base',       'section' => 'knowledge-base',   'type' => 'access',  'module' => 'knowledge',        'sort_order' => 1],
@@ -323,9 +330,13 @@ return [
         ['key' => 'deals_v2.manage_pipeline',    'label' => 'Manage Pipeline Templates',   'section' => 'deals-v2',         'type' => 'action',  'module' => 'deals_v2',         'sort_order' => 14],
         ['key' => 'deals_v2.override_dates',     'label' => 'Override Due Dates',          'section' => 'deals-v2',         'type' => 'action',  'module' => 'deals_v2',         'sort_order' => 15],
 
-        // ── Agencies ──
-        ['key' => 'access_agencies',             'label' => 'Access Agencies',             'section' => 'agencies',         'type' => 'access',  'module' => 'agencies',         'sort_order' => 1],
-        ['key' => 'manage_agencies',             'label' => 'Manage Agencies',             'section' => 'agencies',         'type' => 'access',  'module' => 'agencies',         'sort_order' => 2],
+        // ── Agencies ── REMOVED 2026-05-07: System Owner only (see agency-admin-rule.md).
+        // Routes now gated by `owner_only` middleware. No permission keys needed.
+
+        // ── Remote Access (cross-agency consent flow) ──
+        // See .ai/specs/agency-access-authorization-spec.md
+        ['key' => 'agency.manage_access_authorization', 'label' => 'Manage Remote Access Setting', 'section' => 'remote-access', 'type' => 'access', 'module' => 'remote_access', 'sort_order' => 1],
+        ['key' => 'agency.authorize_external_access',   'label' => 'Approve / Deny Remote Access', 'section' => 'remote-access', 'type' => 'action', 'module' => 'remote_access', 'sort_order' => 2],
 
         // ── Settings ──
         ['key' => 'access_settings',             'label' => 'Access Settings',             'section' => 'settings',         'type' => 'access',  'module' => 'settings',         'sort_order' => 1],
@@ -403,6 +414,15 @@ return [
         ['key' => 'branches.view_all',               'label' => 'View Across All Branches',      'section' => 'branches',        'type' => 'access',  'module' => 'branches',         'sort_order' => 1],
         ['key' => 'branches.switch',                 'label' => 'Switch Branch View',            'section' => 'branches',        'type' => 'access',  'module' => 'branches',         'sort_order' => 2],
         ['key' => 'branches.edit_all',               'label' => 'Edit Across All Branches',      'section' => 'branches',        'type' => 'action',  'module' => 'branches',         'sort_order' => 3],
+
+        // ── Sidebar — section visibility (entire sidebar groups) ──
+        // When OFF, the sidebar heading and every item under it (until the
+        // next heading) is hidden. Per-feature permissions still gate the
+        // underlying routes — this is purely visual grouping.
+        ['key' => 'sidebar.section.agents',          'label' => 'Show Agents Section',           'section' => 'sidebar',         'type' => 'access',  'module' => 'sidebar',          'sort_order' => 1],
+        ['key' => 'sidebar.section.branch_manager',  'label' => 'Show Branch Manager Section',   'section' => 'sidebar',         'type' => 'access',  'module' => 'sidebar',          'sort_order' => 2],
+        ['key' => 'sidebar.section.tools',           'label' => 'Show Tools Section',            'section' => 'sidebar',         'type' => 'access',  'module' => 'sidebar',          'sort_order' => 3],
+        ['key' => 'sidebar.section.admin',           'label' => 'Show Admin Section',            'section' => 'sidebar',         'type' => 'access',  'module' => 'sidebar',          'sort_order' => 5],
     ],
 
     // ──────────────────────────────────────────────────────────
@@ -415,7 +435,7 @@ return [
         'super_admin' => '*', // Owner role — gets all permissions
 
         'admin' => [
-            'exclude' => ['access_agencies', 'manage_agencies', 'manage_agency_switching'],
+            'exclude' => ['manage_agency_switching'],
             // Payroll: admin gets full payroll management
             'include' => [
                 'manage_payroll', 'run_payroll', 'view_payroll_reports', 'view_own_payslips',
@@ -423,6 +443,9 @@ return [
                 'manage_leave', 'approve_leave', 'apply_for_leave', 'view_leave_reports',
                 'manage_leave_types', 'manage_staff_take_on', 'view_team_leave_calendar',
                 'adjust_leave_balances',
+                // Sidebar sections — admin sees all
+                'sidebar.section.agents', 'sidebar.section.branch_manager',
+                'sidebar.section.tools', 'sidebar.section.admin',
                 // Whistleblower
                 'compliance.whistleblow.view', 'compliance.whistleblow.create',
                 'compliance.whistleblow.approve', 'compliance.whistleblow.view_all_agency',
@@ -477,7 +500,8 @@ return [
                 'access_sales_documents',
                 'sales_docs.view', 'sales_docs.create', 'sales_docs.edit',
                 'access_calculators', 'access_ellie',
-                'access_pdf_splitter', 'access_deposit_calculator', 'access_deposit_calc_history',
+                'access_pdf_splitter', 'access_pdf_suite',
+                'access_deposit_calculator', 'access_deposit_calc_history',
                 'access_prospecting', 'access_evaluation',
                 'access_properties', 'create_properties', 'publish_properties', 'delete_properties',
                 'properties.view', 'properties.create', 'properties.edit',
@@ -502,6 +526,9 @@ return [
                 // Leave
                 'manage_leave', 'approve_leave', 'apply_for_leave', 'view_leave_reports',
                 'view_team_leave_calendar',
+                // Sidebar sections
+                'sidebar.section.agents', 'sidebar.section.branch_manager',
+                'sidebar.section.tools',
                 // Whistleblower
                 'compliance.whistleblow.view', 'compliance.whistleblow.create',
                 'compliance.whistleblow.approve', 'compliance.whistleblow.view_all_agency',
@@ -540,7 +567,7 @@ return [
                 'access_sales_documents',
                 'sales_docs.view', 'sales_docs.create',
                 'access_calculators', 'access_ellie',
-                'access_pdf_splitter',
+                'access_pdf_splitter', 'access_pdf_suite',
                 'access_prospecting', 'access_evaluation',
                 'access_properties', 'create_properties',
                 'properties.view', 'properties.create', 'properties.edit',
@@ -560,6 +587,8 @@ return [
                 'view_own_payslips',
                 // Leave
                 'apply_for_leave', 'view_team_leave_calendar',
+                // Sidebar sections
+                'sidebar.section.agents', 'sidebar.section.tools',
                 // Whistleblower
                 'compliance.whistleblow.view', 'compliance.whistleblow.create',
             ],
@@ -593,6 +622,8 @@ return [
                 'view_own_stats',
                 'access_rmcp',
                 'view_own_screening',
+                // Sidebar sections
+                'sidebar.section.agents', 'sidebar.section.tools',
             ],
         ],
     ],

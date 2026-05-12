@@ -1,25 +1,39 @@
 <?php
 
-namespace Database\Seeders;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
-use App\Models\CommandCenter\NotificationEventType;
-use Illuminate\Database\Seeder;
-
-class NotificationEventTypeSeeder extends Seeder
+return new class extends Migration
 {
-    public function run(): void
+    public function up(): void
     {
-        $rows = $this->catalogue();
-        foreach ($rows as $i => $row) {
-            $row['sort_order'] = $i;
-            NotificationEventType::updateOrCreate(['key' => $row['key']], $row);
+        if (! Schema::hasTable('notification_event_types')) {
+            return;
         }
+
+        foreach ($this->catalogue() as $i => $row) {
+            $row['sort_order'] = $i;
+            $row['updated_at'] = now();
+
+            $existing = DB::table('notification_event_types')->where('key', $row['key'])->first();
+            if ($existing) {
+                DB::table('notification_event_types')->where('key', $row['key'])->update($row);
+            } else {
+                $row['created_at'] = now();
+                DB::table('notification_event_types')->insert($row);
+            }
+        }
+    }
+
+    public function down(): void
+    {
+        // Catalog is part of the application contract; no destructive rollback.
     }
 
     private function catalogue(): array
     {
         return [
-            // Property
             $this->row('property.documents_missing', 'property', 'Documents', 'Documents not uploaded after listing',
                 'Notify when a newly listed property has no documents on file after the threshold.', 'hours', 24, 1, 168),
             $this->row('property.mandate_expiring', 'property', 'Compliance', 'Mandate expiring soon',
@@ -29,7 +43,6 @@ class NotificationEventTypeSeeder extends Seeder
             $this->row('property.compliance_doc_missing', 'property', 'Compliance', 'Compliance documents missing',
                 'EAAB / FICA-on-property compliance certs not uploaded.', 'hours', 48, 1, 720),
 
-            // Contact
             $this->row('contact.fica_missing', 'contact', 'Compliance', 'FICA documents not uploaded',
                 'New contact has no FICA documents on file after the threshold.', 'hours', 48, 1, 720),
             $this->row('contact.fica_expiring', 'contact', 'Compliance', 'FICA expiring soon',
@@ -39,7 +52,6 @@ class NotificationEventTypeSeeder extends Seeder
             $this->row('contact.birthday', 'contact', 'Activity', 'Contact birthday today',
                 'Today is this contact\'s birthday — good time to reach out.', 'none', null, null, null),
 
-            // Deal
             $this->row('deal.stalled_offer', 'deal', 'Lifecycle', 'Deal stuck at offer stage',
                 'Deal has not progressed past offer stage in the threshold window.', 'hours', 48, 1, 720),
             $this->row('deal.stalled_bond', 'deal', 'Lifecycle', 'Deal stuck at bond stage',
@@ -53,7 +65,6 @@ class NotificationEventTypeSeeder extends Seeder
             $this->row('deal.milestone_due', 'deal', 'Lifecycle', 'Deal milestone due',
                 'A deal milestone is approaching its due date.', 'hours', 24, 1, 168),
 
-            // Agent (adapters — store in user_dashboard_settings)
             $this->row('agent.task_due', 'agent', 'My activity', 'Task due reminder',
                 'Reminds you when one of your tasks is approaching its due time.',
                 'hours', 4, 1, 168, true, 'task_reminder_hours_before'),
@@ -112,4 +123,4 @@ class NotificationEventTypeSeeder extends Seeder
             'adapter_column' => $adapterCol,
         ];
     }
-}
+};

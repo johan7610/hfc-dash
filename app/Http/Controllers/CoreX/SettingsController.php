@@ -42,6 +42,7 @@ class SettingsController extends Controller
             'agency', 'user', 'system', 'notifications',
             'feature-documents', 'feature-rentals', 'feature-contacts',
             'feature-properties', 'feature-matches', 'feature-dashboard',
+            'leave-visibility', 'remote-access',
         ];
         if (!in_array($section, $validSections, true)) {
             $section = 'agency';
@@ -99,7 +100,7 @@ class SettingsController extends Controller
         // Feature Settings tab: Matches
         $data['matchesEnabled']            = (bool) PerformanceSetting::get('matches_enabled', 1);
         $data['matchesShowOnProperties']   = (bool) PerformanceSetting::get('matches_show_on_properties', 1);
-        $data['matchesAllowCrossAgent']    = (bool) PerformanceSetting::get('matches_allow_cross_agent', 0);
+        $data['matchesVisibilityScope']    = (string) PerformanceSetting::get('matches_visibility_scope', \App\Services\Matching\MatchingService::SCOPE_AGENCY);
         $defaultWaMsg = "Hi {name}! 👋\n\nI've put together a personalised selection of properties that match your search criteria.\n\nView your property matches here:\n{link}\n\nFeel free to reach out if you'd like to arrange viewings or have any questions!";
         $data['matchesWaMessage'] = (string) PerformanceSetting::get('matches_wa_message', $defaultWaMsg);
 
@@ -127,6 +128,30 @@ class SettingsController extends Controller
             $data['notificationSnapshot'] = app(NotificationPreferenceService::class)->snapshot($user);
         } else {
             $data['notificationSnapshot'] = null;
+        }
+
+        // Operations: Leave Visibility matrix (admin/owner only)
+        if ($user && in_array($user->role, ['admin', 'owner', 'super_admin'])) {
+            $agencyId = $user->effectiveAgencyId();
+            $matrix = \App\Models\AgencyLeaveVisibilityMatrix::matrixForAgency($agencyId);
+            $roles = \App\Models\Role::allRoles()->pluck('name')
+                ->reject(fn($r) => $r === 'super_admin')->values()->toArray();
+            $aliases = ['branch_manager' => 'bm', 'bm' => 'branch_manager'];
+            $grid = [];
+            foreach ($roles as $vr) {
+                foreach ($roles as $or) {
+                    $vv = array_filter([$vr, $aliases[$vr] ?? null]);
+                    $ov = array_filter([$or, $aliases[$or] ?? null]);
+                    $sb = $matrix->first(fn($r) => in_array($r->viewing_role, $vv) && in_array($r->leave_owner_role, $ov) && $r->same_branch_only === true);
+                    $cb = $matrix->first(fn($r) => in_array($r->viewing_role, $vv) && in_array($r->leave_owner_role, $ov) && $r->same_branch_only === false);
+                    $grid[$vr][$or] = [
+                        'same_branch'  => $sb ? $sb->can_see : false,
+                        'cross_branch' => $cb ? $cb->can_see : false,
+                    ];
+                }
+            }
+            $data['leaveVisibilityRoles'] = $roles;
+            $data['leaveVisibilityGrid']  = $grid;
         }
 
         return view('corex.settings', $data);
@@ -258,11 +283,13 @@ class SettingsController extends Controller
         return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'matches'])->with('success', 'Setting updated.');
     }
 
-    public function updateMatchesAllowCrossAgent(Request $request)
+    public function updateMatchesVisibilityScope(Request $request)
     {
-        $enabled = $request->boolean('matches_allow_cross_agent');
-        PerformanceSetting::updateOrCreate(['key' => 'matches_allow_cross_agent'], ['value' => $enabled ? 1 : 0]);
-        return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'matches'])->with('success', 'Cross-agent setting updated.');
+        $scope = $request->validate([
+            'matches_visibility_scope' => 'required|in:agent,branch,agency',
+        ])['matches_visibility_scope'];
+        PerformanceSetting::updateOrCreate(['key' => 'matches_visibility_scope'], ['value' => $scope]);
+        return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'matches'])->with('success', 'Match visibility scope updated.');
     }
 
     public function updateMatchesWaMessage(Request $request)
@@ -510,6 +537,40 @@ class SettingsController extends Controller
 
         return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'dashboard'])
             ->with('success', 'Agency dashboard settings saved.');
+    }
+
+    /**
+     * Toggle the agency-level "Require system owner consent for remote access" flag.
+     * See .ai/specs/agency-access-authorization-spec.md.
+     */
+    public function updateRemoteAccess(Request $request)
+    {
+        $user = auth()->user();
+        abort_unless($user?->hasPermission('agency.manage_access_authorization'), 403);
+
+        $data = $request->validate([
+            'require_external_access_authorization' => 'nullable|boolean',
+        ]);
+        $newValue = (bool) ($data['require_external_access_authorization'] ?? false);
+
+        $agencyId = $user->effectiveAgencyId();
+        $agency = Agency::findOrFail($agencyId);
+        $oldValue = (bool) $agency->require_external_access_authorization;
+
+        if ($oldValue !== $newValue) {
+            $agency->update(['require_external_access_authorization' => $newValue]);
+            \Illuminate\Support\Facades\Log::info('agency_access_auth_flag_toggled', [
+                'agency_id' => $agency->id,
+                'old'       => $oldValue,
+                'new'       => $newValue,
+                'by'        => $user->id,
+            ]);
+        }
+
+        return redirect()->route('corex.settings', ['s' => 'remote-access'])
+            ->with('success', $newValue
+                ? 'Remote access authorization is now ON. System owners must request consent to switch in.'
+                : 'Remote access authorization is now OFF. System owners can switch in directly.');
     }
 
     /**

@@ -29,6 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 'onboarding.portal' => \App\Http\Middleware\ResolveOnboardingPortal::class,
                 'agency.required' => \App\Http\Middleware\RequireAgencyContext::class,
                 'branch.required' => \App\Http\Middleware\RequiresBranchAssignment::class,
+                'client.ability' => \App\Http\Middleware\EnsureClientAbility::class,
         ]);
 
         $middleware->validateCsrfTokens(except: [
@@ -38,6 +39,14 @@ return Application::configure(basePath: dirname(__DIR__))
 
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // Agency Admin Rule: convert LastAdminException into a friendly redirect/JSON error.
+        $exceptions->render(function (\App\Exceptions\LastAdminException $e, $request) {
+            if ($request->expectsJson()) {
+                return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+            }
+            return back()->with('error', $e->getMessage());
+        });
+
         $exceptions->reportable(function (\Throwable $e) {
             try {
                 // Skip exceptions that don't need fault tracking

@@ -26,7 +26,7 @@
         'x' => 'other',
     ];
 
-    // Badge colour map (tailwind-style token → inline style)
+    // Badge colour map (tailwind-style token â†’ inline style)
     $badgeStyle = [
         'mandate'           => 'background:#dbeafe;color:#1e3a8a',
         'fica'              => 'background:#ede9fe;color:#4c1d95',
@@ -57,10 +57,10 @@
 #spr .alert-error {
     background: color-mix(in srgb, #ef4444 12%, var(--surface));
     border:1px solid color-mix(in srgb, #ef4444 25%, var(--border));
-    color:#ef4444;
+    color:var(--ds-crimson);
 }
 
-/* ── Toolbar ─────────────────────────────── */
+/* â”€â”€ Toolbar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #spr .toolbar {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     background: var(--surface); border: 1px solid var(--border);
@@ -87,7 +87,7 @@
 }
 #spr button.tb-btn:hover { opacity:.85; }
 #spr .btn-apply  { background:var(--brand-button, #0ea5e9); color:#fff; }
-#spr .btn-reset  { background:var(--surface); color:#ef4444; border-color: color-mix(in srgb, #ef4444 40%, var(--border)); }
+#spr .btn-reset  { background:var(--surface); color:var(--ds-crimson); border-color: color-mix(in srgb, #ef4444 40%, var(--border)); }
 #spr .btn-other  { background:var(--surface-2, var(--surface)); color:var(--text-secondary); border-color:var(--border); }
 #spr .btn-gen    { background:var(--brand-button, #0ea5e9); color:#fff; border:none; border-radius:6px;
                    padding:0.625rem 1.5rem; font-size:.875rem; font-weight:600; cursor:pointer;
@@ -96,7 +96,7 @@
 #spr .btn-gen:hover { filter: brightness(1.1);
                       box-shadow: 0 6px 10px -2px color-mix(in srgb, var(--brand-button, #0ea5e9) 30%, transparent); }
 
-/* ── Shortcut legend ─────────────────────── */
+/* â”€â”€ Shortcut legend â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #spr .legend {
     display:flex; flex-wrap:wrap; gap:5px;
     background:var(--surface); border:1px solid var(--border);
@@ -114,11 +114,11 @@
 }
 #spr .key-chip kbd {
     font-family:'JetBrains Mono', monospace; font-weight:700; font-size:.78rem;
-    background:var(--surface-2, var(--surface)); border-radius:3px; padding:1px 5px;
+    background:var(--surface-2, var(--surface)); border-radius:6px; padding:1px 5px;
     border:1px solid var(--border);
 }
 
-/* ── Table ───────────────────────────────── */
+/* â”€â”€ Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #spr .tbl-wrap {
     background:var(--surface); border:1px solid var(--border); border-radius:6px;
     overflow:hidden; margin-bottom:16px;
@@ -196,6 +196,8 @@
 }
 #spr .btn-back:hover { color:var(--brand-icon, #0ea5e9); }
 </style>
+
+@include('tools.pdf-suite._switcher')
 
 <div id="spr">
 <div class="wrap">
@@ -341,22 +343,22 @@
 (function () {
     'use strict';
 
-    /* ── Config ─────────────────────────────── */
+    /* â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     const TOTAL   = {{ $pCount }};
     const KEY_MAP = @json($keyMap);   // { 'm': 'mandate', ... }
 
-    /* ── State ──────────────────────────────── */
+    /* â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     let selected     = new Set();   // page numbers (int)
     let lastSelected = null;
 
-    /* ── DOM helpers ────────────────────────── */
+    /* â”€â”€ DOM helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     const tbody    = document.getElementById('spr-tbody');
     const countEl  = document.getElementById('sel-count');
 
     function row(p)    { return tbody.querySelector(`tr[data-page="${p}"]`); }
     function sel(p)    { return tbody.querySelector(`select[name="labels[${p}]"]`); }
 
-    /* ── Selection rendering ────────────────── */
+    /* â”€â”€ Selection rendering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     function renderSelection() {
         tbody.querySelectorAll('tr[data-page]').forEach(tr => {
             const p = +tr.dataset.page;
@@ -388,7 +390,7 @@
         if (r) r.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
 
-    /* ── Row click ──────────────────────────── */
+    /* â”€â”€ Row click â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     tbody.addEventListener('click', function (e) {
         // Ignore clicks on the select dropdown itself
         if (e.target.tagName === 'SELECT') return;
@@ -410,7 +412,7 @@
         }
     });
 
-    /* ── Apply label to selected rows ──────── */
+    /* â”€â”€ Apply label to selected rows â”€â”€â”€â”€â”€â”€â”€â”€ */
     function applyLabel(label, advance) {
         if (selected.size === 0) return;
         selected.forEach(p => {
@@ -427,10 +429,10 @@
         }
     }
 
-    /* ── Keyboard shortcuts ─────────────────── */
+    /* â”€â”€ Keyboard shortcuts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     document.addEventListener('keydown', function (e) {
         const tag = e.target.tagName;
-        // Allow typing in selects/inputs/buttons normally — only intercept when body / table is focused
+        // Allow typing in selects/inputs/buttons normally â€” only intercept when body / table is focused
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
         if (tag === 'BUTTON') return;
         // Allow select dropdown navigation without stealing keys
@@ -467,7 +469,7 @@
         }
     });
 
-    /* ── Toolbar buttons ────────────────────── */
+    /* â”€â”€ Toolbar buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     document.getElementById('tb-apply').addEventListener('click', function () {
         const v = document.getElementById('tb-type-select').value;
         applyLabel(v, false);
@@ -487,7 +489,7 @@
         }
     });
 
-    /* ── Init ───────────────────────────────── */
+    /* â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
     // Pre-select page 1 so keyboard shortcuts work immediately
     selectOnly(1);
 })();

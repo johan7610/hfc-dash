@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class AgencyController extends Controller
 {
@@ -52,6 +55,7 @@ class AgencyController extends Controller
             'default_color'    => 'nullable|string|max:20',
             'button_color'     => 'nullable|string|max:20',
             'is_active'        => 'nullable|boolean',
+            'is_demo'          => 'nullable|boolean',
             'trading_name'     => 'nullable|string|max:255',
             'tagline'          => 'nullable|string|max:255',
             'address'          => 'nullable|string|max:500',
@@ -66,6 +70,13 @@ class AgencyController extends Controller
             'p24_agency_id'    => 'nullable|string|max:32',
             'p24_agency_label' => 'nullable|string|max:100',
             'logo'             => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+
+            // First Admin — required for live agencies, skipped for demo agencies.
+            // See .ai/specs/agency-admin-rule.md.
+            'admin_name'     => 'required_if:is_demo,0,false,,|nullable|string|max:191',
+            'admin_email'    => 'required_if:is_demo,0,false,,|nullable|email|max:191|unique:users,email',
+            'admin_password' => 'required_if:is_demo,0,false,,|nullable|string|min:8',
+            'admin_cell'     => 'nullable|string|max:50',
         ]);
 
         $data['slug']          = $data['slug'] ?? Str::slug($data['name']);
@@ -73,11 +84,37 @@ class AgencyController extends Controller
         $data['icon_color']    = $data['icon_color']    ?? '#0ea5e9';
         $data['default_color'] = $data['default_color'] ?? '#0b2a4a';
         $data['button_color']  = $data['button_color']  ?? '#0ea5e9';
-        $data['is_active']       = (bool) ($data['is_active'] ?? true);
+        $data['is_active']     = (bool) ($data['is_active'] ?? true);
+        $data['is_demo']       = (bool) ($data['is_demo'] ?? false);
 
-        unset($data['logo']);
+        $isDemo = $data['is_demo'];
+        $adminPayload = $isDemo ? null : [
+            'name'     => $data['admin_name'],
+            'email'    => $data['admin_email'],
+            'password' => $data['admin_password'],
+            'cell'     => $data['admin_cell'] ?? null,
+        ];
+        unset($data['logo'], $data['admin_name'], $data['admin_email'], $data['admin_password'], $data['admin_cell']);
 
-        $agency = Agency::create($data);
+        // Atomic: live agency + first Admin must succeed together. Demo agencies
+        // skip the admin requirement entirely. See spec R1.
+        $agency = DB::transaction(function () use ($data, $adminPayload) {
+            $agency = Agency::create($data);
+
+            if ($adminPayload) {
+                User::create([
+                    'name'      => $adminPayload['name'],
+                    'email'     => $adminPayload['email'],
+                    'password'  => Hash::make($adminPayload['password']),
+                    'cell'      => $adminPayload['cell'],
+                    'role'      => 'admin',
+                    'agency_id' => $agency->id,
+                    'is_active' => true,
+                ]);
+            }
+
+            return $agency;
+        });
 
         if ($request->hasFile('logo')) {
             $ext = $request->file('logo')->getClientOriginalExtension();
@@ -87,16 +124,29 @@ class AgencyController extends Controller
             $agency->update(['logo_path' => $path]);
         }
 
-        return redirect()->route('agencies.index')->with('success', "Agency \"{$data['name']}\" created.");
+        Log::info('Agency created', [
+            'agency_id'   => $agency->id,
+            'is_demo'     => $isDemo,
+            'admin_email' => $adminPayload['email'] ?? null,
+            'created_by'  => auth()->id(),
+        ]);
+
+        $msg = $isDemo
+            ? "Demo agency \"{$data['name']}\" created (no Admin required)."
+            : "Agency \"{$data['name']}\" created with Admin {$adminPayload['email']}.";
+
+        return redirect()->route('agencies.index')->with('success', $msg);
     }
 
     public function edit(Agency $agency)
     {
+        $this->authorizeAgencyScope($agency);
         return view('admin.agencies.create-edit', compact('agency'));
     }
 
     public function update(Request $request, Agency $agency)
     {
+        $this->authorizeAgencyScope($agency);
         $data = $request->validate([
             'name'            => 'required|string|max:100',
             'sidebar_color'   => 'nullable|string|max:20',
@@ -148,7 +198,26 @@ class AgencyController extends Controller
 
         $agency->update($data);
 
+        $user = auth()->user();
+        if ($user && !$user->isOwnerRole()) {
+            return redirect()->route('admin.company-settings')->with('success', "Agency \"{$agency->name}\" updated.");
+        }
+
         return redirect()->route('agencies.index')->with('success', "Agency \"{$agency->name}\" updated.");
+    }
+
+    private function authorizeAgencyScope(Agency $agency): void
+    {
+        $user = auth()->user();
+        if (!$user) {
+            abort(403);
+        }
+        if ($user->isOwnerRole()) {
+            return;
+        }
+        if ((int) $user->effectiveAgencyId() !== (int) $agency->id) {
+            abort(403, 'You can only edit your own agency.');
+        }
     }
 
     /**
@@ -193,7 +262,7 @@ class AgencyController extends Controller
         ));
 
         $counts = [];
-        DB::transaction(function () use ($cascadeTables, $tables, $agencyId, $ownerRoleNames, &$counts, $agency) {
+        DB::transaction(function () use ($cascadeTables, $tables, $agencyId, $ownerRoleNames, &$counts, $agency, $driver) {
             // Cascade rows referencing users we're about to delete (e.g. agent_scorecards)
             // which don't carry agency_id directly and would otherwise trip FK constraints.
             $userIdsToDelete = DB::table('users')
@@ -203,18 +272,50 @@ class AgencyController extends Controller
                 ->all();
 
             if (!empty($userIdsToDelete)) {
-                $userRefTables = array_values(array_filter(
-                    $tables,
-                    fn ($t) => $t !== 'users' && Schema::hasColumn($t, 'user_id')
-                ));
-                foreach ($userRefTables as $table) {
+                // Discover every FK column that references users.id, regardless of name
+                // (user_id, assigned_by, created_by, manager_id, etc.). Falls back to a
+                // conventional column-name scan on non-MySQL drivers.
+                $userRefs = [];
+                if (in_array($driver, ['mysql', 'mariadb'], true)) {
+                    $rows = DB::select(
+                        "SELECT TABLE_NAME, COLUMN_NAME
+                           FROM information_schema.KEY_COLUMN_USAGE
+                          WHERE TABLE_SCHEMA = DATABASE()
+                            AND REFERENCED_TABLE_NAME = 'users'
+                            AND REFERENCED_COLUMN_NAME = 'id'
+                            AND TABLE_NAME <> 'users'"
+                    );
+                    foreach ($rows as $r) {
+                        $userRefs[] = ['table' => $r->TABLE_NAME, 'column' => $r->COLUMN_NAME];
+                    }
+                } else {
+                    $candidateCols = ['user_id', 'assigned_by', 'assigned_to', 'created_by', 'updated_by', 'owner_id', 'manager_id', 'agent_id'];
+                    foreach ($tables as $t) {
+                        if ($t === 'users') continue;
+                        foreach ($candidateCols as $col) {
+                            if (Schema::hasColumn($t, $col)) {
+                                $userRefs[] = ['table' => $t, 'column' => $col];
+                            }
+                        }
+                    }
+                }
+
+                foreach ($userRefs as $ref) {
+                    $table  = $ref['table'];
+                    $column = $ref['column'];
                     try {
-                        $deleted = DB::table($table)->whereIn('user_id', $userIdsToDelete)->delete();
-                        if ($deleted > 0) {
-                            $counts[$table] = ($counts[$table] ?? 0) + $deleted;
+                        // If the referencing table is tenant-scoped, hard-delete the rows.
+                        // Otherwise just null the FK so the user delete can proceed.
+                        if (Schema::hasColumn($table, 'agency_id')) {
+                            $deleted = DB::table($table)->whereIn($column, $userIdsToDelete)->delete();
+                            if ($deleted > 0) {
+                                $counts[$table] = ($counts[$table] ?? 0) + $deleted;
+                            }
+                        } else {
+                            DB::table($table)->whereIn($column, $userIdsToDelete)->update([$column => null]);
                         }
                     } catch (\Throwable $e) {
-                        Log::error("Agency hard-delete failed on user-ref {$table}", [
+                        Log::error("Agency hard-delete failed on user-ref {$table}.{$column}", [
                             'agency_id' => $agencyId,
                             'error'     => $e->getMessage(),
                         ]);

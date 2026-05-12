@@ -55,8 +55,10 @@
                 'label' => 'Agency',
                 'items' => array_values(array_filter([
                     ['key'=>'agency',                'label'=>'Agency Settings',       'type'=>'section', 'keywords'=>'company branding logo signature'],
-                    ['key'=>'company',               'label'=>'Company Details',       'type'=>'link', 'href'=>route('admin.company-settings'), 'keywords'=>'trading name address logo'],
-                    ['key'=>'branches',              'label'=>'Branches & Assignments','type'=>'link', 'href'=>route('admin.branch-assignments'), 'keywords'=>'users branch assignment'],
+                    ['key'=>'company',               'label'=>'Company Settings',      'type'=>'link', 'href'=>route('admin.company-settings'), 'keywords'=>'trading name address logo branches assignments performance vat'],
+                    ($u && $u->hasPermission('agency.manage_access_authorization'))
+                        ? ['key'=>'remote-access', 'label'=>'Remote Access', 'type'=>'section', 'keywords'=>'system owner consent authorization cross-agency switch']
+                        : null,
                 ])),
             ],
             [
@@ -78,8 +80,8 @@
                 'label' => 'Operations',
                 'items' => array_values(array_filter([
                     ['key'=>'commission',            'label'=>'Commission & Revenue Share','type'=>'link', 'href'=>route('corex.settings.commission'), 'keywords'=>'splits caps fees tiers'],
-                    ['key'=>'performance',           'label'=>'Performance Settings',  'type'=>'link', 'href'=>route('admin.performance-settings.edit'), 'keywords'=>'vat targets'],
                     ['key'=>'command-center',        'label'=>'Command Center Rules',  'type'=>'link', 'href'=>route('command-center.settings'), 'keywords'=>'expectations reminders'],
+                    ['key'=>'leave-visibility',      'label'=>'Leave Visibility',      'type'=>'section', 'keywords'=>'leave calendar matrix roles branch'],
                     $can('compliance.whistleblow.configure') ? ['key'=>'whistleblow-settings', 'label'=>'Compliance Reporting', 'type'=>'section', 'keywords'=>'whistleblower ppra approver complaints'] : null,
                 ])),
             ],
@@ -151,24 +153,7 @@
              ============================================================ --}}
         <div x-show="activeSection === 'agency'" x-cloak class="p-6 space-y-6">
 
-            {{-- Branch Assignments link --}}
-            <div>
-                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Structure</h3>
-                <a href="{{ route('admin.branch-assignments') }}"
-                   class="flex items-center gap-3 p-3 rounded-md transition-all duration-300 no-underline group hover:bg-white/5"
-                   style="border:1px solid var(--border);">
-                    <div class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent);">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="color: var(--brand-icon, #0ea5e9);" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" /></svg>
-                    </div>
-                    <div class="flex-1">
-                        <div class="text-sm font-semibold" style="color:var(--text-primary);">Branch Assignments</div>
-                        <div class="text-xs" style="color:var(--text-secondary);">Manage branches and user assignments</div>
-                    </div>
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" class="w-4 h-4 flex-shrink-0" style="color:var(--border-hover);"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
-                </a>
-            </div>
-
-            {{-- Company Settings — moved to its own admin page (mirrors Branch Assignments) --}}
+            {{-- Company Settings — moved to its own admin page (now contains Branches & Performance tabs) --}}
             @if(isset($agency) && $agency)
             <div>
                 <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Company</h3>
@@ -187,57 +172,7 @@
             </div>
             @endif
 
-            {{-- Data Isolation — Split Branches toggle (branch-isolation phase 2) --}}
-            @if(isset($agency) && $agency && auth()->user()?->hasPermission('manage_performance_settings'))
-            <div>
-                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Data Isolation</h3>
-                <form method="POST" action="{{ route('corex.settings.split-branches') }}"
-                      class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
-                    @csrf
-                    @method('PUT')
-
-                    <div class="flex items-start gap-4">
-                        <div class="flex-1">
-                            <div class="text-sm font-semibold mb-1" style="color:var(--text-primary);">Split Branches</div>
-                            <div class="text-xs leading-relaxed" style="color:var(--text-secondary);">
-                                When ON, users only see data belonging to their own branch (contacts, properties, deals, documents, etc.).
-                                Principals and users with <code>branches.view_all</code> continue to see everything across the agency.
-                                Flip freely — no data loss.
-                            </div>
-                        </div>
-
-                        {{-- Toggle switch bound to a hidden value the controller reads as a boolean --}}
-                        <label class="relative inline-flex items-center cursor-pointer flex-shrink-0 mt-1">
-                            <input type="hidden" name="split_branches_enabled" value="0">
-                            <input type="checkbox" name="split_branches_enabled" value="1"
-                                   {{ $agency->split_branches_enabled ? 'checked' : '' }}
-                                   onchange="this.form.submit()"
-                                   class="sr-only peer">
-                            <div class="w-11 h-6 rounded-full transition-colors duration-300"
-                                 style="background:var(--border);"
-                                 :class=""></div>
-                            <style>
-                                input[type=checkbox]:checked + div { background: var(--brand-icon, #0ea5e9) !important; }
-                                input[type=checkbox] + div::after {
-                                    content:''; position:absolute; top:2px; left:2px; width:20px; height:20px;
-                                    border-radius:50%; background:#fff; transition:transform .25s ease;
-                                }
-                                input[type=checkbox]:checked + div::after { transform: translateX(20px); }
-                            </style>
-                        </label>
-                    </div>
-
-                    <div class="mt-3 text-xs" style="color:var(--text-muted);">
-                        Currently: <strong style="color:{{ $agency->split_branches_enabled ? 'var(--brand-icon, #0ea5e9)' : 'var(--text-secondary)' }};">
-                            {{ $agency->split_branches_enabled ? 'ON' : 'OFF' }}
-                        </strong>
-                        — {{ $agency->split_branches_enabled
-                            ? 'Branch isolation is active.'
-                            : 'All users see all agency data (current/default behaviour).' }}
-                    </div>
-                </form>
-            </div>
-            @endif
+            {{-- Data Isolation moved to Company Settings → Branches tab --}}
             @if(false)
             <div>
                 <form method="POST" action="{{ route('corex.settings.agency.update') }}" enctype="multipart/form-data"
@@ -422,40 +357,7 @@
             </div>
             @endif
 
-            {{-- Performance Settings (VAT, Listings per Sale) --}}
-            @if(isset($vatRate))
-            <div>
-                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Performance Settings</h3>
-                <form method="POST" action="{{ route('admin.performance-settings.update') }}"
-                      class="space-y-4 p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
-                    @csrf
-                    {{-- Hidden fields to satisfy PerformanceSettingsController validation --}}
-                    <input type="hidden" name="company_name" value="">
-                    <input type="hidden" name="company_address" value="">
-                    <input type="hidden" name="company_tel" value="">
-                    <input type="hidden" name="company_ffc" value="">
-                    <input type="hidden" name="clear_company_logo" value="0">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">VAT Rate (%)</label>
-                            <input type="number" step="0.01" min="0" max="100" name="vat_rate" value="{{ old('vat_rate', $vatRate) }}"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">Listings per Sale</label>
-                            <input type="number" step="0.01" min="0.01" name="listings_per_sale" value="{{ old('listings_per_sale', $listingsPerSale) }}"
-                                   class="w-full rounded-md px-3 py-2 text-sm"
-                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
-                            <p class="text-xs mt-1" style="color:var(--text-muted);">Used to calculate how many listings are needed for the target sales.</p>
-                        </div>
-                    </div>
-                    <div class="flex justify-end pt-1">
-                        <button type="submit" class="corex-btn-primary text-sm">Save Performance Settings</button>
-                    </div>
-                </form>
-            </div>
-            @endif
+            {{-- Performance Settings moved to Company Settings → Performance tab --}}
 
             {{-- Agency Management (owner role only) --}}
             @if(auth()->user()?->isOwnerRole())
@@ -477,6 +379,57 @@
             @endif
 
         </div>
+
+        {{-- ============================================================
+             REMOTE ACCESS TAB — agency-side consent toggle
+             See .ai/specs/agency-access-authorization-spec.md
+             ============================================================ --}}
+        @if($u && $u->hasPermission('agency.manage_access_authorization') && isset($agency) && $agency)
+        <div x-show="activeSection === 'remote-access'" x-cloak class="p-6 space-y-5">
+            <div>
+                <h2 class="text-lg font-bold" style="color:var(--text-primary);">Remote Access</h2>
+                <p class="text-sm mt-1" style="color:var(--text-secondary);">
+                    Control whether system owners can switch into <strong>{{ $agency->name }}</strong> without asking.
+                </p>
+            </div>
+
+            <form method="POST" action="{{ route('corex.settings.remote-access') }}"
+                  x-data="{ on: {{ $agency->require_external_access_authorization ? 'true' : 'false' }} }"
+                  class="rounded-md p-5 space-y-4"
+                  style="background:var(--surface-2); border:1px solid var(--border);">
+                @csrf
+
+                <label class="flex items-start gap-3 cursor-pointer">
+                    <input type="checkbox" name="require_external_access_authorization" value="1"
+                           x-model="on"
+                           class="mt-1 h-4 w-4 rounded">
+                    <span class="flex-1">
+                        <span class="block text-sm font-semibold" style="color:var(--text-primary);">
+                            Require system owner consent for remote access
+                        </span>
+                        <span class="block text-xs mt-1" style="color:var(--text-secondary);">
+                            <strong>OFF</strong> (default): a system owner can switch into this agency at any time, no questions asked.<br>
+                            <strong>ON</strong>: every cross-agency switch attempt by a system owner triggers an approval request. The system owner picks which admin(s) to ask; only those admins receive the popup. Access lasts 24h once approved.
+                        </span>
+                    </span>
+                </label>
+
+                <div class="flex items-center justify-between gap-3 pt-2"
+                     style="border-top:1px solid var(--border);">
+                    <div class="text-xs" style="color:var(--text-muted);">
+                        Currently:
+                        <span class="font-semibold" :class="on ? 'text-amber-500' : 'text-emerald-500'"
+                              x-text="on ? 'ON — consent required' : 'OFF — open access'"></span>
+                    </div>
+                    <button type="submit"
+                            class="px-4 py-2 rounded-md text-sm font-semibold text-white"
+                            style="background:var(--brand-button, #0ea5e9);">
+                        Save
+                    </button>
+                </div>
+            </form>
+        </div>
+        @endif
 
         {{-- ============================================================
              USER SETTINGS TAB
@@ -1955,29 +1908,29 @@
                     </form>
                 </div>
 
-                {{-- Allow cross-agent properties toggle --}}
-                <div class="p-4 rounded-md flex items-center justify-between gap-4" style="background:var(--surface-2); border:1px solid var(--border);">
+                {{-- Match visibility scope (agent / branch / agency) --}}
+                <div class="p-4 rounded-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border);">
                     <div>
-                        <div class="text-sm font-semibold" style="color:var(--text-primary);">Allow agents to view other agents' properties in match results</div>
-                        <div class="text-xs mt-0.5" style="color:var(--text-secondary);">When On, the Core Match results page (web and mobile) shows a "Show other agents" toggle so the agent can include the rest of the agency's stock. When Off, results are restricted to the agent's own listings — no toggle is shown.</div>
+                        <div class="text-sm font-semibold" style="color:var(--text-primary);">Match results visibility</div>
+                        <div class="text-xs mt-0.5" style="color:var(--text-secondary);">
+                            Controls whose stock is searched when an agent opens a Core Match (web and mobile, and the client-shared page).
+                            <strong>Agent</strong> shows only the match owner's listings,
+                            <strong>Branch</strong> shows the owner's branch stock,
+                            <strong>Agency</strong> shows the agency's full stock.
+                        </div>
                     </div>
-                    <form method="POST" action="{{ route('corex.settings.matches-allow-cross-agent') }}" class="flex items-center gap-3 flex-shrink-0">
+                    <form method="POST" action="{{ route('corex.settings.matches-visibility-scope') }}" class="flex items-center gap-2">
                         @csrf
-                        <input type="hidden" name="matches_allow_cross_agent" value="0">
-                        <label class="relative cursor-pointer flex-shrink-0" style="width:44px; height:24px; display:block;"
-                               title="{{ $matchesAllowCrossAgent ? 'Enabled — click to disable' : 'Disabled — click to enable' }}">
-                            <input type="checkbox" name="matches_allow_cross_agent" value="1"
-                                   {{ $matchesAllowCrossAgent ? 'checked' : '' }}
-                                   class="sr-only"
-                                   onchange="this.closest('form').submit()">
-                            <span class="block w-full h-full rounded-full transition-colors duration-200"
-                                  style="background:{{ $matchesAllowCrossAgent ? 'var(--brand-button, #0ea5e9)' : 'var(--border-hover)' }}"></span>
-                            <span class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-200"
-                                  style="transform:translateX({{ $matchesAllowCrossAgent ? '20px' : '0' }})"></span>
-                        </label>
-                        <span class="text-sm font-semibold" style="color:{{ $matchesAllowCrossAgent ? 'var(--brand-button, #0ea5e9)' : 'var(--text-muted)' }};">
-                            {{ $matchesAllowCrossAgent ? 'On' : 'Off' }}
-                        </span>
+                        @foreach (['agent' => 'Agent', 'branch' => 'Branch', 'agency' => 'Agency'] as $val => $label)
+                            @php $isActive = $matchesVisibilityScope === $val; @endphp
+                            <button type="submit" name="matches_visibility_scope" value="{{ $val }}"
+                                    class="px-4 py-2 rounded-md text-sm font-semibold border transition-colors"
+                                    style="background:{{ $isActive ? 'var(--brand-button, #0ea5e9)' : 'transparent' }};
+                                           color:{{ $isActive ? '#fff' : 'var(--text-secondary)' }};
+                                           border-color:{{ $isActive ? 'var(--brand-button, #0ea5e9)' : 'var(--border)' }};">
+                                {{ $label }}
+                            </button>
+                        @endforeach
                     </form>
                 </div>
 
@@ -2156,6 +2109,84 @@
 
             </div>{{-- /dashboard --}}
 
+        </div>
+
+        {{-- ============================================================
+             LEAVE VISIBILITY (Operations)
+             ============================================================ --}}
+        <div x-show="activeSection === 'leave-visibility'" x-cloak class="p-6 space-y-5">
+            @if(isset($leaveVisibilityRoles) && isset($leaveVisibilityGrid))
+                @if(session('success'))
+                    <div class="px-4 py-2.5 rounded-md text-sm" style="background:rgba(16,185,129,0.1); color:#10b981; border:1px solid rgba(16,185,129,0.2);">
+                        {{ session('success') }}
+                    </div>
+                @endif
+
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider mb-1" style="color:var(--text-muted); border-left:3px solid var(--brand-icon, #0ea5e9); padding-left:10px;">Leave Visibility Matrix</h3>
+                    <p class="text-xs mt-2" style="color:var(--text-secondary);">
+                        Controls which roles can see whose leave entries on the calendar. Access to the leave calendar feature itself is controlled by
+                        <a href="{{ route('corex.role-manager') }}" class="font-medium hover:underline" style="color: var(--brand-icon, #0ea5e9);">Role Manager</a>. The most restrictive rule wins. Own leave is always visible.
+                    </p>
+                </div>
+
+                <form method="POST" action="{{ route('command-center.settings.leave-visibility.update') }}"
+                      class="p-4 rounded-md space-y-4" style="background:var(--surface-2); border:1px solid var(--border);">
+                    @csrf @method('PUT')
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b" style="border-color:var(--border);">
+                                    <th class="text-left py-2 px-3 text-[11px] font-semibold uppercase tracking-wider" style="color:var(--text-muted);">Viewer ↓ / Owner →</th>
+                                    @foreach($leaveVisibilityRoles as $ownerRole)
+                                        <th class="text-center py-2 px-3 text-[11px] font-semibold uppercase tracking-wider capitalize" style="color:var(--text-muted);">
+                                            {{ str_replace('_', ' ', $ownerRole) }}
+                                        </th>
+                                    @endforeach
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($leaveVisibilityRoles as $viewingRole)
+                                    <tr class="border-b" style="border-color:var(--border);">
+                                        <td class="py-2 px-3 text-sm font-medium capitalize" style="color:var(--text-primary);">
+                                            {{ str_replace('_', ' ', $viewingRole) }}
+                                        </td>
+                                        @foreach($leaveVisibilityRoles as $ownerRole)
+                                            <td class="py-2 px-3">
+                                                <div class="inline-flex flex-col items-start gap-1">
+                                                    <label class="flex items-center gap-1.5 text-[11px]" style="color:var(--text-muted);">
+                                                        <input type="checkbox" name="matrix[{{ $viewingRole }}][{{ $ownerRole }}][same_branch]" value="1"
+                                                               {{ ($leaveVisibilityGrid[$viewingRole][$ownerRole]['same_branch'] ?? false) ? 'checked' : '' }}>
+                                                        Branch
+                                                    </label>
+                                                    <label class="flex items-center gap-1.5 text-[11px]" style="color:var(--text-muted);">
+                                                        <input type="checkbox" name="matrix[{{ $viewingRole }}][{{ $ownerRole }}][cross_branch]" value="1"
+                                                               {{ ($leaveVisibilityGrid[$viewingRole][$ownerRole]['cross_branch'] ?? false) ? 'checked' : '' }}>
+                                                        All
+                                                    </label>
+                                                </div>
+                                            </td>
+                                        @endforeach
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <p class="text-[11px]" style="color:var(--text-muted);">
+                        <strong>Branch</strong> = same branch only. <strong>All</strong> = entire agency.
+                    </p>
+
+                    <div class="flex justify-end pt-2 border-t" style="border-color:var(--border);">
+                        <button type="submit" class="px-4 py-2 rounded-md text-sm font-semibold text-white" style="background:var(--brand-button);">
+                            Save Matrix
+                        </button>
+                    </div>
+                </form>
+            @else
+                <p class="text-sm" style="color:var(--text-muted);">You don't have permission to configure leave visibility.</p>
+            @endif
         </div>
 
         {{-- ============================================================

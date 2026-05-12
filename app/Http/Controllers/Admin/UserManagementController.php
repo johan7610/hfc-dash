@@ -7,6 +7,7 @@ use App\Mail\UserInviteMail;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\Branch;
+use App\Services\Admin\AgentDeletionService;
 use App\Services\Syndication\Property24\Property24ApiClient;
 use App\Services\Syndication\Property24\Property24SyndicationService;
 use Illuminate\Http\Request;
@@ -141,6 +142,12 @@ class UserManagementController extends Controller
             'test_agent'      => ['nullable', 'in:0,1'],
         ]);
 
+        // The owner role cannot be created through user management.
+        $submittedRole = Role::allRoles()->firstWhere('name', $data['role']);
+        if ($submittedRole && $submittedRole->is_owner) {
+            abort(403, 'The owner role cannot be assigned through user management.');
+        }
+
         $isTestAgent = ($request->input('test_agent') === '1');
 
         $fullName = trim($data['name'] . ' ' . $data['surname']);
@@ -274,6 +281,16 @@ class UserManagementController extends Controller
             'ffc_certificate' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
             'password'        => ['nullable', 'string', 'min:8'],
         ]);
+
+        // The owner role cannot be assigned through user management.
+        $submittedRole = Role::allRoles()->firstWhere('name', $data['role']);
+        if ($submittedRole && $submittedRole->is_owner && !$user->isOwnerRole()) {
+            abort(403, 'The owner role cannot be assigned through user management.');
+        }
+        // And an existing owner cannot be downgraded here either.
+        if ($user->isOwnerRole() && (!$submittedRole || !$submittedRole->is_owner)) {
+            return back()->withErrors("Cannot change an owner's role.");
+        }
 
         $fullName = trim($data['name'] . ' ' . $data['surname']);
 
@@ -510,9 +527,9 @@ class UserManagementController extends Controller
             return back()->withErrors("Cannot change an owner's role.");
         }
 
-        // Guard 3: Only owners can assign owner roles
-        if ($submittedRole && $submittedRole->is_owner && !auth()->user()->isOwnerRole()) {
-            abort(403, 'Only the System Owner can assign the owner role.');
+        // Guard 3: Owner role cannot be assigned via the UI under any circumstance.
+        if ($submittedRole && $submittedRole->is_owner && !$user->isOwnerRole()) {
+            abort(403, 'The owner role cannot be assigned through user management.');
         }
         $branchId = $data['branch_id'] ?? null;
 
@@ -668,7 +685,44 @@ class UserManagementController extends Controller
         return back()->with('status', "{$user->name} {$state}.{$p24Note}");
     }
 
-    public function delete(User $user)
+    /**
+     * JSON preview for the agent-delete modal: counts of attached records
+     * and the list of eligible reassignment targets in the same agency.
+     */
+    public function deletePreview(User $user, AgentDeletionService $service)
+    {
+        abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
+
+        if ($user->id === auth()->id()) {
+            return response()->json([
+                'error' => 'You cannot delete yourself.',
+            ], 422);
+        }
+
+        $counts = $service->preview($user);
+
+        $targets = User::query()
+            ->where('id', '!=', $user->id)
+            ->where('is_active', true)
+            ->where('agency_id', $user->agency_id)
+            ->whereNull('deleted_at')
+            ->orderBy('name')
+            ->get(['id', 'name', 'email']);
+
+        return response()->json([
+            'user' => [
+                'id'   => $user->id,
+                'name' => $user->name,
+            ],
+            'counts'  => $counts,
+            'targets' => $targets->map(fn ($u) => [
+                'id'    => $u->id,
+                'label' => trim($u->name ?? '').($u->email ? " ({$u->email})" : ''),
+            ])->values(),
+        ]);
+    }
+
+    public function delete(Request $request, User $user, AgentDeletionService $service)
     {
         abort_unless(auth()->user()?->hasPermission('manage_users'), 403);
 
@@ -677,6 +731,24 @@ class UserManagementController extends Controller
         }
 
         $name = $user->name;
+
+        // Decide whether reassignment is needed.
+        $counts = $service->preview($user);
+
+        if ($counts['has_any']) {
+            $data = $request->validate([
+                'target_user_id'      => ['required', 'integer', 'different:user', Rule::exists('users', 'id')->where(function ($q) use ($user) {
+                    $q->where('agency_id', $user->agency_id)->where('is_active', true)->whereNull('deleted_at');
+                })],
+                'secondary_handling'  => ['required', Rule::in(['promote', 'replace'])],
+            ], [
+                'target_user_id.required' => 'Choose an agent to reassign records to.',
+                'target_user_id.exists'   => 'The chosen agent is not a valid active user in this agency.',
+            ]);
+
+            $target = User::findOrFail($data['target_user_id']);
+            $service->reassignAndCleanup($user, $target, $data['secondary_handling'], (int) auth()->id());
+        }
 
         DB::table('branch_assignments')->where('user_id', $user->id)->delete();
 

@@ -41,6 +41,10 @@ Route::get('/{agencySlug}/properties/{property}', [\App\Http\Controllers\PublicA
     ->where('agencySlug', '^(?!admin|shared|dashboard|login|register|corex|api|storage|livewire|_ignition|broadcasting|horizon|sanctum|agent|onboarding|compliance|docuperfect|presentation|presentations|settings|profile|nexus|tv|ellie|xgrid|invite|up)[a-z0-9-]+$')
     ->name('public.agency.properties.show');
 
+// Public branding lookup by agency slug (no auth — used by mobile app login screen)
+Route::get('/api/v1/branding/{slug}', [\App\Http\Controllers\Api\V1\BrandingController::class, 'showBySlug'])
+    ->name('api.v1.branding.show-by-slug');
+
 Route::get('/dashboard', function () {
     return redirect()->route('corex.dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
@@ -51,6 +55,57 @@ Route::middleware('auth')->group(function () {
     Route::get('/api/notifications', [\App\Http\Controllers\Api\NotificationController::class, 'index']);
     Route::post('/api/notifications/{id}/read', [\App\Http\Controllers\Api\NotificationController::class, 'markRead']);
     Route::post('/api/notifications/mark-all-read', [\App\Http\Controllers\Api\NotificationController::class, 'markAllRead']);
+
+    // ── Admin: API Catalog (auto-generated from route table) ──
+    Route::get('/admin/api', [\App\Http\Controllers\Admin\ApiCatalogController::class, 'index'])
+        ->middleware('permission:manage_users')
+        ->name('admin.api.catalog');
+
+    // ── Admin: Client App Activity ── Spec: .ai/specs/client-auth.md
+    Route::get('/admin/client-app-activity', [\App\Http\Controllers\Admin\ClientAppActivityController::class, 'index'])
+        ->middleware('permission:client_app.view_logs')
+        ->name('admin.client-app-activity');
+
+    // ── CoreX Global API v1 (session-authenticated, browser-visible XHR) ──
+    Route::prefix('api/v1')->name('api.v1.')->group(function () {
+        Route::get('/logged-user', [\App\Http\Controllers\Api\V1\MeController::class, 'show'])->name('logged-user');
+
+        Route::get('/properties',      [\App\Http\Controllers\Api\V1\PropertiesController::class, 'index'])->name('properties.index');
+        Route::get('/properties/{property}', [\App\Http\Controllers\Api\V1\PropertiesController::class, 'show'])->name('properties.show');
+
+        Route::get('/contacts',        [\App\Http\Controllers\Api\V1\ContactsController::class, 'index'])->name('contacts.index');
+        Route::get('/contacts/{contact}', [\App\Http\Controllers\Api\V1\ContactsController::class, 'show'])->name('contacts.show');
+
+        Route::get('/deals',           [\App\Http\Controllers\Api\V1\DealsController::class, 'index'])->name('deals.index');
+        Route::get('/deals/{deal}',    [\App\Http\Controllers\Api\V1\DealsController::class, 'show'])->name('deals.show');
+
+        Route::get('/branding',        [\App\Http\Controllers\Api\V1\BrandingController::class, 'show'])->name('branding.show');
+
+        // ── Agency Access Authorization (cross-agency consent flow) ──
+        // See .ai/specs/agency-access-authorization-spec.md
+        Route::prefix('agency-access')->name('agency-access.')->group(function () {
+            Route::get('/inspect/{agency}',        [\App\Http\Controllers\Api\AgencyAccessRequestController::class, 'inspect'])->name('inspect');
+            Route::post('/request',                [\App\Http\Controllers\Api\AgencyAccessRequestController::class, 'store'])->name('store');
+            Route::get('/inbox',                   [\App\Http\Controllers\Api\AgencyAccessRequestController::class, 'inbox'])->name('inbox');
+            Route::get('/{request}/status',        [\App\Http\Controllers\Api\AgencyAccessRequestController::class, 'status'])->name('status');
+            Route::post('/{request}/cancel',       [\App\Http\Controllers\Api\AgencyAccessRequestController::class, 'cancel'])->name('cancel');
+            Route::post('/{request}/authorize',    [\App\Http\Controllers\Api\AgencyAccessRequestController::class, 'authorize'])->name('authorize');
+            Route::post('/{request}/confirm-switch',[\App\Http\Controllers\Api\AgencyAccessRequestController::class, 'confirmSwitch'])->name('confirm-switch');
+        });
+
+        // ── Command Center: Task Notes (threaded) + Checklist ──
+        Route::prefix('command-center/tasks/{task}')->name('command-center.tasks.')->group(function () {
+            Route::get('/notes',           [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'index'])->name('notes.index');
+            Route::post('/notes',          [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'store'])->name('notes.store');
+            Route::put('/notes/{note}',    [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'update'])->name('notes.update');
+            Route::delete('/notes/{note}', [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'destroy'])->name('notes.destroy');
+
+            Route::get('/checklist',                [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'checklistIndex'])->name('checklist.index');
+            Route::post('/checklist',               [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'checklistStore'])->name('checklist.store');
+            Route::patch('/checklist/{itemId}',     [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'checklistUpdate'])->name('checklist.update');
+            Route::delete('/checklist/{itemId}',    [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'checklistDestroy'])->name('checklist.destroy');
+        });
+    });
 
     Route::get('/evaluation', function () {
         return view('evaluation.index');
@@ -139,6 +194,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/admin/users/{user}/delete', [App\Http\Controllers\Admin\UserManagementController::class, 'delete'])
         ->middleware('permission:manage_users')->name('admin.users.delete');
 
+    Route::get('/api/v1/admin/users/{user}/delete-preview', [App\Http\Controllers\Admin\UserManagementController::class, 'deletePreview'])
+        ->middleware('permission:manage_users')->name('api.v1.admin.users.delete-preview');
+
     Route::post('/admin/users/{user}/defaults', [App\Http\Controllers\Admin\UserManagementController::class, 'updateDefaults'])
         ->middleware('permission:manage_users')->name('admin.users.defaults.update');
     Route::post('/admin/users/{user}/role', [App\Http\Controllers\Admin\UserManagementController::class, 'updateRole'])->middleware('permission:manage_users')->name('admin.users.role.update');
@@ -201,7 +259,7 @@ Route::middleware('auth')->group(function () {
 // P24 Importer — owner-only. The `owner_only` middleware sits alongside
 // `permission:access_importer` so even if the permission is mis-granted
 // to an agency admin they still 403 here.
-Route::prefix('admin/importer')->middleware(['auth', 'permission:access_importer'])->name('admin.importer.')->group(function () {
+Route::prefix('admin/importer')->middleware(['auth', 'owner_only'])->name('admin.importer.')->group(function () {
     Route::get('/', [\App\Http\Controllers\Admin\ImporterController::class, 'index'])->name('index');
     Route::post('/agents/upload', [\App\Http\Controllers\Admin\ImporterController::class, 'uploadAgents'])->name('agents.upload');
     Route::get('/runs/{run}/preview', [\App\Http\Controllers\Admin\ImporterController::class, 'preview'])->name('preview');
@@ -401,6 +459,7 @@ require __DIR__.'/auth.php';
 use App\Http\Controllers\Admin\TargetController;
 use App\Http\Controllers\ToolsController;
 use App\Http\Controllers\Tools\PdfSplitterController;
+use App\Http\Controllers\Tools\PdfSuiteController;
 
 Route::middleware(['auth'])->group(function () {
 
@@ -422,6 +481,32 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/tools/pdf-splitter/confirm', [PdfSplitterController::class, 'confirm'])->middleware('permission:access_pdf_splitter')->name('tools.pdf_splitter.confirm');
     Route::get('/tools/pdf-splitter/thumb/{page}', [PdfSplitterController::class, 'serveThumb'])->middleware('permission:access_pdf_splitter')->name('tools.pdf_splitter.thumb')->where('page', '[0-9]+');
     Route::get('/tools/pdf-splitter/download', [PdfSplitterController::class, 'downloadLastZip'])->middleware('permission:access_pdf_splitter')->name('tools.pdf_splitter.download');
+
+    // PDF Suite — hub + 7 sibling tools (Splitter is reachable from the hub)
+    Route::middleware('permission:access_pdf_suite')->prefix('tools/pdf-suite')->name('tools.pdf_suite.')->group(function () {
+        Route::get('/',              [PdfSuiteController::class, 'hub'])->name('hub');
+
+        Route::get('/compress',      [PdfSuiteController::class, 'compress'])->name('compress');
+        Route::post('/compress',     [PdfSuiteController::class, 'compressRun'])->name('compress.run');
+
+        Route::get('/merge',         [PdfSuiteController::class, 'merge'])->name('merge');
+        Route::post('/merge',        [PdfSuiteController::class, 'mergeRun'])->name('merge.run');
+
+        Route::get('/image-to-pdf',  [PdfSuiteController::class, 'imageToPdf'])->name('image-to-pdf');
+        Route::post('/image-to-pdf', [PdfSuiteController::class, 'imageToPdfRun'])->name('image-to-pdf.run');
+
+        Route::get('/rotate',        [PdfSuiteController::class, 'rotate'])->name('rotate');
+        Route::post('/rotate',       [PdfSuiteController::class, 'rotateRun'])->name('rotate.run');
+
+        Route::get('/reorder',       [PdfSuiteController::class, 'reorder'])->name('reorder');
+        Route::post('/reorder',      [PdfSuiteController::class, 'reorderRun'])->name('reorder.run');
+
+        Route::get('/protect',       [PdfSuiteController::class, 'protect'])->name('protect');
+        Route::post('/protect',      [PdfSuiteController::class, 'protectRun'])->name('protect.run');
+
+        Route::get('/redact',        [PdfSuiteController::class, 'redact'])->name('redact');
+        Route::post('/redact',       [PdfSuiteController::class, 'redactRun'])->name('redact.run');
+    });
 
     // Splitter Doc Type Admin (legacy routes — kept so PDF Splitter links still work)
     Route::get('/admin/splitter/doc-types', [\App\Http\Controllers\Admin\SplitterDocTypeController::class, 'index'])->middleware('permission:access_pdf_splitter')->name('admin.splitter.doc-types.index');
@@ -492,8 +577,8 @@ Route::get('/bm/listings', [\App\Http\Controllers\BM\ListingStockController::cla
         Route::post('/admin/tv-code/revoke-company', [\App\Http\Controllers\Admin\TvCodeController::class, 'revokeCompany'])->name('admin.tv-code.revoke-company');
 
         // Agency switcher (super admin)
-        Route::post('/agency/switch/clear', [\App\Http\Controllers\Admin\AgencySwitcherController::class, 'clear'])->middleware('permission:access_agencies')->name('agency.switch.clear');
-        Route::post('/agency/switch/{agency}', [\App\Http\Controllers\Admin\AgencySwitcherController::class, 'switch'])->middleware('permission:access_agencies')->name('agency.switch');
+        Route::post('/agency/switch/clear', [\App\Http\Controllers\Admin\AgencySwitcherController::class, 'clear'])->middleware('owner_only')->name('agency.switch.clear');
+        Route::post('/agency/switch/{agency}', [\App\Http\Controllers\Admin\AgencySwitcherController::class, 'switch'])->middleware('owner_only')->name('agency.switch');
 
         // Branch switcher (Split Branches Phase 2) — gated by branches.switch permission
         Route::post('/branch/switch/clear', [\App\Http\Controllers\Admin\BranchSwitcherController::class, 'clear'])->name('branch.switch.clear');
@@ -938,7 +1023,6 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::get('/settings', [CommandCenterSettingsController::class, 'index'])->name('command-center.settings');
         Route::get('/settings/contact-governance', [CommandCenterContactGovernanceController::class, 'contactGovernance'])->middleware('permission:command_center.settings')->name('command-center.settings.contact-governance');
         Route::put('/settings/contact-governance', [CommandCenterContactGovernanceController::class, 'updateContactGovernance'])->middleware('permission:command_center.settings')->name('command-center.settings.contact-governance.update');
-        Route::get('/settings/leave-visibility', [CommandCenterContactGovernanceController::class, 'leaveVisibility'])->middleware('permission:command_center.settings')->name('command-center.settings.leave-visibility');
         Route::put('/settings/leave-visibility', [CommandCenterContactGovernanceController::class, 'updateLeaveVisibility'])->middleware('permission:command_center.settings')->name('command-center.settings.leave-visibility.update');
         Route::patch('/settings/rules/{rule}/toggle', [CommandCenterSettingsController::class, 'toggleRule'])->name('command-center.settings.toggle-rule');
         Route::post('/settings/expectations', [CommandCenterSettingsController::class, 'storeExpectation'])->name('command-center.settings.store-expectation');
@@ -1373,7 +1457,8 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::post('/settings/matches-enabled', [CoreXSettingsController::class, 'updateMatchesEnabled'])->middleware('permission:access_settings')->name('corex.settings.matches-enabled');
     Route::post('/settings/matches-wa-message', [CoreXSettingsController::class, 'updateMatchesWaMessage'])->middleware('permission:access_settings')->name('corex.settings.matches-wa-message');
     Route::post('/settings/matches-show-on-properties', [CoreXSettingsController::class, 'updateMatchesShowOnProperties'])->middleware('permission:access_settings')->name('corex.settings.matches-show-on-properties');
-    Route::post('/settings/matches-allow-cross-agent', [CoreXSettingsController::class, 'updateMatchesAllowCrossAgent'])->middleware('permission:access_settings')->name('corex.settings.matches-allow-cross-agent');
+    Route::post('/settings/matches-visibility-scope', [CoreXSettingsController::class, 'updateMatchesVisibilityScope'])->middleware('permission:access_settings')->name('corex.settings.matches-visibility-scope');
+    Route::post('/settings/remote-access', [CoreXSettingsController::class, 'updateRemoteAccess'])->middleware('permission:agency.manage_access_authorization')->name('corex.settings.remote-access');
     // Old compliance-officers endpoint — kept for backwards compat, redirects
     Route::post('/settings/compliance-officers', function () {
         return redirect('/corex/settings?tab=user');
@@ -1423,15 +1508,20 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::post('/role-manager/copy-permissions', [CoreXRoleManagerController::class, 'copyPermissions'])
         ->middleware('permission:edit_permissions')->name('corex.role-manager.copy');
 
-    // Agency Management (super_admin only)
-    Route::middleware('permission:access_agencies')->prefix('settings/agencies')->name('agencies.')->group(function () {
+    // Agency Management — index/create/store/destroy/toggle-active are owner-only.
+    Route::middleware('owner_only')->prefix('settings/agencies')->name('agencies.')->group(function () {
         Route::get('/',              [\App\Http\Controllers\Admin\AgencyController::class, 'index'])->name('index');
         Route::get('/create',        [\App\Http\Controllers\Admin\AgencyController::class, 'create'])->name('create');
         Route::post('/',             [\App\Http\Controllers\Admin\AgencyController::class, 'store'])->name('store');
-        Route::get('/{agency}/edit', [\App\Http\Controllers\Admin\AgencyController::class, 'edit'])->name('edit');
-        Route::put('/{agency}',      [\App\Http\Controllers\Admin\AgencyController::class, 'update'])->name('update');
         Route::post('/{agency}/toggle-active', [\App\Http\Controllers\Admin\AgencyController::class, 'toggleActive'])->name('toggle-active');
         Route::delete('/{agency}',   [\App\Http\Controllers\Admin\AgencyController::class, 'destroy'])->name('destroy');
+    });
+
+    // Agency edit/update — accessible to admins with manage_performance_settings.
+    // Controller enforces own-agency scope unless the user is an owner.
+    Route::middleware('permission:manage_performance_settings')->prefix('settings/agencies')->name('agencies.')->group(function () {
+        Route::get('/{agency}/edit', [\App\Http\Controllers\Admin\AgencyController::class, 'edit'])->name('edit');
+        Route::put('/{agency}',      [\App\Http\Controllers\Admin\AgencyController::class, 'update'])->name('update');
     });
 
     // Company Settings (standalone admin page — separate from tabbed settings)
@@ -1646,6 +1736,12 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/{contact}/matches/{match}/hide/{property}',      [\App\Http\Controllers\CoreX\ContactMatchController::class, 'toggleHide'])->name('matches.toggleHide');
         Route::post('/{contact}/matches/{match}/convert/{property}',   [\App\Http\Controllers\CoreX\ContactMatchController::class, 'convertToDeal'])->middleware('permission:core_matches.convert_to_deal')->name('matches.convertToDeal');
         Route::delete('/{contact}/matches/{match}',                    [\App\Http\Controllers\CoreX\ContactMatchController::class, 'destroy'])->name('matches.destroy');
+
+        // Client App Login — Spec: .ai/specs/client-auth.md
+        Route::post('/{contact}/client-login',                  [\App\Http\Controllers\Contacts\ClientLoginController::class, 'create'])->name('client-login.create');
+        Route::post('/{contact}/client-login/reset',            [\App\Http\Controllers\Contacts\ClientLoginController::class, 'reset'])->name('client-login.reset');
+        Route::post('/{contact}/client-login/force-logout',     [\App\Http\Controllers\Contacts\ClientLoginController::class, 'forceLogout'])->name('client-login.force-logout');
+        Route::delete('/{contact}/client-login',                [\App\Http\Controllers\Contacts\ClientLoginController::class, 'remove'])->name('client-login.remove');
     });
 
     // Contact Types (settings)

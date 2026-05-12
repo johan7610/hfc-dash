@@ -120,7 +120,7 @@
 }
 </style>
 
-<x-page-header title="PDF Pack Splitter" :flush="true">
+<x-page-header title="PDF Pack Splitter" subtitle="OCR-driven splitting of multi-document PDF packs into labelled files." :flush="true">
     <x-slot:actions>
         @permission('calculators.manage')
         <a href="{{ route('admin.splitter.doc-types.index') }}" class="corex-btn-outline text-xs">Manage Labels</a>
@@ -128,6 +128,7 @@
         <button type="submit" form="pdf-upload-form" class="corex-btn-primary text-sm">Upload &amp; Split</button>
     </x-slot:actions>
 </x-page-header>
+@include('tools.pdf-suite._switcher')
 
 <div class="p-4 lg:p-6">
 <div id="pdf-splitter-root">

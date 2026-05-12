@@ -12,6 +12,8 @@ use App\Http\Controllers\Api\MobilePropertyController;
 use App\Http\Controllers\Api\MobileContactController;
 use App\Http\Controllers\Api\MobileCoreMatchController;
 use App\Http\Controllers\Api\PropertyPullController;
+use App\Http\Controllers\Api\V1\ClientAuthController;
+use App\Http\Controllers\Api\V1\ClientPortalController;
 use App\Http\Controllers\FaultReportController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
@@ -32,6 +34,11 @@ Route::post('/login', function (Request $request) {
 
     $token = $user->createToken('corex-mobile')->plainTextToken;
 
+    $agency = $user->effectiveAgencyId()
+        ? \App\Models\Agency::withoutGlobalScope(\App\Models\Scopes\AgencyScope::class)
+            ->find($user->effectiveAgencyId())
+        : null;
+
     return response()->json([
         'token' => $token,
         'user' => [
@@ -40,6 +47,11 @@ Route::post('/login', function (Request $request) {
             'email' => $user->email,
             'branch' => $user->branch?->name ?? null,
             'ffc_status' => $user->ffc_status ?? null,
+            'agency' => $agency ? [
+                'id'   => $agency->id,
+                'slug' => $agency->slug,
+                'name' => $agency->name,
+            ] : null,
         ],
     ]);
 });
@@ -52,9 +64,52 @@ Route::post('/fault-report', [FaultReportController::class, 'capture'])
 Route::post('/pp/webhook', [\App\Http\Controllers\PrivateProperty\PpWebhookController::class, 'receive'])
     ->name('pp.webhook');
 
+// ════════════════════════════════════════════════════════════════
+// API v1 — Client Auth (mobile client portal)
+// Spec: .ai/specs/client-auth.md
+// ════════════════════════════════════════════════════════════════
+Route::prefix('v1/client-auth')->group(function () {
+    Route::post('/lookup',          [ClientAuthController::class, 'lookup'])->name('client-auth.lookup');
+    Route::post('/otp/send',        [ClientAuthController::class, 'sendOtp'])->name('client-auth.otp.send');
+    Route::post('/otp/verify',      [ClientAuthController::class, 'verifyOtp'])->name('client-auth.otp.verify');
+    Route::post('/login',           [ClientAuthController::class, 'login'])->name('client-auth.login');
+    Route::post('/password/forgot', [ClientAuthController::class, 'forgotPassword'])->name('client-auth.password.forgot');
+
+    // Activation token OR client sanctum token (both checked in controller)
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/password/set', [ClientAuthController::class, 'setPassword'])->name('client-auth.password.set');
+    });
+
+    // Client sanctum token only
+    Route::middleware(['auth:sanctum', 'client.ability'])->group(function () {
+        Route::post('/password/change', [ClientAuthController::class, 'changePassword'])->name('client-auth.password.change');
+        Route::post('/agency/select',   [ClientAuthController::class, 'selectAgency'])->name('client-auth.agency.select');
+        Route::post('/logout',          [ClientAuthController::class, 'logout'])->name('client-auth.logout');
+    });
+});
+
+Route::prefix('v1/client')->middleware(['auth:sanctum', 'client.ability'])->group(function () {
+    Route::get('/me',                 [ClientPortalController::class, 'me'])->name('client.me');
+    Route::get('/match-options',      [ClientPortalController::class, 'matchOptions'])->name('client.match-options');
+
+    Route::get('/matches',                                  [ClientPortalController::class, 'matches'])->name('client.matches');
+    Route::post('/matches',                                 [ClientPortalController::class, 'matchCreate'])->name('client.matches.create');
+    Route::get('/matches/{match}',                          [ClientPortalController::class, 'matchShow'])->name('client.matches.show');
+    Route::put('/matches/{match}',                          [ClientPortalController::class, 'matchUpdate'])->name('client.matches.update');
+    Route::post('/matches/{match}/feedback/{property}',     [ClientPortalController::class, 'matchFeedback'])->name('client.matches.feedback');
+    Route::post('/matches/{match}/view/{property}',         [ClientPortalController::class, 'matchView'])->name('client.matches.view');
+
+    Route::get('/properties/{property}',  [ClientPortalController::class, 'propertyShow'])->name('client.properties.show');
+});
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/profile', function (Request $request) {
         $user = $request->user();
+
+        $agency = $user->effectiveAgencyId()
+            ? \App\Models\Agency::withoutGlobalScope(\App\Models\Scopes\AgencyScope::class)
+                ->find($user->effectiveAgencyId())
+            : null;
 
         return response()->json([
             'id' => $user->id,
@@ -62,6 +117,11 @@ Route::middleware('auth:sanctum')->group(function () {
             'email' => $user->email,
             'branch' => $user->branch?->name ?? null,
             'ffc_status' => $user->ffc_status ?? null,
+            'agency' => $agency ? [
+                'id'   => $agency->id,
+                'slug' => $agency->slug,
+                'name' => $agency->name,
+            ] : null,
         ]);
     });
 
@@ -146,6 +206,18 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/tasks/{task}/complete', [CommandCenterApiController::class, 'tasksComplete']);
         Route::patch('/tasks/{task}/status', [CommandCenterApiController::class, 'tasksUpdateStatus']);
         Route::delete('/tasks/{task}', [CommandCenterApiController::class, 'tasksDestroy']);
+
+        // ── Task Notes (threaded) ──
+        Route::get('/tasks/{task}/notes',           [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'index']);
+        Route::post('/tasks/{task}/notes',          [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'store']);
+        Route::put('/tasks/{task}/notes/{note}',    [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'update']);
+        Route::delete('/tasks/{task}/notes/{note}', [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'destroy']);
+
+        // ── Task Checklist ──
+        Route::get('/tasks/{task}/checklist',             [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'checklistIndex']);
+        Route::post('/tasks/{task}/checklist',            [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'checklistStore']);
+        Route::patch('/tasks/{task}/checklist/{itemId}',  [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'checklistUpdate']);
+        Route::delete('/tasks/{task}/checklist/{itemId}', [\App\Http\Controllers\Api\CommandTaskNotesController::class, 'checklistDestroy']);
 
         Route::post('/resolve-task/{task}', [CommandCenterApiController::class, 'resolveTask']);
         Route::post('/resolve-event/{calendarEvent}', [CommandCenterApiController::class, 'resolveEvent']);

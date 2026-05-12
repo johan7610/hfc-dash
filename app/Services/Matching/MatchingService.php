@@ -17,6 +17,29 @@ class MatchingService
 {
     public const MIN_SCORE_TO_SURFACE = 40;
 
+    /** Allowed values for the agency `matches_visibility_scope` setting. */
+    public const SCOPE_AGENT  = 'agent';
+    public const SCOPE_BRANCH = 'branch';
+    public const SCOPE_AGENCY = 'agency';
+
+    /**
+     * Read the agency-wide visibility scope setting and translate it into
+     * `propertiesForMatch` overrides for the given match.
+     */
+    public static function scopeOverridesFor(ContactMatch $match): array
+    {
+        $scope = (string) \App\Models\PerformanceSetting::get('matches_visibility_scope', self::SCOPE_AGENCY);
+
+        return match ($scope) {
+            self::SCOPE_AGENT  => ['agent_id' => $match->created_by_user_id],
+            self::SCOPE_BRANCH => [
+                'agent_id'  => null,
+                'branch_id' => $match->createdBy?->branch_id,
+            ],
+            default            => ['agent_id' => null], // agency
+        };
+    }
+
     /** Hard-fail statuses for the auto-match notification job. */
     private const EXCLUDED_FOR_NOTIFY = ['sold', 'withdrawn', 'draft'];
 
@@ -83,17 +106,18 @@ class MatchingService
             $query->where('agency_id', $match->agency_id);
         }
 
-        // Agent scope. Default: only the match owner's properties.
-        // Override with `agent_id` (specific agent) or `agent_id => null` to allow all agency agents.
-        // Cross-agent results require the agency setting `matches_allow_cross_agent` to be enabled
-        // (caller is responsible for enforcing that — service trusts the override).
+        // Visibility scope. Default: only the match owner's properties.
+        // Override with `agent_id` (specific agent or null for any) and/or `branch_id`.
+        // Resolved by the agency setting `matches_visibility_scope` — see scopeOverridesFor().
         if (array_key_exists('agent_id', $overrides)) {
             if ($overrides['agent_id'] !== null) {
                 $query->where('agent_id', $overrides['agent_id']);
             }
-            // null = no agent_id filter (all agency agents)
         } else {
             $query->where('agent_id', $match->created_by_user_id);
+        }
+        if (!empty($overrides['branch_id'])) {
+            $query->where('branch_id', $overrides['branch_id']);
         }
 
         $includeHidden = !empty($overrides['include_hidden']);
@@ -101,7 +125,7 @@ class MatchingService
             $query->whereNotIn('id', $match->hidden_property_ids);
         }
 
-        $listingType  = $overrides['listing_type']  ?? null; // do not auto-restrict; let scoring weight it
+        $listingType  = $overrides['listing_type']  ?? $match->listing_type; // sale vs rental is a hard filter — never mix the two
         $category     = $overrides['category']      ?? $match->category;
         $propertyType = $overrides['property_type'] ?? $match->property_type;
         $priceMin     = $overrides['price_min']     ?? $match->price_min;
@@ -120,7 +144,10 @@ class MatchingService
                 $q2->whereNull($col)->orWhere($col, $val);
             });
         };
-        if ($listingType)  $strLoose($query, 'listing_type', $listingType);
+        // listing_type uses STRICT equality — sale vs rental are different markets and
+        // properties with NULL listing_type are bad data, not legitimate ambiguity.
+        if ($listingType)  $query->where('listing_type', $listingType);
+        // category / property_type stay loose — half-filled listings still appear.
         if ($category)     $strLoose($query, 'category', $category);
         if ($propertyType) $strLoose($query, 'property_type', $propertyType);
 
