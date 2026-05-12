@@ -25,6 +25,30 @@ class AgentQrController extends Controller
     public function __construct(private readonly ClientAuthService $service) {}
 
     /**
+     * GET /api/v1/me/agent-qr
+     * Returns the authenticated agent's own QR slug + canonical URL.
+     * Rejects client-portal tokens (which auth as a ClientUser, not a User).
+     */
+    public function mine(\Illuminate\Http\Request $request): JsonResponse
+    {
+        $agent = $request->user();
+        if (!$agent instanceof User) {
+            return response()->json(['message' => 'Agent token required.'], 403);
+        }
+
+        $slug   = $agent->ensureQrSlug();
+        $url    = $agent->qrCodeUrl();
+        $imgArg = urlencode($url);
+
+        return response()->json([
+            'slug'    => $slug,
+            'url'     => $url,
+            'png_url' => "https://api.qrserver.com/v1/create-qr-code/?size=1024x1024&margin=8&ecc=H&format=png&data={$imgArg}",
+            'agent'   => $this->presentAgent($agent),
+        ]);
+    }
+
+    /**
      * GET /api/v1/client-auth/agent-qr/{slug}
      * Returns a public-safe preview of the agent for the onboarding screen.
      */

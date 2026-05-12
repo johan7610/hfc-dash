@@ -243,4 +243,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/device-tokens',           [DeviceTokenController::class, 'store']);
     Route::delete('/device-tokens/{token}', [DeviceTokenController::class, 'destroy']);
+
+    // Agent's own onboarding QR — spec: .ai/specs/agent-qr-onboarding.md
+    Route::get('/me/agent-qr', [\App\Http\Controllers\Api\V1\AgentQrController::class, 'mine'])
+        ->name('me.agent-qr');
 });
