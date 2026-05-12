@@ -71,13 +71,8 @@ class WhistleblowComplaintService
             throw new \InvalidArgumentException("Complaint #{$complaint->id} is in status '{$complaint->status}', cannot submit.");
         }
 
-        // Validate required fields per tier
+        // Validate required fields + tier-specific evidence requirements
         $this->validateTierRequirements($complaint);
-
-        // Must have at least one evidence row
-        if ($complaint->evidence()->count() === 0) {
-            throw new \InvalidArgumentException('At least one evidence attachment is required before submission.');
-        }
 
         $complaint->update(['status' => 'pending_approval']);
         $this->writeAudit($complaint, 'submitted', $submittedBy);
@@ -463,10 +458,23 @@ class WhistleblowComplaintService
             $missing[] = 'property_address';
         }
 
-        // Tier-specific
+        // Tier-specific evidence requirements per spec §5
+        $evidenceCount = $complaint->evidence()->count();
+
         if ($complaint->tier === 'tier_1') {
-            if (empty($complaint->seller_statement)) {
-                $missing[] = 'seller_statement (required for Tier 1)';
+            // Tier 1: seller statement IS the primary evidence — file attachments optional
+            if (empty($complaint->seller_statement) || mb_strlen(trim($complaint->seller_statement)) < 20) {
+                $missing[] = 'seller_statement (required for Tier 1, minimum 20 characters)';
+            }
+        } elseif ($complaint->tier === 'tier_2') {
+            // Tier 2: at least one screenshot evidence file required
+            if ($evidenceCount === 0) {
+                $missing[] = 'screenshot evidence (required for Tier 2 — attach a screenshot of the advert)';
+            }
+        } elseif ($complaint->tier === 'tier_3') {
+            // Tier 3: at least one screenshot evidence file required
+            if ($evidenceCount === 0) {
+                $missing[] = 'screenshot evidence (required for Tier 3 — attach advert screenshot and PPRA register search)';
             }
         }
 

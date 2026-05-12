@@ -152,7 +152,15 @@
         {{-- Evidence uploads --}}
         <div class="rounded-md p-5 space-y-4" style="background:var(--surface); border:1px solid var(--border);">
             <h3 class="text-xs font-bold uppercase tracking-wider" style="color:var(--text-muted);">Evidence</h3>
-            <p class="text-xs" style="color:var(--text-secondary);">Upload screenshots of the portal listing, PPRA register search results, or any other supporting documents. Max 5 files, 10 MB each.</p>
+            <div x-show="tier === 'tier_1'" class="text-xs" style="color:var(--text-secondary);">
+                A clear seller statement above is the primary evidence. File attachments are optional but recommended where available (call recording, screenshot of the offending advert).
+            </div>
+            <div x-show="tier === 'tier_2'" x-cloak class="text-xs" style="color:var(--ds-amber);">
+                Required: a screenshot of the advert showing the missing FFC number.
+            </div>
+            <div x-show="tier === 'tier_3'" x-cloak class="text-xs" style="color:var(--ds-amber);">
+                Required: a screenshot of the advert AND a screenshot of the PPRA "Find a Property Practitioner" register search showing no result.
+            </div>
             <input type="file" name="evidence_files[]" multiple accept="image/*,.pdf,.doc,.docx"
                    class="w-full text-sm" style="color:var(--text-primary);">
         </div>
