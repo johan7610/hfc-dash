@@ -10,9 +10,12 @@ use App\Models\Compliance\WhistleblowComplaintSubject;
 use App\Models\Compliance\WhistleblowEmailLog;
 use App\Models\Property;
 use App\Models\User;
+use App\Mail\Compliance\SellerInfoMail;
 use App\Mail\Compliance\WhistleblowComplaintMail;
+use App\Models\Compliance\SellerInfoShareLink;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 class WhistleblowComplaintService
 {
@@ -141,6 +144,16 @@ class WhistleblowComplaintService
         // Auto-send email to PPRA (or demo recipient)
         $complaint->refresh();
         $this->sendToPpra($complaint);
+
+        // Auto-send seller info to property sellers (non-blocking)
+        try {
+            $this->sendSellerInfoFromComplaint($complaint);
+        } catch (\Throwable $e) {
+            Log::warning('Seller info auto-send failed', [
+                'complaint_id' => $complaint->id,
+                'error'        => $e->getMessage(),
+            ]);
+        }
 
         return $complaint->fresh();
     }
@@ -358,6 +371,111 @@ class WhistleblowComplaintService
 
             throw $e;
         }
+    }
+
+    /**
+     * Auto-send seller info emails to property sellers on complaint approval.
+     * Returns summary of what was sent.
+     */
+    public function sendSellerInfoFromComplaint(WhistleblowComplaint $complaint): array
+    {
+        if (!$complaint->property_id) {
+            return ['sent_count' => 0, 'whatsapp_link' => null];
+        }
+
+        $property = Property::withoutGlobalScopes()->find($complaint->property_id);
+        if (!$property) {
+            return ['sent_count' => 0, 'whatsapp_link' => null];
+        }
+
+        $agency = Agency::withoutGlobalScopes()->find($complaint->agency_id);
+        $sellerRoles = ['owner', 'lessor', 'landlord', 'seller'];
+        $sellers = $property->contacts()
+            ->wherePivotIn('role', $sellerRoles)
+            ->get();
+
+        $sentCount = 0;
+
+        foreach ($sellers as $contact) {
+            $email = $contact->email;
+            if (!$email) {
+                continue;
+            }
+
+            $sellerName = trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: 'Valued Seller';
+
+            try {
+                $mailable = new SellerInfoMail($agency, $complaint->tier, $sellerName, '');
+                $renderedHtml = $mailable->render();
+
+                Mail::to($email)->send($mailable);
+
+                WhistleblowEmailLog::create([
+                    'complaint_id'    => $complaint->id,
+                    'sent_at'         => now(),
+                    'email_type'      => 'seller_info_email',
+                    'subject'         => $mailable->envelope()->subject,
+                    'recipients_to'   => [$email],
+                    'recipients_cc'   => [],
+                    'rendered_html'   => $renderedHtml,
+                    'rendered_text'   => strip_tags(str_replace(['<br>', '</p>', '</div>'], "\n", $renderedHtml)),
+                    'sent_by_user_id' => $complaint->approved_by_user_id,
+                    'status'          => 'sent',
+                ]);
+                $sentCount++;
+            } catch (\Throwable $e) {
+                WhistleblowEmailLog::create([
+                    'complaint_id'    => $complaint->id,
+                    'sent_at'         => now(),
+                    'email_type'      => 'seller_info_email',
+                    'subject'         => 'Seller info — failed',
+                    'recipients_to'   => [$email],
+                    'recipients_cc'   => [],
+                    'rendered_html'   => '',
+                    'rendered_text'   => '',
+                    'sent_by_user_id' => $complaint->approved_by_user_id,
+                    'status'          => 'failed',
+                    'error_message'   => $e->getMessage(),
+                ]);
+                Log::warning('Seller info email failed', ['contact' => $contact->id, 'error' => $e->getMessage()]);
+            }
+        }
+
+        // Generate WhatsApp shareable link
+        $link = SellerInfoShareLink::create([
+            'tier'            => $complaint->tier,
+            'seller_name'     => null,
+            'seller_email'    => null,
+            'agent_message'   => null,
+            'property_id'     => $complaint->property_id,
+            'sent_by_user_id' => $complaint->approved_by_user_id ?? $complaint->reported_by_user_id,
+            'agency_id'       => $complaint->agency_id,
+            'token'           => Str::random(32),
+            'expires_at'      => now()->addDays(90),
+        ]);
+
+        $whatsappUrl = url('/info/' . $link->token);
+
+        WhistleblowEmailLog::create([
+            'complaint_id'    => $complaint->id,
+            'sent_at'         => now(),
+            'email_type'      => 'seller_info_whatsapp_link',
+            'subject'         => 'WhatsApp shareable link generated',
+            'recipients_to'   => ['WhatsApp link generated'],
+            'recipients_cc'   => [],
+            'rendered_html'   => '',
+            'rendered_text'   => $whatsappUrl,
+            'sent_by_user_id' => $complaint->approved_by_user_id,
+            'status'          => 'sent',
+        ]);
+
+        Log::info('Seller info auto-sent from complaint', [
+            'complaint_id'  => $complaint->id,
+            'emails_sent'   => $sentCount,
+            'whatsapp_link' => $whatsappUrl,
+        ]);
+
+        return ['sent_count' => $sentCount, 'whatsapp_link' => $whatsappUrl];
     }
 
     /**
