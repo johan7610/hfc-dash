@@ -342,6 +342,38 @@
             </div>
             @endif
 
+            {{-- Also Marketed By (prospecting matches) --}}
+            @if(!$isNew)
+            @php
+                $prospectMatches = \App\Models\ProspectingListing::where('matched_property_id', $property->id)->whereNull('deleted_at')->orderByDesc('last_seen_at')->get();
+            @endphp
+            @if($prospectMatches->count() > 0)
+            <div class="rounded-md p-3 space-y-2" style="background:var(--surface); border:1px solid var(--border);">
+                <p class="text-[0.6875rem] font-bold uppercase tracking-wider" style="color:var(--text-muted);">Also Marketed By ({{ $prospectMatches->count() }})</p>
+                @foreach($prospectMatches as $pm)
+                <div class="rounded p-2" style="background:var(--surface-2); border:1px solid var(--border);">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="text-xs font-bold" style="color:var(--text-primary);">{{ $pm->agency_name ?: 'Unknown agency' }}</span>
+                        <span class="ds-badge ds-badge-muted" style="font-size:0.6rem;">{{ strtoupper($pm->portal_source) }}</span>
+                        @if($pm->is_active)
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0"></span>
+                        @endif
+                    </div>
+                    @if($pm->agent_name)
+                    <div class="text-[0.6875rem] mt-0.5" style="color:var(--text-secondary);">{{ $pm->agent_name }}</div>
+                    @endif
+                    <div class="text-[0.6875rem] mt-0.5" style="color:var(--text-muted);">
+                        R {{ number_format($pm->price) }} &middot; {{ $pm->last_seen_at?->format('d M Y') }}
+                    </div>
+                    @if($pm->portal_url)
+                    <a href="{{ $pm->portal_url }}" target="_blank" class="text-[0.6875rem] no-underline mt-0.5 inline-block" style="color:var(--brand-default);">View listing &rarr;</a>
+                    @endif
+                </div>
+                @endforeach
+            </div>
+            @endif
+            @endif
+
         </aside>
 
         {{-- RIGHT: tabs --}}
