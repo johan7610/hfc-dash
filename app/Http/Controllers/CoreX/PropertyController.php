@@ -446,7 +446,7 @@ class PropertyController extends Controller
             'admin_fee'        => 'nullable|numeric|min:0',
             'marketing_fee'    => 'nullable|numeric|min:0',
             'listed_date'      => 'nullable|date',
-            'expiry_date'      => 'nullable|date',
+            'expiry_date'      => 'nullable|date|after_or_equal:listed_date',
             'lease_start_date' => 'nullable|date',
             'lease_end_date'   => 'nullable|date',
             'branch_id'        => 'nullable|exists:branches,id',
@@ -479,6 +479,16 @@ class PropertyController extends Controller
             'pending_contact_ids.*'     => 'integer',
             'pending_new_contacts'      => 'nullable|array',
         ]);
+
+        // A property must have at least one contact linked on creation.
+        $hasContact = !empty(array_filter((array) $request->input('pending_contact_ids', [])))
+            || collect((array) $request->input('pending_new_contacts', []))
+                ->contains(fn ($nc) => !empty($nc['first_name']) && !empty($nc['last_name']) && !empty($nc['phone']));
+        if (! $hasContact) {
+            return back()
+                ->withInput()
+                ->withErrors(['contacts' => 'A contact must be linked to the property before saving.']);
+        }
 
         $data = $this->processSpacesJson($data);
         $data = $this->applyP24Location($data);
@@ -611,6 +621,12 @@ class PropertyController extends Controller
     {
         $this->authorizeProperty($property);
 
+        if ($property->contacts()->count() === 0) {
+            return back()
+                ->withInput()
+                ->withErrors(['contacts' => 'A contact must be linked to the property before saving.']);
+        }
+
         $data = $request->validate([
             'title'            => 'required|string|max:200',
             'excerpt'          => 'nullable|string|max:500',
@@ -670,7 +686,7 @@ class PropertyController extends Controller
             'admin_fee'        => 'nullable|numeric|min:0',
             'marketing_fee'    => 'nullable|numeric|min:0',
             'listed_date'      => 'nullable|date',
-            'expiry_date'      => 'nullable|date',
+            'expiry_date'      => 'nullable|date|after_or_equal:listed_date',
             'lease_start_date' => 'nullable|date',
             'lease_end_date'   => 'nullable|date',
             'branch_id'        => 'nullable|exists:branches,id',

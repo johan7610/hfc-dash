@@ -3,9 +3,29 @@
 @section('corex-content')
 @php $isNew = !$property->exists; @endphp
 <div class="w-full space-y-4"
-     x-data="{ activeTab: '{{ $isNew ? 'info' : session('tab', $activeTab) }}', synOpen: false, synStep: 'main', sbCollapsed: (localStorage.getItem('hfc.propSidebar.collapsed') === '1'), formDirty: false, wbReportOpen: false }"
+     x-data="{ activeTab: '{{ $isNew ? 'info' : session('tab', $activeTab) }}', synOpen: false, synStep: 'main', sbCollapsed: (localStorage.getItem('hfc.propSidebar.collapsed') === '1'), formDirty: false, wbReportOpen: false, complianceModalOpen: false, unsavedModalOpen: false, pendingNavUrl: null, contactRequiredModalOpen: false }"
+     @corex:contact-required.window="contactRequiredModalOpen = true"
+     @corex:clear-dirty.window="formDirty = false"
      x-effect="localStorage.setItem('hfc.propSidebar.collapsed', sbCollapsed ? '1' : '0')"
-     @beforeunload.window="if (formDirty) { $event.preventDefault(); $event.returnValue = ''; }">
+     @beforeunload.window="if (formDirty && !unsavedModalOpen) { $event.preventDefault(); $event.returnValue = ''; }"
+     x-init="
+        document.addEventListener('click', (e) => {
+            if (!formDirty || unsavedModalOpen) return;
+            const a = e.target.closest('a[href]');
+            if (!a) return;
+            const href = a.getAttribute('href');
+            if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+            if (a.target === '_blank' || a.hasAttribute('download')) return;
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            const url = new URL(a.href, window.location.href);
+            if (url.origin !== window.location.origin) return;
+            if (url.pathname === window.location.pathname && url.search === window.location.search) return;
+            e.preventDefault();
+            e.stopPropagation();
+            pendingNavUrl = a.href;
+            unsavedModalOpen = true;
+        }, true);
+     ">
 
     {{-- Top bar: back + flash --}}
     <div class="flex items-center gap-4 flex-wrap">
@@ -15,14 +35,6 @@
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" /></svg>
             Back
         </a>
-        @if(!$isNew && auth()->user()->hasPermission('outreach.compose'))
-        <a href="{{ route('seller-outreach.entry.from-property', $property) }}"
-           class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md no-underline flex-shrink-0"
-           style="background:#00d4aa; color:#003a2f;"
-           title="Compose a WhatsApp/Email pitch to the seller linked to this property">
-            💬 Pitch seller
-        </a>
-        @endif
         @if(session('success'))
         <div class="flex-1 rounded-md border px-4 py-2 text-sm font-medium" style="background:color-mix(in srgb, var(--ds-green, #059669) 10%, transparent); border-color:color-mix(in srgb, var(--ds-green, #059669) 30%, transparent); color:var(--ds-green, #059669);">
             {{ session('success') }}
@@ -127,36 +139,79 @@
                     <span x-text="formDirty ? 'Save Changes *' : 'Save Changes'"></span>
                 </button>
 
-                @php $isMarketable = ($readinessReport->snapshotAt !== null) || $readinessReport->ready; @endphp
+                @php
+                    $isMarketable = ($readinessReport->snapshotAt !== null) || $readinessReport->ready;
+                    $cmpLive    = $readinessReport->snapshotAt !== null;
+                    $cmpReady   = $readinessReport->ready && !$cmpLive;
+                    $cmpLabel   = $cmpLive ? 'LIVE' : ($cmpReady ? 'READY' : 'BLOCKED');
+                    $cmpPillBg  = $cmpLive ? '#10b981' : ($cmpReady ? 'rgba(0,212,170,.18)' : 'rgba(245,158,11,.18)');
+                    $cmpPillFg  = $cmpLive ? '#ffffff' : ($cmpReady ? '#047857' : '#b45309');
+                @endphp
 
-                <button type="button" @click="synOpen=true; synStep='main'"
+                <button type="button" @click="complianceModalOpen = true"
+                        class="prop-action-btn prop-action-btn-neutral justify-between"
+                        title="View compliance gates and go-live status">
+                    <span class="flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z"/></svg>
+                        Compliance Status
+                    </span>
+                    <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded" style="background:{{ $cmpPillBg }}; color:{{ $cmpPillFg }};">{{ $cmpLabel }}</span>
+                </button>
+
+                <button type="button"
+                        @click="{{ $isMarketable ? "synOpen=true; synStep='main'" : 'complianceModalOpen = true' }}"
                         class="prop-action-btn prop-action-btn-neutral {{ !$isMarketable ? 'opacity-50 cursor-not-allowed' : '' }}"
-                        {{ !$isMarketable ? 'aria-disabled=true' : '' }}
-                        title="{{ !$isMarketable ? 'Marketing blocked — see Compliance Status panel' : 'Manage portal syndication' }}">
+                        title="{{ !$isMarketable ? 'Marketing blocked — open Compliance Status to resolve' : 'Manage portal syndication' }}">
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 0 1 7.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 0 1 1.06 0Z"/></svg>
                     Syndication
                 </button>
 
-                <button type="button" @click="synOpen=true; synStep='preview'"
+                <button type="button"
+                        @click="{{ $isMarketable ? "synOpen=true; synStep='preview'" : 'complianceModalOpen = true' }}"
                         class="prop-action-btn prop-action-btn-neutral {{ !$isMarketable ? 'opacity-50 cursor-not-allowed' : '' }}"
-                        {{ !$isMarketable ? 'aria-disabled=true' : '' }}
-                        title="{{ !$isMarketable ? 'Marketing blocked — see Compliance Status panel' : 'Open public listing preview' }}">
+                        title="{{ !$isMarketable ? 'Marketing blocked — open Compliance Status to resolve' : 'Open public listing preview' }}">
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.641 0-8.58-3.007-9.964-7.178Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>
                     Live Preview
                 </button>
 
+                @if($isMarketable)
                 <a href="{{ route('corex.properties.ad', $property) }}" class="prop-action-btn prop-action-btn-brand">
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                     Ad Builder
                 </a>
+                @else
+                <button type="button" @click="complianceModalOpen = true"
+                        class="prop-action-btn prop-action-btn-brand opacity-50 cursor-not-allowed"
+                        title="Marketing blocked — open Compliance Status to resolve">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                    Ad Builder
+                </button>
+                @endif
 
                 @if(\Illuminate\Support\Facades\Route::has('corex.properties.marketing.index') && \App\Models\PerformanceSetting::get('marketing_enabled', 1))
-                <a href="{{ route('corex.properties.marketing.index', $property) }}"
-                   class="prop-action-btn prop-action-btn-fb {{ !$isMarketable ? 'opacity-50 cursor-not-allowed pointer-events-none' : '' }}"
-                   {{ !$isMarketable ? 'aria-disabled=true' : '' }}
-                   title="{{ !$isMarketable ? 'Marketing blocked — see Compliance Status panel' : 'Social media marketing' }}">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 1 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 0 1-1.44-4.282m3.102.069a18.03 18.03 0 0 1-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 0 1 8.835 2.535M10.34 6.66a23.847 23.847 0 0 1 8.835-2.535"/></svg>
-                    Market Property
+                    @if($isMarketable)
+                    <a href="{{ route('corex.properties.marketing.index', $property) }}"
+                       class="prop-action-btn prop-action-btn-fb"
+                       title="Social media marketing">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 1 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 0 1-1.44-4.282m3.102.069a18.03 18.03 0 0 1-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 0 1 8.835 2.535M10.34 6.66a23.847 23.847 0 0 1 8.835-2.535"/></svg>
+                        Market Property
+                    </a>
+                    @else
+                    <button type="button" @click="complianceModalOpen = true"
+                            class="prop-action-btn prop-action-btn-fb opacity-50 cursor-not-allowed"
+                            title="Marketing blocked — open Compliance Status to resolve">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 1 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 0 1-1.44-4.282m3.102.069a18.03 18.03 0 0 1-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 0 1 8.835 2.535M10.34 6.66a23.847 23.847 0 0 1 8.835-2.535"/></svg>
+                        Market Property
+                    </button>
+                    @endif
+                @endif
+
+                @if(auth()->user()->hasPermission('outreach.compose'))
+                <a href="{{ route('seller-outreach.entry.from-property', $property) }}"
+                   class="prop-action-btn prop-action-btn-neutral"
+                   title="Compose a WhatsApp/Email pitch to the seller linked to this property">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.068.157 2.148.279 3.238.364.466.037.893.281 1.153.671L12 21l2.652-3.978c.26-.39.687-.634 1.153-.67 1.09-.086 2.17-.208 3.238-.365 1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z"/></svg>
+                    Pitch Seller
                 </a>
                 @endif
 
@@ -976,9 +1031,27 @@
             </template>
     @endif
 
-    {{-- Compliance readiness panel --}}
+    {{-- Compliance readiness modal (triggered from Actions stack) --}}
     @if(!$isNew)
-        @include('corex.properties.partials.readiness-panel', ['report' => $readinessReport, 'property' => $property])
+        <template x-teleport="body">
+            <div x-show="complianceModalOpen" x-cloak
+                 class="fixed inset-0 z-[120] flex items-start justify-center p-4 overflow-y-auto"
+                 x-transition.opacity>
+                <div class="absolute inset-0" style="background:rgba(0,0,0,0.5);" @click="complianceModalOpen = false"></div>
+                <div class="relative w-full max-w-2xl mt-12"
+                     x-transition:enter="transition ease-out duration-150"
+                     x-transition:enter-start="opacity-0 scale-95"
+                     x-transition:enter-end="opacity-100 scale-100">
+                    <button type="button" @click="complianceModalOpen = false"
+                            class="absolute top-2 right-2 z-10 rounded p-1"
+                            style="color:var(--text-muted); background:var(--surface); border:1px solid var(--border);"
+                            title="Close">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+                    </button>
+                    @include('corex.properties.partials.readiness-panel', ['report' => $readinessReport, 'property' => $property])
+                </div>
+            </div>
+        </template>
     @endif
 
     {{-- Tab bar (shared) --}}
@@ -1247,7 +1320,9 @@
                   novalidate
                   @input="formDirty = true"
                   @change="formDirty = true"
-                  @submit="formDirty = false"
+                  data-is-new="{{ $isNew ? '1' : '0' }}"
+                  data-contact-count="{{ $isNew ? 0 : $property->contacts->count() }}"
+                  @submit="if (!window.coreXPropertyContactGuard($event, $el)) { return; } formDirty = false;"
                   x-data="{
                       info: {
                           identity: true,
@@ -2313,13 +2388,40 @@
                                         @endforeach
                                     </select>
                                 </div>
-                                <div>
-                                    <label class="prop-label">Listed Date</label>
-                                    <input type="date" name="listed_date" value="{{ old('listed_date', $property->listed_date?->format('Y-m-d')) }}" class="prop-input prop-field-lifecycle" style="color-scheme: light dark;">
-                                </div>
-                                <div>
-                                    <label class="prop-label">Expiry Date</label>
-                                    <input type="date" name="expiry_date" value="{{ old('expiry_date', $property->expiry_date?->format('Y-m-d')) }}" class="prop-input prop-field-lifecycle" style="color-scheme: light dark;">
+                                @php
+                                    $listedDateValue = $property->created_at?->format('Y-m-d') ?? now()->format('Y-m-d');
+                                @endphp
+                                <div x-data="{
+                                        listedDate: '{{ $listedDateValue }}',
+                                        expiryDate: '{{ old('expiry_date', $property->expiry_date?->format('Y-m-d')) }}',
+                                        addMonths(n) {
+                                            const base = this.listedDate ? new Date(this.listedDate) : new Date();
+                                            base.setMonth(base.getMonth() + n);
+                                            this.expiryDate = base.toISOString().slice(0, 10);
+                                        }
+                                     }" class="contents">
+                                    <div>
+                                        <label class="prop-label">Listed Date</label>
+                                        <input type="date" name="listed_date" :value="listedDate" readonly
+                                               class="prop-input prop-field-lifecycle"
+                                               style="color-scheme: light dark; opacity:.75; cursor:not-allowed;"
+                                               title="Listed Date is always the date the property was loaded">
+                                    </div>
+                                    <div x-data="{ qaOpen: false }" @click.outside="qaOpen = false" class="relative">
+                                        <label class="prop-label">Expiry Date</label>
+                                        <input type="date" name="expiry_date" x-model="expiryDate" :min="listedDate"
+                                               class="prop-input prop-field-lifecycle" style="color-scheme: light dark;"
+                                               @focus="qaOpen = true" @click="qaOpen = true"
+                                               @change="if (expiryDate && expiryDate < listedDate) { expiryDate = listedDate; }">
+                                        <div x-show="qaOpen" x-cloak x-transition.opacity
+                                             class="absolute left-0 right-0 z-50 rounded-md border shadow-lg p-2 flex flex-wrap items-center gap-1.5"
+                                             style="bottom:100%; margin-bottom:4px; background:var(--surface-1); border-color:var(--border);">
+                                            <span class="text-[0.6875rem]" style="color:var(--text-muted);">Quick set:</span>
+                                            <button type="button" @click="addMonths(3); qaOpen = false" class="text-[0.6875rem] px-2 py-0.5 rounded-md border" style="border-color:var(--border); color:var(--text-secondary);">+3 months</button>
+                                            <button type="button" @click="addMonths(6); qaOpen = false" class="text-[0.6875rem] px-2 py-0.5 rounded-md border" style="border-color:var(--border); color:var(--text-secondary);">+6 months</button>
+                                            <button type="button" @click="addMonths(12); qaOpen = false" class="text-[0.6875rem] px-2 py-0.5 rounded-md border" style="border-color:var(--border); color:var(--text-secondary);">+12 months</button>
+                                        </div>
+                                    </div>
                                 </div>
                                 @if(!$isNew)
                                     <div>
@@ -2732,15 +2834,11 @@
                                 </p>
                                 <p class="text-xs font-bold mb-1.5" style="color:var(--text-primary);">Sort order &amp; Custom tags</p>
                                 <p class="text-xs leading-relaxed mb-2" style="color:var(--text-secondary);">
-                                    Opens a popup where you drag the <span style="color:var(--text-primary); font-weight:600;">⋮⋮</span> grip to reorder tags, add a custom tag, or remove one. The order set here is the order used by <span style="color:var(--text-primary); font-weight:600;">Sort by Tag</span> and the order photos appear in portal feeds.
-                                </p>
-                                <p class="text-xs font-bold mb-1.5" style="color:var(--text-primary);">Sort by Tag</p>
-                                <p class="text-xs leading-relaxed mb-2" style="color:var(--text-secondary);">
-                                    Reorders the entire gallery in one click:
+                                    Opens a popup where you drag the <span style="color:var(--text-primary); font-weight:600;">⋮⋮</span> grip to reorder tags, add a custom tag, or remove one. When you click <span style="color:var(--text-primary); font-weight:600;">Done</span>, the gallery auto-sorts to match this order:
                                 </p>
                                 <ul class="text-xs leading-relaxed mb-2 pl-4 space-y-0.5" style="color:var(--text-secondary); list-style:disc;">
                                     <li>Tagged images first, grouped together by tag.</li>
-                                    <li>Tag groups follow the order set in <span style="color:var(--text-primary); font-weight:600;">Sort order &amp; Custom tags</span> (e.g. Exterior → Lounge → Kitchen → Bedrooms…).</li>
+                                    <li>Tag groups follow the order you set (e.g. Exterior → Lounge → Kitchen → Bedrooms…).</li>
                                     <li>Untagged images stay in their existing order at the very end.</li>
                                 </ul>
                                 <p class="text-xs leading-relaxed mb-2" style="color:var(--text-secondary);">
@@ -2765,11 +2863,6 @@
                                 class="text-[0.6875rem] font-semibold px-2.5 py-1 rounded transition-colors"
                                 :style="manageTagsOpen ? 'background:var(--brand-icon); color:#fff;' : 'background:var(--surface-2); color:var(--text-secondary); border:1px solid var(--border);'">
                             Sort order &amp; Custom tags
-                        </button>
-                        <button type="button" @click="sortByCategory()"
-                                class="text-[0.6875rem] font-semibold px-2.5 py-1 rounded transition-colors"
-                                style="background:var(--surface-2); color:var(--text-secondary); border:1px solid var(--border);">
-                            Sort by Tag
                         </button>
                         <button type="button" @click="save()" :disabled="saving"
                                 class="text-[0.6875rem] font-semibold px-2.5 py-1 rounded transition-colors"
@@ -2808,7 +2901,7 @@
                                 <div class="rounded-md px-3 py-2 flex items-start gap-2" style="background:color-mix(in srgb, var(--brand-icon) 6%, transparent); border:1px solid color-mix(in srgb, var(--brand-icon) 20%, transparent);">
                                     <svg class="w-4 h-4 flex-shrink-0 mt-0.5" style="color:var(--brand-icon);" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></svg>
                                     <p class="text-xs leading-relaxed" style="color:var(--text-secondary);">
-                                        Drag the <span style="color:var(--text-primary); font-weight:600;">⋮⋮ grip</span> on each tag chip to reorder. The order here drives <span style="color:var(--text-primary); font-weight:600;">Sort by Tag</span> on the gallery and the order photos appear in portal feeds.
+                                        Drag the <span style="color:var(--text-primary); font-weight:600;">⋮⋮ grip</span> on each tag chip to reorder. When you click <span style="color:var(--text-primary); font-weight:600;">Done</span>, the gallery auto-sorts to this order — which is also the order photos appear in portal feeds.
                                     </p>
                                 </div>
 
@@ -2863,7 +2956,7 @@
                                 <span class="text-xs" style="color:var(--text-muted);">
                                     <span x-text="availableTags.length"></span> tag<span x-show="availableTags.length !== 1">s</span> in library
                                 </span>
-                                <button type="button" @click="manageTagsOpen = false"
+                                <button type="button" @click="sortByCategory(); manageTagsOpen = false"
                                         class="text-xs font-semibold px-4 py-2 rounded-md"
                                         style="background:var(--ds-green); color:#fff;">
                                     Done
@@ -4144,10 +4237,134 @@
 
     </div>{{-- /two-column layout --}}
 
+    {{-- Unsaved changes modal (in-app navigation only — browser still shows native dialog on F5/close) --}}
+    {{-- Contact required modal --}}
+    <div x-show="contactRequiredModalOpen" x-cloak
+         class="fixed inset-0 z-[9999] flex items-center justify-center"
+         style="background: rgba(0,0,0,0.6);"
+         @keydown.escape.window="contactRequiredModalOpen = false"
+         @click.self="contactRequiredModalOpen = false">
+        <div class="rounded-md shadow-2xl w-full max-w-md mx-4 p-6"
+             style="background: var(--surface); border: 1px solid var(--border);"
+             @click.stop>
+            <div class="flex items-start gap-3 mb-3">
+                <div class="flex-shrink-0 rounded-full p-2"
+                     style="background: color-mix(in srgb, var(--brand-icon) 15%, transparent);">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" style="color: var(--brand-icon);"
+                         fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold" style="color: var(--text-primary);">Contact required</h3>
+                    <p class="text-sm mt-1" style="color: var(--text-secondary);">
+                        A contact must be linked to this property before it can be saved.
+                    </p>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2 justify-end mt-4">
+                <button type="button"
+                        class="px-4 py-2 text-sm rounded-md"
+                        style="background: transparent; color: var(--text-secondary); border: 1px solid var(--border);"
+                        @click="contactRequiredModalOpen = false">
+                    Cancel
+                </button>
+                <button type="button"
+                        class="px-4 py-2 text-sm rounded-md font-medium text-white"
+                        style="background: var(--brand-button, #0ea5e9);"
+                        @click="activeTab = 'contacts'; contactRequiredModalOpen = false;">
+                    Add Contact
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="unsavedModalOpen" x-cloak
+         class="fixed inset-0 z-[9999] flex items-center justify-center"
+         style="background: rgba(0,0,0,0.6);"
+         @keydown.escape.window="unsavedModalOpen = false; pendingNavUrl = null;">
+        <div class="rounded-md shadow-2xl w-full max-w-md mx-4 p-6"
+             style="background: var(--surface); border: 1px solid var(--border);"
+             @click.stop>
+            <h3 class="text-lg font-semibold mb-2" style="color: var(--text-primary);">Unsaved changes</h3>
+            <p class="text-sm mb-5" style="color: var(--text-secondary);">
+                You have unsaved changes on this property. What would you like to do?
+            </p>
+            <div class="flex flex-wrap gap-2 justify-end">
+                <button type="button"
+                        class="px-4 py-2 text-sm rounded-md"
+                        style="background: transparent; color: var(--text-secondary); border: 1px solid var(--border);"
+                        @click="unsavedModalOpen = false; pendingNavUrl = null;">
+                    Cancel
+                </button>
+                <button type="button"
+                        class="px-4 py-2 text-sm rounded-md font-medium"
+                        style="background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border);"
+                        @click="formDirty = false; const url = pendingNavUrl; unsavedModalOpen = false; pendingNavUrl = null; if (url) window.location.href = url;">
+                    Discard changes
+                </button>
+                <button type="button"
+                        class="px-4 py-2 text-sm rounded-md font-medium text-white"
+                        style="background: var(--brand-button, #0ea5e9);"
+                        @click="
+                            const form = document.getElementById('prop-update-form');
+                            if (form && !window.coreXPropertyContactGuard(null, form)) {
+                                unsavedModalOpen = false;
+                                return;
+                            }
+                            formDirty = false;
+                            unsavedModalOpen = false;
+                            pendingNavUrl = null;
+                            if (form) form.submit();
+                        ">
+                    Save changes
+                </button>
+            </div>
+        </div>
+    </div>
+
 </div>{{-- /w-full --}}
 
 @push('scripts')
 <script>
+// Returns true if the form may submit, false if a contact is missing.
+// When false, the submit event (if provided) is preventDefault'ed and a
+// confirm() is shown. On OK, the Contacts tab is opened.
+// Any non-main form submitting from this page (e.g. link/unlink contact)
+// causes a full navigation. Clear the main form's dirty flag so the
+// browser's beforeunload prompt doesn't fire on intentional navigation.
+document.addEventListener('submit', function (e) {
+    if (!e.target || e.target.id === 'prop-update-form') return;
+    window.dispatchEvent(new CustomEvent('corex:clear-dirty'));
+}, true);
+// Same for plain link navigation inside the page (e.g. anchor clicks
+// that the user explicitly initiates) — let them go through.
+document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest && e.target.closest('a[href]');
+    if (!a) return;
+    var href = a.getAttribute('href') || '';
+    if (href.startsWith('#') || a.target === '_blank') return;
+    window.dispatchEvent(new CustomEvent('corex:clear-dirty'));
+}, true);
+
+window.coreXPropertyContactGuard = function (event, form) {
+    if (!form) return true;
+    var isNew = form.getAttribute('data-is-new') === '1';
+    var hasContact;
+    if (isNew) {
+        hasContact = document.querySelectorAll(
+            "input[name^='pending_contact_ids'], input[name^='pending_new_contacts']"
+        ).length > 0;
+    } else {
+        hasContact = parseInt(form.getAttribute('data-contact-count') || '0', 10) > 0;
+    }
+    if (hasContact) return true;
+    if (event) event.preventDefault();
+    window.dispatchEvent(new CustomEvent('corex:contact-required'));
+    return false;
+};
+
 // Pending contacts manager (create form — no property ID yet)
 function pendingContactsManager(searchUrl) {
     return {
