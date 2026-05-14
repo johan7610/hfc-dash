@@ -54,6 +54,7 @@ class Agency extends Model
         'popi_url',
         'whatsapp_launch_mode_agent',
         'whatsapp_launch_mode_seller',
+        'prospecting_pitch_temp_lock_minutes',
         'is_active',
         'is_demo',
         'require_external_access_authorization',

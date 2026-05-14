@@ -149,6 +149,42 @@ final class ComposerController extends Controller
 
         $send = $this->sender->send($context);
 
+        // Auto-claim on pitch submit: if the send corresponds to a prospecting
+        // listing (via property_id → prospecting_listings.matched_property_id),
+        // upgrade the agent's temp lock to a permanent claim with a structured
+        // note. Idempotent — existing claim by same agent gets the note appended.
+        $prospectingListing = \Illuminate\Support\Facades\DB::table('prospecting_listings')
+            ->where('matched_property_id', $send->property_id)
+            ->where('agency_id', $agencyId)
+            ->whereNull('deleted_at')
+            ->first(['id']);
+
+        if ($prospectingListing) {
+            try {
+                app(\App\Services\Prospecting\ProspectingClaimService::class)
+                    ->consumeLockAsPermanentClaim(
+                        listingId: (int) $prospectingListing->id,
+                        userId: (int) $request->user()->id,
+                        agencyId: $agencyId,
+                        pitchContext: [
+                            'sent_at'        => $send->sent_at,
+                            'channel'        => $send->channel,
+                            'recipient_name' => trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')),
+                            'template_name'  => $context->template?->name ?? null,
+                        ],
+                    );
+            } catch (\App\Services\Prospecting\ClaimOwnershipConflictException $e) {
+                // Defence in depth — the temp lock should have prevented this.
+                // The send is real; just log the anomaly so anyone can audit.
+                \Illuminate\Support\Facades\Log::warning('Pitch submitted while listing claimed by another agent', [
+                    'send_id'                  => $send->id,
+                    'prospecting_listing_id'   => $prospectingListing->id,
+                    'submitting_user_id'       => $request->user()->id,
+                    'existing_claim_user_id'   => $e->currentOwnerUserId,
+                ]);
+            }
+        }
+
         $clientUrl = match ($validated['channel']) {
             'whatsapp' => $this->sender->whatsappUrl($send),
             'email'    => $this->sender->mailtoUrl($send),

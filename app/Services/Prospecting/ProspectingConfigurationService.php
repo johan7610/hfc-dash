@@ -2,12 +2,18 @@
 
 namespace App\Services\Prospecting;
 
+use App\Events\Prospecting\SuggestedActionThresholdsUpdated;
 use App\Models\Prospecting\BedroomSegment;
+use App\Models\Prospecting\BuyerMatchTier;
 use App\Models\Prospecting\PriceBand;
 use App\Models\Prospecting\PropertyTypeOption;
 use App\Models\Prospecting\Town;
 use App\Models\Prospecting\TownSuburb;
+use App\Models\SuggestedActionThresholds;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Single read-side API for prospecting configuration. Consumed by the
@@ -101,6 +107,137 @@ class ProspectingConfigurationService
     {
         return $this->bedroomSegments($agencyId)
             ->first(fn (BedroomSegment $segment) => $segment->covers($beds));
+    }
+
+    /**
+     * Agency's buyer-match tier thresholds + labels. Falls back to BuyerMatchTier::defaultsFor()
+     * if no row exists for the agency (so the build is safe before the seeder runs).
+     *
+     * Returns: associative array with keys strong_min_score / mid_min_score / weak_min_score /
+     *          strong_label / mid_label / weak_label / show_weak_in_badge.
+     */
+    public function buyerMatchTiers(int $agencyId): array
+    {
+        return $this->cache[$agencyId]['buyer_match_tiers'] ??= $this->loadBuyerMatchTiers($agencyId);
+    }
+
+    private function loadBuyerMatchTiers(int $agencyId): array
+    {
+        $row = DB::table('buyer_match_tiers')
+            ->where('agency_id', $agencyId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$row) {
+            return BuyerMatchTier::defaultsFor($agencyId);
+        }
+
+        return [
+            'agency_id'          => (int) $row->agency_id,
+            'strong_min_score'   => (int) $row->strong_min_score,
+            'mid_min_score'      => (int) $row->mid_min_score,
+            'weak_min_score'     => (int) $row->weak_min_score,
+            'strong_label'       => (string) $row->strong_label,
+            'mid_label'          => (string) $row->mid_label,
+            'weak_label'         => (string) $row->weak_label,
+            'show_weak_in_badge' => (bool) $row->show_weak_in_badge,
+        ];
+    }
+
+    /**
+     * Classify a score against the agency's tier cutoffs.
+     * Returns 'strong' | 'mid' | 'weak' | null (below weak floor → excluded).
+     */
+    public function classifyBuyerMatchScore(int $score, int $agencyId): ?string
+    {
+        $tiers = $this->buyerMatchTiers($agencyId);
+        if ($score >= $tiers['strong_min_score']) return 'strong';
+        if ($score >= $tiers['mid_min_score'])    return 'mid';
+        if ($score >= $tiers['weak_min_score'])   return 'weak';
+        return null;
+    }
+
+    /**
+     * Per-agency thresholds for the Build E suggested-action chip rules engine.
+     * Cached singleton per request, same as buyerMatchTiers(). Lazily creates
+     * the row from defaults if none exists yet for the agency, so the resolver
+     * is safe to call even before the seeder has run for a brand-new agency.
+     */
+    public function getSuggestedActionThresholds(int $agencyId): SuggestedActionThresholds
+    {
+        return $this->cache[$agencyId]['suggested_action_thresholds']
+            ??= SuggestedActionThresholds::getOrCreateForAgency($agencyId);
+    }
+
+    /**
+     * Update the agency's thresholds. Validates each value is an integer ≥ 1,
+     * invalidates the cache, then fires SuggestedActionThresholdsUpdated with
+     * the diff so any downstream listener (e.g. a chip-count broadcaster)
+     * can react.
+     *
+     * @throws ValidationException when any value is below 1 or not an integer.
+     */
+    public function updateSuggestedActionThresholds(int $agencyId, array $values): SuggestedActionThresholds
+    {
+        $allowed = [
+            'stale_listing_days', 'expiry_warning_hours',
+            'outcome_overdue_days', 'outcome_stale_days',
+            'follow_up_days', 'pitch_recency_days',
+            'high_value_strong_min', 'stock_repitch_days',
+            'colleague_claim_stale_days', 'investigate_mid_min',
+        ];
+        $clean = [];
+        $errors = [];
+        foreach ($allowed as $field) {
+            if (!array_key_exists($field, $values)) {
+                continue; // partial update permitted
+            }
+            $raw = $values[$field];
+            if (!is_numeric($raw) || (int) $raw < 1 || (int) $raw != $raw) {
+                $errors[$field] = ["{$field} must be an integer ≥ 1."];
+                continue;
+            }
+            $clean[$field] = (int) $raw;
+        }
+        if (!empty($errors)) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        $row = SuggestedActionThresholds::getOrCreateForAgency($agencyId);
+        $oldValues = $row->only($allowed);
+        if (!empty($clean)) {
+            $row->fill($clean)->save();
+        }
+        $newValues = $row->refresh()->only($allowed);
+
+        // Compute diff so the event payload is small and useful.
+        $diff = [];
+        foreach ($allowed as $field) {
+            if (($oldValues[$field] ?? null) !== ($newValues[$field] ?? null)) {
+                $diff[$field] = ['old' => $oldValues[$field] ?? null, 'new' => $newValues[$field] ?? null];
+            }
+        }
+
+        $this->clearSuggestedActionThresholdsCache($agencyId);
+
+        $actorId = Auth::id();
+        event(new SuggestedActionThresholdsUpdated(
+            agencyId:    $agencyId,
+            actorUserId: $actorId !== null ? (int) $actorId : null,
+            diff:        $diff,
+        ));
+
+        return $row;
+    }
+
+    /**
+     * Targeted cache invalidation for just the suggested-action thresholds
+     * slot. Exposed so the future settings controller can clear without
+     * blowing away the rest of the per-agency cache.
+     */
+    public function clearSuggestedActionThresholdsCache(int $agencyId): void
+    {
+        unset($this->cache[$agencyId]['suggested_action_thresholds']);
     }
 
     /**

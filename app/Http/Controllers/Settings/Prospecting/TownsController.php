@@ -43,6 +43,7 @@ class TownsController extends Controller
             'priceBandsRental'  => $this->config->priceBandsFor($agencyId, 'rental'),
             'suggestionRegions' => app(RegionSuggestionService::class)->regions(),
             'unmappedSuburbs'   => $this->config->unmappedSuburbsFor($agencyId),
+            'buyerMatchTier'    => $this->config->buyerMatchTiers($agencyId),
             'agencyId'          => $agencyId,
         ]);
     }

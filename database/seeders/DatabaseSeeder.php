@@ -46,6 +46,7 @@ class DatabaseSeeder extends Seeder
             LeaveTypeSeeder::class,
             ProspectingSetupSeeder::class,
             SellerOutreachTemplatesSeeder::class,
+            SuggestedActionThresholdsSeeder::class,
         ]);
     }
 }

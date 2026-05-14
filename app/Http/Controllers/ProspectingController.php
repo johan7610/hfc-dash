@@ -85,6 +85,80 @@ class ProspectingController extends Controller
             }
         }
 
+        // ── Bridge: intelligence-layer segment IDs → legacy listings query ──
+        // The aggregate chips at the top of the page emit URL params like
+        // town_id / bedroom_segment_id / price_band_id / property_type_slug.
+        // Without this bridge, clicking those chips reshaped the aggregate
+        // tiles but the bottom listings table stayed unfiltered. Threading
+        // them through the legacy paginator closes Johan's reported gap:
+        // "clicking [a tile] should show me stock matching".
+        if ($request->filled('town_id')) {
+            $townId = (int) $request->query('town_id');
+            // Use the pre-normalised column so matching is consistent with how
+            // suburbs get mapped elsewhere (ProspectingConfigurationService).
+            $suburbsNormalised = \DB::table('town_suburbs')
+                ->where('agency_id', $agencyId)
+                ->where('town_id', $townId)
+                ->whereNull('deleted_at')
+                ->pluck('suburb_normalised')
+                ->all();
+            if (!empty($suburbsNormalised)) {
+                $query->whereIn(\DB::raw('LOWER(TRIM(suburb))'), $suburbsNormalised);
+            } else {
+                // Town has no mapped suburbs → guarantee zero rows (cleaner than ignoring).
+                $query->whereRaw('1 = 0');
+            }
+        }
+
+        if ($request->filled('bedroom_segment_id')) {
+            $segId = (int) $request->query('bedroom_segment_id');
+            $seg = \DB::table('bedroom_segments')
+                ->where('agency_id', $agencyId)
+                ->where('id', $segId)
+                ->whereNull('deleted_at')
+                ->first();
+            if ($seg) {
+                if ($seg->beds_min !== null) $query->where('bedrooms', '>=', (int) $seg->beds_min);
+                if ($seg->beds_max !== null) $query->where('bedrooms', '<=', (int) $seg->beds_max);
+            }
+        }
+
+        if ($request->filled('price_band_id')) {
+            $bandId = (int) $request->query('price_band_id');
+            $band = \DB::table('price_bands')
+                ->where('agency_id', $agencyId)
+                ->where('id', $bandId)
+                ->whereNull('deleted_at')
+                ->first();
+            if ($band) {
+                if ($band->price_min !== null) $query->where('price', '>=', (int) $band->price_min);
+                if ($band->price_max !== null) $query->where('price', '<=', (int) $band->price_max);
+            }
+        }
+
+        if ($request->filled('property_type_slug')) {
+            $slug = (string) $request->query('property_type_slug');
+            $row = \DB::table('property_type_options')
+                ->where('agency_id', $agencyId)
+                ->where('slug', $slug)
+                ->whereNull('deleted_at')
+                ->first();
+            if ($row) {
+                // property_type on prospecting_listings is free text — match on the
+                // human label, case-insensitive, since portal scrapers capitalise inconsistently.
+                $query->whereRaw('LOWER(TRIM(property_type)) = ?', [strtolower(trim((string) $row->name))]);
+            }
+        }
+
+        // Smart Filter Preset → applies the preset's WHERE clauses on top of any
+        // other filters. Mutually exclusive presets live in the same ?preset= slot.
+        if ($request->filled('preset')) {
+            $preset = (string) $request->query('preset');
+            $userIdForPreset = (int) ($user->id ?? 0);
+            $query = app(\App\Services\Prospecting\SmartFilterPresetService::class)
+                ->applyPresetToListings($query, $preset, $agencyId, $userIdForPreset);
+        }
+
         // Claim filters
         if ($request->filled('claim_filter')) {
             if ($request->claim_filter === 'my_claims') {
@@ -295,15 +369,104 @@ class ProspectingController extends Controller
         );
         $segmentLabels   = $this->buildSegmentLabelMap($config, $agencyId);
 
+        // Per-row state awareness — 5 bulk queries enrich every listing on the page
+        // with pitch / claim / presentation / linked-contact / promotion state so the
+        // row can render the right CTA. Spec context: agents must never accidentally
+        // re-pitch the same seller. Listings are already agency-scoped above.
+        $listingStates = app(\App\Services\Prospecting\ProspectingListingStateEnricher::class)
+            ->enrich($listings->items(), $agencyId);
+
+        // Buyer-match tier breakdown per listing — replaces the single "N buyers" count
+        // with 3-tier ranking using agency-configurable score cutoffs. One grouped query.
+        $listingIdsForTiers = collect($listings->items())->pluck('id')->all();
+        $buyerTiers = app(\App\Services\Prospecting\BuyerMatchTierService::class)
+            ->tiersForListings($listingIdsForTiers, $agencyId);
+        $tierConfig = $config->buyerMatchTiers($agencyId);
+
+        // Smart Filter Presets — 4 named one-click filters at the top of the page.
+        // Stale Claims is BM/admin-only. The partial respects the visible_to flag.
+        $presets = app(\App\Services\Prospecting\SmartFilterPresetService::class)
+            ->presetsFor($agencyId, (int) $user->id);
+        $activePreset = $request->query('preset');
+        $isProspectingManager = $user?->hasPermission('prospecting_setup.manage') ?? false;
+
+        // Build E.1 — pre-compute the single recommended next-action chip per row.
+        // Pure-function resolver over the already-loaded state + tiers; no new
+        // queries (the one threshold lookup is a cached singleton). The E.2 view
+        // will consume $suggestedActions; in E.1 the variable is wired through
+        // so the controller contract is in place but the view partial is not
+        // yet rendered.
+        $thresholds = $config->getSuggestedActionThresholds($agencyId);
+        $resolver = app(\App\Services\Prospecting\SuggestedActionResolver::class);
+        $suggestedActions = [];
+        foreach ($listings->items() as $listingItem) {
+            $stateSlice = [
+                'pitch'           => $listingStates['pitches'][$listingItem->id]        ?? null,
+                'claim'           => $listingStates['claims'][$listingItem->id]         ?? null,
+                'presentation'    => $listingStates['presentations'][$listingItem->id]  ?? null,
+                'contacts'        => $listingStates['contact_counts'][$listingItem->id] ?? 0,
+                'temp_lock'       => $listingStates['temp_locks'][$listingItem->id]     ?? null,
+                'promoted'        => $listingItem->matched_property_id
+                                     && isset($listingStates['promotions'][(int) $listingItem->matched_property_id]),
+                'needs_reminder'  => $listingStates['claims'][$listingItem->id]['needs_reminder'] ?? false,
+                'needs_bm_flag'   => $listingStates['claims'][$listingItem->id]['needs_bm_flag']  ?? false,
+            ];
+            $tierSlice = [
+                'strong'    => $buyerTiers[$listingItem->id]['strong']    ?? 0,
+                'mid'       => $buyerTiers[$listingItem->id]['mid']       ?? 0,
+                'weak'      => $buyerTiers[$listingItem->id]['weak']      ?? 0,
+                'total'     => $buyerTiers[$listingItem->id]['total']     ?? 0,
+                'top_score' => $buyerTiers[$listingItem->id]['top_score'] ?? null,
+            ];
+            $suggestedActions[$listingItem->id] = $resolver->resolve(
+                $stateSlice,
+                $tierSlice,
+                $listingItem,
+                $thresholds,
+                $user,
+                $isProspectingManager,
+            );
+        }
+
         return view('prospecting.index', compact(
             // Legacy view contract — preserved
             'listings', 'stats', 'suburbs', 'propertyTypes', 'users', 'claimStats', 'regenerating',
             'prospectingSetupTowns', 'prospectingSetupPropertyTypes', 'prospectingSetupBedroomSegments',
             'prospectingSetupPriceBandsSale', 'prospectingSetupPriceBandsRental', 'prospectingSetupSuggestionRegions',
             'prospectingSetupUnmappedSuburbs',
-            // Intelligence layer — new
-            'snapshot', 'resolvedListings', 'filters', 'segmentLabels'
+            // Intelligence layer
+            'snapshot', 'resolvedListings', 'filters', 'segmentLabels',
+            // Per-row cross-module state
+            'listingStates',
+            // Buyer-match tier breakdown
+            'buyerTiers', 'tierConfig',
+            // Smart Filter Presets
+            'presets', 'activePreset', 'isProspectingManager',
+            // Build E.1 — suggested-action chip per listing (consumed by E.2 view)
+            'suggestedActions'
         ));
+    }
+
+    /**
+     * Side-panel content: detailed list of buyer matches for one listing, grouped by tier.
+     * Returned as a Blade partial (HTML) for fetch-and-inject.
+     */
+    public function buyerMatches(Request $request, ProspectingListing $listing)
+    {
+        $user = $request->user();
+        $agencyId = $user->effectiveAgencyId() ?? $user->agency_id ?? 0;
+        if ($agencyId === 0 || (int) $listing->agency_id !== $agencyId) abort(404);
+
+        $buyers = app(\App\Services\Prospecting\BuyerMatchTierService::class)
+            ->buyersForListing((int) $listing->id, $agencyId);
+        $tierConfig = app(\App\Services\Prospecting\ProspectingConfigurationService::class)
+            ->buyerMatchTiers($agencyId);
+
+        return view('prospecting._buyer-matches-panel', [
+            'listing'    => $listing,
+            'buyers'     => $buyers,
+            'tierConfig' => $tierConfig,
+        ]);
     }
 
     /**
@@ -538,6 +701,44 @@ class ProspectingController extends Controller
         ]);
 
         return back()->with('success', 'Claim released');
+    }
+
+    /**
+     * BM/admin or original-claimer release with reason capture. Routes through
+     * ProspectingClaimService so the audit trail (reason + releaser) is written
+     * to the claim's notes, and the listing returns to the prospecting pool.
+     *
+     * Authorisation: prospecting_setup.manage OR original claimer.
+     */
+    public function releaseAsManager(Request $request, int $claimId)
+    {
+        $validated = $request->validate([
+            'reason' => 'required|string|max:500',
+        ]);
+
+        $claim = ProspectingClaim::findOrFail($claimId);
+        $user = $request->user();
+        $agencyId = $user->effectiveAgencyId() ?? $user->agency_id;
+
+        if ($agencyId === null || (int) $claim->agency_id !== (int) $agencyId) {
+            abort(404);
+        }
+
+        $isOwner = (int) $claim->user_id === (int) $user->id;
+        $isManager = method_exists($user, 'hasPermission')
+            && $user->hasPermission('prospecting_setup.manage');
+
+        if (!$isOwner && !$isManager) {
+            abort(403, 'Only the claim owner or a prospecting manager can release this claim.');
+        }
+
+        app(\App\Services\Prospecting\ProspectingClaimService::class)->releaseClaim(
+            claimId: (int) $claim->id,
+            releasedByUserId: (int) $user->id,
+            reason: $validated['reason'],
+        );
+
+        return back()->with('success', 'Claim released. Listing returned to the prospecting pool.');
     }
 
     public function show(ProspectingListing $listing)

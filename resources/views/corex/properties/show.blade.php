@@ -3767,6 +3767,26 @@
                     </label>
                 </div>
 
+                {{-- ── MARKET INTELLIGENCE SNAPSHOT (CMAInfo OCR + matched portal listings) ── --}}
+                @php
+                    $cmaSnapshot = $intel->getCmaSnapshot($property->id);
+                    $matchedProspects = $intel->getMatchedProspectingListings($property->id);
+                    $crossSourceTimeline = $intel->getCrossSourceTimeline($property->id);
+                @endphp
+                <div x-show="!sellerPreview">
+                    @include('corex.properties.intelligence._market-snapshot', [
+                        'property' => $property,
+                        'cmaSnapshot' => $cmaSnapshot,
+                        'matchedProspects' => $matchedProspects,
+                    ])
+                </div>
+
+                <div x-show="!sellerPreview">
+                    @include('corex.properties.intelligence._cross-source-timeline', [
+                        'timeline' => $crossSourceTimeline,
+                    ])
+                </div>
+
                 {{-- Section A: Performance Dashboard --}}
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div class="rounded-md p-4 text-center" style="background: var(--surface-2); border: 1px solid var(--border);">

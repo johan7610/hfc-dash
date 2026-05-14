@@ -23,6 +23,7 @@
         'priceBandsRental'  => $priceBandsRental,
         'suggestionRegions' => $suggestionRegions ?? [],
         'unmappedSuburbs'   => $unmappedSuburbs ?? collect(),
+        'buyerMatchTier'    => $buyerMatchTier ?? null,
         'context'           => 'page',
     ])
 

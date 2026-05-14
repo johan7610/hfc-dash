@@ -131,6 +131,14 @@ class Property extends Model
         'compliance_snapshot_data',
         'compliance_evidence_flags',
         'first_marketed_at',
+        'erf_number',
+        'title_deed_number',
+        'municipal_valuation',
+        'municipal_valuation_year',
+        'cma_gps_lat',
+        'cma_gps_lng',
+        'last_cma_at',
+        'last_cma_presentation_id',
     ];
 
     protected $casts = [
@@ -194,6 +202,12 @@ class Property extends Model
         'compliance_snapshot_data'    => 'array',
         'compliance_evidence_flags'   => 'array',
         'first_marketed_at'           => 'datetime',
+        'municipal_valuation'         => 'decimal:2',
+        'municipal_valuation_year'    => 'integer',
+        'cma_gps_lat'                 => 'decimal:7',
+        'cma_gps_lng'                 => 'decimal:7',
+        'last_cma_at'                 => 'datetime',
+        'last_cma_presentation_id'    => 'integer',
     ];
 
     protected static function boot(): void

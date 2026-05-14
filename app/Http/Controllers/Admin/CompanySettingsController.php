@@ -83,6 +83,8 @@ class CompanySettingsController extends Controller
             // 2026-05-14 hotfix — agency-scoped WhatsApp launch modes.
             'whatsapp_launch_mode_agent'  => ['nullable', 'in:whatsapp_app,whatsapp_web'],
             'whatsapp_launch_mode_seller' => ['nullable', 'in:whatsapp_app,whatsapp_web'],
+            // 2026-05-14 — pitch-claim integration: agency-tunable temp lock duration.
+            'prospecting_pitch_temp_lock_minutes' => ['nullable', 'integer', 'min:5', 'max:240'],
         ]);
 
         $removeLogo = $data['remove_logo'] ?? false;
