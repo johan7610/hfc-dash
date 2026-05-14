@@ -42,7 +42,7 @@ class AgencyController extends Controller
 
     public function create()
     {
-        return view('admin.agencies.create-edit', ['agency' => null]);
+        return view('admin.agencies.create-edit', ['agency' => null, 'branches' => collect()]);
     }
 
     public function store(Request $request)
@@ -141,7 +141,11 @@ class AgencyController extends Controller
     public function edit(Agency $agency)
     {
         $this->authorizeAgencyScope($agency);
-        return view('admin.agencies.create-edit', compact('agency'));
+        $branches = \App\Models\Branch::withoutGlobalScopes()
+            ->where('agency_id', $agency->id)
+            ->orderBy('name')
+            ->get();
+        return view('admin.agencies.create-edit', compact('agency', 'branches'));
     }
 
     public function update(Request $request, Agency $agency)
