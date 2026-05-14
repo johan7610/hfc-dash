@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Storage;
 class PropertyController extends Controller
 {
     use \App\Http\Controllers\Concerns\EnforcesMarketingReadiness;
+    use \App\Http\Concerns\AppliesP24Location;
 
     public function index(Request $request)
     {
@@ -1019,64 +1020,6 @@ class PropertyController extends Controller
             'snapshot_at' => $property->compliance_snapshot_at->toIso8601String(),
             'message' => 'Property is now live and ready for marketing.',
         ]);
-    }
-
-    /**
-     * Verify the P24 location chain (suburb → city → province) and overwrite
-     * the denormalized free-text columns (`suburb`, `city`, `province`) with
-     * the canonical P24 names. If the chain is invalid we abort with a
-     * validation error so users can't bypass the autocomplete by tampering
-     * with the hidden IDs.
-     */
-    private function applyP24Location(array $data): array
-    {
-        $suburbId   = $data['p24_suburb_id']   ?? null;
-        $cityId     = $data['p24_city_id']     ?? null;
-        $provinceId = $data['p24_province_id'] ?? null;
-
-        if (!$suburbId) {
-            $data['p24_suburb_mismatch'] = empty($data['p24_suburb_id']);
-            return $data;
-        }
-
-        $suburb = \App\Models\P24Suburb::find($suburbId);
-        if (!$suburb || !$suburb->p24_city_id) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'p24_suburb_id' => 'Selected suburb is no longer recognised by Property24.',
-            ]);
-        }
-
-        $city = \App\Models\P24City::find($suburb->p24_city_id);
-        if (!$city) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'p24_suburb_id' => 'Selected suburb has no parent city on Property24.',
-            ]);
-        }
-
-        if ($cityId && (int) $cityId !== (int) $city->id) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'p24_city_id' => 'Suburb does not belong to the selected city.',
-            ]);
-        }
-
-        $province = \App\Models\P24Province::find($city->p24_province_id);
-        if ($provinceId && $province && (int) $provinceId !== (int) $province->id) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'p24_province_id' => 'City does not belong to the selected province.',
-            ]);
-        }
-
-        $data['p24_suburb_id']   = $suburb->id;
-        $data['p24_city_id']     = $city->id;
-        $data['p24_province_id'] = $province?->id;
-        $data['suburb']          = $suburb->name;
-        $data['city']            = $city->name;
-        if ($province) {
-            $data['province'] = $province->name;
-        }
-        $data['p24_suburb_mismatch'] = false;
-
-        return $data;
     }
 
     private function processSpacesJson(array $data): array

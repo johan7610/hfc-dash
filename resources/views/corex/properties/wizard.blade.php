@@ -187,30 +187,50 @@
                 </div>
             </div>
 
-            {{-- Suburb with autocomplete --}}
-            <div class="relative" x-data @click.outside="showSuburbs = false">
-                <label class="block text-xs font-semibold uppercase tracking-wider mb-1.5" style="color:var(--text-secondary);">Suburb <span class="text-red-500">*</span></label>
-                <input type="text" x-model="s1.suburb"
-                       @focus="showSuburbs = true"
-                       @input="showSuburbs = true"
-                       placeholder="Start typing… e.g. Uvongo Beach"
-                       autocomplete="off"
-                       class="w-full px-3 py-2.5 text-sm rounded-md outline-none"
-                       style="border:1px solid var(--border);background:var(--surface-2);color:var(--text-primary);">
-                <div x-show="showSuburbs && filteredSuburbs.length" x-cloak
-                     class="absolute z-20 left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-md"
-                     style="background:var(--surface);border:1px solid var(--border);box-shadow:0 8px 30px rgba(0,0,0,0.12);">
-                    <template x-for="sub in filteredSuburbs" :key="sub">
-                        <button type="button"
-                                @click="s1.suburb = sub; showSuburbs = false;"
-                                class="w-full text-left px-3 py-2 text-sm transition-all duration-150"
-                                style="color:var(--text-primary);"
-                                onmouseover="this.style.background='var(--surface-2)'"
-                                onmouseout="this.style.background=''"
-                                x-text="sub"></button>
-                    </template>
+            {{-- Property24-backed cascading Province → City → Suburb. Mandatory.
+                 User cannot enter a free-text suburb — they must pick one
+                 P24 recognises so the listing can syndicate. --}}
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider mb-1.5" style="color:var(--text-secondary);">Province <span class="text-red-500">*</span></label>
+                    <select x-model="s1.p24_province_id" @change="onProvinceChange()"
+                            :disabled="loading.provinces"
+                            class="w-full px-3 py-2.5 text-sm rounded-md outline-none"
+                            style="border:1px solid var(--border);background:var(--surface-2);color:var(--text-primary);">
+                        <option value="0">— Select —</option>
+                        <template x-for="p in provinces" :key="p.id">
+                            <option :value="p.id" x-text="p.name"></option>
+                        </template>
+                    </select>
                 </div>
-                <div class="text-[11px] mt-1" style="color:var(--text-muted);">We'll use this for Property24 / Private Property sync.</div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider mb-1.5" style="color:var(--text-secondary);">City / Town <span class="text-red-500">*</span></label>
+                    <select x-model="s1.p24_city_id" @change="onCityChange()"
+                            :disabled="!s1.p24_province_id || s1.p24_province_id == 0 || loading.cities"
+                            class="w-full px-3 py-2.5 text-sm rounded-md outline-none"
+                            style="border:1px solid var(--border);background:var(--surface-2);color:var(--text-primary);">
+                        <option value="0" x-text="s1.p24_province_id && s1.p24_province_id != 0 ? '— Select —' : '— Pick a province —'"></option>
+                        <template x-for="c in cities" :key="c.id">
+                            <option :value="c.id" x-text="c.name"></option>
+                        </template>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider mb-1.5" style="color:var(--text-secondary);">Suburb <span class="text-red-500">*</span></label>
+                    <select x-model="s1.p24_suburb_id" @change="onSuburbChange()"
+                            :disabled="!s1.p24_city_id || s1.p24_city_id == 0 || loading.suburbs"
+                            class="w-full px-3 py-2.5 text-sm rounded-md outline-none"
+                            style="border:1px solid var(--border);background:var(--surface-2);color:var(--text-primary);">
+                        <option value="0" x-text="s1.p24_city_id && s1.p24_city_id != 0 ? '— Select —' : '— Pick a city —'"></option>
+                        <template x-for="su in suburbs" :key="su.id">
+                            <option :value="su.id" x-text="su.name"></option>
+                        </template>
+                    </select>
+                </div>
+            </div>
+            <div class="text-[11px]" style="color:var(--text-muted);">
+                Suburbs are pulled from Property24 — you have to pick one we recognise so this listing can syndicate.
+                <span x-show="provinces.length === 0" x-cloak style="color:#92400e;">No P24 suburbs cached yet — ask an admin to run a sync.</span>
             </div>
 
             {{-- Beds / Baths / Garages as steppers --}}
@@ -546,9 +566,11 @@ function propertyWizard(config) {
         csrf: config.csrf,
         routes: config.routes,
 
-        // Suburb autocomplete
-        showSuburbs: false,
-        suburbs: config.suburbs || [],
+        // P24 cascading location picker
+        provinces: [],
+        cities: [],
+        suburbs: [],
+        loading: { provinces: false, cities: false, suburbs: false },
 
         // Photos
         photos: config.existingImages || [],
@@ -559,20 +581,60 @@ function propertyWizard(config) {
         uploadTotal: 0,
 
         // Step data — agent_id defaults to current user; the server enforces who can change it.
-        s1: { listing_type: 'sale', title: '', property_type: '', suburb: '', street_number: '', street_name: '', price: null, beds: 0, baths: 0, garages: 0 },
+        s1: { listing_type: 'sale', title: '', property_type: '', suburb: '', city: '', province: '',
+              p24_province_id: 0, p24_city_id: 0, p24_suburb_id: 0,
+              street_number: '', street_name: '', price: null, beds: 0, baths: 0, garages: 0 },
         s3: { description: '', mandate_type: '', branch_id: '{{ auth()->user()->effectiveBranchId() ?? '' }}', agent_id: '{{ auth()->id() }}', size_m2: null, erf_size_m2: null, deposit_amount: null, lease_start_date: '', lease_end_date: '', rental_amount: null },
 
-        get filteredSuburbs() {
-            const q = (this.s1.suburb || '').toLowerCase();
-            if (!q) return this.suburbs.slice(0, 10);
-            return this.suburbs.filter(s => s.toLowerCase().includes(q)).slice(0, 10);
+        init() {
+            this._loadProvinces();
+        },
+
+        async _loadProvinces() {
+            this.loading.provinces = true;
+            try {
+                const r = await fetch('/api/v1/p24/provinces', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+                const j = await r.json();
+                this.provinces = j.data || [];
+            } finally { this.loading.provinces = false; }
+        },
+        async onProvinceChange() {
+            const p = this.provinces.find(x => x.id == this.s1.p24_province_id);
+            this.s1.province = p ? p.name : '';
+            this.s1.p24_city_id = 0; this.s1.p24_suburb_id = 0;
+            this.s1.city = ''; this.s1.suburb = '';
+            this.cities = []; this.suburbs = [];
+            if (!this.s1.p24_province_id || this.s1.p24_province_id == 0) return;
+            this.loading.cities = true;
+            try {
+                const r = await fetch('/api/v1/p24/cities?province_id=' + this.s1.p24_province_id, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+                const j = await r.json();
+                this.cities = j.data || [];
+            } finally { this.loading.cities = false; }
+        },
+        async onCityChange() {
+            const c = this.cities.find(x => x.id == this.s1.p24_city_id);
+            this.s1.city = c ? c.name : '';
+            this.s1.p24_suburb_id = 0; this.s1.suburb = '';
+            this.suburbs = [];
+            if (!this.s1.p24_city_id || this.s1.p24_city_id == 0) return;
+            this.loading.suburbs = true;
+            try {
+                const r = await fetch('/api/v1/p24/suburbs?city_id=' + this.s1.p24_city_id, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+                const j = await r.json();
+                this.suburbs = j.data || [];
+            } finally { this.loading.suburbs = false; }
+        },
+        onSuburbChange() {
+            const s = this.suburbs.find(x => x.id == this.s1.p24_suburb_id);
+            this.s1.suburb = s ? s.name : '';
         },
         get checklist() {
             return [
                 { key: 'title',   label: 'Headline',      ok: !!this.s1.title, step: 1 },
                 { key: 'price',   label: 'Price',         ok: !!this.s1.price, step: 1 },
                 { key: 'type',    label: 'Property type', ok: !!this.s1.property_type, step: 1 },
-                { key: 'suburb',  label: 'Suburb',        ok: !!this.s1.suburb, step: 1 },
+                { key: 'suburb',  label: 'Suburb',        ok: !!this.s1.p24_suburb_id && this.s1.p24_suburb_id != 0, step: 1 },
                 { key: 'photos',  label: 'Photos',        ok: this.photos.length >= 1, step: 2 },
                 { key: 'desc',    label: 'Description',   ok: (this.s3.description || '').length >= 30, step: 3 },
             ];
@@ -582,7 +644,13 @@ function propertyWizard(config) {
         formatZAR(n) { return 'R ' + Number(n || 0).toLocaleString('en-ZA').replace(/,/g, ' '); },
 
         step1Valid() {
-            return this.s1.listing_type && this.s1.title.trim() && this.s1.property_type && this.s1.suburb.trim() && (this.s1.price > 0);
+            return this.s1.listing_type
+                && this.s1.title.trim()
+                && this.s1.property_type
+                && this.s1.p24_province_id && this.s1.p24_province_id != 0
+                && this.s1.p24_city_id     && this.s1.p24_city_id     != 0
+                && this.s1.p24_suburb_id   && this.s1.p24_suburb_id   != 0
+                && (this.s1.price > 0);
         },
         canJumpTo(n) { return this.propertyId !== null && n <= Math.max(this.step, this.highestReachedStep || 1); },
 
