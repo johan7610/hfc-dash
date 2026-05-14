@@ -2034,18 +2034,14 @@
                         </button>
 
                         <div x-show="open" x-cloak>
-                            <div class="flex items-center justify-between px-3 py-2 text-[11px]" style="background:var(--surface);">
-                                <span style="color:var(--text-muted);" x-show="geocoding" x-cloak>Locating pin from address…</span>
-                                <span style="color:var(--text-muted);" x-show="!geocoding && (!lat || !lng)" x-cloak>
-                                    Pick an Internal address and we'll drop a pin automatically. Drag to fine-tune.
+                            <div class="px-3 py-2 text-[11px]" style="background:var(--surface); color:var(--text-muted);">
+                                <span x-show="geocoding" x-cloak>Locating pin for the selected suburb…</span>
+                                <span x-show="!geocoding && (!lat || !lng)" x-cloak>
+                                    Pick a Property24 suburb in the Internal address — we'll drop a pin automatically. Drag the pin to fine-tune.
                                 </span>
-                                <span style="color:var(--text-muted);" x-show="!geocoding && lat && lng" x-cloak>
-                                    Drag the pin to fine-tune the exact location.
+                                <span x-show="!geocoding && lat && lng" x-cloak>
+                                    Pin is at the suburb centroid. Drag it to the exact property location.
                                 </span>
-                                <button type="button" @click="geocode()" x-show="!geocoding"
-                                        class="text-[11px] underline transition-all duration-300" style="color:var(--brand-icon);">
-                                    Re-locate from address
-                                </button>
                             </div>
                             <div id="property-map" style="width:100%; height:280px; background:var(--surface-2);"></div>
                         </div>
@@ -5335,12 +5331,53 @@ function propertyMapWidget(init) {
             // If we already have coordinates, open the panel by default so
             // the user sees the pin immediately.
             this.open = !!(this.lat && this.lng);
-            // Re-geocode when the P24 picker reports a change.
-            window.addEventListener('p24-location-changed', () => {
-                if (!this.lat || !this.lng) this.geocode();
+            // Auto-geocode every time the P24 picker reports a new suburb.
+            // Always re-locate to the new suburb centroid — the user expects
+            // the pin to follow their selection, not just appear once.
+            window.addEventListener('p24-location-changed', (e) => {
+                if (e.detail && e.detail.suburbId) this.geocodeSuburb(e.detail);
             });
             // Render the map only after Alpine has shown the panel.
             this.$watch('open', (val) => { if (val) this.$nextTick(() => this._renderMap()); });
+        },
+
+        /**
+         * Geocode the suburb centroid using Nominatim's STRUCTURED query
+         * (suburb / city / state) — much more accurate than free-text,
+         * which previously matched the wrong "Port Edward" and dropped
+         * the pin in Kimberley.
+         */
+        async geocodeSuburb(detail) {
+            const params = new URLSearchParams({
+                format: 'json',
+                limit: '1',
+                countrycodes: 'za',
+            });
+            if (detail.suburbName)   params.set('suburb', detail.suburbName);
+            if (detail.cityName)     params.set('city',   detail.cityName);
+            if (detail.provinceName) params.set('state',  detail.provinceName);
+            this.geocoding = true;
+            try {
+                const r = await fetch('https://nominatim.openstreetmap.org/search?' + params.toString(),
+                                      { headers: { 'Accept': 'application/json' } });
+                const arr = await r.json();
+                let hit = Array.isArray(arr) && arr[0];
+                if (!hit) {
+                    // Fallback: looser free-text query with suburb+state.
+                    const q = [detail.suburbName, detail.provinceName, 'South Africa'].filter(Boolean).join(', ');
+                    const r2 = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=za&q=' + encodeURIComponent(q),
+                                           { headers: { 'Accept': 'application/json' } });
+                    const arr2 = await r2.json();
+                    hit = Array.isArray(arr2) && arr2[0];
+                }
+                if (hit) {
+                    this.lat = (+hit.lat).toFixed(7);
+                    this.lng = (+hit.lon).toFixed(7);
+                    if (!this.open) this.open = true;
+                    this.$nextTick(() => this._placeMarker(+hit.lat, +hit.lon));
+                }
+            } catch (e) { /* silent */ }
+            finally { this.geocoding = false; }
         },
 
         _renderMap() {
@@ -5373,31 +5410,6 @@ function propertyMapWidget(init) {
             this._map.setView([lat, lng], 16);
         },
 
-        async geocode() {
-            const sn  = document.querySelector('input[name="street_number"]')?.value || '';
-            const st  = document.querySelector('input[name="street_name"]')?.value || '';
-            const sub = document.querySelector('input[name="suburb"]')?.value || '';
-            const cty = document.querySelector('input[name="city"]')?.value || '';
-            const prv = document.querySelector('input[name="province"]')?.value || '';
-            const parts = [[sn, st].filter(Boolean).join(' '), sub, cty, prv, 'South Africa'].filter(Boolean);
-            const q = parts.join(', ').trim();
-            if (q.length < 6) return;
-
-            this.geocoding = true;
-            try {
-                const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=za&q=' + encodeURIComponent(q);
-                const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
-                const arr = await r.json();
-                if (Array.isArray(arr) && arr.length > 0) {
-                    const hit = arr[0];
-                    this.lat = (+hit.lat).toFixed(7);
-                    this.lng = (+hit.lon).toFixed(7);
-                    if (!this.open) this.open = true; // ensure map is shown
-                    this.$nextTick(() => this._placeMarker(+hit.lat, +hit.lon));
-                }
-            } catch (e) { /* silent */ }
-            finally { this.geocoding = false; }
-        },
     };
 }
 </script>
