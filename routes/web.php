@@ -1642,6 +1642,12 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::post('/role-manager/copy-permissions', [CoreXRoleManagerController::class, 'copyPermissions'])
         ->middleware('permission:edit_permissions')->name('corex.role-manager.copy');
 
+    // Dev Settings — system-wide developer overrides (owner-only).
+    Route::middleware('owner_only')->prefix('admin/dev-settings')->name('admin.dev-settings.')->group(function () {
+        Route::get('/',  [\App\Http\Controllers\Admin\DevSettingsController::class, 'index'])->name('index');
+        Route::put('/', [\App\Http\Controllers\Admin\DevSettingsController::class, 'update'])->name('update');
+    });
+
     // Agency Management — index/create/store/destroy/toggle-active are owner-only.
     Route::middleware('owner_only')->prefix('settings/agencies')->name('agencies.')->group(function () {
         Route::get('/',              [\App\Http\Controllers\Admin\AgencyController::class, 'index'])->name('index');

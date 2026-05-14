@@ -177,6 +177,16 @@ class PrivatePropertySyndicationService
 
     /**
      * Sync activation status from PP for a property.
+     *
+     * PP returns two distinct response shapes that we have to handle:
+     *
+     *   GetListingStatus       → {"GetListingStatusResult": "For Sale"}        (scalar string)
+     *   GetReferenceNumberByListing → {"GetReferenceNumberByListingResult": "T2870172"}  (scalar string)
+     *
+     * GetListingStatus by itself does NOT carry the PP ref — only the public
+     * status string ("For Sale", "To Let", "Sold", "Pending Offer", "Inactive").
+     * If the listing is live but we have no ref yet, we must follow up with a
+     * GetReferenceNumberByListing call.
      */
     public function syncActivationStatus(Property $property): array
     {
@@ -190,21 +200,62 @@ class PrivatePropertySyndicationService
             ];
         }
 
-        // Check for active status and PP ref. Walk wrapper shapes (see
-        // extractFromSoapResponse for rationale).
-        $ppRef  = $this->extractFromSoapResponse($result, 'GetListingStatus', ['PPRef', 'PropertyRef', 'ListingRef']);
-        $status = $this->extractFromSoapResponse($result, 'GetListingStatus', ['Status', 'PropertyStatus']);
+        // Extract the status string. PP returns it as a scalar in
+        // GetListingStatusResult — but some sandbox calls may return a richer
+        // shape with an inner Status key, so handle both.
+        $rawStatus = $result['GetListingStatusResult'] ?? null;
+        $statusString = null;
+        $ppRefFromStatus = null;
+        if (is_string($rawStatus)) {
+            $statusString = trim($rawStatus);
+        } elseif (is_array($rawStatus)) {
+            $statusString = $rawStatus['Status'] ?? $rawStatus['PropertyStatus'] ?? null;
+            $ppRefFromStatus = $rawStatus['PPRef'] ?? $rawStatus['PropertyRef'] ?? $rawStatus['ListingRef'] ?? null;
+        }
 
-        if ($status === 'Active' && empty($property->pp_ref) && $ppRef) {
-            $property->update([
-                'pp_ref'                => $ppRef,
-                'pp_activated_at'       => now(),
-                'pp_syndication_status' => 'active',
+        // PP's literal "live" status strings — any of these mean the listing
+        // is published and we should have a ref for it.
+        $liveStatuses = ['For Sale', 'To Let', 'Pending Offer', 'Sold', 'Active'];
+        $isLive = $statusString !== null && in_array($statusString, $liveStatuses, true);
+
+        // If live and we don't have a ref yet, pull it via the dedicated
+        // GetReferenceNumberByListing method (GetListingStatus does not return one).
+        $ppRef = $ppRefFromStatus;
+        if ($isLive && empty($property->pp_ref) && empty($ppRef)) {
+            $listingType = in_array(strtolower($property->mandate_type ?? $property->listing_type ?? ''), ['rental']) ? 'Rental' : 'Sale';
+            $refResult = $this->client->getReferenceNumber((string) $property->id, $listingType);
+            if (!(isset($refResult['error']) && $refResult['error'] === true)) {
+                $rawRef = $refResult['GetReferenceNumberByListingResult'] ?? null;
+                if (is_string($rawRef) && trim($rawRef) !== '') {
+                    $ppRef = trim($rawRef);
+                } elseif (is_array($rawRef)) {
+                    $ppRef = $rawRef['PPRef'] ?? $rawRef['Ref'] ?? null;
+                }
+            }
+        }
+
+        // Compose update data based on what we observed.
+        $updateData = [];
+        if ($isLive) {
+            if ($property->pp_syndication_status !== 'active') {
+                $updateData['pp_syndication_status'] = 'active';
+            }
+            if (empty($property->pp_activated_at)) {
+                $updateData['pp_activated_at'] = now();
+            }
+        }
+        if ($ppRef && empty($property->pp_ref)) {
+            $updateData['pp_ref'] = $ppRef;
+        }
+
+        if (!empty($updateData)) {
+            $property->update($updateData);
+            $this->log('info', "Property #{$property->id} synced from PP", [
+                'pp_status'  => $statusString,
+                'pp_ref'     => $ppRef ?: $property->pp_ref,
+                'is_live'    => $isLive,
+                'changes'    => array_keys($updateData),
             ]);
-
-            $this->log('info', "Property #{$property->id} activated on PP with ref: {$ppRef}");
-        } elseif ($ppRef && empty($property->pp_ref)) {
-            $property->update(['pp_ref' => $ppRef]);
         }
 
         return [
@@ -213,6 +264,7 @@ class PrivatePropertySyndicationService
             'status'  => $property->fresh()->pp_syndication_status,
             'pp_ref'  => $property->fresh()->pp_ref,
             'pp_activated_at' => $property->fresh()->pp_activated_at?->toDateTimeString(),
+            'pp_listing_status' => $statusString,
         ];
     }
 
