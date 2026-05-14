@@ -1,10 +1,15 @@
 {{--
-    F.3 — Stats strip (compacted to single-row 10 tiles).
+    F.3/F.7 — Stats strip (compacted to single-row 10 tiles).
+
+    DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20
+    Every colour resolves via a documented token from §1 with a fallback
+    hex per §5.10. No hardcoded brand colours, no invented tokens.
 
     Row 1 (snapshot) + Row 2 (action presets) merged into one grid of 10
     tiles. Grid uses repeat(auto-fit, minmax(110px, 1fr)) so it stays
     single-row on 1440px+ desktops and wraps to two rows on narrower
-    screens. Tile height reduced ~30% from F.2 to free vertical space.
+    screens. Tile height intentionally reduced ~30% from F.2 to free
+    vertical space (Johan F.3 approved).
 
     The "In stock" tile remains the only interactive Row-1 tile — clicking
     it toggles ?include_in_stock=1 (manager-only). Action-preset tiles
@@ -35,11 +40,12 @@
         return route('market-intelligence.index', $params);
     };
 
-    // Compact tile styles — ~30% shorter than F.2.
-    $tileBaseStyle = 'background: var(--surface); border: 1px solid var(--border); padding: 6px 8px; border-radius: 4px; min-width: 0;';
-    $tileActiveStyle = 'background: color-mix(in srgb, var(--brand-icon) 12%, var(--surface)); border-color: var(--brand-icon); padding: 6px 8px; border-radius: 4px; min-width: 0;';
-    $labelStyle = 'font-size: 0.6125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; color: var(--text-muted); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
-    $valueStyle = 'font-size: 1rem; font-weight: 600; color: var(--text-primary); line-height: 1.1;';
+    // F.7 — defensive token + fallback pattern per UI_DESIGN_SYSTEM.md §5.10
+    // so the tiles render correctly even if a token fails to resolve at runtime.
+    $tileBaseStyle = 'background: var(--surface, #ffffff); border: 1px solid var(--border, rgba(0,0,0,0.07)); padding: 6px 8px; border-radius: 6px; min-width: 0;';
+    $tileActiveStyle = 'background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, var(--surface, #ffffff)); border: 1px solid var(--brand-icon, #0ea5e9); padding: 6px 8px; border-radius: 6px; min-width: 0;';
+    $labelStyle = 'font-size: 0.6125rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; color: var(--text-muted, #9ca3af); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
+    $valueStyle = 'font-size: 1rem; font-weight: 600; color: var(--text-primary, #111827); line-height: 1.1;';
 
     $tiles = [
         ['type'=>'snapshot', 'label'=>'Active',        'value'=>$kpis['active'],        'accent'=>'var(--text-primary)'],
@@ -56,7 +62,7 @@
 @endphp
 
 <div class="mi-stats-strip"
-     style="padding: 8px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border);
+     style="padding: 8px 12px; background: var(--surface-2, #f0f2f8); border-bottom: 1px solid var(--border, rgba(0,0,0,0.07));
             display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px;">
 
     @foreach($tiles as $tile)

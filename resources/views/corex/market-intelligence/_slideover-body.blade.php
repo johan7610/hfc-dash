@@ -1,3 +1,4 @@
+{{-- DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20 (F.7 audit). --}}
 {{--
     F.4 — Slide-over body. Returned by MarketIntelligenceController@details
     and injected via Alpine fetch into the slide-over wrapper.

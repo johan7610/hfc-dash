@@ -1,3 +1,4 @@
+{{-- DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20 (F.7 audit). --}}
 {{--
     F.4 — Activity tab: merged chronological timeline of pitches + claim notes.
 --}}

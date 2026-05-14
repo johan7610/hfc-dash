@@ -1,3 +1,4 @@
+{{-- DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20 (F.7 audit). --}}
 {{--
     F.6 — Buyer funnel for Analyse mode. Wraps the existing legacy
     `prospecting._buyer-funnel` partial (which expects $snapshot,

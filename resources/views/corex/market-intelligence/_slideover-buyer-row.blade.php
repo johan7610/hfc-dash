@@ -1,3 +1,4 @@
+{{-- DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20 (F.7 audit). --}}
 {{--
     F.4 — A single buyer row used by both the Overview top-5 list and the
     full Buyers tab list.

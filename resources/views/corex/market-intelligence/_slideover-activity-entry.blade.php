@@ -1,3 +1,4 @@
+{{-- DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20 (F.7 audit). --}}
 {{--
     F.4 — A single activity timeline entry. Used by the Overview tab's
     "Latest activity" list, the Activity tab timeline, AND the inline

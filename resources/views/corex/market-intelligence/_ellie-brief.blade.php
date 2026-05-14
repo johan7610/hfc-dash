@@ -1,3 +1,4 @@
+{{-- DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20 (F.7 audit). --}}
 {{--
     F.6 — Ellie strategic brief hero. Templated narrative for F.6 (the
     real EllieService is post-Wednesday). Action buttons route back to

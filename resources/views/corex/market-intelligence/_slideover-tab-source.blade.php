@@ -1,3 +1,4 @@
+{{-- DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20 (F.7 audit). --}}
 {{--
     F.4 — Source tab: Tracked Property chain + external refs.
 --}}
@@ -6,11 +7,17 @@
     $chain = $source['chain'] ?? [];
     $externalRefs = $source['external_refs'] ?? collect();
 
+    // Portal-source brand colours. These are EXTERNAL brand colours (Property24
+    // blue, Private Property green, etc.) not CoreX brand colours, so the
+    // design system doesn't define tokens for them. Using the var(--token, #fallback)
+    // pattern from UI_DESIGN_SYSTEM.md §5.10 — when --portal-p24 etc. tokens
+    // are approved and defined, this picks them up automatically. Legacy precedent:
+    // resources/views/prospecting/index_legacy_body.blade.php:603 uses the same hex.
     $badgeStyle = fn (string $type) => match(strtolower($type)) {
-        'p24'            => 'background: #1e40af; color: #fff;',
-        'pp'             => 'background: #059669; color: #fff;',
-        'cmainfo','cma'  => 'background: #7c3aed; color: #fff;',
-        'chrome_capture' => 'background: #d97706; color: #fff;',
+        'p24'            => 'background: var(--portal-p24, #1e40af); color: #fff;',
+        'pp'             => 'background: var(--portal-pp, #059669); color: #fff;',
+        'cmainfo','cma'  => 'background: var(--portal-cma, #7c3aed); color: #fff;',
+        'chrome_capture' => 'background: var(--portal-chrome, #d97706); color: #fff;',
         default          => 'background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border);',
     };
 @endphp

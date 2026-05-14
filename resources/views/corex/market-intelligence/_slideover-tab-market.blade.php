@@ -1,3 +1,4 @@
+{{-- DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20 (F.7 audit). --}}
 {{-- F.4 — Market tab placeholder. F.6 will populate with comparable sales,
      suburb price trend chart, and days-on-market metrics from deals_v2. --}}
 <div style="padding: 40px 24px; text-align: center; color: var(--text-muted);">

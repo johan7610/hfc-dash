@@ -1,3 +1,4 @@
+{{-- DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20 (F.7 audit). --}}
 {{--
     F.6 — Opportunity pockets card. List of (suburb, bedrooms) buckets
     where strong-tier buyer demand outstrips canvass-pool supply.

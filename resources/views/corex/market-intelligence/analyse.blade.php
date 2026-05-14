@@ -1,3 +1,4 @@
+{{-- DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20 (F.7 audit). --}}
 {{--
     F.6 Analyse mode body. Same sticky top bar + stats strip as Work mode,
     different content below: Ellie brief, then a 2-column grid with the

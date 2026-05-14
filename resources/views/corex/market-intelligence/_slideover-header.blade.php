@@ -1,3 +1,4 @@
+{{-- DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20 (F.7 audit). --}}
 {{--
     F.4 — Slide-over header with action bar.
 
@@ -74,8 +75,10 @@
                 </a>
                 @endif
                 @if($listing->portal_source === 'p24' || $listing->portal_source === 'pp')
+                {{-- Portal brand pill — external brand colours, var(--token, #fallback)
+                     pattern per UI_DESIGN_SYSTEM.md §5.10. --}}
                 <span style="display: inline-flex; align-items: center; padding: 2px 7px; font-size: 0.625rem; font-weight: 700; letter-spacing: 0.02em; border-radius: 4px;
-                             background: {{ $listing->portal_source === 'p24' ? '#1e40af' : '#059669' }}; color: #fff;">
+                             background: {{ $listing->portal_source === 'p24' ? 'var(--portal-p24, #1e40af)' : 'var(--portal-pp, #059669)' }}; color: #fff;">
                     {{ strtoupper($listing->portal_source) }}
                 </span>
                 @endif

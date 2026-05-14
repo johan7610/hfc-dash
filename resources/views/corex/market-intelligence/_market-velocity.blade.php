@@ -1,3 +1,4 @@
+{{-- DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20 (F.7 audit). --}}
 {{--
     F.6 — Market velocity (days-on-market by price band).
     Empty-state with "—" tiles when no deals data is available.

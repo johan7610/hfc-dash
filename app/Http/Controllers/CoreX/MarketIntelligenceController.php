@@ -560,7 +560,11 @@ class MarketIntelligenceController extends Controller
                 ->count(),
         );
 
-        return view('corex.market-intelligence.analyse', compact(
+        // F.7 fix — return the index dispatcher view so the layouts.corex-app
+        // shell (sidebar + top bar + theme tokens + sidebar nav state) wraps
+        // the analyse body. The previous direct-return bypassed @extends
+        // entirely, producing a shellless page in production.
+        return view('corex.market-intelligence.index', compact(
             'data',
             'snapshotKpis', 'actionPresetCounts',
             'snapshot', 'filters', 'segmentLabels', 'urlWith',

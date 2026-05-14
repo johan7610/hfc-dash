@@ -101,6 +101,46 @@ Never in code. Never in the database unless encrypted. Never in comments. `.env`
 ### Database — No SQLite in Repo
 `database.sqlite` must be in `.gitignore`. It causes constant merge conflicts and has no place in a MySQL-driven production system.
 
+### Design System Compliance (UI_DESIGN_SYSTEM.md is binding)
+
+Every Blade view rendering new UI MUST start by reading `.ai/specs/UI_DESIGN_SYSTEM.md`. The view's header comment MUST declare the design system version it complies with (e.g. `DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20`).
+
+**FORBIDDEN in any Blade view:**
+- Hardcoded colours (`color: #0b2a4a`, `background: white`, `border-color: red`, etc.) for anything a design token covers.
+- Hardcoded font families inline (`font-family: 'Plus Jakarta Sans'`) — use Figtree via the cascade.
+- Hardcoded radii, shadows, or sizes that diverge from the token scale.
+
+**Required pattern when referencing colours:**
+- `var(--token-name, #fallback-hex)` — the var() pattern with the documented token value as a fallback per UI_DESIGN_SYSTEM.md §5.10. This makes views robust if a token fails to resolve at runtime AND auto-upgrades if the token is later refined.
+
+**If a new token is needed:** define it in UI_DESIGN_SYSTEM.md FIRST (with Johan's approval, committed to `main`) BEFORE any view uses it. Do not silently invent tokens.
+
+**Regression guard:** `scripts/check-design-tokens.ps1` greps the `resources/views/corex/` tree for naked hardcoded colours and fails the build if any are found. New CoreX views MUST pass this check.
+
+When in doubt: tokens over hex, components over duplication, patterns over creativity.
+
+### Universal Match-or-Create for Property Data
+Every ingestion path produces or enriches a `tracked_properties` record via `App\Services\Prospecting\TrackedPropertyMatchOrCreateService::matchOrCreate()`. The service uses a 5-strategy match in priority order:
+
+1. **Source-ref exact** — `tracked_property_external_refs(agency_id, source_type, source_ref)`
+2. **GPS proximity** — `~5m tolerance` on `cma_gps_lat/lng`, fallback to `lat/lng`
+3. **Erf number + suburb** — exact match on both
+4. **Normalised address** — street_number + normalised street_name + normalised suburb
+5. **Token overlap** — same suburb + ≥2 significant tokens in the street (last resort)
+
+Source attribution is permanent. Every contribution appends a `source_chain` entry (type, ref, date, fields_contributed) AND creates/updates a `tracked_property_external_refs` row. The append-only chain is the audit record of every external system that has said "I think this is the same property".
+
+Two property tiers, clearly separated:
+
+| Tier | Table | Purpose |
+|------|-------|---------|
+| Agency Stock | `properties` | Formal mandates HFC works |
+| Tracked Properties | `tracked_properties` | Every property CoreX has intelligence on |
+
+Promotion to `properties` (Agency Stock) happens when a mandate is signed via `TrackedPropertyMatchOrCreateService::promoteToStock()`. The TrackedProperty record persists post-promotion as the audit trail; its `promoted_to_property_id` points at the operational Property.
+
+This is the architectural mechanism by which CoreX builds a comprehensive property intelligence dataset organically through normal agent work — no manual data entry; no orphaned CMA fields; no duplicate records across portal sources.
+
 ---
 
 ## Code Style Expectations

@@ -1,3 +1,4 @@
+{{-- DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20 (F.7 audit). --}}
 {{--
     F.6 — Agency share (competitive landscape) in one suburb.
     Top 5 + Others. Self-agency row highlighted. Click an agency name →
