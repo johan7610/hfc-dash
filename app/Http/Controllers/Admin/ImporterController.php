@@ -475,4 +475,49 @@ class ImporterController extends Controller
         }
         return back()->with('status', 'Invites sent to ' . count($userIds) . ' agents.');
     }
+
+    /**
+     * Browse the cached Property24 location tree (Province → City → Suburb).
+     * The tree is rendered as nested collapsible accordions. Cities + suburbs
+     * are loaded on demand via /api/v1/p24/* so this page renders instantly
+     * regardless of how many suburbs are cached (~27k as of EXDEV).
+     */
+    public function p24Locations()
+    {
+        $provinces = \App\Models\P24Province::query()
+            ->withCount(['cities'])
+            ->orderBy('name')
+            ->get();
+
+        $totals = [
+            'provinces' => $provinces->count(),
+            'cities'    => \App\Models\P24City::count(),
+            'suburbs'   => \App\Models\P24Suburb::whereNotNull('p24_city_id')->count(),
+        ];
+
+        $lastSyncedAgency = \App\Models\Agency::withoutGlobalScope(\App\Models\Scopes\AgencyScope::class)
+            ->whereNotNull('p24_locations_synced_at')
+            ->orderByDesc('p24_locations_synced_at')
+            ->first();
+
+        return view('admin.importer.p24-locations', [
+            'provinces'     => $provinces,
+            'totals'        => $totals,
+            'lastSyncedAt'  => $lastSyncedAgency?->p24_locations_synced_at,
+            'lastSyncError' => $lastSyncedAgency?->p24_last_sync_error
+                ?? \App\Models\Agency::withoutGlobalScope(\App\Models\Scopes\AgencyScope::class)
+                    ->whereNotNull('p24_last_sync_error')->value('p24_last_sync_error'),
+        ]);
+    }
+
+    public function refreshP24Locations()
+    {
+        try {
+            \Artisan::call('p24:sync-locations');
+            $output = trim(\Artisan::output());
+            return back()->with('success', 'Property24 location sync ran. ' . $output);
+        } catch (\Throwable $e) {
+            return back()->with('error', 'P24 sync failed: ' . $e->getMessage());
+        }
+    }
 }

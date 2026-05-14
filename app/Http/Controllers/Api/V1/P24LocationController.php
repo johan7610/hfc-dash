@@ -35,6 +35,7 @@ class P24LocationController extends Controller
         $request->validate([
             'province_id' => 'required|integer|exists:p24_provinces,id',
             'q'           => 'nullable|string|max:80',
+            'all'         => 'nullable|boolean',
         ]);
 
         $query = P24City::query()
@@ -46,8 +47,12 @@ class P24LocationController extends Controller
             $query->where('name', 'like', "%{$q}%");
         }
 
+        if (!$request->boolean('all')) {
+            $query->limit(500);
+        }
+
         return response()->json([
-            'data' => $query->limit(200)->get(['id', 'name', 'p24_id']),
+            'data' => $query->get(['id', 'name', 'p24_id']),
         ]);
     }
 
@@ -56,6 +61,7 @@ class P24LocationController extends Controller
         $request->validate([
             'city_id' => 'required|integer|exists:p24_cities,id',
             'q'       => 'nullable|string|max:80',
+            'all'     => 'nullable|boolean',
         ]);
 
         $query = P24Suburb::query()
@@ -67,8 +73,12 @@ class P24LocationController extends Controller
             $query->where('name', 'like', "%{$q}%");
         }
 
+        if (!$request->boolean('all')) {
+            $query->limit(500);
+        }
+
         return response()->json([
-            'data' => $query->limit(200)->get(['id', 'name', 'p24_id']),
+            'data' => $query->get(['id', 'name', 'p24_id']),
         ]);
     }
 }
