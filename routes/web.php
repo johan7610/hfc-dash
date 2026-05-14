@@ -2502,6 +2502,14 @@ Route::middleware(['auth', 'permission:access_prospecting'])
         Route::get('/{listing}/buyer-matches', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'buyerMatches'])
             ->name('buyer-matches');
 
+        // F.4 — slide-over detail panel (async-rendered HTML)
+        Route::get('/{listing}/details', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'details'])
+            ->name('details');
+
+        // F.4 — claim-owner / manager adds a timestamped note to the active claim
+        Route::post('/{listing}/note', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'addNote'])
+            ->name('add-note');
+
         Route::post('/claims/{claimId}/release-as-manager', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'releaseAsManager'])
             ->where('claimId', '\d+')
             ->name('claims.release-as-manager');

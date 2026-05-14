@@ -77,15 +77,14 @@
     data-listing-id="{{ $listing->id }}"
     role="button"
     tabindex="0"
-    x-data="{ selected: false }"
-    :class="{ 'mi-row-selected': selected }"
-    @click="selected = !selected"
-    @keydown.enter="selected = !selected"
+    @click="$dispatch('open-slideover', { listingId: {{ $listing->id }}, trigger: $el })"
+    @keydown.enter.prevent="$dispatch('open-slideover', { listingId: {{ $listing->id }}, trigger: $el })"
+    @keydown.space.prevent="$dispatch('open-slideover', { listingId: {{ $listing->id }}, trigger: $el })"
     style="display: grid; grid-template-columns: 44px 1fr 200px; gap: 12px; align-items: center;
            padding: 10px 14px; min-height: 70px; background: var(--surface); border-bottom: 1px solid var(--border);
            cursor: pointer; transition: background 120ms;"
     onmouseover="this.style.background='var(--surface-2)'"
-    onmouseout="this.style.background = this.classList.contains('mi-row-selected') ? 'color-mix(in srgb, var(--brand-icon) 8%, var(--surface))' : 'var(--surface)'">
+    onmouseout="this.style.background='var(--surface)'">
 
     {{-- Thumbnail --}}
     <div style="width: 44px; height: 44px; border-radius: 6px; overflow: hidden; background: var(--surface-2); border: 1px solid var(--border); flex-shrink: 0;">

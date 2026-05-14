@@ -856,6 +856,101 @@ class MarketIntelligenceController extends Controller
         ]);
     }
 
+    /**
+     * F.4 — render the slide-over body for one listing. Returns HTML for
+     * fetch-and-inject. Authorises via agency match; bails 404 otherwise.
+     */
+    public function details(Request $request, ProspectingListing $listing)
+    {
+        $user = $request->user();
+        $agencyId = $user->effectiveAgencyId() ?? $user->agency_id ?? 0;
+        if ($agencyId === 0 || (int) $listing->agency_id !== $agencyId) abort(404);
+
+        $panel = app(\App\Services\Prospecting\PropertyIntelligencePanelService::class)
+            ->load($listing, $agencyId, $user);
+
+        // Per-row enrichment for the action bar (claim state, suggested chip, phone).
+        $listingStates = app(\App\Services\Prospecting\ProspectingListingStateEnricher::class)
+            ->enrich([$listing], $agencyId);
+        $state = [
+            'pitch'           => $listingStates['pitches'][$listing->id]        ?? null,
+            'claim'           => $listingStates['claims'][$listing->id]         ?? null,
+            'presentation'    => $listingStates['presentations'][$listing->id]  ?? null,
+            'contacts'        => $listingStates['contact_counts'][$listing->id] ?? 0,
+            'temp_lock'       => $listingStates['temp_locks'][$listing->id]     ?? null,
+            'promoted'        => $listing->matched_property_id
+                                 && isset($listingStates['promotions'][(int) $listing->matched_property_id]),
+        ];
+
+        return view('corex.market-intelligence._slideover-body', [
+            'listing' => $listing,
+            'panel'   => $panel,
+            'state'   => $state,
+        ]);
+    }
+
+    /**
+     * F.4 — append a timestamped note to the active claim on this listing.
+     * Reuses ProspectingClaimService::recordActionOnClaim so the audit format
+     * matches every other claim-mutation in the system.
+     *
+     * Auth: claim owner OR prospecting_setup.manage. 403 otherwise.
+     */
+    public function addNote(Request $request, ProspectingListing $listing)
+    {
+        $user = $request->user();
+        $agencyId = $user->effectiveAgencyId() ?? $user->agency_id ?? 0;
+        if ($agencyId === 0 || (int) $listing->agency_id !== $agencyId) abort(404);
+
+        $validated = $request->validate([
+            'note' => 'required|string|min:3|max:1000',
+        ]);
+
+        $claim = \App\Models\ProspectingClaim::where('prospecting_listing_id', $listing->id)
+            ->where('agency_id', $agencyId)
+            ->where('is_active', true)
+            ->whereNull('released_at')
+            ->first();
+
+        if (!$claim) {
+            return response()->json([
+                'error' => 'No active claim on this listing — claim it first.',
+            ], 422);
+        }
+
+        $isOwner = (int) $claim->user_id === (int) $user->id;
+        $isManager = method_exists($user, 'hasPermission')
+            && $user->hasPermission('prospecting_setup.manage');
+        if (!$isOwner && !$isManager) {
+            abort(403, 'Only the claim owner or a prospecting manager can add notes.');
+        }
+
+        $byLabel = $user->name ?? ('user ' . $user->id);
+        $entry = "by {$byLabel}: " . trim($validated['note']);
+
+        app(\App\Services\Prospecting\ProspectingClaimService::class)
+            ->recordActionOnClaim($claim, null, $entry);
+
+        // Return the freshly-rendered timeline so the slide-over can swap it in.
+        $panel = app(\App\Services\Prospecting\PropertyIntelligencePanelService::class)
+            ->load($listing->refresh(), $agencyId, $user);
+
+        $entryHtml = view('corex.market-intelligence._slideover-activity-entry', [
+            'entry' => [
+                'kind'    => 'claim_note',
+                'at'      => now(),
+                'actor'   => $byLabel,
+                'summary' => trim($validated['note']),
+            ],
+        ])->render();
+
+        return response()->json([
+            'success'    => true,
+            'entry_html' => $entryHtml,
+            'note_text'  => trim($validated['note']),
+        ]);
+    }
+
     private function buildFiltersFromRequest(Request $request, int $agencyId): array
     {
         $filters = ['agency_id' => $agencyId];

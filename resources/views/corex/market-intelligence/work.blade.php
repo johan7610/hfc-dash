@@ -27,6 +27,10 @@
     </main>
 </div>
 
+{{-- F.4 — single slide-over instance for the page; row clicks dispatch
+     `open-slideover` events that this component handles. --}}
+@include('corex.market-intelligence._slideover')
+
 <style>
     /* Sticky rail — top offset matches header height. JS below keeps it in sync. */
     .mi-filter-rail {
