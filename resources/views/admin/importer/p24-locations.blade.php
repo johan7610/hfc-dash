@@ -46,6 +46,9 @@
                 <span class="font-semibold">Sync failed:</span>
                 <span x-text="progress.error || ''"></span>
             </div>
+            <div x-show="stuck" x-cloak class="text-xs text-amber-200 mt-1">
+                <span class="font-semibold">Heads up:</span> sync hasn't advanced in 30+ seconds. The detached worker may not have started — check <code>storage/logs/p24-sync.log</code> on the server for errors.
+            </div>
             <div x-show="!running && !failed && finishedAt" x-cloak class="text-xs text-emerald-200 mt-1">
                 Sync complete. Reload the page to see updated counts.
                 <button type="button" @click="reload()" class="underline ml-2">Reload now</button>
@@ -167,6 +170,8 @@ function p24SyncWidget(cfg) {
         running: false,
         finishedAt: null,
         failed: false,
+        stuck: false,
+        _stuckSince: null,
         _pollHandle: null,
 
         get percent() {
@@ -216,11 +221,30 @@ function p24SyncWidget(cfg) {
             try {
                 const r = await fetch(cfg.statusUrl, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
                 const data = await r.json();
+                const prev = this.progress || {};
                 this.progress = data || {};
                 const s = data?.status || 'idle';
                 this.running = (s === 'running');
                 this.failed  = (s === 'failed');
                 this.finishedAt = (s === 'complete' || s === 'failed') ? (data.finished_at || true) : null;
+
+                // "Stuck" detection — flag if running but counts haven't budged for 30s.
+                if (this.running) {
+                    const moved = (prev.provinces_done   !== data.provinces_done)
+                               || (prev.cities_done      !== data.cities_done)
+                               || (prev.suburbs_done     !== data.suburbs_done)
+                               || (prev.current          !== data.current);
+                    if (moved || !this._stuckSince) {
+                        this._stuckSince = Date.now();
+                        this.stuck = false;
+                    } else if (Date.now() - this._stuckSince > 30000) {
+                        this.stuck = true;
+                    }
+                } else {
+                    this.stuck = false;
+                    this._stuckSince = null;
+                }
+
                 if (!this.running && this._pollHandle) {
                     clearInterval(this._pollHandle);
                     this._pollHandle = null;

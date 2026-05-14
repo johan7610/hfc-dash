@@ -541,9 +541,28 @@ class ImporterController extends Controller
             \App\Console\Commands\SyncP24Locations::PROGRESS_TTL
         );
 
-        \App\Jobs\SyncP24LocationsJob::dispatch();
+        // Prefer detached shell over queue: independent of worker config and
+        // works on any host with PHP CLI. The artisan command writes progress
+        // to cache so the UI poller picks it up the same way either path.
+        $php       = PHP_BINARY ?: 'php';
+        $base      = base_path();
+        $logFile   = storage_path('logs/p24-sync.log');
+        $cmd       = sprintf('%s %s/artisan p24:sync-locations', escapeshellarg($php), escapeshellarg($base));
 
-        $msg = 'Property24 location sync queued. Progress will update below.';
+        try {
+            if (DIRECTORY_SEPARATOR === '\\') {
+                // Windows — start /B keeps the child detached from the request.
+                pclose(popen('start /B "" ' . $cmd . ' > ' . escapeshellarg($logFile) . ' 2>&1', 'r'));
+            } else {
+                // POSIX — nohup + & detaches; disown via shell builtin not needed when stdin/out/err redirected.
+                exec('nohup ' . $cmd . ' >> ' . escapeshellarg($logFile) . ' 2>&1 &');
+            }
+        } catch (\Throwable $e) {
+            // Fall back to the queue if exec is disabled or fails.
+            \App\Jobs\SyncP24LocationsJob::dispatch();
+        }
+
+        $msg = 'Property24 location sync started. Progress will update below.';
         return $request->expectsJson()
             ? response()->json(['success' => true, 'message' => $msg])
             : back()->with('success', $msg);
