@@ -1999,6 +1999,58 @@
                         </div>
                     </div>
 
+                    {{-- Map (collapsible) — shows a pin for the picked Internal address.
+                         Auto-geocodes via Nominatim when address fields change; the pin
+                         is draggable for manual fine-tuning. lat/lng save with the form. --}}
+                    <div class="mt-2 rounded-md overflow-hidden"
+                         style="border:1px solid var(--border); background:var(--surface);"
+                         x-data="propertyMapWidget({
+                             initialLat: {{ (float) old('latitude',  $property->latitude  ?? 0) }},
+                             initialLng: {{ (float) old('longitude', $property->longitude ?? 0) }},
+                         })"
+                         x-init="init()">
+                        <input type="hidden" name="latitude"  :value="lat">
+                        <input type="hidden" name="longitude" :value="lng">
+
+                        <button type="button" @click="open = !open"
+                                class="w-full flex items-center justify-between px-3 py-2 transition-all duration-300"
+                                style="background:var(--surface-2); border-bottom:1px solid var(--border);"
+                                onmouseover="this.style.background='var(--surface-3, var(--surface-2))'"
+                                onmouseout="this.style.background='var(--surface-2)'">
+                            <div class="flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" style="color:var(--brand-icon);"
+                                     fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                                </svg>
+                                <span class="text-xs font-semibold uppercase tracking-wider" style="color:var(--text-primary);">Map</span>
+                                <span class="text-[10px]" style="color:var(--text-muted);"
+                                      x-text="lat && lng ? ('pin: ' + (+lat).toFixed(5) + ', ' + (+lng).toFixed(5)) : 'no pin yet — click to drop'"></span>
+                            </div>
+                            <svg :class="open ? 'rotate-180' : ''" class="w-4 h-4 transition-all duration-300" style="color:var(--text-muted);"
+                                 xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        </button>
+
+                        <div x-show="open" x-cloak>
+                            <div class="flex items-center justify-between px-3 py-2 text-[11px]" style="background:var(--surface);">
+                                <span style="color:var(--text-muted);" x-show="geocoding" x-cloak>Locating pin from address…</span>
+                                <span style="color:var(--text-muted);" x-show="!geocoding && (!lat || !lng)" x-cloak>
+                                    Pick an Internal address and we'll drop a pin automatically. Drag to fine-tune.
+                                </span>
+                                <span style="color:var(--text-muted);" x-show="!geocoding && lat && lng" x-cloak>
+                                    Drag the pin to fine-tune the exact location.
+                                </span>
+                                <button type="button" @click="geocode()" x-show="!geocoding"
+                                        class="text-[11px] underline transition-all duration-300" style="color:var(--brand-icon);">
+                                    Re-locate from address
+                                </button>
+                            </div>
+                            <div id="property-map" style="width:100%; height:280px; background:var(--surface-2);"></div>
+                        </div>
+                    </div>
+
                     {{-- Hidden inputs that always submit with the form --}}
                     <input type="hidden" name="address" value="{{ old('address', $property->address) }}">
 
@@ -5258,6 +5310,96 @@ function p24Syndication(config) {
         if (e.key === 'Escape' && !modal.classList.contains('hidden')) hideModal();
     });
 })();
+</script>
+
+{{-- Leaflet (OpenStreetMap) — pin map for the Internal address. --}}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+/**
+ * Map widget under the Public/Internal address card. Reads address fields
+ * from the surrounding propertyAddress Alpine scope and drops a Leaflet/OSM
+ * pin via Nominatim geocoding. Drag-to-adjust. lat/lng saved on form submit.
+ */
+function propertyMapWidget(init) {
+    return {
+        open: false,
+        lat: init.initialLat || 0,
+        lng: init.initialLng || 0,
+        geocoding: false,
+        _map: null, _marker: null,
+
+        init() {
+            // If we already have coordinates, open the panel by default so
+            // the user sees the pin immediately.
+            this.open = !!(this.lat && this.lng);
+            // Re-geocode when the P24 picker reports a change.
+            window.addEventListener('p24-location-changed', () => {
+                if (!this.lat || !this.lng) this.geocode();
+            });
+            // Render the map only after Alpine has shown the panel.
+            this.$watch('open', (val) => { if (val) this.$nextTick(() => this._renderMap()); });
+        },
+
+        _renderMap() {
+            const el = document.getElementById('property-map');
+            if (!el || !window.L) return;
+            // Avoid re-initialising on second open.
+            if (this._map) { setTimeout(() => this._map.invalidateSize(), 50); return; }
+
+            const center = (this.lat && this.lng) ? [+this.lat, +this.lng] : [-30.5, 30.5];
+            this._map = L.map(el).setView(center, (this.lat && this.lng) ? 16 : 6);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors',
+            }).addTo(this._map);
+            if (this.lat && this.lng) this._placeMarker(+this.lat, +this.lng);
+        },
+
+        _placeMarker(lat, lng) {
+            if (!this._map) return;
+            if (this._marker) {
+                this._marker.setLatLng([lat, lng]);
+            } else {
+                this._marker = L.marker([lat, lng], { draggable: true }).addTo(this._map);
+                this._marker.on('dragend', (e) => {
+                    const p = e.target.getLatLng();
+                    this.lat = p.lat.toFixed(7);
+                    this.lng = p.lng.toFixed(7);
+                });
+            }
+            this._map.setView([lat, lng], 16);
+        },
+
+        async geocode() {
+            const sn  = document.querySelector('input[name="street_number"]')?.value || '';
+            const st  = document.querySelector('input[name="street_name"]')?.value || '';
+            const sub = document.querySelector('input[name="suburb"]')?.value || '';
+            const cty = document.querySelector('input[name="city"]')?.value || '';
+            const prv = document.querySelector('input[name="province"]')?.value || '';
+            const parts = [[sn, st].filter(Boolean).join(' '), sub, cty, prv, 'South Africa'].filter(Boolean);
+            const q = parts.join(', ').trim();
+            if (q.length < 6) return;
+
+            this.geocoding = true;
+            try {
+                const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=za&q=' + encodeURIComponent(q);
+                const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+                const arr = await r.json();
+                if (Array.isArray(arr) && arr.length > 0) {
+                    const hit = arr[0];
+                    this.lat = (+hit.lat).toFixed(7);
+                    this.lng = (+hit.lon).toFixed(7);
+                    if (!this.open) this.open = true; // ensure map is shown
+                    this.$nextTick(() => this._placeMarker(+hit.lat, +hit.lon));
+                }
+            } catch (e) { /* silent */ }
+            finally { this.geocoding = false; }
+        },
+    };
+}
 </script>
 @endpush
 
