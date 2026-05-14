@@ -269,6 +269,8 @@
 
                 <a href="{{ route('corex.dashboard') }}" class="corex-nav-subitem {{ request()->routeIs('corex.dashboard', 'command-center.today') ? 'active' : '' }}">Today</a>
                 <a href="{{ route('command-center.calendar') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.calendar') ? 'active' : '' }}">Calendar</a>
+                <a href="{{ route('command-center.tasks') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.tasks*') ? 'active' : '' }}">Tasks</a>
+                <a href="{{ route('command-center.reporting.agent') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.reporting.agent') ? 'active' : '' }}">My Performance</a>
                 @php $pendingInvites = auth()->check() ? \App\Models\CommandCenter\CalendarEventInvitation::forUser(auth()->id())->pending()->count() : 0; @endphp
                 <a href="{{ route('command-center.calendar.invitations') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.calendar.invitations*') ? 'active' : '' }}">
                     Invitations @if($pendingInvites > 0) <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold" style="background:#ef444420; color:#ef4444;">{{ $pendingInvites }}</span> @endif
@@ -276,8 +278,6 @@
                 @if(auth()->user() && in_array(auth()->user()->role, ['admin', 'super_admin', 'owner']))
                     <a href="{{ route('command-center.settings.event-classes') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.settings.event-classes*') ? 'active' : '' }}">Event Classes</a>
                 @endif
-                <a href="{{ route('command-center.tasks') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.tasks*') ? 'active' : '' }}">Tasks</a>
-                <a href="{{ route('command-center.reporting.agent') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.reporting.agent') ? 'active' : '' }}">My Performance</a>
                 @permission('dashboard.oversight.view')
                 <a href="{{ route('command-center.reporting.branch') }}" class="corex-nav-subitem {{ request()->routeIs('command-center.reporting.branch') ? 'active' : '' }}">Branch Report</a>
                 @endpermission
