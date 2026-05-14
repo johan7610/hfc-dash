@@ -78,12 +78,7 @@ Route::middleware('auth')->group(function () {
         ->middleware('permission:manage_users')
         ->name('admin.api.catalog');
 
-    // ── Admin: Client App Activity ── Spec: .ai/specs/client-auth.md
-    Route::get('/admin/client-app-activity', [\App\Http\Controllers\Admin\ClientAppActivityController::class, 'index'])
-        ->middleware('permission:client_app.view_logs')
-        ->name('admin.client-app-activity');
-
-    // ── CoreX Global API v1 (session-authenticated, browser-visible XHR) ──
+// ── CoreX Global API v1 (session-authenticated, browser-visible XHR) ──
     Route::prefix('api/v1')->name('api.v1.')->group(function () {
         Route::get('/logged-user', [\App\Http\Controllers\Api\V1\MeController::class, 'show'])->name('logged-user');
 

@@ -2136,7 +2136,7 @@
                          class="fixed inset-0 z-50 flex items-center justify-center p-4"
                          @keydown.escape.window="openModal = null">
                         <div class="absolute inset-0 bg-black/60" @click="openModal = null"></div>
-                        <div class="relative w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-lg shadow-2xl"
+                        <div class="relative w-full max-w-[46rem] max-h-[85vh] overflow-y-auto rounded-lg shadow-2xl"
                              style="background:var(--surface); border:1px solid var(--border);" @click.stop>
 
                             <div class="sticky top-0 z-10 flex items-center justify-between px-5 py-3 rounded-t-lg"
@@ -2158,20 +2158,20 @@
                                         <div class="grid grid-cols-2 gap-3">
                                             <div>
                                                 <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Unit Number</label>
-                                                <input type="text" name="unit_number" x-model="unitNumber" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                                <input type="text" name="unit_number" x-model="unitNumber" autocomplete="off" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                             </div>
                                             <div>
                                                 <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Floor Number</label>
-                                                <input type="text" name="floor_number" value="{{ old('floor_number', $property->floor_number) }}" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                                <input type="text" name="floor_number" value="{{ old('floor_number', $property->floor_number) }}" autocomplete="off" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                             </div>
                                         </div>
                                         <div>
                                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Name of Unit, Section or Block</label>
-                                            <input type="text" name="unit_section_block" value="{{ old('unit_section_block', $property->unit_section_block) }}" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            <input type="text" name="unit_section_block" value="{{ old('unit_section_block', $property->unit_section_block) }}" autocomplete="off" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
                                         <div>
                                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Name of Complex or Estate</label>
-                                            <input type="text" name="complex_name" x-model="complexName" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            <input type="text" name="complex_name" x-model="complexName" autocomplete="off" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
                                     </div>
                                 </div>
@@ -2182,11 +2182,11 @@
                                     <div class="p-4 rounded-b-md space-y-3" style="background:var(--surface-2); border:1px solid var(--border); border-top:0;">
                                         <div>
                                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Street Number</label>
-                                            <input type="text" name="street_number" x-model="streetNumber" placeholder="e.g. 1046-2" class="w-40 rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            <input type="text" name="street_number" x-model="streetNumber" placeholder="e.g. 1046-2" autocomplete="off" class="w-40 rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
                                         <div>
                                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Street Name</label>
-                                            <input type="text" name="street_name" x-model="streetName" placeholder="e.g. Clarendon Road" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            <input type="text" name="street_name" x-model="streetName" placeholder="e.g. Clarendon Road" autocomplete="off" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
                                     </div>
                                 </div>
@@ -2216,17 +2216,17 @@
                                         <div class="grid grid-cols-2 gap-3">
                                             <div>
                                                 <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Property / Erf Number</label>
-                                                <input type="text" name="property_number" value="{{ old('property_number', $property->property_number) }}" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                                <input type="text" name="property_number" value="{{ old('property_number', $property->property_number) }}" autocomplete="off" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                             </div>
                                             <div>
                                                 <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Stand Number</label>
-                                                <input type="text" name="stand_number" value="{{ old('stand_number', $property->stand_number) }}" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                                <input type="text" name="stand_number" value="{{ old('stand_number', $property->stand_number) }}" autocomplete="off" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                             </div>
                                         </div>
                                         <div class="grid grid-cols-2 gap-3">
                                             <div>
                                                 <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Zone Type</label>
-                                                <select name="zone_type" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                                <select name="zone_type" autocomplete="off" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                                     <option value="">-- None --</option>
                                                     @foreach(['Residential','Commercial','Industrial','Agricultural','Mixed Use'] as $zt)
                                                     <option value="{{ $zt }}" {{ old('zone_type', $property->zone_type) === $zt ? 'selected' : '' }}>{{ $zt }}</option>
@@ -2235,16 +2235,16 @@
                                             </div>
                                             <div>
                                                 <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">District / Municipality</label>
-                                                <input type="text" name="district" value="{{ old('district', $property->district) }}" placeholder="e.g. Ray Nkonyeni" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                                <input type="text" name="district" value="{{ old('district', $property->district) }}" placeholder="e.g. Ray Nkonyeni" autocomplete="off" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                             </div>
                                         </div>
                                         <div>
                                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Region</label>
-                                            <input type="text" name="region" value="{{ old('region', $property->region) }}" placeholder="KZN South Coast" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            <input type="text" name="region" value="{{ old('region', $property->region) }}" placeholder="KZN South Coast" autocomplete="off" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
                                         <div>
                                             <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Internal Note</label>
-                                            <textarea name="address_internal_note" rows="2" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">{{ old('address_internal_note', $property->address_internal_note) }}</textarea>
+                                            <textarea name="address_internal_note" rows="2" autocomplete="off" class="w-full rounded-md px-3 py-1.5 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">{{ old('address_internal_note', $property->address_internal_note) }}</textarea>
                                         </div>
                                     </div>
                                 </div>
