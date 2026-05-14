@@ -7,6 +7,8 @@ namespace App\Http\Controllers\SellerOutreach;
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
 use App\Models\Property;
+use App\Services\Prospecting\PitchLockConflictException;
+use App\Services\Prospecting\ProspectingClaimService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -68,6 +70,25 @@ final class EntryPointController extends Controller
             ->first();
         abort_if(!$listing, 404);
 
+        // Temp lock: prevent two agents from pitching the same listing concurrently.
+        // The lock auto-expires after the agency-configured window (default 30 min)
+        // and is consumed when the pitch submits successfully.
+        try {
+            app(ProspectingClaimService::class)->createTempLock(
+                listingId: $prospectingListingId,
+                userId: (int) $request->user()->id,
+                agencyId: $agencyId,
+            );
+        } catch (PitchLockConflictException $e) {
+            $blockerName = DB::table('users')->where('id', $e->lockedByUserId)->value('name') ?? 'another agent';
+            $expiresIn = $e->expiresAt instanceof \Carbon\Carbon
+                ? $e->expiresAt->diffForHumans()
+                : \Carbon\Carbon::parse($e->expiresAt)->diffForHumans();
+            return redirect()
+                ->route('prospecting.index')
+                ->with('error', "⏳ {$blockerName} is currently pitching this listing. Try again after their lock expires ({$expiresIn}).");
+        }
+
         return view('seller-outreach.entry.prospecting-create-contact', [
             'listing' => $listing,
         ]);
@@ -118,6 +139,64 @@ final class EntryPointController extends Controller
 
             $property = $this->promoteListingToProperty($agencyId, $listing, $request->user());
 
+            // Universal Match-or-Create: ensure a TrackedProperty exists for this
+            // address and link it to both the prospecting listing AND the newly
+            // promoted Property. The TP record becomes the long-lived audit trail
+            // (source_chain accumulates from every ingestion path that touches this
+            // address — P24 capture, PP capture, CMA presentation, manual entry, etc.).
+            // Failure-isolated: a TP write hiccup doesn't roll back the contact/property/pivot
+            // work, which is the user-visible operation.
+            $trackedPropertyId = null;
+            try {
+                $tp = app(\App\Services\Prospecting\TrackedPropertyMatchOrCreateService::class)
+                    ->matchOrCreate(
+                        agencyId: $agencyId,
+                        facts: array_filter([
+                            'address'                 => $property->address,
+                            'street_number'           => $property->street_number,
+                            'street_name'             => $property->street_name,
+                            'suburb'                  => $property->suburb,
+                            'town'                    => $property->town,
+                            'province'                => $property->province,
+                            'property_type'           => $property->property_type,
+                            'bedrooms'                => $property->beds,
+                            'bathrooms'               => $property->baths,
+                            'garages'                 => $property->garages,
+                            'erf_size_m2'             => $property->erf_size_m2,
+                            'last_known_asking_price' => $property->price ?: null,
+                        ], fn ($v) => $v !== null && $v !== ''),
+                        source: [
+                            'type' => 'manual_prospect_entry',
+                            'ref'  => "property_{$property->id}",
+                            'payload' => [
+                                'property_id'            => $property->id,
+                                'prospecting_listing_id' => $listing->id,
+                            ],
+                        ],
+                        actorUserId: (int) $request->user()->id,
+                    );
+
+                // Mark the TP as promoted to this Property and link the listing to the TP.
+                // Idempotent — re-promoting the same TP returns the existing linkage.
+                if ($tp) {
+                    $trackedPropertyId = $tp->id;
+                    if (!$tp->isPromoted()) {
+                        $tp->update([
+                            'promoted_to_property_id' => $property->id,
+                            'promoted_at'             => now(),
+                            'promoted_by_user_id'     => $request->user()->id,
+                            'status'                  => \App\Models\Prospecting\TrackedProperty::STATUS_PROMOTED,
+                        ]);
+                    }
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('TrackedProperty link from manual prospect entry failed', [
+                    'property_id' => $property->id,
+                    'listing_id'  => $listing->id,
+                    'error'       => $e->getMessage(),
+                ]);
+            }
+
             // Link contact ↔ property via the contact_property pivot with role=seller.
             // Idempotent — re-running the flow for the same pair updates role only.
             DB::table('contact_property')->updateOrInsert(
@@ -132,15 +211,17 @@ final class EntryPointController extends Controller
                 ]
             );
 
-            // Close the loop: mark the listing as matched to the promoted Property.
+            // Close the loop: mark the listing as matched to the promoted Property
+            // AND link it to the TrackedProperty (so the listing → TP → property chain is whole).
             DB::table('prospecting_listings')
                 ->where('id', $listing->id)
                 ->whereNull('matched_property_id')
-                ->update([
-                    'matched_property_id' => $property->id,
-                    'matched_at'          => now(),
-                    'updated_at'          => now(),
-                ]);
+                ->update(array_filter([
+                    'matched_property_id'  => $property->id,
+                    'matched_at'           => now(),
+                    'tracked_property_id'  => $trackedPropertyId,
+                    'updated_at'           => now(),
+                ], fn ($v) => $v !== null));
 
             return [$contact, $property];
         });

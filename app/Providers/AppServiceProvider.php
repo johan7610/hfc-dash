@@ -57,6 +57,13 @@ class AppServiceProvider extends ServiceProvider
         // empty cache and the controller's pre-cached state would remain stale.
         $this->app->singleton(\App\Services\Prospecting\ProspectingConfigurationService::class);
 
+        // Universal Match-or-Create hub: singleton so every ingress path
+        // (CMA propagation, P24, PP, Chrome capture, manual entry, mandate
+        // promotion) shares the same instance. The service is stateless but
+        // singleton-binding it makes test substitution + future caching trivial.
+        // See CLAUDE.md Universal Match-or-Create Rule.
+        $this->app->singleton(\App\Services\Prospecting\TrackedPropertyMatchOrCreateService::class);
+
         // Seller-outreach services. Singletons so the composer's per-request
         // template lookup and the landing service's repeat snapshot calls
         // share state with future cache-invalidation listeners (Prompt 03).
@@ -135,6 +142,15 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(
             \App\Events\SellerOutreach\OptOutRecorded::class,
             \App\Listeners\SellerOutreach\RecordOptOutOnContact::class,
+        );
+
+        // CMA back-propagation: when presentation_fields are written, propagate the
+        // CMAInfo-extracted erf / GPS / municipal valuation back to the linked Property.
+        // Failure-isolated — see PropagateCmaToProperty.
+        // Spec: .ai/specs/market-intelligence-discovery.md Section 13.4.
+        Event::listen(
+            \App\Events\Presentation\PresentationFieldsExtracted::class,
+            \App\Listeners\Presentation\PropagateCmaToProperty::class,
         );
 
         // buyer_preferences deprecation listener (spec D11 Phase 1).

@@ -239,6 +239,24 @@
                     </div>
                 </div>
 
+                {{-- Prospecting pitch lock duration — applies when an agent clicks
+                     "Pitch Seller" on a prospecting listing. Prevents two agents
+                     composing pitches on the same listing concurrently. --}}
+                <div class="text-xs font-bold uppercase tracking-wider pb-1" style="color:var(--text-muted); border-bottom:1px solid var(--border);">Prospecting Coordination</div>
+                <div>
+                    <label class="block text-xs font-medium mb-2" style="color:var(--text-secondary);">
+                        Pitch lock duration (minutes)
+                    </label>
+                    <input type="number" name="prospecting_pitch_temp_lock_minutes" min="5" max="240"
+                           value="{{ old('prospecting_pitch_temp_lock_minutes', $agency->prospecting_pitch_temp_lock_minutes ?? 30) }}"
+                           class="w-32 px-3 py-2 text-sm rounded"
+                           style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
+                    <p class="text-xs mt-1" style="color: var(--text-muted);">
+                        How long an agent's "Pitch Seller" click holds a temporary lock before auto-releasing.
+                        Prevents two agents from pitching the same listing concurrently. Range 5–240. Default: 30.
+                    </p>
+                </div>
+
                 <div class="text-xs font-bold uppercase tracking-wider pb-1" style="color:var(--text-muted); border-bottom:1px solid var(--border);">Company Logo</div>
                 <div>
                     @if($agency->logo_path)

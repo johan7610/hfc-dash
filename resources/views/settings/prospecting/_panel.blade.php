@@ -63,7 +63,7 @@
 
     {{-- Tabs --}}
     <div class="flex overflow-x-auto" style="border-bottom: 1px solid var(--border);">
-        @foreach(['towns' => 'Towns & Suburbs', 'property-types' => 'Property Types', 'bedroom-segments' => 'Bedroom Segments', 'price-bands' => 'Price Bands'] as $key => $label)
+        @foreach(['towns' => 'Towns & Suburbs', 'property-types' => 'Property Types', 'bedroom-segments' => 'Bedroom Segments', 'price-bands' => 'Price Bands', 'buyer-match-tiers' => 'Buyer Match Tiers'] as $key => $label)
             <button @click="activeTab = '{{ $key }}'"
                     :class="activeTab === '{{ $key }}' ? 'border-b-2' : 'border-b-2 border-transparent'"
                     :style="activeTab === '{{ $key }}' ? 'color: #00d4aa; border-color: #00d4aa;' : 'color: var(--text-secondary);'"
@@ -612,6 +612,12 @@
                 </div>
             </div>
         @endforeach
+    </div>
+
+    {{-- TAB 5: Buyer Match Tiers — agency-configurable score cutoffs for the
+         prospecting-tab tier badge (🟢 strong · 🟡 mid · ⚪ weak). --}}
+    <div x-show="activeTab === 'buyer-match-tiers'" x-cloak class="space-y-4">
+        @include('settings.prospecting._buyer-match-tiers', ['tier' => $buyerMatchTier ?? null])
     </div>
 
 </div>
