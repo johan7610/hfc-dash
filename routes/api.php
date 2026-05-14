@@ -68,19 +68,10 @@ Route::post('/pp/webhook', [\App\Http\Controllers\PrivateProperty\PpWebhookContr
 // API v1 — Client Auth (mobile client portal)
 // Spec: .ai/specs/client-auth.md
 // ════════════════════════════════════════════════════════════════
-// ════════════════════════════════════════════════════════════════
-// API v1 — P24 location tree (read-only, web-session auth)
-// Powers the cascading Province → City → Suburb selects on the
-// property create/edit form. Backed by locally cached p24_* tables.
-// ════════════════════════════════════════════════════════════════
-Route::prefix('v1/p24')->middleware('auth:web,sanctum')->group(function () {
-    Route::get('/provinces', [\App\Http\Controllers\Api\V1\P24LocationController::class, 'provinces'])
-        ->name('api.v1.p24.provinces');
-    Route::get('/cities',    [\App\Http\Controllers\Api\V1\P24LocationController::class, 'cities'])
-        ->name('api.v1.p24.cities');
-    Route::get('/suburbs',   [\App\Http\Controllers\Api\V1\P24LocationController::class, 'suburbs'])
-        ->name('api.v1.p24.suburbs');
-});
+// NB: The /api/v1/p24/* location-tree endpoints live in routes/web.php so
+// they get the full `web` middleware group (cookie + session). Calling them
+// from a Blade-rendered page over fetch needs session-cookie auth, which
+// isn't applied to routes registered here in api.php.
 
 Route::prefix('v1/client-auth')->group(function () {
     Route::post('/lookup',          [ClientAuthController::class, 'lookup'])->name('client-auth.lookup');

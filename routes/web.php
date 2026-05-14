@@ -61,6 +61,13 @@ Route::get('/dashboard', function () {
 
 Route::middleware('auth')->group(function () {
 
+    // P24 location tree read-API (called from Blade pages over fetch with
+    // session cookies — must live in web.php so the `web` middleware group
+    // applies, not in routes/api.php where session isn't set up).
+    Route::get('/api/v1/p24/provinces', [\App\Http\Controllers\Api\V1\P24LocationController::class, 'provinces'])->name('api.v1.p24.provinces');
+    Route::get('/api/v1/p24/cities',    [\App\Http\Controllers\Api\V1\P24LocationController::class, 'cities'])->name('api.v1.p24.cities');
+    Route::get('/api/v1/p24/suburbs',   [\App\Http\Controllers\Api\V1\P24LocationController::class, 'suburbs'])->name('api.v1.p24.suburbs');
+
     // Notification API
     Route::get('/api/notifications', [\App\Http\Controllers\Api\NotificationController::class, 'index']);
     Route::post('/api/notifications/{id}/read', [\App\Http\Controllers\Api\NotificationController::class, 'markRead']);
