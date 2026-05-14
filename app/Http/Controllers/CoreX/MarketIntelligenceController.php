@@ -44,8 +44,12 @@ class MarketIntelligenceController extends Controller
         $agencyId = $user->effectiveAgencyId() ?? $user->agency_id ?? 1;
         $isProspectingManager = $user?->hasPermission('prospecting_setup.manage') ?? false;
 
-        $query = ProspectingListing::where('agency_id', $agencyId)
-            ->with('activeClaim.user');
+        // F.3 — the legacy ->with('activeClaim.user') eager-load is gone.
+        // All claim state for the row is now read from $listingStates['claims']
+        // (populated by ProspectingListingStateEnricher::loadClaims in one
+        // batched query). The N+1 it caused — one users-table query per
+        // listing per page — is eliminated.
+        $query = ProspectingListing::where('agency_id', $agencyId);
 
         // F.2: action preset URL param. Distinct from the legacy ?preset= (Smart
         // Filter Preset) — that one still works for stale_claims / new_today etc.

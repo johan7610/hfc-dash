@@ -90,6 +90,8 @@ final class ProspectingListingStateEnricher
                 's.sent_at',
                 's.channel',
                 's.outcome',
+                's.recipient_phone_snapshot as recipient_phone',
+                's.recipient_email_snapshot as recipient_email',
                 't.name as template_name',
                 'u.name as agent_name'
             )
@@ -119,6 +121,8 @@ final class ProspectingListingStateEnricher
                 'sent_at' => $r->sent_at,
                 'channel' => $r->channel,
                 'outcome' => $r->outcome,
+                'recipient_phone' => $r->recipient_phone,
+                'recipient_email' => $r->recipient_email,
                 'template_name' => $r->template_name,
                 'agent_name' => $r->agent_name,
                 'is_recent' => $sentTs !== false && $sentTs > $sevenDaysAgo,
