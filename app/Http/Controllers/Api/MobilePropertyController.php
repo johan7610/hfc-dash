@@ -20,14 +20,37 @@ class MobilePropertyController extends Controller
     // Verifies suburb → city → province and overwrites the denormalised
     // suburb/city/province text columns with canonical P24 names.
     use \App\Http\Concerns\AppliesP24Location;
+    use \App\Http\Controllers\Api\Concerns\ResolvesMobileDataScope;
 
     // ── GET /api/mobile/properties ───────────────────────────────
+    //
+    // Visibility (Property has NO global scope, so we enforce it here, the
+    // same way the web CoreX\PropertyController does):
+    //   ?agent_id absent  → the user's own listings (default, like the web)
+    //   ?agent_id=        → everything the role scope allows (branch/agency)
+    //   ?agent_id=123     → that agent's listings (if in scope, else 403)
     public function index(Request $request): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
 
-        $properties = Property::where('agent_id', $user->id)
+        $scope = \App\Services\PermissionService::getDataScope($user, 'properties') ?? 'own';
+        $agentFilter = $this->resolveAgentFilter(
+            $user,
+            'properties',
+            $request->has('agent_id') ? $request->query('agent_id', '') : null
+        );
+
+        $query = Property::query();
+        if ($agentFilter !== null) {
+            $query->where('agent_id', $agentFilter);
+        } elseif ($scope === 'branch') {
+            $query->where('branch_id', $user->effectiveBranchId() ?: -1);
+        }
+        // $scope === 'all' with no agent filter → agency-wide (AgencyScope
+        // still isolates cross-agency).
+
+        $properties = $query
             ->orderByDesc('updated_at')
             ->get([
                 'id', 'title', 'address', 'street_number', 'street_name',
@@ -1139,8 +1162,25 @@ class MobilePropertyController extends Controller
     // ── Authorization ───────────────────────────────────────────
     private function authorizeProperty(User $user, Property $property): void
     {
-        if ((int) $property->agent_id !== (int) $user->id) {
-            abort(403, 'You do not have access to this property.');
+        // Own listing — always allowed.
+        if ((int) $property->agent_id === (int) $user->id) {
+            return;
         }
+
+        // Otherwise allow per the role data scope (mirrors the web, where a
+        // branch manager / agency-wide role can open team listings).
+        $scope = \App\Services\PermissionService::getDataScope($user, 'properties') ?? 'own';
+
+        if ($scope === 'all') {
+            return;
+        }
+
+        if ($scope === 'branch'
+            && $property->branch_id
+            && (int) $property->branch_id === (int) $user->effectiveBranchId()) {
+            return;
+        }
+
+        abort(403, 'This property is outside your visibility scope.');
     }
 }

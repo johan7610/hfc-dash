@@ -52,21 +52,15 @@ class PropertyController extends Controller
         // (card click-through shows full scope).
         if ($canPickAgent) {
             if ($request->has('agent_id')) {
-                $raw           = $request->query('agent_id', '');
-                $filterAgentId = $raw;
-                session(['corex_properties_agent_id' => $raw === '' ? 'all' : $raw]);
+                // Explicit selection ("All" or another agent) — this browse only.
+                $filterAgentId = $request->query('agent_id', '');
             } elseif ($request->query('filter') === 'marketing_pending') {
+                // Compliance card click-through shows full scope.
                 $filterAgentId = '';
             } else {
-                $saved = session('corex_properties_agent_id');
-                if ($saved === null) {
-                    $filterAgentId = (string) $user->id;
-                    session(['corex_properties_agent_id' => $filterAgentId]);
-                } elseif ($saved === 'all') {
-                    $filterAgentId = '';
-                } else {
-                    $filterAgentId = $saved;
-                }
+                // Always default to the current user's own listings on a fresh
+                // visit. Not persisted across visits.
+                $filterAgentId = (string) $user->id;
             }
         }
 

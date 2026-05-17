@@ -143,6 +143,13 @@ Route::middleware('auth:sanctum')->group(function () {
         return response()->json(['message' => 'Logged out']);
     });
 
+    // ── Mobile data-visibility descriptor ───────────────────────
+    // Tells the app whether the user may see branch / agency-wide
+    // contacts & properties (Role Manager scope), so it can render or
+    // hide the "Mine / All / pick agent" filter chips.
+    Route::get('/mobile/visibility', [\App\Http\Controllers\Api\MobileVisibilityController::class, 'show'])
+        ->name('mobile.visibility');
+
     Route::post('/prospecting/import', [ProspectingApiController::class, 'import']);
     Route::get('/prospecting/check-search', [ProspectingApiController::class, 'checkSearch']);
 
