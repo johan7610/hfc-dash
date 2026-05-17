@@ -39,6 +39,32 @@ class AgentDeletionService
     }
 
     /**
+     * Point the departing agent's QR slug at a live agent.
+     *
+     * The slug stays on $source (audit anchor); scans now resolve through
+     * the reroute pointer to $target. Mandatory on every agent delete so no
+     * printed QR code ever dead-ends. Chained automatically if $target later
+     * leaves too (see User::resolveByQrSlug).
+     *
+     * Spec: .ai/specs/agent-qr-onboarding.md
+     */
+    public function setQrReroute(User $source, User $target, int $actorId): void
+    {
+        DB::table('users')->where('id', $source->id)->update([
+            'qr_reroute_user_id' => $target->id,
+            'updated_at'         => now(),
+        ]);
+
+        Log::info('agent.qr_rerouted', [
+            'actor_user_id'   => $actorId,
+            'source_user_id'  => $source->id,
+            'source_qr_slug'  => $source->qr_code_slug,
+            'target_user_id'  => $target->id,
+            'target_user_name' => $target->name,
+        ]);
+    }
+
+    /**
      * Bulk reassign properties + contacts from $source to $target,
      * soft-delete calendar events + tasks owned by $source.
      *

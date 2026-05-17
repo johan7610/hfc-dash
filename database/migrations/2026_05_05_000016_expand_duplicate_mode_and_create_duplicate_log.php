@@ -8,9 +8,13 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        // Step 1: Expand duplicate_mode enum (hard_block → hard_block_override)
-        // MySQL requires ALTER COLUMN to change enum values
-        DB::statement("ALTER TABLE agency_contact_settings MODIFY COLUMN duplicate_mode ENUM('auto_link','soft_warn','hard_block_override','hard_block_request') NOT NULL DEFAULT 'soft_warn'");
+        // Step 1: Expand duplicate_mode enum (hard_block → hard_block_override).
+        // Schema builder change() works on both MySQL and SQLite.
+        Schema::table('agency_contact_settings', function (Blueprint $table) {
+            $table->enum('duplicate_mode', ['auto_link', 'soft_warn', 'hard_block_override', 'hard_block_request'])
+                ->default('soft_warn')
+                ->change();
+        });
 
         // Migrate existing 'hard_block' rows to 'hard_block_override'
         DB::table('agency_contact_settings')
@@ -68,6 +72,10 @@ return new class extends Migration {
         Schema::dropIfExists('contact_duplicate_log');
 
         // Revert enum (can't easily revert to old values if data has new values)
-        DB::statement("ALTER TABLE agency_contact_settings MODIFY COLUMN duplicate_mode ENUM('hard_block','soft_warn','auto_link') NOT NULL DEFAULT 'soft_warn'");
+        Schema::table('agency_contact_settings', function (Blueprint $table) {
+            $table->enum('duplicate_mode', ['hard_block', 'soft_warn', 'auto_link'])
+                ->default('soft_warn')
+                ->change();
+        });
     }
 };

@@ -116,8 +116,32 @@
 
             <template x-if="!loading && !error && counts && !counts.has_any">
                 <p class="text-sm" style="color: var(--text-primary);">
-                    This agent has no attached properties, contacts, events, or tasks. They will be deleted directly.
+                    This agent has no attached properties, contacts, events, or tasks.
                 </p>
+            </template>
+
+            {{-- QR rerouting — always required (every agent has a QR code) --}}
+            <template x-if="!loading && !error && counts">
+                <div class="rounded-md p-3" style="border: 1px solid var(--border); background: color-mix(in srgb, var(--brand-icon) 5%, transparent);">
+                    <label for="agent-delete-qr-target" class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">
+                        Reroute this agent's QR code to <span class="text-red-500">*</span>
+                    </label>
+                    <select
+                        id="agent-delete-qr-target"
+                        x-model="qrRerouteUserId"
+                        @change="qrTouched = true"
+                        class="w-full rounded-md px-3 py-2 text-sm"
+                        style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);"
+                    >
+                        <option value="">— choose an agent —</option>
+                        <template x-for="t in targets" :key="'qr-' + t.id">
+                            <option :value="t.id" x-text="t.label"></option>
+                        </template>
+                    </select>
+                    <p class="text-xs mt-2" style="color: var(--text-muted);">
+                        Clients who scan this agent's existing QR code (printed cards, signage) will be onboarded to the chosen agent instead. The original code keeps working — nothing needs reprinting.
+                    </p>
+                </div>
             </template>
         </div>
 
@@ -162,6 +186,16 @@ function agentDeleteModal() {
         targets: [],
         targetUserId: '',
         secondaryHandling: 'promote',
+        qrRerouteUserId: '',
+        qrTouched: false,
+
+        init() {
+            // QR reroute defaults to the reassignment target until the admin
+            // explicitly picks a different agent for the QR.
+            this.$watch('targetUserId', (val) => {
+                if (!this.qrTouched) this.qrRerouteUserId = val;
+            });
+        },
 
         open(userId, userName) {
             this.visible = true;
@@ -173,6 +207,8 @@ function agentDeleteModal() {
             this.targets = [];
             this.targetUserId = '';
             this.secondaryHandling = 'promote';
+            this.qrRerouteUserId = '';
+            this.qrTouched = false;
 
             const url = '{{ url('/api/v1/admin/users') }}/' + userId + '/delete-preview';
             fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
@@ -193,6 +229,7 @@ function agentDeleteModal() {
 
         canSubmit() {
             if (!this.counts) return false;
+            if (!this.qrRerouteUserId) return false; // QR reroute is mandatory
             if (!this.counts.has_any) return true;
             return !!this.targetUserId;
         },
@@ -210,6 +247,10 @@ function agentDeleteModal() {
             csrf.name = '_token';
             csrf.value = '{{ csrf_token() }}';
             form.appendChild(csrf);
+
+            const qr = document.createElement('input');
+            qr.type = 'hidden'; qr.name = 'qr_reroute_user_id'; qr.value = this.qrRerouteUserId;
+            form.appendChild(qr);
 
             if (this.counts.has_any) {
                 const t = document.createElement('input');

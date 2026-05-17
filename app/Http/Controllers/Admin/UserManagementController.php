@@ -714,6 +714,9 @@ class UserManagementController extends Controller
                 'id'   => $user->id,
                 'name' => $user->name,
             ],
+            'qr' => [
+                'slug' => $user->ensureQrSlug(),
+            ],
             'counts'  => $counts,
             'targets' => $targets->map(fn ($u) => [
                 'id'    => $u->id,
@@ -731,6 +734,22 @@ class UserManagementController extends Controller
         }
 
         $name = $user->name;
+
+        // QR rerouting is mandatory on every agent delete — every agent has a
+        // QR slug and printed codes must never dead-end. Spec: agent-qr-onboarding.md
+        $sameAgencyActive = function ($q) use ($user) {
+            $q->where('agency_id', $user->agency_id)->where('is_active', true)->whereNull('deleted_at');
+        };
+
+        $qrData = $request->validate([
+            'qr_reroute_user_id' => ['required', 'integer', 'different:user', Rule::exists('users', 'id')->where($sameAgencyActive)],
+        ], [
+            'qr_reroute_user_id.required' => 'Choose an agent to reroute this agent\'s QR code to.',
+            'qr_reroute_user_id.exists'   => 'The chosen QR reroute agent is not a valid active user in this agency.',
+        ]);
+
+        $qrTarget = User::findOrFail($qrData['qr_reroute_user_id']);
+        $service->setQrReroute($user, $qrTarget, (int) auth()->id());
 
         // Decide whether reassignment is needed.
         $counts = $service->preview($user);

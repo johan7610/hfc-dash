@@ -22,7 +22,9 @@ Before an admin can delete an agent who still owns properties or contacts, prese
 - Logs the operation to the activity log.
 - Then proceeds with the existing soft-delete + P24 inactivation flow.
 
-If the agent has zero attached records, skip the modal and run the current delete flow unchanged.
+**QR rerouting (added 2026-05-17, mandatory):** Every agent owns a QR code (`qr_code_slug`) that may be printed on cards/signage. On *every* delete the modal also forces the admin to choose a **QR reroute target** — an active agent in the same agency — so scans of the departed agent's QR onboard clients to a live agent instead of dead-ending. This applies even when the agent has zero attached records (so the "skip the modal" case below no longer fully applies: the modal still opens to collect the QR reroute target). The QR picker defaults to the properties/contacts reassignment target but is independently changeable. The slug never moves — a `qr_reroute_user_id` pointer is written on the source agent before soft-delete; resolution is chained. Full mechanics: `.ai/specs/agent-qr-onboarding.md`.
+
+If the agent has zero attached records, the reassignment section is skipped but the modal still opens for the mandatory QR reroute choice.
 
 ## Pillar connections
 
