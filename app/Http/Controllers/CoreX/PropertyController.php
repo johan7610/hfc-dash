@@ -215,7 +215,12 @@ class PropertyController extends Controller
 
         $branches = Branch::orderBy('name')->get();
         $agents   = $this->agentList();
-        $activeTab = request('tab', 'overview');
+        // An explicit ?tab= in the URL (deep links from the mobile app's
+        // compliance next_actions, marketing-pack, FICA, etc.) MUST win over
+        // any flashed session('tab') left by a prior redirect — otherwise a
+        // sticky session tab swallows the deep link and the user always
+        // lands on the last-used tab (usually contacts).
+        $activeTab = request('tab') ?? session('tab') ?? 'overview';
 
         // Find all Core Matches where this property satisfies the criteria.
         // Hard filters run in SQL (indexed); scoring runs in PHP and the result is sorted.

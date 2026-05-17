@@ -3,7 +3,7 @@
 @section('corex-content')
 @php $isNew = !$property->exists; @endphp
 <div class="w-full space-y-4"
-     x-data="{ activeTab: '{{ $isNew ? 'info' : session('tab', $activeTab) }}', synOpen: false, synStep: 'main', sbCollapsed: (localStorage.getItem('hfc.propSidebar.collapsed') === '1'), formDirty: false, wbReportOpen: false, complianceModalOpen: false, unsavedModalOpen: false, pendingNavUrl: null, contactRequiredModalOpen: false }"
+     x-data="{ activeTab: '{{ $isNew ? 'info' : $activeTab }}', synOpen: false, synStep: 'main', sbCollapsed: (localStorage.getItem('hfc.propSidebar.collapsed') === '1'), formDirty: false, wbReportOpen: false, complianceModalOpen: false, unsavedModalOpen: false, pendingNavUrl: null, contactRequiredModalOpen: false }"
      @corex:contact-required.window="contactRequiredModalOpen = true"
      @corex:contact-added.window="contactRequiredModalOpen = false; activeTab = 'info';"
      @corex:clear-dirty.window="formDirty = false"
