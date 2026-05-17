@@ -1,7 +1,7 @@
 @extends('layouts.corex-app')
 
 @section('corex-content')
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6"
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4 overflow-x-hidden"
      x-data="contactShowData('{{ route('corex.contacts.properties.search', $contact) }}', '{{ request('tab', 'info') }}')"
      x-init="activeTab = initTab">
 
@@ -83,9 +83,7 @@
 
             {{-- Schedule Event from Contact --}}
             <a href="{{ route('command-center.calendar', ['view' => 'day', 'prefill_contact_id' => $contact->id, 'prefill_class' => $contact->is_buyer ? 'viewing' : 'meeting']) }}"
-               class="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md no-underline transition-all duration-300"
-               style="background:color-mix(in srgb, #00d4aa 12%, transparent); color:var(--brand-icon); border:1px solid color-mix(in srgb, #00d4aa 25%, transparent);"
-               onmouseover="this.style.background='color-mix(in srgb, #00d4aa 22%, transparent)'" onmouseout="this.style.background='color-mix(in srgb, #00d4aa 12%, transparent)'">
+               class="corex-btn-outline corex-btn-on-brand flex-shrink-0 no-underline">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"/></svg>
                 Schedule Event
             </a>
@@ -93,17 +91,18 @@
             {{-- Compose Seller Pitch (Prompt 08 entry-point) --}}
             @if(auth()->user()->hasPermission('outreach.compose'))
                 @if($contact->messaging_opt_out_at)
-                    <span class="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md"
-                          style="background:color-mix(in srgb, var(--ds-crimson) 12%, transparent); color:var(--ds-crimson); border:1px solid color-mix(in srgb, var(--ds-crimson) 30%, transparent);"
+                    <span class="corex-btn-outline corex-btn-on-brand flex-shrink-0"
+                          style="color:var(--ds-crimson); border-color:color-mix(in srgb, var(--ds-crimson) 45%, transparent);"
                           title="This contact has opted out of messaging">
-                        ⚠ Opted out
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/></svg>
+                        Opted out
                     </span>
                 @else
                     <a href="{{ route('seller-outreach.composer.show', $contact) }}"
-                       class="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md no-underline transition-all duration-300"
-                       style="background:#00d4aa; color:#003a2f;"
+                       class="corex-btn-outline corex-btn-on-brand flex-shrink-0 no-underline"
                        title="Compose a WhatsApp/Email pitch about a property linked to this contact">
-                        💬 Compose pitch
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z"/></svg>
+                        Compose pitch
                     </a>
                 @endif
             @endif
@@ -111,8 +110,7 @@
             {{-- View as Buyer (if buyer) --}}
             @if($contact->is_buyer)
             <a href="{{ route('command-center.buyers.show', $contact) }}"
-               class="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md no-underline transition-all duration-300"
-               style="background:color-mix(in srgb, #00d4aa 12%, transparent); color:var(--brand-icon); border:1px solid color-mix(in srgb, #00d4aa 25%, transparent);">
+               class="corex-btn-outline corex-btn-on-brand flex-shrink-0 no-underline">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>
                 Buyer Hub
             </a>
@@ -121,7 +119,7 @@
             {{-- Create Listing from Contact (only if no linked properties) --}}
             @if(auth()->user()->hasPermission('access_properties') && $contact->properties()->count() === 0)
             <a href="{{ route('corex.properties.create') }}?contact_id={{ $contact->id }}"
-               class="corex-btn-outline flex-shrink-0 inline-flex items-center gap-1.5 no-underline">
+               class="corex-btn-outline corex-btn-on-brand flex-shrink-0 no-underline">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
                 Create Listing
             </a>
@@ -167,12 +165,8 @@
                 ['key'=>'drive','label'=>'Drive <span class="ml-1 text-xs px-1.5 py-0.5 rounded-md" style="background:var(--surface-2);">'. $contact->documents->count() .'</span>'],
                 ['key'=>'fica','label'=>'FICA Compliance ' . $ficaIcon],
                 ['key'=>'consent','label'=>'Consent'],
-                ['key'=>'matches','label'=>'Core Matches <span class="ml-1 text-xs px-1.5 py-0.5 rounded-md" style="background:var(--surface-2);">'. $contact->matches->count() .'</span>'],
                 ['key'=>'outreach','label'=>'Outreach <span class="ml-1 text-xs px-1.5 py-0.5 rounded-md" style="background:var(--surface-2);">'. $outreachCount .'</span>' . $outreachOptOutBadge],
             ] as $t)
-            @if($t['key'] === 'matches' && (!\App\Models\PerformanceSetting::get('matches_enabled', 1) || !auth()->user()->hasPermission('access_core_matches')))
-                @continue
-            @endif
             @if($t['key'] === 'outreach' && !auth()->user()->hasPermission('outreach.compose'))
                 @continue
             @endif
@@ -180,7 +174,7 @@
                     @click="activeTab = '{{ $t['key'] }}'"
                     :class="activeTab === '{{ $t['key'] }}' ? 'border-b-2' : 'border-b-2 border-transparent'"
                     :style="activeTab === '{{ $t['key'] }}' ? 'color:var(--brand-icon, #0ea5e9); border-color:var(--brand-icon, #0ea5e9); background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 5%, transparent);' : 'color:var(--text-secondary);'"
-                    class="px-6 py-4 text-sm font-semibold whitespace-nowrap transition-all duration-300 outline-none hover:opacity-80"
+                    class="px-4 py-4 text-sm font-semibold whitespace-nowrap transition-all duration-300 outline-none hover:opacity-80"
                     >
                 {!! $t['label'] !!}
             </button>
@@ -1117,9 +1111,10 @@
         </div>
 
         {{-- ════════════════════════════
-             CORE MATCHES TAB
+             CORE MATCHES (merged into Properties tab)
              ════════════════════════════ --}}
-        <div x-show="activeTab === 'matches'" x-cloak class="p-6 space-y-6" id="tab-matches">
+        @if(\App\Models\PerformanceSetting::get('matches_enabled', 1) && auth()->user()->hasPermission('access_core_matches'))
+        <div x-show="activeTab === 'properties'" x-cloak class="p-6 pt-0 space-y-6" id="tab-matches">
 
             {{-- Add new match form --}}
             <div class="rounded-md p-5 space-y-5" style="background:var(--surface-2); border:1px solid var(--border);">
@@ -1161,7 +1156,7 @@
                             </div>
 
                             {{-- Detail grid --}}
-                            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-1.5">
+                            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-1.5 min-w-0 break-words">
                                 @if($match->category)
                                 <div>
                                     <span class="text-[10px] font-semibold uppercase tracking-wider" style="color:var(--text-muted);">Category</span>
@@ -1259,7 +1254,8 @@
             </div>
             @endif
 
-        </div>{{-- /matches tab --}}
+        </div>{{-- /matches (under Properties) --}}
+        @endif
 
         {{-- ══════════════════════════════════════════
              VIEWINGS & FEEDBACK TAB
@@ -1392,6 +1388,8 @@
 
 <script>
 function contactShowData(searchUrl, initTab) {
+    // Core Matches was merged into the Properties tab — keep legacy ?tab=matches links working
+    if (initTab === 'matches') initTab = 'properties';
     return {
         activeTab: initTab || 'info',
         initTab: initTab || 'info',

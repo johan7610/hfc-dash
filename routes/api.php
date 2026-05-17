@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\DeviceTokenController;
 use App\Http\Controllers\Api\ProspectingApiController;
 use App\Http\Controllers\Api\MobilePropertyController;
 use App\Http\Controllers\Api\MobileContactController;
+use App\Http\Controllers\Api\MobileContactComplianceController;
 use App\Http\Controllers\Api\MobileCoreMatchController;
 use App\Http\Controllers\Api\PropertyPullController;
 use App\Http\Controllers\Api\V1\ClientAuthController;
@@ -205,6 +206,23 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{contact}',[MobileContactController::class, 'update']);
         Route::post('/{contact}/whatsapp', [MobileContactController::class, 'whatsapp']);
         Route::post('/{contact}/matches',  [MobileContactController::class, 'storeMatch']);
+
+        // ── Contact compliance surface (consent / drive / fica) ──────
+        // Mirrors the web Contact page tabs for the mobile app.
+        // 1. Consent (POPIA/CPA)
+        Route::get('/{contact}/consent',         [MobileContactComplianceController::class, 'consentIndex'])->name('mobile.contacts.consent.index');
+        Route::post('/{contact}/consent',        [MobileContactComplianceController::class, 'consentRecord'])->name('mobile.contacts.consent.record');
+        Route::post('/{contact}/consent/revoke', [MobileContactComplianceController::class, 'consentRevoke'])->name('mobile.contacts.consent.revoke');
+
+        // 2. Drive (documents + document-type catalog + link-to-property)
+        Route::get('/{contact}/drive',                       [MobileContactComplianceController::class, 'driveIndex'])->name('mobile.contacts.drive.index');
+        Route::post('/{contact}/drive',                      [MobileContactComplianceController::class, 'driveStore'])->name('mobile.contacts.drive.store');
+        Route::put('/{contact}/drive/{document}',            [MobileContactComplianceController::class, 'driveUpdate'])->name('mobile.contacts.drive.update');
+        Route::get('/{contact}/drive/{document}/download',   [MobileContactComplianceController::class, 'driveDownload'])->name('mobile.contacts.drive.download');
+        Route::delete('/{contact}/drive/{document}',         [MobileContactComplianceController::class, 'driveDestroy'])->name('mobile.contacts.drive.destroy');
+
+        // 3. FICA compliance
+        Route::get('/{contact}/fica', [MobileContactComplianceController::class, 'ficaIndex'])->name('mobile.contacts.fica.index');
     });
 
     // ── Mobile Core Matches ─────────────────────────────────────
