@@ -3,11 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Contact;
 use App\Models\Property;
+use App\Models\PropertySellerLink;
 use App\Models\PropertySettingItem;
 use App\Models\User;
+use App\Services\Compliance\MarketingReadinessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class MobilePropertyController extends Controller
@@ -686,6 +690,214 @@ class MobilePropertyController extends Controller
 
             'placements' => $placements,
         ]);
+    }
+
+    // ── GET /api/mobile/properties/{id}/compliance ─────────────────
+    // The full marketing-readiness / compliance report for the Overview
+    // screen. Same gates the web Compliance Status panel evaluates:
+    //   - authority_to_market  (signed mandate OR marketing permission)
+    //   - fica_sellers         (every linked seller FICA-approved)
+    //   - photos               (>= 4 uploaded)
+    //   - details_complete     (required listing fields filled)
+    // Returns the gate checklist, what's blocking, the next actions, plus
+    // a per-seller FICA breakdown and a photo count so the mobile can
+    // render the same status chips the web shows.
+    public function compliance(Request $request, Property $property): JsonResponse
+    {
+        $this->authorizeProperty($request->user(), $property);
+
+        $report = app(MarketingReadinessService::class)->statusFor($property);
+
+        // Per-seller FICA breakdown (drives the "FICA" rows on Overview).
+        $sellers = $property->contacts()
+            ->wherePivotIn('role', ['owner', 'seller', 'landlord', 'lessor'])
+            ->get()
+            ->map(function (Contact $c) {
+                $latest = DB::table('fica_submissions')
+                    ->where('contact_id', $c->id)
+                    ->orderByDesc('id')
+                    ->value('status');
+
+                return [
+                    'contact_id'  => $c->id,
+                    'name'        => trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '')),
+                    'role'        => $c->pivot->role,
+                    'fica_status' => $latest ?: 'none',
+                    'fica_passed' => $latest === 'approved',
+                ];
+            })->values();
+
+        $photoCount = count($property->gallery_images_json ?? [])
+                    + count($property->images_json ?? []);
+
+        return response()->json([
+            'property_id'  => $property->id,
+            'marketable'   => $report->ready || $property->compliance_snapshot_at !== null,
+            'ready'        => $report->ready,
+            'snapshot_at'  => $report->snapshotAt?->toIso8601String(),
+            'first_marketed_at' => $property->first_marketed_at?->toIso8601String(),
+            'blocked_by'   => $report->blockedBy,
+            'next_actions' => $report->nextActions,
+            'checklist'    => $report->checklist,   // {gate: {passed, detail}}
+            'photos'       => [
+                'count'    => $photoCount,
+                'required' => 4,
+                'passed'   => $photoCount >= 4,
+            ],
+            'sellers'      => $sellers,
+        ]);
+    }
+
+    // ── POST /api/mobile/properties/{id}/compliance/send-to-market ──
+    // The "Send Authority to Market" / go-live action. Mirrors the web:
+    // takes the compliance snapshot (freezes the cleared state + stamps
+    // first_marketed_at). If any gate fails the MarketingBlockedException
+    // renders itself as a 422 with { blocked_by, report } so the mobile
+    // can show exactly what's outstanding. On success the property is
+    // marketable and the portal-syndication toggles become available.
+    public function sendToMarket(Request $request, Property $property): JsonResponse
+    {
+        $user = $request->user();
+        $this->authorizeProperty($user, $property);
+
+        // Throws MarketingBlockedException (auto-renders 422) when not ready.
+        app(MarketingReadinessService::class)->snapshotCompliance($property, $user);
+
+        $property->refresh();
+
+        return response()->json([
+            'message'           => 'Property cleared and sent to market.',
+            'property_id'       => $property->id,
+            'marketable'        => true,
+            'snapshot_at'       => $property->compliance_snapshot_at?->toIso8601String(),
+            'first_marketed_at' => $property->first_marketed_at?->toIso8601String(),
+        ]);
+    }
+
+    // ── GET /api/mobile/properties/{id}/contacts ───────────────────
+    // Contacts linked to the property with their pivot role + latest
+    // FICA status — feeds the Overview "Owner / Contacts" block.
+    public function contactsIndex(Request $request, Property $property): JsonResponse
+    {
+        $this->authorizeProperty($request->user(), $property);
+
+        $contacts = $property->contacts()->get()->map(function (Contact $c) {
+            $fica = DB::table('fica_submissions')
+                ->where('contact_id', $c->id)
+                ->orderByDesc('id')
+                ->value('status');
+
+            return [
+                'id'         => $c->id,
+                'first_name' => $c->first_name,
+                'last_name'  => $c->last_name,
+                'full_name'  => trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '')),
+                'phone'      => $c->phone,
+                'email'      => $c->email,
+                'role'       => $c->pivot->role,
+                'type'       => $c->type?->name,
+                'fica_status'=> $fica ?: 'none',
+            ];
+        })->values();
+
+        return response()->json([
+            'property_id' => $property->id,
+            'contacts'    => $contacts,
+        ]);
+    }
+
+    // ── POST /api/mobile/properties/{id}/contacts ──────────────────
+    // Link a contact to the property. Two modes:
+    //   A) Existing contact → send { "contact_id": 123, "role": "seller" }
+    //   B) New contact      → send the contact fields (first_name, …) and
+    //                          they're created, then linked, in one call.
+    // `role` is one of: owner, seller, landlord, lessor, buyer, tenant,
+    // bond_originator, attorney … (free string, max 50 — same as web).
+    // Seller-type roles also auto-create the PropertySellerLink the
+    // compliance/FICA flow keys off (mirrors the web link controller).
+    public function contactsLink(Request $request, Property $property): JsonResponse
+    {
+        $user = $request->user();
+        $this->authorizeProperty($user, $property);
+
+        $data = $request->validate([
+            'contact_id'      => 'nullable|integer|exists:contacts,id',
+            'role'            => 'nullable|string|max:50',
+
+            // New-contact fields (required only when contact_id is absent)
+            'first_name'      => 'required_without:contact_id|string|max:100',
+            'last_name'       => 'required_without:contact_id|string|max:100',
+            'phone'           => 'required_without:contact_id|string|max:30',
+            'email'           => 'nullable|email|max:150',
+            'id_number'       => 'nullable|string|max:20',
+            'contact_type_id' => 'nullable|exists:contact_types,id',
+            'notes'           => 'nullable|string|max:1000',
+        ]);
+
+        $role = $data['role'] ?? null;
+
+        if (!empty($data['contact_id'])) {
+            $contact = Contact::findOrFail($data['contact_id']);
+        } else {
+            // Inline-create — same duplicate guard as the mobile contacts endpoint.
+            $dup = Contact::where('phone', $data['phone'])
+                ->when(!empty($data['email']), fn ($q) => $q->orWhere('email', $data['email']))
+                ->first();
+            if ($dup) {
+                return response()->json([
+                    'message'      => 'Duplicate contact (phone or email already exists). Link the existing one with contact_id.',
+                    'duplicate_id' => $dup->id,
+                ], 422);
+            }
+
+            $contact = Contact::create([
+                'first_name'         => $data['first_name'],
+                'last_name'          => $data['last_name'],
+                'phone'              => $data['phone'],
+                'email'              => $data['email'] ?? null,
+                'id_number'          => $data['id_number'] ?? null,
+                'contact_type_id'    => $data['contact_type_id'] ?? null,
+                'notes'              => $data['notes'] ?? null,
+                'created_by_user_id' => $user->id,
+                'agency_id'          => $user->agency_id,
+                'branch_id'          => $user->effectiveBranchId(),
+            ]);
+        }
+
+        // Derive role from the contact type's esign_role when not given,
+        // exactly like the web ContactPropertyController.
+        if (empty($role)) {
+            $esignRole = $contact->type?->esign_role;
+            $role = ['seller' => 'owner', 'lessor' => 'lessor', 'buyer' => 'buyer', 'lessee' => 'tenant'][$esignRole] ?? null;
+        }
+
+        $property->contacts()->syncWithoutDetaching([$contact->id => ['role' => $role]]);
+
+        if (in_array($role, ['owner', 'seller', 'landlord', 'lessor'], true)) {
+            PropertySellerLink::ensureExists($property->id, $contact->id);
+        }
+
+        return response()->json([
+            'message'    => 'Contact linked to property.',
+            'contact'    => [
+                'id'         => $contact->id,
+                'full_name'  => trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')),
+                'phone'      => $contact->phone,
+                'email'      => $contact->email,
+                'role'       => $role,
+            ],
+        ], 201);
+    }
+
+    // ── DELETE /api/mobile/properties/{id}/contacts/{contact} ──────
+    // Unlink a contact from the property (does NOT delete the contact).
+    public function contactsUnlink(Request $request, Property $property, Contact $contact): JsonResponse
+    {
+        $this->authorizeProperty($request->user(), $property);
+
+        $property->contacts()->detach($contact->id);
+
+        return response()->json(['message' => 'Contact unlinked from property.']);
     }
 
     // Build an array of portal placements. Only includes portals where the

@@ -177,6 +177,15 @@ Route::middleware('auth:sanctum')->group(function () {
         // including the live portal placements)
         Route::get('/{property}/overview', [MobilePropertyController::class, 'overview']);
 
+        // Compliance / marketing-readiness (Overview compliance panel)
+        Route::get('/{property}/compliance',                 [MobilePropertyController::class, 'compliance']);
+        Route::post('/{property}/compliance/send-to-market', [MobilePropertyController::class, 'sendToMarket']);
+
+        // Property ↔ Contact links (link existing or create-and-link new)
+        Route::get('/{property}/contacts',              [MobilePropertyController::class, 'contactsIndex']);
+        Route::post('/{property}/contacts',             [MobilePropertyController::class, 'contactsLink']);
+        Route::delete('/{property}/contacts/{contact}', [MobilePropertyController::class, 'contactsUnlink']);
+
         // Gallery tags (derived live from this property's spaces + custom tags)
         Route::get('/{property}/gallery/tags',          [MobilePropertyController::class, 'galleryTags']);
         Route::post('/{property}/gallery/tags',         [MobilePropertyController::class, 'addCustomTag']);
