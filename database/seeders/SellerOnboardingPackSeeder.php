@@ -7,8 +7,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * "Seller Onboarding" web pack — bundles, for the e-sign wizard:
- *   1. Marketing Permission V6        (MarketingPermissionV6Seeder)
- *   2. Letting Mandatory Disclosure V7 (WebTemplateSeeder)
+ *   1. Marketing Permission V6     (MarketingPermissionV6Seeder)
+ *   2. Sales Mandatory Disclosure  (SalesMandatoryDisclosureSeeder)
  *
  * FICA is intentionally NOT a pack item — it stays the per-recipient
  * "FICA verification required" toggle at wizard Step 6; bundling docs
@@ -37,13 +37,15 @@ class SellerOnboardingPackSeeder extends Seeder
 
         $v6Id = DB::table('docuperfect_templates')
             ->where('name', MarketingPermissionV6Seeder::TEMPLATE_NAME)->value('id');
+        // Sale-context disclosure (NOT the letting one — a seller discloses
+        // to a purchaser, PPA s70 / Reg 36).
         $disclosureId = DB::table('docuperfect_templates')
-            ->where('name', 'Letting Mandatory Disclosure V7')->value('id');
+            ->where('name', SalesMandatoryDisclosureSeeder::TEMPLATE_NAME)->value('id');
 
         if (! $v6Id || ! $disclosureId) {
             throw new \RuntimeException(
                 'SellerOnboardingPackSeeder needs both templates seeded first '
-                . '(Marketing Permission V6 + Letting Mandatory Disclosure V7).'
+                . '(Marketing Permission V6 + Sales Mandatory Disclosure).'
             );
         }
 
@@ -61,7 +63,7 @@ class SellerOnboardingPackSeeder extends Seeder
 
         $items = [
             ['template_id' => $v6Id,         'sort_order' => 0,  'slot_label' => 'Marketing Permission V6'],
-            ['template_id' => $disclosureId, 'sort_order' => 10, 'slot_label' => 'Letting Mandatory Disclosure V7'],
+            ['template_id' => $disclosureId, 'sort_order' => 10, 'slot_label' => 'Sales Mandatory Disclosure'],
         ];
 
         foreach ($items as $item) {

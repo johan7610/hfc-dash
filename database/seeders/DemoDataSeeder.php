@@ -248,8 +248,9 @@ class DemoDataSeeder extends Seeder
             SuggestedActionThresholdsSeeder::class,
             SellerOutreachTemplatesSeeder::class,
             AgencyDocumentTypeConfigSeeder::class,
-            WebTemplateSeeder::class,            // 6 e-sign web templates
-            MarketingPermissionV6Seeder::class,  // + Marketing Permission V6 (sales)
+            WebTemplateSeeder::class,                // 6 e-sign web templates
+            MarketingPermissionV6Seeder::class,      // + Marketing Permission V6 (sales)
+            SalesMandatoryDisclosureSeeder::class,   // + Sales Mandatory Disclosure (PPA s70)
         ] as $seeder) {
             $this->safeSeed(class_basename($seeder), fn () => $this->call([$seeder]));
         }
@@ -273,12 +274,21 @@ class DemoDataSeeder extends Seeder
 
     private function stage1_agencyBranchesUsers(): void
     {
-        // Reuse agency 1 (created by migrate:fresh). Mark it a demo agency.
+        // Reuse agency 1 (created by migrate:fresh). Mark it a demo agency
+        // AND correct the stale "Mandate Company"-era letterhead data so the
+        // shared, data-driven company-header component renders HFC's real
+        // details on every web template. Values verified from
+        // resources/docs/source/HFC_Marketing_Permission_V6.docx.
         DB::table('agencies')->where('id', self::AGENCY_ID)->update([
-            'name'      => 'HFC Coastal',
-            'is_demo'   => 1,
-            'is_active' => 1,
-            'updated_at' => now(),
+            'name'         => 'HFC Coastal',
+            'trading_name' => 'Johan and Elize Properties T/A Home Finders Coastal',
+            'reg_no'       => '2017/431318/07',
+            'vat_no'       => '4630287821',
+            'ffc_no'       => '2023116041',
+            'fic_no'       => 'AI/180629/0000019',
+            'is_demo'      => 1,
+            'is_active'    => 1,
+            'updated_at'   => now(),
         ]);
 
         // 3 branches.

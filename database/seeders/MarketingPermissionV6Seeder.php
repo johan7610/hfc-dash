@@ -31,27 +31,30 @@ class MarketingPermissionV6Seeder extends Seeder
 
     public function run(): void
     {
-        $text = fn (string $id, string $label) => [
+        // assignedTo controls the wizard party tag. The seller's OWN data is
+        // tagged 'seller' (routes to the Seller recipient, not "AGENT (You)");
+        // agent-prepared fields stay 'agent'.
+        $text = fn (string $id, string $label, string $assignedTo = 'agent') => [
             'id' => $id, 'field_name' => $id, 'name' => $id,
             'label' => $label, 'type' => 'input', 'tag_type' => 'input',
-            'assignedTo' => 'agent', 'render_type' => 'web',
+            'assignedTo' => $assignedTo, 'render_type' => 'web',
         ];
-        $choice = fn (string $id, string $label, array $opts) => [
+        $choice = fn (string $id, string $label, array $opts, string $assignedTo = 'agent') => [
             'id' => $id, 'field_name' => $id, 'name' => $id,
             'label' => $label, 'type' => 'selection', 'tag_type' => 'selection',
-            'options' => $opts, 'assignedTo' => 'agent', 'render_type' => 'web',
+            'options' => $opts, 'assignedTo' => $assignedTo, 'render_type' => 'web',
         ];
 
         $fields = [
-            $text('seller1_name', 'Seller 1 Name'),
-            $text('seller1_id', 'Seller 1 ID / Entity No'),
-            $text('seller2_name', 'Seller 2 Name'),
-            $text('seller2_id', 'Seller 2 ID / Entity No'),
+            $text('seller1_name', 'Seller 1 Name', 'seller'),
+            $text('seller1_id', 'Seller 1 ID / Entity No', 'seller'),
+            $text('seller2_name', 'Seller 2 Name', 'seller'),
+            $text('seller2_id', 'Seller 2 ID / Entity No', 'seller'),
             $choice('marital_status', 'Marital Status', [
                 'Unmarried', 'In Community of Property', 'Out of Community (ANC)', 'Other',
-            ]),
-            $choice('sa_resident', 'SA Resident', ['Yes', 'No']),
-            $text('contact_tel_email', 'Contact (Tel / Email)'),
+            ], 'seller'),
+            $choice('sa_resident', 'SA Resident', ['Yes', 'No'], 'seller'),
+            $text('contact_tel_email', 'Contact (Tel / Email)', 'seller'),
             $text('property_address', 'Property Address'),
             $text('erf_unit_no', 'Erf / Unit No'),
             $text('complex_estate', 'Complex / Estate'),
@@ -79,7 +82,7 @@ class MarketingPermissionV6Seeder extends Seeder
                 'field_mappings'         => null,
                 'is_global'              => true,
                 'is_esign'               => true,
-                'signing_parties'        => json_encode(['owner_party', 'agent']),
+                'signing_parties'        => json_encode(['seller', 'agent']),
                 'allowed_delivery_modes' => 'esign,wet_ink,download',
                 'updated_at'             => now(),
             ]
