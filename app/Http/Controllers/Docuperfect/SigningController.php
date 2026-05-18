@@ -12,6 +12,7 @@ use App\Models\Docuperfect\SignatureTemplate;
 use App\Models\FicaSubmission;
 use App\Services\Docuperfect\DocumentFlattener;
 use App\Services\Docuperfect\SignatureService;
+use App\Services\Docuperfect\SignatureSurfaceNormalizer;
 use App\Services\WebTemplateFieldPartyMap;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -252,6 +253,13 @@ class SigningController extends Controller
             } else {
                 $editableFields = WebTemplateFieldPartyMap::getEditableFields($signingRequest->party_role);
             }
+
+            // Inline templates carry data-marker-party on a .signature-col /
+            // .signature-section wrapper but never emit data-marker-type, so the
+            // signing engine's [data-marker-party][data-marker-type="signature"]
+            // selector finds zero surfaces. Normalise additively so every web
+            // template is signable without touching the template files (BL-5/6).
+            $webTemplateHtml = SignatureSurfaceNormalizer::normalize($webTemplateHtml);
         }
 
         // Build page image URLs — use flattened images when available (PDF path)
@@ -1108,7 +1116,11 @@ class SigningController extends Controller
         // Embed this signer's signatures, initials, and ceremony values into merged_html
         if (!empty($webData['merged_html']) && (!empty($signatures) || !empty($pageBreakInitials) || !empty($ceremonyValues))) {
             $sigController = app(SignatureController::class);
-            $html = $webData['merged_html'];
+            // Stamp the engine's signature convention onto inline templates so
+            // embedSignaturesIntoHtml's [data-marker-party][data-marker-type=
+            // "signature"] match finds the surface and the final PDF carries
+            // the signature (idempotent — no-op once embedded). BL-5/6.
+            $html = SignatureSurfaceNormalizer::normalize($webData['merged_html']);
             if (!empty($signatures)) {
                 $html = $sigController->embedSignaturesIntoHtml($html, $signatures, $signingRequest->party_role, $signingRequest->signer_name ?? '');
             }

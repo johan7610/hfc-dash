@@ -65,10 +65,21 @@ class SalesMandatoryDisclosureSeeder extends Seeder
                 'field_mappings'         => null,
                 'is_global'              => true,
                 'is_esign'               => true,
-                'signing_parties'        => json_encode(['seller', 'agent']),
+                'signing_parties'        => json_encode(['seller', 'agent', 'buyer']),
                 'allowed_delivery_modes' => 'esign,wet_ink,download',
                 'updated_at'             => now(),
             ]
         );
+
+        // Retire the legacy CDS source (cds/template-117) from the e-sign
+        // wizard. Its YES/NO/N/A disclosure cells are bare <td></td> with no
+        // data-field, so the owner can never fill them — superseded by the
+        // blade above. Soft retire only (no hard delete; row stays, is
+        // recoverable); idempotent, keyed by the stable blade_view.
+        DB::table('docuperfect_templates')
+            ->where('blade_view', 'docuperfect.web-templates.cds.template-117')
+            ->whereNull('deleted_at')
+            ->where('is_esign', true)
+            ->update(['is_esign' => false, 'updated_at' => now()]);
     }
 }
