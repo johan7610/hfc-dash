@@ -1090,7 +1090,25 @@ class ESignWizardController extends Controller
             $esignRoles = $esignRoleMap[strtolower($role)] ?? null;
             if ($esignRoles) {
                 $typeIds = DB::table('contact_types')->whereIn('esign_role', $esignRoles)->pluck('id');
-                if ($typeIds->isNotEmpty()) {
+                $wantsBuyer  = in_array('buyer', $esignRoles, true);
+                $wantsSeller = in_array('seller', $esignRoles, true);
+
+                if ($wantsBuyer || $wantsSeller) {
+                    // contact_type_id is mostly unpopulated; buyer/seller truth
+                    // lives in is_buyer / contact_property role='owner'. Match
+                    // either the (rare) typed contacts OR the canonical column.
+                    $query->where(function ($w) use ($typeIds, $wantsBuyer, $wantsSeller) {
+                        if ($typeIds->isNotEmpty()) {
+                            $w->orWhereIn('contact_type_id', $typeIds);
+                        }
+                        if ($wantsBuyer) {
+                            $w->orWhere('is_buyer', 1);
+                        }
+                        if ($wantsSeller) {
+                            $w->orWhereHas('properties', fn ($q) => $q->where('contact_property.role', 'owner'));
+                        }
+                    });
+                } elseif ($typeIds->isNotEmpty()) {
                     $query->whereIn('contact_type_id', $typeIds);
                 }
             } else {
