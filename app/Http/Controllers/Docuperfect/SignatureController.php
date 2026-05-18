@@ -17,6 +17,7 @@ use App\Services\Docuperfect\DocumentFlattener;
 use App\Services\Docuperfect\SignaturePdfService;
 use App\Models\Docuperfect\NamedField;
 use App\Services\Docuperfect\SignatureService;
+use App\Services\Docuperfect\LetterheadRefresher;
 use App\Services\Docuperfect\SignatureSurfaceNormalizer;
 use App\Services\PermissionService;
 use App\Services\WebTemplateFieldPartyMap;
@@ -923,6 +924,7 @@ class SignatureController extends Controller
             // first-signer pass (same engine selector as the external signer);
             // additive + idempotent, never touches the template files (BL-5/6).
             $webTemplateHtml = SignatureSurfaceNormalizer::normalize($webTemplateHtml);
+            $webTemplateHtml = LetterheadRefresher::refresh($webTemplateHtml);
         } else {
             $pageCount = $hasFlattened ? count($flattenedPages) : ($docTemplate ? $docTemplate->page_count : 0);
             for ($n = 0; $n < $pageCount; $n++) {

@@ -12,11 +12,14 @@
 
     Field mechanism: every fillable field is a
     <span class="field" data-field="KEY">{{ $KEY ?? '' }}</span>.
-    Choice fields (Marital Status, SA Resident, Price basis) are driven
-    by fields_json type:'selection' + options (MarketingPermissionV6Seeder)
-    and the chosen option text is substituted into the data-field span by
-    the e-sign wizard Fill & Review step.
-    Signature blocks use .signature-col[data-marker-party][data-marker-index].
+    Recipient/property fields carry a named_field_id source mapping
+    (MarketingPermissionV6Seeder) so autoFillFields resolves seller +
+    property data into them; choice fields (Marital Status, SA Resident,
+    Price basis) are agent-selected via fields_json type:'selection'.
+    Signatures use the shared recipient-driven signature-block partial
+    (one cell per actual signer; empty signer slots suppressed; emits
+    data-marker-type="signature") — the proven path used by
+    cds/template-117 and cds/template-120.
 --}}
 <!DOCTYPE html>
 <html lang="en">
@@ -167,33 +170,16 @@
     <div class="section-head">FIDELITY FUND CERTIFICATE WARRANTY</div>
     <p class="ffc-warranty">[ FFC WARRANTY CLAUSE &mdash; verbatim statutory wording to be inserted here. This clause is prescribed and must be reproduced word-for-word; insert the exact text from the approved v11 / attorney source. ]</p>
 
-    {{-- ===== Execution ===== --}}
-    <p class="signed-line">Signed at <span class="field field-medium" data-field="signed_at_location">{{ $signed_at_location ?? '' }}</span>
-        on <span class="field field-short" data-field="signed_day">{{ $signed_day ?? '' }}</span>
-        <span class="field field-medium" data-field="signed_month">{{ $signed_month ?? '' }}</span>
-        20<span class="field field-short" data-field="signed_year">{{ $signed_year ?? '' }}</span>.</p>
+    {{-- ===== Execution & signatures =====
+         Recipient-driven shared partial (proven path — cds/template-117,
+         cds/template-120): one signature cell per actual signer of each
+         role, empty slots suppressed (no phantom "Seller 2" for a single
+         seller), each cell a real [data-marker-party][data-marker-type=
+         "signature"] surface. The partial renders the full "Thus done and
+         signed … at … on this … day of …" execution ceremony per role. --}}
+    @include('docuperfect.web-templates.components.signature-block', ['parties' => ['Seller', 'Witness', 'Agent']])
 
-    <div class="signature-section">
-        <div class="signature-grid" style="grid-template-columns: 1fr 1fr;">
-            <div class="signature-col" data-marker-party="owner" data-marker-index="0">
-                <div class="signature-line"></div>
-                <div class="signature-label">Seller 1</div>
-            </div>
-            <div class="signature-col" data-marker-party="owner" data-marker-index="1">
-                <div class="signature-line"></div>
-                <div class="signature-label">Seller 2</div>
-            </div>
-            <div class="signature-col" data-marker-party="witness" data-marker-index="0">
-                <div class="signature-line"></div>
-                <div class="signature-label">Witness</div>
-            </div>
-            <div class="signature-col" data-marker-party="agent" data-marker-index="0">
-                <div class="signature-line"></div>
-                <div class="signature-label">Marketing Permission Agent &mdash; Home Finders Coastal</div>
-            </div>
-        </div>
-        <p style="margin-top: 4pt; font-size: 9pt; text-align: center;">(Registered Owner/s or Duly Authorised Representatives)</p>
-    </div>
+    <p style="margin-top: 4pt; font-size: 9pt; text-align: center;">(Registered Owner/s or Duly Authorised Representatives)</p>
 
     <div class="doc-footer">Marketing Permission V6</div>
 

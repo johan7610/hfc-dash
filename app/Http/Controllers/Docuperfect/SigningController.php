@@ -12,6 +12,7 @@ use App\Models\Docuperfect\SignatureTemplate;
 use App\Models\FicaSubmission;
 use App\Services\Docuperfect\DocumentFlattener;
 use App\Services\Docuperfect\SignatureService;
+use App\Services\Docuperfect\LetterheadRefresher;
 use App\Services\Docuperfect\SignatureSurfaceNormalizer;
 use App\Services\WebTemplateFieldPartyMap;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -260,6 +261,11 @@ class SigningController extends Controller
             // selector finds zero surfaces. Normalise additively so every web
             // template is signable without touching the template files (BL-5/6).
             $webTemplateHtml = SignatureSurfaceNormalizer::normalize($webTemplateHtml);
+
+            // Re-resolve the letterhead so a stored merged_html snapshot
+            // never serves stale agency data ("The Mandate Company /
+            // Margate") at signing — always show CURRENT agency.
+            $webTemplateHtml = LetterheadRefresher::refresh($webTemplateHtml);
         }
 
         // Build page image URLs — use flattened images when available (PDF path)
