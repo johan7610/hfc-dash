@@ -70,6 +70,35 @@ class DemoDataSeeder extends Seeder
     /** Spine tracked-property ids that thread the full lifecycle. */
     private array $spine = [];
 
+    /** contact_types ids resolved dynamically by esign_role (NOT hardcoded). */
+    private ?int $buyerTypeId = null;
+    private ?int $sellerTypeId = null;
+
+    /** Distinct spine street names so the 12 chains map to 12 properties. */
+    private const SPINE_STREETS = [
+        'Lighthouse Way', 'Sardine Run Crescent', 'Aloe Ridge Close', 'Whale Watch Drive',
+        'Coral Reef Lane', 'Milkwood Grove', 'Strelitzia Avenue', 'Dolphin Point Road',
+        'Kingfisher Bend', 'Protea Heights', 'Baobab Boulevard', 'Pelican Bay Walk',
+    ];
+
+    private function buyerTypeId(): int
+    {
+        return $this->buyerTypeId ??= (int) (DB::table('contact_types')
+            ->where('esign_role', 'buyer')->value('id') ?? 0);
+    }
+
+    private function sellerTypeId(): int
+    {
+        return $this->sellerTypeId ??= (int) (DB::table('contact_types')
+            ->where('esign_role', 'seller')->value('id') ?? 0);
+    }
+
+    private function contactTypeFor(bool $isBuyer): ?int
+    {
+        $id = $isBuyer ? $this->buyerTypeId() : $this->sellerTypeId();
+        return $id > 0 ? $id : null;
+    }
+
     public function run(): void
     {
         // Double-lock environment gate (see environmentGateRefusal). The
@@ -100,6 +129,7 @@ class DemoDataSeeder extends Seeder
         $this->stage4_contactsAndWishlists();
         $this->stage5_promoteToStock();
         $this->stage6_buyerMatchRecompute();
+        $this->stage6b_linkBuyerProperties();
         $this->stage7_presentations();
         $this->stage8_fica();
         $this->stage9_esign();
@@ -620,17 +650,21 @@ class DemoDataSeeder extends Seeder
             $beds = $this->rngInt(2, 5);
             $price = $this->priceFor($beds, 'House');
 
+            $cAt = now()->subDays($this->rngInt(10, 90));
             $sellerId = DB::table('contacts')->insertGetId([
                 'agency_id'          => self::AGENCY_ID,
                 'branch_id'          => $branchId,
                 'created_by_user_id' => $agentId,
+                'contact_type_id'    => $this->contactTypeFor(false),
                 'first_name'         => '[DEMO] ' . $this->pick(['Pieter', 'Thandi', 'Greg', 'Naledi', 'Riaan', 'Zola']),
                 'last_name'          => $this->pick(['Naidoo', 'Coetzee', 'Mthembu', 'Fourie', 'Sibeko']),
                 'phone'              => '07' . $this->rngInt(10000000, 99999999),
                 'email'              => 'seller' . Str::random(5) . '@example.com',
                 'is_buyer'           => 0,
                 'messaging_opt_out_at' => null,
-                'created_at'         => now()->subDays($this->rngInt(10, 90)),
+                'loaded_at'          => $cAt,
+                'modified_at'        => now(),
+                'created_at'         => $cAt,
                 'updated_at'         => now(),
             ]);
             $pid = DB::table('properties')->insertGetId([
@@ -704,6 +738,7 @@ class DemoDataSeeder extends Seeder
                 'agency_id'                 => self::AGENCY_ID,
                 'branch_id'                 => $branchId,
                 'created_by_user_id'        => $agentId,
+                'contact_type_id'           => $this->contactTypeFor($isBuyer),
                 'first_name'                => '[DEMO] ' . $firstNames[$i % count($firstNames)],
                 'last_name'                 => $lastNames[$i % count($lastNames)],
                 'phone'                     => '07' . $this->rngInt(10000000, 99999999),
@@ -712,6 +747,8 @@ class DemoDataSeeder extends Seeder
                 'buyer_state'               => $state,
                 'last_activity_at'          => $isBuyer ? $lastActivity : null,
                 'buyer_pipeline_entered_at' => $isBuyer ? $createdAt : null,
+                'loaded_at'                 => $createdAt,
+                'modified_at'               => now(),
                 'created_at'                => $createdAt,
                 'updated_at'                => now(),
             ]);
@@ -819,17 +856,31 @@ class DemoDataSeeder extends Seeder
         foreach ($tps as $idx => $tpId) {
             $branchId = $this->pick($this->branchIds);
             $agentId = $this->agentForBranch($branchId);
+
+            // Intended status decided BEFORE any risky call (FIX 4) so a later
+            // failure can never leave the property at promoteToStock's 'draft'.
+            $status = match (true) {
+                $idx % 9 === 0 => 'sold',
+                $idx % 5 === 0 => 'draft',
+                default        => 'available',
+            };
+            $listedDays = $this->rngInt(8, 180);
+
             try {
                 $property = $matcher->promoteToStock($tpId, $agentId, [
                     'branch_id' => $branchId,
                 ]);
-                // Spread promoted properties across statuses for a lived-in feel.
-                $status = match (true) {
-                    $idx % 9 === 0 => 'sold',
-                    $idx % 5 === 0 => 'draft',
-                    default        => 'available',
-                };
-                $listedDays = $this->rngInt(8, 180);
+            } catch (\Throwable $e) {
+                // promoteToStock is transactional — a throw rolls back the
+                // Property create, so no orphan 'draft' property is left.
+                $this->command->warn("    promote tp #{$tpId}: " . $e->getMessage());
+                continue;
+            }
+
+            // Property exists now. Guarantee it reaches its intended status
+            // even if the enrichment update fails (FIX 4: log loud + compensate,
+            // never silently swallow leaving status='draft').
+            try {
                 DB::table('properties')->where('id', $property->id)->update([
                     'status'       => $status,
                     'title'        => '[DEMO] ' . $property->title,
@@ -839,24 +890,31 @@ class DemoDataSeeder extends Seeder
                     'listed_date'  => $status === 'draft' ? null : now()->subDays($listedDays)->toDateString(),
                     'mandate_type' => $this->pick(['Sole', 'Open', 'Dual']),
                 ]);
-                $this->promotedPropertyIds[] = $property->id;
-
-                if ($status === 'sold') {
-                    DB::table('property_sold_records')->insert([
-                        'property_id'   => $property->id,
-                        'agency_id'     => self::AGENCY_ID,
-                        'sold_price'    => (int) ($property->price * ($this->rngInt(90, 103) / 100)),
-                        'sold_date'     => now()->subDays($this->rngInt(5, 70))->toDateString(),
-                        'days_on_market' => $listedDays,
-                        'source'        => 'manual',
-                        'created_at'    => now(),
-                        'updated_at'    => now(),
-                    ]);
-                }
-                $ok++;
             } catch (\Throwable $e) {
-                $this->command->warn("    promote tp #{$tpId}: " . $e->getMessage());
+                $this->command->error("    promote tp #{$tpId}: status enrichment FAILED ("
+                    . $e->getMessage() . ") — compensating to '{$status}'");
+                DB::table('properties')->where('id', $property->id)->update(['status' => $status]);
             }
+
+            $this->promotedPropertyIds[] = $property->id;
+
+            // FIX 2: PropertyController::store() requires >=1 linked contact.
+            // Every promoted property gets an owner contact, like pitch/spine.
+            $this->createOwnerContact($property->id, $branchId, $agentId);
+
+            if ($status === 'sold') {
+                DB::table('property_sold_records')->insert([
+                    'property_id'   => $property->id,
+                    'agency_id'     => self::AGENCY_ID,
+                    'sold_price'    => (int) ($property->price * ($this->rngInt(90, 103) / 100)),
+                    'sold_date'     => now()->subDays($this->rngInt(5, 70))->toDateString(),
+                    'days_on_market' => $listedDays,
+                    'source'        => 'manual',
+                    'created_at'    => now(),
+                    'updated_at'    => now(),
+                ]);
+            }
+            $ok++;
         }
 
         // A handful of standalone demo properties (not promoted) for variety
@@ -903,7 +961,93 @@ class DemoDataSeeder extends Seeder
                 'updated_at'    => now(),
             ]);
             $this->promotedPropertyIds[] = $pid;
+            // FIX 2: every property must have >=1 linked contact (owner).
+            $this->createOwnerContact($pid, $branchId, $agentId);
         }
+    }
+
+    /**
+     * Create a seller/owner Contact (fully populated — contact_type_id,
+     * loaded_at, modified_at) and link it to the property via the
+     * contact_property pivot with role='owner'. Mirrors the pitch-seller
+     * pattern so seeded properties honour PropertyController's invariant
+     * that every property has at least one linked contact.
+     */
+    private function createOwnerContact(int $propertyId, int $branchId, int $agentId): int
+    {
+        $cAt = now()->subDays($this->rngInt(20, 120));
+        $cid = DB::table('contacts')->insertGetId([
+            'agency_id'          => self::AGENCY_ID,
+            'branch_id'          => $branchId,
+            'created_by_user_id' => $agentId,
+            'contact_type_id'    => $this->contactTypeFor(false),
+            'first_name'         => '[DEMO] ' . $this->pick(['Owner', 'Marius', 'Thuli', 'Estelle', 'Vusi', 'Hennie']),
+            'last_name'          => $this->pick(['Owner', 'Naidoo', 'Coetzee', 'Mthembu', 'Fourie', 'Sibeko']),
+            'phone'              => '07' . $this->rngInt(10000000, 99999999),
+            'email'              => 'owner' . Str::random(6) . '@example.com',
+            'is_buyer'           => 0,
+            'loaded_at'          => $cAt,
+            'modified_at'        => now(),
+            'created_at'         => $cAt,
+            'updated_at'         => now(),
+        ]);
+        DB::table('contact_property')->insertOrIgnore([
+            'contact_id' => $cid, 'property_id' => $propertyId, 'role' => 'owner',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        return $cid;
+    }
+
+    /**
+     * STAGE 6b — link every buyer to its top matched properties (role=buyer)
+     * so "Properties N" on a buyer is non-zero and coherent. Uses the
+     * property_buyer_matches Stage 6 produced; falls back to a property in
+     * the buyer's branch so EVERY is_buyer contact gets >=1 link.
+     */
+    private function stage6b_linkBuyerProperties(): void
+    {
+        $buyers = DB::table('contacts')
+            ->where('agency_id', self::AGENCY_ID)
+            ->where('is_buyer', 1)
+            ->whereNull('deleted_at')
+            ->get(['id', 'branch_id']);
+
+        $linked = 0;
+        $fallbacks = 0;
+        foreach ($buyers as $b) {
+            $propIds = DB::table('property_buyer_matches')
+                ->where('contact_id', $b->id)
+                ->orderByDesc('score')
+                ->limit(3)
+                ->pluck('property_id')
+                ->all();
+
+            if (empty($propIds)) {
+                // Fallback: a property in the buyer's branch (else any agency stock).
+                $fp = DB::table('properties')->where('agency_id', self::AGENCY_ID)
+                    ->where('branch_id', $b->branch_id)->whereNull('deleted_at')
+                    ->orderBy('id')->value('id')
+                    ?? DB::table('properties')->where('agency_id', self::AGENCY_ID)
+                        ->whereNull('deleted_at')->orderBy('id')->value('id');
+                if ($fp) {
+                    $propIds = [$fp];
+                    $fallbacks++;
+                }
+            }
+
+            foreach ($propIds as $pid) {
+                DB::table('contact_property')->insertOrIgnore([
+                    'contact_id' => $b->id, 'property_id' => $pid, 'role' => 'buyer',
+                    'created_at' => now(), 'updated_at' => now(),
+                ]);
+            }
+            if (!empty($propIds)) {
+                $linked++;
+            }
+        }
+
+        $this->command->info("  Stage 6b: {$linked} buyers linked to matched properties "
+            . "({$fallbacks} via branch fallback)");
     }
 
     // ───────────────────────────────────────────────────────────────────
@@ -1335,11 +1479,16 @@ class DemoDataSeeder extends Seeder
             $branchId = $this->branchByTown[$town];
             $agentId = $this->agentForBranch($branchId);
             $agent = User::find($agentId);
-            $suburb = $this->pick(self::TOWN_SUBURBS[$town]);
+            // FIX 3: fixed (non-random) suburb + a DISTINCT street per spine so
+            // matchOrCreate cannot dedupe the 12 chains together — 12 listings
+            // → 12 distinct tracked → 12 distinct promoted properties.
+            $townSuburbs = self::TOWN_SUBURBS[$town];
+            $suburb = $townSuburbs[$s % count($townSuburbs)];
+            $street = self::SPINE_STREETS[$s];
             $beds = $this->rngInt(3, 5);
             $price = $this->priceFor($beds, 'House');
             $streetNo = 500 + $s;
-            $addr = "{$streetNo} Lighthouse Way, {$suburb}";
+            $addr = "{$streetNo} {$street}, {$suburb}";
 
             try {
                 // 1. Prospect listing → 2. tracked property
@@ -1356,7 +1505,7 @@ class DemoDataSeeder extends Seeder
                     'is_active' => 1, 'created_at' => now()->subDays(60), 'updated_at' => now(),
                 ]);
                 $tp = $matcher->matchOrCreate(self::AGENCY_ID, [
-                    'street_number' => (string) $streetNo, 'street_name' => 'Lighthouse Way',
+                    'street_number' => (string) $streetNo, 'street_name' => $street,
                     'suburb' => $suburb, 'town' => $town, 'province' => 'KwaZulu-Natal',
                     'property_type' => 'house', 'bedrooms' => $beds, 'bathrooms' => $beds - 1,
                     'last_known_asking_price' => $price, 'address' => $addr,
@@ -1375,14 +1524,17 @@ class DemoDataSeeder extends Seeder
                 $sellerId = DB::table('contacts')->insertGetId([
                     'agency_id' => self::AGENCY_ID, 'branch_id' => $branchId,
                     'created_by_user_id' => $agentId,
+                    'contact_type_id' => $this->contactTypeFor(false),
                     'first_name' => '[DEMO] Spine Seller', 'last_name' => "#{$s}",
                     'phone' => '07' . $this->rngInt(10000000, 99999999),
                     'email' => "spine.seller{$s}@example.com", 'is_buyer' => 0,
+                    'loaded_at' => now()->subDays(55), 'modified_at' => now(),
                     'created_at' => now()->subDays(55), 'updated_at' => now(),
                 ]);
                 $buyerId = DB::table('contacts')->insertGetId([
                     'agency_id' => self::AGENCY_ID, 'branch_id' => $branchId,
                     'created_by_user_id' => $agentId,
+                    'contact_type_id' => $this->contactTypeFor(true),
                     'first_name' => '[DEMO] Spine Buyer', 'last_name' => "#{$s}",
                     'phone' => '07' . $this->rngInt(10000000, 99999999),
                     'email' => "spine.buyer{$s}@example.com", 'is_buyer' => 1,
@@ -1391,6 +1543,7 @@ class DemoDataSeeder extends Seeder
                     'preapproval_expires_at' => now()->addMonths(3)->toDateString(),
                     'last_activity_at' => now()->subDays(3),
                     'buyer_pipeline_entered_at' => now()->subDays(50),
+                    'loaded_at' => now()->subDays(50), 'modified_at' => now(),
                     'created_at' => now()->subDays(50), 'updated_at' => now(),
                 ]);
                 ContactMatch::withoutGlobalScopes()->create([
@@ -1413,6 +1566,13 @@ class DemoDataSeeder extends Seeder
                 ]);
                 DB::table('contact_property')->insert([
                     'contact_id' => $sellerId, 'property_id' => $property->id, 'role' => 'owner',
+                    'created_at' => now(), 'updated_at' => now(),
+                ]);
+                // Spine buyer is created AFTER stage6b runs, so link it here
+                // to its target property (role=buyer) — guarantees every buyer
+                // has >=1 property link including spine buyers.
+                DB::table('contact_property')->insertOrIgnore([
+                    'contact_id' => $buyerId, 'property_id' => $property->id, 'role' => 'buyer',
                     'created_at' => now(), 'updated_at' => now(),
                 ]);
 
