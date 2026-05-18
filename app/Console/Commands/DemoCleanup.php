@@ -2,22 +2,25 @@
 
 namespace App\Console\Commands;
 
+use Database\Seeders\DemoDataSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 class DemoCleanup extends Command
 {
-    protected $signature = 'demo:cleanup {--force : Skip confirmation}';
-    protected $description = 'Remove all demo-prefixed data seeded by demo:seed. Local only.';
+    protected $signature = 'demo:cleanup {--force : Skip confirmation; also REQUIRED (with DEMO_SEED_ALLOWED=true in .env) to run on a non-local environment}';
+    protected $description = 'Remove all demo-prefixed data seeded by demo:seed. Local: runs directly. Non-local: requires --force AND DEMO_SEED_ALLOWED=true in that environment\'s .env (double-lock; a real production box can never be demo-cleaned).';
 
     public function handle(): int
     {
-        if (!app()->environment('local')) {
-            $this->error('Refusing — APP_ENV is not local.');
+        $force = (bool) $this->option('force');
+
+        if ($refusal = DemoDataSeeder::environmentGateRefusal($force)) {
+            $this->error($refusal);
             return self::FAILURE;
         }
 
-        if (!$this->option('force') && !$this->confirm('This will delete ALL [DEMO]-prefixed records. Continue?')) {
+        if (!$force && !$this->confirm('This will delete ALL [DEMO]-prefixed records. Continue?')) {
             return self::SUCCESS;
         }
 

@@ -72,10 +72,14 @@ class DemoDataSeeder extends Seeder
 
     public function run(): void
     {
-        if (!app()->environment('local')) {
-            throw new \RuntimeException(
-                'DemoDataSeeder runs in local environment only. Current: ' . app()->environment()
-            );
+        // Double-lock environment gate (see environmentGateRefusal). The
+        // --force intent is read from the running console command (demo:seed
+        // passes --force through to db:seed; db:seed defines the --force
+        // option). When the seeder is invoked without a command context the
+        // force intent is false → non-local is refused (the safe direction).
+        $forced = (bool) ($this->command?->option('force') ?? false);
+        if ($refusal = self::environmentGateRefusal($forced)) {
+            throw new \RuntimeException($refusal);
         }
 
         $this->assertSafeMailDriver();
@@ -111,6 +115,48 @@ class DemoDataSeeder extends Seeder
     // ───────────────────────────────────────────────────────────────────
     //  SAFETY
     // ───────────────────────────────────────────────────────────────────
+
+    /**
+     * Double-lock environment gate, shared by demo:seed, demo:cleanup and
+     * this seeder's own run() guard. Returns NULL when the operation may
+     * proceed, or a clear human-readable refusal string otherwise.
+     *
+     *  - `local` environment      → always allowed (normal dev; no flags).
+     *  - any non-local env        → allowed ONLY when BOTH:
+     *      (1) --force was passed by the operator, AND
+     *      (2) DEMO_SEED_ALLOWED=true is set in THAT environment's .env.
+     *
+     * The demo SERVER runs APP_ENV=production, so the gate deliberately
+     * does NOT key on APP_ENV — a real production box that has not opted
+     * in via DEMO_SEED_ALLOWED can NEVER be demo-seeded, even with --force.
+     * The env() read fails safe: if config is cached and the var is not
+     * visible it evaluates false → refuse (operator runs config:clear).
+     */
+    public static function environmentGateRefusal(bool $force): ?string
+    {
+        if (app()->environment('local')) {
+            return null;
+        }
+
+        $env = app()->environment();
+
+        if (!$force) {
+            return "Refusing to run on non-local environment '{$env}'. The safety "
+                . "guard stays on by default. To run on a deliberately opted-in DEMO "
+                . "environment: set DEMO_SEED_ALLOWED=true in that environment's .env "
+                . "AND pass --force.";
+        }
+
+        $optedIn = filter_var(env('DEMO_SEED_ALLOWED'), FILTER_VALIDATE_BOOLEAN);
+        if (!$optedIn) {
+            return "Refusing: --force was given but this environment ('{$env}') has "
+                . "NOT opted in. A real production box can never be demo-seeded. Set "
+                . "DEMO_SEED_ALLOWED=true in this environment's .env to opt in. "
+                . "(If it IS set but config is cached, run `php artisan config:clear` first.)";
+        }
+
+        return null;
+    }
 
     private function assertSafeMailDriver(): void
     {

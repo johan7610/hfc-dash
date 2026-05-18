@@ -15,7 +15,12 @@ Last verified: 2026-05-18 — 15/15 verifications passed on a fresh DB.
 php artisan demo:seed
 ```
 
-- **Local only.** The command and the seeder both refuse to run unless `APP_ENV=local`.
+- **Local:** runs directly, no flags. `demo:cleanup` likewise.
+- **Non-local demo environment (double-lock).** The demo SERVER runs `APP_ENV=production`, so the guard does **not** key on `APP_ENV` alone. To seed/clean a deliberately opted-in non-local demo environment:
+  1. Set **`DEMO_SEED_ALLOWED=true`** in **that environment's `.env`** (the opt-in lock).
+  2. Run **`php artisan demo:seed --force`** (the operator lock). Same for `php artisan demo:cleanup --force`.
+
+  Both conditions are required. A real production box that has **not** set `DEMO_SEED_ALLOWED=true` can **never** be demo-seeded or demo-cleaned, even with `--force`. If `DEMO_SEED_ALLOWED` is set but the box has a cached config, run `php artisan config:clear` first (the gate fails safe — it refuses rather than wrongly proceeding). The gate logic lives in `DemoDataSeeder::environmentGateRefusal()` and is enforced in `demo:seed`, `demo:cleanup`, and the seeder's own `run()`.
 - **Safe.** The seeder asserts the mail driver is `log`/`array` (or `smtp`→localhost) and **aborts** otherwise; it also `Mail::fake()` + `Queue::fake()` + `Bus::fake()` for the whole run. No real email is ever sent, no real external API is ever called.
 - **Re-runnable.** Designed for `migrate:fresh` then `demo:seed`. A deterministic RNG seed means a fresh-DB re-run produces an **identical** structure every time. (It is *additive* if run twice without `migrate:fresh` — always `migrate:fresh` first for a clean dataset.)
 - **Agency.** Everything targets `agency_id = 1` ("HFC Coastal"), which `migrate:fresh` already creates. Reference seeders hardcode agency 1.
