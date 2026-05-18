@@ -2940,6 +2940,7 @@ class SignatureService
                             documentName: $template->document->name ?? 'Document',
                             signingUrl: $signingUrl,
                             personalMessage: "{$amendingRequest->signer_name} has added conditions to this document. Please review and initial each amendment to continue.",
+                            expiresAt: $previousRequest->token_expires_at,
                         )
                     );
 

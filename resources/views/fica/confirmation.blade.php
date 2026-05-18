@@ -9,9 +9,12 @@
     @vite(['resources/css/app.css'])
     <style>
         body { font-family: 'Figtree', sans-serif; background: #f1f5f9; }
-        .conf-btn { display: inline-block; width: 100%; max-width: 320px; padding: 0.75rem 1.5rem; font-weight: 600; font-size: 0.9375rem; text-decoration: none; text-align: center; margin-bottom: 0.75rem; }
-        .conf-btn-primary { background: var(--text-primary); color: #fff; }
-        .conf-btn-primary:hover { background: #1e293b; }
+        .conf-btn { display: inline-block; width: 100%; max-width: 320px; padding: 0.75rem 1.5rem; font-weight: 600; font-size: 0.9375rem; text-decoration: none; text-align: center; margin-bottom: 0.75rem; border-radius: 6px; }
+        /* Public page loads only app.css (no corex.css) — bare var(--text-primary)
+           is undefined here and renders an invisible button. Use the F.7
+           var(--token, #fallback) DS pattern, same as the .fica-btn fix. */
+        .conf-btn-primary { background: var(--brand-button, #0ea5e9); color: #fff; box-shadow: 0 4px 12px color-mix(in srgb, var(--brand-button, #0ea5e9) 25%, transparent); }
+        .conf-btn-primary:hover { filter: brightness(1.1); box-shadow: 0 6px 16px color-mix(in srgb, var(--brand-button, #0ea5e9) 35%, transparent); }
         .conf-btn-secondary { background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; }
         .conf-btn-secondary:hover { background: #e2e8f0; }
     </style>
@@ -29,7 +32,7 @@
                 </svg>
             </div>
 
-            <h1 style="font-size: 1.5rem; font-weight: 700; color: var(--text-primary); margin: 0 0 0.75rem;">FICA Form Submitted</h1>
+            <h1 style="font-size: 1.5rem; font-weight: 700; color: var(--text-primary, #111827); margin: 0 0 0.75rem;">FICA Form Submitted</h1>
 
             @if(!empty($returnUrl))
                 <p style="color: #64748b; font-size: 0.9375rem; line-height: 1.7; max-width: 400px; margin: 0 auto;">
