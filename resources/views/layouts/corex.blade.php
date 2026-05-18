@@ -60,8 +60,14 @@
         @endauth
     </head>
     <body class="font-sans antialiased">
+        {{-- Environment column: thin env banner (or nothing on live) above the
+             full app. Banner is flex:0 0 auto; the app fills the rest — content
+             is pushed down, never overlapped. Empty banner = single flex child
+             = exactly 100vh = identical to before (zero layout shift on live). --}}
+        <div class="h-screen flex flex-col overflow-hidden">
+        @include('partials._env-banner')
         {{-- Mobile sidebar toggle --}}
-        <div x-data="{ sidebarOpen: false, sidebarCollapsed: false }" class="flex h-screen overflow-hidden" style="background:var(--bg)">
+        <div x-data="{ sidebarOpen: false, sidebarCollapsed: false }" class="flex flex-1 min-h-0 overflow-hidden" style="background:var(--bg)">
 
             {{-- Mobile overlay --}}
             <div x-show="sidebarOpen" x-transition:enter="transition-opacity ease-linear duration-200"
@@ -114,6 +120,7 @@
                 </main>
             </div>
         </div>
+        </div>{{-- /environment column --}}
 
         {{-- Global toast notifications --}}
         <x-toast-notifications />
