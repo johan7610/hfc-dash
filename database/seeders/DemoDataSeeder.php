@@ -2,387 +2,1466 @@
 
 namespace Database\Seeders;
 
-use Carbon\Carbon;
+use App\Models\ContactMatch;
+use App\Models\Docuperfect\Document;
+use App\Models\FicaSubmission;
+use App\Models\Presentation;
+use App\Models\User;
+use App\Services\Docuperfect\SignatureService;
+use App\Services\Presentations\PresentationCompilerService;
+use App\Services\Prospecting\ProspectingClaimService;
+use App\Services\Prospecting\TrackedPropertyMatchOrCreateService;
+use App\Services\SellerOutreach\SellerOutreachComposerService;
+use App\Services\SellerOutreach\SellerOutreachSenderService;
+use App\Services\DealV2\DealPipelineService;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 
+/**
+ * DemoDataSeeder — one-command, fully-coherent KZN South Coast demo dataset.
+ *
+ * Builds an interconnected estate-agency dataset by calling the SAME
+ * service-layer methods agents use wherever a CLI-safe service exists
+ * (TrackedPropertyMatchOrCreateService, ProspectingClaimService,
+ * SellerOutreach*, PresentationCompilerService, DealPipelineService),
+ * and raw Model::create()/DB::table()->insert() everywhere the create
+ * path is controller-only (Agency/Branch/User/Contact/Property/
+ * ContactMatch/ProspectingListing/FICA/OTP/e-sign).
+ *
+ * SAFETY: local-env only; mail driver asserted log/array; Mail+Queue
+ * faked for the whole run. Deterministic RNG so a fresh-DB re-run
+ * produces identical structure. Never sends mail / never hits a real
+ * external API. Targets agency_id = 1 (reference seeders hardcode it;
+ * migrate:fresh already creates agency 1 "HFC Coastal").
+ *
+ * KNOWN APP BUG routed around in Stage 11: the seeded "Standard Bond
+ * Sale" pipeline's "Bond Approved" step has status_trigger='granted',
+ * but deals_v2.status is enum('active','completed','cancelled','on_hold')
+ * under STRICT_TRANS_TABLES — DealPipelineService::approveStep() would
+ * throw writing 'granted'. The seeder replicates approveStep's
+ * bookkeeping WITHOUT the invalid status write, then uses the service's
+ * own activateDownstreamSteps(). See DEMO_DATA.md.
+ */
 class DemoDataSeeder extends Seeder
 {
-    private int $agencyId = 1;
-    private array $agentIds;
-    private array $branchIds;
-    private array $suburbs = ['Margate', 'Uvongo', 'Southbroom', 'Shelly Beach', 'Ramsgate', 'Port Edward', 'Manaba'];
+    private const AGENCY_ID = 1;
+    private const DEMO_LOGIN_EMAIL = 'demo@corexos.co.za';
+    private const DEMO_LOGIN_PASSWORD = 'CoreXDemo!2026';
+    private const RNG_SEED = 20260518;
+
+    /** Real KZN South Coast towns → suburbs. */
+    private const TOWN_SUBURBS = [
+        'Margate'        => ['Margate', 'Uvongo', 'Manaba Beach', 'Ramsgate'],
+        'Shelly Beach'   => ['Shelly Beach', 'St Michaels-on-Sea', 'Southbroom'],
+        'Port Shepstone' => ['Port Shepstone', 'Oslo Beach', 'Umtentweni', 'Sea Park'],
+    ];
+
+    private array $branchIds = [];
+    private array $branchByTown = [];
+    private array $agentIds = [];
+    private array $bmIds = [];
+    private int $adminId = 0;
+    private array $agentByBranch = [];
+    /** Spine tracked-property ids that thread the full lifecycle. */
+    private array $spine = [];
 
     public function run(): void
     {
         if (!app()->environment('local')) {
-            throw new \RuntimeException('DemoDataSeeder can only run in local environment. Current: ' . app()->environment());
+            throw new \RuntimeException(
+                'DemoDataSeeder runs in local environment only. Current: ' . app()->environment()
+            );
         }
 
-        $this->agentIds = DB::table('users')
-            ->where('agency_id', $this->agencyId)->where('is_active', 1)
-            ->whereNotIn('role', ['super_admin', 'owner'])
-            ->pluck('id')->toArray();
+        $this->assertSafeMailDriver();
 
-        $this->branchIds = DB::table('branches')
-            ->where('agency_id', $this->agencyId)->pluck('id')->toArray();
+        // Belt-and-braces: the run never sends mail / dispatches real jobs.
+        Mail::fake();
+        Queue::fake();
+        Bus::fake();
 
-        $this->command->info('Seeding demo data (local only)...');
+        mt_srand(self::RNG_SEED); // deterministic — identical structure on fresh-DB re-run
 
-        DB::transaction(function () {
-            $this->seedContactMatchesWithPreapproval();
-            $this->seedDemoContacts();
-            $this->seedDemoProperties();
-            $this->seedDemoCalendarEvents();
-            $this->seedDemoBuyerActivity();
-        });
+        $this->command->info('CoreX demo dataset — KZN South Coast (local, faked mail/queue)');
 
-        $this->command->info('Running match recompute...');
-        \Artisan::call('prospecting:recompute-matches');
-        $this->command->info(\Artisan::output());
+        $this->stage0_referenceData();
+        $this->stage1_agencyBranchesUsers();
+        $this->stage2_prospectingAndTracked();
+        $this->stage3_claimsAndPitches();
+        $this->stage4_contactsAndWishlists();
+        $this->stage5_promoteToStock();
+        $this->stage6_buyerMatchRecompute();
+        $this->stage7_presentations();
+        $this->stage8_fica();
+        $this->stage9_esign();
+        $this->stage10_otp();
+        $this->stage11_deals();
+        $this->stage12_calendar();
+        $this->stageSpine_threadFullLifecycle();
 
-        $this->command->info('Demo data seeded successfully.');
+        $this->command->info('Demo dataset complete. Login: ' . self::DEMO_LOGIN_EMAIL
+            . ' / ' . self::DEMO_LOGIN_PASSWORD);
     }
 
-    // ─── A. CONTACT MATCHES + PREAPPROVAL (enriching real buyers) ────────
-    // Post-unification (spec D1, D3): wishlists live on contact_matches, preapproval
-    // on contacts. Old seedBuyerPreferences() wrote to buyer_preferences.
+    // ───────────────────────────────────────────────────────────────────
+    //  SAFETY
+    // ───────────────────────────────────────────────────────────────────
 
-    private function seedContactMatchesWithPreapproval(): void
+    private function assertSafeMailDriver(): void
     {
-        // Pick buyers who do not yet have a ContactMatch.
-        $buyerIds = DB::table('contacts')
-            ->where('contacts.agency_id', $this->agencyId)
-            ->where('contacts.is_buyer', 1)
-            ->whereNull('contacts.deleted_at')
-            ->leftJoin('contact_matches', function ($j) {
-                $j->on('contacts.id', '=', 'contact_matches.contact_id')
-                  ->whereNull('contact_matches.deleted_at');
-            })
-            ->whereNull('contact_matches.id')
-            ->pluck('contacts.id')->toArray();
+        $driver = config('mail.default');
+        if (in_array($driver, ['log', 'array'], true)) {
+            return;
+        }
+        if ($driver === 'smtp') {
+            $host = (string) config('mail.mailers.smtp.host');
+            $localHosts = ['127.0.0.1', 'localhost', '::1', 'mailpit', 'mailhog'];
+            if (in_array($host, $localHosts, true)) {
+                return;
+            }
+            throw new \RuntimeException(
+                "DemoDataSeeder refuses to run: mail driver is 'smtp' against non-local host '{$host}'. "
+                . "Set MAIL_MAILER=log (or array, or smtp→127.0.0.1) before seeding the demo."
+            );
+        }
+        throw new \RuntimeException(
+            "DemoDataSeeder refuses to run: unexpected mail driver '{$driver}'. "
+            . "Set MAIL_MAILER=log or array for the demo environment."
+        );
+    }
 
-        $presets = [
-            ['price_min' => 1500000, 'price_max' => 2500000, 'beds_min' => 2, 'bedrooms_max' => 3, 'suburbs' => ['Margate', 'Uvongo'], 'must_have_features' => ['garden']],
-            ['price_min' => 3000000, 'price_max' => 5000000, 'beds_min' => 4, 'bedrooms_max' => 5, 'suburbs' => ['Southbroom', 'Shelly Beach'], 'must_have_features' => ['pool', 'sea_view'], 'preapproval_amount' => 4500000, 'preapproval_institution' => 'Standard Bank', 'preapproval_expires_at' => now()->addMonths(2)->toDateString()],
-            ['price_min' => 800000,  'price_max' => 1500000, 'beds_min' => 1, 'bedrooms_max' => 2, 'suburbs' => ['Margate'], 'property_types' => ['Apartment'], 'must_have_features' => ['pet_friendly']],
-            ['price_min' => 5000000, 'price_max' => 8000000, 'beds_min' => 4, 'bedrooms_max' => 5, 'suburbs' => ['Southbroom'], 'preapproval_amount' => 6000000, 'preapproval_institution' => 'Investec', 'preapproval_expires_at' => now()->addMonths(3)->toDateString()],
-            ['price_min' => 2000000, 'price_max' => 3500000, 'beds_min' => 3, 'bedrooms_max' => 3, 'suburbs' => ['Margate', 'Uvongo', 'Shelly Beach', 'Ramsgate'], 'must_have_features' => ['security']],
-            ['price_min' => 1200000, 'price_max' => 2000000, 'beds_min' => 2, 'bedrooms_max' => 3, 'suburbs' => ['Uvongo', 'Margate'], 'property_types' => ['Townhouse'], 'preapproval_amount' => 1800000, 'preapproval_institution' => 'SA Home Loans', 'preapproval_expires_at' => now()->addDays(45)->toDateString()],
-            ['price_min' => 4000000, 'price_max' => 6000000, 'beds_min' => 4, 'bedrooms_max' => 4, 'suburbs' => ['Southbroom', 'Shelly Beach'], 'must_have_features' => ['garden', 'pool']],
-            ['price_min' => 900000,  'price_max' => 1400000, 'beds_min' => 1, 'bedrooms_max' => 2, 'suburbs' => ['Margate'], 'preapproval_amount' => 1200000, 'preapproval_institution' => 'ooba', 'preapproval_expires_at' => now()->addDays(20)->toDateString()],
-            ['price_min' => 2500000, 'price_max' => 4000000, 'beds_min' => 3, 'bedrooms_max' => 4, 'suburbs' => ['Margate', 'Uvongo', 'Ramsgate'], 'must_have_features' => ['pet_friendly']],
-            ['price_min' => 6000000, 'price_max' => 10000000, 'beds_min' => 5, 'bedrooms_max' => 6, 'suburbs' => ['Southbroom']],
-            ['price_min' => 1800000, 'price_max' => 2800000, 'beds_min' => 3, 'bedrooms_max' => 3, 'suburbs' => ['Uvongo', 'Margate'], 'must_have_features' => ['garage']],
-            ['price_min' => 3500000, 'price_max' => 5000000, 'beds_min' => 4, 'bedrooms_max' => 4, 'suburbs' => ['Shelly Beach', 'Margate'], 'preapproval_amount' => 4500000, 'preapproval_institution' => 'Standard Bank', 'preapproval_expires_at' => now()->addMonths(4)->toDateString()],
-        ];
+    private function rngInt(int $min, int $max): int
+    {
+        return mt_rand($min, $max);
+    }
 
-        $count = 0;
-        foreach ($buyerIds as $i => $buyerId) {
-            if ($i >= count($presets)) break;
-            $p = $presets[$i];
+    private function pick(array $arr)
+    {
+        return $arr[mt_rand(0, count($arr) - 1)];
+    }
 
-            // 1. Preapproval → Contact pillar (spec D3).
-            $contactUpdates = array_filter([
-                'preapproval_amount'      => $p['preapproval_amount']      ?? null,
-                'preapproval_expires_at'  => $p['preapproval_expires_at']  ?? null,
-                'preapproval_institution' => $p['preapproval_institution'] ?? null,
-            ], fn ($v) => $v !== null);
-            if (!empty($contactUpdates)) {
-                DB::table('contacts')->where('id', $buyerId)->update($contactUpdates);
+    private function allSuburbs(): array
+    {
+        return array_merge(...array_values(self::TOWN_SUBURBS));
+    }
+
+    // ───────────────────────────────────────────────────────────────────
+    //  STAGE 0 — reference data
+    // ───────────────────────────────────────────────────────────────────
+
+    private function stage0_referenceData(): void
+    {
+        // Permissions/role_permissions (needs only the roles table — present post-migrate).
+        $this->safeSeed('permissions', fn () => \Artisan::call('corex:sync-permissions', ['--seed-defaults' => true]));
+
+        // Reference seeders. BuyerMatchTiersSeeder + CalendarEventClassSeeder
+        // are NOT in DatabaseSeeder — the demo invokes them itself.
+        // DealPipelineTemplateSeeder needs ≥1 user, so it runs after Stage 1.
+        // Each is wrapped so a pre-existing broken reference seeder (e.g.
+        // AgencyDocumentTypeConfigSeeder writes a column some fresh-DB
+        // schemas lack) cannot abort the whole demo build.
+        foreach ([
+            ProspectingSetupSeeder::class,
+            BuyerMatchTiersSeeder::class,
+            CalendarEventClassSeeder::class,
+            SuggestedActionThresholdsSeeder::class,
+            SellerOutreachTemplatesSeeder::class,
+            AgencyDocumentTypeConfigSeeder::class,
+        ] as $seeder) {
+            $this->safeSeed(class_basename($seeder), fn () => $this->call([$seeder]));
+        }
+
+        $this->command->info('  Stage 0: reference data + permissions seeded');
+    }
+
+    private function safeSeed(string $label, \Closure $fn): void
+    {
+        try {
+            $fn();
+        } catch (\Throwable $e) {
+            $this->command->warn("    Stage 0: '{$label}' skipped (pre-existing issue) — "
+                . Str::limit($e->getMessage(), 160));
+        }
+    }
+
+    // ───────────────────────────────────────────────────────────────────
+    //  STAGE 1 — agency, 3 branches, ~14 users
+    // ───────────────────────────────────────────────────────────────────
+
+    private function stage1_agencyBranchesUsers(): void
+    {
+        // Reuse agency 1 (created by migrate:fresh). Mark it a demo agency.
+        DB::table('agencies')->where('id', self::AGENCY_ID)->update([
+            'name'      => 'HFC Coastal',
+            'is_demo'   => 1,
+            'is_active' => 1,
+            'updated_at' => now(),
+        ]);
+
+        // 3 branches.
+        foreach (array_keys(self::TOWN_SUBURBS) as $i => $town) {
+            $bid = DB::table('branches')->insertGetId([
+                'agency_id'  => self::AGENCY_ID,
+                'name'       => $town,
+                'code'       => strtoupper(Str::substr(str_replace(' ', '', $town), 0, 3)),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $this->branchIds[] = $bid;
+            $this->branchByTown[$town] = $bid;
+        }
+        DB::table('agencies')->where('id', self::AGENCY_ID)
+            ->update(['default_branch_id' => $this->branchIds[0]]);
+
+        // Users: 1 admin (demo login), 3 BMs (one per branch), 3 agents per
+        // branch, 1 viewer = 14 users. Agents/BMs on the company domain so
+        // the e-sign agent-FROM path is exercised.
+        $firstNames = ['Johan', 'Lerato', 'Pieter', 'Anele', 'Michelle', 'Sipho', 'Karen',
+            'Bongani', 'Tanya', 'Mandla', 'Nomsa', 'Grant', 'Ayanda', 'Wendy'];
+        $lastNames = ['Reichel', 'Ndlovu', 'van der Merwe', 'Dlamini', 'Botha', 'Mkhize',
+            'Joubert', 'Khumalo', 'Pretorius', 'Nkosi', 'Steyn', 'du Plessis', 'Pillay', 'Venter'];
+
+        // Admin / demo login.
+        $this->adminId = $this->createUser(
+            'Demo Administrator',
+            self::DEMO_LOGIN_EMAIL,
+            self::DEMO_LOGIN_PASSWORD,
+            'admin',
+            $this->branchIds[0],
+            true
+        );
+
+        $n = 1;
+        foreach (array_keys(self::TOWN_SUBURBS) as $ti => $town) {
+            $bid = $this->branchByTown[$town];
+
+            // Branch manager.
+            $bmId = $this->createUser(
+                $firstNames[$n] . ' ' . $lastNames[$n],
+                'bm.' . Str::slug($town, '') . '@hfcoastal.co.za',
+                'CoreXDemo!2026',
+                'branch_manager',
+                $bid,
+                false
+            );
+            $this->bmIds[] = $bmId;
+            $n++;
+
+            // 3 agents.
+            $this->agentByBranch[$bid] = [];
+            for ($a = 0; $a < 3; $a++) {
+                $aid = $this->createUser(
+                    $firstNames[$n] . ' ' . $lastNames[$n],
+                    'agent.' . Str::slug($town, '') . ($a + 1) . '@hfcoastal.co.za',
+                    'CoreXDemo!2026',
+                    'agent',
+                    $bid,
+                    false
+                );
+                $this->agentIds[] = $aid;
+                $this->agentByBranch[$bid][] = $aid;
+                $n++;
+            }
+        }
+
+        // One viewer (read-only role) for completeness.
+        $this->createUser('Demo Viewer', 'viewer@hfcoastal.co.za', 'CoreXDemo!2026',
+            'viewer', $this->branchIds[0], false);
+
+        // DealPipelineTemplateSeeder needs ≥1 user — run it now.
+        $this->safeSeed('DealPipelineTemplateSeeder', fn () => $this->call([DealPipelineTemplateSeeder::class]));
+
+        $this->command->info('  Stage 1: 1 agency + ' . count($this->branchIds)
+            . ' branches + ' . (count($this->agentIds) + count($this->bmIds) + 2) . ' users');
+    }
+
+    private function createUser(string $name, string $email, string $password,
+        string $role, int $branchId, bool $isAdmin): int
+    {
+        return DB::table('users')->insertGetId([
+            'name'              => $name,
+            'email'             => $email,
+            'password'          => Hash::make($password),
+            'email_verified_at' => now(),
+            'role'              => $role,
+            'is_admin'          => $isAdmin ? 1 : 0,
+            'agency_id'         => self::AGENCY_ID,
+            'branch_id'         => $branchId,
+            'is_active'         => 1,
+            'created_at'        => now(),
+            'updated_at'        => now(),
+        ]);
+    }
+
+    private function agentForBranch(int $branchId): int
+    {
+        $pool = $this->agentByBranch[$branchId] ?? $this->agentIds;
+        return $this->pick($pool);
+    }
+
+    // ───────────────────────────────────────────────────────────────────
+    //  STAGE 2 — ~200 prospecting listings → matchOrCreate → tracked
+    // ───────────────────────────────────────────────────────────────────
+
+    private array $listingIds = [];
+    private array $listingMeta = []; // listingId => [suburb, town, branch_id, price, beds, type, trackedId]
+
+    private function stage2_prospectingAndTracked(): void
+    {
+        $matcher = app(TrackedPropertyMatchOrCreateService::class);
+        $streets = ['Ocean', 'Marine', 'Beach', 'Hibiscus', 'Palm', 'Coral', 'Lighthouse',
+            'Dolphin', 'Sunset', 'Seaview', 'Protea', 'Milkwood', 'Sardine', 'Whale', 'Eagle',
+            'Kingfisher', 'Heron', 'Pelican', 'Aloe', 'Strelitzia', 'Baobab', 'Jacaranda'];
+        $types = ['House', 'House', 'House', 'Apartment', 'Apartment', 'Townhouse',
+            'Vacant Land', 'Commercial'];
+        $portals = ['p24', 'pp'];
+        $agencies = ['Pam Golding', 'RE/MAX Coastal', 'Seeff South Coast', 'Just Property',
+            'Harcourts', 'Chas Everitt', 'HFC Coastal'];
+
+        $created = 0;
+        $townList = array_keys(self::TOWN_SUBURBS);
+        for ($i = 0; $i < 200; $i++) {
+            $town = $townList[$i % count($townList)];
+            $branchId = $this->branchByTown[$town];
+            $suburb = $this->pick(self::TOWN_SUBURBS[$town]);
+            $type = $this->pick($types);
+            $beds = $type === 'Apartment' ? $this->rngInt(1, 2)
+                : ($type === 'Vacant Land' || $type === 'Commercial' ? 0
+                : ($type === 'Townhouse' ? $this->rngInt(2, 3) : $this->rngInt(2, 5)));
+            $price = $this->priceFor($beds, $type);
+            $portal = $portals[$i % 2];
+            $streetNo = $this->rngInt(1, 280);
+            $street = $this->pick($streets);
+            $address = "{$streetNo} {$street} Drive, {$suburb}";
+            $capturedBy = $this->agentForBranch($branchId);
+            $firstSeen = now()->subDays($this->rngInt(3, 220));
+
+            $listingId = DB::table('prospecting_listings')->insertGetId([
+                'agency_id'           => self::AGENCY_ID,
+                'captured_by_user_id' => $capturedBy,
+                'portal_source'       => $portal,
+                'portal_ref'          => 'DEMO-' . strtoupper($portal) . '-' . str_pad((string) $i, 4, '0', STR_PAD_LEFT),
+                'portal_url'          => 'https://demo.' . $portal . '.example/listing/' . (100000 + $i),
+                'address'             => $address,
+                'normalized_address'  => \App\Models\ProspectingListing::normalizeAddress($address, $suburb),
+                'suburb'              => $suburb,
+                'district'            => $town,
+                'price'               => $price,
+                'bedrooms'            => $beds ?: null,
+                'bathrooms'           => $beds ? max(1, $beds - 1) : null,
+                'garages'             => $type === 'Apartment' ? 0 : $this->rngInt(0, 2),
+                'property_size_m2'    => $type === 'Vacant Land' ? null : $this->rngInt(60, 420),
+                'erf_size_m2'         => in_array($type, ['Apartment'], true) ? null : $this->rngInt(280, 2200),
+                'property_type'       => $type,
+                'agent_name'          => $this->pick($firstNames = ['Tracy', 'Devon', 'Sandile', 'Marius', 'Kerry']),
+                'agency_name'         => $this->pick($agencies),
+                'first_seen_at'       => $firstSeen,
+                'last_seen_at'        => now()->subDays($this->rngInt(0, 3)),
+                'is_active'           => $i % 13 === 0 ? 0 : 1,
+                'first_seen_email_date' => $firstSeen->copy()->toDateString(),
+                'created_at'          => $firstSeen,
+                'updated_at'          => now(),
+            ]);
+
+            $this->listingIds[] = $listingId;
+            $this->listingMeta[$listingId] = compact('suburb', 'town', 'branchId', 'price', 'beds', 'type')
+                + ['trackedId' => null, 'street' => $street, 'streetNo' => $streetNo];
+
+            // Universal Match-or-Create — produces / enriches a tracked_property.
+            try {
+                $tp = $matcher->matchOrCreate(
+                    self::AGENCY_ID,
+                    [
+                        'street_number' => (string) $streetNo,
+                        'street_name'   => $street . ' Drive',
+                        'suburb'        => $suburb,
+                        'town'          => $town,
+                        'province'      => 'KwaZulu-Natal',
+                        'property_type' => strtolower($type),
+                        'bedrooms'      => $beds ?: null,
+                        'bathrooms'     => $beds ? max(1, $beds - 1) : null,
+                        'last_known_asking_price' => $price,
+                        'address'       => $address,
+                    ],
+                    ['type' => 'demo_' . $portal, 'ref' => 'DEMO-' . $i, 'payload' => ['seed' => true]],
+                    $capturedBy
+                );
+                DB::table('prospecting_listings')->where('id', $listingId)
+                    ->update(['tracked_property_id' => $tp->id]);
+                $this->listingMeta[$listingId]['trackedId'] = $tp->id;
+                $created++;
+            } catch (\Throwable $e) {
+                $this->command->warn("    listing #{$listingId} matchOrCreate: " . $e->getMessage());
+            }
+        }
+
+        $tpCount = DB::table('tracked_properties')->where('agency_id', self::AGENCY_ID)->count();
+        $this->command->info("  Stage 2: " . count($this->listingIds)
+            . " prospecting listings, {$created} matchOrCreate ok, {$tpCount} tracked_properties");
+    }
+
+    private function priceFor(int $beds, string $type): int
+    {
+        if ($type === 'Vacant Land') {
+            return $this->rngInt(45, 180) * 10000;
+        }
+        if ($type === 'Commercial') {
+            return $this->rngInt(180, 450) * 10000;
+        }
+        return match (true) {
+            $beds <= 2 => $this->rngInt(65, 160) * 10000,
+            $beds === 3 => $this->rngInt(140, 320) * 10000,
+            $beds === 4 => $this->rngInt(260, 480) * 10000,
+            default     => $this->rngInt(420, 850) * 10000,
+        };
+    }
+
+    // ───────────────────────────────────────────────────────────────────
+    //  STAGE 3 — claims (chip-rule recipes) + seller-outreach pitches
+    // ───────────────────────────────────────────────────────────────────
+
+    private array $chipListingIds = [];
+
+    private function stage3_claimsAndPitches(): void
+    {
+        $claimSvc = app(ProspectingClaimService::class);
+        $pool = $this->listingIds;
+        shuffle($pool);
+        $cursor = 0;
+        $owner = $this->adminId;                    // demo login owns chip claims (so all chips visible on one login)
+        $otherAgent = $this->agentIds[0];
+
+        // ----- Deterministic chip-rule recipes (one listing per rule) -----
+        // R2 — CLAIM EXPIRES SOON (owner, feedback_at null, hours_left < 6)
+        $l = $pool[$cursor++];
+        $this->makeClaim($l, $owner, 'claimed', now()->subHours(44), null, null, true);
+
+        // R4 — FOLLOW UP CLAIM (owner, status contacted, feedback set, >7d)
+        $l = $pool[$cursor++];
+        $this->makeClaim($l, $owner, 'contacted', now()->subDays(9), now()->subDays(9), null, true);
+
+        // R1 — FLAG TO BM (manager view, status listing, >14d, not flagged)
+        $l = $pool[$cursor++];
+        $this->makeClaim($l, $owner, 'listing', now()->subDays(16), now()->subDays(18), null, true);
+
+        // R8 — RESOLVE COLLEAGUE CLAIM (manager, other user, >21d, not 'listing')
+        $l = $pool[$cursor++];
+        $this->makeClaim($l, $otherAgent, 'contacted', now()->subDays(25), now()->subDays(25), null, true);
+
+        // R3 — LOG OUTCOME (owner pitched a matched property 5d ago, no claim)
+        $r3Listing = $pool[$cursor++];
+
+        // R5 — PITCH NOW · HIGH (no claim/pitch, ≥3 strong matches)
+        $r5Listing = $pool[$cursor++];
+        // R6 — PITCH NOW (no claim/pitch, 1–2 strong matches)
+        $r6Listing = $pool[$cursor++];
+        // R9 — INVESTIGATE (no claim/pitch, 0 strong, ≥5 mid matches)
+        $r9Listing = $pool[$cursor++];
+        $this->chipListingIds = compact('r3Listing', 'r5Listing', 'r6Listing', 'r9Listing');
+
+        // ----- Bulk realistic claims (varied states) -----
+        $bulk = 0;
+        $states = ['claimed', 'contacted', 'contacted', 'meeting_set', 'listing'];
+        for ($k = 0; $k < 28; $k++) {
+            $l = $pool[$cursor++] ?? null;
+            if (!$l) {
+                break;
+            }
+            $st = $this->pick($states);
+            $ageD = $this->rngInt(1, 20);
+            $agent = $this->pick($this->agentIds);
+            $this->makeClaim($l, $agent, $st, now()->subDays($ageD),
+                $st === 'claimed' ? null : now()->subDays($ageD), null, false);
+            $bulk++;
+        }
+
+        // ----- Seller-outreach pitches (service-constructed) -----
+        // composeContext needs a Property + Contact in agency 1. Build a
+        // small pool of pitch sellers + pitch properties first.
+        $pitchPairs = $this->buildPitchSellerProperties(26);
+        $composer = app(SellerOutreachComposerService::class);
+        $sender = app(SellerOutreachSenderService::class);
+        $pitchOk = 0;
+        foreach ($pitchPairs as $idx => $pair) {
+            /** @var \App\Models\Contact $c */
+            $c = $pair['contact'];
+            /** @var \App\Models\Property $p */
+            $p = $pair['property'];
+            $agentModel = User::find($pair['agentId']);
+            $channel = $idx % 4 === 0 ? 'email' : 'whatsapp';
+            try {
+                $ctx = $composer->composeContext(self::AGENCY_ID, $c, $p, $channel, null, $agentModel);
+                if (!$ctx->isSendable()) {
+                    continue;
+                }
+                $send = $sender->send($ctx);
+                // Back-date some sends so the timeline looks worked.
+                DB::table('seller_outreach_sends')->where('id', $send->id)
+                    ->update(['sent_at' => now()->subDays($this->rngInt(0, 40))]);
+                $pitchOk++;
+            } catch (\Throwable $e) {
+                $this->command->warn('    pitch #' . $idx . ': ' . $e->getMessage());
+            }
+        }
+
+        // R3 pitch: pitch a matched property 5d ago from the owner; link the
+        // listing to that property; leave no active claim.
+        $r3 = $this->buildPitchSellerProperties(1, $owner)[0];
+        try {
+            $ctx = $composer->composeContext(self::AGENCY_ID, $r3['contact'], $r3['property'],
+                'whatsapp', null, User::find($owner));
+            if ($ctx->isSendable()) {
+                $send = $sender->send($ctx);
+                DB::table('seller_outreach_sends')->where('id', $send->id)->update([
+                    'sent_at' => now()->subDays(5),
+                    'outcome' => 'sent',
+                ]);
+                DB::table('prospecting_listings')->where('id', $r3Listing)
+                    ->update(['matched_property_id' => $r3['property']->id]);
+            }
+        } catch (\Throwable $e) {
+            $this->command->warn('    R3 pitch: ' . $e->getMessage());
+        }
+
+        $this->command->info("  Stage 3: " . ($bulk + 8) . " claims (8 chip recipes), "
+            . ($pitchOk + 1) . " seller-outreach pitches");
+    }
+
+    private function makeClaim(int $listingId, int $userId, string $status, $claimedAt,
+        $feedbackAt, $flaggedAt, bool $isChip): void
+    {
+        $svc = app(ProspectingClaimService::class);
+        try {
+            $svc->createTempLock($listingId, $userId, self::AGENCY_ID);
+            $claim = $svc->consumeLockAsPermanentClaim($listingId, $userId, self::AGENCY_ID, [
+                'sent_at'        => $claimedAt,
+                'channel'        => 'whatsapp',
+                'recipient_name' => 'seller',
+            ]);
+            if ($status !== 'contacted') {
+                $svc->recordActionOnClaim($claim, $status, "Demo: set to {$status}");
+            }
+            // Adjust timestamps directly so chip recipes are deterministic.
+            DB::table('prospecting_claims')->where('id', $claim->id)->update(array_filter([
+                'status'          => $status,
+                'claimed_at'      => $claimedAt,
+                'last_updated_at' => $claimedAt,
+                'feedback_at'     => $feedbackAt,
+                'flagged_at'      => $flaggedAt,
+            ], fn ($v) => $v !== null) + ['feedback_at' => $feedbackAt, 'flagged_at' => $flaggedAt]);
+        } catch (\Throwable $e) {
+            $this->command->warn("    claim listing #{$listingId}: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Build N (seller-contact, agency-stock-property) pairs for pitches.
+     * Properties are raw-inserted (bypasses website-sync side effect).
+     */
+    private function buildPitchSellerProperties(int $n, ?int $forUser = null): array
+    {
+        $pairs = [];
+        for ($i = 0; $i < $n; $i++) {
+            $town = $this->pick(array_keys(self::TOWN_SUBURBS));
+            $branchId = $this->branchByTown[$town];
+            $suburb = $this->pick(self::TOWN_SUBURBS[$town]);
+            $agentId = $forUser ?? $this->agentForBranch($branchId);
+            $beds = $this->rngInt(2, 5);
+            $price = $this->priceFor($beds, 'House');
+
+            $sellerId = DB::table('contacts')->insertGetId([
+                'agency_id'          => self::AGENCY_ID,
+                'branch_id'          => $branchId,
+                'created_by_user_id' => $agentId,
+                'first_name'         => '[DEMO] ' . $this->pick(['Pieter', 'Thandi', 'Greg', 'Naledi', 'Riaan', 'Zola']),
+                'last_name'          => $this->pick(['Naidoo', 'Coetzee', 'Mthembu', 'Fourie', 'Sibeko']),
+                'phone'              => '07' . $this->rngInt(10000000, 99999999),
+                'email'              => 'seller' . Str::random(5) . '@example.com',
+                'is_buyer'           => 0,
+                'messaging_opt_out_at' => null,
+                'created_at'         => now()->subDays($this->rngInt(10, 90)),
+                'updated_at'         => now(),
+            ]);
+            $pid = DB::table('properties')->insertGetId([
+                'external_id'   => (string) Str::uuid(),
+                'agency_id'     => self::AGENCY_ID,
+                'branch_id'     => $branchId,
+                'agent_id'      => $agentId,
+                'title'         => "[DEMO] {$beds} Bed House in {$suburb}",
+                'address'       => "{$this->rngInt(1, 200)} Coastal Way, {$suburb}",
+                'suburb'        => $suburb,
+                'city'          => $town,
+                'province'      => 'KwaZulu-Natal',
+                'property_type' => 'house',
+                'category'      => 'Residential',
+                'listing_type'  => 'sale',
+                'status'        => 'available',
+                'price'         => $price,
+                'beds'          => $beds,
+                'baths'         => max(1, $beds - 1),
+                'garages'       => $this->rngInt(1, 2),
+                'erf_size_m2'   => $this->rngInt(400, 1600),
+                'size_m2'       => $this->rngInt(90, 340),
+                'created_at'    => now()->subDays($this->rngInt(5, 60)),
+                'updated_at'    => now(),
+            ]);
+            DB::table('contact_property')->insert([
+                'contact_id' => $sellerId, 'property_id' => $pid, 'role' => 'owner',
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+            $pairs[] = [
+                'contact'  => \App\Models\Contact::withoutGlobalScopes()->find($sellerId),
+                'property' => \App\Models\Property::withoutGlobalScopes()->find($pid),
+                'agentId'  => $agentId,
+            ];
+        }
+        return $pairs;
+    }
+
+    // ───────────────────────────────────────────────────────────────────
+    //  STAGE 4 — ~150 contacts (buyers + sellers) + ~45 wishlists
+    // ───────────────────────────────────────────────────────────────────
+
+    private array $buyerIds = [];
+
+    private function stage4_contactsAndWishlists(): void
+    {
+        $firstNames = ['Thabo', 'Lerato', 'Pieter', 'Anele', 'Michelle', 'Sipho', 'Karen',
+            'Bongani', 'Tanya', 'Mandla', 'Jaco', 'Nomsa', 'Grant', 'Fatima', 'Craig',
+            'Precious', 'Wayne', 'Zanele', 'Derek', 'Thandiwe', 'Rikus', 'Ayanda', 'Wendy',
+            'Tshepo', 'Liezel', 'Siyabonga', 'Chantal', 'Mpho', 'Gerhard', 'Nontobeko'];
+        $lastNames = ['Ndlovu', 'van der Merwe', 'Dlamini', 'Botha', 'Mkhize', 'Joubert',
+            'Khumalo', 'Pretorius', 'Nkosi', 'Steyn', 'Mahlangu', 'du Plessis', 'Zulu', 'Nel',
+            'Sithole', 'Smit', 'Pillay', 'Bezuidenhout', 'Molefe', 'Venter'];
+        $states = array_merge(array_fill(0, 38, 'new'), array_fill(0, 52, 'warm'),
+            array_fill(0, 34, 'cold'), array_fill(0, 26, 'lost'));
+        shuffle($states);
+
+        $buyers = 0;
+        $sellers = 0;
+        for ($i = 0; $i < 150; $i++) {
+            $branchId = $this->pick($this->branchIds);
+            $agentId = $this->agentForBranch($branchId);
+            $isBuyer = $i % 5 !== 0; // ~80% buyers, ~20% pure sellers
+            $state = $isBuyer ? ($states[$i] ?? 'warm') : null;
+            $createdAt = now()->subDays($this->rngInt(5, 150));
+            $lastActivity = $state === 'lost'
+                ? $createdAt->copy()->addDays($this->rngInt(5, 30))
+                : now()->subDays($this->rngInt(0, 24));
+
+            $contactId = DB::table('contacts')->insertGetId([
+                'agency_id'                 => self::AGENCY_ID,
+                'branch_id'                 => $branchId,
+                'created_by_user_id'        => $agentId,
+                'first_name'                => '[DEMO] ' . $firstNames[$i % count($firstNames)],
+                'last_name'                 => $lastNames[$i % count($lastNames)],
+                'phone'                     => '07' . $this->rngInt(10000000, 99999999),
+                'email'                     => strtolower($firstNames[$i % count($firstNames)]) . $i . '@example.com',
+                'is_buyer'                  => $isBuyer ? 1 : 0,
+                'buyer_state'               => $state,
+                'last_activity_at'          => $isBuyer ? $lastActivity : null,
+                'buyer_pipeline_entered_at' => $isBuyer ? $createdAt : null,
+                'created_at'                => $createdAt,
+                'updated_at'                => now(),
+            ]);
+
+            if ($isBuyer) {
+                $this->buyerIds[] = $contactId;
+                $buyers++;
+            } else {
+                $sellers++;
             }
 
-            // 2. Wishlist → contact_matches (Eloquent so the observer fires and
-            //    is_primary auto-sets for the first match per contact).
-            $propertyTypes = $p['property_types'] ?? [];
-            \App\Models\ContactMatch::withoutGlobalScopes()->create([
-                'agency_id'             => $this->agencyId,
-                'contact_id'            => $buyerId,
-                'created_by_user_id'    => 22,
-                'updated_by_user_id'    => 22,
-                'status'                => \App\Models\ContactMatch::STATUS_ACTIVE,
+            // ~45 wishlists across buyers, varied criteria so matching lights up.
+            if ($isBuyer && count($this->wishlistContactIds ?? []) < 45) {
+                $this->makeWishlist($contactId, $agentId);
+            }
+
+            if ($state === 'lost') {
+                $reasons = ['found_elsewhere', 'price_too_high', 'area_not_suitable',
+                    'financing_failed', 'changed_mind', 'relocation_cancelled'];
+                $rc = $this->pick($reasons);
+                DB::table('buyer_lost_records')->insert([
+                    'contact_id'                 => $contactId,
+                    'agency_id'                  => self::AGENCY_ID,
+                    'reason_code'                => $rc,
+                    'reason_label'               => ucfirst(str_replace('_', ' ', $rc)),
+                    'recorded_by_user_id'        => $agentId,
+                    'recorded_at'                => $lastActivity,
+                    'source'                     => 'manual',
+                    'buyer_state_at_loss'        => 'cold',
+                    'days_in_pipeline_at_loss'   => $this->rngInt(14, 90),
+                    'agent_owner_user_id_at_loss' => $agentId,
+                    'branch_id_at_loss'          => $branchId,
+                    'preapproval_amount_at_loss' => $this->rngInt(0, 1) ? $this->rngInt(100, 500) * 10000 : null,
+                    'created_at'                 => $lastActivity,
+                    'updated_at'                 => $lastActivity,
+                ]);
+            }
+        }
+
+        $this->command->info("  Stage 4: {$buyers} buyers + {$sellers} sellers, "
+            . count($this->wishlistContactIds) . ' wishlists');
+    }
+
+    private array $wishlistContactIds = [];
+
+    private function makeWishlist(int $contactId, int $agentId): void
+    {
+        $suburbs = $this->allSuburbs();
+        $s1 = $this->pick($suburbs);
+        $s2 = $this->pick($suburbs);
+        $base = $this->pick([800000, 1200000, 1500000, 2000000, 2500000, 3000000, 4000000]);
+        $institutions = ['Standard Bank', 'FNB', 'Nedbank', 'ABSA', 'ooba', 'SA Home Loans'];
+
+        if ($this->rngInt(0, 2) === 0) {
+            DB::table('contacts')->where('id', $contactId)->update([
+                'preapproval_amount'      => $base + $this->rngInt(0, 800000),
+                'preapproval_institution' => $this->pick($institutions),
+                'preapproval_expires_at'  => now()->addDays($this->rngInt(15, 90))->toDateString(),
+            ]);
+        }
+
+        try {
+            ContactMatch::withoutGlobalScopes()->create([
+                'agency_id'             => self::AGENCY_ID,
+                'contact_id'            => $contactId,
+                'created_by_user_id'    => $agentId,
+                'updated_by_user_id'    => $agentId,
+                'status'                => ContactMatch::STATUS_ACTIVE,
                 'listing_type'          => 'sale',
-                'price_min'             => $p['price_min'],
-                'price_max'             => $p['price_max'],
-                'beds_min'              => $p['beds_min'] ?? null,
-                'bedrooms_max'          => $p['bedrooms_max'] ?? null,
-                'suburbs'               => $p['suburbs'] ?? [],
-                'property_types'        => $propertyTypes,
-                'property_type'         => $propertyTypes[0] ?? null,
-                'must_have_features'    => $p['must_have_features'] ?? [],
+                'price_min'             => $base,
+                'price_max'             => $base + $this->rngInt(500000, 2500000),
+                'beds_min'              => $this->rngInt(1, 3),
+                'bedrooms_max'          => $this->rngInt(3, 5),
+                'suburbs'               => array_values(array_unique([$s1, $s2])),
+                'property_types'        => $this->rngInt(0, 1) ? ['House'] : [],
+                'must_have_features'    => $this->rngInt(0, 1) ? ['garden'] : [],
                 'nice_to_have_features' => [],
                 'deal_breakers'         => [],
             ]);
-            $count++;
+            $this->wishlistContactIds[] = $contactId;
+        } catch (\Throwable $e) {
+            $this->command->warn("    wishlist contact #{$contactId}: " . $e->getMessage());
         }
-        $this->command->info("  A. ContactMatches + preapproval seeded: {$count}");
     }
 
-    // ─── B. DEMO CONTACTS (buyers) ──────────────────────────
+    // ───────────────────────────────────────────────────────────────────
+    //  STAGE 5 — promoteToStock → properties at varied lifecycle stages
+    // ───────────────────────────────────────────────────────────────────
 
-    private function seedDemoContacts(): void
+    private array $promotedPropertyIds = [];
+
+    private function stage5_promoteToStock(): void
     {
-        $firstNames = ['Thabo', 'Lerato', 'Pieter', 'Anele', 'Michelle', 'Sipho', 'Karen', 'Bongani', 'Tanya', 'Mandla',
-                        'Jaco', 'Nomsa', 'Grant', 'Fatima', 'Craig', 'Precious', 'Wayne', 'Zanele', 'Derek', 'Thandiwe',
-                        'Rikus', 'Ayanda', 'Wendy', 'Tshepo', 'Liezel', 'Siyabonga', 'Chantal', 'Mpho', 'Gerhard', 'Nontobeko'];
-        $lastNames = ['Ndlovu', 'van der Merwe', 'Dlamini', 'Botha', 'Mkhize', 'Joubert', 'Khumalo', 'Pretorius', 'Nkosi', 'Steyn',
-                      'Mahlangu', 'du Plessis', 'Zulu', 'Nel', 'Sithole', 'Smit', 'Pillay', 'Bezuidenhout', 'Molefe', 'Venter'];
-        $states = array_merge(array_fill(0, 5, 'new'), array_fill(0, 12, 'warm'), array_fill(0, 7, 'cold'), array_fill(0, 6, 'lost'));
-        shuffle($states);
+        $matcher = app(TrackedPropertyMatchOrCreateService::class);
+        // Promote ~55 tracked properties to agency stock (My Listings).
+        $tps = DB::table('tracked_properties')
+            ->where('agency_id', self::AGENCY_ID)
+            ->whereNull('promoted_to_property_id')
+            ->orderBy('id')
+            ->limit(55)
+            ->pluck('id')
+            ->toArray();
 
-        $count = 0;
-        for ($i = 0; $i < 30; $i++) {
-            $agentId = $this->agentIds[$i % count($this->agentIds)];
-            $branchId = $this->branchIds[$i % count($this->branchIds)];
-            $state = $states[$i] ?? 'warm';
-            $createdAt = now()->subDays(rand(7, 120));
-            $lastActivity = $state === 'lost' ? $createdAt->copy()->addDays(rand(5, 30)) : now()->subDays(rand(0, 21));
+        $ok = 0;
+        foreach ($tps as $idx => $tpId) {
+            $branchId = $this->pick($this->branchIds);
+            $agentId = $this->agentForBranch($branchId);
+            try {
+                $property = $matcher->promoteToStock($tpId, $agentId, [
+                    'branch_id' => $branchId,
+                ]);
+                // Spread promoted properties across statuses for a lived-in feel.
+                $status = match (true) {
+                    $idx % 9 === 0 => 'sold',
+                    $idx % 5 === 0 => 'draft',
+                    default        => 'available',
+                };
+                $listedDays = $this->rngInt(8, 180);
+                DB::table('properties')->where('id', $property->id)->update([
+                    'status'       => $status,
+                    'title'        => '[DEMO] ' . $property->title,
+                    'listing_type' => 'sale',
+                    'category'     => 'Residential',
+                    'published_at' => $status === 'draft' ? null : now()->subDays($listedDays),
+                    'listed_date'  => $status === 'draft' ? null : now()->subDays($listedDays)->toDateString(),
+                    'mandate_type' => $this->pick(['Sole', 'Open', 'Dual']),
+                ]);
+                $this->promotedPropertyIds[] = $property->id;
 
-            $contactId = DB::table('contacts')->insertGetId([
-                'agency_id' => $this->agencyId,
-                'branch_id' => $branchId,
-                'created_by_user_id' => $agentId,
-                'first_name' => '[DEMO] ' . $firstNames[$i % count($firstNames)],
-                'last_name' => $lastNames[$i % count($lastNames)],
-                'phone' => '07' . rand(10000000, 99999999),
-                'email' => strtolower($firstNames[$i % count($firstNames)]) . $i . '@demo.test',
-                'is_buyer' => true,
-                'buyer_state' => $state,
-                'last_activity_at' => $lastActivity,
-                'buyer_pipeline_entered_at' => $createdAt,
-                'created_at' => $createdAt,
-                'updated_at' => now(),
-            ]);
-
-            // Add a wishlist for ~60% of demo buyers (post-unification: writes to
-            // contact_matches + contact preapproval block, not buyer_preferences).
-            if ($i < 18) {
-                $suburb = $this->suburbs[array_rand($this->suburbs)];
-                $suburb2 = $this->suburbs[array_rand($this->suburbs)];
-                $budgetBase = [800000, 1200000, 1500000, 2000000, 2500000, 3000000, 4000000, 5000000][rand(0, 7)];
-
-                if ($i % 3 === 0) {
-                    DB::table('contacts')->where('id', $contactId)->update([
-                        'preapproval_amount'      => $budgetBase + rand(0, 500000),
-                        'preapproval_institution' => ['Standard Bank', 'FNB', 'Nedbank', 'ABSA', 'ooba'][rand(0, 4)],
-                        'preapproval_expires_at'  => now()->addDays(rand(15, 90))->toDateString(),
+                if ($status === 'sold') {
+                    DB::table('property_sold_records')->insert([
+                        'property_id'   => $property->id,
+                        'agency_id'     => self::AGENCY_ID,
+                        'sold_price'    => (int) ($property->price * ($this->rngInt(90, 103) / 100)),
+                        'sold_date'     => now()->subDays($this->rngInt(5, 70))->toDateString(),
+                        'days_on_market' => $listedDays,
+                        'source'        => 'manual',
+                        'created_at'    => now(),
+                        'updated_at'    => now(),
                     ]);
                 }
-
-                \App\Models\ContactMatch::withoutGlobalScopes()->create([
-                    'agency_id'          => $this->agencyId,
-                    'contact_id'         => $contactId,
-                    'created_by_user_id' => $agentId,
-                    'updated_by_user_id' => $agentId,
-                    'status'             => \App\Models\ContactMatch::STATUS_ACTIVE,
-                    'listing_type'       => 'sale',
-                    'price_min'          => $budgetBase,
-                    'price_max'          => $budgetBase + rand(500000, 2000000),
-                    'beds_min'           => rand(1, 3),
-                    'bedrooms_max'       => rand(3, 5),
-                    'suburbs'            => array_values(array_unique([$suburb, $suburb2])),
-                    'property_types'     => [],
-                    'must_have_features' => [],
-                    'nice_to_have_features' => [],
-                    'deal_breakers'      => [],
-                ]);
+                $ok++;
+            } catch (\Throwable $e) {
+                $this->command->warn("    promote tp #{$tpId}: " . $e->getMessage());
             }
-
-            // Lost records for lost buyers
-            if ($state === 'lost') {
-                $reasons = ['found_elsewhere', 'price_too_high', 'area_not_suitable', 'financing_failed', 'changed_mind', 'relocation_cancelled'];
-                DB::table('buyer_lost_records')->insert([
-                    'contact_id' => $contactId,
-                    'agency_id' => $this->agencyId,
-                    'reason_code' => $reasons[array_rand($reasons)],
-                    'reason_label' => ucfirst(str_replace('_', ' ', $reasons[array_rand($reasons)])),
-                    'recorded_by_user_id' => $agentId,
-                    'recorded_at' => $lastActivity,
-                    'source' => 'manual',
-                    'buyer_state_at_loss' => 'cold',
-                    'days_in_pipeline_at_loss' => rand(14, 90),
-                    'agent_owner_user_id_at_loss' => $agentId,
-                    'branch_id_at_loss' => $branchId,
-                    'preapproval_amount_at_loss' => rand(0, 1) ? rand(1000000, 5000000) : null,
-                    'created_at' => $lastActivity,
-                    'updated_at' => $lastActivity,
-                ]);
-            }
-            $count++;
         }
-        $this->command->info("  B. Demo buyer contacts seeded: {$count}");
+
+        // A handful of standalone demo properties (not promoted) for variety
+        // + to give buyer-activity something to point at.
+        $this->seedExtraDemoProperties(14);
+
+        $total = DB::table('properties')->where('agency_id', self::AGENCY_ID)->count();
+        $this->command->info("  Stage 5: {$ok} promoted to stock, {$total} properties total");
     }
 
-    // ─── C. DEMO PROPERTIES ────────────────────────────────
-
-    private function seedDemoProperties(): void
+    private function seedExtraDemoProperties(int $n): void
     {
-        $streets = ['Ocean', 'Marine', 'Beach', 'Hibiscus', 'Palm', 'Coral', 'Lighthouse', 'Dolphin', 'Sunset', 'Seaview',
-                     'Protea', 'Fynbos', 'Milkwood', 'Sardine', 'Whale', 'Eagle', 'Kingfisher', 'Heron', 'Pelican', 'Albatross'];
-        $types = array_merge(array_fill(0, 24, 'House'), array_fill(0, 8, 'Apartment'), array_fill(0, 6, 'Townhouse'), array_fill(0, 2, 'Commercial'));
-        shuffle($types);
-
-        $count = 0;
-        for ($i = 0; $i < 40; $i++) {
-            $agentId = $this->agentIds[$i % count($this->agentIds)];
-            $branchId = $this->branchIds[$i % count($this->branchIds)];
-            $suburb = $this->suburbs[$i % count($this->suburbs)];
-            $type = $types[$i] ?? 'House';
-            $beds = $type === 'Apartment' ? rand(1, 2) : ($type === 'Townhouse' ? rand(2, 3) : rand(2, 5));
-            $price = match (true) {
-                $beds <= 2 => rand(6, 18) * 100000,
-                $beds === 3 => rand(15, 40) * 100000,
-                $beds === 4 => rand(25, 60) * 100000,
-                default => rand(40, 120) * 100000,
-            };
-
-            $listedDays = rand(5, 200);
-            $status = match (true) {
-                $i < 4 => 'draft',
-                $i >= 35 => 'sold',
-                default => 'available',
-            };
-            $publishedAt = $status !== 'draft' ? now()->subDays($listedDays) : null;
-
-            DB::table('properties')->insert([
-                'external_id' => 'DEMO-' . str_pad($i, 4, '0', STR_PAD_LEFT),
-                'agency_id' => $this->agencyId,
-                'branch_id' => $branchId,
-                'agent_id' => $agentId,
-                'title' => "[DEMO] {$beds} Bed {$type} in {$suburb}",
-                'address' => "[DEMO] {$i} {$streets[$i % count($streets)]} Drive, {$suburb}",
-                'suburb' => $suburb,
-                'city' => 'KZN South Coast',
-                'province' => 'KwaZulu-Natal',
-                'property_type' => $type,
-                'category' => 'Residential',
-                'listing_type' => 'For Sale',
-                'status' => $status,
-                'price' => $price,
-                'beds' => $beds,
-                'baths' => max(1, $beds - 1),
-                'garages' => $type === 'Apartment' ? 0 : rand(1, 2),
-                'erf_size_m2' => $type === 'Apartment' ? null : rand(300, 2000),
-                'size_m2' => rand(60, 400),
-                'published_at' => $publishedAt,
-                'listed_date' => $publishedAt?->toDateString(),
-                'mandate_type' => ['Sole', 'Open', 'Dual'][rand(0, 2)],
-                'created_at' => now()->subDays($listedDays + rand(0, 10)),
-                'updated_at' => now(),
+        for ($i = 0; $i < $n; $i++) {
+            $town = $this->pick(array_keys(self::TOWN_SUBURBS));
+            $branchId = $this->branchByTown[$town];
+            $agentId = $this->agentForBranch($branchId);
+            $suburb = $this->pick(self::TOWN_SUBURBS[$town]);
+            $beds = $this->rngInt(2, 5);
+            $price = $this->priceFor($beds, 'House');
+            $pid = DB::table('properties')->insertGetId([
+                'external_id'   => (string) Str::uuid(),
+                'agency_id'     => self::AGENCY_ID,
+                'branch_id'     => $branchId,
+                'agent_id'      => $agentId,
+                'title'         => "[DEMO] {$beds} Bed Family Home in {$suburb}",
+                'address'       => "{$this->rngInt(1, 240)} {$this->pick(['Ridge', 'Crest', 'Bay', 'Cove'])} Road, {$suburb}",
+                'suburb'        => $suburb,
+                'city'          => $town,
+                'province'      => 'KwaZulu-Natal',
+                'property_type' => 'house',
+                'category'      => 'Residential',
+                'listing_type'  => 'sale',
+                'status'        => 'available',
+                'price'         => $price,
+                'beds'          => $beds,
+                'baths'         => max(1, $beds - 1),
+                'garages'       => $this->rngInt(1, 3),
+                'erf_size_m2'   => $this->rngInt(420, 1900),
+                'size_m2'       => $this->rngInt(95, 360),
+                'published_at'  => now()->subDays($this->rngInt(10, 120)),
+                'listed_date'   => now()->subDays($this->rngInt(10, 120))->toDateString(),
+                'mandate_type'  => $this->pick(['Sole', 'Open', 'Dual']),
+                'created_at'    => now()->subDays($this->rngInt(15, 130)),
+                'updated_at'    => now(),
             ]);
+            $this->promotedPropertyIds[] = $pid;
+        }
+    }
 
-            $propId = DB::getPdo()->lastInsertId();
+    // ───────────────────────────────────────────────────────────────────
+    //  STAGE 6 — buyer-match recompute + chip-rule match rows
+    // ───────────────────────────────────────────────────────────────────
 
-            // Sold records for sold properties
-            if ($status === 'sold') {
-                DB::table('property_sold_records')->insert([
-                    'property_id' => $propId,
-                    'agency_id' => $this->agencyId,
-                    'sold_price' => (int) ($price * (rand(90, 102) / 100)),
-                    'sold_date' => now()->subDays(rand(5, 60))->toDateString(),
-                    'days_on_market' => $listedDays,
-                    'source' => 'manual',
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
+    private function stage6_buyerMatchRecompute(): void
+    {
+        // Service-driven recompute for every buyer with an active wishlist —
+        // prospecting_buyer_matches AND property_buyer_matches.
+        \Artisan::call('prospecting:recompute-matches');
+        \Artisan::call('matches:recompute');
+
+        // Deterministic chip-rule match rows (direct insert — tier enum is
+        // perfect|strong|approximate; score≥50 only).
+        $buyers = array_slice($this->buyerIds, 0, 10);
+        $insertMatches = function (int $listingId, int $count, int $minScore, int $maxScore, string $tier) use ($buyers) {
+            foreach (array_slice($buyers, 0, $count) as $k => $cid) {
+                DB::table('prospecting_buyer_matches')->updateOrInsert(
+                    ['prospecting_listing_id' => $listingId, 'contact_id' => $cid],
+                    [
+                        'agency_id'        => self::AGENCY_ID,
+                        'score'            => $this->rngInt($minScore, $maxScore),
+                        'tier'             => $tier,
+                        'matched_features' => json_encode(['breakdown' => ['price' => 22, 'area' => 18]]),
+                        'missing_features' => json_encode([]),
+                        'matched_at'       => now(),
+                        'last_recompute_at' => now(),
+                        'created_at'       => now(),
+                        'updated_at'       => now(),
+                    ]
+                );
             }
+        };
 
-            // Marketing activities for active properties (~60%)
-            if ($status === 'available' && rand(0, 2) > 0) {
-                $activities = ['portal_listed', 'photos_refreshed', 'price_adjusted', 'show_day_held', 'social_share'];
-                for ($a = 0; $a < rand(1, 3); $a++) {
-                    DB::table('property_marketing_activities')->insert([
-                        'property_id' => $propId,
-                        'activity_type' => $activities[array_rand($activities)],
-                        'occurred_at' => now()->subDays(rand(1, 60)),
-                        'logged_by_user_id' => $agentId,
-                        'internal_only' => false,
-                        'created_at' => now(),
+        if (!empty($this->chipListingIds)) {
+            // R5 — ≥3 strong (score ≥ 80)
+            $insertMatches($this->chipListingIds['r5Listing'], 4, 84, 95, 'strong');
+            // R6 — 1–2 strong
+            $insertMatches($this->chipListingIds['r6Listing'], 2, 82, 90, 'strong');
+            // R9 — 0 strong, ≥5 mid (50–79)
+            $insertMatches($this->chipListingIds['r9Listing'], 6, 55, 74, 'approximate');
+            // R3 listing → ≥1 strong so it surfaces well
+            $insertMatches($this->chipListingIds['r3Listing'], 3, 80, 92, 'strong');
+        }
+
+        $pbm = DB::table('prospecting_buyer_matches')->where('agency_id', self::AGENCY_ID)->count();
+        $bm = DB::table('property_buyer_matches')->where('agency_id', self::AGENCY_ID)->count();
+        $this->command->info("  Stage 6: {$pbm} prospecting_buyer_matches, {$bm} property_buyer_matches");
+    }
+
+    // ───────────────────────────────────────────────────────────────────
+    //  STAGE 7 — presentations (draft/finalized) + compiled versions
+    // ───────────────────────────────────────────────────────────────────
+
+    private function stage7_presentations(): void
+    {
+        $compiler = new PresentationCompilerService();
+        $props = DB::table('properties')->where('agency_id', self::AGENCY_ID)
+            ->orderBy('id')->limit(30)->get();
+        $ok = 0;
+        $compiled = 0;
+        foreach ($props as $idx => $p) {
+            $finalize = $idx % 3 === 0;
+            $userId = $this->agentForBranch($p->branch_id ?? $this->branchIds[0]);
+            try {
+                $pres = Presentation::create([
+                    'agency_id'          => self::AGENCY_ID,
+                    'branch_id'          => $p->branch_id ?? $this->branchIds[0],
+                    'created_by_user_id' => $userId,
+                    'listing_id'         => null, // keeps PresentationObserver a no-op
+                    'title'              => 'Listing Presentation — ' . $p->suburb,
+                    'property_address'   => $p->address,
+                    'suburb'             => $p->suburb,
+                    'property_type'      => 'house',
+                    'bedrooms'           => $p->beds,
+                    'bathrooms'          => $p->baths,
+                    'asking_price_inc'   => $p->price,
+                    'seller_name'        => 'Demo Seller',
+                    'status'             => $finalize ? 'finalized' : 'draft',
+                    'currency'           => 'ZAR',
+                ]);
+                $ok++;
+                $compiler->compile($pres->id, $userId);
+                $compiled++;
+            } catch (\Throwable $e) {
+                $this->command->warn('    presentation prop #' . $p->id . ': ' . $e->getMessage());
+            }
+        }
+        $this->command->info("  Stage 7: {$ok} presentations, {$compiled} compiled versions");
+    }
+
+    // ───────────────────────────────────────────────────────────────────
+    //  STAGE 8 — FICA submissions across the pipeline
+    // ───────────────────────────────────────────────────────────────────
+
+    private function stage8_fica(): void
+    {
+        $contactIds = DB::table('contacts')->where('agency_id', self::AGENCY_ID)
+            ->orderBy('id')->limit(20)->pluck('id')->toArray();
+        $stages = ['draft', 'submitted', 'under_review', 'agent_approved', 'approved'];
+        $made = 0;
+        foreach ($contactIds as $i => $cid) {
+            $target = $stages[$i % count($stages)];
+            try {
+                $sub = FicaSubmission::create([
+                    'agency_id'    => self::AGENCY_ID,
+                    'requested_by' => $this->adminId,
+                    'contact_id'   => $cid,
+                    'entity_type'  => 'natural',
+                    'status'       => 'draft',
+                    'created_at'   => now()->subDays($this->rngInt(2, 40)),
+                ]);
+                if (in_array($target, ['submitted', 'under_review', 'agent_approved', 'approved'], true)) {
+                    $sub->update(['status' => 'submitted', 'signed_at' => now()->subDays($this->rngInt(1, 20))]);
+                }
+                if ($target === 'under_review') {
+                    $sub->update(['status' => 'under_review']);
+                }
+                if (in_array($target, ['agent_approved', 'approved'], true)) {
+                    $sub->update([
+                        'status'              => 'agent_approved',
+                        'risk_rating'         => $this->rngInt(1, 3),
+                        'verification_method' => ['method' => 'in_person'],
+                        'agent_verified_by'   => $this->pick($this->agentIds),
+                        'agent_verified_at'   => now()->subDays($this->rngInt(1, 10)),
                     ]);
                 }
+                if ($target === 'approved') {
+                    $sub->update([
+                        'status'         => 'approved',
+                        'verified_by'    => $this->adminId,
+                        'verified_at'    => now()->subDays($this->rngInt(0, 5)),
+                        'fica_expires_at' => now()->addMonths(24)->toDateString(),
+                        'co_verified_by' => $this->adminId,
+                        'co_verified_at' => now()->subDays($this->rngInt(0, 5)),
+                    ]);
+                }
+                $made++;
+            } catch (\Throwable $e) {
+                $this->command->warn('    fica contact #' . $cid . ': ' . $e->getMessage());
             }
-            $count++;
         }
-        $this->command->info("  C. Demo properties seeded: {$count}");
+        $this->command->info("  Stage 8: {$made} FICA submissions across the pipeline");
     }
 
-    // ─── D. DEMO CALENDAR EVENTS ──────────────────────────
+    // ───────────────────────────────────────────────────────────────────
+    //  STAGE 9 — e-sign documents + signature requests (no real mail)
+    // ───────────────────────────────────────────────────────────────────
 
-    private function seedDemoCalendarEvents(): void
+    private function stage9_esign(): void
     {
-        $classes = ['viewing', 'viewing', 'viewing', 'viewing', 'listing_presentation', 'listing_presentation',
-                    'meeting', 'meeting', 'seller_meeting', 'property_evaluation'];
+        // Minimal docuperfect_template so Document.template_id resolves.
+        $templateId = DB::table('docuperfect_templates')->value('id');
+        if (!$templateId) {
+            $templateId = DB::table('docuperfect_templates')->insertGetId([
+                'name'       => '[DEMO] Sale Agreement',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
 
-        $count = 0;
-        for ($i = 0; $i < 40; $i++) {
-            $agentId = $this->agentIds[$i % count($this->agentIds)];
-            $daysOffset = rand(-45, 25);
-            $hour = rand(8, 17);
-            $eventDate = now()->addDays($daysOffset)->setHour($hour)->setMinute(0)->setSecond(0);
-            $class = $classes[$i % count($classes)];
-            $status = $daysOffset < -1 ? (rand(0, 2) > 0 ? 'completed' : 'pending') : 'pending';
+        $sigService = app(SignatureService::class);
+        $props = DB::table('properties')->where('agency_id', self::AGENCY_ID)
+            ->orderBy('id')->limit(15)->get();
+        $ok = 0;
+        foreach ($props as $idx => $p) {
+            $owner = User::find($this->agentForBranch($p->branch_id ?? $this->branchIds[0]));
+            try {
+                $doc = Document::create([
+                    'name'             => '[DEMO] Sale Agreement — ' . $p->suburb,
+                    'template_id'      => $templateId,
+                    'owner_id'         => $owner->id,
+                    'branch_id'        => $p->branch_id,
+                    'document_type'    => 'sale_agreement',
+                    'property_address' => $p->address,
+                    'property_id'      => $p->id,
+                    'fields_json'      => [],
+                ]);
+                $tpl = $sigService->createTemplate($doc, $owner);
+                $req = $sigService->createSigningRequest(
+                    $tpl, 'seller', 'Demo Seller', 'seller.sign' . $idx . '@example.com',
+                    null, 'Please sign the sale agreement.', $owner, false
+                );
+                // Simulate progression WITHOUT sending mail (never call sendSigningRequest()).
+                $state = $idx % 3;
+                if ($state === 0) {
+                    $req->update(['status' => 'completed', 'sent_at' => now()->subDays(6),
+                        'completed_at' => now()->subDays($this->rngInt(1, 4))]);
+                    $tpl->update(['status' => 'completed', 'completed_at' => now()->subDays(1)]);
+                } elseif ($state === 1) {
+                    $req->update(['status' => 'pending', 'sent_at' => now()->subDays($this->rngInt(1, 5))]);
+                }
+                // state 2 → left 'waiting' (drafted, not yet sent)
+                $ok++;
+            } catch (\Throwable $e) {
+                $this->command->warn('    esign prop #' . $p->id . ': ' . $e->getMessage());
+            }
+        }
+        $this->command->info("  Stage 9: {$ok} e-sign documents + signature requests (no mail sent)");
+    }
+
+    // ───────────────────────────────────────────────────────────────────
+    //  STAGE 10 — OTP rows (verified, for the client-auth flow)
+    // ───────────────────────────────────────────────────────────────────
+
+    private function stage10_otp(): void
+    {
+        $emails = DB::table('contacts')->where('agency_id', self::AGENCY_ID)
+            ->whereNotNull('email')->orderBy('id')->limit(12)->pluck('email')->toArray();
+        $made = 0;
+        foreach ($emails as $i => $email) {
+            $code = str_pad((string) $this->rngInt(0, 999999), 6, '0', STR_PAD_LEFT);
+            $verified = $i % 3 !== 0;
+            DB::table('client_otps')->insert([
+                'email'      => $email,
+                'purpose'    => $i % 4 === 0 ? 'recovery' : 'activation',
+                'code_hash'  => Hash::make($code),
+                'expires_at' => $verified ? now()->subMinutes($this->rngInt(2, 20)) : now()->addMinutes(8),
+                'used_at'    => $verified ? now()->subMinutes($this->rngInt(1, 15)) : null,
+                'attempts'   => $verified ? 1 : 0,
+                'created_at' => now()->subMinutes($this->rngInt(20, 120)),
+                'updated_at' => now(),
+            ]);
+            $made++;
+        }
+        $this->command->info("  Stage 10: {$made} OTP rows (mix verified / pending)");
+    }
+
+    // ───────────────────────────────────────────────────────────────────
+    //  STAGE 11 — Deal Register v2 + step progression (~10 → registered)
+    // ───────────────────────────────────────────────────────────────────
+
+    private function stage11_deals(): void
+    {
+        $bondTpl = DB::table('deal_pipeline_templates')
+            ->where('deal_type', 'bond')->where('is_default', 1)->value('id')
+            ?? DB::table('deal_pipeline_templates')->where('deal_type', 'bond')->value('id');
+        $cashTpl = DB::table('deal_pipeline_templates')->where('deal_type', 'cash')->value('id');
+        if (!$bondTpl) {
+            $this->command->warn('    Stage 11 skipped: no bond pipeline template');
+            return;
+        }
+
+        $svc = app(DealPipelineService::class);
+        $props = DB::table('properties')->where('agency_id', self::AGENCY_ID)
+            ->orderBy('id')->limit(40)->get();
+        $buyers = $this->buyerIds;
+        $sellersPool = DB::table('contacts')->where('agency_id', self::AGENCY_ID)
+            ->where('is_buyer', 0)->pluck('id')->toArray();
+
+        $made = 0;
+        $registered = 0;
+        foreach ($props as $idx => $p) {
+            $branchId = $p->branch_id ?? $this->branchIds[0];
+            $agent = $this->agentForBranch($branchId);
+            $agent2 = $this->pick($this->agentIds);
+            $buyer = $buyers[$idx % max(1, count($buyers))] ?? null;
+            $seller = $sellersPool[$idx % max(1, count($sellersPool))] ?? null;
+            $type = $idx % 4 === 0 ? 'cash' : 'bond';
+            $tpl = $type === 'cash' && $cashTpl ? $cashTpl : $bondTpl;
+            $type = $tpl === $cashTpl ? 'cash' : 'bond';
+            $price = (int) $p->price ?: 1500000;
+            $comm = (int) round($price * 0.06);
+
+            try {
+                $deal = $svc->createDeal([
+                    'deal_type'            => $type,
+                    'property_id'          => $p->id,
+                    'listing_agent_id'     => $agent,
+                    'selling_agent_id'     => $agent2,
+                    'pipeline_template_id' => $tpl,
+                    'purchase_price'       => $price,
+                    'commission_percentage' => 6.0,
+                    'commission_amount'    => $comm,
+                    'commission_vat'       => (int) round($comm * 0.15),
+                    'offer_date'           => now()->subDays($this->rngInt(20, 160))->toDateString(),
+                    'branch_id'            => $branchId,
+                    'created_by_id'        => $agent,
+                    'contacts'             => array_values(array_filter([
+                        $buyer ? ['contact_id' => $buyer, 'role' => 'buyer'] : null,
+                        $seller ? ['contact_id' => $seller, 'role' => 'seller'] : null,
+                    ])),
+                    'agents'               => [
+                        ['side' => 'listing', 'user_id' => $agent],
+                        ['side' => 'selling', 'user_id' => $agent2],
+                    ],
+                ]);
+                $made++;
+
+                // How far along: 0=just created, 1=mid, 2=registered.
+                $progress = $idx % 4 === 0 ? 2 : ($idx % 2 === 0 ? 1 : 0);
+                if ($progress >= 1) {
+                    $this->driveDeal($svc, $deal, User::find($agent),
+                        $progress === 2 ? 'registered' : 'mid');
+                    if ($progress === 2) {
+                        $registered++;
+                    }
+                }
+            } catch (\Throwable $e) {
+                $this->command->warn('    deal prop #' . $p->id . ': ' . $e->getMessage());
+            }
+        }
+        $this->command->info("  Stage 11: {$made} deals ({$registered} driven to registered)");
+    }
+
+    /**
+     * Drive a Bond deal along its spine. Routes around the app bug where
+     * "Bond Approved" fires status_trigger='granted' (invalid for the
+     * deals_v2.status enum) by replicating approveStep's bookkeeping
+     * minus the bad status write, then using the service's own
+     * activateDownstreamSteps().
+     */
+    private function driveDeal(DealPipelineService $svc, $deal, User $actor, string $to): void
+    {
+        $deal->load('stepInstances');
+        $byName = fn (string $name) => $deal->stepInstances->firstWhere('name', $name);
+
+        $complete = function (string $name) use ($svc, $byName, $actor, &$deal) {
+            $deal->load('stepInstances');
+            $step = $deal->stepInstances->firstWhere('name', $name);
+            if (!$step || $step->status === 'completed') {
+                return;
+            }
+            if ($step->status === 'not_started') {
+                $svc->activateStep($step);
+            }
+            $svc->completeStep($step, $actor, ['outcome' => 'positive']);
+        };
+
+        // OTP Signed → Bond Application Submitted
+        $complete('OTP Signed');
+        $complete('Bond Application Submitted');
+
+        // Bond Approved: requires_bm_approval + status_trigger='granted'.
+        // completeStep leaves it approval_status='pending' (no status write,
+        // no downstream). Replicate the SAFE half of approveStep().
+        $deal->load('stepInstances');
+        $bondApproved = $deal->stepInstances->firstWhere('name', 'Bond Approved');
+        if ($bondApproved) {
+            if ($bondApproved->status === 'not_started') {
+                $svc->activateStep($bondApproved);
+            }
+            if ($bondApproved->status !== 'completed') {
+                $svc->completeStep($bondApproved, $actor, ['outcome' => 'positive']);
+            }
+            $bondApproved->refresh();
+            $bondApproved->update([
+                'approval_status' => 'approved',
+                'approved_by_id'  => ($this->bmIds[0] ?? $this->adminId),
+                'approved_at'     => now(),
+                'approval_notes'  => 'Demo: bond grant approved by BM',
+            ]);
+            // Service-driven downstream activation (no invalid status write).
+            $svc->activateDownstreamSteps($bondApproved);
+        }
+
+        if ($to === 'mid') {
+            return;
+        }
+
+        // Continue the spine to Registration. Registration's
+        // status_trigger='completed' IS a valid enum value → sets
+        // deals_v2.status='completed' + actual_registration via the service.
+        foreach (['Attorney Instructed', 'Rates Clearance', 'Deeds Office Lodgement', 'Registration'] as $name) {
+            $complete($name);
+        }
+    }
+
+    // ───────────────────────────────────────────────────────────────────
+    //  STAGE 12 — calendar events (recent past + next 3 weeks)
+    // ───────────────────────────────────────────────────────────────────
+
+    private function stage12_calendar(): void
+    {
+        $categories = ['viewing', 'viewing', 'viewing', 'listing_presentation',
+            'property_evaluation', 'meeting', 'seller_meeting', 'viewing'];
+        $made = 0;
+        for ($i = 0; $i < 110; $i++) {
+            $agentId = $this->pick($this->agentIds);
+            $branchId = DB::table('users')->where('id', $agentId)->value('branch_id');
+            $daysOffset = $this->rngInt(-21, 21);
+            $hour = $this->rngInt(8, 17);
+            $eventDate = now()->addDays($daysOffset)->setTime($hour, 0, 0);
+            $cat = $this->pick($categories);
+            $status = $daysOffset < -1 ? ($this->rngInt(0, 2) > 0 ? 'completed' : 'pending') : 'pending';
 
             DB::table('calendar_events')->insert([
-                'agency_id' => $this->agencyId,
-                'user_id' => $agentId,
-                'title' => "[DEMO] {$class} — " . $this->suburbs[array_rand($this->suburbs)],
-                'category' => $class,
-                'event_type' => 'manual',
+                'agency_id'   => self::AGENCY_ID,
+                'branch_id'   => $branchId,
+                'user_id'     => $agentId,
+                'created_by_id' => $agentId,
+                'title'       => '[DEMO] ' . ucwords(str_replace('_', ' ', $cat)) . ' — ' . $this->pick($this->allSuburbs()),
+                'category'    => $cat,
+                'event_type'  => 'manual',
                 'source_type' => 'manual:demo',
-                'event_date' => $eventDate,
-                'end_date' => $eventDate->copy()->addHour(),
-                'status' => $status,
-                'all_day' => false,
-                'created_at' => $eventDate->copy()->subDays(rand(1, 7)),
-                'updated_at' => now(),
+                'event_date'  => $eventDate,
+                'end_date'    => $eventDate->copy()->addHour(),
+                'status'      => $status,
+                'all_day'     => 0,
+                'priority'    => 'normal',
+                'created_at'  => $eventDate->copy()->subDays($this->rngInt(1, 7)),
+                'updated_at'  => now(),
             ]);
-            $count++;
+            $made++;
         }
-        $this->command->info("  D. Demo calendar events seeded: {$count}");
+        $this->command->info("  Stage 12: {$made} calendar events (past + next 3 weeks)");
     }
 
-    // ─── E. DEMO BUYER ACTIVITY ─────────────────────────────
+    // ───────────────────────────────────────────────────────────────────
+    //  SPINE — 12 properties threading the FULL lifecycle end-to-end
+    // ───────────────────────────────────────────────────────────────────
 
-    private function seedDemoBuyerActivity(): void
+    private function stageSpine_threadFullLifecycle(): void
     {
-        $demoContactIds = DB::table('contacts')
-            ->where('agency_id', $this->agencyId)
-            ->where('first_name', 'like', '[DEMO]%')
-            ->where('is_buyer', 1)
-            ->pluck('id')->toArray();
+        $matcher = app(TrackedPropertyMatchOrCreateService::class);
+        $claimSvc = app(ProspectingClaimService::class);
+        $composer = app(SellerOutreachComposerService::class);
+        $sender = app(SellerOutreachSenderService::class);
+        $compiler = new PresentationCompilerService();
+        $sigService = app(SignatureService::class);
+        $dealSvc = app(DealPipelineService::class);
+        $templateId = DB::table('docuperfect_templates')->value('id');
+        $bondTpl = DB::table('deal_pipeline_templates')->where('deal_type', 'bond')->value('id');
 
-        $propertyIds = DB::table('properties')
-            ->where('agency_id', $this->agencyId)
-            ->where('status', 'available')
-            ->pluck('id')->toArray();
+        $threaded = 0;
+        for ($s = 0; $s < 12; $s++) {
+            $town = array_keys(self::TOWN_SUBURBS)[$s % 3];
+            $branchId = $this->branchByTown[$town];
+            $agentId = $this->agentForBranch($branchId);
+            $agent = User::find($agentId);
+            $suburb = $this->pick(self::TOWN_SUBURBS[$town]);
+            $beds = $this->rngInt(3, 5);
+            $price = $this->priceFor($beds, 'House');
+            $streetNo = 500 + $s;
+            $addr = "{$streetNo} Lighthouse Way, {$suburb}";
 
-        if (empty($demoContactIds) || empty($propertyIds)) return;
-
-        $count = 0;
-        foreach (array_slice($demoContactIds, 0, 20) as $contactId) {
-            for ($r = 0; $r < rand(1, 3); $r++) {
-                $propId = $propertyIds[array_rand($propertyIds)];
-                DB::table('buyer_property_responses')->insertOrIgnore([
-                    'contact_id' => $contactId,
-                    'property_id' => $propId,
-                    'response' => ['interested', 'interested', 'viewing_requested', 'not_interested'][rand(0, 3)],
-                    'source' => 'buyer_portal',
-                    'responded_at' => now()->subDays(rand(0, 14)),
-                    'created_at' => now(),
-                    'updated_at' => now(),
+            try {
+                // 1. Prospect listing → 2. tracked property
+                $listingId = DB::table('prospecting_listings')->insertGetId([
+                    'agency_id' => self::AGENCY_ID, 'captured_by_user_id' => $agentId,
+                    'portal_source' => 'p24', 'portal_ref' => 'DEMO-SPINE-' . $s,
+                    'portal_url' => 'https://demo.p24.example/spine/' . $s,
+                    'address' => $addr, 'normalized_address' => \App\Models\ProspectingListing::normalizeAddress($addr, $suburb),
+                    'suburb' => $suburb, 'district' => $town, 'price' => $price,
+                    'bedrooms' => $beds, 'bathrooms' => $beds - 1, 'garages' => 2,
+                    'property_type' => 'House', 'agent_name' => 'Demo Source',
+                    'agency_name' => 'HFC Coastal',
+                    'first_seen_at' => now()->subDays(60), 'last_seen_at' => now(),
+                    'is_active' => 1, 'created_at' => now()->subDays(60), 'updated_at' => now(),
                 ]);
-                $count++;
-            }
+                $tp = $matcher->matchOrCreate(self::AGENCY_ID, [
+                    'street_number' => (string) $streetNo, 'street_name' => 'Lighthouse Way',
+                    'suburb' => $suburb, 'town' => $town, 'province' => 'KwaZulu-Natal',
+                    'property_type' => 'house', 'bedrooms' => $beds, 'bathrooms' => $beds - 1,
+                    'last_known_asking_price' => $price, 'address' => $addr,
+                ], ['type' => 'demo_spine', 'ref' => 'SPINE-' . $s, 'payload' => ['spine' => true]], $agentId);
+                DB::table('prospecting_listings')->where('id', $listingId)
+                    ->update(['tracked_property_id' => $tp->id]);
 
-            DB::table('buyer_activity_log')->insert([
-                'contact_id' => $contactId,
-                'agency_id' => $this->agencyId,
-                'activity_type' => ['viewing_completed', 'call_logged', 'email_sent', 'note_added', 'manual'][rand(0, 4)],
-                'activity_date' => now()->subDays(rand(0, 30)),
-                'logged_by_user_id' => $this->agentIds[array_rand($this->agentIds)],
-                'created_at' => now(),
-            ]);
+                // 3. Claim + pitch
+                $claimSvc->createTempLock($listingId, $agentId, self::AGENCY_ID);
+                $claim = $claimSvc->consumeLockAsPermanentClaim($listingId, $agentId, self::AGENCY_ID, [
+                    'sent_at' => now()->subDays(40), 'channel' => 'whatsapp', 'recipient_name' => 'seller',
+                ]);
+                $claimSvc->recordActionOnClaim($claim, 'listing', 'Demo spine: mandate secured');
+
+                // Seller contact + 4. buyer contact + wishlist
+                $sellerId = DB::table('contacts')->insertGetId([
+                    'agency_id' => self::AGENCY_ID, 'branch_id' => $branchId,
+                    'created_by_user_id' => $agentId,
+                    'first_name' => '[DEMO] Spine Seller', 'last_name' => "#{$s}",
+                    'phone' => '07' . $this->rngInt(10000000, 99999999),
+                    'email' => "spine.seller{$s}@example.com", 'is_buyer' => 0,
+                    'created_at' => now()->subDays(55), 'updated_at' => now(),
+                ]);
+                $buyerId = DB::table('contacts')->insertGetId([
+                    'agency_id' => self::AGENCY_ID, 'branch_id' => $branchId,
+                    'created_by_user_id' => $agentId,
+                    'first_name' => '[DEMO] Spine Buyer', 'last_name' => "#{$s}",
+                    'phone' => '07' . $this->rngInt(10000000, 99999999),
+                    'email' => "spine.buyer{$s}@example.com", 'is_buyer' => 1,
+                    'buyer_state' => 'warm', 'preapproval_amount' => $price + 200000,
+                    'preapproval_institution' => 'Standard Bank',
+                    'preapproval_expires_at' => now()->addMonths(3)->toDateString(),
+                    'last_activity_at' => now()->subDays(3),
+                    'buyer_pipeline_entered_at' => now()->subDays(50),
+                    'created_at' => now()->subDays(50), 'updated_at' => now(),
+                ]);
+                ContactMatch::withoutGlobalScopes()->create([
+                    'agency_id' => self::AGENCY_ID, 'contact_id' => $buyerId,
+                    'created_by_user_id' => $agentId, 'updated_by_user_id' => $agentId,
+                    'status' => ContactMatch::STATUS_ACTIVE, 'listing_type' => 'sale',
+                    'price_min' => $price - 300000, 'price_max' => $price + 400000,
+                    'beds_min' => $beds - 1, 'bedrooms_max' => $beds + 1,
+                    'suburbs' => [$suburb], 'property_types' => ['House'],
+                    'must_have_features' => [], 'nice_to_have_features' => [], 'deal_breakers' => [],
+                ]);
+
+                // 5. Promote tracked → agency stock
+                $property = $matcher->promoteToStock($tp->id, $agentId, ['branch_id' => $branchId]);
+                DB::table('properties')->where('id', $property->id)->update([
+                    'title' => "[DEMO] SPINE {$beds} Bed House in {$suburb}",
+                    'status' => 'available', 'listing_type' => 'sale', 'category' => 'Residential',
+                    'published_at' => now()->subDays(38),
+                    'listed_date' => now()->subDays(38)->toDateString(), 'mandate_type' => 'Sole',
+                ]);
+                DB::table('contact_property')->insert([
+                    'contact_id' => $sellerId, 'property_id' => $property->id, 'role' => 'owner',
+                    'created_at' => now(), 'updated_at' => now(),
+                ]);
+
+                // 6. Pitch the buyer's match (seller-outreach) + buyer match row
+                $sellerModel = \App\Models\Contact::withoutGlobalScopes()->find($sellerId);
+                $propModel = \App\Models\Property::withoutGlobalScopes()->find($property->id);
+                try {
+                    $ctx = $composer->composeContext(self::AGENCY_ID, $sellerModel, $propModel, 'whatsapp', null, $agent);
+                    if ($ctx->isSendable()) {
+                        $sender->send($ctx);
+                    }
+                } catch (\Throwable $e) {
+                }
+                DB::table('prospecting_buyer_matches')->updateOrInsert(
+                    ['prospecting_listing_id' => $listingId, 'contact_id' => $buyerId],
+                    ['agency_id' => self::AGENCY_ID, 'score' => 91, 'tier' => 'perfect',
+                     'matched_features' => json_encode(['breakdown' => ['price' => 25, 'area' => 20]]),
+                     'missing_features' => json_encode([]), 'matched_at' => now(),
+                     'last_recompute_at' => now(), 'created_at' => now(), 'updated_at' => now()]
+                );
+
+                // 7. Presentation (finalized) + compiled
+                $pres = Presentation::create([
+                    'agency_id' => self::AGENCY_ID, 'branch_id' => $branchId,
+                    'created_by_user_id' => $agentId, 'listing_id' => null,
+                    'title' => "Listing Presentation — {$suburb} (spine #{$s})",
+                    'property_address' => $addr, 'suburb' => $suburb, 'property_type' => 'house',
+                    'bedrooms' => $beds, 'bathrooms' => $beds - 1, 'asking_price_inc' => $price,
+                    'seller_name' => 'Spine Seller', 'status' => 'finalized', 'currency' => 'ZAR',
+                ]);
+                $compiler->compile($pres->id, $agentId);
+
+                // 8. FICA (approved) for the buyer
+                $fica = FicaSubmission::create([
+                    'agency_id' => self::AGENCY_ID, 'requested_by' => $this->adminId,
+                    'contact_id' => $buyerId, 'entity_type' => 'natural', 'status' => 'draft',
+                ]);
+                $fica->update(['status' => 'submitted', 'signed_at' => now()->subDays(20)]);
+                $fica->update(['status' => 'agent_approved', 'risk_rating' => 1,
+                    'verification_method' => ['method' => 'in_person'],
+                    'agent_verified_by' => $agentId, 'agent_verified_at' => now()->subDays(15)]);
+                $fica->update(['status' => 'approved', 'verified_by' => $this->adminId,
+                    'verified_at' => now()->subDays(12),
+                    'fica_expires_at' => now()->addMonths(24)->toDateString(),
+                    'co_verified_by' => $this->adminId, 'co_verified_at' => now()->subDays(12)]);
+
+                // 9. E-sign (completed) + 10. OTP (verified)
+                if ($templateId) {
+                    $doc = Document::create([
+                        'name' => "[DEMO] Sale Agreement — spine #{$s}", 'template_id' => $templateId,
+                        'owner_id' => $agentId, 'branch_id' => $branchId,
+                        'document_type' => 'sale_agreement', 'property_address' => $addr,
+                        'property_id' => $property->id, 'fields_json' => [],
+                    ]);
+                    $tpl = $sigService->createTemplate($doc, $agent);
+                    $req = $sigService->createSigningRequest($tpl, 'buyer', '[DEMO] Spine Buyer',
+                        "spine.buyer{$s}@example.com", null, 'Please sign.', $agent, false);
+                    $req->update(['status' => 'completed', 'sent_at' => now()->subDays(8),
+                        'completed_at' => now()->subDays(7)]);
+                    $tpl->update(['status' => 'completed', 'completed_at' => now()->subDays(7)]);
+                }
+                $otpCode = str_pad((string) $this->rngInt(0, 999999), 6, '0', STR_PAD_LEFT);
+                DB::table('client_otps')->insert([
+                    'email' => "spine.buyer{$s}@example.com", 'purpose' => 'activation',
+                    'code_hash' => Hash::make($otpCode), 'expires_at' => now()->subMinutes(10),
+                    'used_at' => now()->subMinutes(8), 'attempts' => 1,
+                    'created_at' => now()->subMinutes(30), 'updated_at' => now(),
+                ]);
+
+                // 11. Deal register → driven to registered
+                if ($bondTpl) {
+                    $comm = (int) round($price * 0.06);
+                    $deal = $dealSvc->createDeal([
+                        'deal_type' => 'bond', 'property_id' => $property->id,
+                        'listing_agent_id' => $agentId, 'selling_agent_id' => $agentId,
+                        'pipeline_template_id' => $bondTpl, 'purchase_price' => $price,
+                        'commission_percentage' => 6.0, 'commission_amount' => $comm,
+                        'commission_vat' => (int) round($comm * 0.15),
+                        'offer_date' => now()->subDays(90)->toDateString(),
+                        'branch_id' => $branchId, 'created_by_id' => $agentId,
+                        'contacts' => [['contact_id' => $buyerId, 'role' => 'buyer'],
+                                       ['contact_id' => $sellerId, 'role' => 'seller']],
+                        'agents' => [['side' => 'listing', 'user_id' => $agentId],
+                                     ['side' => 'selling', 'user_id' => $agentId]],
+                    ]);
+                    $this->driveDeal($dealSvc, $deal, $agent, 'registered');
+                }
+
+                $this->spine[] = ['tracked_property_id' => $tp->id, 'property_id' => $property->id,
+                    'buyer_contact_id' => $buyerId, 'listing_id' => $listingId];
+                $threaded++;
+            } catch (\Throwable $e) {
+                $this->command->warn("    spine #{$s}: " . $e->getMessage());
+            }
         }
-        $this->command->info("  E. Demo buyer activity seeded: {$count} responses");
+        $this->command->info("  Spine: {$threaded} properties threaded prospect → registered");
     }
 }
