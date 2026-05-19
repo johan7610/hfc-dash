@@ -1750,7 +1750,14 @@ class SignatureService
 
         $webTemplateData = $document->web_template_data ?? [];
         $templateIds = $webTemplateData['template_ids'] ?? [];
-        $mergedHtml = $webTemplateData['merged_html'] ?? '';
+        // §19 Option 2 — split/file from the EXACT signed-and-paginated DOM
+        // (per-document .corex-a4-page + per-page initials, as the signer
+        // saw). Fall back to canonical merged_html for legacy / never-web-
+        // signed documents. The server never re-paginates here.
+        $signedPaginated = $document->signed_paginated_html;
+        $mergedHtml = (is_string($signedPaginated) && trim($signedPaginated) !== '')
+            ? $signedPaginated
+            : ($webTemplateData['merged_html'] ?? '');
         $propertyId = $document->property_id;
 
         // Resolve signing contacts once (shared across all filed documents)

@@ -1119,19 +1119,16 @@ class SigningController extends Controller
             $webData['signed_initials'] = $existingInitials;
         }
 
-        // §19.7 — adopt the client's EXACT signed-and-paginated DOM as the
-        // merged_html base. It already carries the per-document
-        // .corex-document-wrapper > .corex-a4-page structure and per-page
-        // initial slots the signer saw, so the embed step below finds every
-        // initial/signature target, splitMergedHtml() splits the already-
-        // paginated DOM per document, and the PDF is generated from exactly
-        // what the signer signed. The server MUST NOT re-paginate.
+        // §19 Option 2 — the client posts the EXACT signed-and-paginated DOM,
+        // but it is NOT fed back into merged_html (doing so caused the
+        // re-pagination accretion loop: accreted .corex-a4-page, stacked
+        // stale footers, inflated gate). merged_html stays the CANONICAL,
+        // UN-paginated document; the embed step below applies THIS signer's
+        // values to its un-paginated markers so the next signer, loading
+        // canonical merged_html, sees all prior marks. The paginated DOM is
+        // persisted ONCE to signed_paginated_html (below) and consumed only
+        // by splitMergedHtml()/the PDF generator — never re-paginated.
         $paginatedHtml = (string) $request->input('paginated_html', '');
-        if (trim($paginatedHtml) !== '' && (
-                str_contains($paginatedHtml, 'corex-a4-page') ||
-                str_contains($paginatedHtml, 'corex-document-wrapper'))) {
-            $webData['merged_html'] = $paginatedHtml;
-        }
 
         // Embed this signer's signatures, initials, and ceremony values into merged_html
         if (!empty($webData['merged_html']) && (!empty($signatures) || !empty($pageBreakInitials) || !empty($ceremonyValues))) {
@@ -1153,7 +1150,15 @@ class SigningController extends Controller
             $webData['merged_html'] = $html;
         }
 
-        $document->update(['web_template_data' => $webData]);
+        // Two-write: canonical un-paginated merged_html (above) + the exact
+        // signed paginated DOM persisted ONCE to the derived-artifact column.
+        $updates = ['web_template_data' => $webData];
+        if (trim($paginatedHtml) !== '' && (
+                str_contains($paginatedHtml, 'corex-a4-page') ||
+                str_contains($paginatedHtml, 'corex-document-wrapper'))) {
+            $updates['signed_paginated_html'] = $paginatedHtml;
+        }
+        $document->update($updates);
 
         // --- Amendment Detection (Other Conditions) ---
         $otherConditionsText = $request->input('other_conditions_text', '');

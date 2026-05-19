@@ -1394,16 +1394,13 @@ class SignatureController extends Controller
                 $webData['ceremony_values'] = array_merge($webData['ceremony_values'] ?? [], $ceremonyValues);
             }
 
-            // §19.7 — adopt the agent's EXACT signed-and-paginated DOM as the
-            // merged_html base (per-document .corex-a4-page + per-page initial
-            // slots) so the next signer + the filed PDF/split see exactly what
-            // the agent saw. The server MUST NOT re-paginate.
+            // §19 Option 2 — do NOT feed the paginated DOM back into
+            // merged_html (that caused the re-pagination accretion loop).
+            // merged_html stays the CANONICAL, un-paginated document; the
+            // embed below applies the agent's values to its un-paginated
+            // markers so the next signer sees them. The exact paginated DOM
+            // is persisted ONCE to signed_paginated_html (below).
             $paginatedHtml = (string) $request->input('paginated_html', '');
-            if (trim($paginatedHtml) !== '' && (
-                    str_contains($paginatedHtml, 'corex-a4-page') ||
-                    str_contains($paginatedHtml, 'corex-document-wrapper'))) {
-                $webData['merged_html'] = $paginatedHtml;
-            }
 
             // Embed agent signature images and initials into merged_html so next signer sees them
             if (!empty($webData['merged_html'])) {
@@ -1418,7 +1415,15 @@ class SignatureController extends Controller
                 $webData['merged_html'] = $html;
             }
 
-            $document->update(['web_template_data' => $webData]);
+            // Two-write: canonical un-paginated merged_html + exact signed
+            // paginated DOM persisted ONCE to the derived-artifact column.
+            $docUpdates = ['web_template_data' => $webData];
+            if (trim($paginatedHtml) !== '' && (
+                    str_contains($paginatedHtml, 'corex-a4-page') ||
+                    str_contains($paginatedHtml, 'corex-document-wrapper'))) {
+                $docUpdates['signed_paginated_html'] = $paginatedHtml;
+            }
+            $document->update($docUpdates);
 
             // Find agent request for audit logging
             $agentRequest = $template->requests()

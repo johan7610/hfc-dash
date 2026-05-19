@@ -27,6 +27,7 @@ class Document extends Model
         'property_id',
         'lease_expiry_date',
         'web_template_data',
+        'signed_paginated_html',
     ];
 
     protected $casts = [

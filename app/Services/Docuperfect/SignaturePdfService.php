@@ -25,13 +25,21 @@ class SignaturePdfService
             $docTemplate = $document->template;
 
             $webTemplateData = $document->web_template_data ?? [];
-            $hasMergedHtml = !empty($webTemplateData['merged_html']);
+            // §19 Option 2 — generate the PDF from the EXACT signed-and-
+            // paginated DOM the signer saw (per-document .corex-a4-page +
+            // per-page initials). Fall back to canonical merged_html for
+            // legacy / never-web-signed documents. No server re-pagination.
+            $signedPaginated = $document->signed_paginated_html;
+            $renderHtml = (is_string($signedPaginated) && trim($signedPaginated) !== '')
+                ? $signedPaginated
+                : ($webTemplateData['merged_html'] ?? '');
+            $hasMergedHtml = trim((string) $renderHtml) !== '';
             $hasDocPages = !empty($webTemplateData['flattened_page_count']);
             $isWebTemplate = $docTemplate && ($docTemplate->render_type ?? 'pdf') === 'web';
 
             // Web templates with merged_html: use Puppeteer (Chromium) for pixel-perfect rendering
             if ($isWebTemplate && $hasMergedHtml) {
-                return $this->generateFromHtml($template, $document, $webTemplateData['merged_html']);
+                return $this->generateFromHtml($template, $document, $renderHtml);
             }
 
             // Page-image templates: use DomPDF with overlay rendering
