@@ -1221,6 +1221,40 @@ class DemoDataSeeder extends Seeder
 
     private function stage8_fica(): void
     {
+        // FICA CO-review/approve pages gate on User::isComplianceOfficer(),
+        // which requires an ACTIVE fica_officer_appointments row. The seeder
+        // that creates the primary CO (HfcRmcpMasterSeeder) is NOT in the
+        // demo chain, so without this NOBODY on the demo can open
+        // compliance/fica/{id}/compliance-review (403). Appoint the Demo
+        // Administrator (the demo login) as primary FICA Compliance Officer
+        // so the agent-verify → CO-review → approve pipeline works end to
+        // end on the demo. Idempotent: skip if that active appointment
+        // already exists (the model auto-ends a prior primary on create —
+        // the guard prevents re-run churn). Gate stays appointment-based;
+        // agents/viewers without an appointment still cannot CO-review.
+        $adminUser = DB::table('users')->where('id', $this->adminId)->first();
+        if ($adminUser) {
+            $alreadyCo = \App\Models\Compliance\FicaOfficerAppointment::withoutGlobalScopes()
+                ->where('agency_id', self::AGENCY_ID)
+                ->where('role', \App\Models\Compliance\FicaOfficerAppointment::ROLE_PRIMARY)
+                ->where('user_id', $this->adminId)
+                ->whereNull('ended_on')
+                ->exists();
+            if (! $alreadyCo) {
+                \App\Models\Compliance\FicaOfficerAppointment::withoutGlobalScopes()->create([
+                    'agency_id'    => self::AGENCY_ID,
+                    'role'         => \App\Models\Compliance\FicaOfficerAppointment::ROLE_PRIMARY,
+                    'user_id'      => $this->adminId,
+                    'full_name'    => $adminUser->name,
+                    'id_number'    => '8001015009087',
+                    'email'        => $adminUser->email,
+                    'title'        => 'FICA Compliance Officer',
+                    'appointed_on' => '2026-03-01',
+                    'notes'        => 'Demo seed — Demo Administrator appointed primary FICA Compliance Officer so the FICA CO-review pipeline is usable on the demo.',
+                ]);
+            }
+        }
+
         $contactIds = DB::table('contacts')->where('agency_id', self::AGENCY_ID)
             ->orderBy('id')->limit(20)->pluck('id')->toArray();
         $stages = ['draft', 'submitted', 'under_review', 'agent_approved', 'approved'];
