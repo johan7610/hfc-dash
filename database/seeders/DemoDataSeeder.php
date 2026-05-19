@@ -248,10 +248,17 @@ class DemoDataSeeder extends Seeder
             SuggestedActionThresholdsSeeder::class,
             SellerOutreachTemplatesSeeder::class,
             AgencyDocumentTypeConfigSeeder::class,
-            WebTemplateSeeder::class,                // 6 e-sign web templates
-            MarketingPermissionV6Seeder::class,      // + Marketing Permission V6 (sales)
-            MarketingPermissionEsignSeeder::class,   // + Marketing Permission Esign (CDS, working)
-            SalesMandatoryDisclosureSeeder::class,   // + Sales Mandatory Disclosure (PPA s70)
+            WebTemplateSeeder::class,                   // 6 e-sign web templates
+            MarketingPermissionV6Seeder::class,         // + Marketing Permission V6 (sales)
+            MarketingPermissionEsignSeeder::class,      // + Marketing Permission Esign (CDS #125, type 23)
+            // §19/§20-fixed CDS demo set, captured byte-for-byte from the
+            // live rows. SalesMandatoryDisclosureEsignSeeder replaces the old
+            // SalesMandatoryDisclosureSeeder (different blade, WITHOUT this
+            // session's per-document pagination / disclosure-key fixes) — the
+            // old class file is kept but is no longer registered.
+            SalesMandatoryDisclosureEsignSeeder::class, // + Sales Mandatory Disclosure (CDS #123, type 11)
+            SellerMandatoryAddendumSeeder::class,       // + Seller Mandatory Addendum (CDS #120, type 13)
+            ExclusiveAuthorityToSellSeeder::class,      // + Exclusive Authority to Sell (CDS #111, type 1)
         ] as $seeder) {
             $this->safeSeed(class_basename($seeder), fn () => $this->call([$seeder]));
         }
@@ -367,6 +374,7 @@ class DemoDataSeeder extends Seeder
         // Web pack needs ≥1 user (web_packs.created_by NOT NULL) + the
         // templates from Stage 0 — runs here, after both exist.
         $this->safeSeed('SellerOnboardingPackSeeder', fn () => $this->call([SellerOnboardingPackSeeder::class]));
+        $this->safeSeed('MarketingPermissionPackSeeder', fn () => $this->call([MarketingPermissionPackSeeder::class]));
 
         $this->command->info('  Stage 1: 1 agency + ' . count($this->branchIds)
             . ' branches + ' . (count($this->agentIds) + count($this->bmIds) + 2) . ' users');

@@ -5,7 +5,7 @@
         "template_type": "cds",
         "render_type": "web",
         "blade_view": "docuperfect.web-templates.cds.template-125",
-        "document_type_id": null,
+        "document_type_id": 23,
         "category": "sales",
         "page_count": 0,
         "allowed_delivery_modes": "esign,wet_ink,download",
