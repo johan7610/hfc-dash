@@ -312,6 +312,9 @@
                     paginateDocument(container, @json($signingParties ?? []));
                     // Restore previously signed initials so reviewer sees them
                     restoreStoredInitials(container, @json($storedInitials ?? []));
+                    // §20 — restore the seller's stored YES/NO/N/A disclosure
+                    // answers (read-only) so the reviewing agent sees them.
+                    restoreStoredDisclosure(container, @json($disclosureAnswers ?? []));
                 });
             </script>
         @else

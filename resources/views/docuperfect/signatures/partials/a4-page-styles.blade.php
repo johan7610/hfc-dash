@@ -392,6 +392,89 @@ function restoreStoredInitials(container, storedInitials) {
 }
 
 /**
+ * Disclosure restore-on-render (§20). Shared, read-only re-application of a
+ * signer's stored YES/NO/N/A disclosure answers onto a freshly-rendered grid.
+ *
+ * Stored answers (web_template_data['disclosure_answers']) are keyed
+ * disclosure_row_0..N in document order — the exact order the signing-view
+ * converter used. Signatures get embedded into merged_html; disclosure
+ * answers do not, so any LATER viewer (agent review, a subsequent signer,
+ * any future passive viewer) renders a blank grid unless restored here.
+ *
+ * Purely visual + read-only: marks the selected radio/placeholder, attaches
+ * NO listeners. The reviewing agent (and any non-disclosing party) sees the
+ * seller's selections but cannot alter them — the approved §20 legal rule.
+ * Keyed off disclosure_answers, NOT per-template — works for every
+ * disclosure grid (Addendum B #119, Seller Mandatory Addendum #120) and,
+ * best-effort, the bare YES/NO/N/A table form (Sales Mandatory Disclosure
+ * #123). Fail-open: any error leaves the grid untouched.
+ */
+function restoreStoredDisclosure(container, disclosureAnswers) {
+    if (!container || !disclosureAnswers || typeof disclosureAnswers !== 'object') return;
+    try {
+        var get = function (idx) {
+            var v = disclosureAnswers['disclosure_row_' + idx];
+            return (v === undefined || v === null) ? '' : ('' + v).trim().toLowerCase();
+        };
+
+        // 1. Owned checklist structure (#119 / #120): .corex-disclosure-row
+        //    + .corex-radio-placeholder[data-value]. Enumerate rows in
+        //    document order — the same global index the converter used.
+        var rows = container.querySelectorAll('.corex-disclosure-row');
+        rows.forEach(function (row, i) {
+            var keyAttr = row.getAttribute('data-disclosure-key');
+            var idx = keyAttr && /disclosure_row_(\d+)/.test(keyAttr)
+                ? keyAttr.replace(/^.*disclosure_row_(\d+).*$/, '$1')
+                : i;
+            var val = get(idx);
+            if (!val) return;
+            row.querySelectorAll('.corex-radio-placeholder').forEach(function (ph) {
+                var sel = ((ph.getAttribute('data-value') || '').trim().toLowerCase() === val);
+                ph.setAttribute('data-selected', sel ? 'true' : 'false');
+                ph.textContent = sel ? '●' : '○';
+                ph.style.cursor = 'default';
+            });
+            // Legacy injected radios, if present in this row.
+            row.querySelectorAll('input[type="radio"]').forEach(function (r) {
+                r.checked = ((r.value || '').trim().toLowerCase() === val);
+                r.disabled = true;
+            });
+        });
+
+        // 2. Bare YES/NO/N/A table form (#123): empty <td> cells, no
+        //    placeholders. Mark the matching column cell read-only.
+        if (rows.length === 0) {
+            container.querySelectorAll('table').forEach(function (table) {
+                var ths = table.querySelectorAll('thead th');
+                if (ths.length < 3) return;
+                var col = {};
+                ths.forEach(function (th, ci) {
+                    var t = (th.textContent || '').trim().toUpperCase();
+                    if (t === 'YES') col.yes = ci;
+                    else if (t === 'NO') col.no = ci;
+                    else if (t === 'N/A' || t === 'NA') col.na = ci;
+                });
+                if (col.yes === undefined || col.no === undefined) return;
+                var dataIdx = 0;
+                table.querySelectorAll('tbody tr').forEach(function (tr) {
+                    var tds = tr.querySelectorAll('td');
+                    if (tds.length < ths.length) return; // spacer / sub-header
+                    var val = get(dataIdx);
+                    dataIdx++;
+                    if (!val) return;
+                    var target = val === 'yes' ? col.yes : (val === 'no' ? col.no : col.na);
+                    if (target === undefined || !tds[target]) return;
+                    tds[target].textContent = '●';
+                    tds[target].style.textAlign = 'center';
+                });
+            });
+        }
+    } catch (e) {
+        if (window.console) console.warn('restoreStoredDisclosure failed', e);
+    }
+}
+
+/**
  * Backward-compat wrapper — old views that call splitDocumentIntoPages() still work.
  */
 function splitDocumentIntoPages(container) {
