@@ -1958,6 +1958,14 @@ class SigningController extends Controller
             $mergedHtml
         );
 
+        // Zero external requests of ANY kind: inline local storage assets
+        // (agency logo etc.) as base64 data: URIs and neutralise any
+        // remaining remote/loopback <img>/<link>/<script>. Runs BEFORE the
+        // path branch so BOTH return paths emit a fully self-contained doc
+        // (the loopback logo on a single-threaded dev server was the last
+        // network dependency that could stall page.goto).
+        $mergedHtml = $this->inlineLocalAssetsAndStripRemote($mergedHtml);
+
         $pdfStyles = <<<CSS
 /* === Self-hosted brand fonts (embedded — NO external network) === */
 {$brandFontCss}
@@ -2104,6 +2112,88 @@ HTML;
         }
 
         return $css;
+    }
+
+    /**
+     * Make the PDF source fully self-contained: inline local storage assets
+     * (agency logo etc.) as base64 data: URIs and neutralise any remaining
+     * remote/loopback resource the renderer would issue a network request
+     * for. After this, Puppeteer's page.goto fetches NOTHING over the
+     * network — eliminating the loopback-logo stall on a single-threaded
+     * server. Fail-open: an unresolved local asset is left untouched; an
+     * unresolved REMOTE <img> is replaced with a 1x1 transparent pixel so
+     * it can never block the load event.
+     */
+    private function inlineLocalAssetsAndStripRemote(string $html): string
+    {
+        if (trim($html) === '') {
+            return $html;
+        }
+
+        $mimeFor = function (string $path): string {
+            return match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
+                'jpg', 'jpeg' => 'image/jpeg',
+                'png'         => 'image/png',
+                'gif'         => 'image/gif',
+                'svg'         => 'image/svg+xml',
+                'webp'        => 'image/webp',
+                default       => 'image/jpeg',
+            };
+        };
+
+        // Resolve a "/storage/<rel>" web path (absolute, loopback, or bare)
+        // to a local file under the public disk; return base64 data URI or
+        // null if it cannot be resolved locally.
+        $toDataUri = function (string $url) use ($mimeFor): ?string {
+            $clean = preg_replace('/[?#].*$/', '', $url);
+            if (!preg_match('#(?:^|//[^/]+)?/storage/(.+)$#i', $clean, $m)) {
+                return null;
+            }
+            $rel = ltrim($m[1], '/');
+            $candidates = [
+                storage_path('app/public/' . $rel),
+                public_path('storage/' . $rel),
+            ];
+            foreach ($candidates as $file) {
+                if (is_file($file) && is_readable($file)) {
+                    return 'data:' . $mimeFor($file) . ';base64,'
+                        . base64_encode((string) file_get_contents($file));
+                }
+            }
+            return null;
+        };
+
+        $transparentPx = 'data:image/png;base64,'
+            . 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgAAIAAAUAAeImBZsAAAAASUVORK5CYII=';
+
+        // 1. <img src="..."> — inline local storage assets; any remaining
+        //    remote/loopback src becomes a transparent pixel (no request).
+        $html = preg_replace_callback(
+            '#(<img\b[^>]*\bsrc=)(["\'])(.*?)\2#is',
+            function ($mm) use ($toDataUri, $transparentPx) {
+                $src = $mm[3];
+                if (stripos($src, 'data:') === 0) {
+                    return $mm[0];
+                }
+                $data = $toDataUri($src);
+                if ($data !== null) {
+                    return $mm[1] . $mm[2] . $data . $mm[2];
+                }
+                if (preg_match('#^(?:https?:)?//#i', $src) || str_contains($src, '127.0.0.1') || str_contains($src, 'localhost')) {
+                    return $mm[1] . $mm[2] . $transparentPx . $mm[2];
+                }
+                return $mm[0]; // local/relative non-storage — leave as-is
+            },
+            $html
+        );
+
+        // 2. Remove any remaining remote stylesheet/script the renderer
+        //    would fetch (googleapis already stripped above; this catches
+        //    any other remote <link rel=stylesheet>/<script src>).
+        $html = preg_replace('#<link\b[^>]*\bhref=["\'](?:https?:)?//[^"\']*["\'][^>]*>#i', '', $html);
+        $html = preg_replace('#<script\b[^>]*\bsrc=["\'](?:https?:)?//[^"\']*["\'][^>]*>\s*</script>#i', '', $html);
+
+        return $html;
     }
 
     /**
