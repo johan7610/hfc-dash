@@ -409,66 +409,130 @@ function restoreStoredInitials(container, storedInitials) {
  * best-effort, the bare YES/NO/N/A table form (Sales Mandatory Disclosure
  * #123). Fail-open: any error leaves the grid untouched.
  */
+// §20 — THE single source of disclosure-key derivation. The signing-view
+// gate (disclosure-logic.blade.php), the persisted store, and the agent
+// review restore (restoreStoredDisclosure below) ALL key disclosure rows
+// through this one object. Two implementations of this rule is the exact
+// defect that caused the prior rounds — there is now exactly one.
+//
+// Key is INTRINSIC + STATELESS: disclosure_<docKey>_<ordinal-of-this-row
+// among the canonical disclosure rows of its own .corex-document-wrapper>.
+// docKey is the instance-stable token stamped server-side. No counter, no
+// walk-order or pack-position dependence: the same row yields the same key
+// from any caller.
+window.CoreXDisclosure = window.CoreXDisclosure || {
+    docKeyOf: function (el) {
+        var w = (el && el.closest) ? el.closest('.corex-document-wrapper') : null;
+        var k = w ? (w.getAttribute('data-disclosure-doc') || '') : '';
+        return (k && k.trim() !== '') ? k.trim() : 'doc';
+    },
+    // Canonical, ordered disclosure ANSWER rows within ONE wrapper:
+    //   checklist form  -> every .corex-disclosure-row
+    //   bare YES/NO/N/A -> tbody <tr> that are real answer/cert rows
+    // (checklist-owned <table class="corex-disclosure-table"> excluded —
+    // that IS the checklist form, counted above). ONE definition of the
+    // row-set, consumed by the gate converters AND restore.
+    rowsInWrapper: function (w) {
+        if (!w) return [];
+        var out = [];
+        // Order MUST mirror _processAllDisclosures' per-scope order:
+        // _processDisclosureTable (bare) THEN processWebDisclosureChecklists
+        // (checklist), so the stateless ordinal == the gate's assignment.
+        w.querySelectorAll('table').forEach(function (table) {
+            if (table.classList.contains('corex-disclosure-table') ||
+                table.closest('.corex-disclosure-checklist')) return;
+            var ths = table.querySelectorAll('thead th');
+            if (ths.length < 2) return;
+            var H = Array.prototype.map.call(ths, function (h) {
+                return (h.textContent || '').trim().toUpperCase();
+            });
+            var yi = H.indexOf('YES'), ni = H.indexOf('NO');
+            if (yi === -1 || ni === -1) return;
+            table.querySelectorAll('tbody tr').forEach(function (tr) {
+                var tds = tr.querySelectorAll('td');
+                if (tds.length < ths.length) return;
+                if (tds.length === 1) return;
+                var c0 = ((tds[0] && tds[0].textContent) || '').trim();
+                var c1 = ((tds[1] && tds[1].textContent) || '').trim();
+                if (tds.length > ths.length && !c0 &&
+                    c1.indexOf('If Yes, when was it issued') !== -1) { out.push(tr); return; }
+                if (!c0) return;
+                var sub = (!(tds[yi] && tds[yi].textContent.trim())) &&
+                          (!(tds[ni] && tds[ni].textContent.trim())) &&
+                          c0.charAt(c0.length - 1) === ':';
+                if (sub) return;
+                out.push(tr);
+            });
+        });
+        w.querySelectorAll('.corex-disclosure-row').forEach(function (r) { out.push(r); });
+        return out;
+    },
+    _ordinal: function (rowEl) {
+        var w = (rowEl && rowEl.closest) ? rowEl.closest('.corex-document-wrapper') : null;
+        var rows = w ? this.rowsInWrapper(w) : [rowEl];
+        var i = Array.prototype.indexOf.call(rows, rowEl);
+        return i < 0 ? 0 : i;
+    },
+    keyForRow: function (rowEl) {
+        return 'disclosure_' + this.docKeyOf(rowEl) + '_' + this._ordinal(rowEl);
+    },
+    dateKeyForRow: function (rowEl) {
+        return 'disclosure_' + this.docKeyOf(rowEl) + '_date_' + this._ordinal(rowEl);
+    },
+    isAnswerKey: function (k) {
+        return typeof k === 'string' && k.indexOf('disclosure_') === 0 && k.indexOf('_date_') === -1;
+    }
+};
+
+// Read-only restore of stored YES/NO/N/A onto a freshly-rendered (NOT
+// signing-Alpine) page — the agent review. Per .corex-document-wrapper
+// (every pack segment), both the checklist AND the bare-table form, keyed
+// via the ONE CoreXDisclosure rule so it matches what the gate stored.
 function restoreStoredDisclosure(container, disclosureAnswers) {
     if (!container || !disclosureAnswers || typeof disclosureAnswers !== 'object') return;
     try {
-        var get = function (idx) {
-            var v = disclosureAnswers['disclosure_row_' + idx];
-            return (v === undefined || v === null) ? '' : ('' + v).trim().toLowerCase();
-        };
-
-        // 1. Owned checklist structure (#119 / #120): .corex-disclosure-row
-        //    + .corex-radio-placeholder[data-value]. Enumerate rows in
-        //    document order — the same global index the converter used.
-        var rows = container.querySelectorAll('.corex-disclosure-row');
-        rows.forEach(function (row, i) {
-            var keyAttr = row.getAttribute('data-disclosure-key');
-            var idx = keyAttr && /disclosure_row_(\d+)/.test(keyAttr)
-                ? keyAttr.replace(/^.*disclosure_row_(\d+).*$/, '$1')
-                : i;
-            var val = get(idx);
-            if (!val) return;
-            row.querySelectorAll('.corex-radio-placeholder').forEach(function (ph) {
-                var sel = ((ph.getAttribute('data-value') || '').trim().toLowerCase() === val);
-                ph.setAttribute('data-selected', sel ? 'true' : 'false');
-                ph.textContent = sel ? '●' : '○';
-                ph.style.cursor = 'default';
-            });
-            // Legacy injected radios, if present in this row.
-            row.querySelectorAll('input[type="radio"]').forEach(function (r) {
-                r.checked = ((r.value || '').trim().toLowerCase() === val);
-                r.disabled = true;
-            });
-        });
-
-        // 2. Bare YES/NO/N/A table form (#123): empty <td> cells, no
-        //    placeholders. Mark the matching column cell read-only.
-        if (rows.length === 0) {
-            container.querySelectorAll('table').forEach(function (table) {
+        var CD = window.CoreXDisclosure;
+        var wrappers = container.querySelectorAll('.corex-document-wrapper');
+        var scopes = wrappers.length ? Array.prototype.slice.call(wrappers) : [container];
+        scopes.forEach(function (w) {
+            CD.rowsInWrapper(w).forEach(function (row) {
+                var key = CD.keyForRow(row);
+                var rawv = disclosureAnswers[key];
+                var val = (rawv === undefined || rawv === null) ? '' : ('' + rawv).trim().toLowerCase();
+                if (!val) return;
+                // Checklist form
+                var phs = row.querySelectorAll('.corex-radio-placeholder');
+                if (phs.length) {
+                    phs.forEach(function (ph) {
+                        var sel = ((ph.getAttribute('data-value') || '').trim().toLowerCase() === val);
+                        ph.setAttribute('data-selected', sel ? 'true' : 'false');
+                        ph.textContent = sel ? '●' : '○';
+                        ph.style.cursor = 'default';
+                    });
+                    return;
+                }
+                // Bare YES/NO/N/A <tr>: mark the matching column cell.
+                var table = row.closest('table');
+                if (!table) return;
                 var ths = table.querySelectorAll('thead th');
-                if (ths.length < 3) return;
                 var col = {};
-                ths.forEach(function (th, ci) {
+                Array.prototype.forEach.call(ths, function (th, ci) {
                     var t = (th.textContent || '').trim().toUpperCase();
                     if (t === 'YES') col.yes = ci;
                     else if (t === 'NO') col.no = ci;
                     else if (t === 'N/A' || t === 'NA') col.na = ci;
                 });
-                if (col.yes === undefined || col.no === undefined) return;
-                var dataIdx = 0;
-                table.querySelectorAll('tbody tr').forEach(function (tr) {
-                    var tds = tr.querySelectorAll('td');
-                    if (tds.length < ths.length) return; // spacer / sub-header
-                    var val = get(dataIdx);
-                    dataIdx++;
-                    if (!val) return;
-                    var target = val === 'yes' ? col.yes : (val === 'no' ? col.no : col.na);
-                    if (target === undefined || !tds[target]) return;
-                    tds[target].textContent = '●';
-                    tds[target].style.textAlign = 'center';
+                var tds = row.querySelectorAll('td');
+                var target = val === 'yes' ? col.yes : (val === 'no' ? col.no : col.na);
+                if (target === undefined || !tds[target]) return;
+                tds[target].textContent = '●';
+                tds[target].style.textAlign = 'center';
+                row.querySelectorAll('input[type="radio"]').forEach(function (r) {
+                    r.checked = ((r.value || '').trim().toLowerCase() === val);
+                    r.disabled = true;
                 });
             });
-        }
+        });
     } catch (e) {
         if (window.console) console.warn('restoreStoredDisclosure failed', e);
     }

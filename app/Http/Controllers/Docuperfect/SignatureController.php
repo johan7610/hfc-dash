@@ -2246,9 +2246,25 @@ class SignatureController extends Controller
             'label' => ucfirst(str_replace('_', ' ', $p['role_label'] ?? $p['role'] ?? 'unknown')),
         ])->unique('role')->values()->toArray();
 
+        // §20 — per-segment titles for the (possibly pack) review body.
+        // Ordered to match the merged_html .corex-document-wrapper order
+        // (the pack loop concatenates segments in template_ids order).
+        // Single (non-pack) document => one title = the document name.
+        $packTemplateIds = $webTemplateData['template_ids'] ?? [];
+        $packSegmentTitles = [];
+        if (is_array($packTemplateIds) && count($packTemplateIds) > 0) {
+            foreach ($packTemplateIds as $tid) {
+                $segTpl = \App\Models\Docuperfect\Template::find($tid);
+                $packSegmentTitles[] = $segTpl->name ?? ('Document ' . $tid);
+            }
+        } else {
+            $packSegmentTitles[] = $document->name;
+        }
+
         return view('docuperfect.signatures.review', [
             'document' => $document,
             'template' => $template,
+            'packSegmentTitles' => $packSegmentTitles,
             'completedRequest' => $completedRequest,
             'nextParty' => $nextParty,
             'progress' => $progress,

@@ -37,40 +37,25 @@
             return ownerTerms.includes(role);
         },
 
-        // §20 — INTRINSIC disclosure key. docKey is a per-document-instance
-        // token stamped server-side on each segment's .corex-document-wrapper
-        // (data-disclosure-doc). It is instance-stable: frozen into the
-        // persisted merged_html, unique per segment (same template twice in
-        // a pack => two distinct tokens), NEVER derived from DOM position,
-        // wrapper order, or a cross-document cursor. Row index is per-docKey
-        // and reset every _processAllDisclosures run, so a document's keys
-        // are IDENTICAL whether it is alone or at any position in any pack.
-        // Legacy/unstamped frozen merged_html falls back to 'doc'.
+        // §20 — INTRINSIC, STATELESS disclosure key (docKey from the
+        // wrapper's server-stamped data-disclosure-doc + this row's ordinal
+        // among its own wrapper's canonical rows). Same row => same key from
+        // any caller; no counter, no DOM-order/pack-position dependence.
+        // ALL four delegate to the ONE shared rule (window.CoreXDisclosure
+        // in a4-page-styles.blade.php — loaded by both signing views).
+        // The gate, the store, and the agent-review restore therefore use a
+        // single, stateless, intrinsic key derivation. No second copy.
         _disclosureDocKey(el) {
-            const w = (el && el.closest) ? el.closest('.corex-document-wrapper') : null;
-            const k = w ? (w.getAttribute('data-disclosure-doc') || '') : '';
-            return k.trim() !== '' ? k.trim() : 'doc';
+            return window.CoreXDisclosure.docKeyOf(el);
         },
         _disclosureKeyFor(rowEl) {
-            const dk = this._disclosureDocKey(rowEl);
-            if (!this._disclosureDocIdx) this._disclosureDocIdx = {};
-            if (typeof this._disclosureDocIdx[dk] !== 'number') this._disclosureDocIdx[dk] = 0;
-            const i = this._disclosureDocIdx[dk]++;
-            return 'disclosure_' + dk + '_' + i;
+            return window.CoreXDisclosure.keyForRow(rowEl);
         },
         _disclosureDateKeyFor(rowEl) {
-            const dk = this._disclosureDocKey(rowEl);
-            if (!this._disclosureDateIdx) this._disclosureDateIdx = {};
-            if (typeof this._disclosureDateIdx[dk] !== 'number') this._disclosureDateIdx[dk] = 0;
-            const i = this._disclosureDateIdx[dk]++;
-            return 'disclosure_' + dk + '_date_' + i;
+            return window.CoreXDisclosure.dateKeyForRow(rowEl);
         },
-        // The ONE satisfied/answer-key predicate. A disclosure ANSWER key
-        // starts 'disclosure_' and is NOT a conditional date key (_date_).
-        // Used identically by every required/satisfied counter so required
-        // and satisfied can never diverge again.
         _isDisclosureAnswerKey(k) {
-            return typeof k === 'string' && k.indexOf('disclosure_') === 0 && k.indexOf('_date_') === -1;
+            return window.CoreXDisclosure.isAnswerKey(k);
         },
 
         // Seed in-memory answers from the persisted store so a later signer
@@ -180,9 +165,8 @@
         // across §19 re-pagination. Replaces the prior pair of direct calls.
         _processAllDisclosures() {
             this.totalDisclosureRows = 0;
-            // Reset per-document intrinsic counters (NOT a cross-doc cursor).
-            this._disclosureDocIdx = {};
-            this._disclosureDateIdx = {};
+            // Keys are stateless (window.CoreXDisclosure) — no per-pass
+            // counters to reset; identical to what the store/restore use.
             this._seedDisclosureFromStore();
             const container = this.$refs.webDocContent || null;
             if (!container) { this._restoreDisclosureAnswers(); return; }
