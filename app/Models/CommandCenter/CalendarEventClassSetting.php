@@ -24,6 +24,15 @@ class CalendarEventClassSetting extends Model
         // (mass-assignment) — every class defaulted to false and the
         // migration's "viewing => true" was unreproducible on a fresh seed.
         'allow_multiple_properties',
+        // Added by migration 2026_05_06_000001 (actor_role +
+        // completion_behaviour). Same migration-before-seeder defect as
+        // allow_multiple_properties: the migration's per-class UPDATE is a
+        // no-op on a fresh DB (class rows don't exist yet) and these were
+        // never in $fillable, so every class fell back to the column
+        // defaults ('neither' / 'freeform'). With 'viewing' stuck on
+        // 'freeform' the panel never offered "Capture Feedback to
+        // Complete". CalendarEventClassSeeder now reasserts the map.
+        'actor_role', 'completion_behaviour',
     ];
 
     public const NATURE_ACTIONABLE    = 'actionable';
