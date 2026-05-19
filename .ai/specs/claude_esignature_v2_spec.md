@@ -109,7 +109,7 @@
 **"Document Signing Roles"** (cds-builder.blade.php:320-346)
 - Per-template setting stored in `docuperfect_templates.signing_parties` JSON
 - Values: owner_party, acquiring_party, agent
-- Used by: sales/rental context detection, signature block rendering, wizard fallback role
+- Used by: sales/rental context detection, signature block rendering, wizard fallback
 - Scope: this template only
 
 ### Per-Field Settings
@@ -387,6 +387,8 @@ Manual add → always available, no filter
 |---|-----|-----------|
 | 7 | Memory allocation on docuperfect_documents | FIXED — DocumentController uses ->paginate(20) |
 | 8 | Wrong email (elizesouthbroom) | DATA FIX — Agent's email wrong in users table on staging, not a code bug |
+| WP1 | Web pack: Addendum B signature block never presented to signer | Pack merge concatenated independently-rendered template HTML; segments kept inconsistent data-marker-party keys (lessor vs seller); signer's scan skipped non-matching segments | FIXED — pack-merge loop given single-doc parity (party_names, recipients_by_role, resolveSignatureNames per segment); normalizePackMarkerParties() re-keys all segments to canonical recipient roles; SignatureSurfaceNormalizer made per-wrapper. Commit bab6623 |
+| WP2 | Web pack page counter showed template count, not real page count | $pageCount = count(template_ids); paginateDocument() never wrote real count back to totalPages | FIXED (pack-wide) — _syncTotalPagesFromPagination() added; SUPERSEDED by §19 which makes numbering per-document. Commit bab6623 |
 
 ---
 
@@ -420,6 +422,7 @@ Manual add → always available, no filter
 | Amendment/flag full flow | Backend complete | Only Other Conditions wired. Clause flags inert. |
 | Editable at signing | Infrastructure built | No template has field_mappings.editable_by populated |
 | Signature upload (image) | Specced | In V2 spec as two-layer approach |
+| Registered radio/option CDS field type | Parked (post-demo) | Option 1 of the SALES ADDENDUM B fix: a real registered radio/option field type with `field_mappings` entries + CDS builder support. Correct root-cause fix but a larger CDS-compiler change. Demo uses Option 2 (the `.corex-disclosure-checklist` markup + the existing client converter) instead. |
 
 ---
 
@@ -448,115 +451,159 @@ Manual add → always available, no filter
 
 ---
 
-## 19. Auto Per-Page Initials  — DRAFT (PROPOSED, pending Johan/Andre approval)
+## 19. Per-Document Pagination, Initials & Numbering — APPROVED
 
-> Status: **DRAFT — NOT APPROVED. No code may be written against this section
-> until it is reviewed and committed to `main`** (CLAUDE.md spec-first rule).
-> Drafted by VS Code Claude from the session "WEB PACK + PER-PAGE INITIALS
-> INVESTIGATION" (BUG 3). Size: **L**. Legally significant — initials appear
-> on every page of signed mandates/disclosures; Document-Fidelity rule applies.
+> Status: **APPROVED** (Johan, March 2026). Build may proceed on a dev branch.
+> Size: **L**. Legally significant — initials and page numbering appear on
+> every page of signed mandates/disclosures; Document-Fidelity rule applies.
+> Supersedes the pack-wide page counter shipped in WP2 (§14): numbering is
+> now per-document, not pack-wide.
 
-### 19.1 Requirement (business)
+### 19.1 Governing principle — a pack is an envelope, not a merge
 
-Every rendered A4 page of an e-sign document MUST carry one initial slot per
-required signer, placed automatically by the system. Page count is
-unpredictable (a 1-page template can render to 2+ when a signer adds text), so
-this is a **render-time system rule**, not a template-design decision. Manual
-`####` CDS markers remain supported but are no longer the only mechanism.
-`autoPlaceInitialMarkers()` (ESignWizardController.php:~2100) does NOT serve
-this — it estimates pages from one template's `cds_json`, is marker-overlay
-based, and has no pack concept. It is out of scope here (leave as-is).
+A document pack combines multiple documents into ONE signing session and ONE
+send, but it does **not** make them one document. Each document keeps its own
+identity: its own page numbering, its own per-page initials, and its own
+terminal signature block. The signer's experience must be identical to
+receiving each document separately — exactly as with wet-ink documents handed
+over as a set. This makes each filed document independently legally defensible.
 
-### 19.2 Placement & mechanism
+Worked example (the canonical test case):
 
+- **Doc 1** — 2 pages → page 1 of 2 (initial), page 2 of 2 (signature block, no initial)
+- **Doc 2** — 5 pages → pages 1–4 of 5 (initial each), page 5 of 5 (signature block, no initial)
+- **Doc 3** — 1 page → page 1 of 1 (signature block, no initial — it is both first and last page)
+
+### 19.2 Per-document pagination & numbering
+
+- Each `.corex-document-wrapper` paginates **within its own boundary**. A page
+  never straddles two documents — doc 1 always ends its own last page, doc 2
+  always starts its own page 1. There is no shared/pack-wide page index.
+- Page numbering is **per document**: "Page X of N" where N is THAT document's
+  page count, restarting at 1 for each document in the pack.
+- This **revises** the WP2 fix: `_syncTotalPagesFromPagination()` (added in
+  external/sign.blade.php and sign.blade.php) currently counts all
+  `.corex-a4-page` elements pack-wide. It MUST instead count
+  `.corex-a4-page` elements **within the current document-wrapper**, and the
+  displayed "Page X of N" / prev-next bounds MUST reflect the document the
+  signer is currently viewing. Single (non-pack) documents are unaffected —
+  one wrapper, numbering 1..N as before.
+
+### 19.3 Per-page initials placement
+
+- **What:** every page of every document carries one initial slot per required
+  signer, **bottom-right**, EXCEPT the document's last page.
+- **Last page = signature page:** the last page of each document carries the
+  signature block and **no initial slot**. A single-page document carries the
+  signature block and no initial slot (it has no preceding page to initial).
+- Rule, stated precisely: an initial slot is placed on page P of a document
+  when `P < lastPageIndexOfThatDocument`. The signature block sits on page
+  `lastPageIndexOfThatDocument`.
 - **When:** at client pagination time, immediately after `paginateDocument()`
   builds the `.corex-a4-page` elements (a4-page-styles.blade.php:~87; called
   from external/sign.blade.php:~1382 & :~1959, sign.blade.php:~690).
-- **Where:** a footer initials row appended to each `.corex-a4-page`, one
-  `[data-marker-type="initial"][data-marker-party="<role>"]` slot per required
-  signer. `_buildInitialsRow()` already exists in a4-page-styles.blade.php
-  (~:340) and Strategy-2 already calls it (~:318) — Strategy-1 and the
-  external/agent re-pagination paths must call it consistently too.
-- **Pack-aware:** each `.corex-a4-page` is owned by exactly one
-  `.corex-document-wrapper` (one per pack template). The injected initials
-  MUST sit inside that owning wrapper so `SignatureService::splitMergedHtml()`
-  (:~1911, splits at `.corex-document-wrapper` boundaries) keeps each page's
-  initials in the correct filed document. A page that visually straddles two
-  templates is attributed to the wrapper of its **first** child node
-  (deterministic rule — document it in the code).
-- **Party keys:** use the same canonical recipient role keys produced by
-  `normalizePackMarkerParties()` (ESignWizardController) so the initial scan
-  matches the signer exactly as signatures do.
+- **How:** `_buildInitialsRow()` already exists in a4-page-styles.blade.php
+  (~:340) and Strategy-2 already calls it (~:318). PRE-BUILD CHECK: confirm
+  whether Strategy-2 is already injecting initials rows in current production
+  documents — if so, the build must not double-inject. Strategy-1 and the
+  external/agent re-pagination paths must call it consistently, and the
+  last-page-exclusion rule above must be applied to ALL paths.
+- **Party keys:** initial slots use the same canonical recipient role keys
+  produced by `normalizePackMarkerParties()` (ESignWizardController, commit
+  bab6623) so the initial scan matches the signer exactly as signatures do.
+  Single (non-pack) documents must derive initial party keys from the SAME
+  canonical recipient source, so a single-doc initial keys identically to a
+  pack-segment initial.
 
-### 19.3 Idempotent re-anchor
+### 19.4 Idempotent re-anchor
 
 Re-pagination (content edit, zoom, font reflow) re-runs `paginateDocument()`.
-Injection MUST be keyed by **page index within the owning wrapper** so it:
-- never duplicates an initials row on re-run,
-- never loses an already-applied initial value (re-attach captured state by
-  `(wrapperIndex, pageIndex, party)`),
-- removes orphaned rows when page count shrinks.
+Because each document paginates within its own wrapper, injection is keyed by
+**(documentWrapperIndex, pageIndexWithinWrapper, party)**. On re-run it MUST:
+- never duplicate an initials row,
+- never lose an already-applied initial value (re-attach captured state by the
+  key above),
+- remove orphaned rows when a document's page count shrinks,
+- correctly move the signature block if the last page of a document changes
+  (e.g. doc 2 grows 5→6 pages: old page 5 gains an initial, new page 6 gets
+  the signature block).
 
-### 19.4 Interactivity (both signing views)
+### 19.5 Interactivity (both signing views)
 
 Injected initials become interactive for the current signer via the EXISTING
 `[data-marker-type="initial"]` scan in BOTH external/sign.blade.php and
 sign.blade.php (agent), including the existing **apply-to-all** affordance.
-No new scanning mechanism — reuse the initial-marker handler.
+Apply-to-all fills every page-initial for that signer across all documents in
+the pack in one action (intended — low-friction is the point). No new scanning
+mechanism — reuse the initial-marker handler.
 
-### 19.5 Completion gating
+### 19.6 Completion gating
 
-The "all items complete" gate MUST add `pages × requiredSigners` initial items
-to its required-count. The document MUST NOT complete with any blank page
-initial. Gate count MUST be derived from the SAME paginated DOM the signer
-sees (not a server estimate) so it cannot diverge from what is rendered.
+The "all items complete" gate MUST add, per document,
+`(pages − 1) × requiredSigners` initial items plus the signature-block items,
+summed across all documents in the pack. The document MUST NOT complete with
+any blank page initial. The gate count MUST be derived from the SAME paginated
+DOM the signer sees (per-wrapper page count), never a server estimate.
 
-### 19.6 Persistence / PDF (BUG #5 history)
+### 19.7 Persistence / PDF (BUG #5 history)
 
-Per-signer initials MUST be embedded into `merged_html` in the existing
-signature/initial embed step so the Puppeteer-flattened PDF carries them.
-History (§6 / BUG #5, SignaturePdfService.php:298-301): initials have been
-explicitly skipped in the PDF before — the build MUST verify per-page initials
-survive flatten and appear in both the internal and client PDFs.
+- Per-signer initials MUST be embedded into `merged_html` in the existing
+  signature/initial embed step so the Puppeteer-flattened PDF carries them.
+- **Page-count integrity (mandatory mechanism):** each document's PDF MUST be
+  generated from that document's **exact signed-and-paginated DOM** — i.e. the
+  `.corex-a4-page` elements the signer actually saw and signed are serialized
+  and handed to Puppeteer. The PDF generator MUST NOT re-paginate or re-flow
+  the content server-side. This guarantees the flattened PDF page count and
+  per-page initials match what the signer saw and what the gate counted. Since
+  `splitMergedHtml()` already splits per `.corex-document-wrapper`, it splits
+  the already-paginated DOM — it does not re-flow it.
+- History (§6 / BUG #5, SignaturePdfService.php:298-301): initials have been
+  explicitly skipped in the PDF before — the build MUST verify per-page
+  initials survive flatten and appear in both the internal and client PDFs.
 
-### 19.7 Files in scope (build, when approved)
+### 19.8 Files in scope (build)
 
 | Concern | File (approx) |
 |---|---|
-| Inject + re-anchor at pagination | resources/views/docuperfect/signatures/partials/a4-page-styles.blade.php |
-| Interactivity + gating (external) | resources/views/docuperfect/signatures/external/sign.blade.php |
-| Interactivity + gating (agent) | resources/views/docuperfect/signatures/sign.blade.php |
-| Embed into merged_html for PDF | app/Http/Controllers/Docuperfect/SignatureController.php / SignatureService.php |
-| PDF flatten retains initials | app/Services/Docuperfect/SignaturePdfService.php (~:298) |
-| Split keeps per-page initials | app/Services/Docuperfect/SignatureService.php splitMergedHtml (~:1911) |
+| Per-wrapper pagination + numbering | resources/views/docuperfect/signatures/partials/a4-page-styles.blade.php |
+| Per-document counter (revise WP2) | external/sign.blade.php, sign.blade.php (`_syncTotalPagesFromPagination`) |
+| Inject + re-anchor initials, last-page exclusion | a4-page-styles.blade.php (`_buildInitialsRow`, Strategy-1 & re-pagination paths) |
+| Interactivity + gating (external) | external/sign.blade.php |
+| Interactivity + gating (agent) | sign.blade.php |
+| Embed into merged_html for PDF | SignatureController.php / SignatureService.php (signature/initial embed step) |
+| PDF from exact paginated DOM | SignaturePdfService.php (~:298), generateFromHtml |
+| Split keeps per-document pages | SignatureService.php splitMergedHtml (~:1911) |
 
-### 19.8 Acceptance criteria
+### 19.9 Acceptance criteria
 
-1. Every rendered A4 page (single doc AND each pack segment) shows one initial
-   slot per required signer in the footer.
-2. Slots are interactive for the current signer; apply-to-all works.
-3. Completion is blocked until every page initial for every signer is filled.
-4. Re-pagination (add text) re-anchors with no duplicate rows and no lost
-   applied initials.
-5. Completed `merged_html` carries every per-page initial; the flattened PDF
-   (internal + client) shows them on every page.
-6. `splitMergedHtml()` output: each filed document retains exactly its own
-   pages' initials (none lost, none cross-filed).
-7. Single-document flow unchanged in behaviour except for the new footer row.
+1. Each document in a pack numbers its own pages "Page X of N" restarting at 1
+   per document; prev/next bounds match the current document.
+2. Every page of every document shows one initial slot per required signer,
+   bottom-right, EXCEPT each document's last (signature) page.
+3. A single-page document shows the signature block and no initial slot.
+4. Initial slots are interactive for the current signer; apply-to-all works
+   across the whole pack.
+5. Completion is blocked until every required page initial and every signature
+   block, for every signer, across every document, is filled.
+6. Re-pagination (add text) re-anchors with no duplicate rows and no lost
+   applied initials; if a document's last page changes, the signature block
+   moves to the new last page and the former last page gains an initial slot.
+7. Completed `merged_html` carries every per-page initial; the flattened PDF
+   (internal + client) shows them, and the PDF page count per document matches
+   what the signer saw.
+8. `splitMergedHtml()` output: each filed document retains exactly its own
+   pages, numbering, initials and signature block (none lost, none cross-filed).
+9. Single (non-pack) document flow is unchanged except for the new per-page
+   initial footer rows.
 
-### 19.9 Risks (must be addressed in build)
+### 19.10 Risks (must be addressed in build)
 
 - Re-pagination must idempotently re-anchor without duplicating or dropping
-  signed initials (state keyed by wrapper+page+party).
-- Puppeteer flatten has dropped initials before (§6 BUG #5) — explicit verify.
-- Pack-split boundary must align with page ownership; a straddling page must
-  file deterministically (first-child-wrapper rule).
-- Gate page-count and PDF page-count must both derive from the same paginated
-  DOM or they will disagree (gate says complete, PDF missing a page's initial).
-
-### 19.10 Approval
-
-- [ ] Reviewed by Johan
-- [ ] Reviewed by Andre
-- [ ] Committed to `main` — build may then proceed on a dev branch
+  signed initials (state keyed by documentWrapperIndex + pageIndex + party).
+- The signature block must follow the document's last page when page count
+  changes — a stale signature block on a no-longer-last page is a defect.
+- Puppeteer flatten has dropped initials before (§6 BUG #5) — the build MUST
+  generate each PDF from the exact paginated DOM and explicitly verify.
+- PRE-BUILD: confirm Strategy-2 is not already injecting initials rows in
+  production, or the build will double-inject.
 - DO NOT assume a setting is "dead" without checking every file that reads it.
