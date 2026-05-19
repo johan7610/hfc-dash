@@ -77,6 +77,13 @@ class MarketingPermissionV6Seeder extends Seeder
         $nfPropErf     = $this->nf('Property Erf / Unit No', 'property', 'property_number', null);
         $nfPropPrice   = $this->nf('Property Asking Price', 'property', 'price', null);
 
+        // Bug 2(b): ensure the Step-4-linked deal sources exist so demo:seed
+        // reproduces them even without a fresh migrate. Idempotent (find-or-
+        // create by source triple). resolveDealFromKey already resolves these.
+        $this->nf('Mandate Commission % (Step 4)', 'deal', 'commission', null);
+        $this->nf('Mandate Start Date (Step 4)', 'deal', 'mandate_start', null);
+        $this->nf('Mandate Expiry Date (Step 4)', 'deal', 'mandate_expiry', null);
+
         // text(): a fillable text field. $nfId links a named-field source
         // mapping so autoFillFields() auto-populates it.
         $text = fn (string $id, string $label, string $assignedTo = 'agent', ?int $nfId = null) => array_filter([

@@ -2473,10 +2473,19 @@ class ESignWizardController extends Controller
                 $contacts = $contactsByRole[$contactType] ?? [];
                 if (empty($contacts)) return null;
 
-                // Use first contact only — indexed fields (seller_1_phone etc.)
-                // are resolved separately via WebTemplateDataService
-                $contact = $contacts[0] ?? [];
-                return $this->resolveContactValue($sourceColumn, $contact);
+                // Bug 1: concatenate this column across ALL contacts of the
+                // role (e.g. two sellers' IDs → "3112 and 6789"), the same
+                // ' and ' join field groups use, so plain contact fields
+                // (ID, address, email, phone) stay consistent with the
+                // field-grouped name field. One contact → single value.
+                $parts = [];
+                foreach ($contacts as $c) {
+                    $v = trim((string) $this->resolveContactValue($sourceColumn, $c));
+                    if ($v !== '') {
+                        $parts[] = $v;
+                    }
+                }
+                return implode(' and ', $parts);
 
             case 'agent':
                 if ($sourceColumn === 'name') return $agent->name ?? '';

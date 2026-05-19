@@ -534,10 +534,22 @@ class WebTemplateDataService
                 $nfSourceColumn = $namedField->source_column ?? '';
                 $nfContactType = $namedField->source_contact_type ?? $field['sourceContactType'] ?? '';
 
-                $value = $this->resolveByNamedFieldKey(
-                    $nfKey, $nfSourceType, $nfSourceColumn, $nfContactType,
-                    $property, $contactsByRole, $details, $agent
-                );
+                // Bug 1: a role-bound contact field (Seller/Buyer/Lessor/Lessee)
+                // must concatenate its column across EVERY recipient of that
+                // role — same join field groups use — so two sellers' IDs
+                // render "3112 and 6789", consistent with the name field.
+                // Generic contact fields (no contact type) keep single-contact
+                // behaviour to avoid mixing unrelated roles.
+                if ($nfSourceType === 'contact' && !empty($nfContactType)) {
+                    $parts = explode('.', $nfKey, 2);
+                    $attr = count($parts) === 2 ? $parts[1] : ($nfSourceColumn ?: $nfKey);
+                    $value = $this->resolveContactColumnAllRecipients($nfContactType, $attr, $recipients);
+                } else {
+                    $value = $this->resolveByNamedFieldKey(
+                        $nfKey, $nfSourceType, $nfSourceColumn, $nfContactType,
+                        $property, $contactsByRole, $details, $agent
+                    );
+                }
             }
 
             // Fallback: source-based resolution (backward compat for mappings without named fields)
@@ -636,6 +648,35 @@ class WebTemplateDataService
     }
 
     /**
+     * Bug 1: resolve a single contact column across EVERY recipient of a role,
+     * joined with ' and ' — the exact join resolveFieldGroupValue uses (so a
+     * plain "Seller ID" field renders "3112 and 6789", consistent with the
+     * field-grouped name field). One recipient → single value, no separator.
+     * Zero matching recipients → '' (caller falls back as before).
+     */
+    private function resolveContactColumnAllRecipients(?string $contactType, string $column, array $recipients): string
+    {
+        $aliases = ['landlord' => 'lessor', 'tenant' => 'lessee'];
+        $norm = fn (string $r) => $aliases[$r] ?? $r;
+
+        $role = strtolower(trim(preg_replace('/\s+\d+$/', '', (string) $contactType)));
+        $role = $norm($role);
+
+        $parts = [];
+        foreach ($recipients as $r) {
+            if ($norm(strtolower($r['role'] ?? '')) !== $role) {
+                continue;
+            }
+            $val = trim((string) $this->resolveContactFromKey($column, $r));
+            if ($val !== '') {
+                $parts[] = $val;
+            }
+        }
+
+        return implode(' and ', $parts);
+    }
+
+    /**
      * Resolve a property value from a key attribute.
      */
     private function resolvePropertyFromKey(string $attr, array $property, array $details)
@@ -651,6 +692,12 @@ class WebTemplateDataService
             'district'           => $property['district'] ?? 'Ray Nkonyeni',
             'property_type'      => $property['property_type'] ?? '',
             'price'              => $details['price'] ?? $property['price'] ?? '',
+            // Bug 2: the "Commission Percent" (property/commission_percent)
+            // source must pull the Step-4 Document Details value first, then
+            // fall back to the property record. Without this arm it hit the
+            // match default and silently read only $property['commission_percent'].
+            'commission_percent', 'commission'
+                => $details['commission'] ?? $details['commission_percent'] ?? $property['commission_percent'] ?? '',
             'rental_amount'      => $details['monthly_rental'] ?? $property['rental_amount'] ?? '',
             'deposit_amount'     => $details['deposit'] ?? $property['deposit_amount'] ?? '',
             'lease_start_date'   => $details['lease_start'] ?? '',
