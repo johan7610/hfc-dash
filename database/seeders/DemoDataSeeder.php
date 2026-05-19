@@ -145,6 +145,7 @@ class DemoDataSeeder extends Seeder
         $this->stage10_otp();
         $this->stage11_deals();
         $this->stage12_calendar();
+        $this->stageViewingFeedback_demoShowcase();
         $this->stageSpine_threadFullLifecycle();
         $this->stageZ_demoPresenterCoherence();
 
@@ -1583,6 +1584,226 @@ class DemoDataSeeder extends Seeder
             $made++;
         }
         $this->command->info("  Stage 12: {$made} calendar events (past + next 3 weeks)");
+    }
+
+    // ───────────────────────────────────────────────────────────────────
+    //  VIEWING FEEDBACK SHOWCASE — one completed multi-property viewing
+    //  with per-property feedback, so the buyer "Viewings & Feedback"
+    //  tab and the property "Recent Viewings & Feedback" section render
+    //  populated on a fresh demo:seed (no manual capture needed).
+    //
+    //  Writes the EXACT shape CalendarController::storeFeedback() produces
+    //  for a per-contact (viewing) event: one calendar_event_feedback row
+    //  per property (property_id + contact_id set, feedback_kind=viewing),
+    //  matching calendar_event_links (1 buyer_contact + N subject_property),
+    //  buyer_property_views, buyer_activity_log + a feedback_captured audit
+    //  entry. Fully idempotent — keyed lookups + updateOrInsert.
+    // ───────────────────────────────────────────────────────────────────
+
+    private function stageViewingFeedback_demoShowcase(): void
+    {
+        $buyer = DB::table('contacts')
+            ->where('agency_id', self::AGENCY_ID)
+            ->where('is_buyer', 1)
+            ->whereNull('deleted_at')
+            ->orderBy('id')
+            ->first(['id', 'branch_id']);
+
+        if (!$buyer) {
+            $this->command->warn('  Viewing feedback showcase: no buyer contact — skipped');
+            return;
+        }
+
+        // 4 agency-stock properties, preferring the buyer's branch.
+        $props = DB::table('properties')
+            ->where('agency_id', self::AGENCY_ID)
+            ->whereNull('deleted_at')
+            ->where('branch_id', $buyer->branch_id)
+            ->orderBy('id')->limit(4)->pluck('id')->all();
+        if (count($props) < 4) {
+            $props = DB::table('properties')
+                ->where('agency_id', self::AGENCY_ID)
+                ->whereNull('deleted_at')
+                ->orderBy('id')->limit(4)->pluck('id')->all();
+        }
+        if (count($props) < 2) {
+            $this->command->warn('  Viewing feedback showcase: <2 stock properties — skipped');
+            return;
+        }
+
+        $branchId = $buyer->branch_id ?? $this->branchIds[0];
+        $agentId  = $this->agentForBranch($branchId) ?: $this->agentIds[0];
+        $eventDate = now()->subDays(6)->setTime(10, 0, 0);
+
+        $title = '[DEMO] Multi-Property Viewing — Feedback Showcase';
+
+        // Idempotent event: reuse the stable demo event if it exists.
+        $eventId = DB::table('calendar_events')
+            ->where('agency_id', self::AGENCY_ID)
+            ->where('source_type', 'manual:demo')
+            ->where('title', $title)
+            ->value('id');
+
+        if (!$eventId) {
+            $eventId = DB::table('calendar_events')->insertGetId([
+                'agency_id'     => self::AGENCY_ID,
+                'branch_id'     => $branchId,
+                'user_id'       => $agentId,
+                'created_by_id' => $agentId,
+                'title'         => $title,
+                'category'      => 'viewing',
+                'event_type'    => 'manual',
+                'source_type'   => 'manual:demo',
+                'event_date'    => $eventDate,
+                'end_date'      => $eventDate->copy()->addHours(3),
+                'status'        => 'completed',
+                'all_day'       => 0,
+                'priority'      => 'normal',
+                'created_at'    => $eventDate->copy()->subDays(2),
+                'updated_at'    => now(),
+            ]);
+        } else {
+            DB::table('calendar_events')->where('id', $eventId)
+                ->update(['status' => 'completed', 'updated_at' => now()]);
+        }
+
+        // Links: 1 buyer_contact + N subject_property (string class names
+        // exactly as the read services match on).
+        DB::table('calendar_event_links')->updateOrInsert(
+            [
+                'calendar_event_id' => $eventId,
+                'linkable_type'     => 'App\\Models\\Contact',
+                'linkable_id'       => $buyer->id,
+                'role'              => 'buyer_contact',
+            ],
+            ['created_by_user_id' => $agentId, 'created_at' => now(), 'updated_at' => now()]
+        );
+        foreach ($props as $pid) {
+            DB::table('calendar_event_links')->updateOrInsert(
+                [
+                    'calendar_event_id' => $eventId,
+                    'linkable_type'     => 'App\\Models\\Property',
+                    'linkable_id'       => $pid,
+                    'role'              => 'subject_property',
+                ],
+                ['created_by_user_id' => $agentId, 'created_at' => now(), 'updated_at' => now()]
+            );
+        }
+
+        // Real outcome / concern option ids (global or agency 1).
+        $outcomeIds = DB::table('agency_feedback_options')
+            ->where('category', 'outcome')->where('is_active', 1)
+            ->where(fn ($q) => $q->whereNull('agency_id')->orWhere('agency_id', self::AGENCY_ID))
+            ->orderBy('sort_order')->pluck('id')->all();
+        $concernIds = DB::table('agency_feedback_options')
+            ->where('category', 'concern')->where('is_active', 1)
+            ->where(fn ($q) => $q->whereNull('agency_id')->orWhere('agency_id', self::AGENCY_ID))
+            ->orderBy('sort_order')->pluck('id')->all();
+
+        $sellerNotes = [
+            'Buyer liked the layout and natural light; positive overall.',
+            'Felt the asking price was slightly high for the area.',
+            'Loved the sea view — wants to bring their partner for a second look.',
+            'Garden too small for their needs; otherwise impressed.',
+        ];
+        $internalNotes = [
+            'Strong interest — follow up within 48h.',
+            'Price objection — flag to listing agent for seller chat.',
+            'Hot lead on this one — schedule second viewing.',
+            'Soft no on size — keep on list for similar stock.',
+        ];
+
+        $fbRows = 0;
+        $bpv = 0;
+        foreach (array_values($props) as $i => $pid) {
+            $outcomeId = $outcomeIds[$i % max(count($outcomeIds), 1)] ?? null;
+            $concerns  = ($i === 1 && !empty($concernIds)) ? [$concernIds[0]] : [];
+
+            DB::table('calendar_event_feedback')->updateOrInsert(
+                [
+                    'calendar_event_id' => $eventId,
+                    'contact_id'        => $buyer->id,
+                    'property_id'       => $pid,
+                ],
+                [
+                    'feedback_kind'        => 'viewing',
+                    'visibility'           => 'public_to_seller',
+                    'outcome_option_id'    => $outcomeId,
+                    'concern_option_ids'   => json_encode($concerns),
+                    'seller_visible_notes' => $sellerNotes[$i % count($sellerNotes)],
+                    'internal_notes'       => $internalNotes[$i % count($internalNotes)],
+                    'next_action_notes'    => $i === 0 ? 'Call buyer to gauge offer appetite.' : null,
+                    'captured_by_user_id'  => $agentId,
+                    'captured_at'          => $eventDate,
+                    'agency_id'            => self::AGENCY_ID,
+                    'branch_id'            => $branchId,
+                    'created_at'           => $eventDate,
+                    'updated_at'           => now(),
+                ]
+            );
+            $fbRows++;
+
+            $feedbackId = DB::table('calendar_event_feedback')
+                ->where('calendar_event_id', $eventId)
+                ->where('contact_id', $buyer->id)
+                ->where('property_id', $pid)
+                ->value('id');
+
+            // buyer_property_views — same upsert key storeFeedback uses.
+            DB::table('buyer_property_views')->updateOrInsert(
+                ['contact_id' => $buyer->id, 'property_id' => $pid],
+                [
+                    'last_viewed_at' => $eventDate,
+                    'view_count'     => 1,
+                    'updated_at'     => now(),
+                    'created_at'     => now(),
+                ]
+            );
+            $bpv++;
+
+            // buyer_activity_log — timeline tab. NB: activity_type is an
+            // ENUM that does NOT contain 'feedback_captured' (the value
+            // CalendarController::storeFeedback() writes — a latent bug in
+            // that path, out of scope here). 'viewing_completed' is the
+            // canonical existing enum value for a completed viewing whose
+            // feedback was captured, so the timeline stays coherent.
+            DB::table('buyer_activity_log')->updateOrInsert(
+                [
+                    'contact_id'          => $buyer->id,
+                    'related_event_id'    => $eventId,
+                    'related_property_id' => $pid,
+                    'activity_type'       => 'viewing_completed',
+                ],
+                [
+                    'agency_id'           => self::AGENCY_ID,
+                    'activity_date'       => $eventDate,
+                    'related_feedback_id' => $feedbackId,
+                    'metadata'            => json_encode([
+                        'event_title' => $title,
+                        'outcome_id'  => $outcomeId,
+                        'captured_by' => 'Demo Agent',
+                    ]),
+                    'logged_by_user_id'   => $agentId,
+                ]
+            );
+        }
+
+        // feedback_captured audit entry (mirrors storeFeedback).
+        \App\Models\CommandCenter\CalendarEventAuditEntry::updateOrCreate(
+            ['calendar_event_id' => $eventId, 'action' => 'feedback_captured'],
+            [
+                'new_values'           => ['contact_count' => $fbRows],
+                'performed_by_user_id' => $agentId,
+                'performed_at'         => $eventDate,
+            ]
+        );
+
+        // Contact pillar: bump last_activity_at (coherent with the viewing).
+        DB::table('contacts')->where('id', $buyer->id)
+            ->update(['last_activity_at' => $eventDate]);
+
+        $this->command->info("  Viewing feedback showcase: 1 completed multi-property viewing"
+            . " (contact #{$buyer->id}, {$fbRows} per-property feedback rows, {$bpv} buyer_property_views)");
     }
 
     // ───────────────────────────────────────────────────────────────────

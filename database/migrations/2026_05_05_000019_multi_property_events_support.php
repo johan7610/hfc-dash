@@ -42,6 +42,22 @@ return new class extends Migration {
             });
         }
 
+        // Drop the legacy 2-column unique cef_event_contact_unique
+        // (calendar_event_id, contact_id) from migration 000005. It was
+        // never dropped when the 3-column composite above superseded it,
+        // so on a fresh migrate BOTH coexist and the old one rejects
+        // feedback rows 2..N of a multi-property viewing (same event +
+        // contact, different property) with SQLSTATE[23000] — only the
+        // first property's feedback ever saved. Idempotent: only drop if
+        // present. The 3-column composite already covers the
+        // calendar_event_id FK (leftmost column), so the drop is safe.
+        $oldIdx = DB::select("SHOW INDEX FROM calendar_event_feedback WHERE Key_name = 'cef_event_contact_unique'");
+        if (!empty($oldIdx)) {
+            Schema::table('calendar_event_feedback', function (Blueprint $table) {
+                $table->dropUnique('cef_event_contact_unique');
+            });
+        }
+
         // 2. Add allow_multiple_properties to class settings
         Schema::table('calendar_event_class_settings', function (Blueprint $table) {
             $table->boolean('allow_multiple_properties')->default(false)->after('daily_digest_roles');
