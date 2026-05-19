@@ -293,6 +293,13 @@ class DemoDataSeeder extends Seeder
             // agency_id NULL ⋃ agency_id=$id). Idempotent: updateOrInsert
             // keyed (agency_id, category, label).
             AgencyFeedbackOptionsSeeder::class,
+            // P24 suburbs — Property24ListingMapper::fuzzyLocalMatch maps
+            // suburb names to P24 location ids. Empty on demo => every
+            // P24 mapping falls through. Idempotent: updateOrCreate by slug.
+            P24SuburbSeeder::class,
+            // Knowledge base categories — Admin → Knowledge / Ellie KB
+            // category dropdown. Idempotent: updateOrInsert by slug.
+            KnowledgeCategorySeeder::class,
             SuggestedActionThresholdsSeeder::class,
             SellerOutreachTemplatesSeeder::class,
             AgencyDocumentTypeConfigSeeder::class,
@@ -317,7 +324,81 @@ class DemoDataSeeder extends Seeder
             $this->safeSeed(class_basename($seeder), fn () => $this->call([$seeder]));
         }
 
+        // Stage-0 backfills for reference tables that have no canonical
+        // seeder file. The exact rows are taken from local nexus_os —
+        // do NOT invent. Idempotent: find-or-create by natural key.
+        $this->backfillContactTypes();
+        $this->backfillPropertyStatusItems();
+
         $this->command->info('  Stage 0: reference data + permissions seeded');
+    }
+
+    /**
+     * Add the 4 contact_types missing from a fresh demo (Lessee, Lessor,
+     * Prospect, Tenant). esign_role values come from local nexus_os; they
+     * are required for rental/lease esign role resolution. Idempotent
+     * keyed on `name`.
+     */
+    private function backfillContactTypes(): void
+    {
+        $rows = [
+            ['name' => 'Lessee',   'esign_role' => 'lessee'],
+            ['name' => 'Lessor',   'esign_role' => 'lessor'],
+            ['name' => 'Prospect', 'esign_role' => null],
+            ['name' => 'Tenant',   'esign_role' => 'lessee'],
+        ];
+        $added = 0;
+        foreach ($rows as $r) {
+            $existing = DB::table('contact_types')->where('name', $r['name'])->whereNull('deleted_at')->exists();
+            if ($existing) continue;
+            DB::table('contact_types')->insert([
+                'name'       => $r['name'],
+                'color'      => '#6366f1',
+                'sort_order' => 0,
+                'esign_role' => $r['esign_role'],
+                'is_active'  => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $added++;
+        }
+        $this->command->info("    contact_types backfill: +{$added} (target Lessee/Lessor/Prospect/Tenant)");
+    }
+
+    /**
+     * Add the 5 property_setting_items missing from a fresh demo: the
+     * "For Sale — *" status nuances + "To Let". Captured verbatim from
+     * local nexus_os. Idempotent keyed on (group, name).
+     */
+    private function backfillPropertyStatusItems(): void
+    {
+        $rows = [
+            ['name' => 'For Sale — Reduced Price',   'sort_order' => 2,  'is_default' => 1],
+            ['name' => 'For Sale — Pending',         'sort_order' => 3,  'is_default' => 1],
+            ['name' => 'For Sale — Back on Market',  'sort_order' => 4,  'is_default' => 1],
+            ['name' => 'For Sale — Raised Price',    'sort_order' => 5,  'is_default' => 1],
+            ['name' => 'To Let',                     'sort_order' => 14, 'is_default' => 0],
+        ];
+        $added = 0;
+        foreach ($rows as $r) {
+            $existing = DB::table('property_setting_items')
+                ->where('group', 'property_status')
+                ->where('name', $r['name'])
+                ->whereNull('deleted_at')
+                ->exists();
+            if ($existing) continue;
+            DB::table('property_setting_items')->insert([
+                'group'      => 'property_status',
+                'name'       => $r['name'],
+                'sort_order' => $r['sort_order'],
+                'is_default' => $r['is_default'],
+                'active'     => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $added++;
+        }
+        $this->command->info("    property_setting_items backfill: +{$added} status items");
     }
 
     private function safeSeed(string $label, \Closure $fn): void
@@ -435,6 +516,16 @@ class DemoDataSeeder extends Seeder
         // templates from Stage 0 — runs here, after both exist.
         $this->safeSeed('SellerOnboardingPackSeeder', fn () => $this->call([SellerOnboardingPackSeeder::class]));
         $this->safeSeed('MarketingPermissionPackSeeder', fn () => $this->call([MarketingPermissionPackSeeder::class]));
+
+        // Agency-scoped settings backstops. AgencyObserver::created() does
+        // firstOrCreate these rows, but DemoDataSeeder updates the
+        // pre-existing agency 1 via raw DB::table()->update() (line ~344),
+        // which bypasses Eloquent events — so the observer never fires
+        // for agency 1. These seeders iterate Agency::all() and ensure
+        // both rows exist. Idempotent (firstOrCreate by agency_id [+ role
+        // tuple for the matrix]).
+        $this->safeSeed('AgencyContactSettingsSeeder', fn () => $this->call([AgencyContactSettingsSeeder::class]));
+        $this->safeSeed('AgencyLeaveVisibilityMatrixSeeder', fn () => $this->call([AgencyLeaveVisibilityMatrixSeeder::class]));
 
         $this->command->info('  Stage 1: 1 agency + ' . count($this->branchIds)
             . ' branches + ' . (count($this->agentIds) + count($this->bmIds) + 2) . ' users');
