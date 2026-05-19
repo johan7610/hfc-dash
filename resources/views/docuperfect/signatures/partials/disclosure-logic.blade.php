@@ -25,6 +25,18 @@
             return ownerTerms.includes(role) && ownerTerms.includes(dp);
         },
 
+        // True ONLY when the CURRENT signer is the disclosing owner/seller
+        // party. The mandatory-disclosure grid is gate-counted toward a
+        // signer's required/incomplete total ONLY for that signer; every
+        // other signer (agent, buyer) sees it READ-ONLY and is NOT gated
+        // on it (PPA s70 — the seller is the sole discloser).
+        _signerIsDisclosingParty() {
+            const ownerTerms = ['owner_party', 'lessor', 'seller', 'landlord', 'owner'];
+            const role = (typeof this._currentSignerRole === 'function'
+                ? (this._currentSignerRole() || '') : '').toLowerCase();
+            return ownerTerms.includes(role);
+        },
+
         // Seed in-memory answers from the persisted store so a later signer
         // (e.g. the agent reviewing after the seller) starts from the
         // seller's actual selections, never a blank grid.
@@ -77,6 +89,7 @@
             const self = this;
             const checklists = container.querySelectorAll('.corex-disclosure-checklist');
             let globalIdx = 0;
+            let gatedIdx = 0;
 
             checklists.forEach(checklist => {
                 const disclosureParty = checklist.getAttribute('data-disclosure-party') || 'owner_party';
@@ -113,11 +126,15 @@
                             radio.style.cursor = 'default';
                         }
                     });
+                    // Count toward the gate ONLY for the disclosing party.
+                    // Non-disclosing signers (agent, buyer) see the grid
+                    // read-only and must NOT be gated on it (PPA s70).
+                    if (editable) gatedIdx++;
                     globalIdx++;
                 });
             });
 
-            this.totalDisclosureRows = (this.totalDisclosureRows || 0) + globalIdx;
+            this.totalDisclosureRows = (this.totalDisclosureRows || 0) + gatedIdx;
         },
 
         // Orchestrator: reset → seed from store → bare-table converter (only

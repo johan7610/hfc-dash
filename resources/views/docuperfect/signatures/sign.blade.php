@@ -1141,10 +1141,11 @@ function signDocument() {
                 }
             }
 
-            // §19 Part A — disclosure rows count toward completion in the
-            // agent view identically to the external view (same
-            // totalDisclosureRows + disclosure_row_-prefixed answers).
-            if (this.totalDisclosureRows > 0) {
+            // §19 Part A — disclosure rows are gate-counted ONLY for the
+            // disclosing owner/seller party. The agent sees the grid
+            // read-only and must NOT be blocked on it (PPA s70 — the
+            // seller is the sole discloser).
+            if (this._signerIsDisclosingParty() && this.totalDisclosureRows > 0) {
                 total += this.totalDisclosureRows;
                 const answered = Object.keys(this.webDisclosureAnswers)
                     .filter(k => k.startsWith('disclosure_row_')).length;

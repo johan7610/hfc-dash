@@ -1737,8 +1737,10 @@ function externalSign() {
                 });
             }
 
-            // 4. Disclosure rows
-            if (this.totalDisclosureRows > 0) {
+            // 4. Disclosure rows — gate-counted ONLY for the disclosing
+            //    owner/seller party. A non-owner external signer (buyer)
+            //    sees the grid read-only and is NOT gated on it (PPA s70).
+            if (this._signerIsDisclosingParty() && this.totalDisclosureRows > 0) {
                 total += this.totalDisclosureRows;
                 const answered = Object.keys(this.webDisclosureAnswers).filter(k => k.startsWith('disclosure_row_')).length;
                 incomplete += (this.totalDisclosureRows - answered);
