@@ -309,6 +309,22 @@ final class EntryPointController extends Controller
             }))
             ->first();
         if ($existing) {
+            // Heal a property promoted before this fix (or any reuse) that
+            // has no structured street — only when BOTH are empty, so a
+            // manually-edited address is never overwritten.
+            if (empty($existing->street_number) && empty($existing->street_name)) {
+                [$sNo, $sName] = $this->parseStreet($address, $suburb);
+                $patch = [];
+                if ($sNo !== null && $sNo !== '') {
+                    $patch['street_number'] = $sNo;
+                }
+                if ($sName !== null && $sName !== '') {
+                    $patch['street_name'] = $sName;
+                }
+                if ($patch !== []) {
+                    $existing->forceFill($patch)->save();
+                }
+            }
             return $existing;
         }
 
@@ -320,6 +336,12 @@ final class EntryPointController extends Controller
         $propertyBranchId = $actor->branch_id
             ?? \DB::table('users')->where('id', $propertyAgentId)->value('branch_id');
 
+        // Parse the free-text address into structured fields so the pitched
+        // property's Internal Address modal + the outreach address line
+        // (built from street_number+street_name+suburb) are populated.
+        [$streetNumber, $streetName] = $this->parseStreet($address, $suburb);
+        $district = trim((string) ($listing->district ?? ''));
+
         // properties.beds/baths/garages/price/suburb/property_type/status are
         // NOT NULL — fall back to the schema defaults (0 / empty / 'house' /
         // 'draft') when the prospecting row doesn't carry the value.
@@ -330,7 +352,10 @@ final class EntryPointController extends Controller
             'external_id'   => 'prospecting:' . $listing->id,
             'title'         => $address !== '' ? $address : 'Prospecting listing ' . $listing->id,
             'address'       => $address !== '' ? $address : null,
+            'street_number' => $streetNumber,
+            'street_name'   => $streetName,
             'suburb'        => $suburb !== '' ? $suburb : '',
+            'district'      => $district !== '' ? $district : null,
             'price'         => $listing->price ?? 0,
             'beds'          => $listing->bedrooms ?? 0,
             'baths'         => $listing->bathrooms ?? 0,
@@ -340,6 +365,35 @@ final class EntryPointController extends Controller
             'listing_type'  => 'sale',
             'status'        => 'draft',
         ]);
+    }
+
+    /**
+     * Prospecting listings carry only a free-text `address` string (plus a
+     * separate suburb/district) — NO structured street fields. Parse the
+     * street line (the segment before the first comma) into
+     * [street_number, street_name] so a pitched Property's Internal Address
+     * and the outreach address line are populated instead of "(no address)".
+     * Returns [null, null] when there is no real street (e.g. the address is
+     * just the suburb).
+     */
+    private function parseStreet(string $address, string $suburb): array
+    {
+        $address = trim($address);
+        if ($address === '') {
+            return [null, null];
+        }
+        $streetLine = trim((string) (explode(',', $address)[0] ?? ''));
+        $suburb = trim($suburb);
+        if ($streetLine === ''
+            || ($suburb !== '' && mb_strtolower($streetLine) === mb_strtolower($suburb))) {
+            return [null, null];
+        }
+        // Leading street number: "173", "12A", "1/3", "12-14".
+        if (preg_match('/^\s*(\d+[A-Za-z]?(?:\s*[\/-]\s*\d+[A-Za-z]?)?)\s+(.+)$/u', $streetLine, $m)) {
+            return [trim($m[1]), trim($m[2])];
+        }
+        // No leading number — the whole line is the street name.
+        return [null, $streetLine];
     }
 
     private function resolvePromotionAgentId(int $agencyId, $actor): int
