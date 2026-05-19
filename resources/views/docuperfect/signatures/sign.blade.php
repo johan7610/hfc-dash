@@ -688,6 +688,7 @@ function signDocument() {
                     setTimeout(() => {
                         const container = this.$refs.webDocContent;
                         paginateDocument(container, this.signingParties);
+                        this._syncTotalPagesFromPagination(container);
                         // Restore previously signed initials (from other parties)
                         restoreStoredInitials(container, this.storedInitials);
                         this._makeWebElementsInteractive();
@@ -1227,6 +1228,23 @@ function signDocument() {
         // ── Navigation ──
         prevPage() { if (this.currentPage > 1) this.currentPage--; },
         nextPage() { if (this.currentPage < this.totalPages) this.currentPage++; },
+
+        // The server $pageCount is provisional — for a web pack it counts
+        // TEMPLATES, not rendered A4 pages. The real total is only known once
+        // paginateDocument() has built the .corex-a4-page elements. Re-derive
+        // totalPages from the actual paginated DOM (continuous across the
+        // whole merged pack — never per-template) on EVERY pagination so the
+        // counter and prev/next bounds stay correct after re-pagination too.
+        _syncTotalPagesFromPagination(container) {
+            const root = container || this.$refs.webDocContent;
+            if (!root) return;
+            const pages = root.querySelectorAll('.corex-a4-page');
+            if (pages.length > 0) {
+                this.totalPages = pages.length;
+                if (this.currentPage > this.totalPages) this.currentPage = this.totalPages;
+                if (this.currentPage < 1) this.currentPage = 1;
+            }
+        },
 
         markersForCurrentPage() {
             return this.markers.filter(m => m.page_number === this.currentPage);
