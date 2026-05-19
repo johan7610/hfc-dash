@@ -1518,16 +1518,53 @@ class ESignWizardController extends Controller
                 if (!$tpl || !$tpl->blade_view) continue;
 
                 $tplData = $webTemplateDataService->resolve($tplId, $stepData, $user);
+                $segIsSales = false;
                 if (!empty($tpl->signing_parties)) {
                     $tplData['signing_parties'] = $tpl->signing_parties;
-                    // Parity with the single-doc path (see ~line 1602): the
+                    // Parity with the single-doc path (see ~line 1610): the
                     // signature-block component maps owner_party→Seller/Lessor
                     // off document_context. The pack loop never set it, so
                     // EVERY pack template baked "Lessor" even for a sales
                     // pack. Resolve per template (category/template_type
                     // aware) so each segment of a mixed pack is correct.
                     $propSrc = $stepData['property']['_property_source'] ?? null;
-                    $tplData['document_context'] = $tpl->isSalesDocument($propSrc) ? 'sales' : 'rental';
+                    $segIsSales = $tpl->isSalesDocument($propSrc);
+                    $tplData['document_context'] = $segIsSales ? 'sales' : 'rental';
+                }
+
+                // Full single-doc parity (mirrors ~1613-1631 & 1651). The
+                // signature-block partial keys data-marker-party off
+                // signing_parties/document_context, but it needs
+                // recipients_by_role + party_names to emit the right number
+                // of signer cells with names, and resolveSignatureNames() to
+                // resolve residual Blade tokens / signed-at inputs. Without
+                // these the pack segments rendered inconsistently with the
+                // standalone template (root of the missing-signable bug).
+                $segPartyNames = [];
+                foreach ($recipients as $r) {
+                    if (($r['role'] ?? '') === 'agent') continue;
+                    $segPartyNames[] = $r['name'] ?? '';
+                }
+                $segPartyNames[] = $user->name;
+                $tplData['party_names'] = $segPartyNames;
+
+                $segRecipientsByRole = [];
+                foreach ($recipients as $r) {
+                    $rBase = preg_replace('/_\d+$/', '', $r['role'] ?? '');
+                    $segRecipientsByRole[$rBase][] = $r;
+                }
+                $segRecipientsByRole['agent'] = [['name' => $user->name, 'role' => 'agent', 'email' => $user->email ?? '']];
+                $tplData['recipients_by_role'] = $segRecipientsByRole;
+
+                $segParties = [['role' => 'agent', 'name' => $user->name, 'display' => $user->name]];
+                foreach ($recipients as $r) {
+                    $resolvedRole = $r['role'] ?? '';
+                    if ($resolvedRole === 'owner_party') {
+                        $resolvedRole = $segIsSales ? 'seller' : 'landlord';
+                    } elseif ($resolvedRole === 'acquiring_party') {
+                        $resolvedRole = $segIsSales ? 'buyer' : 'tenant';
+                    }
+                    $segParties[] = ['role' => $resolvedRole, 'name' => $r['name'] ?? '', 'display' => $r['name'] ?? ''];
                 }
 
                 // Render the template and extract styles + body
@@ -1546,6 +1583,7 @@ class ESignWizardController extends Controller
                     ? '<div style="page-break-after:always;"></div>'
                     : '';
 
+                $bodyHtml = $this->resolveSignatureNames($bodyHtml, $tplData, $segParties);
                 $bodyHtml = $this->injectFieldValues($bodyHtml, $tplData);
 
                 // BL-2c: a pack template that yields no signable surface even
@@ -1566,6 +1604,17 @@ class ESignWizardController extends Controller
                 $mergedHtml .= $styles . $bodyHtml . $pageBreak;
                 $packTemplateData[$tplId] = $tplData;
             }
+
+            // STEP 1 found the signature-block partial keys data-marker-party
+            // off each template's OWN signing_parties/document_context, not
+            // the recipients — so merged segments carry inconsistent owner/
+            // acquiring synonyms (lessor vs seller). The external scan only
+            // makes a surface interactive when its key resolves to the
+            // signer's role, so a lessor-keyed segment is skipped for a
+            // seller signer. Unify EVERY data-marker-party across the whole
+            // merged document to the canonical recipient role keys so every
+            // segment is signable by the actual recipients.
+            $mergedHtml = $this->normalizePackMarkerParties($mergedHtml, $recipients);
 
             $webTemplateData = [
                 'merged_html'        => $mergedHtml,
@@ -2261,6 +2310,86 @@ class ESignWizardController extends Controller
             return $xpath->query('//*[@data-marker-party][@data-marker-type="signature"]')->length;
         } catch (\Throwable $e) {
             return 0;
+        }
+    }
+
+    /**
+     * Pack signing-role fix. The signature-block partial keys
+     * data-marker-party off each template's own signing_parties +
+     * document_context (Step 1 finding), NOT the recipients. In a merged
+     * pack, segments therefore carry inconsistent owner/acquiring
+     * synonyms (e.g. lessor vs seller). The external signing scan only
+     * makes a surface interactive when its key resolves to the signer's
+     * role, so a lessor-keyed segment is silently skipped for a seller
+     * signer. Normalise EVERY data-marker-party across the whole merged
+     * document to the canonical recipient role keys — family-collapsed,
+     * numeric suffix preserved (seller_2 etc.) — so every segment is
+     * signable by the actual recipients. Fail-open (any error => original).
+     */
+    private function normalizePackMarkerParties(string $mergedHtml, array $recipients): string
+    {
+        if (trim($mergedHtml) === '') {
+            return $mergedHtml;
+        }
+
+        $ownerTerms     = ['owner_party', 'owner', 'lessor', 'landlord', 'seller'];
+        $acquiringTerms = ['acquiring_party', 'lessee', 'tenant', 'buyer', 'purchaser'];
+        $agentTerms     = ['agent', 'property_practitioner'];
+
+        // Canonical owner/acquiring keys from the pack's actual recipients
+        // (mirrors the single-doc owner_party→seller/landlord resolution).
+        $roles = array_map(
+            fn ($r) => strtolower(preg_replace('/_\d+$/', '', $r['role'] ?? '')),
+            $recipients
+        );
+        $isRental = (bool) array_intersect($roles, ['landlord', 'lessor', 'tenant', 'lessee'])
+                 && ! array_intersect($roles, ['seller', 'buyer']);
+        $ownerCanon = $isRental ? 'landlord' : 'seller';
+        $acqCanon   = $isRental ? 'tenant'   : 'buyer';
+
+        try {
+            $dom = new \DOMDocument();
+            @$dom->loadHTML(
+                '<?xml encoding="utf-8"?>' . $mergedHtml,
+                LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NOERROR
+            );
+            $xpath = new \DOMXPath($dom);
+            $changed = false;
+
+            foreach ($xpath->query('//*[@data-marker-party]') as $node) {
+                /** @var \DOMElement $node */
+                $raw = $node->getAttribute('data-marker-party');
+                if ($raw === '') {
+                    continue;
+                }
+                $suffix = preg_match('/_(\d+)$/', $raw, $mm) ? '_' . $mm[1] : '';
+                $base = strtolower(preg_replace('/_\d+$/', '', $raw));
+
+                if (in_array($base, $ownerTerms, true)) {
+                    $new = $ownerCanon . $suffix;
+                } elseif (in_array($base, $acquiringTerms, true)) {
+                    $new = $acqCanon . $suffix;
+                } elseif (in_array($base, $agentTerms, true)) {
+                    $new = 'agent';
+                } else {
+                    continue; // unknown role — leave untouched
+                }
+
+                if ($new !== $raw) {
+                    $node->setAttribute('data-marker-party', $new);
+                    $changed = true;
+                }
+            }
+
+            if (! $changed) {
+                return $mergedHtml;
+            }
+
+            $result = $dom->saveHTML();
+            return trim(preg_replace('/^<\?xml encoding="utf-8"\?>/', '', $result));
+        } catch (\Throwable $e) {
+            \Log::warning('PACK_MARKER_PARTY_NORMALIZE_FAILED', ['error' => $e->getMessage()]);
+            return $mergedHtml;
         }
     }
 
