@@ -651,7 +651,7 @@ function signDocument() {
         // Web template interactive signing state
         webSigElements: [],       // [{el, partyRole, type, index, isMine, signed, sigData}]
         webSignatures: {},         // { 'agent-sig-0': dataUrl, ... }
-        // §19 Part A — disclosure state (shared logic @include'd below).
+        // §19 Part A — disclosure state (shared logic pulled in below).
         // Agent view is READ-ONLY for the seller's mandatory disclosure
         // (PPA s70) but must SEE + gate-count it and persist it on submit.
         webDisclosureAnswers: {},
@@ -710,7 +710,7 @@ function signDocument() {
         },
 
         // §19 Part A — shared disclosure logic (single source; external +
-        // agent both @include this). The agent is never the disclosure
+        // agent both pull this in). The agent is never the disclosure
         // party, so _disclosureEditable() returns false here → grid is
         // visible + restored + gate-counted, but READ-ONLY.
         _currentSignerRole() {

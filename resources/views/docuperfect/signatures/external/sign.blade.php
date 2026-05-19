@@ -2559,7 +2559,7 @@ function externalSign() {
         },
 
         // \u00A719 Part A \u2014 shared disclosure logic (single source; agent +
-        // external both @include this). Provides processWebDisclosureChecklists,
+        // external both pull this in). Provides processWebDisclosureChecklists,
         // _disclosureEditable, _seedDisclosureFromStore, _restoreDisclosureAnswers,
         // _processAllDisclosures. Editable only for owner_party (seller).
         _currentSignerRole() {
