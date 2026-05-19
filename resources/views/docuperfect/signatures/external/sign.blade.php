@@ -2659,6 +2659,14 @@ function externalSign() {
             let totalRows = 0;
 
             tables.forEach(table => {
+                // §19 — a <table> wrapped in .corex-disclosure-checklist is
+                // owned SOLELY by processWebDisclosureChecklists(). Never
+                // double-process it here: doing so double-counts
+                // totalDisclosureRows (required=2x, satisfied=1x → the gate
+                // can never clear) and destroys the .corex-radio-placeholder
+                // controls the checklist converter needs.
+                if (table.closest('.corex-disclosure-checklist')) return;
+
                 // Check if this table has YES/NO/N/A headers
                 const headers = table.querySelectorAll('thead th');
                 if (headers.length < 2) return;
