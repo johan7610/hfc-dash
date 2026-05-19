@@ -2205,15 +2205,38 @@ HTML;
 /* Hide interactive signing UI elements */
 .web-sig-prompt { display: none !important; }
 .init-prompt { display: none !important; }
-.web-sig-interactive {
-    border: 1px solid #94a3b8 !important;
+/* Neutralise interactive signing-UI state in the FLATTENED PDF ONLY.
+   The green/dashed box, tinted background and 0.8 opacity are correct
+   DURING signing but must NOT appear in a legal PDF. Selectors match the
+   signing view's specificity (.web-sig-interactive.web-sig-signed) so its
+   !important box rule cannot win by specificity + source order. Every
+   signed surface — agent, seller, seller_2…seller_n, native OR
+   resolver-injected — collapses to ONE consistent neutral signature line
+   (border-bottom kept; box/tint/opacity stripped). */
+.web-sig-interactive,
+.web-sig-interactive.web-sig-signed,
+.web-sig-signed,
+.web-sig-other-signed,
+.web-sig-other-party {
+    border: none !important;
+    border-bottom: 1px solid #333 !important;
     background: transparent !important;
-    min-height: 28pt;
+    box-shadow: none !important;
+    opacity: 1 !important;
 }
+/* Container-independent signature size: a fixed box (aspect preserved via
+   object-fit) so the SAME capture renders identically whether its cell is
+   full-width (agent, cols-1) or half-width (seller, cols-2). A stylesheet
+   !important beats embedSigIntoElement's inline max-height. Height equals
+   the previous 50px cap → no vertical growth → no re-pagination (§19.7). */
 .web-sig-signed-img {
-    display: block;
-    max-height: 50px;
-    object-fit: contain;
+    display: block !important;
+    width: 160px !important;
+    height: 50px !important;
+    max-height: 50px !important;
+    object-fit: contain !important;
+    margin: 2px auto !important;
+    opacity: 1 !important;
 }
 /* Hide marker overlays, toolbars, panels */
 [class*="marker-overlay"],
