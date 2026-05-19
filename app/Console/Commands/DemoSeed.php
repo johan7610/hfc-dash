@@ -20,12 +20,23 @@ class DemoSeed extends Command
             return self::FAILURE;
         }
 
-        $this->info('Seeding demo data...');
-        // Pass --force through to db:seed: required so db:seed does not
-        // prompt/abort on a non-local environment, and so the seeder's own
-        // run() gate sees the operator's --force intent.
+        // Demo work ALWAYS targets the dedicated 'demo' connection
+        // (nexus_os_demo), NEVER the real working DB. Pre-flight: refuse if
+        // the demo connection itself resolves to a protected real DB.
+        $demoDb = config('database.connections.demo.database');
+        if ($refusal = DemoDataSeeder::protectedDatabaseRefusal($demoDb)) {
+            $this->error($refusal);
+            return self::FAILURE;
+        }
+
+        $this->info("Seeding demo data into the 'demo' connection ({$demoDb})...");
+        // --database=demo: db:seed switches the default connection for the
+        // run, so the seeder writes to nexus_os_demo. --force: required so
+        // db:seed does not prompt/abort on non-local and so the seeder's own
+        // run() gates see the operator's --force intent.
         $this->call('db:seed', [
             '--class' => 'Database\\Seeders\\DemoDataSeeder',
+            '--database' => 'demo',
             '--force' => true,
         ]);
 

@@ -111,6 +111,15 @@ class DemoDataSeeder extends Seeder
             throw new \RuntimeException($refusal);
         }
 
+        // HARD STOP: never let the demo seeder write to the real working DB,
+        // regardless of environment. Catches `db:seed --class=DemoDataSeeder`
+        // and `migrate:fresh --seed --seeder=DemoDataSeeder` on the default
+        // (nexus_os) connection. The supported path (demo:seed / explicit
+        // --database=demo) switches the default to nexus_os_demo → passes.
+        if ($refusal = self::protectedDatabaseRefusal()) {
+            throw new \RuntimeException($refusal);
+        }
+
         $this->assertSafeMailDriver();
 
         // Belt-and-braces: the run never sends mail / dispatches real jobs.
@@ -183,6 +192,36 @@ class DemoDataSeeder extends Seeder
                 . "NOT opted in. A real production box can never be demo-seeded. Set "
                 . "DEMO_SEED_ALLOWED=true in this environment's .env to opt in. "
                 . "(If it IS set but config is cached, run `php artisan config:clear` first.)";
+        }
+
+        return null;
+    }
+
+    /**
+     * Real working databases that demo seeding / cleanup must NEVER touch.
+     * `migrate:fresh --seed --seeder=DemoDataSeeder` against 'nexus_os' once
+     * wiped real local data — this is the hard stop. Demo work belongs in
+     * the 'demo' connection (nexus_os_demo).
+     */
+    public const PROTECTED_DATABASES = ['nexus_os'];
+
+    /**
+     * Returns NULL when the target database is safe for destructive demo
+     * work, or a clear refusal string when it is a protected real DB.
+     * Pass an explicit db name, else the current default connection's db is
+     * checked (so `db:seed --database=demo` — which switches the default —
+     * resolves to nexus_os_demo and passes).
+     */
+    public static function protectedDatabaseRefusal(?string $databaseName = null): ?string
+    {
+        $db = $databaseName ?? \Illuminate\Support\Facades\DB::connection()->getDatabaseName();
+
+        if (in_array($db, self::PROTECTED_DATABASES, true)) {
+            return "Refusing: demo seeding/cleanup must NOT run against the real "
+                . "working database '{$db}'. Demo work belongs in 'nexus_os_demo' "
+                . "(the 'demo' connection). Use:  php artisan demo:seed  (auto-targets "
+                . "the demo connection), or pass  --database=demo  to db:seed / "
+                . "migrate:fresh. See .ai/DEMO_SEEDING.md.";
         }
 
         return null;

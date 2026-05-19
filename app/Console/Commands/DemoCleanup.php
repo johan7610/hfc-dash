@@ -20,6 +20,18 @@ class DemoCleanup extends Command
             return self::FAILURE;
         }
 
+        // Cleanup ALWAYS operates on the dedicated 'demo' connection
+        // (nexus_os_demo), NEVER the real working DB. Switch the default
+        // connection so every DB::table() delete below is scoped to demo,
+        // then hard-refuse if that connection resolves to a protected DB.
+        DB::setDefaultConnection('demo');
+        $demoDb = DB::connection()->getDatabaseName();
+        if ($refusal = DemoDataSeeder::protectedDatabaseRefusal($demoDb)) {
+            $this->error($refusal);
+            return self::FAILURE;
+        }
+        $this->info("Target: 'demo' connection ({$demoDb})");
+
         if (!$force && !$this->confirm('This will delete ALL [DEMO]-prefixed records. Continue?')) {
             return self::SUCCESS;
         }
