@@ -1034,7 +1034,10 @@ class DocumentImporterController extends Controller
             ->orderBy('sort_order')
             ->get(['id', 'name', 'sort_order', 'is_default']);
 
-        if ($parties->isEmpty()) {
+        // effectiveAgencyId() is nullable; seedDefaultsForAgency() requires a
+        // concrete int. With no resolvable agency we cannot seed agency-scoped
+        // defaults — load with whatever exists rather than 500.
+        if ($parties->isEmpty() && $agencyId !== null) {
             AgencySigningParty::seedDefaultsForAgency($agencyId);
             $parties = AgencySigningParty::forAgency($agencyId)
                 ->orderBy('sort_order')
