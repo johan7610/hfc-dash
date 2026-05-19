@@ -1859,18 +1859,18 @@ class DemoDataSeeder extends Seeder
             );
             $bpv++;
 
-            // buyer_activity_log — timeline tab. NB: activity_type is an
-            // ENUM that does NOT contain 'feedback_captured' (the value
-            // CalendarController::storeFeedback() writes — a latent bug in
-            // that path, out of scope here). 'viewing_completed' is the
-            // canonical existing enum value for a completed viewing whose
-            // feedback was captured, so the timeline stays coherent.
+            // buyer_activity_log — timeline tab. Mirrors what
+            // CalendarController::storeFeedback() writes for a captured
+            // viewing-feedback row. The 'feedback_captured' enum value
+            // was added by migration 2026_05_20_000001 (was previously a
+            // latent bug — the controller wrote it, the enum lacked it,
+            // every save hit SQLSTATE 1265 and rolled back).
             DB::table('buyer_activity_log')->updateOrInsert(
                 [
                     'contact_id'          => $buyer->id,
                     'related_event_id'    => $eventId,
                     'related_property_id' => $pid,
-                    'activity_type'       => 'viewing_completed',
+                    'activity_type'       => 'feedback_captured',
                 ],
                 [
                     'agency_id'           => self::AGENCY_ID,

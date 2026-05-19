@@ -1625,7 +1625,15 @@
             </div>
 
             {{-- Footer (step-aware for multi-property) --}}
-            <div class="px-6 py-4 flex items-center justify-between gap-2" style="border-top: 1px solid var(--border);">
+            <div style="border-top: 1px solid var(--border);">
+                {{-- Inline server-error surface — replaces the prior silent
+                     fail where a 500/422 left the save button dead. --}}
+                <template x-if="feedbackError">
+                    <div class="px-6 pt-3 text-xs"
+                         style="color: var(--ds-crimson, #dc2626);"
+                         x-text="feedbackError"></div>
+                </template>
+            <div class="px-6 py-4 flex items-center justify-between gap-2">
                 <div>
                     <template x-if="feedbackData.is_multi_property && feedbackData.properties.length > 1">
                         <button type="button" @click="skipFeedbackProperty()"
@@ -1652,6 +1660,7 @@
                     </template>
                 </div>
             </div>
+            </div>{{-- /footer wrapper (border-top + feedbackError display) --}}
         </div>
     </div>
 
@@ -2268,6 +2277,10 @@ function calendarPage() {
         feedbackForm: {},
         feedbackSaving: false,
         feedbackPropertyStep: 0,
+        // Surfaced when the save POST returns non-2xx or throws — rendered
+        // inline at the modal footer. Replaces the prior silent fail where
+        // a 500 / 422 left the button dead with no user feedback.
+        feedbackError: null,
         // Reason picker modal (dismiss + require_reason complete)
         reasonPickerOpen: false,
         reasonPickerAction: 'dismiss', // 'dismiss' or 'complete'
@@ -2945,6 +2958,7 @@ function calendarPage() {
                 };
                 this.feedbackPropertyStep = 0;
                 this.feedbackForm = {};
+                this.feedbackError = null;
 
                 if (mode === 'per_property') {
                     // Index per-property form rows by property_id.
@@ -3021,8 +3035,14 @@ function calendarPage() {
             };
         },
 
+        // Returns a structured result so callers can surface server
+        // errors instead of swallowing them. On non-2xx, parses the
+        // standard Laravel JSON shape ({message, errors}) and folds
+        // validation errors into a single readable message. Never
+        // throws on HTTP status — only on network/parse failure.
         async submitFeedbackPayload(payload) {
-            return await fetch('/corex/command-center/calendar/' + this.feedbackData.event.id + '/feedback', {
+            const url = '/corex/command-center/calendar/' + this.feedbackData.event.id + '/feedback';
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
@@ -3032,24 +3052,58 @@ function calendarPage() {
                 credentials: 'same-origin',
                 body: JSON.stringify(payload),
             });
+            if (response.ok) {
+                return { ok: true, status: response.status };
+            }
+            let body = null;
+            try { body = await response.json(); } catch (_) { /* non-JSON body */ }
+            const validationDetail = body && body.errors
+                ? Object.values(body.errors).flat().slice(0, 3).join(' · ')
+                : null;
+            const message = validationDetail
+                || (body && body.message)
+                || ('Save failed (HTTP ' + response.status + ').');
+            console.error('[Capture Feedback] save failed', { url, status: response.status, payload, body });
+            return { ok: false, status: response.status, message, errors: body?.errors ?? null };
         },
 
         async saveFeedback() {
             this.feedbackSaving = true;
-            const payload = this.buildFeedbackPayload();
-            const r = await this.submitFeedbackPayload(payload);
-            this.feedbackSaving = false;
-            if (r.ok) { this.feedbackOpen = false; window.location.reload(); }
+            this.feedbackError = null;
+            try {
+                const payload = this.buildFeedbackPayload();
+                const r = await this.submitFeedbackPayload(payload);
+                if (r.ok) {
+                    this.feedbackOpen = false;
+                    window.location.reload();
+                } else {
+                    this.feedbackError = r.message;
+                }
+            } catch (e) {
+                console.error('[Capture Feedback] network error', e);
+                this.feedbackError = 'Network error: ' + (e.message || 'request failed');
+            } finally {
+                this.feedbackSaving = false;
+            }
         },
 
         async saveFeedbackAndNext() {
             this.feedbackSaving = true;
-            const payload = this.buildFeedbackPayload();
-            const r = await this.submitFeedbackPayload(payload);
-            this.feedbackSaving = false;
-            if (r.ok) {
-                this.feedbackPropertyStep++;
-                this.resetFeedbackForm();
+            this.feedbackError = null;
+            try {
+                const payload = this.buildFeedbackPayload();
+                const r = await this.submitFeedbackPayload(payload);
+                if (r.ok) {
+                    this.feedbackPropertyStep++;
+                    this.resetFeedbackForm();
+                } else {
+                    this.feedbackError = r.message;
+                }
+            } catch (e) {
+                console.error('[Capture Feedback] network error', e);
+                this.feedbackError = 'Network error: ' + (e.message || 'request failed');
+            } finally {
+                this.feedbackSaving = false;
             }
         },
 
