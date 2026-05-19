@@ -68,6 +68,29 @@ class SalesMandatoryDisclosureEsignSeeder extends Seeder
         ]);
     }
 
+    /**
+     * Find-or-create the document_types row for $slug, return its id.
+     * Mirrors nf(): never trust a hard-coded FK id (a fresh DB may not
+     * have the type → FK violation, silently swallowed by safeSeed).
+     */
+    private function documentTypeId(string $slug, string $label, string $grouping = 'shared'): int
+    {
+        $id = DB::table('document_types')->where('slug', $slug)->whereNull('deleted_at')->value('id');
+        if ($id) {
+            return (int) $id;
+        }
+
+        return (int) DB::table('document_types')->insertGetId([
+            'slug'       => $slug,
+            'label'      => $label,
+            'grouping'   => $grouping,
+            'is_active'  => 1,
+            'sort_order' => (int) DB::table('document_types')->max('sort_order') + 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
     public function run(): void
     {
         $path = base_path(self::DATA_FILE);
@@ -114,6 +137,9 @@ class SalesMandatoryDisclosureEsignSeeder extends Seeder
             'field_mappings'  => json_encode($fieldMappings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             'updated_at'      => now(),
         ]);
+        // FK-safe: resolve document_type_id by stable SLUG (find-or-create),
+        // overriding the fragile baked numeric id in the data file.
+        $row['document_type_id'] = $this->documentTypeId('disclosure', 'Disclosure', 'shared');
 
         $existingId = DB::table('docuperfect_templates')
             ->where('name', self::TEMPLATE_NAME)

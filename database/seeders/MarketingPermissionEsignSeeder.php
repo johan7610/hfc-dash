@@ -65,6 +65,32 @@ class MarketingPermissionEsignSeeder extends Seeder
         ]);
     }
 
+    /**
+     * Find-or-create the document_types row for $slug, return its id.
+     * Mirrors nf(): never trust a hard-coded FK id. A fresh DB only has
+     * document_types 1–22; 'marketing_permission' (was a UI-only addition,
+     * absent from every migration/seeder) does NOT exist, so the baked
+     * numeric id 23 FK-violates docuperfect_templates_document_type_id_foreign
+     * and the whole seeder is silently swallowed by DemoDataSeeder::safeSeed.
+     */
+    private function documentTypeId(string $slug, string $label, string $grouping = 'shared'): int
+    {
+        $id = DB::table('document_types')->where('slug', $slug)->whereNull('deleted_at')->value('id');
+        if ($id) {
+            return (int) $id;
+        }
+
+        return (int) DB::table('document_types')->insertGetId([
+            'slug'       => $slug,
+            'label'      => $label,
+            'grouping'   => $grouping,
+            'is_active'  => 1,
+            'sort_order' => (int) DB::table('document_types')->max('sort_order') + 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
     public function run(): void
     {
         $path = base_path(self::DATA_FILE);
@@ -111,6 +137,9 @@ class MarketingPermissionEsignSeeder extends Seeder
             'field_mappings'  => json_encode($fieldMappings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             'updated_at'      => now(),
         ]);
+        // FK-safe: resolve document_type_id by stable SLUG (find-or-create),
+        // overriding the fragile baked numeric id in the data file.
+        $row['document_type_id'] = $this->documentTypeId('marketing_permission', 'Marketing Permission', 'property');
 
         $existingId = DB::table('docuperfect_templates')
             ->where('name', self::TEMPLATE_NAME)
