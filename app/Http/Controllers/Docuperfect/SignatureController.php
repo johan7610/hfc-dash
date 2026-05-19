@@ -999,6 +999,7 @@ class SignatureController extends Controller
             'esignFlowId' => $esignFlowId,
             'signingParties' => $signingParties,
             'storedInitials' => $webTemplateData['signed_initials'] ?? [],
+            'storedDisclosure' => $webTemplateData['disclosure_answers'] ?? [],
         ]);
     }
 
@@ -1392,6 +1393,18 @@ class SignatureController extends Controller
             $ceremonyValues = $request->input('ceremony_values', []);
             if (!empty($ceremonyValues)) {
                 $webData['ceremony_values'] = array_merge($webData['ceremony_values'] ?? [], $ceremonyValues);
+            }
+
+            // §19 Part A — persist disclosure answers on the agent's submit
+            // (mirrors SigningController::completeWeb). The agent does not
+            // FILL the seller's mandatory disclosure, but its completion
+            // must not drop whatever answers already exist.
+            $disclosureAnswers = $request->input('disclosure_answers', []);
+            if (!empty($disclosureAnswers)) {
+                $webData['disclosure_answers'] = array_merge(
+                    $webData['disclosure_answers'] ?? [],
+                    $disclosureAnswers
+                );
             }
 
             // §19 Option 2 — do NOT feed the paginated DOM back into

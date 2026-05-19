@@ -1,0 +1,134 @@
+{{--
+    Shared disclosure logic (§19 Part A — APPROVED).
+    @include'd INSIDE the Alpine object literal of BOTH signing views:
+      - external/sign.blade.php  (externalSign())   — seller / external signer
+      - sign.blade.php           (signDocument())   — agent
+    SINGLE SOURCE. Do not copy-paste these methods into either view.
+
+    Contract:
+      * Each consuming component MUST define _currentSignerRole() and have
+        state: webDisclosureAnswers:{}, totalDisclosureRows:0, storedDisclosure:{}.
+      * The bare-table converter _processDisclosureTable()/_processCertificateRow()
+        remains external-only (legacy path; #119 uses the checklist structure).
+        _processAllDisclosures() calls it only when present (typeof guard).
+
+    Legal rule (Johan-approved, PPA s70): the mandatory-disclosure grid is
+    EDITABLE only for owner_party (the seller discloses). The agent and every
+    other signer see it READ-ONLY but must SEE the seller's actual answers.
+--}}
+        // Editable ONLY when the current signer is the owner/seller party.
+        _disclosureEditable(disclosureParty) {
+            const ownerTerms = ['owner_party', 'lessor', 'seller', 'landlord', 'owner'];
+            const dp = (disclosureParty || 'owner_party').toLowerCase();
+            const role = (typeof this._currentSignerRole === 'function'
+                ? (this._currentSignerRole() || '') : '').toLowerCase();
+            return ownerTerms.includes(role) && ownerTerms.includes(dp);
+        },
+
+        // Seed in-memory answers from the persisted store so a later signer
+        // (e.g. the agent reviewing after the seller) starts from the
+        // seller's actual selections, never a blank grid.
+        _seedDisclosureFromStore() {
+            const stored = this.storedDisclosure || {};
+            if (stored && typeof stored === 'object') {
+                Object.keys(stored).forEach(k => {
+                    if (this.webDisclosureAnswers[k] === undefined) {
+                        this.webDisclosureAnswers[k] = stored[k];
+                    }
+                });
+            }
+        },
+
+        // Re-apply stored YES/NO/N/A onto the rendered grid (checklist
+        // placeholders + bare-table radios). Runs after conversion so a
+        // re-rendered document shows prior answers — required for the
+        // read-only agent review.
+        _restoreDisclosureAnswers() {
+            const container = this.$refs.webDocContent || null;
+            if (!container) return;
+            const ans = this.webDisclosureAnswers || {};
+            container.querySelectorAll('.corex-disclosure-row').forEach(row => {
+                const key = row.getAttribute('data-disclosure-key');
+                if (!key) return;
+                const val = (ans[key] || '').toString().toLowerCase();
+                if (!val) return;
+                row.querySelectorAll('.corex-radio-placeholder').forEach(ph => {
+                    const sel = (ph.dataset.value || '').toLowerCase() === val;
+                    ph.setAttribute('data-selected', sel ? 'true' : 'false');
+                    ph.textContent = sel ? '●' : '○';
+                });
+            });
+            Object.keys(ans).forEach(k => {
+                if (!k.startsWith('disclosure_row_')) return;
+                const el = container.querySelector(
+                    'input[type="radio"][name="' + k + '"][value="' + ans[k] + '"]');
+                if (el) el.checked = true;
+            });
+        },
+
+        // .corex-disclosure-checklist converter. Registers
+        // totalDisclosureRows + disclosure_row_-prefixed answers so the
+        // completion gate counts it identically to the bare-table path in
+        // BOTH views (pre-existing bug fixed here). Editable only for
+        // owner_party; read-only (visible, non-interactive) otherwise.
+        processWebDisclosureChecklists() {
+            const container = this.$refs.webDocContent || null;
+            if (!container) return;
+            const self = this;
+            const checklists = container.querySelectorAll('.corex-disclosure-checklist');
+            let globalIdx = 0;
+
+            checklists.forEach(checklist => {
+                const disclosureParty = checklist.getAttribute('data-disclosure-party') || 'owner_party';
+                const editable = self._disclosureEditable(disclosureParty);
+
+                checklist.querySelectorAll('.corex-disclosure-row').forEach(row => {
+                    const rowKey = 'disclosure_row_' + globalIdx;
+                    row.setAttribute('data-disclosure-key', rowKey);
+                    row.setAttribute('data-editable', editable ? 'true' : 'false');
+
+                    const radios = row.querySelectorAll('.corex-radio-placeholder');
+                    radios.forEach(radio => {
+                        const rv = (radio.dataset.value || '').toLowerCase();
+                        const isSel = (self.webDisclosureAnswers[rowKey] || '')
+                            .toString().toLowerCase() === rv;
+                        radio.setAttribute('data-selected', isSel ? 'true' : 'false');
+                        radio.textContent = isSel ? '●' : '○';
+                        radio.style.fontSize = '16pt';
+
+                        if (editable) {
+                            radio.style.cursor = 'pointer';
+                            radio.addEventListener('click', () => {
+                                radios.forEach(r => {
+                                    r.setAttribute('data-selected', 'false');
+                                    r.textContent = '○';
+                                });
+                                radio.setAttribute('data-selected', 'true');
+                                radio.textContent = '●';
+                                self.webDisclosureAnswers[rowKey] = radio.dataset.value || '';
+                                if (typeof self.updateIncompleteCount === 'function') self.updateIncompleteCount();
+                                if (typeof self._updateIncompleteCount === 'function') self._updateIncompleteCount();
+                            });
+                        } else {
+                            radio.style.cursor = 'default';
+                        }
+                    });
+                    globalIdx++;
+                });
+            });
+
+            this.totalDisclosureRows = (this.totalDisclosureRows || 0) + globalIdx;
+        },
+
+        // Orchestrator: reset → seed from store → bare-table converter (only
+        // if the view defines it) → checklist converter → restore. Idempotent
+        // across §19 re-pagination. Replaces the prior pair of direct calls.
+        _processAllDisclosures() {
+            this.totalDisclosureRows = 0;
+            this._seedDisclosureFromStore();
+            if (typeof this._processDisclosureTable === 'function') {
+                this._processDisclosureTable();
+            }
+            this.processWebDisclosureChecklists();
+            this._restoreDisclosureAnswers();
+        },

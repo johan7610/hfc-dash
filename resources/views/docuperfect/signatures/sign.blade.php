@@ -651,6 +651,12 @@ function signDocument() {
         // Web template interactive signing state
         webSigElements: [],       // [{el, partyRole, type, index, isMine, signed, sigData}]
         webSignatures: {},         // { 'agent-sig-0': dataUrl, ... }
+        // §19 Part A — disclosure state (shared logic @include'd below).
+        // Agent view is READ-ONLY for the seller's mandatory disclosure
+        // (PPA s70) but must SEE + gate-count it and persist it on submit.
+        webDisclosureAnswers: {},
+        totalDisclosureRows: 0,
+        storedDisclosure: @json($storedDisclosure ?? new \stdClass),
         webSigTotal: 0,
         webSigSigned: 0,
         webCeremonyValues: {},     // { 'agent_location': 'Shelly Beach', 'agent_day': '23', ... }
@@ -692,6 +698,7 @@ function signDocument() {
                         // Restore previously signed initials (from other parties)
                         restoreStoredInitials(container, this.storedInitials);
                         this._makeWebElementsInteractive();
+                        this._processAllDisclosures();
                         // Delay to let DOM settle after ceremony fields are created
                         setTimeout(() => this._updateIncompleteCount(), 300);
                     }, 150);
@@ -701,6 +708,15 @@ function signDocument() {
                 this._updateIncompleteCount();
             }
         },
+
+        // §19 Part A — shared disclosure logic (single source; external +
+        // agent both @include this). The agent is never the disclosure
+        // party, so _disclosureEditable() returns false here → grid is
+        // visible + restored + gate-counted, but READ-ONLY.
+        _currentSignerRole() {
+            return 'agent';
+        },
+        @include('docuperfect.signatures.partials.disclosure-logic')
 
         /**
          * Web template interactive signing: find all [data-marker-party][data-marker-type="signature"]
@@ -1123,6 +1139,16 @@ function signDocument() {
                         if (!btn.textContent || !btn.textContent.trim()) incomplete++;
                     });
                 }
+            }
+
+            // §19 Part A — disclosure rows count toward completion in the
+            // agent view identically to the external view (same
+            // totalDisclosureRows + disclosure_row_-prefixed answers).
+            if (this.totalDisclosureRows > 0) {
+                total += this.totalDisclosureRows;
+                const answered = Object.keys(this.webDisclosureAnswers)
+                    .filter(k => k.startsWith('disclosure_row_')).length;
+                incomplete += (this.totalDisclosureRows - answered);
             }
 
             this.totalAgent = total;
@@ -1829,6 +1855,10 @@ function signDocument() {
                 const payload = {
                     signatures: this.webSignatures,
                     initials: initialsData,
+                    // §19 Part A — persist disclosure answers on the agent's
+                    // submit so the seller's selections are never dropped
+                    // (the agent does not fill them; this just carries them).
+                    disclosure_answers: this.webDisclosureAnswers,
                     party_role: 'agent',
                     ceremony_values: this.webCeremonyValues || {},
                     esign_flow_id: @json($esignFlowId ?? null),

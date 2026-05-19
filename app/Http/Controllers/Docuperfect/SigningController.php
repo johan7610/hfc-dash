@@ -343,6 +343,7 @@ class SigningController extends Controller
             'sectionAcceptances' => $sectionAcceptances,
             'signingParties' => $signingParties,
             'storedInitials' => $webTemplateData['signed_initials'] ?? [],
+            'storedDisclosure' => $webTemplateData['disclosure_answers'] ?? [],
         ]);
     }
 

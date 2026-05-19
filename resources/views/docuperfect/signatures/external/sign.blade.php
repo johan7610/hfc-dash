@@ -1330,6 +1330,7 @@ function externalSign() {
         webFieldValues: {},
         webSignatures: {},
         webDisclosureAnswers: {},
+        storedDisclosure: @json($storedDisclosure ?? new \stdClass),
         webConsented: false,
         showWebSigCapture: false,
         currentWebSigBlockId: null,
@@ -1387,8 +1388,7 @@ function externalSign() {
                         }
                         this._makeWebElementsInteractive();
                         this._makeCeremonyFieldsEditable();
-                        this.processWebDisclosureChecklists();
-                        this._processDisclosureTable();
+                        this._processAllDisclosures();
                         this._initClauseFlagging();
                         // Compute incomplete count after all interactive elements are set up
                         setTimeout(() => {
@@ -1965,8 +1965,7 @@ function externalSign() {
                                 }
                                 this._makeWebElementsInteractive();
                                 this._makeCeremonyFieldsEditable();
-                                this.processWebDisclosureChecklists();
-                                this._processDisclosureTable();
+                                this._processAllDisclosures();
                                 this._initClauseFlagging();
                                 setTimeout(() => this.updateIncompleteCount(), 300);
                             }, 150);
@@ -2559,48 +2558,14 @@ function externalSign() {
             return false;
         },
 
-        processWebDisclosureChecklists() {
-            const container = this.$refs.webDocContent || null;
-            if (!container) return;
-
-            setTimeout(() => {
-                const checklists = container.querySelectorAll('.corex-disclosure-checklist');
-                const self = this;
-
-                checklists.forEach(checklist => {
-                    // Check which party should fill this disclosure
-                    // Default to owner_party for mandatory disclosure (seller discloses defects)
-                    // Honour data-disclosure-party attribute if set on the checklist element
-                    const disclosureParty = checklist.getAttribute('data-disclosure-party') || 'owner_party';
-
-                    const rows = checklist.querySelectorAll('.corex-disclosure-row');
-                    rows.forEach((row, rowIdx) => {
-                        const isEditable = this.isMyWebSigBlock(disclosureParty);
-                        row.setAttribute('data-editable', isEditable ? 'true' : 'false');
-
-                        if (isEditable) {
-                            const radios = row.querySelectorAll('.corex-radio-placeholder');
-                            radios.forEach(radio => {
-                                radio.setAttribute('data-selected', 'false');
-                                radio.style.cursor = 'pointer';
-                                radio.style.fontSize = '16pt';
-                                radio.textContent = '\u25CB';
-
-                                radio.addEventListener('click', () => {
-                                    radios.forEach(r => {
-                                        r.setAttribute('data-selected', 'false');
-                                        r.textContent = '\u25CB';
-                                    });
-                                    radio.setAttribute('data-selected', 'true');
-                                    radio.textContent = '\u25CF';
-                                    self.webDisclosureAnswers['row-' + rowIdx] = radio.dataset.value || '';
-                                });
-                            });
-                        }
-                    });
-                });
-            }, 150);
+        // \u00A719 Part A \u2014 shared disclosure logic (single source; agent +
+        // external both @include this). Provides processWebDisclosureChecklists,
+        // _disclosureEditable, _seedDisclosureFromStore, _restoreDisclosureAnswers,
+        // _processAllDisclosures. Editable only for owner_party (seller).
+        _currentSignerRole() {
+            return (this.signerRole || this.partyRole || '').toLowerCase();
         },
+        @include('docuperfect.signatures.partials.disclosure-logic')
 
         /**
          * Attach clause-level flagging to numbered clauses in the document.
