@@ -445,4 +445,118 @@ Manual add → always available, no filter
 - No hard deletes anywhere. Soft deletes only.
 - Commit HFC2402 to main and push after every session.
 - DO NOT remove working code without full dependency trace.
+
+---
+
+## 19. Auto Per-Page Initials  — DRAFT (PROPOSED, pending Johan/Andre approval)
+
+> Status: **DRAFT — NOT APPROVED. No code may be written against this section
+> until it is reviewed and committed to `main`** (CLAUDE.md spec-first rule).
+> Drafted by VS Code Claude from the session "WEB PACK + PER-PAGE INITIALS
+> INVESTIGATION" (BUG 3). Size: **L**. Legally significant — initials appear
+> on every page of signed mandates/disclosures; Document-Fidelity rule applies.
+
+### 19.1 Requirement (business)
+
+Every rendered A4 page of an e-sign document MUST carry one initial slot per
+required signer, placed automatically by the system. Page count is
+unpredictable (a 1-page template can render to 2+ when a signer adds text), so
+this is a **render-time system rule**, not a template-design decision. Manual
+`####` CDS markers remain supported but are no longer the only mechanism.
+`autoPlaceInitialMarkers()` (ESignWizardController.php:~2100) does NOT serve
+this — it estimates pages from one template's `cds_json`, is marker-overlay
+based, and has no pack concept. It is out of scope here (leave as-is).
+
+### 19.2 Placement & mechanism
+
+- **When:** at client pagination time, immediately after `paginateDocument()`
+  builds the `.corex-a4-page` elements (a4-page-styles.blade.php:~87; called
+  from external/sign.blade.php:~1382 & :~1959, sign.blade.php:~690).
+- **Where:** a footer initials row appended to each `.corex-a4-page`, one
+  `[data-marker-type="initial"][data-marker-party="<role>"]` slot per required
+  signer. `_buildInitialsRow()` already exists in a4-page-styles.blade.php
+  (~:340) and Strategy-2 already calls it (~:318) — Strategy-1 and the
+  external/agent re-pagination paths must call it consistently too.
+- **Pack-aware:** each `.corex-a4-page` is owned by exactly one
+  `.corex-document-wrapper` (one per pack template). The injected initials
+  MUST sit inside that owning wrapper so `SignatureService::splitMergedHtml()`
+  (:~1911, splits at `.corex-document-wrapper` boundaries) keeps each page's
+  initials in the correct filed document. A page that visually straddles two
+  templates is attributed to the wrapper of its **first** child node
+  (deterministic rule — document it in the code).
+- **Party keys:** use the same canonical recipient role keys produced by
+  `normalizePackMarkerParties()` (ESignWizardController) so the initial scan
+  matches the signer exactly as signatures do.
+
+### 19.3 Idempotent re-anchor
+
+Re-pagination (content edit, zoom, font reflow) re-runs `paginateDocument()`.
+Injection MUST be keyed by **page index within the owning wrapper** so it:
+- never duplicates an initials row on re-run,
+- never loses an already-applied initial value (re-attach captured state by
+  `(wrapperIndex, pageIndex, party)`),
+- removes orphaned rows when page count shrinks.
+
+### 19.4 Interactivity (both signing views)
+
+Injected initials become interactive for the current signer via the EXISTING
+`[data-marker-type="initial"]` scan in BOTH external/sign.blade.php and
+sign.blade.php (agent), including the existing **apply-to-all** affordance.
+No new scanning mechanism — reuse the initial-marker handler.
+
+### 19.5 Completion gating
+
+The "all items complete" gate MUST add `pages × requiredSigners` initial items
+to its required-count. The document MUST NOT complete with any blank page
+initial. Gate count MUST be derived from the SAME paginated DOM the signer
+sees (not a server estimate) so it cannot diverge from what is rendered.
+
+### 19.6 Persistence / PDF (BUG #5 history)
+
+Per-signer initials MUST be embedded into `merged_html` in the existing
+signature/initial embed step so the Puppeteer-flattened PDF carries them.
+History (§6 / BUG #5, SignaturePdfService.php:298-301): initials have been
+explicitly skipped in the PDF before — the build MUST verify per-page initials
+survive flatten and appear in both the internal and client PDFs.
+
+### 19.7 Files in scope (build, when approved)
+
+| Concern | File (approx) |
+|---|---|
+| Inject + re-anchor at pagination | resources/views/docuperfect/signatures/partials/a4-page-styles.blade.php |
+| Interactivity + gating (external) | resources/views/docuperfect/signatures/external/sign.blade.php |
+| Interactivity + gating (agent) | resources/views/docuperfect/signatures/sign.blade.php |
+| Embed into merged_html for PDF | app/Http/Controllers/Docuperfect/SignatureController.php / SignatureService.php |
+| PDF flatten retains initials | app/Services/Docuperfect/SignaturePdfService.php (~:298) |
+| Split keeps per-page initials | app/Services/Docuperfect/SignatureService.php splitMergedHtml (~:1911) |
+
+### 19.8 Acceptance criteria
+
+1. Every rendered A4 page (single doc AND each pack segment) shows one initial
+   slot per required signer in the footer.
+2. Slots are interactive for the current signer; apply-to-all works.
+3. Completion is blocked until every page initial for every signer is filled.
+4. Re-pagination (add text) re-anchors with no duplicate rows and no lost
+   applied initials.
+5. Completed `merged_html` carries every per-page initial; the flattened PDF
+   (internal + client) shows them on every page.
+6. `splitMergedHtml()` output: each filed document retains exactly its own
+   pages' initials (none lost, none cross-filed).
+7. Single-document flow unchanged in behaviour except for the new footer row.
+
+### 19.9 Risks (must be addressed in build)
+
+- Re-pagination must idempotently re-anchor without duplicating or dropping
+  signed initials (state keyed by wrapper+page+party).
+- Puppeteer flatten has dropped initials before (§6 BUG #5) — explicit verify.
+- Pack-split boundary must align with page ownership; a straddling page must
+  file deterministically (first-child-wrapper rule).
+- Gate page-count and PDF page-count must both derive from the same paginated
+  DOM or they will disagree (gate says complete, PDF missing a page's initial).
+
+### 19.10 Approval
+
+- [ ] Reviewed by Johan
+- [ ] Reviewed by Andre
+- [ ] Committed to `main` — build may then proceed on a dev branch
 - DO NOT assume a setting is "dead" without checking every file that reads it.
