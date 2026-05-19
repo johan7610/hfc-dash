@@ -41,7 +41,7 @@
 <div class="corex-h1">SIGNING</div><div class="corex-h1"><br></div>
 <div class="corex-clause corex-clause-indent-1"><span style="color: rgb(100, 116, 139); font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;">THUS DONE AND SIGNED&nbsp;</span></div><div class="corex-signature-section"><div class="corex-clause"><span class="corex-clause-text"><br></span></div><div class="corex-clause"><span class="corex-clause-text">Marketing Permission Agent Marketing Permission V6</span></div></div>
 
-@include("docuperfect.web-templates.components.signature-block", ["parties" => ["Lessor", "Agent"]])
+@include("docuperfect.web-templates.components.signature-block", ["parties" => ["Seller", "Agent"]])
 
 </div>
 </div>

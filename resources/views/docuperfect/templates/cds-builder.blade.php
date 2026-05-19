@@ -894,6 +894,11 @@ function cdsEditor() {
         settingsExpanded: false,
 
         get isSalesContext() {
+            // Category is authoritative (matches Template::isSalesDocument):
+            // a sales template offers Seller/Buyer roles regardless of name.
+            const cat = (this.templateCategory || '').toLowerCase();
+            if (cat.includes('sale')) return true;
+            if (cat.includes('rent') || cat.includes('lett') || cat.includes('lease')) return false;
             const name = (this.templateName || '').toLowerCase();
             return name.includes('sell') || name.includes('sale')
                 || name.includes('authority') || name.includes('otp')

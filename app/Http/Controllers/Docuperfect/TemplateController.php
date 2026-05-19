@@ -836,11 +836,18 @@ BLADE;
 
         $blade .= $html . "\n\n";
 
-        // Signature block
+        // Signature block — use the authoritative sales/rental classifier
+        // (category/template_type aware) so a sales CDS template bakes
+        // Seller/Buyer blocks, not Lessor/Lessee. The Template row is saved
+        // before this runs (saveCds), so it resolves here. Name heuristic
+        // only as a last resort for a not-yet-persisted template.
         $nameLower = strtolower($templateName);
-        $isSalesDoc = str_contains($nameLower, 'sell') || str_contains($nameLower, 'sale')
-            || str_contains($nameLower, 'authority') || str_contains($nameLower, 'otp')
-            || str_contains($nameLower, 'purchase');
+        $tplForCtx = Template::find($templateId);
+        $isSalesDoc = $tplForCtx
+            ? $tplForCtx->isSalesDocument()
+            : (str_contains($nameLower, 'sell') || str_contains($nameLower, 'sale')
+                || str_contains($nameLower, 'authority') || str_contains($nameLower, 'otp')
+                || str_contains($nameLower, 'purchase'));
 
         if (!empty($signingParties)) {
             $displayParties = Template::mapSigningPartyKeys($signingParties, $isSalesDoc);

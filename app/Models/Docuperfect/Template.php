@@ -131,11 +131,24 @@ class Template extends Model
             if ($hasRental && !$hasSales) return false;
         }
 
-        // Layer 2: property source table
+        // Layer 2: explicit category / template_type set by the builder.
+        // Authoritative — covers CDS templates whose signing_parties use the
+        // generic owner_party/acquiring_party tokens (so Layer 1 can't tell)
+        // and whose name carries no sales keyword. Without this a sales CDS
+        // template falls through to the name heuristic and wrongly renders
+        // Lessor. template_type 'cds' is neutral and skipped (no sale/rent
+        // substring), so category decides.
+        foreach ([strtolower((string) ($this->category ?? '')), strtolower((string) ($this->template_type ?? ''))] as $sig) {
+            if ($sig === '') continue;
+            if (str_contains($sig, 'sale') || $sig === 'otp') return true;
+            if (str_contains($sig, 'rent') || str_contains($sig, 'lett') || str_contains($sig, 'lease')) return false;
+        }
+
+        // Layer 3: property source table
         if ($propertySource === 'properties') return true;
         if ($propertySource === 'rental_properties') return false;
 
-        // Layer 3: template name pattern matching (fallback)
+        // Layer 4: template name pattern matching (last-resort fallback)
         $name = strtolower($this->name ?? '');
         return str_contains($name, 'sell') || str_contains($name, 'sale')
             || str_contains($name, 'authority') || str_contains($name, 'otp')
