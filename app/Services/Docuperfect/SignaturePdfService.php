@@ -70,16 +70,19 @@ class SignaturePdfService
             $clientStoragePath = "{$baseDir}/client_signed.pdf";
             $internalStoragePath = "{$baseDir}/final_signed.pdf";
 
-            $targetDir = storage_path("app/{$baseDir}");
-            if (!is_dir($targetDir)) {
-                mkdir($targetDir, 0755, true);
-            }
+            // Write to the 'local' disk ROOT (Laravel 11: storage/app/private)
+            // so Storage::disk('local') — used by Document::downloadResponse()
+            // and the completion-email / signing-download readers — resolves
+            // the EXACT file. Raw storage_path('app/..') put PDFs one dir
+            // OUTSIDE the disk, causing Flysystem 500s on download.
+            $disk = \Illuminate\Support\Facades\Storage::disk('local');
+            $disk->makeDirectory($baseDir);
 
             if (file_exists($clientTempPath)) {
-                rename($clientTempPath, storage_path("app/{$clientStoragePath}"));
+                rename($clientTempPath, $disk->path($clientStoragePath));
             }
             if (file_exists($internalTempPath)) {
-                rename($internalTempPath, storage_path("app/{$internalStoragePath}"));
+                rename($internalTempPath, $disk->path($internalStoragePath));
             }
 
             return [
@@ -151,18 +154,18 @@ class SignaturePdfService
         $clientStoragePath = "{$baseDir}/client_signed.pdf";
         $internalStoragePath = "{$baseDir}/final_signed.pdf";
 
-        $targetDir = storage_path("app/{$baseDir}");
-        if (!is_dir($targetDir)) {
-            mkdir($targetDir, 0755, true);
-        }
+        // Write to the 'local' disk ROOT (see generate()) so the filed
+        // Document and every reader resolve the same physical file.
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+        $disk->makeDirectory($baseDir);
 
         if ($clientTempPath !== $internalTempPath) {
-            rename($clientTempPath, storage_path("app/{$clientStoragePath}"));
-            rename($internalTempPath, storage_path("app/{$internalStoragePath}"));
+            rename($clientTempPath, $disk->path($clientStoragePath));
+            rename($internalTempPath, $disk->path($internalStoragePath));
         } else {
             // Same file — copy for client, move for internal
-            copy($clientTempPath, storage_path("app/{$clientStoragePath}"));
-            rename($clientTempPath, storage_path("app/{$internalStoragePath}"));
+            copy($clientTempPath, $disk->path($clientStoragePath));
+            rename($clientTempPath, $disk->path($internalStoragePath));
         }
 
         Log::info('SignaturePdfService: Web template PDFs generated via Puppeteer', [

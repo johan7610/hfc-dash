@@ -1958,9 +1958,12 @@ class SignatureController extends Controller
             return redirect()->back()->with('error', 'Signed PDF has not been generated yet.');
         }
 
-        $pdfPath = storage_path("app/{$template->signed_pdf_path}");
+        // Resolve via the 'local' disk (where signed PDFs are written) —
+        // raw storage_path('app/..') is one dir outside the disk root.
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+        $pdfPath = $disk->path($template->signed_pdf_path);
 
-        if (!file_exists($pdfPath)) {
+        if (!$disk->exists($template->signed_pdf_path)) {
             return redirect()->back()->with('error', 'Signed PDF file not found.');
         }
 

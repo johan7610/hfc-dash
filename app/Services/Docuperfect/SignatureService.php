@@ -1817,16 +1817,16 @@ class SignatureService
         $docName = ($document->name ?? 'Signed Document') . ' (Signed).pdf';
 
         // FIX 2 — never file a Document that points at a non-existent PDF.
-        // A row with a missing storage_path 500s on download (Flysystem
-        // UnableToRetrieveMetadata). Fail loudly + recoverable instead of
-        // silently creating a broken record.
-        $absPdfPath = storage_path("app/{$pdfPath}");
-        if (!is_file($absPdfPath)) {
+        // Validate via the SAME disk Document::downloadResponse() reads
+        // (Storage::disk('local')) so a guard pass GUARANTEES the download
+        // works. is_file(storage_path('app/..')) checked the wrong root
+        // (one dir outside the disk) → guard passed, download 500'd.
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+        if (!$disk->exists($pdfPath)) {
             Log::error('Auto-file: refusing to create a Document for a missing PDF', [
                 'template_id'  => $template->id,
                 'document_id'  => $document->id ?? null,
                 'storage_path' => $pdfPath,
-                'abs_path'     => $absPdfPath,
                 'recoverable'  => true,
             ]);
             return;
@@ -1837,7 +1837,7 @@ class SignatureService
             'storage_path'     => $pdfPath,
             'disk'             => 'local',
             'mime_type'        => 'application/pdf',
-            'size'             => filesize($absPdfPath),
+            'size'             => $disk->size($pdfPath),
             'document_type_id' => $docTemplate?->document_type_id,
             'source_type'      => 'esign',
             'source_id'        => $template->id,
@@ -1882,18 +1882,18 @@ class SignatureService
         }
 
         $signingController = app(\App\Http\Controllers\Docuperfect\SigningController::class);
+        // Write under the 'local' disk ROOT so the filed Document
+        // (Storage::disk('local')->download) resolves the exact file.
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
         $baseDir = "docuperfect/signed-documents/{$template->id}/individual";
-        $targetDir = storage_path("app/{$baseDir}");
-        if (!is_dir($targetDir)) {
-            mkdir($targetDir, 0755, true);
-        }
+        $disk->makeDirectory($baseDir);
 
         foreach ($templateIds as $idx => $tplId) {
             $tpl = \App\Models\Docuperfect\Template::find($tplId);
             if (!$tpl) continue;
 
             $individualPdfPath = "{$baseDir}/{$tplId}_client.pdf";
-            $fullStoragePath = storage_path("app/{$individualPdfPath}");
+            $fullStoragePath = $disk->path($individualPdfPath);
 
             // Dedup check
             if (\App\Models\Document::where('storage_path', $individualPdfPath)->where('source_type', 'esign')->exists()) {
@@ -1925,9 +1925,11 @@ class SignatureService
 
             $docName = ($tpl->name ?? 'Document') . ' (Signed).pdf';
 
-            // FIX 2 — never file a Document that points at a non-existent PDF
-            // (rename above could have failed). A broken row 500s on download.
-            if (!is_file($fullStoragePath)) {
+            // FIX 2 — validate via the SAME disk Document::downloadResponse()
+            // reads (Storage::disk('local')) so a guard pass GUARANTEES the
+            // download works. is_file(storage_path('app/..')) checked a path
+            // one dir outside the disk root → guard passed, download 500'd.
+            if (!$disk->exists($individualPdfPath)) {
                 Log::error('Auto-file pack: refusing to create a Document for a missing PDF', [
                     'template_id'      => $template->id,
                     'pack_template_id' => $tplId,
@@ -1937,7 +1939,7 @@ class SignatureService
                 ]);
                 continue;
             }
-            $fileSize = filesize($fullStoragePath);
+            $fileSize = $disk->size($individualPdfPath);
 
             $filedDoc = \App\Models\Document::create([
                 'original_name'    => $docName,
@@ -2799,17 +2801,17 @@ class SignatureService
             $viewUrl = url("/docuperfect/documents/{$template->document_id}/signatures/audit");
             $progress = $template->partyProgress();
 
+            // Resolve via the 'local' disk (where signed PDFs are written)
+            // so attachments survive the disk-root path fix.
+            $disk = \Illuminate\Support\Facades\Storage::disk('local');
+
             // Client copy — for external signers (no audit trail)
-            $clientPdfPath = $pdfPaths ? storage_path("app/{$pdfPaths['client']}") : null;
-            if ($clientPdfPath && !file_exists($clientPdfPath)) {
-                $clientPdfPath = null;
-            }
+            $clientPdfPath = ($pdfPaths && !empty($pdfPaths['client']) && $disk->exists($pdfPaths['client']))
+                ? $disk->path($pdfPaths['client']) : null;
 
             // Internal copy — for agent (with audit trail)
-            $internalPdfPath = $pdfPaths ? storage_path("app/{$pdfPaths['internal']}") : null;
-            if ($internalPdfPath && !file_exists($internalPdfPath)) {
-                $internalPdfPath = null;
-            }
+            $internalPdfPath = ($pdfPaths && !empty($pdfPaths['internal']) && $disk->exists($pdfPaths['internal']))
+                ? $disk->path($pdfPaths['internal']) : null;
 
             $pdfFilename = "Signed - {$documentName}.pdf";
 
