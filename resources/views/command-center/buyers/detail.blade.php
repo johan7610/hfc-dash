@@ -1,6 +1,21 @@
 @extends('layouts.corex')
 
 @section('corex-content')
+@php
+    // SINGLE SOURCE for the viewing-picker. Build the property rows ONCE with
+    // a shape-safe accessor (data_get works for arrays AND objects, so a
+    // future $matched shape change can't silently null the id), drop any
+    // null-id rows, and derive the pre-selected ids FROM this same list so
+    // pickerProperties and pickerSelected can never diverge (the divergence
+    // that dropped prefill_properties from the Schedule-Viewing handoff).
+    $viewingPickerProps = $matched->take(6)->map(fn ($mp) => [
+        'id'          => data_get($mp, 'id'),
+        'address'     => data_get($mp, 'address'),
+        'suburb'      => data_get($mp, 'suburb'),
+        'price'       => data_get($mp, 'price'),
+        'match_score' => data_get($mp, 'match_score'),
+    ])->filter(fn ($p) => $p['id'] !== null)->values();
+@endphp
 <div class="space-y-4"
      x-data="{
         activeTab: '{{ $tab }}',
@@ -11,8 +26,8 @@
         closeDrawer() { this.wishlistDrawerOpen = false; this.wishlistEditingId = null; },
 
         showViewingPicker: false,
-        pickerProperties: @js($matched->take(6)->map(fn($mp) => ['id' => $mp['id'], 'address' => $mp['address'], 'suburb' => $mp['suburb'] ?? null, 'price' => $mp['price'] ?? null, 'match_score' => $mp['match_score'] ?? null])->values()),
-        pickerSelected: @js($matched->take(6)->pluck('id')->values()),
+        pickerProperties: @js($viewingPickerProps),
+        pickerSelected: @js($viewingPickerProps->pluck('id')->values()),
         togglePickerProperty(id) {
             const i = this.pickerSelected.indexOf(id);
             if (i === -1) this.pickerSelected.push(id);
@@ -23,8 +38,13 @@
             this.pickerSelected = this.pickerAllChecked() ? [] : this.pickerProperties.map(p => p.id);
         },
         continueToSchedule() {
-            const chosen = this.pickerProperties.filter(p => this.pickerSelected.includes(p.id))
-                                              .map(p => ({ id: p.id, address: p.address }));
+            // Derive chosen FROM the ticked ids (pickerSelected), not by
+            // filtering pickerProperties — so a selected id is ALWAYS carried
+            // into prefill_properties even if its address/label is missing.
+            const byId = new Map(this.pickerProperties.map(p => [p.id, p]));
+            const chosen = this.pickerSelected
+                .filter(id => id !== null && id !== undefined)
+                .map(id => { const p = byId.get(id); return { id: id, address: (p && p.address) ? p.address : '' }; });
             // Pass the buyer as a prefill_attendees handoff so the calendar
             // chips render immediately — no fetch, no name lookup roundtrip.
             const attendees = [{
