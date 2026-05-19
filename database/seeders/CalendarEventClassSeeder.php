@@ -805,6 +805,12 @@ class CalendarEventClassSeeder extends Seeder
                 'label'               => 'Property viewing',
                 'description'         => 'Buyer viewing a property. Short cycle, same-day actionable. Red on event day = capture feedback after.',
                 'is_active'           => true,
+                // A buyer viewing trip covers several properties in one
+                // outing — viewing is the multi-property class (migration
+                // 2026_05_05_000019 intended this; it was lost because the
+                // migration ran before the seeder created the row + the
+                // column was not fillable). All other classes stay single.
+                'allow_multiple_properties' => true,
                 'green_days'          => 7,
                 'amber_days'          => 2,
                 'red_days'            => 0,

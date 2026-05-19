@@ -19,6 +19,11 @@ class CalendarEventClassSetting extends Model
         'green_notifications', 'amber_notifications', 'red_notifications',
         'daily_digest_enabled', 'daily_digest_roles',
         'label', 'description',
+        // Added by migration 2026_05_05_000019 but never added to $fillable,
+        // so CalendarEventClassSeeder's updateOrCreate silently dropped it
+        // (mass-assignment) — every class defaulted to false and the
+        // migration's "viewing => true" was unreproducible on a fresh seed.
+        'allow_multiple_properties',
     ];
 
     public const NATURE_ACTIONABLE    = 'actionable';
@@ -27,6 +32,7 @@ class CalendarEventClassSetting extends Model
     protected $casts = [
         'is_active'             => 'boolean',
         'daily_digest_enabled'  => 'boolean',
+        'allow_multiple_properties' => 'boolean',
         'green_days'            => 'integer',
         'amber_days'            => 'integer',
         'red_days'              => 'integer',
