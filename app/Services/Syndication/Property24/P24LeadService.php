@@ -60,9 +60,16 @@ class P24LeadService
      */
     public function pullLeads(?Agency $agency): array
     {
-        $api      = $agency ? new Property24ApiClient($agency) : $this->api;
+        $api       = $agency ? new Property24ApiClient($agency) : $this->api;
         $cursorKey = self::CURSOR_CACHE_KEY . ($agency?->id ?? 'default');
-        $after    = Cache::get($cursorKey);
+        $after     = Cache::get($cursorKey);
+
+        // P24 v53 requires `after` and rejects values older than 30 days.
+        // First run (no cursor): default to 7 days ago so we capture recent leads
+        // without hitting the 30-day ceiling.
+        if (!$after) {
+            $after = now()->subDays(7)->toIso8601String();
+        }
 
         $response = $api->getLeads($after);
 
