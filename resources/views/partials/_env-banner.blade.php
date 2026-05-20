@@ -54,6 +54,6 @@
                 text-transform:uppercase; text-align:center;
                 white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
                 padding:0 12px; user-select:none;">
-        {{ $c['text'] }}
+        {{ $c['text'] }}@if ($envLabel === 'DEMO') · <a href="https://mail.demo1.corexos.co.za" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline;">Open Mailpit</a>@endif
     </div>
 @endif
