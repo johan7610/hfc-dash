@@ -4264,11 +4264,13 @@
                                 <span><strong style="color:var(--text-secondary);">{{ $cm->floor_size_min ? number_format($cm->floor_size_min) : '—' }}–{{ $cm->floor_size_max ? number_format($cm->floor_size_max) : '—' }}</strong> m² floor</span>
                                 @endif
                             </div>
+                            @if($cm->contact)
                             <a href="{{ route('corex.contacts.matches.results', [$cm->contact, $cm]) }}"
                                class="inline-flex items-center gap-1.5 mt-2 text-xs font-semibold no-underline"
                                style="color:var(--brand-icon);">
                                 View match results →
                             </a>
+                            @endif
                         </div>
                     </div>
                 </div>
