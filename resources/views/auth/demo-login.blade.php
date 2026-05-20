@@ -1,7 +1,7 @@
 <x-guest-layout>
     <div class="space-y-4">
         <div class="text-center">
-            <h2 class="text-lg font-semibold" style="color: var(--text-primary);">Demo Mode</h2>
+            <h2 class="text-lg font-semibold" style="color: #ffffff;">Demo Mode</h2>
             <p class="text-xs mt-1" style="color: var(--text-secondary);">
                 Pick a role to enter the demo. No password required.
             </p>
@@ -38,8 +38,5 @@
             @endforeach
         </div>
 
-        <p class="text-[10px] text-center mt-4" style="color: var(--text-muted);">
-            Demo mode is enabled in Dev Settings. Authentication bypass — non-production only.
-        </p>
     </div>
 </x-guest-layout>
