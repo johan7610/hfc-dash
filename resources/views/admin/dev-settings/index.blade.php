@@ -52,6 +52,36 @@
             </div>
         </div>
 
+        <div class="flex items-start justify-between gap-6 pt-6" style="border-top: 1px solid var(--border);">
+            <div class="flex-1">
+                <label for="demo_mode_enabled" class="block font-semibold" style="color: var(--text-primary);">
+                    Enable demo mode (bypass login)
+                </label>
+                <p class="text-sm mt-1" style="color: var(--text-secondary);">
+                    When enabled, the login screen is replaced with four role buttons (Admin, Branch Manager, Agent, Viewer).
+                    Clicking a button signs the visitor in as a demo user with that role — no password required.
+                    For use on demo.corexos.co.za only.
+                </p>
+                <p class="text-xs mt-2" style="color: var(--ds-red, #dc2626);">
+                    DANGER: This is an authentication bypass. It is hard-disabled on production (APP_ENV=production) regardless of this toggle.
+                    @if($isProduction)
+                        <strong>This server is running APP_ENV=production — the toggle has no effect here.</strong>
+                    @endif
+                </p>
+            </div>
+            <div class="pt-1">
+                <label class="inline-flex items-center cursor-pointer">
+                    <input type="hidden" name="demo_mode_enabled" value="0">
+                    <input type="checkbox"
+                           id="demo_mode_enabled"
+                           name="demo_mode_enabled"
+                           value="1"
+                           {{ $demoModeEnabled ? 'checked' : '' }}
+                           class="w-5 h-5 rounded">
+                </label>
+            </div>
+        </div>
+
         <div class="flex justify-end pt-4" style="border-top: 1px solid var(--border);">
             <button type="submit" class="corex-btn-primary">Save Settings</button>
         </div>
