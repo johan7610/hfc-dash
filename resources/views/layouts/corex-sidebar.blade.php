@@ -1361,6 +1361,9 @@
             @if($canSwitchUsers)
             <button type="button" @click="switchPanel = !switchPanel; userMenu = false" class="corex-user-dropdown-item w-full text-left">Switch User</button>
             @endif
+            @if(\App\Http\Controllers\Auth\DemoLoginController::isEnabled())
+            <a href="{{ route('demo.owner.login') }}" class="corex-user-dropdown-item w-full text-left block">System Owner</a>
+            @endif
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
                 <button type="submit" class="corex-user-dropdown-item w-full text-left">Log Out</button>
