@@ -101,9 +101,14 @@ class P24LeadService
             }
         }
 
-        if ($newestSeen) {
-            // Use the lead's timestamp; pad +1s so we don't refetch it next cycle.
-            Cache::put($cursorKey, $newestSeen->copy()->addSecond()->toIso8601String(), now()->addDays(30));
+        // Prefer P24's authoritative `nextAfter` pagination token when present;
+        // otherwise fall back to last-seen lead timestamp + 1s.
+        $nextCursor = $payload['nextAfter'] ?? null;
+        if (!$nextCursor && $newestSeen) {
+            $nextCursor = $newestSeen->copy()->addSecond()->toIso8601String();
+        }
+        if ($nextCursor) {
+            Cache::put($cursorKey, $nextCursor, now()->addDays(30));
         }
 
         return ['fetched' => count($leads), 'inserted' => $inserted, 'skipped' => $skipped];
@@ -125,11 +130,11 @@ class P24LeadService
         $listingRef = $this->firstNonEmpty($raw, ['listingNumber', 'listingReference', 'listingId', 'p24ListingNumber']);
         $name       = trim((string) $this->firstNonEmpty($raw, ['leadName', 'name', 'fullName', 'contactName'])) ?: 'Unknown';
         $email      = $this->firstNonEmpty($raw, ['leadEmail', 'email', 'emailAddress']);
-        $phone      = $this->firstNonEmpty($raw, ['leadPhoneNumber', 'phone', 'phoneNumber', 'cellNumber']);
+        $phone      = $this->firstNonEmpty($raw, ['leadPhoneNumber', 'phone', 'phoneNumber', 'cellNumber', 'contactNumber']);
         $message    = $this->firstNonEmpty($raw, ['leadMessage', 'message', 'enquiry']);
         $leadType   = (string) ($this->firstNonEmpty($raw, ['leadType', 'type', 'enquiryType']) ?? 'Email');
         $isWhats    = (bool) ($raw['isWhatsApp'] ?? $raw['is_whatsapp'] ?? false);
-        $receivedAt = $this->parseTimestamp($this->firstNonEmpty($raw, ['leadDateTime', 'receivedAt', 'createdAt', 'timestamp'])) ?? now();
+        $receivedAt = $this->parseTimestamp($this->firstNonEmpty($raw, ['leadDateTime', 'receivedAt', 'createdAt', 'timestamp', 'date'])) ?? now();
         $leadId     = (string) ($this->firstNonEmpty($raw, ['leadId', 'id']) ?? '');
 
         // Dedupe — same portal + listing ref + (email|phone) + received_at
@@ -325,7 +330,7 @@ class P24LeadService
      */
     private function extractLeads(array $payload): array
     {
-        foreach (['leads', 'items', 'data', 'results'] as $key) {
+        foreach (['messages', 'leads', 'items', 'data', 'results'] as $key) {
             if (isset($payload[$key]) && is_array($payload[$key])) {
                 return $payload[$key];
             }
