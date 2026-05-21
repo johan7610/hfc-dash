@@ -232,6 +232,51 @@
 
 <div x-data="externalSign()" x-init="init()" class="max-w-4xl mx-auto px-4 py-6 space-y-4">
 
+    {{-- Phase 1B.6 (FIX 5) — banner shown when this party has already
+         completed signing AND the document is now in an amendment
+         initialing cascade. The original signatures stay rendered as
+         captured below; this banner explains why the page reopened. --}}
+    @if(!empty($partyAlreadySigned) && !empty($inAmendmentInitialing))
+        <div class="rounded-2xl px-5 py-4"
+             style="background: color-mix(in srgb, #92400e 8%, transparent);
+                    border: 1px solid color-mix(in srgb, #92400e 30%, transparent);">
+            <div class="flex items-start gap-3">
+                <span style="font-size: 1.25rem; line-height: 1;">⚑</span>
+                <div style="flex: 1;">
+                    <div style="font-weight: 700; color: #92400e;">
+                        You signed this document on {{ optional($request->completed_at)->format('d M Y') ?: 'an earlier date' }}.
+                    </div>
+                    <div style="color: #78350f; font-size: 0.9rem; margin-top: 0.25rem;">
+                        An amendment was added — please initial the changes below to confirm
+                        your agreement. Your original signature is preserved.
+                    </div>
+                    <div style="margin-top: 0.75rem;">
+                        <a href="{{ route('signatures.external', ['token' => $request->token]) }}"
+                           style="display: inline-block; padding: 0.5rem 1rem; background: #92400e; color: #fff; border-radius: 4px; text-decoration: none; font-size: 0.85rem; font-weight: 600;">
+                            Go to focused initialing view &rarr;
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- Phase 1B.6 (FIX 5) — party-has-signed indicator when not in an
+         amendment cycle. Reassures the recipient that their signature
+         is recorded and explains why the affordances are read-only. --}}
+    @if(!empty($partyAlreadySigned) && empty($inAmendmentInitialing))
+        <div class="rounded-2xl px-5 py-3"
+             style="background: color-mix(in srgb, #047857 8%, transparent);
+                    border: 1px solid color-mix(in srgb, #047857 30%, transparent);">
+            <div class="flex items-center gap-2" style="color: #065f46; font-size: 0.9rem;">
+                <span style="font-size: 1.1rem;">✓</span>
+                <span>You signed this document on
+                    {{ optional($request->completed_at)->format('d M Y H:i') ?: 'an earlier date' }}.
+                    Your signatures and initials are recorded and locked.</span>
+            </div>
+        </div>
+    @endif
+
     {{-- Header --}}
     <div class="rounded-2xl px-6 py-4" style="background:#0b2a4a;">
         <div class="flex items-start justify-between">
@@ -1337,7 +1382,23 @@ function externalSign() {
         webSigMode: 'draw',
         webTypedSignature: '',
         webCeremonyValues: {},
-        webClauseFlaggedItems: [],
+        // Phase 1B.6 (FIX 6) — seed from server-persisted clause_flags so
+        // a refresh after flagging restores the visible flag UI. The
+        // persistedClauseFlags JSON shape is keyed by party_role; we
+        // flatten to a per-clause list for client use.
+        webClauseFlaggedItems: (function () {
+            const persisted = @json($persistedClauseFlags ?? []);
+            const me = @json($request->party_role ?? '');
+            const mine = (persisted && persisted[me]) ? persisted[me] : [];
+            if (!Array.isArray(mine)) return [];
+            return mine.map((f, idx) => ({
+                clauseNum: f.clauseNum ?? f.clause_num ?? '',
+                clauseIndex: idx,
+                concern: f.concern ?? f.suggested_change ?? '',
+                amendment_id: f.amendment_id ?? null,
+                status: f.status ?? 'pending_review',
+            }));
+        })(),
         otherConditionsText: '',
         totalDisclosureRows: 0,
         webIsDrawing: false,
@@ -2571,7 +2632,17 @@ function externalSign() {
 
         /**
          * Attach clause-level flagging to numbered clauses in the document.
-         * Signer can flag individual clauses with a concern — does NOT block signing.
+         *
+         * Phase 1B.6 (FIX 2 + FIX 6) — the flag icon now dispatches the
+         * `open-flag-clause-modal` event consumed by the flag-clause-modal
+         * partial. The modal POSTs to /sign/{token}/flag-clause which
+         * persists immediately (DocumentAmendment + clause_flags JSON), so
+         * a page refresh re-seeds the visible flag indicator without
+         * losing recipient input.
+         *
+         * On init we ALSO re-paint clauses that were flagged in a prior
+         * session (data seeded server-side via persistedClauseFlags) so
+         * the visible state survives reload.
          */
         _initClauseFlagging() {
             const container = this.$refs.webDocContent || null;
@@ -2580,70 +2651,67 @@ function externalSign() {
             const self = this;
             const clauses = container.querySelectorAll('.corex-clause');
 
+            // Build a quick lookup of clauses already flagged from
+            // persisted state — so we can paint the orange treatment on
+            // them at init.
+            const flaggedByNum = new Set(
+                (self.webClauseFlaggedItems || []).map(f => String(f.clauseNum))
+            );
+
             clauses.forEach((clause, idx) => {
-                // Only flag clauses that have a clause number
                 const numEl = clause.querySelector('.corex-clause-number');
                 if (!numEl) return;
                 const clauseNum = numEl.textContent.trim();
 
-                // Make the clause container relative for positioning
                 clause.style.position = 'relative';
 
-                // Create flag icon
+                // Repaint flagged state if persisted.
+                if (flaggedByNum.has(clauseNum)) {
+                    clause.classList.add('clause-flagged');
+                }
+
+                // Render the flag icon — always visible at the clause
+                // edge. For flagged clauses we still show it (as the
+                // "you flagged this" indicator) but use a distinct title.
                 const flagBtn = document.createElement('span');
                 flagBtn.className = 'clause-flag-icon';
-                flagBtn.title = 'Flag this clause';
+                flagBtn.title = flaggedByNum.has(clauseNum)
+                    ? 'You flagged this clause for agent review'
+                    : 'Flag / suggest change to this clause';
                 flagBtn.textContent = '⚑';
                 flagBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     e.preventDefault();
-                    console.log('[ClauseFlag] Clicked clause', clauseNum, 'idx', idx);
-                    self._toggleClauseFlag(clause, clauseNum, idx);
+                    self._openClauseFlagModal(clause, clauseNum, idx);
                 });
 
                 clause.appendChild(flagBtn);
             });
-
         },
 
+        /**
+         * Phase 1B.6 — open the flag-clause modal. Captures the full
+         * clause text (sans the flag icon glyph itself) and dispatches
+         * the open-flag-clause-modal event. The modal handles the POST
+         * + reload; this side just gathers context.
+         */
+        _openClauseFlagModal(clauseEl, clauseNum, idx) {
+            // Lift the original clause text — strip our own flag icon
+            // glyph so it doesn't appear inside the modal.
+            const clone = clauseEl.cloneNode(true);
+            clone.querySelectorAll('.clause-flag-icon, .clause-flag-comment')
+                .forEach(n => n.remove());
+            const clauseText = (clone.innerText || clone.textContent || '').trim();
+
+            window.dispatchEvent(new CustomEvent('open-flag-clause-modal', {
+                detail: { clauseRef: clauseNum, clauseText: clauseText },
+            }));
+        },
+
+        // Legacy hook kept for any caller that still references the
+        // toggle API; routes to the modal instead of inline input.
         _toggleClauseFlag(clauseEl, clauseNum, idx) {
-            const isFlagged = clauseEl.classList.contains('clause-flagged');
-            if (isFlagged) {
-                // Remove flag
-                clauseEl.classList.remove('clause-flagged');
-                const commentDiv = clauseEl.querySelector('.clause-flag-comment');
-                if (commentDiv) commentDiv.remove();
-                this.webClauseFlaggedItems = this.webClauseFlaggedItems.filter(f => f.clauseNum !== clauseNum);
-            } else {
-                // Add flag
-                clauseEl.classList.add('clause-flagged');
-
-                const commentDiv = document.createElement('div');
-                commentDiv.className = 'clause-flag-comment';
-
-                const input = document.createElement('input');
-                input.type = 'text';
-                input.placeholder = 'What is your concern with clause ' + clauseNum + '?';
-                input.addEventListener('input', () => {
-                    const existing = this.webClauseFlaggedItems.find(f => f.clauseNum === clauseNum);
-                    if (existing) {
-                        existing.concern = input.value;
-                    }
-                });
-                input.addEventListener('click', (e) => e.stopPropagation());
-
-                commentDiv.appendChild(input);
-                clauseEl.appendChild(commentDiv);
-
-                this.webClauseFlaggedItems.push({
-                    clauseNum: clauseNum,
-                    clauseIndex: idx,
-                    concern: '',
-                });
-
-                // Focus input
-                setTimeout(() => input.focus(), 50);
-            }
+            this._openClauseFlagModal(clauseEl, clauseNum, idx);
         },
 
         /**
@@ -3232,14 +3300,19 @@ function uploadForm() {
 }
 </script>
 
-{{-- Phase 1B.5 — recipient Other Conditions + strikethrough modals.
-     The modal partials wire themselves via window CustomEvent dispatch
-     (open-add-condition-modal, open-override-modal). The override partial
-     also auto-attaches click handlers to numbered clauses on DOM ready. --}}
+{{-- Phase 1B.5 + 1B.6 — recipient Other Conditions + Flag Clause modals.
+     The modal partials wire themselves via window CustomEvent dispatch:
+       open-add-condition-modal — fired by + Add condition buttons inside
+         InsertableBlockRenderer-rendered blocks
+       open-flag-clause-modal   — fired by the existing _toggleClauseFlag
+         icon handler (Phase 1B.6 replaces the inline-input UX with this
+         richer modal — see _initClauseFlagging / _toggleClauseFlag).
+     The Phase 1B.5 override-modal partial was removed in Phase 1B.6 — the
+     clause-flag flow is the canonical recipient change-proposal path. --}}
 @isset($request)
     @php $token = $request->token; @endphp
-    @include('docuperfect.signatures._partials.add-condition-modal', ['token' => $token])
-    @include('docuperfect.signatures._partials.override-modal', ['token' => $token])
+    @include('docuperfect.signatures._partials.add-condition-modal', ['token' => $token, 'numberedClauses' => $numberedClauses ?? []])
+    @include('docuperfect.signatures._partials.flag-clause-modal', ['token' => $token])
 @endisset
 
 </body>

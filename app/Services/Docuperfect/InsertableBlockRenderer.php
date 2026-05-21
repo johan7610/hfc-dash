@@ -166,11 +166,21 @@ final class InsertableBlockRenderer
 
         $itemsHtml = '';
         if ($conditions->isNotEmpty()) {
-            $itemsHtml .= '<ol class="conditions-list">';
+            // Phase 1B.6 (FIX 3) — auto-numbered blocks use <ol> with
+            // explicit list-style so the surrounding document CSS (which
+            // sometimes resets list-style) doesn't suppress the digits.
+            // Non-auto-number blocks use <ul> with list-style:none.
+            if ($autoNumber) {
+                $itemsHtml .= '<ol class="conditions-list conditions-list-numbered" '
+                    . 'style="list-style: decimal outside; padding-left: 1.5em; margin: 0.4rem 0;">';
+            } else {
+                $itemsHtml .= '<ul class="conditions-list conditions-list-unnumbered" '
+                    . 'style="list-style: none; padding-left: 0; margin: 0.4rem 0;">';
+            }
             foreach ($conditions as $c) {
                 $itemsHtml .= $this->renderConditionRow($c, $context);
             }
-            $itemsHtml .= '</ol>';
+            $itemsHtml .= $autoNumber ? '</ol>' : '</ul>';
         } elseif ($useLegacyTextFallback) {
             $legacyLines = preg_split("/\r?\n/", (string) $doc->other_conditions_text);
             $itemsHtml .= '<div class="conditions-legacy-text" style="white-space:pre-wrap;">'
@@ -233,14 +243,30 @@ final class InsertableBlockRenderer
                 . 'background:#fef3c7; color:#92400e; border-radius:3px; font-size:0.7rem;">'
                 . 'Overrides clause ' . e((string) $c->overrides_clause_ref) . '</span>';
         }
+
+        // Phase 1B.6 (FIX 4) — informational "Relates to clause N" badge
+        // when the recipient picked an existing clause reference during
+        // the Add Condition flow. Distinct from override — the original
+        // clause is NOT struck through.
+        $relatesBadge = '';
+        if (! $c->is_override && ! empty($c->relates_to_clause_ref)) {
+            $relatesBadge = ' <a href="#" class="relates-badge" '
+                . 'data-clause-ref="' . e((string) $c->relates_to_clause_ref) . '" '
+                . 'onclick="(function(ref){var el=document.querySelector(\'[data-clause-ref=\"\'+ref+\'\"]\');if(el){el.scrollIntoView({behavior:\'smooth\',block:\'center\'});el.style.background=\'#fef3c7\';setTimeout(function(){el.style.background=\'\';},2000);}return false;})(\'' . e((string) $c->relates_to_clause_ref) . '\'); return false;" '
+                . 'style="display:inline-block; margin-left:0.4rem; padding:1px 6px; '
+                . 'background:#dbeafe; color:#1e40af; border-radius:3px; font-size:0.7rem; text-decoration:none;">'
+                . 'Relates to clause ' . e((string) $c->relates_to_clause_ref) . '</a>';
+        }
+
         $lockedHint = $c->is_locked
             ? ' <span style="color:#6b7280; font-size:0.7rem; font-style:italic;">[locked]</span>'
             : '';
 
         return '<li class="condition-row" data-condition-id="' . $c->id . '" '
-            . 'style="margin: 0.3rem 0; padding-left: 0.2rem;">'
+            . 'style="margin: 0.3rem 0; padding-left: 0.2rem; display: list-item;">'
             . nl2br(e($c->content))
             . $overrideBadge
+            . $relatesBadge
             . $lockedHint
             . '</li>';
     }

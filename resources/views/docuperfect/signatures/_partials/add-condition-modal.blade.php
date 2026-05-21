@@ -1,60 +1,53 @@
-{{-- E-Sign V3 Phase 1B.5 — Add Condition modal partial.
-     Listens for the 'open-add-condition-modal' window event dispatched by
-     the "+ Add condition" buttons rendered inside insertable-block partials.
+{{-- E-Sign V3 Phase 1B.6 — Add Condition modal (rewritten).
+
+     Recipient-side modal for adding a brand-new condition. No clause-
+     library access (recipient writes are always free text). Optionally
+     links to an existing numbered clause via `relates_to_clause_ref`.
+
+     Listens for the 'open-add-condition-modal' window CustomEvent
+     dispatched by the "+ Add condition" buttons rendered inside
+     InsertableBlockRenderer.
 
      Required Blade locals:
-       $token — recipient signing token (mounted route /sign/{token})
+       $token            — recipient signing token (mounted route /sign/{token})
+       $numberedClauses  — array of [{ref, preview}] extracted from the body
 
-     Spec: .ai/specs/esign-v3-complete-spec.md §7.5.4 --}}
+     Spec: .ai/specs/esign-v3-complete-spec.md §7.5.4 (Phase 1B.6 revision) --}}
 
 <div x-data="addConditionModalAlpine()" x-init="init()"
      x-show="open" x-cloak
      style="position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.5);">
     <div style="background: #fff; border-radius: 8px; max-width: 640px; width: 92%; max-height: 88vh; overflow-y: auto; padding: 1.5rem;">
 
-        <h3 style="margin: 0 0 1rem; color: #111827; font-size: 1.05rem; font-weight: 700;"
-            x-text="'Add condition to ' + (blockLabel || 'block')"></h3>
+        <h3 style="margin: 0 0 0.5rem; color: #111827; font-size: 1.05rem; font-weight: 700;"
+            x-text="'Add a condition' + (blockLabel ? ' to ' + blockLabel : '')"></h3>
+        <p style="margin: 0 0 1rem; color: #6b7280; font-size: 0.85rem;">
+            Describe any additional condition you want included. The agent will
+            review your request before it&rsquo;s added to the document.
+        </p>
 
-        <div style="display: flex; gap: 0.5rem; border-bottom: 1px solid #e5e7eb; margin-bottom: 1rem;">
-            <button type="button" @click="tab = 'library'"
-                    :style="tab === 'library' ? 'color: #0ea5e9; border-bottom: 2px solid #0ea5e9; margin-bottom: -1px;' : 'color: #6b7280;'"
-                    style="background: none; border: none; padding: 0.5rem 0.8rem; font-weight: 600; cursor: pointer; font-size: 0.85rem;">
-                From clause library
-            </button>
-            <button type="button" @click="tab = 'custom'"
-                    :style="tab === 'custom' ? 'color: #0ea5e9; border-bottom: 2px solid #0ea5e9; margin-bottom: -1px;' : 'color: #6b7280;'"
-                    style="background: none; border: none; padding: 0.5rem 0.8rem; font-weight: 600; cursor: pointer; font-size: 0.85rem;">
-                Write custom
-            </button>
-        </div>
+        @if(!empty($numberedClauses))
+            <label style="display: block; font-size: 0.85rem; font-weight: 600; color: #111827; margin-bottom: 0.3rem;">
+                Does this relate to an existing clause?
+                <span style="color: #6b7280; font-weight: 400;">(optional)</span>
+            </label>
+            <select x-model="relatesToClause"
+                    style="width: 100%; padding: 0.55rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.9rem; background: #fff; margin-bottom: 1rem;">
+                <option value="">No &mdash; this is a new condition</option>
+                @foreach($numberedClauses as $clause)
+                    <option value="{{ $clause['ref'] }}">
+                        Clause {{ $clause['ref'] }} &mdash; {{ $clause['preview'] }}
+                    </option>
+                @endforeach
+            </select>
+        @endif
 
-        {{-- Library tab --}}
-        <div x-show="tab === 'library'">
-            <input type="text" x-model="search" @input.debounce.300ms="fetchClauses()"
-                   placeholder="Search clauses…"
-                   style="width: 100%; padding: 0.6rem; border: 1px solid #d1d5db; border-radius: 4px; margin-bottom: 0.75rem; font-size: 0.9rem;">
-            <div style="max-height: 18rem; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 4px;">
-                <template x-if="!clauses.length">
-                    <div style="padding: 1rem; color: #6b7280; font-size: 0.85rem; text-align: center;"
-                         x-text="loadingClauses ? 'Loading…' : 'No clauses match. Try Write custom.'"></div>
-                </template>
-                <template x-for="c in clauses" :key="c.id">
-                    <button type="button" @click="selectClause(c)"
-                            style="display: block; width: 100%; text-align: left; padding: 0.7rem 0.85rem; border: none; border-bottom: 1px solid #f3f4f6; background: #fff; cursor: pointer;">
-                        <div style="font-weight: 600; color: #111827; font-size: 0.9rem;" x-text="c.name"></div>
-                        <div style="font-size: 0.8rem; color: #6b7280; margin-top: 0.25rem;"
-                             x-text="(c.text || '').substring(0, 140)"></div>
-                    </button>
-                </template>
-            </div>
-        </div>
-
-        {{-- Custom tab --}}
-        <div x-show="tab === 'custom'">
-            <textarea x-model="customText" rows="6"
-                      placeholder="Type the condition wording…"
-                      style="width: 100%; padding: 0.7rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.9rem; resize: vertical;"></textarea>
-        </div>
+        <label style="display: block; font-size: 0.85rem; font-weight: 600; color: #111827; margin-bottom: 0.3rem;">
+            Your proposed condition
+        </label>
+        <textarea x-model="customText" rows="6"
+                  placeholder="Type the condition wording…"
+                  style="width: 100%; padding: 0.7rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.9rem; resize: vertical;"></textarea>
 
         <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem;">
             <button type="button" @click="close()"
@@ -62,8 +55,8 @@
                 Cancel
             </button>
             <button type="button" @click="submit()"
-                    :disabled="submitting || (!customText && !selectedClauseId)"
-                    :style="(submitting || (!customText && !selectedClauseId)) ? 'opacity: 0.4; cursor: not-allowed;' : ''"
+                    :disabled="submitting || !customText.trim()"
+                    :style="(submitting || !customText.trim()) ? 'opacity: 0.4; cursor: not-allowed;' : ''"
                     style="padding: 0.6rem 1.4rem; background: #0ea5e9; color: #fff; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 0.9rem;">
                 <span x-text="submitting ? 'Saving…' : 'Save condition'"></span>
             </button>
@@ -79,57 +72,31 @@
 function addConditionModalAlpine() {
     return {
         open: false,
-        tab: 'library',
         blockId: '',
         blockPurpose: '',
         blockLabel: '',
-        search: '',
-        clauses: [],
-        loadingClauses: false,
         customText: '',
-        selectedClauseId: null,
+        relatesToClause: '',
         submitting: false,
         error: '',
-        clausesUrl: @json(route('docuperfect.clauses.json')),
-        storeUrl:   @json(route('signatures.external.addCondition', ['token' => $token])),
+        storeUrl: @json(route('signatures.external.addCondition', ['token' => $token])),
         init() {
             window.addEventListener('open-add-condition-modal', (e) => {
                 const d = e.detail || {};
-                this.blockId = d.blockId || '';
+                this.blockId = d.blockId || 'other_conditions';
                 this.blockPurpose = d.purpose || 'other_conditions';
-                this.blockLabel = d.label || 'Other Conditions';
-                this.tab = 'library';
-                this.search = '';
-                this.clauses = [];
+                this.blockLabel = d.label || '';
                 this.customText = '';
-                this.selectedClauseId = null;
+                this.relatesToClause = '';
                 this.error = '';
                 this.open = true;
-                this.fetchClauses();
             });
-        },
-        async fetchClauses() {
-            this.loadingClauses = true;
-            try {
-                const url = this.clausesUrl + (this.search ? '?q=' + encodeURIComponent(this.search) : '');
-                const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
-                if (r.ok) {
-                    const data = await r.json();
-                    this.clauses = Array.isArray(data) ? data : (data.data || data.clauses || []);
-                }
-            } catch (e) { console.warn(e); }
-            this.loadingClauses = false;
-        },
-        selectClause(c) {
-            this.selectedClauseId = c.id;
-            this.customText = c.text || c.content || '';
-            this.tab = 'custom';
         },
         close() { this.open = false; },
         async submit() {
             this.error = '';
             const content = (this.customText || '').trim();
-            if (!content) { this.error = 'Please enter or select a condition.'; return; }
+            if (!content) { this.error = 'Please enter the condition wording.'; return; }
             this.submitting = true;
             try {
                 const csrf = document.querySelector('meta[name=csrf-token]').content;
@@ -137,18 +104,18 @@ function addConditionModalAlpine() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
                     body: JSON.stringify({
-                        block_id:          this.blockId,
-                        block_purpose:     this.blockPurpose,
-                        content:           content,
-                        source:            this.selectedClauseId ? 'library' : 'custom',
-                        library_clause_id: this.selectedClauseId,
+                        block_id:              this.blockId,
+                        block_purpose:         this.blockPurpose,
+                        content:               content,
+                        source:                'custom',
+                        relates_to_clause_ref: this.relatesToClause || null,
                     }),
                 });
                 if (r.ok) {
                     location.reload();
                 } else {
                     const j = await r.json().catch(() => ({}));
-                    this.error = j.error || ('Save failed (' + r.status + ')');
+                    this.error = j.error || j.message || ('Save failed (' + r.status + ')');
                 }
             } catch (e) {
                 this.error = 'Network error: ' + e.message;

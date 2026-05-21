@@ -2479,10 +2479,14 @@ Route::prefix('sign')->group(function () {
     Route::post('/{token}/amendment/{amendment}/accept', [\App\Http\Controllers\Docuperfect\SigningController::class, 'acceptAmendment'])->name('signatures.external.acceptAmendment');
     Route::post('/{token}/amendment/{amendment}/reject', [\App\Http\Controllers\Docuperfect\SigningController::class, 'rejectAmendment'])->name('signatures.external.rejectAmendment');
 
-    // Phase 1B.5 — recipient Other Conditions / strikethrough / focused initialing
+    // Phase 1B.5 — recipient Other Conditions / focused initialing
     Route::post('/{token}/conditions',          [\App\Http\Controllers\Docuperfect\SigningController::class, 'addCondition'])->name('signatures.external.addCondition');
-    Route::post('/{token}/strikethroughs',      [\App\Http\Controllers\Docuperfect\SigningController::class, 'proposeStrikethrough'])->name('signatures.external.proposeStrikethrough');
     Route::post('/{token}/initial-amendments', [\App\Http\Controllers\Docuperfect\SigningController::class, 'initialAmendments'])->name('signatures.external.initialAmendments');
+
+    // Phase 1B.6 (FIX 2) — recipient clause-flag (replaces Phase 1B.5 strikethrough modal).
+    Route::post('/{token}/flag-clause',         [\App\Http\Controllers\Docuperfect\SigningController::class, 'flagClause'])->name('signatures.external.flagClause');
+    // Soft-deprecated Phase 1B.5 endpoint — returns 410 with redirect hint.
+    Route::post('/{token}/strikethroughs',      [\App\Http\Controllers\Docuperfect\SigningController::class, 'proposeStrikethrough'])->name('signatures.external.proposeStrikethrough');
 });
 
 // ===== SIGNED DOCUMENT DOWNLOAD (no auth, token-based) =====

@@ -354,10 +354,32 @@ class SigningController extends Controller
             'label' => ucfirst(str_replace('_', ' ', $p['role_label'] ?? $p['role'] ?? 'unknown')),
         ])->values()->toArray();
 
+        // Phase 1B.6 (FIX 4) — extract numbered clauses from the body for
+        // the Add Condition + Flag Clause modal pickers.
+        $numberedClauses = $this->extractNumberedClauses($webTemplateHtml);
+
+        // Phase 1B.6 (FIX 6) — seed the persisted clause flags state so a
+        // page refresh restores the visible flag UI (the legacy webData
+        // path only persisted at signComplete; reading it back means a
+        // mid-session flag survives reload).
+        $persistedClauseFlags = $webTemplateData['clause_flags'] ?? [];
+
+        // Phase 1B.6 (FIX 5) — flag whether this signing party has already
+        // completed signing. The view uses this to render captured
+        // signatures read-only instead of "click to sign" affordances when
+        // the document is in an amendment cycle.
+        $partyAlreadySigned = $signingRequest->status === SignatureRequest::STATUS_COMPLETED
+            || $signingRequest->completed_at !== null;
+        $inAmendmentInitialing = $template->status === SignatureTemplate::STATUS_AMENDMENT_INITIALING;
+
         return view('docuperfect.signatures.external.sign', [
             'request' => $signingRequest,
             'template' => $template,
             'document' => $document,
+            'numberedClauses' => $numberedClauses,
+            'persistedClauseFlags' => $persistedClauseFlags,
+            'partyAlreadySigned' => $partyAlreadySigned,
+            'inAmendmentInitialing' => $inAmendmentInitialing,
             'allMarkers' => $allMarkers,
             'myMarkers' => $myMarkers,
             'signedCount' => $signedCount,
@@ -2797,6 +2819,54 @@ CSS;
         ]);
     }
 
+    /**
+     * Phase 1B.6 — extract numbered clause refs + previews from a document
+     * HTML body so the Add Condition + Flag Clause modals can offer a
+     * "Relates to clause" / "Flag clause" picker.
+     *
+     * Matches paragraphs/list items/divs that begin with a clause-number
+     * pattern (1., 1.1, 4.8, 12.3.4). Skips anything inside an
+     * .insertable-block container.
+     *
+     * @return array<int, array{ref:string, preview:string}>
+     */
+    public function extractNumberedClauses(?string $documentHtml): array
+    {
+        if (! is_string($documentHtml) || $documentHtml === '') {
+            return [];
+        }
+
+        // Strip insertable-block scopes first so we don't pick up
+        // conditions inside their own block as "clauses".
+        $stripped = preg_replace(
+            '/<div\b[^>]*class="[^"]*insertable-block[^"]*"[^>]*>.*?<\/div>/si',
+            '',
+            $documentHtml
+        ) ?? $documentHtml;
+
+        $clauses = [];
+        $seen = [];
+
+        if (preg_match_all('/<(p|li|div)\b[^>]*>(.*?)<\/\1>/si', $stripped, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $inner = trim(strip_tags($m[2]));
+                if ($inner === '') continue;
+                if (preg_match('/^\s*(\d+(?:\.\d+)*)\b[\.\s]\s*(.*)$/su', $inner, $cm)) {
+                    $ref = $cm[1];
+                    if (isset($seen[$ref])) continue;
+                    $seen[$ref] = true;
+                    $preview = trim(preg_replace('/\s+/', ' ', $cm[2]));
+                    $clauses[] = [
+                        'ref'     => $ref,
+                        'preview' => mb_substr($preview, 0, 80) . (mb_strlen($preview) > 80 ? '…' : ''),
+                    ];
+                }
+            }
+        }
+
+        return $clauses;
+    }
+
     // ─────────────────────────────────────────────────────────────────
     // Phase 1B.5 — recipient-side Other Conditions, strikethrough, and
     // focused initialing endpoints + helpers.
@@ -2871,12 +2941,19 @@ CSS;
         }
 
         $validated = $request->validate([
-            'block_id'          => ['required', 'string', 'max:100'],
-            'block_purpose'     => ['required', 'in:other_conditions,included_items,excluded_items,custom_named'],
-            'content'           => ['required', 'string', 'max:4000'],
-            'source'            => ['required', 'in:library,custom'],
-            'library_clause_id' => ['nullable', 'integer'],
+            'block_id'              => ['required', 'string', 'max:100'],
+            'block_purpose'         => ['required', 'in:other_conditions,included_items,excluded_items,custom_named'],
+            'content'               => ['required', 'string', 'max:4000'],
+            // Phase 1B.6 — recipient writes are always source=custom (no
+            // library access from the recipient side). Accept the field for
+            // backward compatibility with stored client payloads but force
+            // the value to 'custom' below.
+            'source'                => ['sometimes', 'in:library,custom'],
+            'library_clause_id'     => ['nullable', 'integer'],
+            'relates_to_clause_ref' => ['nullable', 'string', 'max:50'],
         ]);
+        $validated['source'] = 'custom';
+        $validated['library_clause_id'] = null;
 
         $template = $signingRequest->template;
         $document = $template->document;
@@ -2906,6 +2983,7 @@ CSS;
                 'content'               => $validated['content'],
                 'is_locked'             => false,
                 'is_override'           => false,
+                'relates_to_clause_ref' => $validated['relates_to_clause_ref'] ?? null,
                 'added_by_user_id'      => $signingRequest->signed_by_user_id ?? null,
                 'added_by_party_id'     => $signingRequest->id,
                 'added_via'             => 'recipient_signing',
@@ -2943,11 +3021,132 @@ CSS;
     }
 
     /**
-     * POST /docuperfect/api/sign/{token}/strikethroughs
-     * Recipient proposes a strikethrough override on a printed clause.
+     * POST /docuperfect/api/sign/{token}/flag-clause   (Phase 1B.6 — FIX 2)
+     *
+     * Recipient flags a numbered clause with a suggested change. Creates a
+     * DocumentAmendment row with amendment_type = 'flag_raised' (existing
+     * Phase 2 ES-4 enum value) and ALSO writes through to the legacy
+     * web_template_data.clause_flags JSON so the orange-flag display
+     * survives page refresh.
+     *
+     * Replaces Phase 1B.5's proposeStrikethrough — the override modal was
+     * the wrong abstraction. The flag UI is the recipient's clause-change
+     * path. Agent approval of a flag-raised amendment creates a numbered
+     * condition in the Other Conditions block with is_override = true.
+     */
+    public function flagClause(Request $request, string $token): \Illuminate\Http\JsonResponse
+    {
+        $signingRequest = SignatureRequest::where('token', $token)
+            ->with('template.document')
+            ->firstOrFail();
+
+        if (! $this->signerCanAct($signingRequest)) {
+            return response()->json(['error' => 'Not authorised at this stage.'], 403);
+        }
+
+        $validated = $request->validate([
+            'clause_ref'           => ['required', 'string', 'max:50'],
+            'clause_original_text' => ['required', 'string', 'max:4000'],
+            'suggested_change'     => ['required', 'string', 'max:4000'],
+            'reason'               => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $template = $signingRequest->template;
+        $document = $template->document;
+
+        $result = DB::transaction(function () use ($validated, $signingRequest, $template, $document) {
+            $version = (int) ($template->document_version ?? 1);
+
+            // Compose the flag-raised reason text — pair the suggested
+            // change with an optional why-explanation so the agent review
+            // surface (Phase 1B AmendmentController) has full context.
+            $flagReason = $validated['suggested_change'];
+            if (! empty($validated['reason'])) {
+                $flagReason .= "\n\nReason: " . $validated['reason'];
+            }
+
+            $amendment = DocumentAmendment::create([
+                'document_id'             => $document?->id,
+                'signature_template_id'   => $template->id,
+                'amended_by_request_id'   => $signingRequest->id,
+                'amendment_type'          => DocumentAmendment::TYPE_FLAG_RAISED,
+                'flag_origin'             => DocumentAmendment::FLAG_ORIGIN_SIGNING_PARTY,
+                'flag_clause_ref'         => $validated['clause_ref'],
+                'flag_reason'             => $flagReason,
+                'section_reference'       => 'Clause ' . $validated['clause_ref'],
+                'original_text'           => $validated['clause_original_text'],
+                'new_text'                => $validated['suggested_change'],
+                'document_version_before' => $version,
+                'document_version_after'  => $version,
+                'document_hash_before'    => $template->document_hash,
+                'document_hash_after'     => null,
+                'status'                  => DocumentAmendment::STATUS_PENDING,
+            ]);
+
+            // Phase 1B.6 (FIX 6) — write through to web_template_data
+            // .clause_flags JSON immediately so a refresh of the signing
+            // page can re-seed the visible flag indicator (was previously
+            // only persisted at signComplete time).
+            if ($document) {
+                $webData = $document->web_template_data ?? [];
+                $existing = $webData['clause_flags'][$signingRequest->party_role] ?? [];
+                $existing[] = [
+                    'clauseNum'         => $validated['clause_ref'],
+                    'concern'           => $validated['suggested_change'],
+                    'reason'            => $validated['reason'] ?? null,
+                    'amendment_id'      => $amendment->id,
+                    'flagged_at'        => now()->toIso8601String(),
+                    'status'            => 'pending_review',
+                ];
+                $webData['clause_flags'][$signingRequest->party_role] = $existing;
+                $document->update(['web_template_data' => $webData]);
+            }
+
+            $template->update([
+                'amendment_status' => SignatureTemplate::AMENDMENT_STATUS_PENDING_REVIEW,
+                'status'           => SignatureTemplate::STATUS_AMENDMENT_REVIEW,
+            ]);
+
+            SignatureAuditLog::log(
+                $template,
+                'clause_flagged_by_recipient',
+                SignatureAuditLog::ACTOR_SIGNER,
+                $signingRequest->signer_name ?? 'Unknown',
+                metadata: [
+                    'amendment_id' => $amendment->id,
+                    'clause_ref'   => $validated['clause_ref'],
+                ],
+            );
+
+            return $amendment;
+        });
+
+        return response()->json([
+            'ok'           => true,
+            'amendment_id' => $result->id,
+            'clause_ref'   => $validated['clause_ref'],
+        ], 201);
+    }
+
+    /**
+     * POST /docuperfect/api/sign/{token}/strikethroughs  (Phase 1B.5 — deprecated)
+     *
+     * Phase 1B.6 (FIX 2): retained as a soft-deprecated endpoint that 410s
+     * with a clear message. The recipient flow now uses flagClause()
+     * exclusively. Agent-side strikethrough creation (if introduced
+     * later) will go through a different path.
      */
     public function proposeStrikethrough(Request $request, string $token): \Illuminate\Http\JsonResponse
     {
+        return response()->json([
+            'error' => 'The strikethrough override flow has been replaced by clause flagging. '
+                . 'Use POST /sign/{token}/flag-clause instead.',
+        ], 410);
+
+        // The original implementation is retained below behind an
+        // unreachable return so the diff stays auditable. The legacy
+        // path can be deleted in a follow-up commit once no client
+        // payload mentions it.
         $signingRequest = SignatureRequest::where('token', $token)
             ->with('template')
             ->firstOrFail();

@@ -38,6 +38,7 @@ class DocumentCondition extends Model
         'is_locked',
         'is_override',
         'overrides_clause_ref',
+        'relates_to_clause_ref',
         'added_by_user_id',
         'added_by_party_id',
         'added_via',
