@@ -383,6 +383,17 @@ class SigningController extends Controller
             || $signingRequest->completed_at !== null;
         $inAmendmentInitialing = $template->status === SignatureTemplate::STATUS_AMENDMENT_INITIALING;
 
+        // Phase 1B.9 (FIX 2) — Apply-to-all initials is an agent-only
+        // affordance. Recipients must initial each page individually for
+        // legal informed-consent reasons (each initial = explicit affirm).
+        // An "agent" here = either an authenticated CoreX user with
+        // document-management permission OR a signing-party whose role is
+        // 'agent' (the dispatching agent acting as a signer).
+        $authUser = $request->user();
+        $isAgent = ($authUser !== null && method_exists($authUser, 'hasPermission')
+                && $authUser->hasPermission('manage_documents'))
+            || $signingRequest->party_role === 'agent';
+
         return view('docuperfect.signatures.external.sign', [
             'request' => $signingRequest,
             'template' => $template,
@@ -391,6 +402,7 @@ class SigningController extends Controller
             'persistedClauseFlags' => $persistedClauseFlags,
             'partyAlreadySigned' => $partyAlreadySigned,
             'inAmendmentInitialing' => $inAmendmentInitialing,
+            'isAgent' => $isAgent,
             'allMarkers' => $allMarkers,
             'myMarkers' => $myMarkers,
             'signedCount' => $signedCount,
@@ -3025,10 +3037,26 @@ CSS;
             return compact('amendment', 'condition');
         });
 
+        // Phase 1B.9 (FIX 3) — render the new row HTML server-side so the
+        // client can append it in place without reloading the page (the
+        // previous location.reload() wiped Alpine signature state — the
+        // critical reset bug Phase 1B.9 eliminates).
+        $newCondition = $result['condition']->fresh(['initials']);
+        $renderedRow  = app(\App\Services\Docuperfect\InsertableBlockRenderer::class)
+            ->renderConditionRowPublic(
+                $newCondition,
+                \App\Services\Docuperfect\InsertableBlockRenderer::CONTEXT_RECIPIENT_SIGNING,
+                $signingRequest->template,
+                $token,
+                $signingRequest->party_role
+            );
+
         return response()->json([
-            'ok'           => true,
-            'condition'    => $result['condition'],
-            'amendment_id' => $result['amendment']->id,
+            'ok'               => true,
+            'condition'        => $newCondition,
+            'amendment_id'     => $result['amendment']->id,
+            'rendered_row'     => $renderedRow,
+            'amendment_status' => 'pending_review',
         ], 201);
     }
 
@@ -3138,6 +3166,100 @@ CSS;
             'amendment_id' => $result->id,
             'clause_ref'   => $validated['clause_ref'],
         ], 201);
+    }
+
+    /**
+     * DELETE /docuperfect/api/sign/{token}/flag/{clauseRef}   (Phase 1B.9 — FIX 1, pre-completion)
+     *
+     * Recipient self-removes a flag they raised — allowed ONLY while the
+     * party has not yet completed signing AND the amendment is still in
+     * 'pending' state (agent hasn't acted on it).
+     *
+     * After signing completes, removal must go through the agent-initiated
+     * consent flow via FlagRemovalController.
+     */
+    public function removeOwnFlag(Request $request, string $token, string $clauseRef): \Illuminate\Http\JsonResponse
+    {
+        $signingRequest = SignatureRequest::where('token', $token)
+            ->with('template.document')
+            ->firstOrFail();
+
+        // Pre-completion gate. After completed_at is set the recipient
+        // can no longer unilaterally remove their own flag — they must
+        // go through the consent path.
+        if ($signingRequest->status === SignatureRequest::STATUS_COMPLETED
+            || $signingRequest->completed_at !== null
+        ) {
+            return response()->json([
+                'error' => 'You have already signed. Removing a flag now requires the agent to request your authenticated consent.',
+            ], 409);
+        }
+
+        $template = $signingRequest->template;
+        $document = $template?->document;
+        if (! $document) {
+            return response()->json(['error' => 'Document not found.'], 404);
+        }
+
+        // Find a pending amendment matching the clause + this party.
+        $amendment = DocumentAmendment::query()
+            ->where('signature_template_id', $template->id)
+            ->where('amendment_type', DocumentAmendment::TYPE_FLAG_RAISED)
+            ->where('flag_clause_ref', $clauseRef)
+            ->where('amended_by_request_id', $signingRequest->id)
+            ->where('status', DocumentAmendment::STATUS_PENDING)
+            ->latest('id')
+            ->first();
+
+        DB::transaction(function () use ($document, $signingRequest, $clauseRef, $amendment, $template) {
+            // Scrub the matching entry from clause_flags JSON.
+            $webData = $document->web_template_data ?? [];
+            $partyRole = $signingRequest->party_role;
+            $flagsByParty = $webData['clause_flags'] ?? [];
+            if ($partyRole && isset($flagsByParty[$partyRole]) && is_array($flagsByParty[$partyRole])) {
+                $flagsByParty[$partyRole] = array_values(array_filter(
+                    $flagsByParty[$partyRole],
+                    fn($f) => (string) ($f['clauseNum'] ?? '') !== (string) $clauseRef
+                ));
+                if (empty($flagsByParty[$partyRole])) {
+                    unset($flagsByParty[$partyRole]);
+                }
+                $webData['clause_flags'] = $flagsByParty;
+                $document->update(['web_template_data' => $webData]);
+            }
+
+            // Soft-delete the pending amendment (audit retained).
+            if ($amendment) {
+                $amendment->update(['status' => DocumentAmendment::STATUS_REJECTED]);
+                $amendment->delete();
+            }
+
+            // If this was the only pending amendment, clear amendment_status.
+            $stillPending = DocumentAmendment::query()
+                ->where('signature_template_id', $template->id)
+                ->where('status', DocumentAmendment::STATUS_PENDING)
+                ->exists();
+            if (! $stillPending) {
+                $template->update([
+                    'status'           => SignatureTemplate::STATUS_SIGNING,
+                    'amendment_status' => null,
+                ]);
+            }
+
+            SignatureAuditLog::log(
+                $template,
+                'flag_self_removed_pre_completion',
+                SignatureAuditLog::ACTOR_SIGNER,
+                $signingRequest->signer_name ?? 'Recipient',
+                metadata: [
+                    'clause_ref'    => $clauseRef,
+                    'amendment_id'  => $amendment?->id,
+                    'party_role'    => $partyRole,
+                ],
+            );
+        });
+
+        return response()->json(['ok' => true]);
     }
 
     /**

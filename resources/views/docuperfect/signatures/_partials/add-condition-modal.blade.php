@@ -143,6 +143,12 @@
         attachAddConditionHandlers();
         attachInitialHandlers();
     });
+    // Phase 1B.9 — when a new condition row is appended in-place we fire
+    // this event so the freshly-rendered .btn-add-initial buttons get
+    // their click handler attached without a page reload.
+    document.addEventListener('phase-1b7-reattach-initial-handlers', function () {
+        attachInitialHandlers();
+    });
 })();
 
 function addConditionModalAlpine() {
@@ -185,7 +191,17 @@ function addConditionModalAlpine() {
                     }),
                 });
                 if (r.ok) {
-                    location.reload();
+                    // Phase 1B.9 (FIX 3) — in-place DOM append. The
+                    // previous implementation called location.reload()
+                    // here, which wiped Alpine state including every
+                    // captured signature and initial — the critical
+                    // recipient-experience bug. We now append the new
+                    // <li> row server-rendered (rendered_row) into the
+                    // matching insertable-block <ol>, leaving the rest
+                    // of the page untouched.
+                    const data = await r.json().catch(() => ({}));
+                    this._appendConditionRow(data);
+                    this.close();
                 } else {
                     const j = await r.json().catch(() => ({}));
                     this.error = j.error || j.message || ('Save failed (' + r.status + ')');
@@ -194,6 +210,86 @@ function addConditionModalAlpine() {
                 this.error = 'Network error: ' + e.message;
             }
             this.submitting = false;
+        },
+
+        /**
+         * Phase 1B.9 (FIX 3) — insert the server-rendered <li> row into the
+         * target insertable-block's <ol>, OR seed the block with a fresh
+         * <ol> if it was empty (still showing 'No conditions yet.').
+         * Falls back to a soft toast + page-state-aware reload only if the
+         * server didn't return rendered_row (unexpected, but defensive).
+         */
+        _appendConditionRow(data) {
+            if (!data || !data.rendered_row) {
+                // Server contract changed unexpectedly — degrade gracefully
+                // but avoid the destructive reload. Show a confirmation
+                // toast; the recipient can refresh manually if they want.
+                this._showSavedToast();
+                return;
+            }
+            const blockEl = document.querySelector(
+                '.insertable-block[data-block-id="' + (this.blockId || 'other_conditions') + '"]'
+            );
+            if (!blockEl) {
+                this._showSavedToast();
+                return;
+            }
+
+            // Find or create the <ol>
+            let list = blockEl.querySelector('ol.conditions-list-numbered, ul.conditions-list-unnumbered');
+            if (!list) {
+                // The empty-state <p> is rendered when there are no
+                // conditions yet — replace it with an <ol> seeded by the
+                // new row. The renderer's auto_number default for
+                // other_conditions purpose is true, so emit <ol>.
+                const empty = blockEl.querySelector('p.no-conditions-yet');
+                const isOtherConditions = (this.blockPurpose || 'other_conditions') === 'other_conditions';
+                const newList = document.createElement(isOtherConditions ? 'ol' : 'ul');
+                newList.className = isOtherConditions ? 'conditions-list conditions-list-numbered' : 'conditions-list conditions-list-unnumbered';
+                newList.setAttribute('style', isOtherConditions
+                    ? 'list-style: decimal outside; padding-left: 1.5em; margin: 0.4rem 0;'
+                    : 'list-style: none; padding-left: 0; margin: 0.4rem 0;');
+                if (empty) {
+                    empty.replaceWith(newList);
+                } else {
+                    // Insert before the Add Condition button (or at end)
+                    const addBtn = blockEl.querySelector('.btn-add-condition');
+                    if (addBtn) {
+                        blockEl.insertBefore(newList, addBtn);
+                    } else {
+                        blockEl.appendChild(newList);
+                    }
+                }
+                list = newList;
+            }
+
+            // Inject the new row HTML — wrap in a template so we get a
+            // real <li> node we can append (innerHTML assignment to <ol>
+            // would replace existing rows).
+            const wrap = document.createElement('template');
+            wrap.innerHTML = data.rendered_row.trim();
+            const node = wrap.content.firstElementChild;
+            if (node) {
+                list.appendChild(node);
+                // The new row carries .btn-add-initial buttons — re-attach
+                // the handler IIFE so the recipient can initial the new
+                // condition without a reload.
+                document.dispatchEvent(new CustomEvent('phase-1b7-reattach-initial-handlers'));
+            }
+
+            this._showSavedToast();
+        },
+
+        _showSavedToast() {
+            // Tiny inline toast — surfaces success without commandeering
+            // the existing signing notification surface.
+            const toast = document.createElement('div');
+            toast.textContent = 'Condition added. The agent will review it.';
+            toast.style.cssText = 'position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);'
+                + 'padding:0.7rem 1.2rem;background:#0ea5e9;color:#fff;border-radius:6px;'
+                + 'font-size:0.9rem;box-shadow:0 4px 16px rgba(0,0,0,0.15);z-index:10000;';
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
         },
     };
 }

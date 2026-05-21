@@ -2488,9 +2488,26 @@ Route::prefix('sign')->group(function () {
 
     // Phase 1B.6 (FIX 2) — recipient clause-flag (replaces Phase 1B.5 strikethrough modal).
     Route::post('/{token}/flag-clause',         [\App\Http\Controllers\Docuperfect\SigningController::class, 'flagClause'])->name('signatures.external.flagClause');
+    // Phase 1B.9 (FIX 1) — recipient self-undo pre-completion.
+    Route::delete('/{token}/flag/{clauseRef}',  [\App\Http\Controllers\Docuperfect\SigningController::class, 'removeOwnFlag'])->name('signatures.external.removeOwnFlag');
     // Soft-deprecated Phase 1B.5 endpoint — returns 410 with redirect hint.
     Route::post('/{token}/strikethroughs',      [\App\Http\Controllers\Docuperfect\SigningController::class, 'proposeStrikethrough'])->name('signatures.external.proposeStrikethrough');
 });
+
+// Phase 1B.9 (FIX 1) — Flag Removal consent flow.
+// Agent-side request (auth required) + recipient consent screen (public,
+// token-authenticated).
+Route::middleware(['auth'])->group(function () {
+    Route::post('/docuperfect/flags/{amendment}/request-removal',
+        [\App\Http\Controllers\Docuperfect\FlagRemovalController::class, 'requestRemoval'])
+        ->name('docuperfect.flags.requestRemoval');
+});
+Route::get('/flag-removal/{token}',
+    [\App\Http\Controllers\Docuperfect\FlagRemovalController::class, 'showConsent'])
+    ->name('signatures.flag-removal.consent.show');
+Route::post('/flag-removal/{token}/consent',
+    [\App\Http\Controllers\Docuperfect\FlagRemovalController::class, 'submitConsent'])
+    ->name('signatures.flag-removal.consent.submit');
 
 // ===== SIGNED DOCUMENT DOWNLOAD (no auth, token-based) =====
 Route::get('/documents/download/{token}', [\App\Http\Controllers\Docuperfect\SigningController::class, 'downloadPage'])->name('signatures.download.page');

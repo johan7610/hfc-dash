@@ -1379,7 +1379,18 @@ Phase 1B.5 data tables retained as-is: `document_clause_strikethroughs` is no lo
 
 Removed the "Does this relate to an existing clause? (optional)" dropdown from the recipient Add Condition modal. Recipients now provide free-text conditions only. The `document_conditions.relates_to_clause_ref` column is retained — existing rows keep their values and the `InsertableBlockRenderer` continues to render the "Relates to clause N" badge for legacy data. Recipient writes no longer populate the column. All other Phase 1B.5/1B.6/1B.7 functionality preserved.
 
-E-Sign V3 is shipped at this point. Remaining backlog (non-blocking): Phase 2.1 multi-role `editable_by` enforcement, V1.5 deferrals (wet-ink rendering + pagination recalc), and the ES-1 cherry-pick to `main` + Staging back-merge pending Johan's per-push authorisation.
+### 22.11 Phase 1B.9 — three critical fixes
+
+**FIX 3 (CRITICAL) — Signature reset on Add Condition.** The `add-condition-modal` partial called `location.reload()` after a successful condition POST; that wiped every captured signature, initial, and field on the page, forcing the recipient to redo all their signing work. Fix: `SigningController::addCondition()` now returns `rendered_row` (server-rendered `<li>` HTML for the new condition) in its 201 JSON response. The modal appends the row into the matching `.insertable-block`'s `<ol>` in place — no reload, no state loss. The original signature data, initials, and field values stay intact because the page is never re-rendered. Also `SigningController::show()` view-switch on `STATUS_AMENDMENT_INITIALING` (Phase 1B.5) routes returning signers to the focused initialing surface even when their `SignatureRequest::status` is `COMPLETED`. Together these mean the user-reported reset bug is eliminated.
+
+**FIX 2 — Apply-to-all is agent-only.** Recipients must initial each page individually for legal informed-consent reasons (each initial = explicit affirmation per page). The "Apply to All Pages?" modal is now gated on `isAgent`, computed in `SigningController::show()` as `auth()->user()->hasPermission('manage_documents') || $signingRequest->party_role === 'agent'`. Both trigger sites (PDF marker path + web template initials path) check `this.isAgent` before flipping `showApplyAll = true` / `showInitialApplyAll = true`. Agent self-signing still gets the productivity affordance.
+
+**FIX 1 — Flag undo with consent-gated removal.**
+- **Pre-completion (free undo):** new `DELETE /sign/{token}/flag/{clauseRef}` endpoint allows the recipient to retract their own flag while `SignatureRequest::completed_at` is still NULL. Returns 409 with a pointer to the consent flow once signing has completed. UI: an "✕" affordance appears beside the flag icon on flagged clauses for pre-completion parties.
+- **Post-completion (consent-gated):** new `flag_removal_requests` table + `FlagRemovalRequest` model + `FlagRemovalController` with three endpoints — `POST /docuperfect/flags/{amendment}/request-removal` (agent, auth-gated), `GET /flag-removal/{token}` (public, token-authenticated consent screen), `POST /flag-removal/{token}/consent` (recipient submits authorise/reject). Tokens are 64-char, 14-day TTL. Email send via the existing `SigningRequestMail` transport with a composed body. On `consented`: the amendment is soft-deleted + the clause-flag JSON entry is scrubbed. On `rejected`: both stay; agent is notified. Original flag + consent decision both retained in the audit chain forever.
+- Agent-side button surfaces on the amendment review surface for flag-type amendments raised by a party with `completed_at IS NOT NULL`.
+
+E-Sign V3 remaining backlog (non-blocking): Phase 2.1 multi-role `editable_by` enforcement, V1.5 deferrals (wet-ink rendering + pagination recalc), and the ES-1 cherry-pick to `main` + Staging back-merge pending Johan's per-push authorisation.
 
 ---
 

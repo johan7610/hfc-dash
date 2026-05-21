@@ -255,6 +255,22 @@ final class InsertableBlockRenderer
             . '</div>';
     }
 
+    /**
+     * Phase 1B.9 (FIX 3) — public so the SigningController can render a
+     * single new condition row HTML and return it as JSON for the
+     * recipient's add-condition modal to append in place. This avoids
+     * the full-page reload that wiped Alpine signature state.
+     */
+    public function renderConditionRowPublic(
+        DocumentCondition $c,
+        string $context,
+        ?SignatureTemplate $doc = null,
+        ?string $signingToken = null,
+        ?string $currentPartyKey = null
+    ): string {
+        return $this->renderConditionRow($c, $context, $doc, $signingToken, $currentPartyKey);
+    }
+
     private function renderConditionRow(
         DocumentCondition $c,
         string $context,

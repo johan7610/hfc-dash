@@ -167,6 +167,78 @@
                     </button>
                 </form>
             </details>
+
+            {{-- Phase 1B.9 (FIX 1) — for flag-type amendments raised by a
+                 recipient who has already completed signing, the agent can
+                 request authenticated consent to remove the flag. This is
+                 NOT the same as approve/reject — those decide the merits;
+                 this asks the recipient to retract their flag entirely. --}}
+            @if($amendment->isFlag() && $amendment->amendedByRequest?->completed_at)
+                <details class="inline-block" x-data="flagRemovalRequest()">
+                    <summary class="text-sm font-medium cursor-pointer px-3 py-2"
+                             style="color: var(--ds-amber, #d97706);">
+                        Request flag removal (consent)
+                    </summary>
+                    <div class="mt-3 space-y-2 max-w-md">
+                        <p class="text-xs" style="color: var(--text-muted, #6b7280);">
+                            This emails {{ $amendment->amendedByRequest->signer_name ?? 'the recipient' }}
+                            asking them to consent to removal of their flag. They must
+                            confirm via an authenticated link before the flag is removed.
+                            This protects you legally.
+                        </p>
+                        <textarea x-model="reason" rows="3"
+                                  class="w-full text-sm rounded-md px-3 py-2"
+                                  style="background: var(--surface, #fff); border: 1px solid var(--border, rgba(0,0,0,0.2));"
+                                  placeholder="Reason for requesting removal (sent to the recipient + recorded in audit)"></textarea>
+                        <button type="button" @click="submit({{ $amendment->id }})"
+                                :disabled="submitting || !reason.trim() || reason.length < 10"
+                                :style="(submitting || !reason.trim() || reason.length < 10) ? 'opacity:0.4; cursor:not-allowed;' : ''"
+                                class="text-sm px-3 py-2 rounded-md font-medium"
+                                style="background: var(--ds-amber, #d97706); color: #fff;">
+                            <span x-text="submitting ? 'Sending…' : 'Send consent request'"></span>
+                        </button>
+                        <p x-show="result" x-cloak x-text="result"
+                           class="text-xs"
+                           :style="resultIsError ? 'color: var(--ds-crimson, #dc2626);' : 'color: var(--ds-green, #16a34a);'"></p>
+                    </div>
+                </details>
+                <script>
+                function flagRemovalRequest() {
+                    return {
+                        reason: '',
+                        submitting: false,
+                        result: '',
+                        resultIsError: false,
+                        async submit(amendmentId) {
+                            this.result = '';
+                            this.submitting = true;
+                            try {
+                                const csrf = document.querySelector('meta[name=csrf-token]').content;
+                                const r = await fetch('/docuperfect/flags/' + amendmentId + '/request-removal', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
+                                    body: JSON.stringify({ reason: this.reason }),
+                                });
+                                if (r.ok) {
+                                    const d = await r.json();
+                                    this.result = 'Consent request sent to ' + (d.sent_to || 'the recipient') + '.';
+                                    this.resultIsError = false;
+                                    this.reason = '';
+                                } else {
+                                    const j = await r.json().catch(() => ({}));
+                                    this.result = j.error || ('Failed (' + r.status + ')');
+                                    this.resultIsError = true;
+                                }
+                            } catch (e) {
+                                this.result = 'Network error: ' + e.message;
+                                this.resultIsError = true;
+                            }
+                            this.submitting = false;
+                        },
+                    };
+                }
+                </script>
+            @endif
         @else
             <p class="text-sm" style="color: var(--text-muted, #6b7280);">
                 This amendment has already been actioned (status: <strong>{{ $amendment->status }}</strong>).

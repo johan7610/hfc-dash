@@ -1364,6 +1364,11 @@ function externalSign() {
         applyingAll: false,
         firstSignatureDone: false,
 
+        // Phase 1B.9 (FIX 2) — Apply-to-all initial/signature is agent-only.
+        // Recipients must initial each page individually for legal informed-
+        // consent reasons. Computed server-side and seeded into Alpine here.
+        isAgent: @json($isAgent ?? false),
+
         // Decline
         showDeclineModal: false,
         declineReason: '',
@@ -2392,7 +2397,14 @@ function externalSign() {
                     m.is_mine && !m.signed && m.type === currentType
                 );
 
-                if (!this.firstSignatureDone && (currentType === 'signature' || currentType === 'initial') && remainingMarkers.length > 0) {
+                // Phase 1B.9 (FIX 2) — only the agent gets the apply-to-all
+                // prompt. Recipients must initial each page individually for
+                // legal informed-consent reasons.
+                if (this.isAgent
+                    && !this.firstSignatureDone
+                    && (currentType === 'signature' || currentType === 'initial')
+                    && remainingMarkers.length > 0
+                ) {
                     this.lastSignatureData = signatureData;
                     this.lastSignatureType = signatureType;
                     this.showApplyAll = true;
@@ -2684,9 +2696,57 @@ function externalSign() {
                     e.preventDefault();
                     self._openClauseFlagModal(clause, clauseNum, idx);
                 });
-
                 clause.appendChild(flagBtn);
+
+                // Phase 1B.9 (FIX 1, pre-completion) — when this party has
+                // raised a flag AND hasn't signed yet, show a small "X"
+                // affordance that lets them undo it. After signing
+                // completes the affordance disappears (gated by
+                // partyHasCompleted, computed below) — removal then
+                // requires the agent-initiated consent flow.
+                const partyHasCompleted = @json($partyAlreadySigned ?? false);
+                if (flaggedByNum.has(clauseNum) && !partyHasCompleted) {
+                    const removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.className = 'clause-flag-remove';
+                    removeBtn.title = 'Remove this flag';
+                    removeBtn.textContent = '✕';
+                    removeBtn.style.cssText = 'margin-left:0.4rem; padding:0 0.4rem; '
+                        + 'background:transparent; border:1px solid #d97706; color:#92400e; '
+                        + 'border-radius:3px; cursor:pointer; font-size:0.7rem; line-height:1.4;';
+                    removeBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        if (!confirm('Remove this flag? You can re-flag the clause later if you change your mind.')) return;
+                        await self._removeOwnFlag(clauseNum, clause, removeBtn);
+                    });
+                    clause.appendChild(removeBtn);
+                }
             });
+        },
+
+        async _removeOwnFlag(clauseNum, clauseEl, removeBtn) {
+            try {
+                const csrf = document.querySelector('meta[name=csrf-token]')?.content;
+                const token = @json($request->token);
+                const url = '/sign/' + token + '/flag/' + encodeURIComponent(clauseNum);
+                const r = await fetch(url, {
+                    method: 'DELETE',
+                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
+                });
+                if (r.ok) {
+                    clauseEl.classList.remove('clause-flagged');
+                    removeBtn.remove();
+                    const commentDiv = clauseEl.querySelector('.clause-flag-comment');
+                    if (commentDiv) commentDiv.remove();
+                    this.webClauseFlaggedItems = this.webClauseFlaggedItems.filter(f => String(f.clauseNum) !== String(clauseNum));
+                } else {
+                    const j = await r.json().catch(() => ({}));
+                    alert(j.error || ('Could not remove flag (' + r.status + ')'));
+                }
+            } catch (e) {
+                alert('Network error: ' + e.message);
+            }
         },
 
         /**
@@ -3104,10 +3164,12 @@ function externalSign() {
             // updateIncompleteCount is the single source of truth for all counters
             this.updateIncompleteCount();
 
-            // For initials: offer apply-to-all prompt if there are remaining unsigned initials
+            // For initials: offer apply-to-all prompt if there are remaining unsigned initials.
+            // Phase 1B.9 (FIX 2) — gated on isAgent. Recipients initial each
+            // page individually for legal informed-consent reasons.
             if (isInitial) {
                 const unsignedInitials = (this.webInitialElements || []).filter(e => e.isMine && !e.signed);
-                if (unsignedInitials.length > 0 && !this.webInitialSigData) {
+                if (this.isAgent && unsignedInitials.length > 0 && !this.webInitialSigData) {
                     this.pendingInitialSigData = sigData;
                     this.pendingInitialBlockId = sigId;
                     this.showInitialApplyAll = true;
