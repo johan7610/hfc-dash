@@ -117,13 +117,19 @@ final class AnthropicGateway
         }
 
         // ── 4. Compose payload + call ──────────────────────────────────────
+        // ES-6.1: when the request carries documents (PDF / images), emit
+        // multipart messages.content[] in the Anthropic format. Otherwise
+        // keep the original string-content shape so existing surfaces are
+        // bit-for-bit unchanged.
+        $userContent = $this->buildUserMessageContent($request);
+
         $payload = [
             'model'       => $model,
             'max_tokens'  => $request->maxTokens,
             'temperature' => $request->temperature,
             'system'      => $request->systemPrompt,
             'messages'    => [
-                ['role' => 'user', 'content' => $request->userPrompt],
+                ['role' => 'user', 'content' => $userContent],
             ],
         ];
 
@@ -223,6 +229,55 @@ final class AnthropicGateway
     // ─────────────────────────────────────────────────────────────────────
     // Internals
     // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * ES-6.1 — emit the user message content. When the request carries
+     * documents (PDF / images for vision input), return the Anthropic
+     * multipart content array. When there are no documents, keep the
+     * legacy string-content shape so existing call sites are byte-for-byte
+     * unchanged.
+     *
+     * Anthropic multipart shape per Messages API docs:
+     *   [
+     *     { "type": "document", "source": { "type": "base64", "media_type": "application/pdf", "data": "<b64>" } },
+     *     { "type": "image",    "source": { "type": "base64", "media_type": "image/png",       "data": "<b64>" } },
+     *     { "type": "text",     "text":   "<prompt>" }
+     *   ]
+     *
+     * @return string|array<int, array<string, mixed>>
+     */
+    private function buildUserMessageContent(NarrativeRequest $request): string|array
+    {
+        if (empty($request->documents)) {
+            return $request->userPrompt;
+        }
+
+        $content = [];
+        foreach ($request->documents as $doc) {
+            $type      = $doc['type'] ?? null;
+            $mediaType = $doc['media_type'] ?? null;
+            $data      = $doc['data'] ?? null;
+            if (! is_string($type) || ! is_string($mediaType) || ! is_string($data) || $data === '') {
+                continue; // skip malformed entries silently — log via dev-check
+            }
+            // Anthropic expects 'document' for PDFs and 'image' for raster images.
+            $blockType = $type === 'image' ? 'image' : 'document';
+            $content[] = [
+                'type'   => $blockType,
+                'source' => [
+                    'type'       => 'base64',
+                    'media_type' => $mediaType,
+                    'data'       => $data,
+                ],
+            ];
+        }
+        $content[] = [
+            'type' => 'text',
+            'text' => $request->userPrompt,
+        ];
+
+        return $content;
+    }
 
     private function callApi(string $endpoint, string $apiKey, array $payload): Response
     {

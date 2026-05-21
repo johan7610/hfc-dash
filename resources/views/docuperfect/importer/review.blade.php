@@ -64,6 +64,8 @@
                             @csrf
                             <input type="hidden" name="draft_id" :value="draftId">
                             <input type="hidden" name="template_name" value="{{ $templateName }}">
+                            {{-- ES-6.4 — confirmed insertable blocks travel with the generate POST --}}
+                            <input type="hidden" name="insertable_blocks_json" :value="JSON.stringify(insertableBlocks)">
                             <button type="submit"
                                     class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-4 py-2 rounded-lg transition-colors font-semibold">
                                 Generate Template &rarr;
@@ -121,6 +123,76 @@
         {{-- RIGHT PANE: Toolbar + Linking (30%) --}}
         <div class="w-[30%] h-full overflow-y-auto bg-white border-l border-gray-200" id="link-pane">
             <div class="p-4">
+
+                {{-- ===== ES-6.4: DETECTED INSERTABLE BLOCKS ===== --}}
+                <div class="mb-4 border border-amber-200 rounded-lg overflow-hidden bg-amber-50/40">
+                    <button type="button" @click="blocksExpanded = !blocksExpanded"
+                            class="w-full flex items-center justify-between px-3 py-2.5 bg-amber-50 hover:bg-amber-100 transition-colors text-left">
+                        <span class="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
+                            &#9876;&#65039; Detected Insertable Blocks
+                            <span class="text-amber-600" x-text="'(' + insertableBlocks.length + ')'"></span>
+                        </span>
+                        <span class="text-xs text-amber-600" x-text="blocksExpanded ? '&#9650;' : '&#9660;'"></span>
+                    </button>
+                    <div x-show="blocksExpanded" x-transition class="border-t border-amber-200 p-3 space-y-2">
+                        <template x-if="!insertableBlocks.length">
+                            <p class="text-[11px] text-gray-500">
+                                No insertable blocks detected. Add one manually if your template needs an Other Conditions block.
+                            </p>
+                        </template>
+                        <template x-for="(block, idx) in insertableBlocks" :key="idx">
+                            <div class="rounded border border-amber-200 bg-white p-2 text-xs">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-center gap-1.5 mb-1">
+                                            <span class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded"
+                                                  :class="{
+                                                    'bg-amber-100 text-amber-800': block.purpose === 'other_conditions',
+                                                    'bg-emerald-100 text-emerald-800': block.purpose === 'included_items',
+                                                    'bg-rose-100 text-rose-800': block.purpose === 'excluded_items',
+                                                    'bg-gray-100 text-gray-700': block.purpose === 'custom_named',
+                                                  }"
+                                                  x-text="block.purpose"></span>
+                                            <span class="font-semibold text-gray-700" x-text="block.label || block.id"></span>
+                                        </div>
+                                        <div class="text-[10px] text-gray-500" x-show="block.approximate_location" x-text="'Location: ' + block.approximate_location"></div>
+                                        <code class="text-[10px] text-gray-600 font-mono" x-text="block.position_marker"></code>
+                                    </div>
+                                    <button type="button" @click="insertableBlocks.splice(idx, 1)"
+                                            class="text-gray-400 hover:text-red-500 text-xs flex-shrink-0"
+                                            title="Remove this block">&#128465;</button>
+                                </div>
+                                <div class="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
+                                    <label class="flex items-center gap-1">
+                                        <input type="checkbox" x-model="block.auto_number" class="w-3 h-3"> Auto-number
+                                    </label>
+                                    <label class="flex items-center gap-1">
+                                        <input type="checkbox" x-model="block.locked" class="w-3 h-3"> Locked
+                                    </label>
+                                    <label class="flex items-center gap-1 col-span-2">
+                                        Max:
+                                        <input type="number" x-model.number="block.max_conditions" min="0" max="100"
+                                               class="w-12 text-[10px] border border-gray-200 rounded px-1 py-0.5">
+                                    </label>
+                                </div>
+                            </div>
+                        </template>
+                        <button type="button"
+                                @click="insertableBlocks.push({
+                                    id: 'manual_' + Date.now(),
+                                    purpose: 'other_conditions',
+                                    label: 'Other Conditions',
+                                    custom_label: null,
+                                    position_marker: '~~~~OTHER_CONDITIONS~~~~',
+                                    approximate_location: 'manual',
+                                    min_conditions: 0, max_conditions: 20,
+                                    auto_number: true, locked: false,
+                                })"
+                                class="w-full text-[11px] px-2 py-1 rounded border border-dashed border-amber-300 text-amber-700 hover:bg-amber-100">
+                            + Add insertable block manually
+                        </button>
+                    </div>
+                </div>
 
                 {{-- ===== SIGNING PARTIES (collapsible) ===== --}}
                 <div class="mb-4 border border-gray-200 rounded-lg overflow-hidden">
@@ -648,6 +720,10 @@ function tagEditor() {
         savedTags: @json($savedTags ?? []),
         savedMappings: @json($savedMappings ?? (object)[]),
         savedTaggedHtml: @json($savedTaggedHtml ?? ''),
+
+        // ES-6.4 — AI-detected insertable blocks (Other Conditions etc.)
+        insertableBlocks: @json($insertableBlocks ?? []),
+        blocksExpanded: false,
 
         // Undo stack for tag actions (max 20)
         undoStack: [],

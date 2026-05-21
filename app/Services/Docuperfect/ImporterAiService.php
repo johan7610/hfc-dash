@@ -5,6 +5,22 @@ namespace App\Services\Docuperfect;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * AI helper for the import pipeline.
+ *
+ * Pre-existing surface: `detectFields()` — field-blank assignment for a
+ *   plain-text .docx body (Mammoth path A).
+ *
+ * E-Sign V3 Phase 3 (ES-6) additions:
+ *   - `insertableBlocksPromptSection()` — system-prompt fragment teaching
+ *      the model to detect Other Conditions / Included Items / Excluded
+ *      Items / custom-named blocks. Appended to fieldPrompt() output via
+ *      detectFieldsAndBlocks().
+ *   - `detectFieldsAndBlocks()` — text path (existing .docx flow) plus
+ *      the new schema (fields + insertable_blocks combined response).
+ *   - `detectFromPdf()` — PDF input via Anthropic vision. Uses
+ *      AnthropicGateway with the documents[] DTO field added in ES-6.1.
+ */
 class ImporterAiService
 {
     /**
@@ -251,5 +267,177 @@ IMPORTANT — DATE AND SIGNING BLANKS:
 
 YOUR RESPONSE MUST BE PURE JSON — no markdown, no ```json fences, no text before or after the JSON object.
 PROMPT;
+    }
+
+    /**
+     * ES-6.2 — system-prompt extension teaching the model to detect
+     * "insertable blocks" (Other Conditions, Included Items, Excluded
+     * Items, custom-named lists). Appended to fieldPrompt() output by
+     * detectFieldsAndBlocks() so callers requesting the extended schema
+     * receive both arrays in one round-trip.
+     *
+     * Spec: .ai/specs/esign-v3-complete-spec.md §7.5.2, §12, §17 ES-6.2
+     */
+    public function insertableBlocksPromptSection(): string
+    {
+        return <<<'PROMPT'
+
+INSERTABLE BLOCKS DETECTION
+In addition to identifying parties, fields, signatures, and initials,
+detect "insertable blocks" — sections of the document where the user is
+expected to fill in numbered conditions, included items, excluded items,
+or custom-named lists.
+
+Look for sections that match these patterns:
+
+- Headings like "Other Conditions", "Special Conditions", "Additional
+  Terms" → insertable_block with purpose "other_conditions"
+- Headings like "Included Items", "Items Included", "Fixtures and
+  Fittings Included" → "included_items"
+- Headings like "Excluded Items", "Items Excluded", "Items NOT Included"
+  → "excluded_items"
+- Other named list blocks with numbered or empty-line slots →
+  "custom_named" with the label preserved (e.g. "Outstanding Repairs",
+  "Tenant Notice Period")
+
+Block characteristics:
+- Numbered list (1., 2., 3., etc.) following a heading
+- Empty lines / blank spaces awaiting handwritten content
+- "(insert clauses here)" or similar placeholder text
+- Multiple blocks may exist in one document (especially OTPs)
+
+For each detected block, return inside an insertable_blocks array:
+{
+  "id": "auto-generated-from-label",
+  "purpose": "other_conditions" | "included_items" | "excluded_items" | "custom_named",
+  "label": "Other Conditions",
+  "custom_label": null,
+  "position_marker": "~~~~OTHER_CONDITIONS~~~~",
+  "approximate_location": "after-clause-12",
+  "min_conditions": 0,
+  "max_conditions": 20,
+  "auto_number": true,
+  "locked": false
+}
+
+A template can have AT MOST ONE block with purpose="other_conditions".
+Multiple custom_named blocks are fine.
+
+When `purpose = "custom_named"`, populate `custom_label` with the source
+heading text and set `position_marker` to `~~~~CUSTOM:<label>~~~~` with
+the same label.
+
+Recognised purpose → marker mapping:
+  other_conditions  →  ~~~~OTHER_CONDITIONS~~~~
+  included_items    →  ~~~~INCLUDED_ITEMS~~~~
+  excluded_items    →  ~~~~EXCLUDED_ITEMS~~~~
+  custom_named      →  ~~~~CUSTOM:<label>~~~~
+
+Combine your output as a single JSON object:
+{
+  "fields":            { ... existing per-blank assignment object ... },
+  "insertable_blocks": [ ... array of block objects per above ... ]
+}
+
+If the document contains no insertable blocks, return an empty array for
+insertable_blocks. Do not invent blocks where none exist.
+PROMPT;
+    }
+
+    /**
+     * ES-6.2 — text-path detection that returns BOTH the field-blank
+     * assignment object AND the insertable_blocks array in a single
+     * Anthropic call.
+     *
+     * @return array{fields: array, insertable_blocks: array}
+     */
+    public function detectFieldsAndBlocks(string $userMessage, int $maxTokens = 5000): array
+    {
+        $systemPrompt = $this->fieldPrompt() . "\n\n" . $this->insertableBlocksPromptSection();
+        $raw = $this->callForExtendedSchema($systemPrompt, $userMessage, $maxTokens);
+
+        return [
+            'fields'            => $raw['fields'] ?? [],
+            'insertable_blocks' => $raw['insertable_blocks'] ?? [],
+        ];
+    }
+
+    /**
+     * ES-6.1 — PDF input path via Anthropic vision.
+     *
+     * Reads the uploaded PDF, base64-encodes it, calls AnthropicGateway
+     * with documents[] populated. forceRefresh=true bypasses the narrative
+     * cache (each import is unique). Returns the same combined schema as
+     * detectFieldsAndBlocks().
+     *
+     * @return array{fields: array, insertable_blocks: array}
+     */
+    public function detectFromPdf(string $pdfPath, ?string $supplementaryText = null): array
+    {
+        if (! file_exists($pdfPath)) {
+            throw new \RuntimeException("PDF not found at {$pdfPath}");
+        }
+        $pdfBytes = file_get_contents($pdfPath);
+        if ($pdfBytes === false || $pdfBytes === '') {
+            throw new \RuntimeException('PDF read failed');
+        }
+
+        $systemPrompt = $this->fieldPrompt() . "\n\n" . $this->insertableBlocksPromptSection();
+        $userPrompt = "Analyse the attached PDF. Identify every fillable blank "
+            . "and every insertable block per the system instructions.";
+        if ($supplementaryText) {
+            $userPrompt .= "\n\nAdditional context from the agent:\n" . $supplementaryText;
+        }
+
+        $gateway = app(\App\Services\AI\AnthropicGateway::class);
+        $request = new \App\Services\AI\DTOs\NarrativeRequest(
+            narrativeType:   'esign_import_pdf',
+            cacheKey:        'esign_import_pdf:' . hash('sha256', $pdfBytes),
+            modelAlias:      'quality',
+            systemPrompt:    $systemPrompt,
+            userPrompt:      $userPrompt,
+            inputData:       ['pdf_sha256' => hash('sha256', $pdfBytes), 'size' => strlen($pdfBytes)],
+            maxTokens:       6000,
+            temperature:     0.0,
+            cacheTtlMinutes: 60,
+            forceRefresh:    true,
+            promptVersion:   'es6-v1',
+            documents:       [[
+                'type'       => 'pdf',
+                'media_type' => 'application/pdf',
+                'data'       => base64_encode($pdfBytes),
+            ]],
+        );
+
+        try {
+            $response = $gateway->generateStructured($request, [
+                'fields'            => 'object keyed by blank number',
+                'insertable_blocks' => 'array of detected insertable blocks',
+            ]);
+            $payload = $response->outputJson ?? $this->parseJsonResponse($response->outputText) ?? [];
+        } catch (\Throwable $e) {
+            Log::warning('ImporterAI: PDF vision call failed', ['error' => $e->getMessage()]);
+            $payload = [];
+        }
+
+        return [
+            'fields'            => $payload['fields'] ?? [],
+            'insertable_blocks' => $payload['insertable_blocks'] ?? [],
+        ];
+    }
+
+    /**
+     * ES-6.2 — internal: send the extended-schema request directly via the
+     * existing dual-engine code path (Claude primary, OpenAI fallback) so
+     * the .docx path benefits from the same fallback chain that the field-
+     * only path already uses.
+     */
+    private function callForExtendedSchema(string $systemPrompt, string $userMessage, int $maxTokens): array
+    {
+        $r = $this->tryClaude($systemPrompt, $userMessage, $maxTokens);
+        if ($r !== null) return $r;
+        $r = $this->tryOpenAI($systemPrompt, $userMessage, $maxTokens);
+        if ($r !== null) return $r;
+        return [];
     }
 }

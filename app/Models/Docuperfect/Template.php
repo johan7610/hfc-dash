@@ -34,6 +34,7 @@ class Template extends Model
         'field_mappings',
         'allowed_delivery_modes',
         'security_tier',
+        'insertable_blocks',
         'owner_id',
         'archived_at',
     ];
@@ -46,6 +47,7 @@ class Template extends Model
         'editor_state' => 'array',
         'cds_json' => 'array',
         'field_mappings' => 'array',
+        'insertable_blocks' => 'array',
         'is_global' => 'boolean',
         'is_esign' => 'boolean',
         'archived_at' => 'datetime',

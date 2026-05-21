@@ -44,6 +44,15 @@ final class NarrativeRequest
      * @param bool    $forceRefresh     Skip cache; always hit the API.
      * @param string  $promptVersion    Bump to invalidate cached narratives
      *                                  when the prompt changes ('v1', 'v2', …).
+     * @param array<int, array{type:string, media_type:string, data:string}> $documents
+     *                                  E-Sign V3 (ES-6.1) — optional Anthropic
+     *                                  multipart document inputs. Each entry:
+     *                                    type       = 'pdf' | 'image'
+     *                                    media_type = 'application/pdf' | 'image/png' | 'image/jpeg' | …
+     *                                    data       = base64 payload
+     *                                  When non-empty, AnthropicGateway emits
+     *                                  the messages.content[] in multipart form
+     *                                  (document blocks before the text block).
      */
     public function __construct(
         public readonly string $narrativeType,
@@ -59,6 +68,7 @@ final class NarrativeRequest
         public readonly ?array $fallbackData = null,
         public readonly bool $forceRefresh = false,
         public readonly string $promptVersion = 'v1',
+        public readonly array $documents = [],
     ) {}
 
     /**

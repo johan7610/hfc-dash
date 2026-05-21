@@ -175,7 +175,7 @@
                      @dragover.prevent="dragging = true"
                      @dragleave.prevent="dragging = false"
                      @drop.prevent="dragging = false; $refs.fileInput.files = $event.dataTransfer.files; fileName = $event.dataTransfer.files[0]?.name || ''">
-                    <input type="file" accept=".docx" class="hidden" x-ref="fileInput"
+                    <input type="file" accept=".docx,.pdf" class="hidden" x-ref="fileInput"
                            @change="fileName = $event.target.files[0]?.name || ''">
 
                     <div x-show="!fileName" class="space-y-2">
@@ -191,7 +191,7 @@
                             </button>
                             or drag and drop
                         </p>
-                        <p class="text-xs" style="color: var(--text-muted);">.docx only, max 10MB</p>
+                        <p class="text-xs" style="color: var(--text-muted);">.docx or .pdf, max 10MB</p>
                     </div>
 
                     <div x-show="fileName" x-cloak class="space-y-2">

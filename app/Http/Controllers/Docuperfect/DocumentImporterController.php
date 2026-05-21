@@ -137,15 +137,18 @@ class DocumentImporterController extends Controller
             'size' => $file->getSize(),
         ]);
 
-        if ($ext !== 'docx') {
+        // ES-6.1: accept .pdf in addition to .docx. PDFs route to the
+        // vision-based ImporterAiService::detectFromPdf() path; .docx
+        // stays on the Mammoth → text-based detect flow.
+        if (! in_array($ext, ['docx', 'pdf'], true)) {
             return response()->json([
-                'error' => 'Only .docx files are supported.'
+                'error' => 'Only .docx and .pdf files are supported.'
             ], 422);
         }
 
         // Store file
         \Log::info('[DocumentImporter] Saving temp file...');
-        $filename = uniqid('import_') . '.docx';
+        $filename = uniqid('import_') . '.' . $ext;
         $dir = storage_path('app/public/imports/temp');
 
         if (!is_dir($dir)) {
@@ -169,13 +172,48 @@ class DocumentImporterController extends Controller
 
         // Parse synchronously
         try {
-            \Log::info('[DocumentImporter] Calling DocxParserService...');
-            $parser = new \App\Services\Docuperfect\DocxParserService();
-            $result = $parser->parse($fullPath);
+            if ($ext === 'pdf') {
+                \Log::info('[DocumentImporter] PDF path — calling ImporterAiService::detectFromPdf');
+                $aiSvc = app(\App\Services\Docuperfect\ImporterAiService::class);
+                $payload = $aiSvc->detectFromPdf($fullPath);
+                // PDF path: we don't have Mammoth HTML; we expose a stub
+                // body so the review UI can render text from extracted
+                // fields. Future: render page images for visual context.
+                $fieldsArray = $this->aiFieldsObjectToList($payload['fields'] ?? []);
+                $result = [
+                    'html'                => $this->buildPdfStubHtml($file->getClientOriginalName(), $fieldsArray, $payload['insertable_blocks'] ?? []),
+                    'fields'              => $fieldsArray,
+                    'insertable_blocks'   => $payload['insertable_blocks'] ?? [],
+                    'warnings'            => [],
+                ];
+            } else {
+                \Log::info('[DocumentImporter] Calling DocxParserService...');
+                $parser = new \App\Services\Docuperfect\DocxParserService();
+                $result = $parser->parse($fullPath);
+
+                // ES-6.2: extended-schema call on the same plain text so
+                // the .docx path also benefits from Other Conditions
+                // detection. Failure here is non-fatal (insertable_blocks
+                // simply stays empty for this import).
+                try {
+                    $aiSvc = app(\App\Services\Docuperfect\ImporterAiService::class);
+                    $plainText = mb_substr((string) ($result['plain_text'] ?? strip_tags($result['html'] ?? '')), 0, 25000);
+                    if ($plainText !== '') {
+                        $detect = $aiSvc->detectFieldsAndBlocks($plainText, 5000);
+                        $result['insertable_blocks'] = $detect['insertable_blocks'] ?? [];
+                    } else {
+                        $result['insertable_blocks'] = [];
+                    }
+                } catch (\Throwable $e) {
+                    \Log::warning('[DocumentImporter] insertable_blocks detection failed (non-fatal)', ['error' => $e->getMessage()]);
+                    $result['insertable_blocks'] = [];
+                }
+            }
 
             \Log::info('[DocumentImporter] Parse returned', [
                 'html_length' => strlen($result['html'] ?? ''),
                 'field_count' => count($result['fields'] ?? []),
+                'block_count' => count($result['insertable_blocks'] ?? []),
                 'warnings' => $result['warnings'] ?? [],
             ]);
 
@@ -197,8 +235,10 @@ class DocumentImporterController extends Controller
                 'filename'    => $file->getClientOriginalName(),
                 'html'        => $result['html'],
                 'fields_json' => json_encode([
-                    'fields'           => $result['fields'],
-                    'claude_originals' => $claudeOriginals,
+                    'fields'             => $result['fields'],
+                    'insertable_blocks'  => $result['insertable_blocks'] ?? [],
+                    'claude_originals'   => $claudeOriginals,
+                    'source_format'      => $ext,
                 ]),
             ]);
 
@@ -270,6 +310,9 @@ class DocumentImporterController extends Controller
 
         $fieldsData = json_decode($draft->fields_json, true) ?? [];
         $fields = $fieldsData['fields'] ?? [];
+        // ES-6.4: surface AI-detected insertable blocks to the review view
+        // so the agent can confirm / adjust / remove them before generate.
+        $insertableBlocks = $fieldsData['insertable_blocks'] ?? [];
         $filename = $draft->filename;
 
         // Extract saved tagging state (if user previously saved draft)
@@ -351,6 +394,7 @@ class DocumentImporterController extends Controller
             ],
             'templateName' => pathinfo($filename, PATHINFO_FILENAME),
             'fields' => $fields,
+            'insertableBlocks' => $insertableBlocks,
             'draftId' => $draft->id,
             'groupedFields' => $groupedFields,
             'fieldGroups' => $fieldGroups,
@@ -458,6 +502,23 @@ class DocumentImporterController extends Controller
 
         try {
             $template = $generator->generate($draft, $templateName, $user->id);
+
+            // ES-6.4 — persist confirmed insertable_blocks onto the new
+            // template. Form posts a JSON-encoded array under
+            // 'insertable_blocks_json'; falls back to the draft's stored
+            // detection if the form didn't override it.
+            $blocksJson = $request->input('insertable_blocks_json');
+            $blocks = null;
+            if (is_string($blocksJson) && $blocksJson !== '') {
+                $decoded = json_decode($blocksJson, true);
+                if (is_array($decoded)) $blocks = $decoded;
+            }
+            if ($blocks === null) {
+                $blocks = $fieldsData['insertable_blocks'] ?? [];
+            }
+            if (! empty($blocks)) {
+                $template->update(['insertable_blocks' => array_values($blocks)]);
+            }
 
             // Log AI corrections BEFORE deleting the draft (needs draft data)
             $this->logFieldCorrections($draft, $user->id);
@@ -1120,5 +1181,67 @@ class DocumentImporterController extends Controller
                 'correction_count' => $correctionCount,
             ]);
         }
+    }
+
+    // ───────────────────────────────────────────────────────────────────
+    // ES-6.1 PDF path helpers
+    // ───────────────────────────────────────────────────────────────────
+
+    /**
+     * ImporterAiService::detectFromPdf() returns the .fields slot as an
+     * object keyed by blank-number string. The .docx pipeline downstream
+     * expects an indexed list. Flatten the object → list while keeping
+     * the same per-field shape (label/key/pillar/assigned_to/confidence).
+     */
+    private function aiFieldsObjectToList(array $fields): array
+    {
+        $out = [];
+        foreach ($fields as $key => $entry) {
+            if (! is_array($entry)) continue;
+            $entry['index']  = $entry['index']  ?? (int) $key;
+            $entry['context'] = $entry['context'] ?? '';
+            $entry['suggested_key']   = $entry['suggested_key']   ?? ($entry['key']   ?? '');
+            $entry['suggested_label'] = $entry['suggested_label'] ?? ($entry['label'] ?? '');
+            $out[] = $entry;
+        }
+        return $out;
+    }
+
+    /**
+     * For PDF imports we lack Mammoth HTML. The review surface still
+     * expects a `html` payload to render. We emit a structured stub
+     * showing detected fields and any insertable blocks so the agent has
+     * useful review context, plus a clear note about the PDF source.
+     */
+    private function buildPdfStubHtml(string $filename, array $fields, array $blocks): string
+    {
+        $rows = [];
+        $rows[] = '<div style="padding:14pt 0; border-bottom:1px solid #ccc;">'
+            . '<strong>Imported from PDF:</strong> ' . e($filename) . '<br>'
+            . '<span style="color:#888;font-size:10pt;">AI extracted ' . count($fields)
+            . ' fields and ' . count($blocks) . ' insertable blocks.</span></div>';
+        if (! empty($fields)) {
+            $rows[] = '<h3>Detected fields</h3><ol>';
+            foreach ($fields as $f) {
+                $rows[] = '<li>'
+                    . '<strong>' . e($f['suggested_label'] ?? $f['label'] ?? 'Field') . '</strong> '
+                    . '<code>' . e($f['suggested_key'] ?? $f['key'] ?? '') . '</code> '
+                    . '<em>' . e($f['assigned_to'] ?? '') . '</em>'
+                    . '</li>';
+            }
+            $rows[] = '</ol>';
+        }
+        if (! empty($blocks)) {
+            $rows[] = '<h3>Detected insertable blocks</h3><ol>';
+            foreach ($blocks as $b) {
+                $rows[] = '<li>'
+                    . '<strong>' . e($b['label'] ?? $b['id'] ?? 'Block') . '</strong> '
+                    . '<code>' . e($b['purpose'] ?? '') . '</code>'
+                    . ($b['approximate_location'] ?? '' ? ' &mdash; ' . e($b['approximate_location']) : '')
+                    . '</li>';
+            }
+            $rows[] = '</ol>';
+        }
+        return implode("\n", $rows);
     }
 }
