@@ -72,6 +72,17 @@ final class LogAgentActivity
         $snake = str_replace('whats_app', 'whatsapp', $snake);
         $snake = str_replace('a_i_', 'ai_', $snake);
 
+        // Short-noun prefixes: split right after the prefix so the remainder
+        // is the verb. Spec §3.2.7 / B1 brief: AINarrativeGenerated →
+        // "ai.narrative_generated" (noun="ai", verb=whole tail). Without
+        // this, the default last-underscore rule would give the wrong shape
+        // ("ai_narrative.generated") for these short-noun families.
+        foreach (['ai_'] as $prefix) {
+            if (str_starts_with($snake, $prefix)) {
+                return rtrim($prefix, '_') . '.' . substr($snake, strlen($prefix));
+            }
+        }
+
         $lastUnderscore = strrpos($snake, '_');
         if ($lastUnderscore === false) {
             return $snake;

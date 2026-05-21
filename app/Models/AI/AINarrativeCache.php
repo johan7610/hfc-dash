@@ -8,7 +8,6 @@ use App\Models\Agency;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Cached Ellie / AI-generated narratives.
@@ -25,8 +24,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 final class AINarrativeCache extends Model
 {
-    use SoftDeletes;
-
+    // No SoftDeletes — narrative cache is ephemeral by design (expires_at
+    // governs lifetime). Spec §3.2.6 column list intentionally omits
+    // deleted_at.
     protected $table = 'ai_narrative_cache';
 
     public const TYPE_WEEKLY_BRIEF    = 'weekly_brief';

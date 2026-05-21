@@ -60,7 +60,31 @@ return [
     ],
 
     'anthropic' => [
-        'key' => env('ANTHROPIC_API_KEY'),
+        // Legacy key — kept for backwards compatibility with existing consumers
+        // (AiFieldMapperService, ClaudeVisionParserService, ImporterAiService,
+        // MarketingCopyService, AIExtractionService). DO NOT REMOVE without
+        // migrating those services to read `api_key` instead.
+        'key'     => env('ANTHROPIC_API_KEY'),
+        // Canonical name per MIC spec §4.8.
+        'api_key' => env('ANTHROPIC_API_KEY'),
+
+        'api_base'      => env('ANTHROPIC_API_BASE', 'https://api.anthropic.com'),
+        'default_model' => env('ANTHROPIC_DEFAULT_MODEL', 'claude-haiku-4-5'),
+        'models' => [
+            'fast'    => env('ANTHROPIC_FAST_MODEL', 'claude-haiku-4-5'),
+            'quality' => env('ANTHROPIC_QUALITY_MODEL', 'claude-sonnet-4-6'),
+        ],
+        'timeout'     => (int) env('ANTHROPIC_TIMEOUT', 30),
+        'max_retries' => (int) env('ANTHROPIC_MAX_RETRIES', 3),
+        'enabled'     => filter_var(env('ANTHROPIC_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        // ZAR conversion — defaults to a sensible exchange rate; refresh quarterly.
+        'usd_to_zar' => (float) env('ANTHROPIC_USD_TO_ZAR', 18.50),
+        // USD per million tokens — refresh when Anthropic changes pricing.
+        'pricing' => [
+            'claude-haiku-4-5'  => ['input' => 1.00, 'output' => 5.00],
+            'claude-sonnet-4-6' => ['input' => 3.00, 'output' => 15.00],
+            'claude-opus-4-7'   => ['input' => 5.00, 'output' => 25.00],
+        ],
     ],
 
     'property24_syndication' => [

@@ -72,6 +72,13 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(\App\Services\SellerOutreach\SellerOutreachSenderService::class);
         $this->app->singleton(\App\Services\SellerOutreach\SellerOutreachLandingService::class);
         $this->app->singleton(\App\Services\SellerOutreach\SellerOutreachOptOutService::class);
+
+        // MIC Phase B1 — Anthropic gateway + cost aggregator. Singletons so
+        // the cache lookup, retry config, and pricing table resolve once per
+        // request. The gateway is stateless; the cost aggregator is read-only.
+        // Spec: .ai/specs/mic-complete-spec.md §4.8.
+        $this->app->singleton(\App\Services\AI\AnthropicGateway::class);
+        $this->app->singleton(\App\Services\AI\AICostAggregator::class);
     }
 
     public function boot(): void
