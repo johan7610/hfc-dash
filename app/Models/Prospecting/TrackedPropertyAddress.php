@@ -166,4 +166,26 @@ final class TrackedPropertyAddress extends Model
             'latitude', 'longitude',
         ];
     }
+
+    /**
+     * Default confidence for an ingestion source, per spec §7.1. Suburb-only
+     * addresses (no street_name) downgrade to 'low' regardless of source —
+     * the same rule the Phase C1 backfill applies inline.
+     *
+     * Recognised sources: p24, pp, chrome_capture, cmainfo, manual_agent,
+     * manual_admin, deeds_office. Unknown sources fall through to 'low'.
+     */
+    public static function confidenceForSource(string $sourceType, ?string $streetName): string
+    {
+        if (empty($streetName)) {
+            return self::CONFIDENCE_LOW;
+        }
+        return match ($sourceType) {
+            self::SOURCE_MANUAL_AGENT, self::SOURCE_MANUAL_ADMIN => self::CONFIDENCE_VERIFIED,
+            self::SOURCE_DEEDS_OFFICE, self::SOURCE_CMAINFO      => self::CONFIDENCE_HIGH,
+            self::SOURCE_CHROME_CAPTURE, self::SOURCE_PP         => self::CONFIDENCE_MEDIUM,
+            self::SOURCE_P24                                     => self::CONFIDENCE_LOW,
+            default                                              => self::CONFIDENCE_LOW,
+        };
+    }
 }
