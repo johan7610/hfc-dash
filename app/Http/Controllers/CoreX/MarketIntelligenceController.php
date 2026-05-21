@@ -4,6 +4,7 @@ namespace App\Http\Controllers\CoreX;
 
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
+use App\Models\Prospecting\TrackedProperty;
 use App\Models\ProspectingClaim;
 use App\Models\ProspectingListing;
 use App\Models\User;
@@ -591,9 +592,12 @@ class MarketIntelligenceController extends Controller
     }
 
     /**
-     * Opportunities tab — STUB (Phase D1). Phase D4 folds the full Tracked
-     * Properties surface (filters, sorters, promote-to-stock) into this tab.
-     * For now, a paginated list with a "coming in D4" notice.
+     * Opportunities tab — Phase D4. Replaces the D1 stub. Surfaces every
+     * TrackedProperty for the viewer's agency with filter chips, secondary
+     * dropdowns, and a strong-match-count badge per row. Detail page lives
+     * at opportunityShow() (route market-intelligence.opportunities.show).
+     *
+     * Spec: .ai/specs/mic-complete-spec.md §5.4.
      */
     public function opportunities(Request $request)
     {
@@ -601,21 +605,175 @@ class MarketIntelligenceController extends Controller
         $agencyId = $user->effectiveAgencyId() ?? $user->agency_id;
         if ($agencyId === null) abort(403);
 
-        $tps = \App\Models\Prospecting\TrackedProperty::query()
+        $filter = (string) $request->query('filter', 'all');
+        $suburbParam = trim((string) $request->query('suburb', ''));
+        $sourceParam = trim((string) $request->query('source', ''));
+        $statusParam = trim((string) $request->query('status', ''));
+        $search      = trim((string) $request->query('search', ''));
+
+        $base = TrackedProperty::query()
             ->withoutGlobalScopes()
             ->where('agency_id', $agencyId)
-            ->whereNull('deleted_at')
-            ->with('primaryAddress')
-            ->orderByDesc('last_enriched_at')
-            ->paginate(50);
+            ->whereNull('deleted_at');
 
-        $tpCount = \App\Models\Prospecting\TrackedProperty::query()
-            ->withoutGlobalScopes()
+        $query = (clone $base)
+            ->with(['primaryAddress', 'externalRefs'])
+            ->withCount(['prospectingListings as listing_count'])
+            ->withCount([
+                'prospectingListings as strong_match_count' => function ($q) {
+                    $q->whereHas('buyerMatches', fn ($qb) => $qb->where('score', '>=', 80));
+                },
+            ]);
+
+        // Filter chip — primary filter from §5.4.3.
+        match ($filter) {
+            'with_address'      => $query->whereHas('primaryAddress', fn ($q) => $q->whereNotNull('street_name')),
+            'without_address'   => $query->whereDoesntHave('primaryAddress', fn ($q) => $q->whereNotNull('street_name')),
+            'company_stock'     => $query->where(function ($q) {
+                                       $q->where('status', TrackedProperty::STATUS_PROMOTED)
+                                         ->orWhereNotNull('promoted_to_property_id');
+                                   }),
+            'recently_enriched' => $query->where('last_enriched_at', '>=', now()->subDays(7)),
+            default             => null, // 'all'
+        };
+
+        // Secondary filters.
+        if ($suburbParam !== '') {
+            $query->where('suburb_normalised', TrackedProperty::normaliseSuburb($suburbParam));
+        }
+        if ($sourceParam !== '') {
+            $query->whereExists(function ($q) use ($sourceParam, $agencyId) {
+                $q->select(\DB::raw(1))
+                  ->from('tracked_property_external_refs as tper')
+                  ->whereColumn('tper.tracked_property_id', 'tracked_properties.id')
+                  ->where('tper.agency_id', $agencyId)
+                  ->where('tper.source_type', $sourceParam)
+                  ->whereNull('tper.deleted_at');
+            });
+        }
+        if ($statusParam !== '') {
+            $query->where('status', $statusParam);
+        }
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('street_name', 'LIKE', "%{$search}%")
+                  ->orWhere('suburb', 'LIKE', "%{$search}%")
+                  ->orWhere('erf_number', 'LIKE', "%{$search}%")
+                  ->orWhere('external_id', 'LIKE', "%{$search}%")
+                  ->orWhereHas('primaryAddress', function ($qa) use ($search) {
+                      $qa->where('street_name', 'LIKE', "%{$search}%");
+                  });
+            });
+        }
+
+        $tps = $query
+            ->orderByDesc('strong_match_count')
+            ->orderByDesc('updated_at')
+            ->paginate(50)
+            ->withQueryString();
+
+        // ── Stats strip (§5.4.2) — agency-wide totals, NOT filter-scoped. ──
+        $stats = [
+            'total'             => (clone $base)->count(),
+            'matching_buyers'   => (clone $base)
+                ->whereHas('prospectingListings.buyerMatches', fn ($q) => $q->where('score', '>=', 80))
+                ->count(),
+            'unclaimed'         => (clone $base)
+                ->whereDoesntHave('prospectingListings.activeClaim')
+                ->count(),
+            'with_address'      => (clone $base)
+                ->whereHas('primaryAddress', fn ($q) => $q->whereNotNull('street_name'))
+                ->count(),
+            'promoted_to_stock' => (clone $base)
+                ->where(function ($q) {
+                    $q->where('status', TrackedProperty::STATUS_PROMOTED)
+                      ->orWhereNotNull('promoted_to_property_id');
+                })
+                ->count(),
+        ];
+
+        // Source attribution chips.
+        $sourceCounts = \DB::table('tracked_property_external_refs')
             ->where('agency_id', $agencyId)
             ->whereNull('deleted_at')
-            ->count();
+            ->select('source_type', \DB::raw('COUNT(DISTINCT tracked_property_id) as cnt'))
+            ->groupBy('source_type')
+            ->orderByDesc('cnt')
+            ->get()
+            ->keyBy('source_type');
 
-        return view('corex.market-intelligence.opportunities', compact('tps', 'tpCount'));
+        // Suburb dropdown options (top 30).
+        $suburbCounts = (clone $base)
+            ->whereNotNull('suburb')->where('suburb', '!=', '')
+            ->select('suburb', \DB::raw('COUNT(*) as cnt'))
+            ->groupBy('suburb')
+            ->orderByDesc('cnt')
+            ->limit(30)
+            ->get();
+
+        return view('corex.market-intelligence.opportunities', [
+            'tps'            => $tps,
+            'stats'          => $stats,
+            'sourceCounts'   => $sourceCounts,
+            'suburbCounts'   => $suburbCounts,
+            'activeFilter'   => $filter,
+            'activeSuburb'   => $suburbParam,
+            'activeSource'   => $sourceParam,
+            'activeStatus'   => $statusParam,
+            'activeSearch'   => $search,
+        ]);
+    }
+
+    /**
+     * Opportunities detail — Phase D4. Folds the Tracked-Property show page
+     * under the MIC unified URL. Reuses the C3 edit-address / add-alternative
+     * / set-primary modals via their existing /corex/tracked-properties/{tp}/
+     * address/* POST endpoints (unchanged).
+     */
+    public function opportunityShow(Request $request, TrackedProperty $tp)
+    {
+        $user = $request->user();
+        $agencyId = $user->effectiveAgencyId() ?? $user->agency_id;
+        if ($agencyId === null || (int) $tp->agency_id !== (int) $agencyId) {
+            abort(404);
+        }
+
+        $tp->load([
+            'externalRefs',
+            'promotedProperty',
+            'promotedBy',
+            'addresses' => function ($q) {
+                $q->orderByDesc('is_primary')
+                  ->orderByRaw("FIELD(confidence, 'verified', 'high', 'medium', 'low')")
+                  ->orderByDesc('last_seen_at');
+            },
+            'addresses.verifier',
+            'primaryAddress',
+            'primaryAddress.verifier',
+            'prospectingListings',
+        ]);
+
+        $linkedListings = \DB::table('prospecting_listings')
+            ->where('tracked_property_id', $tp->id)
+            ->where('agency_id', $agencyId)
+            ->whereNull('deleted_at')
+            ->select(
+                'id', 'portal_source', 'portal_ref', 'portal_url',
+                'address', 'suburb', 'price', 'bedrooms', 'bathrooms',
+                'property_type', 'first_seen_at', 'is_active'
+            )
+            ->orderByDesc('first_seen_at')
+            ->get();
+
+        $externalRefsBySource = $tp->externalRefs->groupBy('source_type');
+        $chain = $tp->source_chain ?? [];
+
+        return view('corex.market-intelligence.opportunity-detail', [
+            'tp'                   => $tp,
+            'linkedListings'       => $linkedListings,
+            'externalRefsBySource' => $externalRefsBySource,
+            'sourceChain'          => $chain,
+        ]);
     }
 
     /**

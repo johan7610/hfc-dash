@@ -113,6 +113,17 @@ final class TrackedProperty extends Model
     }
 
     /**
+     * Portal listings linked back to this Tracked Property via the
+     * `prospecting_listings.tracked_property_id` FK. Used by the MIC
+     * Opportunities tab (Phase D4) to surface strong-match counts per TP
+     * and by the detail page to list portal observations.
+     */
+    public function prospectingListings(): HasMany
+    {
+        return $this->hasMany(\App\Models\ProspectingListing::class, 'tracked_property_id');
+    }
+
+    /**
      * Address history (one row per source contribution). Exactly one row
      * has is_primary=true; the TrackedPropertyAddressObserver keeps this TP's
      * address-field cache (street_number, street_name, suburb, … latitude,

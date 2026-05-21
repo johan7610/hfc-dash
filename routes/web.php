@@ -2502,11 +2502,14 @@ Route::middleware(['auth', 'permission:access_prospecting'])
     ->name('corex.tracked-properties.')
     ->group(function () {
         // Phase D1 — legacy GET root redirects to the Opportunities tab.
-        // The index() controller method is preserved (Phase D4 will fold its
-        // logic into MarketIntelligenceController::opportunities). The detail
-        // route + POST endpoints stay mounted at their current paths.
+        // Phase D4 — legacy GET detail also 301-redirects so any bookmark
+        // resolves to the new MIC URL. The POST endpoints (edit, set-primary,
+        // promote, merge stub) stay mounted at the original paths because
+        // redirecting POSTs would break form submissions.
         Route::redirect('/', '/corex/market-intelligence/opportunities', 301)->name('index');
-        Route::get('/{trackedProperty}',     [\App\Http\Controllers\CoreX\TrackedPropertyController::class, 'show'])->name('show');
+        Route::get('/{trackedProperty}', function ($trackedProperty) {
+            return redirect('/corex/market-intelligence/opportunities/' . $trackedProperty, 301);
+        })->where('trackedProperty', '[0-9]+')->name('show');
         Route::post('/{trackedProperty}/promote', [\App\Http\Controllers\CoreX\TrackedPropertyController::class, 'promote'])->name('promote');
 
         // Phase C3 — address management on the TP detail page.
@@ -2550,7 +2553,10 @@ Route::middleware(['auth', 'permission:access_prospecting'])
         // Phase D1 — four-tab structure. Work is the default landing.
         Route::get('/',              [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'work'])->name('work');
         Route::get('/work',          [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'work']);
-        Route::get('/opportunities', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'opportunities'])->name('opportunities');
+        Route::get('/opportunities',                       [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'opportunities'])->name('opportunities');
+        Route::get('/opportunities/{tp}',                  [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'opportunityShow'])
+            ->where('tp', '[0-9]+')
+            ->name('opportunities.show');
         Route::get('/analyse',       [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'analyse'])->name('analyse');
         Route::get('/market-pulse',  [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'marketPulse'])->name('market-pulse');
 
