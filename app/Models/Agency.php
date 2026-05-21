@@ -72,6 +72,13 @@ class Agency extends Model
         'whistleblow_approver_user_ids',
         'whistleblow_compliance_officer_email',
         'whistleblow_tier_recipients',
+        // MIC Phase B2 — per-agency AI monthly budget cap.
+        'ai_monthly_budget_zar',
+        'ai_budget_warning_pct',
+        'ai_budget_hard_cap_pct',
+        'ai_budget_overage_allowed',
+        'ai_budget_last_warned_at',
+        'ai_budget_last_hard_stopped_at',
     ];
 
     protected $casts = [
@@ -85,7 +92,87 @@ class Agency extends Model
         'p24_locations_synced_at' => 'datetime',
         'whistleblow_approver_user_ids' => 'array',
         'whistleblow_tier_recipients' => 'array',
+        // MIC Phase B2 — AI budget casts.
+        'ai_monthly_budget_zar'          => 'decimal:2',
+        'ai_budget_warning_pct'          => 'integer',
+        'ai_budget_hard_cap_pct'         => 'integer',
+        'ai_budget_overage_allowed'      => 'boolean',
+        'ai_budget_last_warned_at'       => 'datetime',
+        'ai_budget_last_hard_stopped_at' => 'datetime',
     ];
+
+    public const AI_BUDGET_STATUS_HEALTHY  = 'healthy';
+    public const AI_BUDGET_STATUS_WARNING  = 'warning';
+    public const AI_BUDGET_STATUS_CRITICAL = 'critical';
+    public const AI_BUDGET_STATUS_CAPPED   = 'capped';
+
+    /**
+     * Sum of cost_zar in ai_narrative_cache attributed to this agency
+     * for the given month (default = current month).
+     */
+    public function aiBudgetUsedZar(?\Carbon\Carbon $month = null): float
+    {
+        $month ??= \Carbon\Carbon::now();
+        return (float) \DB::table('ai_narrative_cache')
+            ->where('agency_id', $this->id)
+            ->whereBetween('generated_at', [
+                $month->copy()->startOfMonth(),
+                $month->copy()->endOfMonth(),
+            ])
+            ->sum('cost_zar');
+    }
+
+    /**
+     * Used / budget × 100. Returns 0 when budget is zero (avoid div-by-zero).
+     */
+    public function aiBudgetUsedPct(?\Carbon\Carbon $month = null): float
+    {
+        $budget = (float) ($this->ai_monthly_budget_zar ?? 0);
+        if ($budget <= 0) return 0.0;
+        return round(($this->aiBudgetUsedZar($month) / $budget) * 100, 2);
+    }
+
+    /**
+     * ZAR remaining in the month (negative when overage allowed + exceeded).
+     */
+    public function aiBudgetRemaining(?\Carbon\Carbon $month = null): float
+    {
+        return (float) ($this->ai_monthly_budget_zar ?? 0) - $this->aiBudgetUsedZar($month);
+    }
+
+    /**
+     * Budget status:
+     *   healthy  — usage < warning_pct
+     *   warning  — warning_pct ≤ usage < (warning_pct + critical-band-width). Default: 80–94.99%.
+     *   critical — 95% ≤ usage < hard_cap_pct
+     *   capped   — usage ≥ hard_cap_pct AND overage not allowed
+     */
+    public function aiBudgetStatus(?\Carbon\Carbon $month = null): string
+    {
+        $used = $this->aiBudgetUsedPct($month);
+        $warn = (int) ($this->ai_budget_warning_pct ?? 80);
+        $hard = (int) ($this->ai_budget_hard_cap_pct ?? 110);
+
+        if ($used >= $hard && !$this->ai_budget_overage_allowed) {
+            return self::AI_BUDGET_STATUS_CAPPED;
+        }
+        if ($used >= 95) {
+            return self::AI_BUDGET_STATUS_CRITICAL;
+        }
+        if ($used >= $warn) {
+            return self::AI_BUDGET_STATUS_WARNING;
+        }
+        return self::AI_BUDGET_STATUS_HEALTHY;
+    }
+
+    /**
+     * Whether this agency may make further AI calls right now.
+     * False only when status=capped (hard cap reached AND overage disallowed).
+     */
+    public function canMakeAiCall(?\Carbon\Carbon $month = null): bool
+    {
+        return $this->aiBudgetStatus($month) !== self::AI_BUDGET_STATUS_CAPPED;
+    }
 
     public function branches(): HasMany
     {

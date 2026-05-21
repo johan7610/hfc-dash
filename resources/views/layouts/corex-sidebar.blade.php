@@ -1229,6 +1229,16 @@
             <span>API</span>
         </a>
 
+        {{-- AI Usage (MIC Phase B2) --}}
+        @permission('mic.view_ai_costs')
+        <a href="{{ route('admin.ai-usage.index') }}" class="corex-nav-item {{ request()->routeIs('admin.ai-usage.*') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.5l4.5-4.5 4.5 4.5L21 6m0 0v6m0-6h-6" />
+            </svg>
+            <span>AI Usage</span>
+        </a>
+        @endpermission
+
         {{-- Dev Settings --}}
         <a href="{{ route('admin.dev-settings.index') }}" class="corex-nav-item {{ request()->routeIs('admin.dev-settings.*') ? 'active' : '' }}">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">

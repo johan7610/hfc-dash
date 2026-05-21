@@ -8,6 +8,7 @@ use App\Models\Agency;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Cached Ellie / AI-generated narratives.
@@ -24,9 +25,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 final class AINarrativeCache extends Model
 {
-    // No SoftDeletes — narrative cache is ephemeral by design (expires_at
-    // governs lifetime). Spec §3.2.6 column list intentionally omits
-    // deleted_at.
+    // SoftDeletes restored in Phase B2: SweepExpiredNarrativeCacheJob soft-
+    // deletes expired rows; PurgeOldSoftDeletedCacheJob hard-deletes after
+    // 90 days. The unique index was migrated to (cache_key, deleted_at) so
+    // updateOrCreate keeps working alongside soft-deleted history.
+    use SoftDeletes;
+
     protected $table = 'ai_narrative_cache';
 
     public const TYPE_WEEKLY_BRIEF    = 'weekly_brief';

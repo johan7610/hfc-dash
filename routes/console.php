@@ -135,3 +135,20 @@ Schedule::command('corex:leave:send-reminders')->dailyAt('06:00')->onOneServer()
 
 // P24 location tree sync — monthly on the 1st at 02:00
 Schedule::command('p24:sync-locations')->monthlyOn(1, '02:00')->withoutOverlapping();
+
+// ── AI Narrative Cache hygiene (MIC Phase B2) ──
+// Daily: soft-delete expired rows at 03:00 SAST.
+Schedule::job(new \App\Jobs\AI\SweepExpiredNarrativeCacheJob())
+    ->dailyAt('03:00')
+    ->timezone('Africa/Johannesburg')
+    ->onOneServer()
+    ->withoutOverlapping()
+    ->name('ai-cache-sweep');
+
+// Weekly: hard-delete rows soft-deleted > 90 days. Sundays at 03:30 SAST.
+Schedule::job(new \App\Jobs\AI\PurgeOldSoftDeletedCacheJob())
+    ->weeklyOn(0, '03:30')
+    ->timezone('Africa/Johannesburg')
+    ->onOneServer()
+    ->withoutOverlapping()
+    ->name('ai-cache-purge');

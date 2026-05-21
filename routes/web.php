@@ -73,6 +73,12 @@ Route::middleware('auth')->group(function () {
         ->middleware('permission:manage_users')
         ->name('admin.api.catalog');
 
+    // ── Admin: AI usage / cost dashboard (MIC Phase B2) ──
+    Route::get('/admin/ai-usage', [\App\Http\Controllers\Admin\AiUsageController::class, 'index'])
+        ->name('admin.ai-usage.index');
+    Route::post('/admin/ai-usage/agencies/{agency}/budget', [\App\Http\Controllers\Admin\AiUsageController::class, 'updateBudget'])
+        ->name('admin.ai-usage.budget.update');
+
 // ── CoreX Global API v1 (session-authenticated, browser-visible XHR) ──
     Route::prefix('api/v1')->name('api.v1.')->group(function () {
         Route::get('/logged-user', [\App\Http\Controllers\Api\V1\MeController::class, 'show'])->name('logged-user');

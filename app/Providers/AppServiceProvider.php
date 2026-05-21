@@ -172,8 +172,30 @@ class AppServiceProvider extends ServiceProvider
             // 14.5 AI
             \App\Events\AI\AINarrativeGenerated::class,
             \App\Events\AI\AINarrativeFailedFallback::class,
+            // Phase B2 — agency budget signals.
+            \App\Events\AI\AgencyAiBudgetWarning::class,
+            \App\Events\AI\AgencyAiBudgetCapped::class,
         ] as $micActivityEvent) {
             Event::listen($micActivityEvent, \App\Listeners\Activity\LogAgentActivity::class);
+        }
+
+        // MIC Phase B2 — narrative cache invalidation on upstream input changes.
+        // Each listener is failure-isolated (try/catch + log) so a cache-cleanup
+        // hiccup never breaks the originating domain event. Spec §4.8.
+        Event::listen(
+            \App\Events\Prospecting\TrackedPropertyAddressVerified::class,
+            \App\Listeners\AI\InvalidateOnTrackedPropertyAddressVerified::class,
+        );
+        Event::listen(
+            \App\Events\MarketReports\MarketReportParsed::class,
+            \App\Listeners\AI\InvalidateOnMarketReportParsed::class,
+        );
+        foreach ([
+            \App\Events\Prospecting\ClaimCreated::class,
+            \App\Events\Prospecting\ClaimReleased::class,
+            \App\Events\Prospecting\ClaimAutoReleased::class,
+        ] as $claimEvent) {
+            Event::listen($claimEvent, \App\Listeners\AI\InvalidateOnClaimChange::class);
         }
 
         // Prospecting setup: clear the ProspectingConfigurationService's

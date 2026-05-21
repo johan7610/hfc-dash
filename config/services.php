@@ -77,8 +77,11 @@ return [
         'timeout'     => (int) env('ANTHROPIC_TIMEOUT', 30),
         'max_retries' => (int) env('ANTHROPIC_MAX_RETRIES', 3),
         'enabled'     => filter_var(env('ANTHROPIC_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
-        // ZAR conversion — defaults to a sensible exchange rate; refresh quarterly.
-        'usd_to_zar' => (float) env('ANTHROPIC_USD_TO_ZAR', 18.50),
+        // ZAR conversion — current as of May 2026. Refresh quarterly or when
+        // the rate moves > 5%. NB: this is a forward-looking rate only —
+        // historical ai_narrative_cache rows are NOT retroactively repriced.
+        // Each row's cost_zar is a snapshot at the time of generation.
+        'usd_to_zar' => (float) env('ANTHROPIC_USD_TO_ZAR', 16.50),
         // USD per million tokens — refresh when Anthropic changes pricing.
         'pricing' => [
             'claude-haiku-4-5'  => ['input' => 1.00, 'output' => 5.00],
