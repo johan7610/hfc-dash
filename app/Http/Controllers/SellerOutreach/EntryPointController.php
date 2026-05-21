@@ -85,7 +85,7 @@ final class EntryPointController extends Controller
                 ? $e->expiresAt->diffForHumans()
                 : \Carbon\Carbon::parse($e->expiresAt)->diffForHumans();
             return redirect()
-                ->route('prospecting.index')
+                ->route('market-intelligence.work')
                 ->with('error', "⏳ {$blockerName} is currently pitching this listing. Try again after their lock expires ({$expiresIn}).");
         }
 

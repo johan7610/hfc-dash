@@ -2560,6 +2560,12 @@ Route::middleware(['auth', 'permission:access_prospecting'])
         Route::get('/analyse',       [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'analyse'])->name('analyse');
         Route::get('/market-pulse',  [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'marketPulse'])->name('market-pulse');
 
+        // Phase G2 — BM team dashboard. Permission-gated via the controller.
+        Route::get('/team', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'team'])->name('team');
+
+        // Phase G3 — feedback-template JSON for the claim slide-over.
+        Route::get('/feedback-templates', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'feedbackTemplates'])->name('feedback-templates');
+
         // Phase D5 — AI surfaces.
         Route::post('/analyse/regenerate-brief',
             [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'regenerateBrief'])
@@ -2626,36 +2632,36 @@ Route::middleware(['auth', 'permission:access_prospecting'])
         Route::get('/{listing}',           [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'show'])->name('show');
     });
 
-// ===== PROSPECTING (legacy — kept mounted for F.1 migration window) =====
+// ===== PROSPECTING (legacy URL prefix — Phase I1 retirement) =====
+// Phase I1 retired ProspectingController. The /prospecting URL prefix
+// remains mounted (preserves the prospecting.* route names that legacy
+// blade partials in resources/views/prospecting/ still reference + keeps
+// any external bookmarks working) but every handler now lives on
+// MarketIntelligenceController. The controller file ProspectingController
+// .php has been deleted.
 Route::middleware(['auth', 'permission:access_prospecting'])->prefix('prospecting')->name('prospecting.')->group(function () {
-    Route::get('/', [\App\Http\Controllers\ProspectingController::class, 'index'])->name('index');
+    Route::get('/', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'work'])->name('index');
 
-    // Intelligence layer endpoints — must be declared BEFORE the {listing}
-    // catch-alls below or Laravel's model-binding would shadow these paths.
-    Route::get('/snapshot.json', [\App\Http\Controllers\ProspectingController::class, 'snapshotJson'])->name('snapshot');
-    Route::get('/segment/{dimension}/{value}/buyers',  [\App\Http\Controllers\ProspectingController::class, 'segmentBuyers'])
+    Route::get('/snapshot.json', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'snapshotJson'])->name('snapshot');
+    Route::get('/segment/{dimension}/{value}/buyers',  [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'segmentBuyers'])
         ->where('dimension', 'town|property_type|bedrooms|price_band|unmapped_suburb')
         ->name('segment.buyers');
-    Route::get('/segment/{dimension}/{value}/listings', [\App\Http\Controllers\ProspectingController::class, 'segmentListings'])
+    Route::get('/segment/{dimension}/{value}/listings', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'segmentListings'])
         ->where('dimension', 'town|property_type|bedrooms|price_band|unmapped_suburb')
         ->name('segment.listings');
 
-    // Side-panel: tier-ranked buyer matches for one listing. Declared before the
-    // {listing} catch-all routes below so model-binding doesn't shadow it.
-    Route::get('/{listing}/buyer-matches', [\App\Http\Controllers\ProspectingController::class, 'buyerMatches'])
+    Route::get('/{listing}/buyer-matches', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'buyerMatches'])
         ->name('buyer-matches');
 
-    // BM/admin or owner: release a claim with reason. Path-scoped to /claims/
-    // so model-binding for ProspectingListing doesn't interfere.
-    Route::post('/claims/{claimId}/release-as-manager', [\App\Http\Controllers\ProspectingController::class, 'releaseAsManager'])
+    Route::post('/claims/{claimId}/release-as-manager', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'releaseAsManager'])
         ->where('claimId', '\d+')
         ->name('claims.release-as-manager');
 
-    Route::get('/thumbnail/{listing}', [\App\Http\Controllers\ProspectingController::class, 'thumbnail'])->name('thumbnail');
-    Route::post('/{listing}/claim', [\App\Http\Controllers\ProspectingController::class, 'claim'])->name('claim');
-    Route::post('/{listing}/feedback', [\App\Http\Controllers\ProspectingController::class, 'feedback'])->name('feedback');
-    Route::post('/{listing}/release', [\App\Http\Controllers\ProspectingController::class, 'release'])->name('release');
-    Route::get('/{listing}', [\App\Http\Controllers\ProspectingController::class, 'show'])->name('show');
+    Route::get('/thumbnail/{listing}', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'thumbnail'])->name('thumbnail');
+    Route::post('/{listing}/claim',    [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'claim'])->name('claim');
+    Route::post('/{listing}/feedback', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'feedback'])->name('feedback');
+    Route::post('/{listing}/release',  [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'release'])->name('release');
+    Route::get('/{listing}',           [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'show'])->name('show');
 });
 
 // Bookmark-continuity redirect from the legacy bare /prospecting URL to the new

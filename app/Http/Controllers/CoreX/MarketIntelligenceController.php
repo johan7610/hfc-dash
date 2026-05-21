@@ -1007,6 +1007,115 @@ class MarketIntelligenceController extends Controller
     }
 
     /**
+     * MIC Phase G2 — BM team dashboard. Per-agent claim + outreach stats
+     * for managers, ordered to surface the worst performers first (highest
+     * stale count → lowest feedback rate).
+     *
+     * Permission: mic.view_team (seeded Phase A2).
+     *
+     * Spec: .ai/specs/mic-complete-spec.md §10.2.
+     */
+    public function team(Request $request)
+    {
+        $user = $request->user();
+        if (!$user?->hasPermission('mic.view_team')) abort(403);
+
+        $agencyId = (int) ($user->effectiveAgencyId() ?? $user->agency_id);
+        if ($agencyId === 0) abort(403);
+
+        $thirtyDaysAgo = Carbon::now()->subDays(30);
+        $oneDayAgo     = Carbon::now()->subDay();
+
+        $agents = User::query()
+            ->where('agency_id', $agencyId)
+            ->where('is_active', true)
+            ->whereIn('role', ['agent', 'branch_manager', 'admin'])
+            ->orderBy('name')
+            ->get(['id', 'name', 'role', 'branch_id']);
+
+        $rows = $agents->map(function (User $agent) use ($thirtyDaysAgo, $oneDayAgo) {
+            $base = ProspectingClaim::query()->where('user_id', $agent->id);
+            $activeClaims = (clone $base)->where('is_active', true)->whereNull('released_at')->count();
+
+            $last30 = (clone $base)->where('claimed_at', '>=', $thirtyDaysAgo);
+            $totalRecent = (clone $last30)->count();
+            $withFeedback = (clone $last30)->whereNotNull('feedback_at')->count();
+            $feedbackRate = $totalRecent > 0 ? round(($withFeedback / $totalRecent) * 100, 1) : null;
+
+            $expiring24h = (clone $base)
+                ->where('is_active', true)
+                ->whereNull('released_at')
+                ->whereNull('feedback_at')
+                ->where('claimed_at', '<', $oneDayAgo)
+                ->count();
+
+            $staleFlagged = (clone $base)
+                ->where('is_active', true)
+                ->whereNull('released_at')
+                ->whereNotNull('flagged_at')
+                ->count();
+
+            // Pitches in last 30 days — count of every pitch / outreach event
+            // for this agent (LogAgentActivity rows). pitch.sent is the
+            // canonical event for SellerOutreach sends; the others are
+            // direct-channel variants kept for future use.
+            $pitches30d = 0;
+            if (Schema::hasTable('agent_activity_events')) {
+                $pitches30d = (int) DB::table('agent_activity_events')
+                    ->where('user_id', $agent->id)
+                    ->where('occurred_at', '>=', $thirtyDaysAgo)
+                    ->whereIn('event_type', [
+                        'pitch.sent',
+                        'whatsapp_message.sent',
+                        'email_message.sent',
+                        'call.logged',
+                    ])->count();
+            }
+
+            $presentations30d = 0;
+            if (Schema::hasTable('presentations') && Schema::hasColumn('presentations', 'created_by_user_id')) {
+                $presentations30d = (int) DB::table('presentations')
+                    ->where('created_by_user_id', $agent->id)
+                    ->where('created_at', '>=', $thirtyDaysAgo)
+                    ->whereNull('deleted_at')
+                    ->count();
+            }
+
+            return [
+                'agent'             => $agent,
+                'active_claims'     => $activeClaims,
+                'feedback_rate'     => $feedbackRate,
+                'expiring_24h'      => $expiring24h,
+                'stale_flagged'     => $staleFlagged,
+                'pitches_30d'       => $pitches30d,
+                'presentations_30d' => $presentations30d,
+            ];
+        })
+        // Sort worst performers first: high stale count, then low feedback rate.
+        ->sortByDesc(fn ($row) => [
+            $row['stale_flagged'],
+            $row['feedback_rate'] === null ? -1 : -$row['feedback_rate'],
+        ])
+        ->values();
+
+        return view('corex.market-intelligence.team', [
+            'rows' => $rows,
+        ]);
+    }
+
+    /**
+     * MIC Phase G3 — return the quick-pick claim-feedback template list
+     * as JSON. The slide-over Alpine component fetches this and renders
+     * the button row when the agent opens a claim's feedback panel.
+     */
+    public function feedbackTemplates(Request $request)
+    {
+        return response()->json([
+            'templates' => \App\Services\Prospecting\ClaimFeedbackTemplates::getTemplates(),
+        ]);
+    }
+
+    /**
      * Phase E3 — per-listing "why this matches your buyers" tooltip.
      * Sonnet 4.6 (quality matters for client-facing copy). Anonymised buyer
      * summaries — no names, no exact prices, no contact details. 7-day cache

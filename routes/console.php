@@ -162,3 +162,12 @@ Schedule::job(new \App\Jobs\AI\WarmThisWeekTilesJob())
     ->onOneServer()
     ->withoutOverlapping()
     ->name('ai-tiles-warm');
+
+// Hourly: flag claims as stale once the agent has gone >48h without
+// feedback. Surfaces on the BM Team Dashboard (Phase G2). Idempotent.
+Schedule::job(new \App\Jobs\Prospecting\FlagStaleClaimsJob())
+    ->hourly()
+    ->timezone('Africa/Johannesburg')
+    ->onOneServer()
+    ->withoutOverlapping()
+    ->name('flag-stale-claims');

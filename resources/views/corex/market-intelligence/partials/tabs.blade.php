@@ -15,6 +15,10 @@
         ['key' => 'analyse',       'route' => 'market-intelligence.analyse',       'label' => 'Analyse'],
         ['key' => 'market-pulse',  'route' => 'market-intelligence.market-pulse',  'label' => 'Market Pulse'],
     ];
+    // Phase G2 — managers + admins see the Team tab.
+    if (auth()->user()?->hasPermission('mic.view_team')) {
+        $tabs[] = ['key' => 'team', 'route' => 'market-intelligence.team', 'label' => 'Team'];
+    }
     $activeKey = collect($tabs)
         ->first(fn ($t) => request()->routeIs($t['route']))['key'] ?? 'work';
 @endphp
