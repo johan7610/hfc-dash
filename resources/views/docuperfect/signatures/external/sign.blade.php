@@ -3232,5 +3232,15 @@ function uploadForm() {
 }
 </script>
 
+{{-- Phase 1B.5 — recipient Other Conditions + strikethrough modals.
+     The modal partials wire themselves via window CustomEvent dispatch
+     (open-add-condition-modal, open-override-modal). The override partial
+     also auto-attaches click handlers to numbered clauses on DOM ready. --}}
+@isset($request)
+    @php $token = $request->token; @endphp
+    @include('docuperfect.signatures._partials.add-condition-modal', ['token' => $token])
+    @include('docuperfect.signatures._partials.override-modal', ['token' => $token])
+@endisset
+
 </body>
 </html>

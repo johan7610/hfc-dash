@@ -1351,6 +1351,17 @@ The wizard MUST resolve party labels through `Template::mapSigningPartyKeys($tem
 | ES-6 (AI import) | 2–3 days | ~1 day |
 | **Total** | **6–8 days** | **~3–4 days** |
 
+### 22.8 Phase 1B.5 — signing-view embeds shipped
+
+Phase 1B left the recipient-side experience as a deferral: the backend API, the modal partial, and the agent review surface all shipped, but the partial was not yet embedded into the multi-file signing-view architecture.
+
+Phase 1B.5 closes the loop:
+
+- §7.5.4 "Adding a condition" — operational at signing time. Each `~~~~MARKER~~~~` in the document body renders an in-line "+ Add condition" button via `App\Services\Docuperfect\InsertableBlockRenderer`. The button dispatches a `CustomEvent` consumed by the embedded `add-condition-modal` partial, which submits to a new `POST /sign/{token}/conditions` endpoint.
+- §7.5.5 "Strikethrough override" — operational. The `override-modal` partial scans the document body on load, wraps numbered clauses with click handlers, and routes through a new `POST /sign/{token}/strikethroughs` endpoint that creates a paired `DocumentCondition` (in the other_conditions block) + `DocumentClauseStrikethrough` row linked by `amendment_id`. Fails fast with a 400 if the template has no `other_conditions` block declared.
+- §7.5.7 "Focused initialing view" — operational. `SigningController::show()` now detects `status = STATUS_AMENDMENT_INITIALING` and switches to the new `initialing.blade.php` view, which shows only the changed regions across all approved amendments + per-item initial slots. A new `POST /sign/{token}/initial-amendments` endpoint creates immutable `ConditionInitial` rows, advances party-by-party, and resolves the cascade back to `STATUS_SIGNING` once every party has initialed every accepted amendment.
+- §7.5.4 "Legacy textarea bridge" — operational. Wizard Step 5 textarea writes to both the legacy `other_conditions_text` longText column AND structured `document_conditions` rows via `App\Services\Docuperfect\LegacyOtherConditionsBridge`. Idempotent via a per-row `custom_label = '_bridge:<sha1>'` signature; recipient-added rows are never touched. One-shot backfill migration `2026_05_22_120001` scans existing docs with non-empty `other_conditions_text` and zero structured rows.
+
 ---
 
 ## 23. Open Questions

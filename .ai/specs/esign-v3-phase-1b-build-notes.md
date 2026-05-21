@@ -40,21 +40,26 @@ When a template marked `wet_ink` delivery enters the render pipeline, the `~~~~O
 
 ---
 
-## 3. Signing-experience integration (Parts 10 + 11) — V1: PARTIAL provided
+## 3. Signing-experience integration (Parts 10 + 11) — RESOLVED in Phase 1B.5
 
-**Phase 1B ship:**
+**Phase 1B shipped backend + reusable Blade partial.**
 
-- **Backend API endpoints** — complete and tested (`POST /docuperfect/signing/{signatureTemplate}/conditions`, `POST .../strikethroughs`).
-- **Reusable Blade partial** — `resources/views/docuperfect/signing/_partials/add-condition-affordance.blade.php`. Embeds an "Add condition" button or "Strike through and replace" affordance + modal + clause library picker + AJAX submit. Wires straight to the new API endpoints. Reload-on-success keeps the signing flow's state consistent without a JS-driven re-render.
+**Phase 1B.5 closes the loop with full signing-view integration.** Shipping commit: see git log for "Phase 1B.5 — signing-view embeds".
 
-**What is NOT yet done:**
+- `app/Services/Docuperfect/InsertableBlockRenderer` replaces every `~~~~MARKER~~~~` in the document's HTML body with styled, contextual block partials. Threaded into the existing `SigningController::show()` pipeline right after `LetterheadRefresher::refresh()`.
+- Recipient signing context emits "+ Add condition" buttons inside each block — these dispatch a `CustomEvent` that the embedded `add-condition-modal` partial listens for.
+- Override modal partial scans the document body on load, wraps numbered clauses (regex `/^\s*(\d+(?:\.\d+)*)\b[\.\s]/`) with click handlers that dispatch `open-override-modal` with the clause ref + text.
+- Sign-token API endpoints added:
+  - `POST /sign/{token}/conditions` — recipient adds a condition
+  - `POST /sign/{token}/strikethroughs` — recipient proposes a strikethrough
+  - `POST /sign/{token}/initial-amendments` — submits per-party initials during the cascade
+- `SigningController::show()` view-switch fires when `amendment_status = 'amendment_initialing'` — routes to the new focused initialing view at `resources/views/docuperfect/signatures/external/initialing.blade.php` showing only the changed regions for the current party.
+- `LegacyOtherConditionsBridge` bridges the wizard's free-text textarea into structured `document_conditions` rows so recipient signing renders them — idempotent via `custom_label` signature column, cleans up its own rows on textarea-emptying.
+- Backfill migration `2026_05_22_120001` scans existing docs with non-empty `other_conditions_text` and zero structured rows, runs the bridge once.
 
-- The partial is **not yet embedded** into the existing signing views. The signing surface architecture (per CDS audit) involves multiple Blade files in `resources/views/docuperfect/signatures/external/` and `resources/views/docuperfect/signing/`; integration requires a careful pass to identify the right insertion points for each template type (mandate, OTP wet-ink, FICA, etc.).
-
-**Follow-up work (Phase 9.5.3):**
-
-- Add `@include` of the partial in the relevant signing views at the position where the rendered document contains an insertable block placeholder.
-- Wire the strikethrough flow: click handler on `[data-clause-ref]` spans to launch the partial in `mode: 'strikethrough'` with the clause text pre-filled.
+**Still deferred (not user-facing experience gaps):**
+- Wet-ink empty-slot rendering — separate prompt.
+- Pagination recalc — separate prompt.
 
 ---
 
@@ -70,7 +75,8 @@ When a template marked `wet_ink` delivery enters the render pipeline, the `~~~~O
 | `ConditionsController` (POST condition + strikethrough) + routes | SHIPPED |
 | `AmendmentController` (review / approve / reject / reject-document) + view + routes | SHIPPED |
 | CDS builder "Insert Block" + "Clauses" panel | SHIPPED |
-| Signing partial for add-condition + strikethrough modal | SHIPPED (not yet embedded) |
+| Signing partial for add-condition + strikethrough modal | SHIPPED (Phase 1B) |
+| **Signing-view embed** (renderer + modals + click handlers + initialing view + legacy bridge) | **SHIPPED in Phase 1B.5** |
 | Pagination recalc | DEFERRED — V1 ships static; covered by final-flatten render |
 | Wet-ink empty-slot rendering | DEFERRED — V1 relies on source-doc pre-formatted lines |
 

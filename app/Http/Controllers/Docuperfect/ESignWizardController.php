@@ -1328,10 +1328,31 @@ class ESignWizardController extends Controller
                 $styles = implode("\n", $styleMatches[0]);
             }
 
+            // Phase 1B.5 — render insertable-block placeholders inline so the
+            // wizard agent sees styled blocks instead of literal `~~~~MARKER~~~~`
+            // text in the right-pane preview. The recipient-signing pipeline
+            // re-renders against the live document instance at signing time;
+            // here we render against a synthetic SignatureTemplate so the
+            // unbound-marker fallback handles older templates too.
+            $previewHtml = $styles . $bodyHtml;
+            $previewSigTemplate = new \App\Models\Docuperfect\SignatureTemplate();
+            $previewSigTemplate->id = 0;
+            $previewSigTemplate->document_id = 0;
+            $previewSigTemplate->setRelation('template', $template);
+            $previewBlocks = $template->insertable_blocks ?? [];
+            $previewHtml = app(\App\Services\Docuperfect\InsertableBlockRenderer::class)
+                ->renderInDocument(
+                    $previewHtml,
+                    $previewSigTemplate,
+                    is_array($previewBlocks) ? $previewBlocks : [],
+                    \App\Services\Docuperfect\InsertableBlockRenderer::CONTEXT_AGENT_PREPARATION,
+                    null
+                );
+
             return response()->json([
                 'render_type'   => 'web',
                 'blade_view'    => $template->blade_view,
-                'html'          => $styles . $bodyHtml,
+                'html'          => $previewHtml,
                 'page_count'    => $template->page_count,
                 'fields'        => $template->fields_json ?? [],
                 'wizard_config' => $template->wizard_config,
@@ -1971,6 +1992,19 @@ class ESignWizardController extends Controller
                 'sections_json'       => $template->sections,
                 'other_conditions_text' => trim($stepData['fill_review']['other_conditions_text'] ?? '') ?: null,
             ]);
+
+            // Phase 1B.5 — bridge the legacy textarea content into structured
+            // document_conditions rows so the recipient-signing surface (which
+            // reads from those rows, not other_conditions_text) renders them.
+            try {
+                app(\App\Services\Docuperfect\LegacyOtherConditionsBridge::class)
+                    ->syncToStructuredRows($sigTemplate);
+            } catch (\Throwable $e) {
+                \Log::warning('LegacyOtherConditionsBridge sync failed (non-fatal)', [
+                    'sig_template_id' => $sigTemplate->id,
+                    'error'           => $e->getMessage(),
+                ]);
+            }
 
             // 3. Create SignatureRequests — agent first (signing_order=1), then supervisor (if candidate), then recipients
             $signatureService->createSigningRequest(
@@ -4156,6 +4190,17 @@ class ESignWizardController extends Controller
                 'sections_json'       => $template->sections,
                 'other_conditions_text' => trim($stepData['fill_review']['other_conditions_text'] ?? '') ?: null,
             ]);
+
+            // Phase 1B.5 — bridge to structured document_conditions rows
+            try {
+                app(\App\Services\Docuperfect\LegacyOtherConditionsBridge::class)
+                    ->syncToStructuredRows($sigTemplate);
+            } catch (\Throwable $e) {
+                \Log::warning('LegacyOtherConditionsBridge sync failed (wet-ink path)', [
+                    'sig_template_id' => $sigTemplate->id,
+                    'error'           => $e->getMessage(),
+                ]);
+            }
 
             // 3. Create SignatureRequests with signing_method = 'wet_ink'
             $agentReq = $signatureService->createSigningRequest(

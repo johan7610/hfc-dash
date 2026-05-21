@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Docuperfect;
 
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
+use App\Models\Docuperfect\ConditionInitial;
 use App\Models\Docuperfect\DocumentAmendment;
+use App\Models\Docuperfect\DocumentClauseStrikethrough;
+use App\Models\Docuperfect\DocumentCondition;
 use App\Models\Docuperfect\ESignConsentLog;
 use App\Models\Docuperfect\SignatureAuditLog;
 use App\Models\Docuperfect\SignatureMarker;
@@ -18,6 +21,7 @@ use App\Services\Docuperfect\SignatureSurfaceNormalizer;
 use App\Services\WebTemplateFieldPartyMap;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -83,6 +87,18 @@ class SigningController extends Controller
             return view('docuperfect.signatures.external.waiting', [
                 'request' => $signingRequest,
             ]);
+        }
+
+        // Phase 1B.5 — focused initialing view-switch.
+        // When the parent template's amendment_status indicates an
+        // initialing cascade is in progress, recipients land on a focused
+        // view showing only changed regions (not the entire document).
+        $tplForSwitch = $signingRequest->template;
+        if ($tplForSwitch
+            && $tplForSwitch->status === SignatureTemplate::STATUS_AMENDMENT_INITIALING
+            && $tplForSwitch->amendment_status === SignatureTemplate::AMENDMENT_STATUS_INITIALING
+        ) {
+            return $this->showInitialingView($signingRequest, $token);
         }
 
         // Gateway gate — signer must verify ID AND accept consent before seeing documents
@@ -269,6 +285,21 @@ class SigningController extends Controller
             // never serves stale agency data ("The Mandate Company /
             // Margate") at signing — always show CURRENT agency.
             $webTemplateHtml = LetterheadRefresher::refresh($webTemplateHtml);
+
+            // Phase 1B.5 — replace `~~~~MARKER~~~~` tokens with styled
+            // insertable-block partials. Recipient context wires the
+            // "+ Add condition" affordance and the strikethrough click
+            // surface. Unbound markers (no template metadata entry) still
+            // render via the synthesised-block fallback in the service.
+            $blocksMeta = $docTemplate->insertable_blocks ?? [];
+            $webTemplateHtml = app(\App\Services\Docuperfect\InsertableBlockRenderer::class)
+                ->renderInDocument(
+                    $webTemplateHtml,
+                    $template,
+                    is_array($blocksMeta) ? $blocksMeta : [],
+                    \App\Services\Docuperfect\InsertableBlockRenderer::CONTEXT_RECIPIENT_SIGNING,
+                    $token
+                );
         }
 
         // Build page image URLs — use flattened images when available (PDF path)
@@ -2764,6 +2795,449 @@ CSS;
             'rejected' => true,
             'acceptance_id' => $acceptance->id,
         ]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Phase 1B.5 — recipient-side Other Conditions, strikethrough, and
+    // focused initialing endpoints + helpers.
+    // ─────────────────────────────────────────────────────────────────
+
+    /**
+     * GET surface routed to from show() when amendment_status indicates
+     * an initialing cascade is in progress for this signing party.
+     */
+    private function showInitialingView(SignatureRequest $signingRequest, string $token)
+    {
+        $template = $signingRequest->template;
+
+        // Amendments that are approved + still need initials from this party.
+        $amendments = DocumentAmendment::query()
+            ->where('signature_template_id', $template->id)
+            ->where('status', DocumentAmendment::STATUS_ACCEPTED)
+            ->orderBy('id')
+            ->get();
+
+        $alreadyInitialedAmendmentIds = ConditionInitial::query()
+            ->whereIn('amendment_id', $amendments->pluck('id'))
+            ->where('signature_request_id', $signingRequest->id)
+            ->pluck('amendment_id')
+            ->unique();
+
+        $pendingAmendments = $amendments->reject(
+            fn($a) => $alreadyInitialedAmendmentIds->contains($a->id)
+        )->values();
+
+        // Build initialing items per pending amendment: associated conditions
+        // and strikethroughs.
+        $items = [];
+        foreach ($pendingAmendments as $amendment) {
+            $conds = DocumentCondition::query()
+                ->where('amendment_id', $amendment->id)
+                ->whereNull('superseded_at')
+                ->orderBy('condition_number')
+                ->get();
+            $strikes = DocumentClauseStrikethrough::query()
+                ->where('amendment_id', $amendment->id)
+                ->get();
+            $items[] = [
+                'amendment'      => $amendment,
+                'conditions'     => $conds,
+                'strikethroughs' => $strikes,
+            ];
+        }
+
+        return view('docuperfect.signatures.external.initialing', [
+            'request'      => $signingRequest,
+            'template'     => $template,
+            'document'     => $template->document,
+            'token'        => $token,
+            'pendingItems' => $items,
+            'noItems'      => empty($items),
+        ]);
+    }
+
+    /**
+     * POST /docuperfect/api/sign/{token}/conditions
+     * Recipient adds a condition to one of the document's insertable blocks.
+     */
+    public function addCondition(Request $request, string $token): \Illuminate\Http\JsonResponse
+    {
+        $signingRequest = SignatureRequest::where('token', $token)
+            ->with('template')
+            ->firstOrFail();
+
+        if (! $this->signerCanAct($signingRequest)) {
+            return response()->json(['error' => 'Not authorised at this stage.'], 403);
+        }
+
+        $validated = $request->validate([
+            'block_id'          => ['required', 'string', 'max:100'],
+            'block_purpose'     => ['required', 'in:other_conditions,included_items,excluded_items,custom_named'],
+            'content'           => ['required', 'string', 'max:4000'],
+            'source'            => ['required', 'in:library,custom'],
+            'library_clause_id' => ['nullable', 'integer'],
+        ]);
+
+        $template = $signingRequest->template;
+        $document = $template->document;
+        $agencyId = $signingRequest->template?->creator?->effectiveAgencyId();
+
+        $result = DB::transaction(function () use ($validated, $signingRequest, $template, $document, $agencyId) {
+            $amendment = $this->openOrReusePendingAmendment(
+                $template,
+                $document,
+                DocumentAmendment::TYPE_ADDITION,
+                originalText: '',
+                newText: $validated['content']
+            );
+
+            $next = (int) DocumentCondition::query()
+                ->where('signature_template_id', $template->id)
+                ->where('block_id', $validated['block_id'])
+                ->whereNull('superseded_at')
+                ->max('condition_number');
+
+            $condition = DocumentCondition::create([
+                'signature_template_id' => $template->id,
+                'agency_id'             => $agencyId,
+                'block_id'              => $validated['block_id'],
+                'block_purpose'         => $validated['block_purpose'],
+                'condition_number'      => $next + 1,
+                'content'               => $validated['content'],
+                'is_locked'             => false,
+                'is_override'           => false,
+                'added_by_user_id'      => $signingRequest->signed_by_user_id ?? null,
+                'added_by_party_id'     => $signingRequest->id,
+                'added_via'             => 'recipient_signing',
+                'source'                => $validated['source'],
+                'library_clause_id'     => $validated['library_clause_id'] ?? null,
+                'amendment_id'          => $amendment->id,
+            ]);
+
+            $template->update([
+                'amendment_status' => SignatureTemplate::AMENDMENT_STATUS_PENDING_REVIEW,
+                'status'           => SignatureTemplate::STATUS_AMENDMENT_REVIEW,
+            ]);
+
+            SignatureAuditLog::log(
+                $template,
+                'condition_added_by_recipient',
+                SignatureAuditLog::ACTOR_SIGNER,
+                $signingRequest->signer_name ?? 'Unknown',
+                metadata: [
+                    'amendment_id'  => $amendment->id,
+                    'condition_id'  => $condition->id,
+                    'block_id'      => $validated['block_id'],
+                    'block_purpose' => $validated['block_purpose'],
+                ],
+            );
+
+            return compact('amendment', 'condition');
+        });
+
+        return response()->json([
+            'ok'           => true,
+            'condition'    => $result['condition'],
+            'amendment_id' => $result['amendment']->id,
+        ], 201);
+    }
+
+    /**
+     * POST /docuperfect/api/sign/{token}/strikethroughs
+     * Recipient proposes a strikethrough override on a printed clause.
+     */
+    public function proposeStrikethrough(Request $request, string $token): \Illuminate\Http\JsonResponse
+    {
+        $signingRequest = SignatureRequest::where('token', $token)
+            ->with('template')
+            ->firstOrFail();
+
+        if (! $this->signerCanAct($signingRequest)) {
+            return response()->json(['error' => 'Not authorised at this stage.'], 403);
+        }
+
+        $validated = $request->validate([
+            'clause_ref'           => ['required', 'string', 'max:50'],
+            'clause_original_text' => ['required', 'string', 'max:4000'],
+            'replacement_content'  => ['required', 'string', 'max:4000'],
+            'library_clause_id'    => ['nullable', 'integer'],
+        ]);
+
+        $template = $signingRequest->template;
+        $document = $template->document;
+        $agencyId = $template?->creator?->effectiveAgencyId();
+
+        // The template MUST declare an other_conditions block for the
+        // override to have a destination. Without it, fail fast.
+        // SignatureTemplate has no direct template relation; walk through
+        // its document → template → insertable_blocks.
+        $hasOtherConditionsBlock = false;
+        $otherConditionsBlockId  = 'other_conditions';
+        $liveTemplate = $template->document?->template;
+        foreach ((array) ($liveTemplate?->insertable_blocks ?? []) as $b) {
+            if (($b['purpose'] ?? null) === 'other_conditions') {
+                $hasOtherConditionsBlock = true;
+                $otherConditionsBlockId  = (string) ($b['id'] ?? 'other_conditions');
+                break;
+            }
+        }
+        if (! $hasOtherConditionsBlock) {
+            return response()->json([
+                'error' => 'This document does not support clause overrides. Contact the agent.',
+            ], 400);
+        }
+
+        $result = DB::transaction(function () use ($validated, $signingRequest, $template, $document, $agencyId, $otherConditionsBlockId) {
+            $amendment = $this->openOrReusePendingAmendment(
+                $template,
+                $document,
+                DocumentAmendment::TYPE_STRIKEOUT,
+                originalText: $validated['clause_original_text'],
+                newText: $validated['replacement_content']
+            );
+
+            $referenced = sprintf('As per clause %s, %s', $validated['clause_ref'], $validated['replacement_content']);
+
+            $next = (int) DocumentCondition::query()
+                ->where('signature_template_id', $template->id)
+                ->where('block_id', $otherConditionsBlockId)
+                ->whereNull('superseded_at')
+                ->max('condition_number');
+
+            $condition = DocumentCondition::create([
+                'signature_template_id' => $template->id,
+                'agency_id'             => $agencyId,
+                'block_id'              => $otherConditionsBlockId,
+                'block_purpose'         => 'other_conditions',
+                'condition_number'      => $next + 1,
+                'content'               => $referenced,
+                'is_locked'             => false,
+                'is_override'           => true,
+                'overrides_clause_ref'  => $validated['clause_ref'],
+                'added_by_user_id'      => null,
+                'added_by_party_id'     => $signingRequest->id,
+                'added_via'             => 'recipient_signing',
+                'source'                => isset($validated['library_clause_id']) ? 'library' : 'custom',
+                'library_clause_id'     => $validated['library_clause_id'] ?? null,
+                'amendment_id'          => $amendment->id,
+            ]);
+
+            $strike = DocumentClauseStrikethrough::create([
+                'signature_template_id'    => $template->id,
+                'agency_id'                => $agencyId,
+                'clause_ref'               => $validated['clause_ref'],
+                'clause_original_text'     => $validated['clause_original_text'],
+                'replacement_condition_id' => $condition->id,
+                'proposed_by_user_id'      => null,
+                'proposed_by_party_id'     => $signingRequest->id,
+                'amendment_id'             => $amendment->id,
+                'status'                   => DocumentClauseStrikethrough::STATUS_PROPOSED,
+            ]);
+
+            $template->update([
+                'amendment_status' => SignatureTemplate::AMENDMENT_STATUS_PENDING_REVIEW,
+                'status'           => SignatureTemplate::STATUS_AMENDMENT_REVIEW,
+            ]);
+
+            SignatureAuditLog::log(
+                $template,
+                'strikethrough_proposed_by_recipient',
+                SignatureAuditLog::ACTOR_SIGNER,
+                $signingRequest->signer_name ?? 'Unknown',
+                metadata: [
+                    'amendment_id'  => $amendment->id,
+                    'clause_ref'    => $validated['clause_ref'],
+                    'condition_id'  => $condition->id,
+                    'strike_id'     => $strike->id,
+                ],
+            );
+
+            return compact('amendment', 'condition', 'strike');
+        });
+
+        return response()->json([
+            'ok'            => true,
+            'strikethrough' => $result['strike'],
+            'condition'     => $result['condition'],
+            'amendment_id'  => $result['amendment']->id,
+        ], 201);
+    }
+
+    /**
+     * POST /docuperfect/api/sign/{token}/initial-amendments
+     * Submit per-party initials for the changed regions of one or more
+     * approved amendments. Insert-only via the ConditionInitial model.
+     */
+    public function initialAmendments(Request $request, string $token): \Illuminate\Http\JsonResponse
+    {
+        $signingRequest = SignatureRequest::where('token', $token)
+            ->with('template')
+            ->firstOrFail();
+
+        $template = $signingRequest->template;
+        if (! $template
+            || $template->status !== SignatureTemplate::STATUS_AMENDMENT_INITIALING
+        ) {
+            return response()->json(['error' => 'Document is not currently in an initialing cascade.'], 400);
+        }
+
+        $validated = $request->validate([
+            'amendments'                          => ['required', 'array', 'min:1'],
+            'amendments.*.amendment_id'           => ['required', 'integer'],
+            'amendments.*.initials'               => ['required', 'array', 'min:1'],
+            'amendments.*.initials.*.initialable_type'  => ['required', 'in:condition,strikethrough'],
+            'amendments.*.initials.*.initialable_id'    => ['required', 'integer'],
+            'amendments.*.initials.*.initial_image_path' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $partyKey = $signingRequest->party_role ?? 'unknown';
+        $created  = 0;
+
+        DB::transaction(function () use ($validated, $signingRequest, $template, $partyKey, $request, &$created) {
+            foreach ($validated['amendments'] as $amend) {
+                foreach ($amend['initials'] as $ini) {
+                    $morphClass = $ini['initialable_type'] === 'strikethrough'
+                        ? DocumentClauseStrikethrough::class
+                        : DocumentCondition::class;
+                    ConditionInitial::create([
+                        'initialable_type'     => $morphClass,
+                        'initialable_id'       => $ini['initialable_id'],
+                        'party_key'            => $partyKey,
+                        'signature_request_id' => $signingRequest->id,
+                        'amendment_id'         => $amend['amendment_id'],
+                        'initial_image_path'   => $ini['initial_image_path'] ?? null,
+                        'ip_address'           => $request->ip(),
+                        'user_agent'           => substr((string) $request->userAgent(), 0, 500),
+                    ]);
+                    $created++;
+                }
+                SignatureAuditLog::log(
+                    $template,
+                    'amendment_initialed_by_party',
+                    SignatureAuditLog::ACTOR_SIGNER,
+                    $signingRequest->signer_name ?? 'Unknown',
+                    metadata: [
+                        'amendment_id' => $amend['amendment_id'],
+                        'party'        => $partyKey,
+                    ],
+                );
+            }
+        });
+
+        // Cascade completion check — if every other signing party has also
+        // recorded initials for every accepted amendment, close the cascade.
+        $this->checkInitialingCascadeComplete($template);
+
+        return response()->json([
+            'ok'         => true,
+            'created'    => $created,
+            'next_url'   => route('signatures.external', ['token' => $token]),
+        ]);
+    }
+
+    /**
+     * Return the active pending amendment (if one exists for this template
+     * window) or open a new one. Re-using a pending amendment keeps every
+     * condition/strikethrough proposed in the same review window grouped
+     * together for the agent.
+     */
+    private function openOrReusePendingAmendment(
+        SignatureTemplate $template,
+        $document,
+        string $type,
+        string $originalText,
+        string $newText
+    ): DocumentAmendment {
+        $existing = DocumentAmendment::query()
+            ->where('signature_template_id', $template->id)
+            ->where('status', DocumentAmendment::STATUS_PENDING)
+            ->latest('id')
+            ->first();
+        if ($existing) {
+            return $existing;
+        }
+        $version = (int) ($template->document_version ?? 1);
+        return DocumentAmendment::create([
+            'document_id'             => $document?->id,
+            'signature_template_id'   => $template->id,
+            'amended_by_request_id'   => null,
+            'amendment_type'          => $type,
+            'section_reference'       => 'Other Conditions',
+            'original_text'           => $originalText,
+            'new_text'                => $newText,
+            'document_version_before' => $version,
+            'document_version_after'  => $version + 1,
+            'document_hash_before'    => $template->document_hash,
+            'document_hash_after'     => null,
+            'status'                  => DocumentAmendment::STATUS_PENDING,
+        ]);
+    }
+
+    /**
+     * Is this signing request authorised to add conditions / propose
+     * strikethroughs right now? Allowed when the request hasn't completed
+     * and the template isn't terminal-state.
+     */
+    private function signerCanAct(SignatureRequest $req): bool
+    {
+        if (in_array($req->status, [
+            SignatureRequest::STATUS_COMPLETED,
+            SignatureRequest::STATUS_DECLINED,
+        ], true)) {
+            return false;
+        }
+        $tplStatus = $req->template?->status;
+        return ! in_array($tplStatus, [
+            SignatureTemplate::STATUS_REJECTED,
+            SignatureTemplate::STATUS_CANCELLED,
+            SignatureTemplate::STATUS_EXPIRED,
+            SignatureTemplate::STATUS_COMPLETED,
+        ], true);
+    }
+
+    /**
+     * If every signing party has recorded initials for every accepted
+     * amendment, return the template to its prior signing flow.
+     */
+    private function checkInitialingCascadeComplete(SignatureTemplate $template): void
+    {
+        $acceptedAmendmentIds = DocumentAmendment::query()
+            ->where('signature_template_id', $template->id)
+            ->where('status', DocumentAmendment::STATUS_ACCEPTED)
+            ->pluck('id');
+        if ($acceptedAmendmentIds->isEmpty()) {
+            return;
+        }
+
+        $partyKeys = collect($template->requests()->where('status', '!=', SignatureRequest::STATUS_DECLINED)->get())
+            ->pluck('party_role')
+            ->unique()
+            ->values();
+
+        foreach ($acceptedAmendmentIds as $amendId) {
+            foreach ($partyKeys as $key) {
+                $initialed = ConditionInitial::query()
+                    ->where('amendment_id', $amendId)
+                    ->where('party_key', $key)
+                    ->exists();
+                if (! $initialed) {
+                    return; // still pending
+                }
+            }
+        }
+
+        // All initialed — flip back to signing state.
+        $template->update([
+            'status'           => SignatureTemplate::STATUS_SIGNING,
+            'amendment_status' => SignatureTemplate::AMENDMENT_STATUS_RESOLVED,
+        ]);
+        SignatureAuditLog::log(
+            $template,
+            'amendment_initialing_cascade_complete',
+            SignatureAuditLog::ACTOR_SYSTEM,
+            'System',
+            metadata: ['amendment_ids' => $acceptedAmendmentIds->toArray()],
+        );
     }
 
     /**
