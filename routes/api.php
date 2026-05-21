@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\DeviceTokenController;
 use App\Http\Controllers\Api\ProspectingApiController;
 use App\Http\Controllers\Api\MobilePropertyController;
 use App\Http\Controllers\Api\MobileContactController;
+use App\Http\Controllers\Api\MobileContactComplianceController;
 use App\Http\Controllers\Api\MobileCoreMatchController;
 use App\Http\Controllers\Api\PropertyPullController;
 use App\Http\Controllers\Api\V1\ClientAuthController;
@@ -72,6 +73,15 @@ Route::post('/pp/webhook', [\App\Http\Controllers\PrivateProperty\PpWebhookContr
 // they get the full `web` middleware group (cookie + session). Calling them
 // from a Blade-rendered page over fetch needs session-cookie auth, which
 // isn't applied to routes registered here in api.php.
+
+// ════════════════════════════════════════════════════════════════
+// API v1 — Demo Mode (mobile app)
+// Hard-gated to non-production via DemoLoginController::isEnabled()
+// ════════════════════════════════════════════════════════════════
+Route::prefix('v1/demo')->group(function () {
+    Route::get('/status', [\App\Http\Controllers\Api\V1\DemoAuthController::class, 'status'])->name('demo.status');
+    Route::post('/login', [\App\Http\Controllers\Api\V1\DemoAuthController::class, 'login'])->name('demo.login');
+});
 
 Route::prefix('v1/client-auth')->group(function () {
     Route::post('/lookup',          [ClientAuthController::class, 'lookup'])->name('client-auth.lookup');
@@ -142,11 +152,29 @@ Route::middleware('auth:sanctum')->group(function () {
         return response()->json(['message' => 'Logged out']);
     });
 
+    // ── Mobile data-visibility descriptor ───────────────────────
+    // Tells the app whether the user may see branch / agency-wide
+    // contacts & properties (Role Manager scope), so it can render or
+    // hide the "Mine / All / pick agent" filter chips.
+    Route::get('/mobile/visibility', [\App\Http\Controllers\Api\MobileVisibilityController::class, 'show'])
+        ->name('mobile.visibility');
+
     Route::post('/prospecting/import', [ProspectingApiController::class, 'import']);
     Route::get('/prospecting/check-search', [ProspectingApiController::class, 'checkSearch']);
 
     Route::post('/properties/pull-from-portal', [PropertyPullController::class, 'pullFromPortal']);
     Route::get('/properties/{propertyId}/pull-status', [PropertyPullController::class, 'pullStatus']);
+
+    // ── Mobile P24 location tree (token-authed) ──────────────────
+    // Token-auth twins of the session-only /api/v1/p24/* endpoints in
+    // routes/web.php. The mobile create/edit property screen calls these
+    // to drive the cascading Province → City → Suburb pickers, then sends
+    // the chosen IDs back as p24_province_id / p24_city_id / p24_suburb_id.
+    Route::prefix('mobile/p24')->group(function () {
+        Route::get('/provinces', [\App\Http\Controllers\Api\V1\P24LocationController::class, 'provinces']);
+        Route::get('/cities',    [\App\Http\Controllers\Api\V1\P24LocationController::class, 'cities']);
+        Route::get('/suburbs',   [\App\Http\Controllers\Api\V1\P24LocationController::class, 'suburbs']);
+    });
 
     // ── Mobile Properties ────────────────────────────────────────
     Route::prefix('mobile/properties')->group(function () {
@@ -165,6 +193,15 @@ Route::middleware('auth:sanctum')->group(function () {
         // Overview screen (everything the Overview tab needs in one call,
         // including the live portal placements)
         Route::get('/{property}/overview', [MobilePropertyController::class, 'overview']);
+
+        // Compliance / marketing-readiness (Overview compliance panel)
+        Route::get('/{property}/compliance',                 [MobilePropertyController::class, 'compliance']);
+        Route::post('/{property}/compliance/send-to-market', [MobilePropertyController::class, 'sendToMarket']);
+
+        // Property ↔ Contact links (link existing or create-and-link new)
+        Route::get('/{property}/contacts',              [MobilePropertyController::class, 'contactsIndex']);
+        Route::post('/{property}/contacts',             [MobilePropertyController::class, 'contactsLink']);
+        Route::delete('/{property}/contacts/{contact}', [MobilePropertyController::class, 'contactsUnlink']);
 
         // Gallery tags (derived live from this property's spaces + custom tags)
         Route::get('/{property}/gallery/tags',          [MobilePropertyController::class, 'galleryTags']);
@@ -185,6 +222,23 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{contact}',[MobileContactController::class, 'update']);
         Route::post('/{contact}/whatsapp', [MobileContactController::class, 'whatsapp']);
         Route::post('/{contact}/matches',  [MobileContactController::class, 'storeMatch']);
+
+        // ── Contact compliance surface (consent / drive / fica) ──────
+        // Mirrors the web Contact page tabs for the mobile app.
+        // 1. Consent (POPIA/CPA)
+        Route::get('/{contact}/consent',         [MobileContactComplianceController::class, 'consentIndex'])->name('mobile.contacts.consent.index');
+        Route::post('/{contact}/consent',        [MobileContactComplianceController::class, 'consentRecord'])->name('mobile.contacts.consent.record');
+        Route::post('/{contact}/consent/revoke', [MobileContactComplianceController::class, 'consentRevoke'])->name('mobile.contacts.consent.revoke');
+
+        // 2. Drive (documents + document-type catalog + link-to-property)
+        Route::get('/{contact}/drive',                       [MobileContactComplianceController::class, 'driveIndex'])->name('mobile.contacts.drive.index');
+        Route::post('/{contact}/drive',                      [MobileContactComplianceController::class, 'driveStore'])->name('mobile.contacts.drive.store');
+        Route::put('/{contact}/drive/{document}',            [MobileContactComplianceController::class, 'driveUpdate'])->name('mobile.contacts.drive.update');
+        Route::get('/{contact}/drive/{document}/download',   [MobileContactComplianceController::class, 'driveDownload'])->name('mobile.contacts.drive.download');
+        Route::delete('/{contact}/drive/{document}',         [MobileContactComplianceController::class, 'driveDestroy'])->name('mobile.contacts.drive.destroy');
+
+        // 3. FICA compliance
+        Route::get('/{contact}/fica', [MobileContactComplianceController::class, 'ficaIndex'])->name('mobile.contacts.fica.index');
     });
 
     // ── Mobile Core Matches ─────────────────────────────────────

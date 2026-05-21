@@ -22,21 +22,13 @@ class ContactController extends Controller
         $dataScope    = PermissionService::getDataScope($user, 'contacts');
         $canPickAgent = in_array($dataScope, ['all', 'branch']);
 
-        // Agent filter with session persistence
+        // Agent filter: always default to the current user's own contacts on a
+        // fresh visit. An explicit ?agent_id= (e.g. "All", or another agent)
+        // applies for that browse only and is NOT persisted across visits.
         if ($request->has('agent_id')) {
-            $raw           = $request->query('agent_id', '');
-            $filterAgentId = $raw;
-            session(['corex_contacts_agent_id' => $raw === '' ? 'all' : $raw]);
+            $filterAgentId = $request->query('agent_id', '');
         } elseif ($canPickAgent) {
-            $saved = session('corex_contacts_agent_id');
-            if ($saved === null) {
-                $filterAgentId = (string) $user->id;
-                session(['corex_contacts_agent_id' => $filterAgentId]);
-            } elseif ($saved === 'all') {
-                $filterAgentId = '';
-            } else {
-                $filterAgentId = $saved;
-            }
+            $filterAgentId = (string) $user->id;
         } else {
             $filterAgentId = '';
         }

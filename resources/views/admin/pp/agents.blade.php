@@ -14,11 +14,18 @@
                 Every agent profile PP currently has for this branch. Rows highlighted in red share an email with another row — those are duplicate profiles that need cleanup.
             </p>
         </div>
-        <a href="{{ route('admin.pp.agents') }}"
-           class="px-4 py-2 rounded-md text-sm font-medium"
-           style="background:var(--surface-2); color:var(--text-secondary); border:1px solid var(--border);">
-            Refresh from PP
-        </a>
+        <div class="flex items-center gap-2">
+            <a href="{{ route('admin.pp.mapping-email') }}"
+               class="px-4 py-2 rounded-md text-sm font-medium"
+               style="background:var(--brand-button); color:#fff;">
+                Generate Mapping Email
+            </a>
+            <a href="{{ route('admin.pp.agents') }}"
+               class="px-4 py-2 rounded-md text-sm font-medium"
+               style="background:var(--surface-2); color:var(--text-secondary); border:1px solid var(--border);">
+                Refresh from PP
+            </a>
+        </div>
     </div>
 
     @if($error)

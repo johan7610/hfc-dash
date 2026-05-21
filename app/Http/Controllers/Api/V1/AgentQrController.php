@@ -195,16 +195,8 @@ class AgentQrController extends Controller
 
     private function resolveAgent(string $slug): ?User
     {
-        if (!preg_match('/^[a-z0-9]{6,16}$/', $slug)) {
-            return null;
-        }
-
-        return User::query()
-            ->withoutGlobalScopes()
-            ->where('qr_code_slug', $slug)
-            ->where('is_active', true)
-            ->whereNull('deleted_at')
-            ->first();
+        // Follows the reroute chain so a departed agent's QR keeps working.
+        return User::resolveByQrSlug($slug);
     }
 
     private function presentAgent(User $agent): array

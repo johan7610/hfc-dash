@@ -12,6 +12,8 @@ class DevSettingsController extends Controller
     {
         return view('admin.dev-settings.index', [
             'complianceChecksDisabled' => DevSetting::bool('compliance_checks_disabled'),
+            'demoModeEnabled'          => DevSetting::bool('demo_mode_enabled'),
+            'isProduction'             => app()->environment('production'),
         ]);
     }
 
@@ -20,6 +22,11 @@ class DevSettingsController extends Controller
         DevSetting::set(
             'compliance_checks_disabled',
             $request->boolean('compliance_checks_disabled') ? '1' : '0'
+        );
+
+        DevSetting::set(
+            'demo_mode_enabled',
+            $request->boolean('demo_mode_enabled') ? '1' : '0'
         );
 
         return redirect()->route('admin.dev-settings.index')

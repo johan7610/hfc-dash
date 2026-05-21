@@ -52,21 +52,15 @@ class PropertyController extends Controller
         // (card click-through shows full scope).
         if ($canPickAgent) {
             if ($request->has('agent_id')) {
-                $raw           = $request->query('agent_id', '');
-                $filterAgentId = $raw;
-                session(['corex_properties_agent_id' => $raw === '' ? 'all' : $raw]);
+                // Explicit selection ("All" or another agent) — this browse only.
+                $filterAgentId = $request->query('agent_id', '');
             } elseif ($request->query('filter') === 'marketing_pending') {
+                // Compliance card click-through shows full scope.
                 $filterAgentId = '';
             } else {
-                $saved = session('corex_properties_agent_id');
-                if ($saved === null) {
-                    $filterAgentId = (string) $user->id;
-                    session(['corex_properties_agent_id' => $filterAgentId]);
-                } elseif ($saved === 'all') {
-                    $filterAgentId = '';
-                } else {
-                    $filterAgentId = $saved;
-                }
+                // Always default to the current user's own listings on a fresh
+                // visit. Not persisted across visits.
+                $filterAgentId = (string) $user->id;
             }
         }
 
@@ -215,7 +209,12 @@ class PropertyController extends Controller
 
         $branches = Branch::orderBy('name')->get();
         $agents   = $this->agentList();
-        $activeTab = request('tab', 'overview');
+        // An explicit ?tab= in the URL (deep links from the mobile app's
+        // compliance next_actions, marketing-pack, FICA, etc.) MUST win over
+        // any flashed session('tab') left by a prior redirect — otherwise a
+        // sticky session tab swallows the deep link and the user always
+        // lands on the last-used tab (usually contacts).
+        $activeTab = request('tab') ?? session('tab') ?? 'overview';
 
         // Find all Core Matches where this property satisfies the criteria.
         // Hard filters run in SQL (indexed); scoring runs in PHP and the result is sorted.
@@ -1144,12 +1143,13 @@ class PropertyController extends Controller
             return $input;
         }
 
-        // youtube.com/watch?v=ID or youtube.com/embed/ID or youtu.be/ID
-        if (preg_match('/(?:youtube\.com\/(?:watch\?.*v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/', $input, $m)) {
+        // youtube.com/watch?v=ID, /embed/ID, /shorts/ID, /live/ID, /v/ID, youtu.be/ID
+        if (preg_match('/(?:youtube\.com\/(?:watch\?\S*?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/', $input, $m)) {
             return $m[1];
         }
 
-        // Fallback: return first 11 chars if longer, or as-is
-        return substr($input, 0, 11);
+        // Not a recognisable YouTube id/URL — return empty rather than a
+        // garbage truncation that would silently pass PP's 11-char check.
+        return '';
     }
 }

@@ -3,7 +3,7 @@
 @section('corex-content')
 @php $isNew = !$property->exists; @endphp
 <div class="w-full space-y-4"
-     x-data="{ activeTab: '{{ $isNew ? 'info' : session('tab', $activeTab) }}', synOpen: false, synStep: 'main', sbCollapsed: (localStorage.getItem('hfc.propSidebar.collapsed') === '1'), formDirty: false, wbReportOpen: false, complianceModalOpen: false, unsavedModalOpen: false, pendingNavUrl: null, contactRequiredModalOpen: false }"
+     x-data="{ activeTab: '{{ $isNew ? 'info' : $activeTab }}', synOpen: false, synStep: 'main', sbCollapsed: (localStorage.getItem('hfc.propSidebar.collapsed') === '1'), formDirty: false, wbReportOpen: false, complianceModalOpen: false, unsavedModalOpen: false, pendingNavUrl: null, contactRequiredModalOpen: false }"
      @corex:contact-required.window="contactRequiredModalOpen = true"
      @corex:contact-added.window="contactRequiredModalOpen = false; activeTab = 'info';"
      @corex:clear-dirty.window="formDirty = false"
@@ -3787,6 +3787,13 @@
                     ])
                 </div>
 
+                {{-- Portal Leads (P24 + PP) — Spec: .ai/specs/portal-leads.md --}}
+                <div x-show="!sellerPreview">
+                    @include('corex.properties.intelligence._portal-leads', [
+                        'property' => $property,
+                    ])
+                </div>
+
                 {{-- Section A: Performance Dashboard --}}
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div class="rounded-md p-4 text-center" style="background: var(--surface-2); border: 1px solid var(--border);">
@@ -4257,11 +4264,13 @@
                                 <span><strong style="color:var(--text-secondary);">{{ $cm->floor_size_min ? number_format($cm->floor_size_min) : '—' }}–{{ $cm->floor_size_max ? number_format($cm->floor_size_max) : '—' }}</strong> m² floor</span>
                                 @endif
                             </div>
+                            @if($cm->contact)
                             <a href="{{ route('corex.contacts.matches.results', [$cm->contact, $cm]) }}"
                                class="inline-flex items-center gap-1.5 mt-2 text-xs font-semibold no-underline"
                                style="color:var(--brand-icon);">
                                 View match results →
                             </a>
+                            @endif
                         </div>
                     </div>
                 </div>

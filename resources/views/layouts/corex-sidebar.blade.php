@@ -150,9 +150,19 @@
     {{-- Logo + Help icon --}}
     <div class="corex-sidebar-logo" style="display:flex; align-items:center; justify-content:space-between;">
         <span>CoreX <span>Os</span></span>
-        @auth
-        <div id="help-widget-slot" style="flex-shrink:0;"></div>
-        @endauth
+        <div style="display:flex; align-items:center; gap:0.5rem; flex-shrink:0;">
+            @auth
+            <div id="help-widget-slot" style="flex-shrink:0;"></div>
+            @endauth
+            {{-- Mobile-only: close sidebar for a full-screen page --}}
+            <button type="button" @click="sidebarOpen = false" class="lg:hidden"
+                    aria-label="Close menu" title="Close menu"
+                    style="display:flex; align-items:center; justify-content:center; width:2rem; height:2rem; border-radius:6px; color:var(--text-secondary); background:transparent;">
+                <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
     </div>
     @if($_userAgency)
     <div class="px-4 -mt-1 pb-2">
@@ -392,6 +402,12 @@
                 @permission('access_core_matches')
                 @if(\Illuminate\Support\Facades\Route::has('corex.core-matches.index') && \App\Models\PerformanceSetting::get('matches_enabled', 1))
                 <a href="{{ route('corex.core-matches.index') }}" class="corex-nav-subitem {{ request()->routeIs('corex.core-matches.*') ? 'active' : '' }}">Core Matches</a>
+                @endif
+                @endpermission
+
+                @permission('access_portal_leads')
+                @if(\Illuminate\Support\Facades\Route::has('corex.portal-leads.index'))
+                <a href="{{ route('corex.portal-leads.index') }}" class="corex-nav-subitem {{ request()->routeIs('corex.portal-leads.*') ? 'active' : '' }}">Portal Leads</a>
                 @endif
                 @endpermission
 
@@ -899,6 +915,23 @@
         </a>
         @endif
 
+        {{-- Flow Map --}}
+        @permission('access_flow_map')
+        @if(\Illuminate\Support\Facades\Route::has('tools.flow-map'))
+        <a href="{{ route('tools.flow-map') }}" class="corex-nav-item {{ request()->routeIs('tools.flow-map') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="5" cy="6" r="2"/>
+                <circle cx="19" cy="6" r="2"/>
+                <circle cx="12" cy="18" r="2"/>
+                <path d="M7 6h10"/>
+                <path d="M6.5 8 11 16"/>
+                <path d="M17.5 8 13 16"/>
+            </svg>
+            <span>Flow Map</span>
+        </a>
+        @endif
+        @endpermission
+
         {{-- Ellie AI --}}
         @permission('access_ellie')
         @if(\Illuminate\Support\Facades\Route::has('ellie.index'))
@@ -1333,6 +1366,9 @@
             <a href="{{ route('agent.portal') }}#profile" class="corex-user-dropdown-item">Profile</a>
             @if($canSwitchUsers)
             <button type="button" @click="switchPanel = !switchPanel; userMenu = false" class="corex-user-dropdown-item w-full text-left">Switch User</button>
+            @endif
+            @if(\App\Http\Controllers\Auth\DemoLoginController::isEnabled())
+            <a href="{{ route('demo.owner.login') }}" class="corex-user-dropdown-item w-full text-left block">System Owner</a>
             @endif
             <form method="POST" action="{{ route('logout') }}">
                 @csrf

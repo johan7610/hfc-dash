@@ -24,6 +24,7 @@ class User extends Authenticatable
         'email',
         'password',
         'qr_code_slug',
+        'qr_reroute_user_id',
         'role',
         'designation',
         'supervised_by',
@@ -335,6 +336,49 @@ class User extends Authenticatable
     public function qrCodeUrl(): string
     {
         return rtrim(config('app.url'), '/') . '/r/a/' . $this->ensureQrSlug();
+    }
+
+    /**
+     * Resolve a scanned QR slug to the live agent who should receive the lead.
+     *
+     * The slug always stays on the agent it was minted for (the audit anchor).
+     * When that agent has left (inactive / soft-deleted) we follow their
+     * `qr_reroute_user_id` pointer — chained, so a target who later leaves
+     * reroutes again — until we land on an active, non-deleted agent.
+     *
+     * Returns null if the slug is unknown, or the chain dead-ends at an
+     * inactive agent with no reroute set, or a loop is detected.
+     *
+     * Spec: .ai/specs/agent-qr-onboarding.md
+     */
+    public static function resolveByQrSlug(string $slug): ?self
+    {
+        if (!preg_match('/^[a-z0-9]{6,16}$/', $slug)) {
+            return null;
+        }
+
+        $user = static::query()
+            ->withoutGlobalScopes()
+            ->where('qr_code_slug', $slug)
+            ->first();
+
+        $seen = [];
+        while ($user) {
+            if ($user->is_active && $user->deleted_at === null) {
+                return $user;
+            }
+            if (isset($seen[$user->id]) || !$user->qr_reroute_user_id) {
+                return null; // loop, or chain dead-ends on a departed agent
+            }
+            $seen[$user->id] = true;
+
+            $user = static::query()
+                ->withoutGlobalScopes()
+                ->whereKey($user->qr_reroute_user_id)
+                ->first();
+        }
+
+        return null;
     }
 
     // ── Owner role checks (the ONLY hardcoded concept) ──

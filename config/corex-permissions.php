@@ -272,6 +272,10 @@ return [
         ['key' => 'core_matches.manage',         'label' => 'Manage (edit, archive)',      'section' => 'core-matches',     'type' => 'action',  'module' => 'core_matches',     'sort_order' => 13],
         ['key' => 'core_matches.convert_to_deal','label' => 'Convert to Deal',             'section' => 'core-matches',     'type' => 'action',  'module' => 'core_matches',     'sort_order' => 14],
 
+        // ── Portal Leads (P24 + PP unified) ──
+        ['key' => 'access_portal_leads',         'label' => 'Access Portal Leads',         'section' => 'portal-leads',     'type' => 'access',  'module' => 'portal_leads',     'sort_order' => 1],
+        ['key' => 'portal_leads.view',           'label' => 'View',                        'section' => 'portal-leads',     'type' => 'action',  'module' => 'portal_leads',     'sort_order' => 10],
+
         // ── Client App (mobile client portal) ──
         // Spec: .ai/specs/client-auth.md
         ['key' => 'client_app.create_login',     'label' => 'Create Client App Login',     'section' => 'contacts',         'type' => 'action',  'module' => 'client_app',       'sort_order' => 50],
@@ -282,6 +286,9 @@ return [
 
         // ── Calculators / Tools ──
         ['key' => 'access_calculators',          'label' => 'Access Calculators & Tools',  'section' => 'calculators',      'type' => 'access',  'module' => 'calculators',      'sort_order' => 1],
+
+        // ── Flow Map ──
+        ['key' => 'access_flow_map',             'label' => 'Access Flow Map',             'section' => 'flow-map',         'type' => 'access',  'module' => 'flow_map',         'sort_order' => 1],
 
         // ── Ellie AI ──
         ['key' => 'access_ellie',                'label' => 'Access Ellie AI',             'section' => 'ellie',            'type' => 'access',  'module' => 'ellie',            'sort_order' => 1],
@@ -509,7 +516,7 @@ return [
                 'commercial_evals.view', 'commercial_evals.create', 'commercial_evals.edit',
                 'access_sales_documents',
                 'sales_docs.view', 'sales_docs.create', 'sales_docs.edit',
-                'access_calculators', 'access_ellie',
+                'access_calculators', 'access_ellie', 'access_flow_map',
                 'access_pdf_splitter', 'access_pdf_suite',
                 'access_deposit_calculator', 'access_deposit_calc_history',
                 'access_prospecting', 'access_evaluation',
@@ -520,6 +527,7 @@ return [
                 'contacts.delete', 'contacts.whatsapp', 'contacts.email',
                 'access_core_matches',
                 'core_matches.view', 'core_matches.create', 'core_matches.delete', 'core_matches.manage', 'core_matches.convert_to_deal',
+                'access_portal_leads', 'portal_leads.view',
                 'p24.view',
                 'access_knowledge_base', 'knowledge.view',
                 'settings.view',
@@ -578,7 +586,7 @@ return [
                 'commercial_evals.view', 'commercial_evals.create',
                 'access_sales_documents',
                 'sales_docs.view', 'sales_docs.create',
-                'access_calculators', 'access_ellie',
+                'access_calculators', 'access_ellie', 'access_flow_map',
                 'access_pdf_splitter', 'access_pdf_suite',
                 'access_prospecting', 'access_evaluation',
                 'access_properties', 'create_properties',
@@ -588,6 +596,7 @@ return [
                 'contacts.whatsapp', 'contacts.email',
                 'access_core_matches',
                 'core_matches.view', 'core_matches.create', 'core_matches.delete', 'core_matches.manage', 'core_matches.convert_to_deal',
+                'access_portal_leads', 'portal_leads.view',
                 'p24.view',
                 'access_knowledge_base', 'knowledge.view',
                 'view_own_stats',
@@ -625,11 +634,12 @@ return [
                 'access_filing_register', 'filing.view',
                 'access_commercial_evaluations', 'commercial_evals.view',
                 'access_sales_documents', 'sales_docs.view',
-                'access_calculators', 'access_ellie',
+                'access_calculators', 'access_ellie', 'access_flow_map',
                 'access_prospecting', 'access_evaluation',
                 'access_properties', 'properties.view',
                 'access_contacts', 'contacts.view',
                 'access_core_matches', 'core_matches.view',
+                'access_portal_leads', 'portal_leads.view',
                 'p24.view',
                 'access_knowledge_base', 'knowledge.view',
                 'settings.view',

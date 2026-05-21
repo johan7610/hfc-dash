@@ -215,6 +215,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/admin/users/{user}/pp/update-id', [\App\Http\Controllers\PrivateProperty\AgentPpController::class, 'updateId'])->middleware('permission:manage_users')->name('admin.users.pp.update-id');
     Route::post('/admin/users/{user}/pp/update-external-ref', [\App\Http\Controllers\PrivateProperty\AgentPpController::class, 'updateExternalRef'])->middleware('permission:manage_users')->name('admin.users.pp.update-external-ref');
     Route::get('/admin/pp/agents', [\App\Http\Controllers\PrivateProperty\AgentPpController::class, 'index'])->middleware('permission:manage_users')->name('admin.pp.agents');
+    Route::get('/admin/pp/mapping-email', [\App\Http\Controllers\PrivateProperty\AgentPpController::class, 'mappingEmail'])->middleware('permission:manage_users')->name('admin.pp.mapping-email');
     Route::post('/admin/pp/agents/deactivate', [\App\Http\Controllers\PrivateProperty\AgentPpController::class, 'deactivateByEncryptedId'])->middleware('permission:manage_users')->name('admin.pp.agents.deactivate');
     Route::post('/admin/pp/agents/purge-listing/{id}', [\App\Http\Controllers\PrivateProperty\AgentPpController::class, 'purgeListing'])->middleware('permission:manage_users')->name('admin.pp.agents.purge-listing');
 
@@ -473,9 +474,13 @@ use App\Http\Controllers\Admin\TargetController;
 use App\Http\Controllers\ToolsController;
 use App\Http\Controllers\Tools\PdfSplitterController;
 use App\Http\Controllers\Tools\PdfSuiteController;
+use App\Http\Controllers\Tools\FlowMapController;
 
 Route::middleware(['auth'])->group(function () {
 
+
+    // Flow Map — read-only guide to how CoreX interconnects (spec: .ai/specs/flows-map.md)
+    Route::get('/tools/flow-map', [FlowMapController::class, 'index'])->middleware('permission:access_flow_map')->name('tools.flow-map');
 
     // Tools
     Route::get('/tools/commission', [ToolsController::class, 'commission'])->middleware('permission:access_calculators')->name('tools.commission');
@@ -1834,6 +1839,16 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::get('/core-matches', [\App\Http\Controllers\CoreX\ContactMatchController::class, 'index'])
         ->middleware('permission:access_contacts')
         ->name('corex.core-matches.index');
+
+    // Portal Leads (P24 + PP unified). Spec: .ai/specs/portal-leads.md
+    Route::prefix('real-estate/portal-leads')
+        ->middleware(['permission:access_portal_leads', 'agency.required'])
+        ->name('corex.portal-leads.')
+        ->group(function () {
+            Route::get('/',     [\App\Http\Controllers\CoreX\PortalLeadController::class, 'index'])->name('index');
+            Route::get('/poll', [\App\Http\Controllers\CoreX\PortalLeadController::class, 'poll'])->name('poll');
+            Route::post('/{portalLead}/mark-notified', [\App\Http\Controllers\CoreX\PortalLeadController::class, 'markNotified'])->name('mark-notified');
+        });
 
     // Contacts
     Route::prefix('contacts')->middleware(['permission:access_contacts', 'agency.required'])->name('corex.contacts.')->group(function () {
