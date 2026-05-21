@@ -2560,6 +2560,19 @@ Route::middleware(['auth', 'permission:access_prospecting'])
         Route::get('/analyse',       [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'analyse'])->name('analyse');
         Route::get('/market-pulse',  [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'marketPulse'])->name('market-pulse');
 
+        // Phase D5 — AI surfaces.
+        Route::post('/analyse/regenerate-brief',
+            [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'regenerateBrief'])
+            ->middleware('permission:mic.regenerate_brief')
+            ->name('brief.regenerate');
+        Route::get('/analyse/pocket-narrative',
+            [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'pocketNarrative'])
+            ->name('pocket-narrative');
+        Route::get('/suburb/{suburb}',
+            [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'suburbDeepDive'])
+            ->where('suburb', '[A-Za-z0-9 \-\&\']+')
+            ->name('suburb-deep-dive');
+
         // Intelligence layer — declared before the {listing} catch-alls so
         // model-binding doesn't shadow them.
         Route::get('/snapshot.json', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'snapshotJson'])->name('snapshot');

@@ -50,6 +50,38 @@
     </div>
 </div>
 
+{{-- Phase D5 — suburb + demand-pocket slide-over (lazy AJAX). --}}
+@include('corex.market-intelligence.partials.mic-slideover')
+
+{{-- Phase D5 — wire suburb name clicks + pocket cell clicks to the slide-over. --}}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Heatmap cells with data-suburb + data-bedrooms → pocket panel
+        document.querySelectorAll('[data-mic-pocket="1"]').forEach(function (el) {
+            el.addEventListener('click', function (e) {
+                e.preventDefault();
+                const suburb = el.dataset.suburb;
+                const bedrooms = parseInt(el.dataset.bedrooms, 10);
+                if (suburb && bedrooms) {
+                    window.dispatchEvent(new CustomEvent('mic-open-pocket', { detail: { suburb, bedrooms } }));
+                }
+            });
+        });
+        // Suburb name spans → suburb deep-dive panel
+        document.querySelectorAll('[data-mic-suburb]').forEach(function (el) {
+            el.addEventListener('click', function (e) {
+                if (e.target.closest('a, button')) return; // don't hijack links/buttons inside
+                e.preventDefault();
+                const suburb = el.dataset.micSuburb;
+                if (suburb) {
+                    window.dispatchEvent(new CustomEvent('mic-open-suburb', { detail: { suburb } }));
+                }
+            });
+            el.style.cursor = 'pointer';
+        });
+    });
+</script>
+
 <style>
     @media (max-width: 1024px) {
         .mi-analyse-grid { grid-template-columns: 1fr !important; }

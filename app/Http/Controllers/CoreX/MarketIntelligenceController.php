@@ -4,19 +4,29 @@ namespace App\Http\Controllers\CoreX;
 
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
+use App\Models\P24ImportLog;
+use App\Models\P24Listing;
+use App\Models\P24PriceChange;
 use App\Models\Prospecting\TrackedProperty;
 use App\Models\ProspectingClaim;
 use App\Models\ProspectingListing;
 use App\Models\User;
+use App\Services\AI\AnthropicGateway;
+use App\Services\AI\DTOs\NarrativeRequest;
+use App\Services\MarketIntelligence\OpportunityPocketService;
+use App\Services\MarketIntelligence\StrategicBriefService;
 use App\Services\Prospecting\ProspectingConfigurationService;
 use App\Services\Prospecting\ProspectingIntelligenceService;
 use App\Services\Prospecting\ProspectingListingResolver;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Models\SuggestedActionThresholds;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -777,9 +787,12 @@ class MarketIntelligenceController extends Controller
     }
 
     /**
-     * Market Pulse tab — STUB (Phase D1). Phase D6 folds the /admin/p24
-     * import surface into this tab. For now, agency-wide top-of-funnel
-     * stats so the tab does something useful.
+     * Market Pulse tab — Phase D6. Folds the legacy /admin/p24 surface into
+     * the unified MIC URL. Same queries as Admin\P24Controller::index();
+     * different chrome (tabs + MIC look). The /admin/p24 root GET still
+     * 301-redirects here (Phase D1).
+     *
+     * Spec: .ai/specs/mic-complete-spec.md §5.6.
      */
     public function marketPulse(Request $request)
     {
@@ -787,33 +800,421 @@ class MarketIntelligenceController extends Controller
         $agencyId = $user->effectiveAgencyId() ?? $user->agency_id;
         if ($agencyId === null) abort(403);
 
-        $sinceMonday = \Carbon\Carbon::now()->startOfWeek();
+        $now = Carbon::now();
+        $thisMonthStart = $now->copy()->startOfMonth()->toDateString();
 
-        $pulse = [
-            'tracked_total'  => \DB::table('tracked_properties')
-                ->where('agency_id', $agencyId)
-                ->whereNull('deleted_at')
-                ->count(),
-            'new_this_week'  => \DB::table('tracked_properties')
-                ->where('agency_id', $agencyId)
-                ->whereNull('deleted_at')
-                ->where('first_seen_at', '>=', $sinceMonday)
-                ->count(),
-            'p24_active'     => \DB::table('prospecting_listings')
-                ->where('agency_id', $agencyId)
-                ->whereNull('deleted_at')
-                ->where('portal_source', 'p24')
-                ->where('is_active', true)
-                ->count(),
-            'pp_active'      => \DB::table('prospecting_listings')
-                ->where('agency_id', $agencyId)
-                ->whereNull('deleted_at')
-                ->where('portal_source', 'pp')
-                ->where('is_active', true)
-                ->count(),
+        $lastImport = P24ImportLog::orderByDesc('created_at')->first();
+        $emailsProcessed30d = P24ImportLog::where('created_at', '>=', $now->copy()->subDays(30))
+            ->where('status', 'success')
+            ->count();
+        $activeListings = P24Listing::active()->count();
+        $newThisMonth = P24Listing::where('first_seen_date', '>=', $thisMonthStart)->count();
+        $avgAskingPrice = (float) P24Listing::active()->avg('asking_price');
+
+        $imapConfigured = !empty(config('services.p24_imap.host'))
+            && !empty(config('services.p24_imap.username'))
+            && !empty(config('services.p24_imap.password'));
+
+        $kpis = [
+            'last_import_at'      => $lastImport?->created_at,
+            'last_import_status'  => $lastImport?->status,
+            'emails_30d'          => $emailsProcessed30d,
+            'active_listings'     => $activeListings,
+            'new_this_month'      => $newThisMonth,
+            'avg_price'           => $avgAskingPrice,
+            'imap_status'         => $imapConfigured ? 'configured' : 'not configured',
         ];
 
-        return view('corex.market-intelligence.market-pulse', compact('pulse'));
+        $suburbStats = P24Listing::active()
+            ->select(
+                'suburb',
+                DB::raw('COUNT(*) as listing_count'),
+                DB::raw('AVG(asking_price) as avg_price'),
+                DB::raw('MIN(asking_price) as min_price'),
+                DB::raw('MAX(asking_price) as max_price'),
+                DB::raw('SUM(CASE WHEN first_seen_date >= "' . $thisMonthStart . '" THEN 1 ELSE 0 END) as new_this_month'),
+            )
+            ->whereNotNull('suburb')
+            ->groupBy('suburb')
+            ->orderByDesc('listing_count')
+            ->get();
+
+        $recentListings = P24Listing::orderByDesc('first_seen_date')
+            ->orderByDesc('created_at')
+            ->limit(200)
+            ->get(['id', 'p24_listing_number', 'p24_url', 'suburb', 'property_type', 'asking_price', 'bedrooms', 'bathrooms', 'listing_status', 'first_seen_date']);
+
+        $priceChanges = P24PriceChange::with('listing:id,p24_listing_number,p24_url,suburb')
+            ->orderByDesc('change_date')
+            ->orderByDesc('created_at')
+            ->limit(200)
+            ->get();
+
+        $importLog = P24ImportLog::orderByDesc('created_at')
+            ->limit(50)
+            ->get();
+
+        return view('corex.market-intelligence.market-pulse', compact(
+            'kpis',
+            'suburbStats',
+            'recentListings',
+            'priceChanges',
+            'importLog',
+        ));
+    }
+
+    /**
+     * Phase D5 — force-refresh the agency's Strategic Brief AI narrative.
+     * Permission-gated (mic.regenerate_brief) at the route level. Bypasses
+     * the 24h cache by setting forceRefresh on the gateway request.
+     */
+    public function regenerateBrief(Request $request)
+    {
+        $user = $request->user();
+        $agencyId = $user->effectiveAgencyId() ?? $user->agency_id;
+        if ($agencyId === null) abort(403);
+
+        try {
+            app(StrategicBriefService::class)->buildFor((int) $agencyId, forceRefresh: true);
+            return redirect()->route('market-intelligence.analyse')
+                ->with('status', 'Strategic brief regenerated.');
+        } catch (\Throwable $e) {
+            Log::warning('regenerateBrief failed', ['error' => $e->getMessage()]);
+            return redirect()->route('market-intelligence.analyse')
+                ->with('error', 'Could not regenerate brief: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Phase D5 — lazy demand-pocket narrative. Returns JSON for the slide-
+     * over panel in the Analyse heatmap. Cached 24h via AnthropicGateway.
+     *
+     * Spec: .ai/specs/mic-complete-spec.md §4.4 + §5.5.3.
+     */
+    public function pocketNarrative(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $agencyId = $user->effectiveAgencyId() ?? $user->agency_id;
+        if ($agencyId === null) abort(403);
+
+        $request->validate([
+            'suburb'   => ['required', 'string', 'max:120'],
+            'bedrooms' => ['required', 'integer', 'min:1', 'max:20'],
+        ]);
+
+        $suburb = trim((string) $request->query('suburb'));
+        $bedrooms = (int) $request->query('bedrooms');
+        $suburbSlug = str_replace([' ', '/'], ['-', '-'], strtolower($suburb));
+
+        // Build the pocket facts from existing data — agency_id-scoped.
+        $facts = $this->buildPocketFacts((int) $agencyId, $suburb, $bedrooms);
+        $fallbackText = $this->buildPocketFallback($facts);
+
+        try {
+            $response = app(AnthropicGateway::class)->generate(new NarrativeRequest(
+                narrativeType:   'suburb_pocket',
+                cacheKey:        "demand_pocket:agency:{$agencyId}:{$suburbSlug}:{$bedrooms}bed",
+                modelAlias:      'quality',
+                systemPrompt:    $this->pocketSystemPrompt(),
+                userPrompt:      $this->pocketUserPrompt($facts),
+                inputData:       $facts,
+                maxTokens:       300,
+                temperature:     0.6,
+                cacheTtlMinutes: 24 * 60,
+                agencyId:        (int) $agencyId,
+                fallbackData:    ['text' => $fallbackText],
+                promptVersion:   'v1',
+            ));
+
+            return response()->json([
+                'suburb'        => $suburb,
+                'bedrooms'      => $bedrooms,
+                'narrative'     => $response->outputText,
+                'from_cache'    => $response->fromCache,
+                'from_fallback' => $response->fromFallback,
+                'generated_at'  => $response->generatedAt->toIso8601String(),
+                'facts'         => $facts,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('pocketNarrative failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'suburb'        => $suburb,
+                'bedrooms'      => $bedrooms,
+                'narrative'     => $fallbackText,
+                'from_cache'    => false,
+                'from_fallback' => true,
+                'generated_at'  => now()->toIso8601String(),
+                'facts'         => $facts,
+            ]);
+        }
+    }
+
+    /**
+     * Phase D5 — suburb deep-dive panel (HTML partial — slide-over body).
+     * Pulls active listings + buyer demand + an AI summary if the surface
+     * has anything to say. Market history is sparse until Phase F populates
+     * market_data_points; the panel explains that gracefully.
+     */
+    public function suburbDeepDive(Request $request, string $suburb)
+    {
+        $user = $request->user();
+        $agencyId = $user->effectiveAgencyId() ?? $user->agency_id;
+        if ($agencyId === null) abort(403);
+
+        $suburb = trim($suburb);
+        if ($suburb === '') abort(404);
+
+        $facts = $this->buildSuburbDeepDiveFacts((int) $agencyId, $suburb);
+        $fallbackText = $this->buildSuburbDeepDiveFallback($facts);
+
+        $narrative = $fallbackText;
+        $fromCache = false;
+        $fromFallback = true;
+        $generatedAt = now();
+
+        try {
+            $suburbSlug = str_replace([' ', '/'], ['-', '-'], strtolower($suburb));
+            $response = app(AnthropicGateway::class)->generate(new NarrativeRequest(
+                narrativeType:   'suburb_pocket',
+                cacheKey:        "suburb_deep_dive:agency:{$agencyId}:{$suburbSlug}",
+                modelAlias:      'quality',
+                systemPrompt:    $this->suburbDeepDiveSystemPrompt(),
+                userPrompt:      $this->suburbDeepDiveUserPrompt($facts),
+                inputData:       $facts,
+                maxTokens:       300,
+                temperature:     0.6,
+                cacheTtlMinutes: 24 * 60,
+                agencyId:        (int) $agencyId,
+                fallbackData:    ['text' => $fallbackText],
+                promptVersion:   'v1',
+            ));
+            $narrative = $response->outputText;
+            $fromCache = $response->fromCache;
+            $fromFallback = $response->fromFallback;
+            $generatedAt = $response->generatedAt;
+        } catch (\Throwable $e) {
+            Log::warning('suburbDeepDive AI failed', ['error' => $e->getMessage()]);
+        }
+
+        return view('corex.market-intelligence.partials.suburb-deep-dive', [
+            'suburb'       => $suburb,
+            'facts'        => $facts,
+            'narrative'    => $narrative,
+            'fromCache'    => $fromCache,
+            'fromFallback' => $fromFallback,
+            'generatedAt'  => $generatedAt,
+        ]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Phase D5/D6 helpers
+    // ─────────────────────────────────────────────────────────────────
+
+    private function buildPocketFacts(int $agencyId, string $suburb, int $bedrooms): array
+    {
+        $pl = 'prospecting_listings';
+        $pbm = 'prospecting_buyer_matches';
+
+        $base = DB::table($pl)
+            ->where("$pl.agency_id", $agencyId)
+            ->whereNull("$pl.deleted_at")
+            ->where("$pl.is_active", true)
+            ->whereNull("$pl.matched_property_id")
+            ->where("$pl.suburb", $suburb)
+            ->where("$pl.bedrooms", $bedrooms);
+
+        $listingCount = (clone $base)->count();
+        $avgPrice = (clone $base)->avg('price');
+
+        $buyerCount = (int) DB::table("$pbm as pbm")
+            ->join("$pl as pl", 'pl.id', '=', 'pbm.prospecting_listing_id')
+            ->where('pl.agency_id', $agencyId)
+            ->where('pl.suburb', $suburb)
+            ->where('pl.bedrooms', $bedrooms)
+            ->whereNull('pbm.dismissed_at')
+            ->where('pbm.score', '>=', 80)
+            ->distinct('pbm.contact_id')
+            ->count('pbm.contact_id');
+
+        return [
+            'suburb'         => $suburb,
+            'bedrooms'       => $bedrooms,
+            'listing_count'  => (int) $listingCount,
+            'buyer_count'    => $buyerCount,
+            'ratio'          => $listingCount > 0 ? round($buyerCount / $listingCount, 2) : null,
+            'avg_price'      => $avgPrice ? (int) round((float) $avgPrice) : null,
+        ];
+    }
+
+    private function buildPocketFallback(array $facts): string
+    {
+        $supply = $facts['listing_count'] ?? 0;
+        $demand = $facts['buyer_count'] ?? 0;
+        if ($demand === 0 && $supply === 0) {
+            return "Quiet pocket — no active listings or strong-tier buyer matches recorded for {$facts['suburb']} {$facts['bedrooms']}-bed right now.";
+        }
+        $ratioPart = $facts['ratio'] !== null
+            ? ' (' . $facts['ratio'] . '× demand-to-supply)'
+            : '';
+        $listingWord = $supply === 1 ? 'listing' : 'listings';
+        $buyerWord = $demand === 1 ? 'buyer' : 'buyers';
+        $priceLine = '';
+        if (!empty($facts['avg_price'])) {
+            $priceLine = ' Average asking price across this band is R' . number_format($facts['avg_price'], 0, '.', ',') . '.';
+        }
+        return sprintf(
+            "%s · %d-bed: %d strong-tier %s chasing %d active %s%s.%s Pitch sellers in this band with confidence on demand — but check comparable sales before quoting a list price.",
+            $facts['suburb'],
+            $facts['bedrooms'],
+            $demand,
+            $buyerWord,
+            $supply,
+            $listingWord,
+            $ratioPart,
+            $priceLine,
+        );
+    }
+
+    private function pocketSystemPrompt(): string
+    {
+        return <<<PROMPT
+        You write short briefings on demand-supply pockets for South African
+        real estate agents. Strict rules:
+
+        - 3-4 sentences, plain English, no headers, no bullets.
+        - Lead with the demand:supply situation (specific buyer & listing counts).
+        - One sentence on what kind of buyers chase this band (entry, family,
+          investor) if average price suggests it.
+        - Anti-overpricing anchor: ALWAYS include a sentence reminding the agent
+          that strong demand does not justify above-market pricing — verified
+          comparable sales must drive the list price.
+        - No price predictions. No hype language. Confident, factual tone.
+
+        Return ONLY the narrative text. No JSON, no markdown, no preamble.
+        PROMPT;
+    }
+
+    private function pocketUserPrompt(array $facts): string
+    {
+        return "Write the demand-pocket briefing for {$facts['suburb']} {$facts['bedrooms']}-bed:\n\n"
+            . json_encode($facts, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+            . "\n\nFollow the rules. 3-4 sentences only.";
+    }
+
+    private function buildSuburbDeepDiveFacts(int $agencyId, string $suburb): array
+    {
+        $now = Carbon::now();
+
+        $activeListings = P24Listing::active()->where('suburb', $suburb)->count();
+        $avgAsking = (float) P24Listing::active()->where('suburb', $suburb)->avg('asking_price');
+
+        $listingTypeBreakdown = P24Listing::active()
+            ->where('suburb', $suburb)
+            ->select('property_type', DB::raw('COUNT(*) as cnt'))
+            ->groupBy('property_type')
+            ->orderByDesc('cnt')
+            ->limit(10)
+            ->get()
+            ->map(fn ($r) => ['type' => (string) ($r->property_type ?? '—'), 'count' => (int) $r->cnt])
+            ->all();
+
+        $activeBuyers = (int) DB::table('prospecting_buyer_matches as pbm')
+            ->join('prospecting_listings as pl', 'pl.id', '=', 'pbm.prospecting_listing_id')
+            ->where('pl.agency_id', $agencyId)
+            ->where('pl.suburb', $suburb)
+            ->whereNull('pbm.dismissed_at')
+            ->where('pbm.score', '>=', 80)
+            ->distinct('pbm.contact_id')
+            ->count('pbm.contact_id');
+
+        $bedroomDemand = DB::table('prospecting_buyer_matches as pbm')
+            ->join('prospecting_listings as pl', 'pl.id', '=', 'pbm.prospecting_listing_id')
+            ->where('pl.agency_id', $agencyId)
+            ->where('pl.suburb', $suburb)
+            ->whereNull('pbm.dismissed_at')
+            ->where('pbm.score', '>=', 80)
+            ->whereNotNull('pl.bedrooms')
+            ->select('pl.bedrooms', DB::raw('COUNT(DISTINCT pbm.contact_id) as buyers'))
+            ->groupBy('pl.bedrooms')
+            ->orderBy('pl.bedrooms')
+            ->get()
+            ->map(fn ($r) => ['bedrooms' => (int) $r->bedrooms, 'buyers' => (int) $r->buyers])
+            ->all();
+
+        // market_data_points populated by Phase F — may be empty. Schema
+        // uses (metric_key, metric_value_numeric, metric_date) so the lookup
+        // is a metric-keyed read, not a flat sales-row read.
+        $marketHistory = null;
+        if (Schema::hasTable('market_data_points')) {
+            $row = DB::table('market_data_points')
+                ->where('agency_id', $agencyId)
+                ->where('suburb_normalised', TrackedProperty::normaliseSuburb($suburb))
+                ->where('is_superseded', false)
+                ->orderByDesc('metric_date')
+                ->first();
+            if ($row) {
+                $marketHistory = [
+                    'observed_at'  => $row->metric_date,
+                    'metric_key'   => $row->metric_key,
+                    'metric_value' => $row->metric_value_numeric,
+                ];
+            }
+        }
+
+        return [
+            'suburb'                  => $suburb,
+            'active_listings'         => $activeListings,
+            'avg_asking'              => $avgAsking > 0 ? (int) round($avgAsking) : null,
+            'listing_type_breakdown'  => $listingTypeBreakdown,
+            'active_buyers'           => $activeBuyers,
+            'bedroom_demand'          => $bedroomDemand,
+            'market_history'          => $marketHistory,
+            'has_historical_data'     => $marketHistory !== null,
+        ];
+    }
+
+    private function buildSuburbDeepDiveFallback(array $facts): string
+    {
+        $supply = $facts['active_listings'] ?? 0;
+        $demand = $facts['active_buyers'] ?? 0;
+        if ($supply === 0 && $demand === 0) {
+            return "Quiet suburb — no active P24 listings or strong-tier buyer interest recorded for {$facts['suburb']} right now.";
+        }
+        $listingWord = $supply === 1 ? 'listing' : 'listings';
+        $buyerWord = $demand === 1 ? 'buyer' : 'buyers';
+        $priceLine = !empty($facts['avg_asking'])
+            ? ' Average asking is R' . number_format($facts['avg_asking'], 0, '.', ',') . '.'
+            : '';
+        $histLine = empty($facts['has_historical_data'])
+            ? ' Historical sales data is not loaded for this suburb yet — upload a CMA Info report to enrich.'
+            : '';
+        return "{$facts['suburb']}: {$supply} active P24 {$listingWord}, {$demand} strong-tier {$buyerWord} matched.{$priceLine}{$histLine}";
+    }
+
+    private function suburbDeepDiveSystemPrompt(): string
+    {
+        return <<<PROMPT
+        You write a short suburb intelligence panel for South African real estate
+        agents. Strict rules:
+
+        - 3 sentences, plain English, no headers, no bullets.
+        - First sentence: the supply-demand picture (active listings, active
+          buyers).
+        - Second sentence: where the demand is concentrated (bedroom band /
+          property type) if the data shows a clear concentration.
+        - Third sentence: a realism anchor — strong activity does NOT justify
+          above-market pricing; comparable sales drive the list price.
+        - No price predictions. Confident, factual tone. No hype words.
+
+        Return ONLY the narrative text. No JSON, no markdown.
+        PROMPT;
+    }
+
+    private function suburbDeepDiveUserPrompt(array $facts): string
+    {
+        return "Write the suburb intelligence panel for {$facts['suburb']}:\n\n"
+            . json_encode($facts, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+            . "\n\nFollow the rules. 3 sentences only.";
     }
 
     /**
