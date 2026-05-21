@@ -2578,6 +2578,22 @@ Route::middleware(['auth', 'permission:access_prospecting'])
             [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'matchTooltip'])
             ->name('match-tooltip');
 
+        // Phase F — CMA report import pipeline. Every route gated by
+        // permission:mic.upload_reports (Laravel 11 — middleware is at the
+        // route level, not the controller constructor).
+        Route::prefix('reports')->name('reports.')
+            ->middleware('permission:mic.upload_reports')
+            ->group(function () {
+                Route::get('/',                       [\App\Http\Controllers\CoreX\MarketReportController::class, 'index'])->name('index');
+                Route::get('/create',                 [\App\Http\Controllers\CoreX\MarketReportController::class, 'create'])->name('create');
+                Route::post('/',                      [\App\Http\Controllers\CoreX\MarketReportController::class, 'store'])->name('store');
+                Route::get('/parsers',                [\App\Http\Controllers\CoreX\MarketReportController::class, 'parserDashboard'])->name('parser-dashboard');
+                Route::get('/{report}',               [\App\Http\Controllers\CoreX\MarketReportController::class, 'show'])->name('show');
+                Route::delete('/{report}',            [\App\Http\Controllers\CoreX\MarketReportController::class, 'destroy'])->name('destroy');
+                Route::post('/{report}/spot-check',   [\App\Http\Controllers\CoreX\MarketReportController::class, 'runSpotCheck'])->name('spot-check');
+                Route::get('/{report}/discrepancies', [\App\Http\Controllers\CoreX\MarketReportController::class, 'discrepancies'])->name('discrepancies');
+            });
+
         // Intelligence layer — declared before the {listing} catch-alls so
         // model-binding doesn't shadow them.
         Route::get('/snapshot.json', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'snapshotJson'])->name('snapshot');

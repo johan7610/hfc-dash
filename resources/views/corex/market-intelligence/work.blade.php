@@ -23,6 +23,8 @@
     'agent'            => auth()->user(),
 ])
 
+@include('corex.market-intelligence.partials.quick-upload-cma')
+
 <header class="mi-header"
         style="position: sticky; top: 0; z-index: 10; background: var(--surface);">
     @include('corex.market-intelligence._top-bar')
