@@ -110,10 +110,18 @@ class ContactMatchController extends Controller
         ));
     }
 
-    public function toggleHide(Contact $contact, ContactMatch $match, int $property)
+    public function toggleHide(Request $request, Contact $contact, ContactMatch $match, int $property)
     {
         abort_if($match->contact_id !== $contact->id, 403);
-        $match->toggleHiddenProperty($property);
+
+        if ($match->isPropertyHidden($property)) {
+            $match->unhideProperty($property);
+        } else {
+            $data = $request->validate([
+                'reason' => 'required|string|min:3|max:500',
+            ], [], ['reason' => 'reason']);
+            $match->hidePropertyWithReason($property, $data['reason']);
+        }
 
         return back();
     }

@@ -55,6 +55,7 @@ class ContactMatch extends Model
         'deal_breakers',
         'notes',
         'hidden_property_ids',
+        'hidden_property_reasons',
         'property_view_counts',
         'last_engaged_at',
         'auto_archive_at',
@@ -80,6 +81,7 @@ class ContactMatch extends Model
         'nice_to_have_features' => 'array',
         'deal_breakers'         => 'array',
         'hidden_property_ids'   => 'array',
+        'hidden_property_reasons' => 'array',
         'property_view_counts'  => 'array',
         'last_engaged_at'       => 'datetime',
         'auto_archive_at'       => 'date',
@@ -220,15 +222,62 @@ class ContactMatch extends Model
         return in_array($propertyId, $this->hidden_property_ids ?? []);
     }
 
-    public function toggleHiddenProperty(int $propertyId): void
+    /**
+     * Returns the reason an agent gave when hiding this property, or null
+     * if the property is not hidden / no reason was recorded.
+     */
+    public function hiddenReasonFor(int $propertyId): ?string
+    {
+        $reasons = $this->hidden_property_reasons ?? [];
+        return $reasons[(string) $propertyId] ?? null;
+    }
+
+    /**
+     * Hide a property from this match and store the agent's reason.
+     * Idempotent — calling again updates the reason.
+     */
+    public function hidePropertyWithReason(int $propertyId, string $reason): void
     {
         $ids = $this->hidden_property_ids ?? [];
-        if (in_array($propertyId, $ids)) {
-            $ids = array_values(array_filter($ids, fn($id) => $id !== $propertyId));
-        } else {
+        if (!in_array($propertyId, $ids)) {
             $ids[] = $propertyId;
         }
-        $this->update(['hidden_property_ids' => $ids]);
+
+        $reasons = $this->hidden_property_reasons ?? [];
+        $reasons[(string) $propertyId] = $reason;
+
+        $this->update([
+            'hidden_property_ids'     => array_values($ids),
+            'hidden_property_reasons' => $reasons,
+        ]);
+    }
+
+    /**
+     * Un-hide a property and drop any stored reason.
+     */
+    public function unhideProperty(int $propertyId): void
+    {
+        $ids = array_values(array_filter(
+            $this->hidden_property_ids ?? [],
+            fn ($id) => $id !== $propertyId
+        ));
+
+        $reasons = $this->hidden_property_reasons ?? [];
+        unset($reasons[(string) $propertyId]);
+
+        $this->update([
+            'hidden_property_ids'     => $ids,
+            'hidden_property_reasons' => $reasons,
+        ]);
+    }
+
+    public function toggleHiddenProperty(int $propertyId, ?string $reason = null): void
+    {
+        if ($this->isPropertyHidden($propertyId)) {
+            $this->unhideProperty($propertyId);
+        } else {
+            $this->hidePropertyWithReason($propertyId, $reason ?? '');
+        }
     }
 
     public function incrementPropertyView(int $propertyId): void
