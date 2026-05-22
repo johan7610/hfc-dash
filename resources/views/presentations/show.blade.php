@@ -169,6 +169,44 @@
 
 {{-- Error flash handled by global toast system --}}
 
+{{-- ── PHASE 7: REFRESH REQUESTS (open + recent) ───────────────────────── --}}
+@php
+    $openRefreshRequests = \App\Models\PresentationRefreshRequest::where('presentation_id', $presentation->id)
+        ->whereIn('status', [
+            \App\Models\PresentationRefreshRequest::STATUS_PENDING,
+            \App\Models\PresentationRefreshRequest::STATUS_ACKNOWLEDGED,
+        ])
+        ->orderByDesc('created_at')
+        ->limit(5)
+        ->get();
+@endphp
+@if($openRefreshRequests->isNotEmpty())
+<div class="ds-status-card mb-4" style="border-left:3px solid #f59e0b;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+        <div style="flex:1;">
+            <h2 class="ds-section-header" style="margin-bottom:6px;color:#92400e;">
+                {{ $openRefreshRequests->count() }} open refresh {{ \Illuminate\Support\Str::plural('request', $openRefreshRequests->count()) }}
+            </h2>
+            <div style="font-size:0.8125rem;color:var(--text-secondary);">
+                @foreach($openRefreshRequests as $rr)
+                    <div style="padding:6px 0;border-top:{{ $loop->first ? '0' : '1px solid var(--border)' }};">
+                        <strong>{{ $rr->requester_name }}</strong>
+                        <span style="color:var(--text-muted);font-size:0.75rem;">· {{ $rr->created_at?->diffForHumans() }}</span>
+                        @if($rr->message)
+                            <div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px;">{{ \Illuminate\Support\Str::limit($rr->message, 120) }}</div>
+                        @endif
+                    </div>
+                @endforeach
+            </div>
+        </div>
+        <a href="{{ route('corex.presentations.refresh-requests.index') }}"
+           style="white-space:nowrap;font-size:0.75rem;color:#92400e;text-decoration:none;font-weight:600;padding:6px 12px;background:#fef3c7;border:1px solid #fde68a;border-radius:4px;">
+            Open inbox →
+        </a>
+    </div>
+</div>
+@endif
+
 {{-- ── PHASE 4: SHARE LINKS ──────────────────────────────────────────────── --}}
 @php
     $shareLinkService = app(\App\Services\Presentations\SnapshotLinkService::class);

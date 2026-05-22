@@ -13,6 +13,11 @@ use App\Models\PresentationTeaserLead;
 use App\Notifications\Presentations\PresentationFirstViewedNotification;
 use App\Notifications\Presentations\PresentationFlaggedAccessNotification;
 use App\Notifications\Presentations\TeaserLeadCapturedNotification;
+use App\Services\Presentations\RefreshNotAllowedException;
+use App\Services\Presentations\RefreshRateLimitException;
+use App\Services\Presentations\RefreshRequestService;
+use App\Support\Presentations\StalenessCalculator;
+use App\Support\Presentations\StalenessState;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -55,8 +60,22 @@ final class PublicPresentationController extends Controller
         if ($link->isRevoked()) {
             return $this->renderUnavailable('revoked', $link);
         }
+        // Phase 7 — if this link was superseded by a refresh, redirect to the
+        // new one so the seller doesn't see stale data.
+        if ($link->isSuperseded() && $link->superseded_by_link_id) {
+            $newer = PresentationSnapshotLink::find($link->superseded_by_link_id);
+            if ($newer && $newer->isUsable()) {
+                return redirect()->route('presentation.public.show', $newer->token);
+            }
+            return $this->renderUnavailable('revoked', $link);
+        }
         if ($link->isExpired()) {
-            return $this->renderUnavailable('expired', $link);
+            // Phase 7 — expired links route to the "request a refresh" page
+            // instead of a flat 404, so the seller stays on the agent.
+            return response()->view('presentations.public.expired-with-refresh', [
+                'link'  => $link,
+                'agent' => $link->creator,
+            ], 410);
         }
 
         // Fingerprint the request server-side. The track beacon (POST below)
@@ -114,6 +133,13 @@ final class PublicPresentationController extends Controller
 
         $link = $link->refresh();
 
+        // Phase 7 — classify staleness so the view can render the right banner.
+        $calc            = app(StalenessCalculator::class);
+        $agency          = Agency::find($link->agency_id);
+        $stalenessState  = $calc->classify($link, $agency);
+        $windowDays      = $calc->resolveWindowDays($agency);
+        $bannerMessage   = $calc->bannerMessage($stalenessState, $windowDays);
+
         // Phase 5 — teaser mode branches here. If lead is captured this
         // session, render the full view; otherwise render the teaser view
         // with locked sections + capture form.
@@ -123,13 +149,17 @@ final class PublicPresentationController extends Controller
                 'presentation'     => $link->presentation,
                 'version'          => $link->presentationVersion,
                 'teaserVisibility' => $this->teaserVisibility($link),
+                'stalenessState'   => $stalenessState,
+                'stalenessBanner'  => $bannerMessage,
             ]);
         }
 
         return response()->view('presentations.public.show', [
-            'link'         => $link,
-            'presentation' => $link->presentation,
-            'version'      => $link->presentationVersion,
+            'link'            => $link,
+            'presentation'    => $link->presentation,
+            'version'         => $link->presentationVersion,
+            'stalenessState'  => $stalenessState,
+            'stalenessBanner' => $bannerMessage,
         ]);
     }
 
@@ -328,34 +358,100 @@ final class PublicPresentationController extends Controller
         return response()->noContent(204);
     }
 
-    /** GET /p/{token}/refresh  — Phase 7 placeholder. */
+    /**
+     * GET /p/{token}/refresh — render the seller-facing "ask for an update" form.
+     *
+     * Reachable when the link is expired OR when the staleness banner offers
+     * a "Request refresh" CTA. Revoked / not-found links 404 as usual.
+     */
     public function refreshForm(Request $request, string $token): Response
     {
-        $link = PresentationSnapshotLink::where('token', $token)->first();
-        if (!$link || $link->isRevoked() || $link->isExpired()) {
+        $link = PresentationSnapshotLink::where('token', $token)->with('creator')->first();
+        if (!$link || $link->isRevoked()) {
             return $this->renderUnavailable('not_found');
         }
-        return response()->view('presentations.public.refresh-form', ['link' => $link]);
+        // If superseded, redirect to the new link rather than offer a refresh
+        // — the seller already has the answer they're asking for.
+        if ($link->isSuperseded() && $link->superseded_by_link_id) {
+            $newer = PresentationSnapshotLink::find($link->superseded_by_link_id);
+            if ($newer && $newer->isUsable()) {
+                return redirect()->route('presentation.public.show', $newer->token);
+            }
+        }
+
+        // Prefill from recipient contact when we have one + we're inside an
+        // authenticated session of the lead-capture flow.
+        $prefill = [
+            'requester_name'  => $link->refresh_requested_by_name
+                ?? ($link->recipientContact?->first_name && $link->recipientContact?->last_name
+                    ? trim($link->recipientContact->first_name . ' ' . $link->recipientContact->last_name)
+                    : ''),
+            'requester_email' => $link->recipientContact?->email ?? '',
+            'requester_phone' => $link->recipientContact?->phone ?? '',
+        ];
+
+        return response()->view('presentations.public.refresh-form', [
+            'link'    => $link,
+            'agent'   => $link->creator,
+            'prefill' => $prefill,
+        ]);
     }
 
-    /** POST /p/{token}/refresh  — Phase 7 placeholder. */
+    /**
+     * POST /p/{token}/refresh — record the request via RefreshRequestService.
+     *
+     * Honeypot + validation; the service handles rate-limit + DB writes +
+     * notification dispatch.
+     */
     public function refreshSubmit(Request $request, string $token): Response
     {
         $link = PresentationSnapshotLink::where('token', $token)->first();
-        if (!$link || $link->isRevoked() || $link->isExpired()) {
+        if (!$link || $link->isRevoked()) {
             return $this->renderUnavailable('not_found');
         }
+        if ($link->isSuperseded() && $link->superseded_by_link_id) {
+            $newer = PresentationSnapshotLink::find($link->superseded_by_link_id);
+            if ($newer && $newer->isUsable()) {
+                return redirect()->route('presentation.public.show', $newer->token);
+            }
+        }
+
+        // Honeypot — bots populate the hidden company_name field.
+        if ($request->filled('company_name')) {
+            return response()->view('presentations.public.refresh-thanks', ['link' => $link]);
+        }
+
         $data = $request->validate([
-            'requester_name' => 'required|string|max:200',
-            'message'        => 'nullable|string|max:2000',
+            'requester_name'  => 'required|string|min:2|max:120',
+            'requester_email' => 'nullable|email|max:160',
+            'requester_phone' => 'nullable|string|max:40',
+            'message'         => 'nullable|string|max:2000',
         ]);
-        $link->forceFill([
-            'refresh_requested_at'      => now(),
-            'refresh_requested_by_name' => $data['requester_name'],
-            'refresh_requested_message' => $data['message'] ?? null,
-        ])->save();
-        // Phase 7 will dispatch the notification to the agent.
-        return response()->view('presentations.public.refresh-thanks', ['link' => $link]);
+
+        try {
+            app(RefreshRequestService::class)->submitRequest($link, [
+                'requester_name'   => $data['requester_name'],
+                'requester_email'  => $data['requester_email'] ?? null,
+                'requester_phone'  => $data['requester_phone'] ?? null,
+                'message'          => $data['message'] ?? null,
+                'fingerprint_hash' => $this->serverFingerprint($request),
+                'ip_masked'        => $this->ipForStorage($request, $link),
+                'user_agent'       => mb_substr((string) $request->userAgent(), 0, 500) ?: null,
+            ]);
+        } catch (RefreshRateLimitException $e) {
+            return response()->view('presentations.public.refresh-thanks', [
+                'link'           => $link,
+                'rate_limited'   => true,
+                'rate_limit_msg' => $e->getMessage(),
+            ], 429);
+        } catch (RefreshNotAllowedException $e) {
+            return $this->renderUnavailable('revoked', $link);
+        }
+
+        return response()->view('presentations.public.refresh-thanks', [
+            'link'  => $link->refresh(),
+            'agent' => $link->creator,
+        ]);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────

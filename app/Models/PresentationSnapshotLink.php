@@ -42,6 +42,12 @@ final class PresentationSnapshotLink extends Model
         'refresh_requested_at',
         'refresh_requested_by_name',
         'refresh_requested_message',
+        'refresh_request_count',
+        'refresh_acknowledged_at',
+        'refresh_acknowledged_by_user_id',
+        'refresh_resulted_in_link_id',
+        'superseded_by_link_id',
+        'superseded_at',
     ];
 
     protected $casts = [
@@ -53,6 +59,9 @@ final class PresentationSnapshotLink extends Model
         'flagged_at'              => 'datetime',
         'last_flag_notified_at'   => 'datetime',
         'refresh_requested_at'    => 'datetime',
+        'refresh_request_count'   => 'integer',
+        'refresh_acknowledged_at' => 'datetime',
+        'superseded_at'           => 'datetime',
     ];
 
     public function presentation(): BelongsTo
@@ -96,9 +105,34 @@ final class PresentationSnapshotLink extends Model
         return $this->expires_at !== null && $this->expires_at->isPast();
     }
 
+    public function isSuperseded(): bool
+    {
+        return $this->superseded_at !== null;
+    }
+
     public function isUsable(): bool
     {
-        return !$this->isRevoked() && !$this->isExpired();
+        return !$this->isRevoked() && !$this->isExpired() && !$this->isSuperseded();
+    }
+
+    public function acknowledger(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'refresh_acknowledged_by_user_id');
+    }
+
+    public function resultingLink(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'refresh_resulted_in_link_id');
+    }
+
+    public function supersededBy(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'superseded_by_link_id');
+    }
+
+    public function refreshRequests(): HasMany
+    {
+        return $this->hasMany(PresentationRefreshRequest::class, 'snapshot_link_id');
     }
 
     /**

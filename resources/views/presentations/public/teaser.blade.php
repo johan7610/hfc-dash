@@ -168,6 +168,33 @@
 </header>
 
 <div class="wrap">
+    {{-- Phase 7 — data-may-be-dated banner (aging | stale) --}}
+    @php
+        $sState = $stalenessState ?? null;
+        $sBanner = $stalenessBanner ?? null;
+        $sCls = $sState && $sState->showsBanner()
+            ? ($sState === \App\Support\Presentations\StalenessState::Stale ? 'stale' : 'aging')
+            : null;
+    @endphp
+    @if($sCls && $sBanner)
+        <div style="display:flex; align-items:flex-start; gap:12px; padding:14px 16px; border-radius:8px; margin-bottom:16px; font-size:0.875rem; line-height:1.45;
+            background:{{ $sCls === 'stale' ? '#fee2e2' : '#fef3c7' }};
+            border:1px solid {{ $sCls === 'stale' ? '#fecaca' : '#fde68a' }};
+            color:{{ $sCls === 'stale' ? '#991b1b' : '#92400e' }};">
+            <span style="flex-shrink:0; font-size:1.1rem; line-height:1; padding-top:1px;">{!! $sCls === 'stale' ? '&#9888;' : '&#8987;' !!}</span>
+            <div style="flex:1;">
+                <strong style="display:block; margin-bottom:2px;">{{ $sState->label() }}</strong>
+                {{ $sBanner }}
+                <div>
+                    <a href="{{ route('presentation.public.refresh-form', $link->token) }}"
+                       style="display:inline-block; margin-top:6px; padding:6px 12px; background:{{ $sCls === 'stale' ? '#991b1b' : '#92400e' }}; color:#fff; border-radius:5px; font-weight:600; font-size:0.8125rem; text-decoration:none;">
+                        Request refreshed presentation
+                    </a>
+                </div>
+            </div>
+        </div>
+    @endif
+
     {{-- ── Visible teaser content (gated by agency toggles) ────────────── --}}
     <div>
 

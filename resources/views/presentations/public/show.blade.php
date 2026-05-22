@@ -64,6 +64,24 @@
         header.hero .sub { opacity: .8; margin-top: 4px; font-size: 0.875rem; }
         header.hero .badge { display:inline-block;margin-top:10px;padding:4px 10px;background:rgba(0,212,170,.18);color:#5eead4;border:1px solid rgba(0,212,170,.4);border-radius:999px;font-size:0.6875rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase; }
 
+        /* Phase 7 — staleness banner */
+        .staleness-banner {
+            display:flex; align-items:flex-start; gap:12px; padding:14px 16px; border-radius:8px;
+            margin-bottom:16px; font-size:0.875rem; line-height:1.45;
+        }
+        .staleness-banner.aging { background:#fef3c7; border:1px solid #fde68a; color:#92400e; }
+        .staleness-banner.stale { background:#fee2e2; border:1px solid #fecaca; color:#991b1b; }
+        .staleness-banner .sb-icon { flex-shrink:0; font-size:1.1rem; line-height:1; padding-top:1px; }
+        .staleness-banner .sb-body { flex:1; }
+        .staleness-banner .sb-body strong { display:block; margin-bottom:2px; }
+        .staleness-banner a.sb-cta {
+            display:inline-block; margin-top:6px; padding:6px 12px; background:#0f172a; color:#fff;
+            border-radius:5px; font-weight:600; font-size:0.8125rem;
+        }
+        .staleness-banner.aging a.sb-cta { background:#92400e; }
+        .staleness-banner.stale a.sb-cta { background:#991b1b; }
+        .staleness-banner a.sb-cta:hover { opacity:0.9; }
+
         section.block {
             background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
             padding: 20px 22px; margin-bottom: 16px;
@@ -102,6 +120,27 @@
 </header>
 
 <div class="container">
+
+    {{-- Phase 7 — data-may-be-dated banner (aging | stale) --}}
+    @php
+        $sState = $stalenessState ?? null;
+        $sBanner = $stalenessBanner ?? null;
+        $sCls = $sState && $sState->showsBanner()
+            ? ($sState === \App\Support\Presentations\StalenessState::Stale ? 'stale' : 'aging')
+            : null;
+    @endphp
+    @if($sCls && $sBanner)
+        <div class="staleness-banner {{ $sCls }}">
+            <span class="sb-icon">{!! $sCls === 'stale' ? '&#9888;' : '&#8987;' !!}</span>
+            <div class="sb-body">
+                <strong>{{ $sState->label() }}</strong>
+                {{ $sBanner }}
+                <div>
+                    <a class="sb-cta" href="{{ route('presentation.public.refresh-form', $link->token) }}">Request refreshed presentation</a>
+                </div>
+            </div>
+        </div>
+    @endif
 
     @if($isTeaser)
         <div class="teaser-note">

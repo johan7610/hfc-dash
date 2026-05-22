@@ -435,6 +435,30 @@
                 @if(config('features.presentations') && \Illuminate\Support\Facades\Route::has('presentations.index'))
                 <a href="{{ route('presentations.index') }}" class="corex-nav-subitem {{ request()->routeIs('presentations.*') ? 'active' : '' }}">Presentations</a>
                 @endif
+                @if(\Illuminate\Support\Facades\Route::has('corex.presentations.refresh-requests.index'))
+                    @php
+                        // Phase 7 — count of open refresh requests, scoped to the user's effective agency.
+                        $refreshOpenCount = 0;
+                        try {
+                            $agencyId = auth()->user()?->effectiveAgencyId();
+                            if ($agencyId) {
+                                $refreshOpenCount = \App\Models\PresentationRefreshRequest::where('agency_id', $agencyId)
+                                    ->whereIn('status', ['pending', 'acknowledged'])
+                                    ->count();
+                            }
+                        } catch (\Throwable $e) { /* sidebar must never blow up */ }
+                    @endphp
+                    <a href="{{ route('corex.presentations.refresh-requests.index') }}"
+                       class="corex-nav-subitem {{ request()->routeIs('corex.presentations.refresh-requests.*') ? 'active' : '' }}"
+                       style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                        <span>Refresh Requests</span>
+                        @if($refreshOpenCount > 0)
+                            <span style="display:inline-block;min-width:18px;padding:1px 6px;background:#f59e0b;color:#fff;border-radius:99px;font-size:0.625rem;font-weight:700;text-align:center;line-height:1.4;">
+                                {{ $refreshOpenCount > 99 ? '99+' : $refreshOpenCount }}
+                            </span>
+                        @endif
+                    </a>
+                @endif
                 @endpermission
 
                 @permission('access_commercial_evaluations')

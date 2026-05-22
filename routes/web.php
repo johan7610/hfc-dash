@@ -89,6 +89,24 @@ Route::middleware('auth')->group(function () {
     Route::get('/corex/deliveries/{delivery}/whatsapp-redirect', [\App\Http\Controllers\Presentation\PresentationDeliveryController::class, 'whatsappRedirect'])
         ->name('corex.deliveries.whatsapp-redirect');
 
+    // Phase 7 — refresh request inbox + per-row actions.
+    Route::prefix('corex/presentations/refresh-requests')
+        ->name('corex.presentations.refresh-requests.')
+        ->group(function () {
+            Route::get('/', [\App\Http\Controllers\Presentation\RefreshRequestController::class, 'index'])
+                ->middleware('permission:access_presentations')
+                ->name('index');
+            Route::post('/{refreshRequest}/acknowledge', [\App\Http\Controllers\Presentation\RefreshRequestController::class, 'acknowledge'])
+                ->middleware('permission:access_presentations')
+                ->name('acknowledge');
+            Route::post('/{refreshRequest}/resolve', [\App\Http\Controllers\Presentation\RefreshRequestController::class, 'resolve'])
+                ->middleware('permission:access_presentations')
+                ->name('resolve');
+            Route::post('/{refreshRequest}/decline', [\App\Http\Controllers\Presentation\RefreshRequestController::class, 'decline'])
+                ->middleware('permission:access_presentations')
+                ->name('decline');
+        });
+
     // P24 location tree read-API (called from Blade pages over fetch with
     // session cookies — must live in web.php so the `web` middleware group
     // applies, not in routes/api.php where session isn't set up).
