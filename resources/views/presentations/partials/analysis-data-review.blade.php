@@ -240,6 +240,31 @@
     </div>
     @endif
 
+    {{-- Phase 3g V2 Part D — Spatial View. Shows the actual comps backing
+         this presentation as map pins around the subject. --}}
+    @php
+        $_p = $presentation ?? null;
+        $_property = $_p?->property;
+        $_subjectLat = $_property?->latitude;
+        $_subjectLng = $_property?->longitude;
+    @endphp
+    @if($_p && $_subjectLat && $_subjectLng)
+    <div class="ds-status-card mb-4" style="border-left-color: var(--brand-button);" id="spatial-view">
+        <h3 class="ds-section-header">Spatial View</h3>
+        @include('corex.map.partials._embed-map', [
+            'containerId'    => 'presentation-spatial-' . $_p->id,
+            'centerLat'      => $_subjectLat,
+            'centerLng'      => $_subjectLng,
+            'radiusM'        => 1000,
+            'subjectTitle'   => $_p->property_address ?: 'Subject',
+            'mode'           => 'presentation',
+            'presentationId' => $_p->id,
+            'enabledLayers'  => ['sold_comps', 'active_listings'],
+            'fullMapUrl'     => route('corex.map.index') . '?focus=' . $_subjectLat . ',' . $_subjectLng . '&zoom=17',
+        ])
+    </div>
+    @endif
+
     {{-- ── NEW LISTING INFLOW & ABSORPTION ──────────────────────────────── --}}
     @php $inflow = $analysisData['inflow_absorption'] ?? []; @endphp
     @if(!empty($inflow))

@@ -59,6 +59,15 @@ final class MapController extends Controller
             'priceMax'     => 'sometimes|nullable|integer|min:0',
             'limit'        => 'sometimes|integer|min:1|max:5000',
             'include_demo' => 'sometimes|nullable',
+            // Phase 3g V2 — filter panel.
+            'dateFromYear' => 'sometimes|nullable|integer|min:2000|max:2099',
+            'dateToYear'   => 'sometimes|nullable|integer|min:2000|max:2099',
+            'bedrooms'     => 'sometimes|array',
+            'bedrooms.*'   => 'integer|min:0|max:10',
+            // Phase 3g V2 Part E — radius post-filter (embedded views).
+            'radiusCenterLat' => 'sometimes|nullable|numeric|between:-90,90',
+            'radiusCenterLng' => 'sometimes|nullable|numeric|between:-180,180',
+            'radiusM'         => 'sometimes|nullable|integer|min:50|max:50000',
         ]);
 
         $user = $request->user();
@@ -88,6 +97,12 @@ final class MapController extends Controller
             priceMin:      $validated['priceMin']  ?? null,
             priceMax:      $validated['priceMax']  ?? null,
             limit:         (int) ($validated['limit'] ?? 2000),
+            dateFromYear:  isset($validated['dateFromYear']) ? (int) $validated['dateFromYear'] : null,
+            dateToYear:    isset($validated['dateToYear'])   ? (int) $validated['dateToYear']   : null,
+            bedrooms:      array_values(array_map('intval', $validated['bedrooms'] ?? [])),
+            radiusCenterLat: isset($validated['radiusCenterLat']) ? (float) $validated['radiusCenterLat'] : null,
+            radiusCenterLng: isset($validated['radiusCenterLng']) ? (float) $validated['radiusCenterLng'] : null,
+            radiusM:         isset($validated['radiusM']) ? (int) $validated['radiusM'] : null,
             // Phase 3h Step 9.5 — query string accepts '0'/'false' to hide
             // demo pins. Anything else (or missing) keeps demo data visible.
             includeDemo:   filter_var(
@@ -105,6 +120,121 @@ final class MapController extends Controller
         ];
 
         return response()->json($payload);
+    }
+
+    /**
+     * Phase 3g V2 Part D — JSON pins for a specific presentation's spatial
+     * view. Returns the presentation's subject + its hydrated sold comps and
+     * active listings as map-ready pins (no bounds filter — the presentation
+     * decides its own comp set via the hydrator).
+     *
+     * GET /corex/presentations/{presentation}/spatial-pins
+     */
+    public function presentationPins(Request $request, \App\Models\Presentation $presentation): JsonResponse
+    {
+        $this->assertSameAgency($request, $presentation->agency_id);
+
+        // Subject GPS comes from the linked Property when available.
+        $property = $presentation->property_id
+            ? \App\Models\Property::withoutGlobalScopes()->find($presentation->property_id)
+            : null;
+
+        $subject = null;
+        if ($property?->latitude !== null && $property->longitude !== null) {
+            $subject = [
+                'lat'      => (float) $property->latitude,
+                'lng'      => (float) $property->longitude,
+                'title'    => $property->address ?: ($presentation->property_address ?? 'Subject'),
+                'subtitle' => $presentation->suburb,
+                'role'     => 'subject',
+            ];
+        }
+
+        $resolveGps = function (array $raw) {
+            // 1. raw_row_json may carry explicit lat/lng (from manual upload extractors).
+            if (isset($raw['latitude'], $raw['longitude'])
+                && $raw['latitude'] !== null && $raw['longitude'] !== null) {
+                return [(float) $raw['latitude'], (float) $raw['longitude']];
+            }
+            // 2. mic_comp_row_id → market_report_comp_rows.lat/lng (direct).
+            $compRowId = $raw['mic_comp_row_id'] ?? null;
+            $schemeName = $raw['scheme_name'] ?? null;
+            if ($compRowId) {
+                $r = \Illuminate\Support\Facades\DB::table('market_report_comp_rows')
+                    ->where('id', $compRowId)
+                    ->first(['latitude', 'longitude', 'scheme_name']);
+                if ($r) {
+                    if ($r->latitude !== null && $r->longitude !== null) {
+                        return [(float) $r->latitude, (float) $r->longitude];
+                    }
+                    $schemeName = $schemeName ?: $r->scheme_name;
+                }
+            }
+            // 3. Scheme-name inheritance: match scheme to any subject report.
+            //    Same pattern MapPinService uses for the standalone map.
+            if ($schemeName) {
+                $mr = \Illuminate\Support\Facades\DB::table('market_reports')
+                    ->whereRaw('LOWER(subject_scheme_name) = ?', [mb_strtolower($schemeName)])
+                    ->whereNotNull('subject_latitude')->whereNotNull('subject_longitude')
+                    ->orderByDesc('id')
+                    ->first(['subject_latitude', 'subject_longitude']);
+                if ($mr) {
+                    return [(float) $mr->subject_latitude, (float) $mr->subject_longitude];
+                }
+            }
+            return [null, null];
+        };
+
+        $soldPins = [];
+        foreach ($presentation->soldComps as $sc) {
+            $raw = is_string($sc->raw_row_json) ? (json_decode($sc->raw_row_json, true) ?: []) : ((array) $sc->raw_row_json ?: []);
+            [$lat, $lng] = $resolveGps($raw);
+            if ($lat === null || $lng === null) continue;
+
+            $price = \App\Support\MarketAnalytics\OutlierGuard::price($sc->sold_price_inc);
+            $soldPins[] = [
+                'id'       => 'psc:' . $sc->id,
+                'layer'    => 'sold_comps',
+                'lat'      => (float) $lat,
+                'lng'      => (float) $lng,
+                'title'    => $raw['address'] ?? 'Comp #' . $sc->id,
+                'subtitle' => 'Sold ' . ($price !== null ? 'R ' . number_format($price, 0, '.', ' ') : 'R —')
+                    . ($sc->sold_date ? ' · ' . $sc->sold_date->format('M Y') : ''),
+                'price'    => $price,
+                'date'     => $sc->sold_date?->toDateString(),
+                'detail_url' => route('corex.map.sold', ['layerId' => 'psc:' . $sc->id]),
+            ];
+        }
+
+        $activePins = [];
+        foreach ($presentation->activeListings as $al) {
+            $raw = is_string($al->raw_row_json) ? (json_decode($al->raw_row_json, true) ?: []) : ((array) $al->raw_row_json ?: []);
+            [$lat, $lng] = $resolveGps($raw);
+            if ($lat === null || $lng === null) continue;
+
+            $price = \App\Support\MarketAnalytics\OutlierGuard::price($al->list_price_inc);
+            $activePins[] = [
+                'id'       => 'pal:' . $al->id,
+                'layer'    => 'active_listings',
+                'lat'      => (float) $lat,
+                'lng'      => (float) $lng,
+                'title'    => $raw['address'] ?? 'Listing #' . $al->id,
+                'subtitle' => ($price !== null ? 'R ' . number_format($price, 0, '.', ' ') : 'R —')
+                    . (isset($raw['days_on_market']) ? ' · DOM ' . (int) $raw['days_on_market'] : ''),
+                'price'    => $price,
+                'detail_url' => route('corex.map.active', ['layerId' => 'pal:' . $al->id]),
+            ];
+        }
+
+        return response()->json([
+            'subject'         => $subject,
+            'sold_comps'      => $soldPins,
+            'active_listings' => $activePins,
+            'counts' => [
+                'sold'   => count($soldPins),
+                'active' => count($activePins),
+            ],
+        ]);
     }
 
     /** GET /corex/properties/{property}/map-card */
@@ -320,7 +450,7 @@ final class MapController extends Controller
                 $row->size_m2 ? ['label' => 'Extent', 'value' => $row->size_m2 . ' m²'] : null,
             ]),
             'relationships' => array_filter([
-                $row->presentation_id ? ['label' => 'Open presentation', 'url' => route('corex.presentations.show', $row->presentation_id)] : null,
+                $row->presentation_id ? ['label' => 'Open presentation', 'url' => route('presentations.show', $row->presentation_id)] : null,
             ]),
             'sensitive_facts' => [],
         ];
@@ -382,7 +512,7 @@ final class MapController extends Controller
                 $row->size_m2 ? ['label' => 'Extent', 'value' => $row->size_m2 . ' m²'] : null,
             ]),
             'relationships' => array_filter([
-                $row->presentation_id ? ['label' => 'Open presentation', 'url' => route('corex.presentations.show', $row->presentation_id)] : null,
+                $row->presentation_id ? ['label' => 'Open presentation', 'url' => route('presentations.show', $row->presentation_id)] : null,
             ]),
             'sensitive_facts' => [],
         ];

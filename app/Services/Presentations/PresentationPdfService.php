@@ -1014,6 +1014,103 @@ a:hover { text-decoration: underline; }
 <div class="callout callout-info">No vicinity sales data available for this property.</div>
 <?php endif ?>
 
+<?php // Phase 3g V2 Part D4/D5 — Spatial View SVG. Only renders when the
+      // subject property has resolved GPS + at least one comp with GPS. ?>
+<?php
+    $_propertyForMap = $presentation->property_id ? \App\Models\Property::withoutGlobalScopes()->find($presentation->property_id) : null;
+    $_subjLat = $_propertyForMap?->latitude;
+    $_subjLng = $_propertyForMap?->longitude;
+    $_svgComps = [];
+    if ($_subjLat !== null && $_subjLng !== null) {
+        foreach ($presentation->soldComps as $_sc) {
+            $_raw = is_string($_sc->raw_row_json) ? (json_decode($_sc->raw_row_json, true) ?: []) : ((array) $_sc->raw_row_json ?: []);
+            $_lat = $_raw['latitude'] ?? null;
+            $_lng = $_raw['longitude'] ?? null;
+            $_compRowId = $_raw['mic_comp_row_id'] ?? null;
+            $_schemeName = $_raw['scheme_name'] ?? null;
+            if (($_lat === null || $_lng === null) && $_compRowId) {
+                $_gps = \Illuminate\Support\Facades\DB::table('market_report_comp_rows')
+                    ->where('id', $_compRowId)
+                    ->first(['latitude', 'longitude', 'scheme_name']);
+                if ($_gps) {
+                    if ($_gps->latitude !== null && $_gps->longitude !== null) {
+                        $_lat = (float) $_gps->latitude; $_lng = (float) $_gps->longitude;
+                    }
+                    $_schemeName = $_schemeName ?: $_gps->scheme_name;
+                }
+            }
+            // Scheme-name fallback — inherit from any matching subject report.
+            if (($_lat === null || $_lng === null) && $_schemeName) {
+                $_mr = \Illuminate\Support\Facades\DB::table('market_reports')
+                    ->whereRaw('LOWER(subject_scheme_name) = ?', [mb_strtolower($_schemeName)])
+                    ->whereNotNull('subject_latitude')->whereNotNull('subject_longitude')
+                    ->orderByDesc('id')
+                    ->first(['subject_latitude', 'subject_longitude']);
+                if ($_mr) { $_lat = (float) $_mr->subject_latitude; $_lng = (float) $_mr->subject_longitude; }
+            }
+            if ($_lat === null || $_lng === null) continue;
+            $_svgComps[] = [
+                'lat'       => (float) $_lat,
+                'lng'       => (float) $_lng,
+                'title'     => $_raw['address'] ?? null,
+                'layer'     => 'sold_comps',
+                'price'     => $_sc->sold_price_inc ? (int) $_sc->sold_price_inc : null,
+                'sale_date' => $_sc->sold_date ? $_sc->sold_date->toDateString() : null,
+            ];
+        }
+        foreach ($presentation->activeListings as $_al) {
+            $_raw = is_string($_al->raw_row_json) ? (json_decode($_al->raw_row_json, true) ?: []) : ((array) $_al->raw_row_json ?: []);
+            $_lat = $_raw['latitude'] ?? null;
+            $_lng = $_raw['longitude'] ?? null;
+            $_compRowId = $_raw['mic_comp_row_id'] ?? null;
+            $_schemeName = $_raw['scheme_name'] ?? null;
+            if (($_lat === null || $_lng === null) && $_compRowId) {
+                $_gps = \Illuminate\Support\Facades\DB::table('market_report_comp_rows')
+                    ->where('id', $_compRowId)
+                    ->first(['latitude', 'longitude', 'scheme_name']);
+                if ($_gps) {
+                    if ($_gps->latitude !== null && $_gps->longitude !== null) {
+                        $_lat = (float) $_gps->latitude; $_lng = (float) $_gps->longitude;
+                    }
+                    $_schemeName = $_schemeName ?: $_gps->scheme_name;
+                }
+            }
+            // Scheme-name fallback — inherit from any matching subject report.
+            if (($_lat === null || $_lng === null) && $_schemeName) {
+                $_mr = \Illuminate\Support\Facades\DB::table('market_reports')
+                    ->whereRaw('LOWER(subject_scheme_name) = ?', [mb_strtolower($_schemeName)])
+                    ->whereNotNull('subject_latitude')->whereNotNull('subject_longitude')
+                    ->orderByDesc('id')
+                    ->first(['subject_latitude', 'subject_longitude']);
+                if ($_mr) { $_lat = (float) $_mr->subject_latitude; $_lng = (float) $_mr->subject_longitude; }
+            }
+            if ($_lat === null || $_lng === null) continue;
+            $_svgComps[] = [
+                'lat'       => (float) $_lat,
+                'lng'       => (float) $_lng,
+                'title'     => $_raw['address'] ?? null,
+                'layer'     => 'active_listings',
+                'price'     => $_al->list_price_inc ? (int) $_al->list_price_inc : null,
+                'sale_date' => null,
+            ];
+        }
+    }
+?>
+<?php if ($_subjLat !== null && $_subjLng !== null && !empty($_svgComps)): ?>
+<div style="margin-top:18px;">
+    <h3 style="margin-bottom:8px;">Spatial View — Comps Around Subject</h3>
+    <?= (new \App\Services\Presentations\Pdf\SpatialViewSvgRenderer())->render(
+        ['lat' => (float) $_subjLat, 'lng' => (float) $_subjLng, 'title' => $address],
+        $_svgComps,
+        540, 360,
+    ) ?>
+    <p style="font-size:10px;color:#64748b;margin-top:4px;">
+        Subject at centre · <?= count($_svgComps) ?> data point<?= count($_svgComps) === 1 ? '' : 's' ?> within view ·
+        Distances Haversine-corrected · Compass: north up
+    </p>
+</div>
+<?php endif ?>
+
 <?php // ══════════════════════════════════════════════════════════════════════
       // PAGE 5 — COMPARATIVE MARKET ANALYSIS
       // ══════════════════════════════════════════════════════════════════════ ?>

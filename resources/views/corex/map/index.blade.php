@@ -13,6 +13,8 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+{{-- Phase 3g V2 — heatmap overlay. --}}
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 @endpush
 
 @section('corex-content')
@@ -73,6 +75,75 @@
             </div>
             <div id="layer-cap-notice" style="display: none; margin-top: 10px; padding: 8px; font-size: 0.6875rem; color: var(--ds-amber, #d97706); background: color-mix(in srgb, var(--ds-amber, #d97706) 8%, transparent); border-radius: 4px;"></div>
 
+            {{-- Phase 3g V2 Part A — display mode radio. --}}
+            <div style="margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);">
+                <div style="font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 600; margin-bottom: 8px;">Display mode</div>
+                <div id="display-mode-group" style="display: flex; flex-direction: column; gap: 4px;">
+                    @foreach(['pins' => 'Pins', 'heatmap' => 'Heatmap', 'both' => 'Both'] as $key => $label)
+                    <label style="display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; font-size: 0.8125rem;">
+                        <input type="radio" name="display-mode" value="{{ $key }}" {{ $key === 'pins' ? 'checked' : '' }} style="margin: 0;">
+                        <span style="color: var(--text-primary);">{{ $label }}</span>
+                    </label>
+                    @endforeach
+                </div>
+            </div>
+
+            {{-- Phase 3g V2 Part B — filters section, collapsible. --}}
+            <div style="margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);">
+                <button id="filters-toggle" type="button"
+                        style="display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 0; background: none; border: 0; cursor: pointer; text-align: left; font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 600;">
+                    <span id="filters-caret" style="display: inline-block; transition: transform 150ms;">▸</span>
+                    <span style="flex: 1;">Filters</span>
+                    <span id="filters-count" style="display: none; font-size: 0.625rem; padding: 1px 6px; background: var(--brand-button); color: #fff; border-radius: 999px; text-transform: none; letter-spacing: 0;">0</span>
+                </button>
+                <div id="filters-body" style="display: none; margin-top: 10px;">
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 0.6875rem; color: var(--text-secondary); margin-bottom: 4px;">Date range</div>
+                        <div style="display: flex; gap: 6px; align-items: center; font-size: 0.75rem;">
+                            <input type="number" id="filter-year-from" min="2018" max="2030" value="{{ now()->year - 5 }}" style="width: 60px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 3px; background: var(--surface-2); color: var(--text-primary); font-size: 0.75rem;">
+                            <span style="color: var(--text-muted);">to</span>
+                            <input type="number" id="filter-year-to" min="2018" max="2030" value="{{ now()->year }}" style="width: 60px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 3px; background: var(--surface-2); color: var(--text-primary); font-size: 0.75rem;">
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 0.6875rem; color: var(--text-secondary); margin-bottom: 4px;">Property type</div>
+                        <div style="display: flex; flex-direction: column; gap: 3px; font-size: 0.75rem;">
+                            @foreach(['house' => 'House', 'sectional' => 'Apartment / Sectional', 'townhouse' => 'Townhouse', 'vacant' => 'Vacant Land'] as $val => $label)
+                            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                <input type="checkbox" data-filter-type="{{ $val }}" checked style="margin: 0;">
+                                <span style="color: var(--text-primary);">{{ $label }}</span>
+                            </label>
+                            @endforeach
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 0.6875rem; color: var(--text-secondary); margin-bottom: 4px;">Price band (R)</div>
+                        <div style="display: flex; gap: 6px; align-items: center; font-size: 0.75rem;">
+                            <input type="number" id="filter-price-min" min="0" max="10000000" step="100000" value="0" style="width: 88px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 3px; background: var(--surface-2); color: var(--text-primary); font-size: 0.75rem;">
+                            <span style="color: var(--text-muted);">–</span>
+                            <input type="number" id="filter-price-max" min="0" max="10000000" step="100000" value="10000000" style="width: 88px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 3px; background: var(--surface-2); color: var(--text-primary); font-size: 0.75rem;">
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 0.6875rem; color: var(--text-secondary); margin-bottom: 4px;">Bedrooms</div>
+                        <div id="filter-bedrooms" style="display: flex; gap: 4px;">
+                            @foreach([1, 2, 3, 4, 5] as $b)
+                            <button type="button" data-bed="{{ $b }}" class="bed-pill" data-on="1"
+                                style="padding: 4px 8px; font-size: 0.75rem; font-weight: 500; background: var(--brand-button); color: #fff; border: 0; border-radius: 4px; cursor: pointer;">{{ $b === 5 ? '5+' : $b }}</button>
+                            @endforeach
+                        </div>
+                    </div>
+
+                    <button type="button" id="filter-clear"
+                        style="width: 100%; padding: 6px 10px; font-size: 0.75rem; font-weight: 500; color: var(--text-secondary); background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; cursor: pointer;">
+                        Clear filters
+                    </button>
+                </div>
+            </div>
+
             {{-- Phase 3h Step 10 — demo data toggle. Default ON locally + on
                  staging; default OFF in production. The data attribute below
                  lets the JS read the env-aware default. --}}
@@ -101,6 +172,18 @@
             <div id="corex-map" style="position: absolute; inset: 0;"></div>
             <div id="empty-state" style="display: none; position: absolute; inset: 50% 0 0 0; transform: translateY(-50%); text-align: center; color: var(--text-muted); font-size: 0.875rem; pointer-events: none;">
                 No data in this area yet — try importing CMA reports for this suburb.
+            </div>
+
+            {{-- Phase 3g V2 Part A5 — heatmap legend. Inverted gradient:
+                 red = sparse (ops should target this area), green = dense. --}}
+            <div id="heat-legend" style="display: none; position: absolute; bottom: 16px; right: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 0.6875rem; color: var(--text-secondary); box-shadow: 0 2px 6px rgba(0,0,0,.12); z-index: 1000;">
+                <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Coverage density</div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <div style="width: 80px; height: 8px; border-radius: 4px; background: linear-gradient(to right, #dc2626, #f59e0b, #84cc16, #16a34a);"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 6px; margin-top: 3px; font-size: 0.625rem;">
+                    <span>Sparse</span><span>Limited</span><span>Covered</span><span>Dense</span>
+                </div>
             </div>
         </main>
 
@@ -176,6 +259,70 @@ document.addEventListener('DOMContentLoaded', function () {
         return demoDefaultOn;
     })();
     if (demoToggleEl) demoToggleEl.checked = includeDemo;
+
+    // Phase 3g V2 — display mode + filter state.
+    const CURRENT_YEAR = {{ now()->year }};
+    const FILTER_DEFAULTS = {
+        yearFrom: CURRENT_YEAR - 5,
+        yearTo:   CURRENT_YEAR,
+        types:    ['house','sectional','townhouse','vacant'],
+        priceMin: 0,
+        priceMax: 10000000,
+        bedrooms: [1,2,3,4,5],
+    };
+    let displayMode = localStorage.getItem('corex.map.display_mode') || 'pins';
+    let filters = loadFiltersFromStorage();
+    let heatLayer = null;
+
+    function loadFiltersFromStorage() {
+        try {
+            const raw = localStorage.getItem('corex.map.filters_v1');
+            if (!raw) return { ...FILTER_DEFAULTS };
+            const f = JSON.parse(raw);
+            return {
+                yearFrom: Number.isInteger(f.yearFrom) ? f.yearFrom : FILTER_DEFAULTS.yearFrom,
+                yearTo:   Number.isInteger(f.yearTo)   ? f.yearTo   : FILTER_DEFAULTS.yearTo,
+                types:    Array.isArray(f.types)    && f.types.length    ? f.types    : [...FILTER_DEFAULTS.types],
+                priceMin: Number.isInteger(f.priceMin) ? f.priceMin : FILTER_DEFAULTS.priceMin,
+                priceMax: Number.isInteger(f.priceMax) ? f.priceMax : FILTER_DEFAULTS.priceMax,
+                bedrooms: Array.isArray(f.bedrooms) && f.bedrooms.length ? f.bedrooms : [...FILTER_DEFAULTS.bedrooms],
+            };
+        } catch (e) {
+            return { ...FILTER_DEFAULTS };
+        }
+    }
+    function persistFilters() {
+        localStorage.setItem('corex.map.filters_v1', JSON.stringify(filters));
+    }
+    function countActiveFilters() {
+        let n = 0;
+        if (filters.yearFrom !== FILTER_DEFAULTS.yearFrom) n++;
+        if (filters.yearTo   !== FILTER_DEFAULTS.yearTo)   n++;
+        if (filters.types.length !== FILTER_DEFAULTS.types.length) n++;
+        if (filters.priceMin !== FILTER_DEFAULTS.priceMin) n++;
+        if (filters.priceMax !== FILTER_DEFAULTS.priceMax) n++;
+        if (filters.bedrooms.length !== FILTER_DEFAULTS.bedrooms.length) n++;
+        return n;
+    }
+    function syncFilterUi() {
+        document.getElementById('filter-year-from').value = filters.yearFrom;
+        document.getElementById('filter-year-to').value   = filters.yearTo;
+        document.querySelectorAll('[data-filter-type]').forEach(cb => {
+            cb.checked = filters.types.includes(cb.dataset.filterType);
+        });
+        document.getElementById('filter-price-min').value = filters.priceMin;
+        document.getElementById('filter-price-max').value = filters.priceMax;
+        document.querySelectorAll('#filter-bedrooms .bed-pill').forEach(btn => {
+            const on = filters.bedrooms.includes(parseInt(btn.dataset.bed, 10));
+            btn.dataset.on = on ? '1' : '0';
+            btn.style.background = on ? 'var(--brand-button)' : 'var(--surface-2)';
+            btn.style.color = on ? '#fff' : 'var(--text-secondary)';
+        });
+        const cnt = countActiveFilters();
+        const badge = document.getElementById('filters-count');
+        badge.textContent = String(cnt);
+        badge.style.display = cnt > 0 ? 'inline-block' : 'none';
+    }
     const enabledLayers = new Set([
         'hfc_listings', 'sold_comps', 'active_listings', 'mic_subjects', 'scheme_owners',
     ]);
@@ -286,7 +433,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function boundsKey(b) {
-        return [b.south, b.west, b.north, b.east, viewMode, includeDemo ? '1' : '0', Array.from(enabledLayers).sort().join(',')]
+        const filterFp = [
+            filters.yearFrom, filters.yearTo,
+            filters.types.slice().sort().join(','),
+            filters.priceMin, filters.priceMax,
+            filters.bedrooms.slice().sort().join(','),
+        ].join(':');
+        return [b.south, b.west, b.north, b.east, viewMode, includeDemo ? '1' : '0', displayMode, filterFp, Array.from(enabledLayers).sort().join(',')]
             .map(v => typeof v === 'number' ? v.toFixed(4) : v).join('|');
     }
 
@@ -302,6 +455,9 @@ document.addEventListener('DOMContentLoaded', function () {
         clearAllPins();
         let total = 0;
         let cappedLayers = [];
+        const heatPoints = [];
+        const showPins   = displayMode === 'pins' || displayMode === 'both';
+        const showHeat   = displayMode === 'heatmap' || displayMode === 'both';
 
         (payload.layers || []).forEach(layer => {
             const cluster = clusterByLayer[layer.key];
@@ -318,6 +474,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // Skip rendering if layer disabled via checkbox
             if (!enabledLayers.has(layer.key)) return;
+
+            // Always feed heat points (across enabled layers, regardless of pin display).
+            (layer.pins || []).forEach(p => heatPoints.push([p.lat, p.lng, 1.0]));
+
+            if (!showPins) {
+                total += (layer.pins || []).length;
+                return;
+            }
 
             (layer.pins || []).forEach(pin => {
                 const m = L.marker([pin.lat, pin.lng], { icon: pinIcon(pin) });
@@ -351,6 +515,39 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
             cap.style.display = 'none';
         }
+
+        // Phase 3g V2 — heatmap render. Reuse the same layer instance —
+        // setLatLngs() avoids tile redraw flicker.
+        renderHeatmap(showHeat ? heatPoints : []);
+        document.getElementById('heat-legend').style.display = showHeat ? 'block' : 'none';
+    }
+
+    function renderHeatmap(points) {
+        if (points.length === 0) {
+            if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
+            return;
+        }
+        if (!heatLayer) {
+            heatLayer = L.heatLayer(points, {
+                radius: 25,
+                blur: 18,
+                maxZoom: 17,
+                max: 5.0,
+                // Inverted gradient — red where data is THIN (action needed),
+                // green where coverage is dense. Reads against operator instinct
+                // ("hot" usually = warning) but matches our actual goal: red
+                // means "pull more CMA reports here".
+                gradient: {
+                    0.0: '#dc2626',
+                    0.3: '#f59e0b',
+                    0.6: '#84cc16',
+                    1.0: '#16a34a',
+                },
+            }).addTo(map);
+        } else {
+            heatLayer.setLatLngs(points);
+            if (!map.hasLayer(heatLayer)) heatLayer.addTo(map);
+        }
     }
 
     // ── Fetching ──────────────────────────────────────────────────────────
@@ -378,6 +575,19 @@ document.addEventListener('DOMContentLoaded', function () {
         // Always send all five layer keys so server gives counts for each;
         // the UI hides disabled ones at render time.
         ['hfc_listings','sold_comps','active_listings','mic_subjects','scheme_owners'].forEach(k => params.append('layers[]', k));
+
+        // Filters — only send when narrowed beyond defaults so the URL stays
+        // clean in the common case.
+        if (filters.yearFrom !== FILTER_DEFAULTS.yearFrom) params.set('dateFromYear', String(filters.yearFrom));
+        if (filters.yearTo   !== FILTER_DEFAULTS.yearTo)   params.set('dateToYear',   String(filters.yearTo));
+        if (filters.types.length !== FILTER_DEFAULTS.types.length) {
+            filters.types.forEach(t => params.append('propertyTypes[]', t));
+        }
+        if (filters.priceMin !== FILTER_DEFAULTS.priceMin) params.set('priceMin', String(filters.priceMin));
+        if (filters.priceMax !== FILTER_DEFAULTS.priceMax) params.set('priceMax', String(filters.priceMax));
+        if (filters.bedrooms.length !== FILTER_DEFAULTS.bedrooms.length) {
+            filters.bedrooms.forEach(b => params.append('bedrooms[]', String(b)));
+        }
 
         setLoading(true);
         try {
@@ -603,6 +813,75 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('reset-bounds-btn').addEventListener('click', () => {
         map.fitBounds([[HFC_BOUNDS.south, HFC_BOUNDS.west], [HFC_BOUNDS.north, HFC_BOUNDS.east]]);
     });
+
+    // Phase 3g V2 — display-mode radios.
+    document.querySelectorAll('#display-mode-group input[type="radio"]').forEach(r => {
+        if (r.value === displayMode) r.checked = true;
+        r.addEventListener('change', e => {
+            if (!e.target.checked) return;
+            displayMode = e.target.value;
+            localStorage.setItem('corex.map.display_mode', displayMode);
+            cache.length = 0;
+            fetchPins();
+        });
+    });
+
+    // Phase 3g V2 — filters: collapse toggle + change handlers + clear button.
+    const filtersToggleBtn = document.getElementById('filters-toggle');
+    const filtersBody      = document.getElementById('filters-body');
+    const filtersCaret     = document.getElementById('filters-caret');
+    filtersToggleBtn.addEventListener('click', () => {
+        const open = filtersBody.style.display === 'block';
+        filtersBody.style.display = open ? 'none' : 'block';
+        filtersCaret.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
+    });
+
+    function onFilterChange() {
+        const yf = parseInt(document.getElementById('filter-year-from').value, 10);
+        const yt = parseInt(document.getElementById('filter-year-to').value, 10);
+        const types = Array.from(document.querySelectorAll('[data-filter-type]'))
+            .filter(cb => cb.checked).map(cb => cb.dataset.filterType);
+        const pMin = parseInt(document.getElementById('filter-price-min').value, 10);
+        const pMax = parseInt(document.getElementById('filter-price-max').value, 10);
+        const beds = Array.from(document.querySelectorAll('#filter-bedrooms .bed-pill'))
+            .filter(b => b.dataset.on === '1').map(b => parseInt(b.dataset.bed, 10));
+
+        filters = {
+            yearFrom: Number.isInteger(yf) ? yf : FILTER_DEFAULTS.yearFrom,
+            yearTo:   Number.isInteger(yt) ? yt : FILTER_DEFAULTS.yearTo,
+            types:    types.length ? types : [...FILTER_DEFAULTS.types],
+            priceMin: Number.isInteger(pMin) ? pMin : FILTER_DEFAULTS.priceMin,
+            priceMax: Number.isInteger(pMax) ? pMax : FILTER_DEFAULTS.priceMax,
+            bedrooms: beds.length ? beds : [...FILTER_DEFAULTS.bedrooms],
+        };
+        persistFilters();
+        syncFilterUi();
+        cache.length = 0;
+        fetchPins();
+    }
+
+    ['filter-year-from','filter-year-to','filter-price-min','filter-price-max'].forEach(id => {
+        document.getElementById(id).addEventListener('change', onFilterChange);
+    });
+    document.querySelectorAll('[data-filter-type]').forEach(cb => cb.addEventListener('change', onFilterChange));
+    document.querySelectorAll('#filter-bedrooms .bed-pill').forEach(btn => {
+        btn.addEventListener('click', () => {
+            btn.dataset.on = btn.dataset.on === '1' ? '0' : '1';
+            const on = btn.dataset.on === '1';
+            btn.style.background = on ? 'var(--brand-button)' : 'var(--surface-2)';
+            btn.style.color      = on ? '#fff' : 'var(--text-secondary)';
+            onFilterChange();
+        });
+    });
+    document.getElementById('filter-clear').addEventListener('click', () => {
+        filters = { ...FILTER_DEFAULTS, types: [...FILTER_DEFAULTS.types], bedrooms: [...FILTER_DEFAULTS.bedrooms] };
+        persistFilters();
+        syncFilterUi();
+        cache.length = 0;
+        fetchPins();
+    });
+
+    syncFilterUi();
 
     // Phase 3h Step 10 — demo toggle click handler.
     if (demoToggleEl) {

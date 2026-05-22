@@ -198,6 +198,8 @@ final class MapPinService
 
         $this->applyDemoFilter($q, $req, 'is_demo');
         $this->applyPropertyTypeFilter($q, $req, 'property_type');
+        $this->applyTypeFilter($q, $req, 'property_type');
+        $this->applyBedroomsFilter($q, $req, 'beds');
         $this->applyPriceFilter($q, $req, 'price');
 
         $total = (clone $q)->count();
@@ -220,6 +222,7 @@ final class MapPinService
             'sensitive'  => false,
         ])->all();
 
+        $pins = $this->applyRadiusFilter($pins, $req);
         return [$pins, $total];
     }
 
@@ -277,6 +280,7 @@ final class MapPinService
         $this->applyDemoFilter($mrcrQ, $req, 'mrcr.is_demo');
         $this->applyDateFilter($mrcrQ, $req, 'mrcr.sale_date');
         $this->applyPriceFilter($mrcrQ, $req, 'mrcr.sale_price');
+        $this->applyTypeFilter($mrcrQ, $req, 'mrcr.property_type');
 
         foreach ($mrcrQ->limit($limit)->get() as $r) {
             $key = $this->dedupeKey($r->address ?? $r->scheme_name ?? '', $r->sale_date ?? '');
@@ -350,6 +354,7 @@ final class MapPinService
         }
 
         $pins = array_slice(array_values($combined), 0, $limit);
+        $pins = $this->applyRadiusFilter($pins, $req);
         return [$pins, count($combined)];
     }
 
@@ -392,6 +397,7 @@ final class MapPinService
             ]);
         $this->applyDemoFilter($mrcrQ, $req, 'mrcr.is_demo');
         $this->applyPriceFilter($mrcrQ, $req, 'mrcr.list_price');
+        $this->applyTypeFilter($mrcrQ, $req, 'mrcr.property_type');
 
         foreach ($mrcrQ->limit($limit)->get() as $r) {
             $key = $this->dedupeKey($r->address ?? $r->scheme_name ?? '', 'active');
@@ -462,6 +468,7 @@ final class MapPinService
         }
 
         $pins = array_slice(array_values($combined), 0, $limit);
+        $pins = $this->applyRadiusFilter($pins, $req);
         return [$pins, count($combined)];
     }
 
@@ -501,6 +508,7 @@ final class MapPinService
             'sensitive'  => false,
         ])->all();
 
+        $pins = $this->applyRadiusFilter($pins, $req);
         return [$pins, $total];
     }
 
@@ -558,6 +566,7 @@ final class MapPinService
             'sensitive'  => true,
         ])->all();
 
+        $pins = $this->applyRadiusFilter($pins, $req);
         return [$pins, $total];
     }
 
@@ -591,6 +600,88 @@ final class MapPinService
     {
         if ($req->dateFrom !== null) $q->where($column, '>=', $req->dateFrom);
         if ($req->dateTo !== null)   $q->where($column, '<=', $req->dateTo);
+        // Phase 3g V2 — year-range filter (used by the standalone-map
+        // filter panel). Year is computed from the date column.
+        if ($req->dateFromYear !== null) {
+            $q->whereYear($column, '>=', $req->dateFromYear);
+        }
+        if ($req->dateToYear !== null) {
+            $q->whereYear($column, '<=', $req->dateToYear);
+        }
+    }
+
+    /**
+     * Phase 3g V2 — match presentation-style property type buckets to the
+     * variety of strings stored across our source tables. We accept a list
+     * of front-end keys (house, sectional, townhouse, vacant) and translate
+     * to a LIKE-friendly pattern set per source.
+     */
+    private function applyTypeFilter($q, MapBoundsRequest $req, string $column): void
+    {
+        if (empty($req->propertyTypes)) return;
+
+        // Translate front-end keys to the messy variety of strings in the
+        // database. Keep this list narrow + obvious — better to miss a
+        // pin than to misclassify one in the wrong band.
+        $patterns = [];
+        foreach ($req->propertyTypes as $t) {
+            $key = strtolower($t);
+            $patterns = array_merge($patterns, match ($key) {
+                'house'      => ['house', 'residence'],
+                'sectional'  => ['sectional', 'apartment', 'flat', 'unit'],
+                'townhouse'  => ['townhouse', 'duplex'],
+                'vacant'     => ['vacant', 'land'],
+                default      => [$key],
+            });
+        }
+        $patterns = array_values(array_unique($patterns));
+
+        $q->where(function ($sub) use ($patterns, $column) {
+            foreach ($patterns as $pat) {
+                $sub->orWhereRaw('LOWER(' . $column . ') LIKE ?', ['%' . $pat . '%']);
+            }
+        });
+    }
+
+    /**
+     * Apply bedrooms filter where the column exists. 5 represents "5+".
+     */
+    private function applyBedroomsFilter($q, MapBoundsRequest $req, string $column): void
+    {
+        if (empty($req->bedrooms)) return;
+        // Default = all selected (1-5). Only filter when the request narrowed it.
+        if (count($req->bedrooms) >= 5) return;
+
+        $q->where(function ($sub) use ($req, $column) {
+            foreach ($req->bedrooms as $b) {
+                $b = (int) $b;
+                if ($b >= 5) {
+                    $sub->orWhere($column, '>=', 5);
+                } else {
+                    $sub->orWhere($column, '=', $b);
+                }
+            }
+        });
+    }
+
+    /**
+     * Phase 3g V2 Part E — drop pins outside Haversine(center, pin) ≤ radius.
+     * Called after rows are fetched (cheap; we already cap per layer).
+     *
+     * @param array<int, array<string, mixed>> $pins
+     * @return array<int, array<string, mixed>>
+     */
+    private function applyRadiusFilter(array $pins, MapBoundsRequest $req): array
+    {
+        if (!$req->hasRadiusFilter()) return $pins;
+        $cLat = (float) $req->radiusCenterLat;
+        $cLng = (float) $req->radiusCenterLng;
+        $rM   = (int)   $req->radiusM;
+        return array_values(array_filter($pins, function ($p) use ($cLat, $cLng, $rM) {
+            return \App\Support\MarketAnalytics\HaversineDistance::distanceMetres(
+                $cLat, $cLng, (float) $p['lat'], (float) $p['lng']
+            ) <= $rM;
+        }));
     }
 
     private function formatPropertySubtitle($r): string

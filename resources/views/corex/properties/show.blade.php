@@ -1495,6 +1495,34 @@
                     </div>
                 @endif
 
+                {{-- Phase 3g V2 Part C — Property Location embedded map.
+                     Centred on property's GPS (resolved by Phase 3f geocoding),
+                     shows sold + active comps within 1km. Falls back to a
+                     placeholder when GPS is missing. --}}
+                <div class="lg:col-span-3">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-xs font-bold uppercase tracking-wider" style="color:var(--text-muted);">Property Location</h3>
+                        @if($property->latitude && $property->longitude)
+                            <a href="{{ route('corex.map.index') }}?focus={{ $property->latitude }},{{ $property->longitude }}&zoom=17"
+                               class="text-xs font-medium" style="color: var(--brand-button); text-decoration: none;">
+                                Open full map →
+                            </a>
+                        @endif
+                    </div>
+                    @include('corex.map.partials._embed-map', [
+                        'containerId'  => 'corex-prop-map-' . $property->id,
+                        'centerLat'    => $property->latitude,
+                        'centerLng'    => $property->longitude,
+                        'radiusM'      => 1000,
+                        'subjectTitle' => $property->address ?: ('Property #' . $property->id),
+                        'mode'         => 'bounds',
+                        'enabledLayers' => ['sold_comps', 'active_listings'],
+                        'fullMapUrl'   => $property->latitude
+                            ? route('corex.map.index') . '?focus=' . $property->latitude . ',' . $property->longitude . '&zoom=17'
+                            : null,
+                    ])
+                </div>
+
                 {{-- Row 2: Key Dates (cols 1-2) | Linked Contact (col 3) — headings align since rows share top --}}
                 @if(count($keyDates))
                     <div class="lg:col-span-2 lg:col-start-1">

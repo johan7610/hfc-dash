@@ -41,7 +41,27 @@ final class MapBoundsRequest
         // someone explicitly toggles them off (the left-rail switch
         // wires this up from localStorage).
         public readonly bool   $includeDemo = true,
+        // Phase 3g V2 — extended filter fields. All optional, defaults
+        // preserve V1 behaviour (no filtering when null).
+        public readonly ?int   $dateFromYear = null,
+        public readonly ?int   $dateToYear   = null,
+        /** @var int[] */
+        public readonly array  $bedrooms     = [],
+        // Phase 3g V2 Part E — radius post-filter for the embedded views.
+        // When all 3 set, pins outside Haversine(center, pin) <= radiusM
+        // are dropped after the bounding-box pre-filter. The standalone
+        // map doesn't pass these, so V1 behaviour is unchanged.
+        public readonly ?float $radiusCenterLat = null,
+        public readonly ?float $radiusCenterLng = null,
+        public readonly ?int   $radiusM         = null,
     ) {}
+
+    public function hasRadiusFilter(): bool
+    {
+        return $this->radiusCenterLat !== null
+            && $this->radiusCenterLng !== null
+            && $this->radiusM !== null;
+    }
 
     public function isSellerView(): bool
     {

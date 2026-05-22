@@ -2012,6 +2012,8 @@ Route::middleware(['auth', 'permission:access_presentations'])->prefix('presenta
     Route::get('/{presentation}/edit',         [\App\Http\Controllers\Presentation\PresentationController::class, 'edit'])     ->name('edit');
     Route::patch('/{presentation}',            [\App\Http\Controllers\Presentation\PresentationController::class, 'update'])   ->name('update');
     Route::get('/{presentation}/analysis',     [\App\Http\Controllers\Presentation\PresentationController::class, 'analysis']) ->name('analysis');
+    // Phase 3g V2 Part D — embedded spatial view JSON for the analysis screen.
+    Route::get('/{presentation}/spatial-pins', [\App\Http\Controllers\Map\MapController::class, 'presentationPins'])->name('spatial-pins');
     Route::post('/{presentation}/analysis/run',[\App\Http\Controllers\Presentation\PresentationController::class, 'runAnalysis'])  ->name('analysis.run');
     Route::patch('/{presentation}/analysis-selections', [\App\Http\Controllers\Presentation\PresentationController::class, 'updateAnalysisSelections'])
         ->name('analysis-selections.update');
