@@ -40,6 +40,7 @@ class PresentationGeneratorService
     public function __construct(
         private AnalysisDataService $analysisData = new AnalysisDataService(),
         private PresentationCompilerService $compiler = new PresentationCompilerService(),
+        private MicSnapshotHydrator $hydrator = new MicSnapshotHydrator(),
     ) {}
 
     /**
@@ -160,6 +161,14 @@ class PresentationGeneratorService
                 ? SaleProbabilityRun::where('market_analytics_run_id', $maRun->id)->latest('id')->first()
                 : null;
 
+            // ── 3.5. Phase 3d — MIC snapshot hydration ─────────────────────
+            // Before AnalysisDataService runs, copy any matching MIC evidence
+            // (market_report_comp_rows + suburb/CMA market_data_points) into
+            // presentation_sold_comps + presentation_active_listings +
+            // presentation_fields. Downstream consumers keep reading from the
+            // presentation_* tables unchanged.
+            $hydrationSummary = $this->hydrator->hydrateForPresentation($presentation);
+
             // ── 4. AnalysisDataService compile + PresentationSnapshot ──────
             $presentation->refresh();
             $computed = $this->analysisData->compile($presentation);
@@ -179,6 +188,10 @@ class PresentationGeneratorService
 
             // ── 5. Compile a PresentationVersion ───────────────────────────
             $version = $this->compiler->compile($presentation->id, $agentUserId);
+
+            // Phase 3d — stamp hydration summary on the version row.
+            $version->hydration_summary_json = $hydrationSummary;
+            $version->save();
 
             // ── 6. Fire event ──────────────────────────────────────────────
             PresentationGenerated::dispatch($presentation, $version);

@@ -30,9 +30,16 @@ class PresentationReadinessService
 
     public function evaluate(Presentation $presentation): array
     {
-        $presentation->loadMissing(['uploads', 'soldComps', 'activeListings', 'links', 'articles']);
+        $presentation->loadMissing(['uploads', 'soldComps', 'activeListings', 'links', 'articles', 'fields']);
 
         $urlSnapshots = PresentationUrlSnapshot::where('presentation_id', $presentation->id)->get();
+
+        // Phase 3d — hydrated presentation_fields keys signal MIC-sourced
+        // evidence. We treat these on par with manual uploads for the
+        // suburb_evidence + cma_uploaded checks.
+        $fieldKeys     = $presentation->fields->pluck('field_key')->all();
+        $hasSuburbField = collect($fieldKeys)->contains(fn ($k) => str_starts_with((string) $k, 'suburb.latest_'));
+        $hasCmaField    = collect($fieldKeys)->contains(fn ($k) => in_array($k, ['cma.lower_range', 'cma.middle_range', 'cma.upper_range'], true));
 
         // ── Required items ────────────────────────────────────────────────────
 
@@ -43,13 +50,14 @@ class PresentationReadinessService
             'satisfied' => !empty($presentation->suburb) && !empty($presentation->property_type),
         ];
 
-        // 2. Suburb evidence: upload with type suburb_stats OR a search URL snapshot
+        // 2. Suburb evidence: upload with type suburb_stats OR a search URL
+        //    snapshot OR hydrated suburb.* fields (Phase 3d — MIC snapshot).
         $hasSuburbUpload   = $presentation->uploads->where('type', 'suburb_stats')->count() >= 1;
         $hasSuburbSnapshot = $urlSnapshots->whereIn('source_type', ['p24_search', 'private_property_search'])->count() >= 1;
         $required['suburb_evidence'] = [
             'key'       => 'suburb_evidence',
             'label'     => 'Suburb report or stats evidence',
-            'satisfied' => $hasSuburbUpload || $hasSuburbSnapshot,
+            'satisfied' => $hasSuburbUpload || $hasSuburbSnapshot || $hasSuburbField,
         ];
 
         // 3. Vicinity sales: upload with type vicinity_sales/cma OR sold comps in DB
@@ -87,7 +95,9 @@ class PresentationReadinessService
         $optional['cma_uploaded'] = [
             'key'       => 'cma_uploaded',
             'label'     => 'CMA report uploaded',
-            'satisfied' => $presentation->uploads->where('type', 'cma')->count() >= 1,
+            // Phase 3d — hydrated cma.* fields satisfy this too (MIC snapshot
+            // from a CMA Info Property Valuation report).
+            'satisfied' => $presentation->uploads->where('type', 'cma')->count() >= 1 || $hasCmaField,
         ];
 
         // Count competitor data points from ALL sources

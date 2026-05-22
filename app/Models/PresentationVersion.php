@@ -16,11 +16,13 @@ class PresentationVersion extends Model
         'analytics_run_id',
         'probability_run_id',
         'data_snapshot_json',
+        'hydration_summary_json',
         'compiled_at',
     ];
 
     protected $casts = [
-        'compiled_at' => 'datetime',
+        'compiled_at'            => 'datetime',
+        'hydration_summary_json' => 'array',
     ];
 
     public function presentation()
