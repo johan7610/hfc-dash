@@ -79,8 +79,11 @@ Route::post('/pp/webhook', [\App\Http\Controllers\PrivateProperty\PpWebhookContr
 // Hard-gated to non-production via DemoLoginController::isEnabled()
 // ════════════════════════════════════════════════════════════════
 Route::prefix('v1/demo')->group(function () {
-    Route::get('/status', [\App\Http\Controllers\Api\V1\DemoAuthController::class, 'status'])->name('demo.status');
-    Route::post('/login', [\App\Http\Controllers\Api\V1\DemoAuthController::class, 'login'])->name('demo.login');
+    // Route names are prefixed `api.` to avoid colliding with the web
+    // `demo.login` route (routes/auth.php) — a duplicate name makes the
+    // route() helper resolve to whichever loads last.
+    Route::get('/status', [\App\Http\Controllers\Api\V1\DemoAuthController::class, 'status'])->name('api.demo.status');
+    Route::post('/login', [\App\Http\Controllers\Api\V1\DemoAuthController::class, 'login'])->name('api.demo.login');
 });
 
 Route::prefix('v1/client-auth')->group(function () {

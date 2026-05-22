@@ -73,6 +73,7 @@ class MobileCoreMatchController extends Controller
                 'price_display' => $p->formattedPrice(),
                 'thumbnail'     => ($p->gallery_images_json ?? [])[0] ?? null,
                 'hidden'        => $match->isPropertyHidden($p->id),
+                'hidden_reason' => $match->hiddenReasonFor($p->id),
                 'reaction'      => $fb?->reaction,        // 'interested' | 'not_interested' | 'saved' | null
                 'reaction_note' => $fb?->note,
             ];
@@ -132,14 +133,27 @@ class MobileCoreMatchController extends Controller
 
     // POST /api/mobile/core-matches/{match}/hide/{property}
     // Toggles hidden flag for that property within this match.
+    // When hiding a property a `reason` is REQUIRED and stored against the
+    // match; when un-hiding, the reason is cleared and no body is needed.
     public function toggleHide(Request $request, ContactMatch $match, int $property): JsonResponse
     {
         $this->authorizeMatch($request->user(), $match);
-        $match->toggleHiddenProperty($property);
+
+        $willHide = !$match->isPropertyHidden($property);
+
+        if ($willHide) {
+            $data = $request->validate([
+                'reason' => 'required|string|min:3|max:500',
+            ]);
+            $match->hidePropertyWithReason($property, $data['reason']);
+        } else {
+            $match->unhideProperty($property);
+        }
 
         return response()->json([
-            'property_id' => $property,
-            'hidden'      => $match->isPropertyHidden($property),
+            'property_id'   => $property,
+            'hidden'        => $match->isPropertyHidden($property),
+            'hidden_reason' => $match->hiddenReasonFor($property),
         ]);
     }
 
@@ -251,6 +265,7 @@ class MobileCoreMatchController extends Controller
             'must_have_features' => $m->must_have_features,
             'notes'              => $m->notes,
             'hidden_property_ids'=> $m->hidden_property_ids ?? [],
+            'hidden_property_reasons' => $m->hidden_property_reasons ?? (object) [],
             'share_url'          => $m->sharedUrl(),
         ];
     }

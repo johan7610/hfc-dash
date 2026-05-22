@@ -268,7 +268,8 @@
                         @endif
                         <span class="ds-badge {{ $statusVariant }}">{{ ucfirst($property->status) }}</span>
                         @if($isHidden)
-                        <span class="ds-badge ds-badge-warning">Hidden</span>
+                        @php($hiddenReason = $match->hiddenReasonFor($property->id))
+                        <span class="ds-badge ds-badge-warning" @if($hiddenReason) title="Reason: {{ $hiddenReason }}" @endif>Hidden</span>
                         @endif
                         @if($fbMeta)
                         <span class="ds-badge {{ $fbMeta['variant'] }}" title="Client reaction">
@@ -286,6 +287,13 @@
                         @endif
                         @endif
                     </div>
+                    @if($isHidden && !empty($match->hiddenReasonFor($property->id)))
+                    <div class="rounded-md p-2 mb-2 text-xs"
+                         style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-secondary);">
+                        <span class="text-[0.6875rem] font-semibold uppercase tracking-wider" style="color: var(--text-muted);">Hidden reason</span>
+                        <div class="whitespace-pre-wrap leading-relaxed mt-0.5" style="color: var(--text-primary);">{{ $match->hiddenReasonFor($property->id) }}</div>
+                    </div>
+                    @endif
                     @if($fbMeta && !empty($fb->note))
                     <div x-show="noteOpen === {{ $property->id }}" x-cloak x-transition
                          class="rounded-md p-3 mb-2 text-xs"
@@ -351,8 +359,14 @@
                 </form>
                 @endpermission
 
-                <form method="POST" action="{{ route('corex.contacts.matches.toggleHide', [$contact, $match, $property]) }}">
+                <form method="POST" action="{{ route('corex.contacts.matches.toggleHide', [$contact, $match, $property]) }}"
+                      @if(!$isHidden)
+                      onsubmit="var r=prompt('Why are you hiding this property from this match?');if(r===null){return false;}r=r.trim();if(r.length<3){alert('Please enter a reason (at least 3 characters).');return false;}this.querySelector('input[name=reason]').value=r;return true;"
+                      @endif>
                     @csrf
+                    @unless($isHidden)
+                    <input type="hidden" name="reason" value="">
+                    @endunless
                     <button type="submit" class="corex-btn-outline w-full">
                         @if($isHidden)
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.641 0-8.58-3.007-9.964-7.178Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
