@@ -179,6 +179,8 @@ class AppServiceProvider extends ServiceProvider
             \App\Events\Presentation\PresentationOutcomeRecorded::class,
             \App\Events\Presentation\PresentationOutcomePrompted::class,
             \App\Events\Presentation\PresentationOutcomeLocked::class,
+            // Phase 3j — SG document save.
+            \App\Events\Property\PropertySgDocumentSaved::class,
         ] as $micActivityEvent) {
             Event::listen($micActivityEvent, \App\Listeners\Activity\LogAgentActivity::class);
         }

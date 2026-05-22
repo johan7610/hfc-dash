@@ -1566,6 +1566,11 @@
                             </div>
                         </div>
                     @endif
+
+                    {{-- Phase 3j — SG Documents panel (server-side SG search + save to drive) --}}
+                    <div style="margin-top:14px;">
+                        @include('corex.properties.partials._sg-documents-panel', ['property' => $property])
+                    </div>
                 </div>
 
                 {{-- Row 2: Key Dates (cols 1-2) | Linked Contact (col 3) — headings align since rows share top --}}

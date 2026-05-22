@@ -300,6 +300,12 @@ class Property extends Model
         return $this->hasMany(Presentation::class, 'property_id')->latest();
     }
 
+    /** Phase 3j — SG documents referenced for this property. */
+    public function sgDocuments(): HasMany
+    {
+        return $this->hasMany(\App\Models\PropertySgDocument::class, 'property_id')->latest();
+    }
+
     public function latestPresentation(): ?Presentation
     {
         return $this->presentations()->first();

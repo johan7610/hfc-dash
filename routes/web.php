@@ -96,6 +96,8 @@ Route::middleware('auth')->group(function () {
 
     // Phase 3i — admin deal-link-review queue.
     Route::bind('reviewItem', fn ($id) => \App\Models\DealLinkReviewQueue::findOrFail($id));
+    // Phase 3j — SG document binding.
+    Route::bind('sgDoc', fn ($id) => \App\Models\PropertySgDocument::findOrFail($id));
     Route::prefix('corex/admin/deal-link-review')
         ->name('corex.admin.deal-link-review.')
         ->group(function () {
@@ -1758,6 +1760,21 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
             ->name('generate-presentation');
         Route::get('/{property}/presentation-coverage', [\App\Http\Controllers\Presentation\PresentationGeneratorController::class, 'coverage'])
             ->name('presentation-coverage');
+
+        // Phase 3j — SG document integration (server-side proxy + save to drive).
+        // The /search endpoint is the only one that may HTTP out to SG; rate
+        // limit it per-user (30/hr) and per-agency at the controller via cache.
+        Route::post('/{property}/sg/search', [\App\Http\Controllers\CoreX\PropertySgController::class, 'search'])
+            ->middleware('throttle:30,60')
+            ->name('sg.search');
+        Route::post('/{property}/sg/save-all', [\App\Http\Controllers\CoreX\PropertySgController::class, 'saveAll'])
+            ->middleware('throttle:30,60')
+            ->name('sg.save-all');
+        Route::post('/{property}/sg/documents/{sgDoc}/save', [\App\Http\Controllers\CoreX\PropertySgController::class, 'saveDocument'])
+            ->middleware('throttle:60,60')
+            ->name('sg.save-document');
+        Route::get('/{property}/sg/documents/{sgDoc}/download', [\App\Http\Controllers\CoreX\PropertySgController::class, 'download'])
+            ->name('sg.download');
 
         // Seller Live Links — agent management
         Route::post('/seller-links/generate', [\App\Http\Controllers\SellerLinkController::class, 'generate'])->name('seller-links.generate');
