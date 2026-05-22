@@ -77,4 +77,22 @@ final class MapBoundsRequest
     {
         return min(max(1, $this->limit), self::MAX_LIMIT);
     }
+
+    /**
+     * Phase 9a hardening — degree-span heuristic for "how zoomed in is the
+     * caller". Wider boxes (country/region view) cap pins more aggressively
+     * because the view doesn't gain detail from 2000 pins at country zoom.
+     *
+     *   span < 0.05° (street/suburb) → no extra cap, use effectiveLimit()
+     *   span < 0.5°  (town/district) → cap 500 / layer
+     *   span ≥ 0.5°  (region+)       → cap 200 / layer
+     */
+    public function zoomAwarePerLayerLimit(int $layerCount): int
+    {
+        $base = max(50, (int) floor($this->effectiveLimit() / max(1, $layerCount)));
+        $span = max(abs($this->north - $this->south), abs($this->east - $this->west));
+        if ($span >= 0.5)  return min($base, 200);
+        if ($span >= 0.05) return min($base, 500);
+        return $base;
+    }
 }

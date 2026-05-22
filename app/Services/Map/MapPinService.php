@@ -33,7 +33,10 @@ final class MapPinService
     /** @return array{bounds: array, layers: array, totals: array} */
     public function getPinsInBounds(MapBoundsRequest $req): array
     {
-        $perLayerLimit = max(50, (int) floor($req->effectiveLimit() / max(1, count($req->layers))));
+        // Phase 9a hardening — at wide-zoom (country/region) the view gains
+        // no detail from 2000 pins; cap aggressively to keep query cost
+        // bounded. See MapBoundsRequest::zoomAwarePerLayerLimit().
+        $perLayerLimit = $req->zoomAwarePerLayerLimit(count($req->layers));
 
         $layers = [];
         $totals = [];

@@ -57,6 +57,13 @@ final class PublicPresentationController extends Controller
         if (!$link) {
             return $this->renderUnavailable('not_found');
         }
+        // Phase 9a hardening — a snapshot link whose parent presentation has
+        // been soft-deleted must NOT render. The eager-load above doesn't
+        // respect SoftDeletes when the relationship root was looked up via
+        // withoutGlobalScopes() on the link, so we check explicitly.
+        if (!$link->presentation || $link->presentation->trashed()) {
+            return $this->renderUnavailable('not_found');
+        }
         if ($link->isRevoked()) {
             return $this->renderUnavailable('revoked', $link);
         }
@@ -202,8 +209,8 @@ final class PublicPresentationController extends Controller
         ]);
 
         // At least one of email/phone required.
-        $email = trim((string) ($data['email'] ?? ''));
-        $phone = trim((string) ($data['phone'] ?? ''));
+        $email = mb_strtolower(trim((string) ($data['email'] ?? '')));
+        $phone = $this->normaliseSaPhone(trim((string) ($data['phone'] ?? '')));
         if ($email === '' && $phone === '') {
             return response()->json([
                 'error'  => 'Provide email or phone so we can send your report.',
@@ -489,6 +496,34 @@ final class PublicPresentationController extends Controller
         $parts = explode('.', $ip);
         if (count($parts) !== 4) return $ip;
         return $parts[0] . '.' . $parts[1] . '.' . $parts[2] . '.0/24';
+    }
+
+    /**
+     * Phase 9a hardening — normalise an SA phone for lead capture.
+     * 082 123 4567 → 27821234567, +27 82 123 4567 → 27821234567.
+     * Returns '' when input doesn't look like a real phone number, so the
+     * controller's email-OR-phone-required check still fires.
+     *
+     * Mirrors the rule used by PresentationDeliveryService::whatsappUrl()
+     * but kept local — extracting a shared helper isn't worth the indirection
+     * for a 6-line normaliser.
+     */
+    private function normaliseSaPhone(string $raw): string
+    {
+        if ($raw === '') return '';
+        $digits = preg_replace('/\D+/', '', $raw) ?? '';
+        if ($digits === '') return '';
+        if (str_starts_with($digits, '27')) {
+            return '27' . preg_replace('/^0+/', '', substr($digits, 2));
+        }
+        if (str_starts_with($digits, '0')) {
+            return '27' . preg_replace('/^0+/', '', $digits);
+        }
+        if (strlen($digits) === 9) {
+            return '27' . $digits;
+        }
+        // Doesn't look SA — keep the digits but don't reject.
+        return $digits;
     }
 
     private function shouldDispatchFlagNotice(PresentationSnapshotLink $link): bool

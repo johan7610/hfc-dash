@@ -164,6 +164,33 @@ class AgentPortalController extends Controller
             || $trainingItems->contains('status', 'red')
             || $rmcpStatus === 'red';
 
+        // Phase 9a G2 — light presentation stats for the agent. Cheap queries,
+        // drive action. Failure-isolated so a stats hiccup never breaks the
+        // portal load.
+        $presentationStats = [
+            'this_week_count'           => 0,
+            'awaiting_outcome_count'    => 0,
+            'refresh_requests_count'    => 0,
+        ];
+        try {
+            $presentationStats['this_week_count'] = \App\Models\Presentation::query()
+                ->where('created_by_user_id', $user->id)
+                ->where('created_at', '>=', now()->subDays(7))
+                ->count();
+            $presentationStats['awaiting_outcome_count'] = \App\Models\Presentation::query()
+                ->where('created_by_user_id', $user->id)
+                ->where('created_at', '<=', now()->subDays(7))
+                ->whereDoesntHave('outcome')
+                ->count();
+            $presentationStats['refresh_requests_count'] = \App\Models\PresentationRefreshRequest::query()
+                ->whereIn('status', ['pending', 'acknowledged'])
+                ->whereHas('link', fn ($q) => $q->where('created_by_user_id', $user->id))
+                ->count();
+        } catch (\Throwable $e) {
+            // Stats are decorative — the portal must still render.
+            \Log::warning('agent_portal.stats_failed', ['error' => $e->getMessage()]);
+        }
+
         return view('agent.portal', compact(
             'user',
             'documents',
@@ -184,7 +211,8 @@ class AgentPortalController extends Controller
             'impersonationLogs',
             'needsAttention',
             'latestPayslip',
-            'payslipCount'
+            'payslipCount',
+            'presentationStats'
         ));
     }
 

@@ -54,6 +54,8 @@ Schedule::job(new \App\Jobs\SyncMarketingInsightsJob())->dailyAt('04:00');
 Schedule::job(new \App\Jobs\PromptOutcomeCaptureJob())->dailyAt('08:30')->withoutOverlapping();
 // Phase 8 — daily auto-lock for outcomes recorded >90d ago.
 Schedule::job(new \App\Jobs\LockOldOutcomesJob())->dailyAt('02:45')->withoutOverlapping();
+// Phase 9a — POPIA 90-day retention for presentation_snapshot_views.
+Schedule::job(new \App\Jobs\PurgeOldSnapshotViewsJob())->dailyAt('03:15')->withoutOverlapping();
 
 // Prospecting claim maintenance — runs hourly
 Schedule::command('prospecting:maintain-claims')->hourly();

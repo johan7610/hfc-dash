@@ -397,9 +397,14 @@
                 <label class="field-label" for="notes">Anything else? (optional)</label>
                 <textarea id="notes" name="notes" maxlength="2000" placeholder="Special requirements, timeline, questions..."></textarea>
 
+                {{-- Phase 9a hardening — POPIA-aligned: opt-in is now an
+                     active choice, no longer pre-ticked. The "By submitting…"
+                     note above the button captures lawful basis for the
+                     property-specific contact; this checkbox is for ongoing
+                     marketing-channel consent only. --}}
                 <label class="checkbox-row">
-                    <input type="checkbox" name="consent_marketing" value="1" checked>
-                    <span>I agree to receive market updates and agent contact about this property.</span>
+                    <input type="checkbox" name="consent_marketing" value="1">
+                    <span>I'd also like to receive future market updates from this agency.</span>
                 </label>
 
                 {{-- Honeypot — bots fill, humans don't see. --}}

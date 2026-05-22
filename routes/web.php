@@ -33,6 +33,7 @@ Route::get('/m/{shortcode}', [\App\Http\Controllers\SellerOutreach\PublicLanding
 //    Track endpoint is rate-limited 60req/min/IP to stop beacon abuse.
 Route::get('/p/{token}', [\App\Http\Controllers\Presentation\PublicPresentationController::class, 'show'])
     ->where('token', '[A-Za-z0-9]{40,64}')
+    ->middleware('throttle:60,1')
     ->name('presentation.public.show');
 Route::post('/p/{token}/track', [\App\Http\Controllers\Presentation\PublicPresentationController::class, 'track'])
     ->where('token', '[A-Za-z0-9]{40,64}')
@@ -45,6 +46,7 @@ Route::post('/p/{token}/capture-lead', [\App\Http\Controllers\Presentation\Publi
     ->name('presentation.public.capture-lead');
 Route::get('/p/{token}/refresh', [\App\Http\Controllers\Presentation\PublicPresentationController::class, 'refreshForm'])
     ->where('token', '[A-Za-z0-9]{40,64}')
+    ->middleware('throttle:60,1')
     ->name('presentation.public.refresh-form');
 Route::post('/p/{token}/refresh', [\App\Http\Controllers\Presentation\PublicPresentationController::class, 'refreshSubmit'])
     ->where('token', '[A-Za-z0-9]{40,64}')
@@ -93,6 +95,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/corex/presentations/outcomes', [\App\Http\Controllers\Presentation\PresentationOutcomesDashboardController::class, 'index'])
         ->middleware('permission:access_presentations')
         ->name('corex.presentations.outcomes.index');
+    // Phase 9a — full-funnel analytics dashboard.
+    Route::get('/corex/presentations/analytics', [\App\Http\Controllers\Presentation\PresentationAnalyticsController::class, 'index'])
+        ->middleware('permission:access_presentations')
+        ->name('corex.presentations.analytics.index');
 
     // Phase 3i — admin deal-link-review queue.
     Route::bind('reviewItem', fn ($id) => \App\Models\DealLinkReviewQueue::findOrFail($id));

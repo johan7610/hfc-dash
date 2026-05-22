@@ -435,6 +435,12 @@
                 @if(config('features.presentations') && \Illuminate\Support\Facades\Route::has('presentations.index'))
                 <a href="{{ route('presentations.index') }}" class="corex-nav-subitem {{ request()->routeIs('presentations.*') ? 'active' : '' }}">Presentations</a>
                 @endif
+                @if(\Illuminate\Support\Facades\Route::has('corex.presentations.analytics.index'))
+                    <a href="{{ route('corex.presentations.analytics.index') }}"
+                       class="corex-nav-subitem {{ request()->routeIs('corex.presentations.analytics.*') ? 'active' : '' }}">
+                        Analytics
+                    </a>
+                @endif
                 @if(\Illuminate\Support\Facades\Route::has('corex.presentations.outcomes.index'))
                     @php
                         // Phase 8 — count of presentations >30d old with no outcome (in current user's scope).
