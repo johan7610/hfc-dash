@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Presentation;
 
 use App\Http\Controllers\Controller;
 use App\Models\Property;
+use App\Services\Presentations\CmaCoverageService;
 use App\Services\Presentations\PresentationGeneratorService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -11,16 +12,18 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Presentations V2 Phase 1 — one-button generator entry point.
+ * Presentations V2 Phase 1 + 2 — one-button generator entry point + coverage.
  *
- * POST /properties/{property}/generate-presentation
+ * POST /corex/properties/{property}/generate-presentation
+ * GET  /corex/properties/{property}/presentation-coverage
  *
- * Spec: .ai/specs/presentations.md §3.1
+ * Spec: .ai/specs/presentations.md §3.1 + Phase 2
  */
 class PresentationGeneratorController extends Controller
 {
     public function __construct(
         private PresentationGeneratorService $generator,
+        private CmaCoverageService $coverage,
     ) {}
 
     public function generate(Request $request, Property $property): JsonResponse|RedirectResponse
@@ -37,7 +40,7 @@ class PresentationGeneratorController extends Controller
         }
 
         $validated = $request->validate([
-            'asking_price' => ['nullable', 'integer', 'min:0'],
+            'asking_price' => ['nullable', 'numeric', 'min:0', 'max:999999999'],
         ]);
 
         $startedAt = microtime(true);
@@ -88,5 +91,29 @@ class PresentationGeneratorController extends Controller
             return response()->json(['error' => $message], $status);
         }
         return back()->with('error', $message);
+    }
+
+    /**
+     * GET /corex/properties/{property}/presentation-coverage
+     *
+     * Phase 2 — returns the coverage state JSON so the property show page
+     * can render a badge above the Generate Presentation button without
+     * blocking initial page render.
+     */
+    public function coverage(Request $request, Property $property): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user, 403);
+
+        if (!$user->hasPermission('access_presentations')) {
+            return response()->json(['error' => 'You do not have permission to view presentation coverage.'], 403);
+        }
+        if ((int) $property->agency_id !== (int) $user->effectiveAgencyId()) {
+            return response()->json(['error' => 'Property is outside your agency scope.'], 403);
+        }
+
+        $result = $this->coverage->scoreForProperty($property);
+
+        return response()->json($result);
     }
 }

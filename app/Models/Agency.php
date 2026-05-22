@@ -79,6 +79,11 @@ class Agency extends Model
         'ai_budget_overage_allowed',
         'ai_budget_last_warned_at',
         'ai_budget_last_hard_stopped_at',
+        // Presentations V2 Phase 2 — CMA coverage thresholds.
+        'presentations_coverage_rich_threshold',
+        'presentations_coverage_moderate_threshold',
+        'presentations_coverage_thin_threshold',
+        'presentations_default_period_months',
     ];
 
     protected $casts = [
@@ -99,6 +104,11 @@ class Agency extends Model
         'ai_budget_overage_allowed'      => 'boolean',
         'ai_budget_last_warned_at'       => 'datetime',
         'ai_budget_last_hard_stopped_at' => 'datetime',
+        // Presentations V2 Phase 2.
+        'presentations_coverage_rich_threshold'     => 'integer',
+        'presentations_coverage_moderate_threshold' => 'integer',
+        'presentations_coverage_thin_threshold'     => 'integer',
+        'presentations_default_period_months'       => 'integer',
     ];
 
     public const AI_BUDGET_STATUS_HEALTHY  = 'healthy';

@@ -235,14 +235,38 @@
                 </a>
                 @endif
 
-                {{-- Presentations V2 — one-button generator (Phase 1) --}}
+                {{-- Presentations V2 — one-button generator (Phase 1) + coverage badge + asking-price modal (Phase 2) --}}
                 @if(auth()->user()->hasPermission('create_presentations'))
-                <form method="POST"
-                      action="{{ route('corex.properties.generate-presentation', $property) }}"
-                      x-data="{ generating: false }"
-                      @submit="generating = true">
-                    @csrf
-                    <button type="submit"
+                <div x-data="presentationGenerator({
+                        propertyId: {{ $property->id }},
+                        coverageUrl: '{{ route('corex.properties.presentation-coverage', $property) }}',
+                        generateUrl: '{{ route('corex.properties.generate-presentation', $property) }}',
+                        csrf: '{{ csrf_token() }}',
+                        hasListedPrice: {{ $property->price ? 'true' : 'false' }},
+                        listedPrice: {{ $property->price ? (int) $property->price : 'null' }},
+                    })"
+                    x-init="loadCoverage()"
+                    class="space-y-2">
+
+                    {{-- Coverage badge (loaded async; placeholder shown until coverage resolves) --}}
+                    <div class="rounded-md px-2.5 py-2 text-[11px] leading-snug"
+                         x-show="coverage"
+                         x-cloak
+                         :style="badgeStyle">
+                        <div class="font-semibold uppercase tracking-wider text-[9px] mb-0.5" x-text="badgeHeading"></div>
+                        <div x-text="coverage?.recommendation"></div>
+                    </div>
+                    <div class="rounded-md px-2.5 py-2 text-[11px]" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-muted);"
+                         x-show="!coverage && !coverageError" x-cloak>
+                        Checking comp coverage…
+                    </div>
+                    <div class="rounded-md px-2.5 py-2 text-[11px]" style="background:color-mix(in srgb, #dc2626 10%, transparent); border:1px solid color-mix(in srgb, #dc2626 30%, transparent); color:#dc2626;"
+                         x-show="coverageError" x-cloak
+                         x-text="coverageError"></div>
+
+                    {{-- Generate button --}}
+                    <button type="button"
+                            @click="onClickGenerate()"
                             class="prop-action-btn prop-action-btn-brand w-full"
                             :disabled="generating"
                             :class="generating ? 'opacity-60 cursor-wait' : ''"
@@ -255,7 +279,147 @@
                         </svg>
                         <span x-text="generating ? 'Generating…' : 'Generate Presentation'"></span>
                     </button>
-                </form>
+
+                    {{-- Asking-price modal (shown when property has no listed price) --}}
+                    <template x-teleport="body">
+                        <div x-show="modalOpen" x-cloak
+                             class="fixed inset-0 z-[120] flex items-center justify-center p-4"
+                             x-transition.opacity>
+                            <div class="absolute inset-0" style="background:rgba(0,0,0,0.45);" @click="modalOpen = false"></div>
+                            <div class="relative rounded-md w-full max-w-md p-5 shadow-xl"
+                                 style="background:var(--surface); border:1px solid var(--border);"
+                                 @click.stop>
+                                <h3 class="text-base font-bold mb-1" style="color:var(--text-primary);">What price are you testing?</h3>
+                                <p class="text-xs mb-3" style="color:var(--text-secondary);">
+                                    This property has no listed price. Enter a price you want the analysis to test.
+                                </p>
+                                <div class="mb-2 text-xs" style="color:var(--text-muted);" x-show="suggestedPrice">
+                                    Suggestion based on suburb data:
+                                    <span class="font-semibold" style="color:var(--text-primary);"
+                                          x-text="formatZar(suggestedPrice)"></span>
+                                </div>
+                                <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Asking price (ZAR)</label>
+                                <div class="relative">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-sm pointer-events-none" style="color:var(--text-muted);">R</span>
+                                    <input type="number" min="0" step="1000" x-model.number="askingPrice"
+                                           class="w-full rounded-md pl-7 pr-3 py-2 text-sm"
+                                           style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);"
+                                           placeholder="e.g. 1500000">
+                                </div>
+                                <p class="text-[11px] mt-1" style="color:var(--text-muted);" x-show="modalError" x-text="modalError"></p>
+                                <div class="mt-4 flex items-center justify-end gap-2">
+                                    <button type="button" @click="modalOpen = false"
+                                            class="px-3 py-1.5 text-sm font-medium rounded-md"
+                                            style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-secondary);">
+                                        Cancel
+                                    </button>
+                                    <button type="button" @click="submitFromModal()"
+                                            :disabled="generating"
+                                            class="prop-action-btn prop-action-btn-brand"
+                                            :class="generating ? 'opacity-60 cursor-wait' : ''">
+                                        <span x-text="generating ? 'Generating…' : 'Generate'"></span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                <script>
+                if (typeof window.presentationGenerator !== 'function') {
+                    window.presentationGenerator = function(config) {
+                        return {
+                            coverage: null,
+                            coverageError: null,
+                            modalOpen: false,
+                            modalError: null,
+                            askingPrice: null,
+                            suggestedPrice: null,
+                            generating: false,
+
+                            get badgeStyle() {
+                                const state = this.coverage?.state;
+                                const palettes = {
+                                    rich:     { bg: 'color-mix(in srgb, var(--ds-green) 10%, transparent)',  border: 'color-mix(in srgb, var(--ds-green) 35%, transparent)',  fg: 'var(--ds-green)' },
+                                    moderate: { bg: 'color-mix(in srgb, var(--ds-amber) 12%, transparent)',  border: 'color-mix(in srgb, var(--ds-amber) 35%, transparent)',  fg: 'var(--ds-amber)' },
+                                    thin:     { bg: 'color-mix(in srgb, var(--ds-amber) 12%, transparent)',  border: 'color-mix(in srgb, var(--ds-amber) 35%, transparent)',  fg: 'var(--ds-amber)' },
+                                    none:     { bg: 'color-mix(in srgb, #dc2626 10%, transparent)',          border: 'color-mix(in srgb, #dc2626 30%, transparent)',          fg: '#dc2626' },
+                                };
+                                const p = palettes[state] ?? palettes.none;
+                                return `background:${p.bg}; border:1px solid ${p.border}; color:${p.fg};`;
+                            },
+                            get badgeHeading() {
+                                const labels = { rich: 'Strong data', moderate: 'Moderate data', thin: 'Thin data', none: 'No data' };
+                                return labels[this.coverage?.state] ?? 'Coverage';
+                            },
+                            formatZar(n) {
+                                if (n === null || n === undefined) return '—';
+                                return 'R ' + Number(n).toLocaleString('en-ZA');
+                            },
+                            async loadCoverage() {
+                                try {
+                                    const r = await fetch(config.coverageUrl, { headers: { 'Accept': 'application/json' } });
+                                    if (!r.ok) {
+                                        this.coverageError = 'Coverage check failed (' + r.status + ').';
+                                        return;
+                                    }
+                                    this.coverage = await r.json();
+                                } catch (e) {
+                                    this.coverageError = 'Coverage check failed: ' + e.message;
+                                }
+                            },
+                            onClickGenerate() {
+                                if (this.generating) return;
+                                if (config.hasListedPrice) {
+                                    this.fireGenerate(null);
+                                    return;
+                                }
+                                // Pre-fill suggestion: prefer suburb median from cached coverage breakdown
+                                // (server doesn't return median yet; using listedPrice if any, else null).
+                                this.suggestedPrice = config.listedPrice || null;
+                                this.askingPrice = this.suggestedPrice;
+                                this.modalError = null;
+                                this.modalOpen = true;
+                            },
+                            submitFromModal() {
+                                if (this.askingPrice === null || this.askingPrice === '' || this.askingPrice < 0) {
+                                    this.modalError = 'Please enter a positive price (or click Cancel).';
+                                    return;
+                                }
+                                this.fireGenerate(this.askingPrice);
+                            },
+                            async fireGenerate(askingPrice) {
+                                this.generating = true;
+                                const body = new FormData();
+                                body.append('_token', config.csrf);
+                                if (askingPrice !== null && askingPrice !== undefined && askingPrice !== '') {
+                                    body.append('asking_price', String(askingPrice));
+                                }
+                                try {
+                                    const r = await fetch(config.generateUrl, {
+                                        method: 'POST',
+                                        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                                        body,
+                                    });
+                                    const data = await r.json().catch(() => null);
+                                    if (!r.ok) {
+                                        this.modalError = (data && data.error) || ('Generation failed (' + r.status + ').');
+                                        this.generating = false;
+                                        return;
+                                    }
+                                    if (data?.redirect_url) {
+                                        window.location.href = data.redirect_url;
+                                    } else {
+                                        window.location.reload();
+                                    }
+                                } catch (e) {
+                                    this.modalError = 'Generation failed: ' + e.message;
+                                    this.generating = false;
+                                }
+                            },
+                        };
+                    };
+                }
+                </script>
                 @endif
 
                 <form method="POST" action="{{ route('corex.properties.duplicate', $property) }}" onsubmit="return confirm('Duplicate this property?')">

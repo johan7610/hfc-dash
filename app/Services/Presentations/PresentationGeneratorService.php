@@ -205,7 +205,8 @@ class PresentationGeneratorService
     {
         if (array_key_exists('asking_price', $options)) {
             $supplied = $options['asking_price'];
-            return $supplied !== null ? (int) $supplied : null;
+            if ($supplied === null || $supplied === '') return null;
+            return (int) round((float) $supplied);
         }
         return $property->price !== null ? (int) $property->price : null;
     }

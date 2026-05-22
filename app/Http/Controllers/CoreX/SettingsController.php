@@ -269,6 +269,41 @@ class SettingsController extends Controller
         return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('success', 'Syndication portals updated.');
     }
 
+    /**
+     * Presentations V2 Phase 2 — CMA coverage thresholds + default period.
+     */
+    public function updatePresentations(Request $request)
+    {
+        $user = auth()->user();
+        abort_unless($user, 403);
+
+        $agencyId = $user->effectiveAgencyId();
+        $agency   = $agencyId ? Agency::find($agencyId) : null;
+        abort_unless($agency, 404, 'No agency in scope.');
+
+        $data = $request->validate([
+            'presentations_coverage_rich_threshold'     => ['required', 'integer', 'min:1', 'max:999'],
+            'presentations_coverage_moderate_threshold' => ['required', 'integer', 'min:1', 'max:999'],
+            'presentations_coverage_thin_threshold'     => ['required', 'integer', 'min:1', 'max:999'],
+            'presentations_default_period_months'       => ['required', 'integer', 'min:1', 'max:60'],
+        ]);
+
+        if (
+            $data['presentations_coverage_rich_threshold'] < $data['presentations_coverage_moderate_threshold']
+            || $data['presentations_coverage_moderate_threshold'] < $data['presentations_coverage_thin_threshold']
+        ) {
+            return redirect()
+                ->route('corex.settings', ['s' => 'feature-presentations'])
+                ->withErrors(['presentations_coverage_rich_threshold' => 'Thresholds must satisfy: rich ≥ moderate ≥ thin.']);
+        }
+
+        $agency->update($data);
+
+        return redirect()
+            ->route('corex.settings', ['s' => 'feature-presentations'])
+            ->with('success', 'Presentation coverage thresholds saved.');
+    }
+
     public function updateMatchesEnabled(Request $request)
     {
         $enabled = $request->boolean('matches_enabled');

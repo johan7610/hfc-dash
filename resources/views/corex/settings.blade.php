@@ -68,6 +68,7 @@
                     ['key'=>'feature-rentals',       'label'=>'Rentals',               'type'=>'section', 'keywords'=>'rental document types reminders'],
                     ['key'=>'feature-contacts',      'label'=>'Contacts',              'type'=>'section', 'keywords'=>'contact types sources tags'],
                     ['key'=>'feature-properties',    'label'=>'Properties & Listings', 'type'=>'section', 'keywords'=>'syndication portals marketing'],
+                    ['key'=>'feature-presentations', 'label'=>'Presentations',         'type'=>'section', 'keywords'=>'cma coverage thresholds comps period rich moderate thin'],
                     ['key'=>'feature-matches',       'label'=>'Matches',               'type'=>'section', 'keywords'=>'whatsapp message'],
                     ['key'=>'feature-dashboard',     'label'=>'Dashboard',             'type'=>'section', 'keywords'=>'cockpit widgets'],
                     ['key'=>'notifications',         'label'=>'Notifications',         'type'=>'section', 'keywords'=>'reminders push email alerts overdue'],
@@ -1856,6 +1857,72 @@
                 @endforeach
 
             </div>{{-- /properties --}}
+
+            {{-- PRESENTATIONS section (V2 Phase 2) --}}
+            <div x-show="activeSection === 'feature-presentations'" x-cloak class="space-y-3">
+                @php
+                    $presAgency = $agency ?? null;
+                    $presRich     = (int) ($presAgency->presentations_coverage_rich_threshold     ?? 6);
+                    $presModerate = (int) ($presAgency->presentations_coverage_moderate_threshold ?? 3);
+                    $presThin     = (int) ($presAgency->presentations_coverage_thin_threshold     ?? 1);
+                    $presPeriod   = (int) ($presAgency->presentations_default_period_months       ?? 12);
+                @endphp
+
+                <div class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
+                    <div class="mb-3">
+                        <div class="text-sm font-semibold" style="color:var(--text-primary);">CMA Coverage Thresholds</div>
+                        <div class="text-xs mt-0.5" style="color:var(--text-secondary);">Controls the data-quality badge shown on the property page above the Generate Presentation button. Counts are sold (registered) deals in the property's suburb within the rolling window.</div>
+                    </div>
+
+                    @if($presAgency)
+                    <form method="POST" action="{{ route('corex.settings.presentations.update') }}" class="space-y-3">
+                        @csrf
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Rich (default 6)</label>
+                                <input type="number" min="1" max="999" name="presentations_coverage_rich_threshold"
+                                       value="{{ $presRich }}"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                <div class="text-[11px] mt-1" style="color:var(--text-muted);">≥ this many comps → green badge "Strong data".</div>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Moderate (default 3)</label>
+                                <input type="number" min="1" max="999" name="presentations_coverage_moderate_threshold"
+                                       value="{{ $presModerate }}"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                <div class="text-[11px] mt-1" style="color:var(--text-muted);">≥ this many comps → amber badge "Moderate data".</div>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Thin (default 1)</label>
+                                <input type="number" min="1" max="999" name="presentations_coverage_thin_threshold"
+                                       value="{{ $presThin }}"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                <div class="text-[11px] mt-1" style="color:var(--text-muted);">≥ this many comps → amber badge "Thin data". 0 comps → red badge.</div>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Default period (months)</label>
+                                <input type="number" min="1" max="60" name="presentations_default_period_months"
+                                       value="{{ $presPeriod }}"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                <div class="text-[11px] mt-1" style="color:var(--text-muted);">Rolling window for the comp count (default 12).</div>
+                            </div>
+                        </div>
+
+                        <div class="pt-2 flex items-center gap-2">
+                            <button type="submit" class="prop-action-btn prop-action-btn-brand">Save Thresholds</button>
+                            <p class="text-[11px]" style="color:var(--text-muted);">Thresholds must satisfy: rich ≥ moderate ≥ thin ≥ 1.</p>
+                        </div>
+                    </form>
+                    @else
+                    <p class="text-xs" style="color:var(--text-muted);">No agency context — cannot edit thresholds.</p>
+                    @endif
+                </div>
+            </div>{{-- /presentations --}}
 
             {{-- MATCHES section --}}
             <div x-show="activeSection === 'feature-matches'" x-cloak class="space-y-5">
