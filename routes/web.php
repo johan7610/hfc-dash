@@ -2053,6 +2053,13 @@ Route::middleware(['auth', 'permission:access_presentations'])->prefix('presenta
     // Phase 5 — teaser leads index.
     Route::get('/{presentation}/teaser-leads',                          [\App\Http\Controllers\Presentation\SnapshotLinkController::class, 'teaserLeads'])
         ->name('teaser-leads');
+    // Phase 3 — AI summary generation + accept.
+    Route::post('/{presentation}/ai-summary/generate', [\App\Http\Controllers\Presentation\AiSummaryController::class, 'generate'])
+        ->middleware('throttle:30,1')
+        ->name('ai-summary.generate');
+    Route::post('/{presentation}/ai-summary/accept',   [\App\Http\Controllers\Presentation\AiSummaryController::class, 'accept'])
+        ->name('ai-summary.accept');
+
     // Phase 6 — Send-to-Recipient flow.
     Route::post('/{presentation}/deliveries/preview',                   [\App\Http\Controllers\Presentation\PresentationDeliveryController::class, 'preview'])
         ->name('deliveries.preview');

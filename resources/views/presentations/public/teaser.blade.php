@@ -246,6 +246,18 @@
         </div>
         @endif
 
+        {{-- Phase 3 — AI Market Summary stays locked in teaser. --}}
+        <div class="locked" data-section-id="ai-summary-locked">
+            <div class="lock-row">
+                <div class="lock-icon">🔒</div>
+                <div class="lock-title">AI Market Summary</div>
+            </div>
+            <div class="lock-blurb">
+                A data-grounded narrative analysis of your property's market position, what the numbers mean for your timing, and the pricing conversation your agent recommends.
+            </div>
+            <a class="lock-cta" href="#lead-form">Unlock to see →</a>
+        </div>
+
         {{-- Locked: comparable sales --}}
         <div class="locked" data-section-id="comparables-locked">
             <div class="lock-row">

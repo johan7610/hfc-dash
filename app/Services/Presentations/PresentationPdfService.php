@@ -639,12 +639,18 @@ a:hover { text-decoration: underline; }
     <h2>Executive Summary</h2>
 </div>
 
+<?php // Phase 3 — AI-generated executive summary lives on the version snapshot.
+      // Falls back to the static blurb when no AI summary present (legacy versions). ?>
+<?php if (!empty($version->ai_summary_text)): ?>
+    <div style="font-size:12px;line-height:1.6;color:var(--text-primary);margin-bottom:16px;white-space:pre-wrap;"><?= e($version->ai_summary_text) ?></div>
+<?php else: ?>
 <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">
     A data-driven overview of your property's market position. This summary draws on
     <?= count($vicinitySales) + count($cmaComps) + count($streetSales) ?> comparable sales,
     <?= $activeCount ?> active listing<?= $activeCount !== 1 ? 's' : '' ?>,
     and current suburb statistics.
 </p>
+<?php endif ?>
 
 <?php // PROPERTY VALUE — CMA Band ?>
 <?php if ($cmaLower || $cmaMiddle || $cmaUpper): ?>

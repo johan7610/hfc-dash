@@ -129,11 +129,19 @@
             </a>
         @endif
         @if(config('features.presentation_blueprint'))
+            @php
+                // Phase 3 — Compile Pack also requires an AI summary on the latest version.
+                $hasAiSummary    = $latestVersion?->ai_summary_text;
+                $canCompileFull  = $readiness['can_compile'] && $hasAiSummary;
+                $compileBlockMsg = !$readiness['can_compile']
+                    ? 'Missing required evidence — see checklist below'
+                    : (!$hasAiSummary ? 'Generate AI Summary first (see Executive Summary panel below)' : '');
+            @endphp
             <form method="POST" action="{{ route('presentations.compile', $presentation) }}" class="inline">
                 @csrf
                 <button type="submit"
-                        class="{{ $readiness['can_compile'] ? 'corex-btn-primary' : 'corex-btn-primary' }}" style="{{ $readiness['can_compile'] ? '' : 'opacity:0.5;cursor:not-allowed;' }}"
-                        {{ $readiness['can_compile'] ? '' : 'disabled title="Missing required evidence — see checklist below"' }}>
+                        class="corex-btn-primary" style="{{ $canCompileFull ? '' : 'opacity:0.5;cursor:not-allowed;' }}"
+                        {{ $canCompileFull ? '' : 'disabled title="' . e($compileBlockMsg) . '"' }}>
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
                     Compile Pack
                 </button>
@@ -674,6 +682,186 @@
     }
 
     function escHtml(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+})();
+</script>
+
+{{-- ── PHASE 3: AI SUMMARY ───────────────────────────────────────────────── --}}
+@php
+    $aiVariants    = \App\Models\PresentationAiVariant::where('is_active', true)->orderBy('sort_order')->get();
+    $currentSummary = $latestVersion?->ai_summary_text;
+    $summaryStale   = $latestVersion && $latestSnapshot && $latestVersion->ai_summary_generated_at
+        && $latestSnapshot->created_at && $latestVersion->ai_summary_generated_at->lt($latestSnapshot->created_at);
+    $summaryHistory = $latestVersion
+        ? \App\Models\PresentationAiSummaryHistory::where('presentation_version_id', $latestVersion->id)
+            ->with('variant:id,key,display_name')
+            ->orderByDesc('id')
+            ->limit(8)
+            ->get()
+        : collect();
+@endphp
+<div class="ds-status-card mb-8" id="ai-summary">
+    <div class="flex items-center justify-between mb-3">
+        <div>
+            <h2 class="ds-section-header" style="margin-bottom:0">Executive Summary <span style="font-size:0.6875rem;color:var(--text-muted);font-weight:500;text-transform:none;letter-spacing:0;">(AI-generated, agent-reviewable)</span></h2>
+            <p class="text-xs" style="color:var(--text-muted);margin:2px 0 0 0;">
+                Choose a tone, generate the narrative, edit if needed, then accept before compiling the pack.
+            </p>
+        </div>
+        @if($currentSummary)
+            <span class="ds-badge ds-badge-success">Summary set</span>
+        @elseif($latestVersion)
+            <span class="ds-badge ds-badge-warning">No summary yet</span>
+        @endif
+    </div>
+
+    @if(!$latestVersion)
+        <div style="padding:14px;background:var(--surface-2);border:1px dashed var(--border);border-radius:6px;font-size:0.8125rem;color:var(--text-muted);">
+            Run analysis first — the AI summary needs the compiled analytics snapshot.
+        </div>
+    @else
+        @if($summaryStale)
+            <div style="margin-bottom:10px;padding:8px 12px;background:color-mix(in srgb, var(--ds-amber, #d97706) 10%, transparent);border-left:3px solid var(--ds-amber, #d97706);border-radius:4px;font-size:0.8125rem;">
+                Analysis was re-run after this summary was generated — consider regenerating.
+            </div>
+        @endif
+
+        <div style="display:grid;grid-template-columns:200px 1fr;gap:12px;align-items:start;margin-bottom:10px;">
+            <div>
+                <label style="display:block;font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);font-weight:600;margin-bottom:4px;">Variant</label>
+                <select id="ai-variant-select" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);font-size:0.875rem;">
+                    @foreach($aiVariants as $v)
+                        <option value="{{ $v->id }}" data-desc="{{ $v->description }}" {{ $latestVersion->ai_variant_id === $v->id ? 'selected' : '' }}>
+                            {{ $v->display_name }}
+                        </option>
+                    @endforeach
+                </select>
+                <div id="ai-variant-desc" style="font-size:0.6875rem;color:var(--text-muted);margin-top:4px;line-height:1.4;"></div>
+                <button type="button" id="ai-generate-btn" class="corex-btn-primary corex-btn-xs" style="margin-top:10px;width:100%;">
+                    {{ $currentSummary ? 'Regenerate' : 'Generate Summary' }}
+                </button>
+            </div>
+            <div>
+                <label style="display:block;font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);font-weight:600;margin-bottom:4px;">Summary text (editable)</label>
+                <textarea id="ai-summary-text" rows="9" maxlength="5000"
+                          style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);font-size:0.875rem;font-family:inherit;line-height:1.55;">{{ $currentSummary }}</textarea>
+                <div style="display:flex;justify-content:space-between;font-size:0.6875rem;color:var(--text-muted);margin-top:4px;">
+                    <span id="ai-summary-meta">
+                        @if($latestVersion->ai_summary_generated_at)
+                            Generated {{ $latestVersion->ai_summary_generated_at->diffForHumans() }}
+                            @if($latestVersion->ai_summary_edited_by_agent) · <strong>edited by agent</strong>@endif
+                        @endif
+                    </span>
+                    <span><span id="ai-summary-word-count">0</span> words · <span id="ai-summary-char-count">0</span>/5000 chars</span>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">
+                    <button type="button" id="ai-accept-btn" class="corex-btn-primary corex-btn-xs" disabled>Accept &amp; Save</button>
+                </div>
+            </div>
+        </div>
+
+        @if($summaryHistory->isNotEmpty())
+            <details style="margin-top:10px;">
+                <summary style="font-size:0.6875rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;cursor:pointer;">Previous attempts ({{ $summaryHistory->count() }})</summary>
+                <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
+                    @foreach($summaryHistory as $h)
+                        <div style="padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-size:0.75rem;">
+                            <strong>{{ $h->variant->display_name ?? '—' }}</strong>
+                            · {{ $h->generated_at->diffForHumans() }}
+                            @if($h->was_saved)<span class="ds-badge ds-badge-success" style="margin-left:6px;">Saved</span>@endif
+                            @if($h->failure_reason)<span style="color:#dc2626;margin-left:6px;">FAILED</span>@endif
+                            @if($h->tokens_used)<span style="color:var(--text-muted);"> · {{ $h->tokens_used }} tokens · {{ $h->latency_ms }}ms</span>@endif
+                        </div>
+                    @endforeach
+                </div>
+            </details>
+        @endif
+    @endif
+</div>
+
+<script>
+(function () {
+    'use strict';
+    const GENERATE_URL = @json(route('presentations.ai-summary.generate', $presentation));
+    const ACCEPT_URL   = @json(route('presentations.ai-summary.accept',   $presentation));
+    const CSRF         = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    let currentHistoryId = null;
+    const textArea  = document.getElementById('ai-summary-text');
+    const acceptBtn = document.getElementById('ai-accept-btn');
+    const generateBtn = document.getElementById('ai-generate-btn');
+    const variantSelect = document.getElementById('ai-variant-select');
+    const descEl  = document.getElementById('ai-variant-desc');
+    const wordEl  = document.getElementById('ai-summary-word-count');
+    const charEl  = document.getElementById('ai-summary-char-count');
+    const metaEl  = document.getElementById('ai-summary-meta');
+
+    if (!textArea) return; // panel hidden when no version
+
+    function updateCounts() {
+        const t = textArea.value || '';
+        wordEl.textContent = (t.trim().match(/\S+/g) || []).length;
+        charEl.textContent = t.length;
+        acceptBtn.disabled = !(currentHistoryId && t.trim().length >= 50);
+    }
+    function refreshDesc() {
+        const opt = variantSelect.options[variantSelect.selectedIndex];
+        descEl.textContent = opt?.dataset.desc || '';
+    }
+    variantSelect.addEventListener('change', refreshDesc);
+    textArea.addEventListener('input', updateCounts);
+    refreshDesc();
+    updateCounts();
+
+    generateBtn.addEventListener('click', async () => {
+        generateBtn.disabled = true;
+        generateBtn.textContent = 'Generating…';
+        try {
+            const resp = await fetch(GENERATE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':CSRF },
+                body: JSON.stringify({ variant_id: parseInt(variantSelect.value, 10) }),
+                credentials: 'same-origin',
+            });
+            const j = await resp.json();
+            if (resp.ok && j.ok) {
+                textArea.value = j.text;
+                currentHistoryId = j.history_id;
+                metaEl.innerHTML = 'Just generated · ' + (j.tokens_used || 0) + ' tokens · ' + (j.latency_ms || 0) + 'ms · ' + (j.model || '—') + (j.from_cache ? ' · <strong>cached</strong>' : '');
+                updateCounts();
+            } else {
+                alert('Generation failed: ' + (j.error || 'unknown'));
+            }
+        } catch (e) {
+            alert('Network error: ' + e.message);
+        } finally {
+            generateBtn.disabled = false;
+            generateBtn.textContent = 'Regenerate';
+        }
+    });
+
+    acceptBtn.addEventListener('click', async () => {
+        if (!currentHistoryId) return;
+        acceptBtn.disabled = true;
+        acceptBtn.textContent = 'Saving…';
+        try {
+            const resp = await fetch(ACCEPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':CSRF },
+                body: JSON.stringify({ history_id: currentHistoryId, edited_text: textArea.value }),
+                credentials: 'same-origin',
+            });
+            const j = await resp.json();
+            if (resp.ok && j.ok) {
+                window.location.reload();
+            } else {
+                alert('Save failed: ' + (j.error || 'unknown'));
+            }
+        } catch (e) {
+            alert('Network error: ' + e.message);
+        } finally {
+            acceptBtn.disabled = false;
+            acceptBtn.textContent = 'Accept & Save';
+        }
+    });
 })();
 </script>
 

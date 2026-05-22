@@ -112,6 +112,10 @@
     {{-- ── Section 1 — Executive Summary ───────────────────────────────── --}}
     <section class="block" data-section-id="exec-summary">
         <h2>1 · Executive Summary</h2>
+        {{-- Phase 3 — AI-generated narrative lives on the version snapshot. --}}
+        @if(!empty($version->ai_summary_text))
+            <div style="font-size:0.9375rem;line-height:1.65;color:var(--text-primary);margin-bottom:16px;white-space:pre-wrap;">{{ $version->ai_summary_text }}</div>
+        @endif
         <div class="kpi-grid">
             @if($askingPrice)
             <div class="kpi">
