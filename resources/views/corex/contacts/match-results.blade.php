@@ -255,8 +255,17 @@
                 default     => 'ds-badge-default',
             };
             $score = (int) ($property->match_score ?? 0);
-            $scoreVariant = $score >= 80 ? 'ds-badge-success' : ($score >= 60 ? 'ds-badge-info' : 'ds-badge-warning');
-            $scoreLabel = $score >= 80 ? 'Strong' : ($score >= 60 ? 'Good' : 'Weak');
+            $tier  = $property->match_tier ?? \App\Services\Matching\MatchingService::tierFor($score);
+            $scoreVariant = match($tier) {
+                'strong' => 'ds-badge-success',
+                'good'   => 'ds-badge-info',
+                default  => 'ds-badge-warning',
+            };
+            $scoreLabel = match($tier) {
+                'strong' => 'Strong',
+                'good'   => 'Good',
+                default  => 'Fair',
+            };
 
             $fb = $feedback[$property->id] ?? null;
             $reactionMeta = [
