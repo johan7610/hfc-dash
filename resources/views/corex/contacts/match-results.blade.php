@@ -222,10 +222,28 @@
                 }
                 return true;
             });
+
+            // Visible properties first, hidden ones grouped at the bottom.
+            $visibleProperties = $filteredProperties->reject(fn ($p) => $match->isPropertyHidden($p->id))->values();
+            $hiddenProperties  = $filteredProperties->filter(fn ($p) => $match->isPropertyHidden($p->id))->values();
+            $orderedProperties = $visibleProperties->concat($hiddenProperties);
+            $hiddenHeaderShown = false;
         @endphp
-        @foreach($filteredProperties as $property)
+        @foreach($orderedProperties as $property)
         @php
             $isHidden = $match->isPropertyHidden($property->id);
+        @endphp
+        @if($isHidden && !$hiddenHeaderShown)
+        @php($hiddenHeaderShown = true)
+        <div class="flex items-center gap-3 pt-6 pb-1">
+            <div class="text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">
+                Hidden from this match ({{ $hiddenProperties->count() }})
+            </div>
+            <div class="flex-1" style="height:1px; background: var(--border);"></div>
+        </div>
+        @endif
+        @php
+            $views = $match->propertyViewCount($property->id);
             $views = $match->propertyViewCount($property->id);
             $thumb = $property->gallery_images_json[0]
                 ?? $property->dawn_images_json[0]

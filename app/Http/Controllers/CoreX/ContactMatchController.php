@@ -102,7 +102,9 @@ class ContactMatchController extends Controller
         // Use the strict ClientMatchResolver so the agent web view applies the
         // same hard filters as the mobile client API — sale matches never show
         // rentals, and vice versa. Spec: .ai/specs/client-auth.md (round 4).
-        $properties = app(\App\Services\Matching\ClientMatchResolver::class)->resolve($match);
+        // includeHidden: true — the agent must still see hidden properties so
+        // they can review the hide reason and un-hide them.
+        $properties = app(\App\Services\Matching\ClientMatchResolver::class)->resolve($match, includeHidden: true);
         $feedback   = $match->feedback()->get()->keyBy('property_id');
 
         return view('corex.contacts.match-results', compact(

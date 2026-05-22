@@ -38,9 +38,13 @@ class ClientMatchResolver
     /**
      * Returns the properties that match the client's filters.
      *
+     * @param  bool  $includeHidden  When true, properties the agent has hidden
+     *         from this match are still returned (agent-facing view needs them
+     *         so they can be reviewed / un-hidden). The client portal always
+     *         passes false so hidden properties never reach the client.
      * @return \Illuminate\Support\Collection<int, Property>
      */
-    public function resolve(ContactMatch $match): Collection
+    public function resolve(ContactMatch $match, bool $includeHidden = false): Collection
     {
         $q = Property::query()
             ->withoutGlobalScope(AgencyScope::class)
@@ -83,9 +87,10 @@ class ClientMatchResolver
             $q->whereIn('p24_suburb_id', $suburbIds);
         }
 
-        // Hidden by client.
+        // Hidden properties — excluded for the client portal, kept for the
+        // agent-facing view so they can be reviewed and un-hidden.
         $hidden = $match->hidden_property_ids ?? [];
-        if (!empty($hidden)) {
+        if (!empty($hidden) && !$includeHidden) {
             $q->whereNotIn('id', $hidden);
         }
 
