@@ -9,16 +9,29 @@ use App\Services\MarketReports\DTOs\MarketReportParseResult;
 use App\Services\MarketReports\DTOs\ParserConfidence;
 
 /**
- * V1 parser for CMA Info "Median Sales Analysis" — 4-page suburb-history
- * PDF with per-year median, sales count, and annual change.
+ * V2 parser for CMA Info "Median Sales Analysis" — 4-page suburb-history PDF.
+ * Layout per row: "<year> <count> R<median> <change%> <index>" with optional
+ * second area (e.g. the parent municipality RAY NKONYENI alongside UVONGO).
  *
- * Spec: .ai/specs/mic-complete-spec.md §8.3.
+ * Phase 3a additions:
+ *   - extracts BOTH areas when the table has parallel suburb/municipality cols
+ *   - no comp rows (the report is purely aggregate metrics — no per-row data)
+ *   - parser version bumped to v2 for audit
+ *
+ * Spec: .ai/specs/mic-complete-spec.md §8.3 + Phase 3a build prompt.
  */
 final class CmaInfoMedianSalesAnalysisParser extends AbstractCmaInfoParser
 {
+    public const PARSER_VERSION = 'cma_info_median_sales_analysis_v2';
+
     public function getReportTypeKey(): string
     {
         return 'cma_info_median_sales_analysis';
+    }
+
+    public function getVersion(): string
+    {
+        return '2.0.0';
     }
 
     public function canParse(string $filePath): ParserConfidence
@@ -33,7 +46,7 @@ final class CmaInfoMedianSalesAnalysisParser extends AbstractCmaInfoParser
         $pages = $this->pageCount($text);
         if ($pages >= 2 && $pages <= 6) { $score += 0.3; $reasons[] = "page count {$pages}"; }
 
-        if ($this->findHeader($text, 'Median Sales Analysis')) {
+        if ($this->findHeader($text, 'Median Sales Analysis') || $this->findHeader($text, 'ST Residential Sales Analysis')) {
             $score += 0.5;
             $reasons[] = 'Median Sales Analysis header';
         }
@@ -57,49 +70,62 @@ final class CmaInfoMedianSalesAnalysisParser extends AbstractCmaInfoParser
         }
 
         $points = [];
-        $today = now()->toDateString();
-        $suburb = $this->normaliseSuburb($report->source_suburb);
+        $today  = now()->toDateString();
+        $suburbNorm = $this->normaliseSuburb($report->source_suburb);
+        $town   = $report->source_town;
 
-        // "YYYY  <count>  R 1,234,567  <±N.NN%>"
-        if (preg_match_all('/(?<year>20\d{2})\s+(?<count>\d{1,5})\s+R\s*(?<med>[\d ,]+)(?:\s+(?<chg>-?\d{1,3}\.\d{1,2})\s*%)?/m', $text, $matches, PREG_SET_ORDER)) {
-            foreach ($matches as $row) {
-                $year = (int) $row['year'];
-                $medDate = $year . '-12-31';
-                $points[] = [
-                    'metric_key'           => 'suburb_median_price_year',
-                    'metric_value_numeric' => $this->parsePrice($row['med']),
-                    'metric_value_date'    => $medDate,
-                    'metric_date'          => $today,
-                    'confidence'           => 'high',
-                    'suburb_normalised'    => $suburb,
-                    'town'                 => $report->source_town,
-                ];
-                $points[] = [
-                    'metric_key'           => 'suburb_sales_count_year',
-                    'metric_value_numeric' => (float) $row['count'],
-                    'metric_value_date'    => $medDate,
-                    'metric_date'          => $today,
-                    'confidence'           => 'high',
-                    'suburb_normalised'    => $suburb,
-                    'town'                 => $report->source_town,
-                ];
-                if (!empty($row['chg'])) {
-                    $points[] = [
-                        'metric_key'           => 'suburb_annual_change_pct',
-                        'metric_value_numeric' => (float) $row['chg'],
-                        'metric_value_date'    => $medDate,
-                        'metric_date'          => $today,
-                        'confidence'           => 'medium',
-                        'suburb_normalised'    => $suburb,
-                        'town'                 => $report->source_town,
-                    ];
+        // Detect the second area header (municipality) — e.g. "RAY NKONYENI".
+        // It appears in the "Year   UVONGO   ...   RAY NKONYENI" column header.
+        $secondAreaName = null;
+        if (preg_match('/Year\s+[A-Z][A-Z \']{2,30}\s+([A-Z][A-Z \']{3,30})/u', $text, $hm)) {
+            $secondAreaName = trim($hm[1]);
+        }
+
+        // Split text into per-year blocks: each block begins at `^20YY` and
+        // extends to (but not including) the next `^20YY`. Within each block
+        // we look for one or two (count, R<median>, change%) triplets — first
+        // is the subject suburb column, second (when present) is the
+        // municipality column. Indices are optional. This is far more tolerant
+        // than the previous "all on one line" pattern.
+        if (preg_match_all('/(?:^|\n)(?<year>20\d{2})(?<body>.*?)(?=(?:\n20\d{2})|\nPlease|\Z)/su', $text, $blocks, PREG_SET_ORDER)) {
+            foreach ($blocks as $block) {
+                $year = (int) $block['year'];
+                if ($year < 2000 || $year > 2099) continue;
+                $body = (string) $block['body'];
+
+                if (!preg_match_all('/(?<c>\d{1,5})\s+R\s*(?<m>[\d ,]+)\s+(?<chg>-?\d{1,3}\.\d{1,2})\s*%/u', $body, $triplets, PREG_SET_ORDER)) {
+                    continue;
+                }
+
+                // MarketDataPoint validation requires exactly ONE of
+                // metric_value_(numeric|date|string). Encode the year via
+                // metric_date (Y-12-31) and leave metric_value_date null.
+                $metricDate = $year . '-12-31';
+
+                // First triplet = subject column
+                $t1 = $triplets[0];
+                $points[] = ['metric_key' => 'suburb_median_price_year', 'metric_value_numeric' => $this->parsePrice($t1['m']), 'metric_date' => $metricDate, 'confidence' => 'high', 'suburb_normalised' => $suburbNorm, 'town' => $town];
+                $points[] = ['metric_key' => 'suburb_sales_count_year', 'metric_value_numeric' => (float) $t1['c'], 'metric_date' => $metricDate, 'confidence' => 'high', 'suburb_normalised' => $suburbNorm, 'town' => $town];
+                $points[] = ['metric_key' => 'suburb_annual_change_pct', 'metric_value_numeric' => (float) $t1['chg'], 'metric_date' => $metricDate, 'confidence' => 'medium', 'suburb_normalised' => $suburbNorm, 'town' => $town];
+
+                // Second triplet (when present) = municipality column
+                if (isset($triplets[1])) {
+                    $t2 = $triplets[1];
+                    $secondNorm = $secondAreaName !== null ? $this->normaliseSuburb($secondAreaName) : null;
+                    $points[] = ['metric_key' => 'suburb_median_price_year', 'metric_value_numeric' => $this->parsePrice($t2['m']), 'metric_date' => $metricDate, 'confidence' => 'high', 'suburb_normalised' => $secondNorm, 'town' => $secondAreaName];
+                    $points[] = ['metric_key' => 'suburb_sales_count_year', 'metric_value_numeric' => (float) $t2['c'], 'metric_date' => $metricDate, 'confidence' => 'high', 'suburb_normalised' => $secondNorm, 'town' => $secondAreaName];
+                    $points[] = ['metric_key' => 'suburb_annual_change_pct', 'metric_value_numeric' => (float) $t2['chg'], 'metric_date' => $metricDate, 'confidence' => 'medium', 'suburb_normalised' => $secondNorm, 'town' => $secondAreaName];
                 }
             }
         }
 
         return new MarketReportParseResult(
             dataPoints: $points,
-            rawJson: ['pages' => $this->pageCount($text), 'years_found' => count($points) / 2],
+            rawJson: [
+                'parser_version'   => self::PARSER_VERSION,
+                'pages'            => $this->pageCount($text),
+                'second_area_name' => $secondAreaName,
+            ],
         );
     }
 }

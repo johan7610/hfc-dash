@@ -7,6 +7,8 @@ namespace App\Jobs\MarketReports;
 use App\Events\MarketReports\MarketReportParsed;
 use App\Models\MarketReports\MarketDataPoint;
 use App\Models\MarketReports\MarketReport;
+use App\Models\MarketReports\MarketReportCompRow;
+use App\Models\MarketReports\SchemeOwner;
 use App\Services\MarketReports\MarketReportParserRegistry;
 use App\Services\Prospecting\TrackedPropertyMatchOrCreateService;
 use Illuminate\Bus\Queueable;
@@ -77,6 +79,21 @@ class ParseMarketReportJob implements ShouldQueue
 
             DB::transaction(function () use ($result, $report) {
                 $today = now()->toDateString();
+
+                // Phase 3a — subject metadata is written back to the report row.
+                if (!empty($result->subjectMeta)) {
+                    $allowed = array_intersect_key(
+                        $result->subjectMeta,
+                        array_flip([
+                            'subject_address', 'subject_scheme_name', 'subject_section_number',
+                            'subject_latitude', 'subject_longitude', 'subject_extent_m2', 'radius_metres',
+                        ])
+                    );
+                    if (!empty($allowed)) {
+                        $report->fill($allowed)->save();
+                    }
+                }
+
                 foreach ($result->dataPoints as $dp) {
                     try {
                         MarketDataPoint::create([
@@ -98,6 +115,49 @@ class ParseMarketReportJob implements ShouldQueue
                         Log::warning('ParseMarketReportJob: data point write failed', [
                             'report_id'  => $report->id,
                             'metric_key' => $dp['metric_key'] ?? null,
+                            'error'      => $e->getMessage(),
+                        ]);
+                    }
+                }
+
+                // Phase 3a — per-row comp evidence.
+                foreach ($result->compRows as $row) {
+                    try {
+                        MarketReportCompRow::create(array_merge($row, [
+                            'market_report_id' => $report->id,
+                            'agency_id'        => $report->agency_id,
+                        ]));
+                    } catch (Throwable $e) {
+                        Log::warning('ParseMarketReportJob: comp row write failed', [
+                            'report_id' => $report->id,
+                            'row_index' => $row['row_index'] ?? null,
+                            'error'     => $e->getMessage(),
+                        ]);
+                    }
+                }
+
+                // Phase 3a — scheme owner roll.
+                foreach ($result->schemeOwners as $owner) {
+                    try {
+                        SchemeOwner::updateOrCreate(
+                            [
+                                'agency_id'      => $report->agency_id,
+                                'scheme_name'    => $owner['scheme_name'] ?? '',
+                                'section_number' => $owner['section_number'] ?? null,
+                                'owner_name'     => $owner['owner_name'] ?? '',
+                            ],
+                            [
+                                'market_report_id' => $report->id,
+                                'flat_number'      => $owner['flat_number'] ?? null,
+                                'scheme_ss_number' => $owner['scheme_ss_number'] ?? null,
+                                'extent_m2'        => $owner['extent_m2'] ?? null,
+                                'property_type'    => $owner['property_type'] ?? null,
+                            ],
+                        );
+                    } catch (Throwable $e) {
+                        Log::warning('ParseMarketReportJob: scheme owner write failed', [
+                            'report_id'  => $report->id,
+                            'owner_name' => $owner['owner_name'] ?? null,
                             'error'      => $e->getMessage(),
                         ]);
                     }

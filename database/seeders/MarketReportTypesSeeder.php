@@ -166,6 +166,16 @@ class MarketReportTypesSeeder extends Seeder
                 'expected_fields' => ['applicant_profile', 'application_outcome', 'bond_amount'],
             ],
             [
+                'key'             => 'cma_info_scheme_owners_list',
+                'display_name'    => 'CMA Info — Sectional Title Scheme Owners List',
+                'parser_class'    => 'App\\Services\\MarketReports\\Parsers\\CmaInfoSchemeOwnersListParser',
+                'auto_approve'    => true,
+                'expected_fields' => [
+                    'scheme_name', 'scheme_address', 'owners[].section_number',
+                    'owners[].owner_name', 'owners[].extent_m2', 'owners[].property_type',
+                ],
+            ],
+            [
                 'key'             => 'other',
                 'display_name'    => 'Other / Unknown',
                 'parser_class'    => 'App\\Services\\MarketReports\\Parsers\\GenericFallbackParser',

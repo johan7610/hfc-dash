@@ -48,6 +48,10 @@ final class MarketReport extends Model
         'raw_extracted_json', 'data_points_count',
         'spot_check_status', 'spot_check_results',
         'notes',
+        // Phase 3a subject metadata
+        'subject_address', 'subject_scheme_name', 'subject_section_number',
+        'subject_latitude', 'subject_longitude', 'subject_extent_m2',
+        'radius_metres',
     ];
 
     protected $casts = [
@@ -57,6 +61,11 @@ final class MarketReport extends Model
         'raw_extracted_json'  => 'array',
         'spot_check_results'  => 'array',
         'data_points_count'   => 'integer',
+        // Phase 3a subject metadata
+        'subject_latitude'    => 'decimal:7',
+        'subject_longitude'   => 'decimal:7',
+        'subject_extent_m2'   => 'integer',
+        'radius_metres'       => 'integer',
     ];
 
     public function uploader(): BelongsTo

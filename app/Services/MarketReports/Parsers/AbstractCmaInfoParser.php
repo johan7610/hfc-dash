@@ -33,13 +33,49 @@ abstract class AbstractCmaInfoParser implements MarketReportParser
     ) {}
 
     /**
-     * Returns raw pdftotext output or '' when extraction is unavailable /
-     * fails. NEVER throws.
+     * Returns raw pdftotext output (preferring -layout mode so column-based
+     * CMA Info reports survive extraction) or '' when extraction is
+     * unavailable / fails. NEVER throws.
+     *
+     * Falls back to the standard TextExtractionService (no -layout) when the
+     * pdftotext binary is unavailable on PATH.
      */
     protected function extractText(string $filePath): string
     {
         if (!is_file($filePath)) return '';
+
+        // -layout preserves table columns — essential for CMA Info reports
+        // where labels and values are positioned side-by-side, not stacked.
+        $layout = $this->tryPdftotextLayout($filePath);
+        if ($layout !== '') {
+            return $layout;
+        }
+
         return $this->textExtractor->extractText($filePath, 'application/pdf');
+    }
+
+    private function tryPdftotextLayout(string $absolutePath): string
+    {
+        $whereCmd = PHP_OS_FAMILY === 'Windows' ? 'where pdftotext 2>NUL' : 'command -v pdftotext 2>/dev/null';
+        $exists = @shell_exec($whereCmd);
+        if (empty($exists)) return '';
+
+        try {
+            $escaped = escapeshellarg($absolutePath);
+            $output  = @shell_exec("pdftotext -layout {$escaped} -");
+            if (!is_string($output)) return '';
+
+            // pdftotext emits U+FFFD (replacement char) for glyphs it cannot
+            // decode (e.g. ° / ²). The bytes look like 0xEF 0xBF 0xBD which
+            // IS valid UTF-8 — but pdftotext on Windows sometimes emits
+            // lone 0xEF or 0xBD bytes that break /u-modifier regex matches.
+            // Strip invalid UTF-8 silently so subsequent /u regex calls
+            // don't throw preg_last_error 4 (PREG_BAD_UTF8_ERROR).
+            $cleaned = @mb_convert_encoding($output, 'UTF-8', 'UTF-8');
+            return trim(is_string($cleaned) ? $cleaned : $output);
+        } catch (\Throwable) {
+            return '';
+        }
     }
 
     protected function normaliseSuburb(?string $s): ?string
