@@ -227,14 +227,13 @@
             $visibleProperties = $filteredProperties->reject(fn ($p) => $match->isPropertyHidden($p->id))->values();
             $hiddenProperties  = $filteredProperties->filter(fn ($p) => $match->isPropertyHidden($p->id))->values();
             $orderedProperties = $visibleProperties->concat($hiddenProperties);
-            $hiddenHeaderShown = false;
+            $firstHiddenId     = $hiddenProperties->first()?->id;
         @endphp
         @foreach($orderedProperties as $property)
         @php
             $isHidden = $match->isPropertyHidden($property->id);
         @endphp
-        @if($isHidden && !$hiddenHeaderShown)
-        @php($hiddenHeaderShown = true)
+        @if($isHidden && $property->id === $firstHiddenId)
         <div class="flex items-center gap-3 pt-6 pb-1">
             <div class="text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">
                 Hidden from this match ({{ $hiddenProperties->count() }})
@@ -243,7 +242,6 @@
         </div>
         @endif
         @php
-            $views = $match->propertyViewCount($property->id);
             $views = $match->propertyViewCount($property->id);
             $thumb = $property->gallery_images_json[0]
                 ?? $property->dawn_images_json[0]
@@ -301,7 +299,7 @@
                         @endif
                         <span class="ds-badge {{ $statusVariant }}">{{ ucfirst($property->status) }}</span>
                         @if($isHidden)
-                        @php($hiddenReason = $match->hiddenReasonFor($property->id))
+                        @php $hiddenReason = $match->hiddenReasonFor($property->id); @endphp
                         <span class="ds-badge ds-badge-warning" @if($hiddenReason) title="Reason: {{ $hiddenReason }}" @endif>Hidden</span>
                         @endif
                         @if($fbMeta)
