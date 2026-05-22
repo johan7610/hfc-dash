@@ -172,8 +172,20 @@ final class CmaInfoSectionalTitleSalesParser extends AbstractCmaInfoParser
     }
 
     /**
-     * Extract rows from either variant. Data rows are anywhere the layout
-     * yields a Section + Residence + Extent + Sale date + Sale price tuple.
+     * Extract rows from either variant. The in-scheme report wraps badly in
+     * pdftotext: rows split across lines, with section + date + prices on
+     * one line and ss/yr/Residence/extent on a different line (or vice
+     * versa). Three complementary patterns catch the bulk of rows:
+     *
+     *   A — full row: section + ss + yr + Residence + extent + date + R sp + R ppm
+     *   B — short row: section + date + R sp + R ppm (no ss/yr/extent on same line)
+     *   C — orphan: ss + yr + Residence + extent + R sp + R ppm (no section, no date)
+     *
+     * After extraction we dedupe by a row fingerprint so a row that matches
+     * both A and B doesn't double-count.
+     *
+     * Price tokens are bounded "thousands group" patterns (Phase 3e A1) so
+     * they can't bleed across columns.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -181,43 +193,141 @@ final class CmaInfoSectionalTitleSalesParser extends AbstractCmaInfoParser
     {
         $rows = [];
 
-        // Phase 3b — scan whole-text for data tuples with lookback context.
-        $pattern = '/(?<sec>\d{1,3})\s+(?<ss>\d{2,5})\s+(?<yr>\d{4})\s+Residence\s+(?<ext>\d{1,5})\s*m\S?\s+(?<date>\d{4}[\/\-]\d{2}[\/\-]\d{2})\s+R\s*(?<sp>[\d ,]+)(?:\s+R\s*(?<ppm>[\d ,]+))?/u';
+        $priceTok = '\d{1,3}(?:[\s,]\d{3}){0,3}';
+        $ppmTok   = '\d{1,3}(?:[\s,]\d{3}){0,2}';
 
-        if (!preg_match_all($pattern, $text, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
-            return $rows;
+        // ── Pattern A — full row ────────────────────────────────────────────
+        $patternA = '/(?<sec>\d{1,3})\s+(?<ss>\d{2,5})\s+(?<yr>\d{4})\s+Residence\s+(?<ext>\d{1,5})\s*m\S?\s+(?<date>\d{4}[\/\-]\d{2}[\/\-]\d{2})\s+R\s*(?<sp>' . $priceTok . ')\s+R\s*(?<ppm>' . $ppmTok . ')/u';
+
+        if (preg_match_all($patternA, $text, $matchesA, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
+            foreach ($matchesA as $m) {
+                $rows[] = $this->buildRow($m, $text, $isInScheme, $impliedScheme, hasFull: true);
+            }
         }
 
-        foreach ($matches as $m) {
+        // Track offsets matched by A so we don't double-count when B/C overlap.
+        $matchedOffsets = [];
+        foreach ($matchesA ?? [] as $m) {
+            $start = $m[0][1];
+            $matchedOffsets[] = [$start, $start + strlen($m[0][0])];
+        }
+
+        // ── Pattern B — short row (section + date + 2 R-figures) ────────────
+        // Whitespace-only between section and date, so the row has lost its
+        // ss/yr/extent column to a wrap.
+        $patternB = '/(?<sec>\d{1,3})\s+(?<date>\d{4}[\/\-]\d{2}[\/\-]\d{2})\s+R\s*(?<sp>' . $priceTok . ')\s+R\s*(?<ppm>' . $ppmTok . ')/u';
+
+        if (preg_match_all($patternB, $text, $matchesB, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
+            foreach ($matchesB as $m) {
+                $start = $m[0][1];
+                if ($this->offsetOverlaps($start, $matchedOffsets)) continue;
+                $rows[] = $this->buildRow($m, $text, $isInScheme, $impliedScheme, hasFull: false);
+            }
+        }
+
+        // ── Pattern C — orphan (ss + yr + Residence + extent + R sp + R ppm
+        // with no section number or date on the line) ─────────────────────
+        $patternC = '/(?<ss>\d{2,5})\s+(?<yr>\d{4})\s+Residence\s+(?<ext>\d{1,5})\s*m\S?\s+R\s*(?<sp>' . $priceTok . ')\s+R\s*(?<ppm>' . $ppmTok . ')/u';
+
+        if (preg_match_all($patternC, $text, $matchesC, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
+            foreach ($matchesC as $m) {
+                $start = $m[0][1];
+                if ($this->offsetOverlaps($start, $matchedOffsets)) continue;
+                $rows[] = $this->buildOrphanRow($m, $isInScheme, $impliedScheme);
+            }
+        }
+
+        // Dedupe — same (sale_date, sale_price) is the same comp.
+        return $this->dedupeBySalePrice($rows);
+    }
+
+    /**
+     * Build a row from pattern A or B. For the in-scheme variant the scheme
+     * name is implied (no lookback needed). For radius the lookback finds
+     * the per-row scheme prefix.
+     *
+     * @param array<int|string, array{0:string,1:int}|string> $m
+     */
+    private function buildRow(array $m, string $text, bool $isInScheme, ?string $impliedScheme, bool $hasFull): array
+    {
+        $sName = $impliedScheme;
+        $sAddress = null;
+
+        if (!$isInScheme) {
+            // Radius variant — find the nearest "SCHEME, ADDR, SUBURB" before this match.
             $matchStart = $m[0][1];
             $lookback   = max(0, $matchStart - 200);
             $context    = mb_substr($text, $lookback, $matchStart - $lookback);
-
-            $sName   = $impliedScheme;
-            $sAddress = null;
-
-            // Radius variant: each row has its own "SCHEME, ADDR, SUBURB" prefix
-            // in the lookback window.
             if (preg_match_all('/([A-Z][A-Z \']{2,40}),\s+([0-9]{1,4}\s+[A-Z][A-Z \']{2,40})(?:,\s+([A-Z][A-Z \']{2,40}))?/u', $context, $am, PREG_SET_ORDER)) {
                 $last = end($am);
                 $sName   = trim($last[1]);
                 $sAddress = trim($last[2]);
             }
-
-            $rows[] = [
-                'scheme_name'    => $sName,
-                'address'        => $sAddress,
-                'section_number' => $m['sec'][0] ?? null,
-                'ss_number'      => $m['ss'][0]  ?? null,
-                'ss_year'        => isset($m['yr'][0]) ? (int) $m['yr'][0] : null,
-                'property_type'  => 'Residence',
-                'extent_m2'      => (int) $m['ext'][0],
-                'sale_date'      => $this->parseDate($m['date'][0]),
-                'sale_price'     => (int) $this->parsePrice($m['sp'][0]),
-                'r_per_m2'       => !empty($m['ppm'][0]) ? (int) $this->parsePrice($m['ppm'][0]) : null,
-            ];
         }
 
-        return $rows;
+        return [
+            'scheme_name'    => $sName,
+            'address'        => $sAddress,
+            'section_number' => $m['sec'][0] ?? null,
+            'ss_number'      => $hasFull && !empty($m['ss'][0])  ? $m['ss'][0] : null,
+            'ss_year'        => $hasFull && !empty($m['yr'][0])  ? (int) $m['yr'][0] : null,
+            'property_type'  => 'Residence',
+            'extent_m2'      => $hasFull && !empty($m['ext'][0]) ? (int) $m['ext'][0] : null,
+            'sale_date'      => $this->parseDate($m['date'][0]),
+            'sale_price'     => $this->parsePriceBounded($m['sp'][0], 'st.sale_price'),
+            'r_per_m2'       => !empty($m['ppm'][0]) ? $this->parsePriceBounded($m['ppm'][0], 'st.r_per_m2', null, 100, 500_000) : null,
+        ];
+    }
+
+    /**
+     * Orphan row — no section + no date but has ss/yr/extent + prices.
+     * We keep it for aggregate stats; section_number=null is intentional.
+     */
+    private function buildOrphanRow(array $m, bool $isInScheme, ?string $impliedScheme): array
+    {
+        return [
+            'scheme_name'    => $impliedScheme,
+            'address'        => null,
+            'section_number' => null,
+            'ss_number'      => $m['ss'][0] ?? null,
+            'ss_year'        => isset($m['yr'][0]) ? (int) $m['yr'][0] : null,
+            'property_type'  => 'Residence',
+            'extent_m2'      => (int) $m['ext'][0],
+            'sale_date'      => null,
+            'sale_price'     => $this->parsePriceBounded($m['sp'][0], 'st.sale_price.orphan'),
+            'r_per_m2'       => $this->parsePriceBounded($m['ppm'][0], 'st.r_per_m2.orphan', null, 100, 500_000),
+        ];
+    }
+
+    private function offsetOverlaps(int $start, array $ranges): bool
+    {
+        foreach ($ranges as [$lo, $hi]) {
+            if ($start >= $lo && $start <= $hi) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Dedupe by (sale_date, sale_price) for full/short rows; orphan rows
+     * (no date) dedupe by (sale_price, r_per_m2) — they're terminal.
+     *
+     * @param array<int, array<string, mixed>> $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private function dedupeBySalePrice(array $rows): array
+    {
+        $seen = [];
+        $out  = [];
+        foreach ($rows as $r) {
+            if (!empty($r['sale_date'])) {
+                $key = 'D|' . $r['sale_date'] . '|' . ($r['sale_price'] ?? '');
+            } else {
+                $key = 'O|' . ($r['sale_price'] ?? '') . '|' . ($r['r_per_m2'] ?? '');
+            }
+            if (isset($seen[$key])) continue;
+            $seen[$key] = true;
+            $out[] = $r;
+        }
+        return $out;
     }
 }

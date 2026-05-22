@@ -115,4 +115,14 @@ return [
         'node_wrapper'           => env('PDF_NODE_WRAPPER', ''),
     ],
 
+    // Phase 3f — Geocoding waterfall (AddressResolverService).
+    'google' => [
+        'geocoding_api_key' => env('GOOGLE_GEOCODING_API_KEY'),
+    ],
+
+    'nominatim' => [
+        'enabled'    => filter_var(env('NOMINATIM_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+        'user_agent' => env('NOMINATIM_UA', 'CoreXOS/1.0 (admin@corexos.co.za)'),
+    ],
+
 ];

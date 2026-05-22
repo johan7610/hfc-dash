@@ -43,6 +43,7 @@ class PresentationGeneratorService
         private MicSnapshotHydrator $hydrator = new MicSnapshotHydrator(),
         private HoldingCostEstimator $holdingCostEstimator = new HoldingCostEstimator(),
         private SimilarActiveListingsResolver $linkSuggestions = new SimilarActiveListingsResolver(),
+        private \App\Services\Geocoding\PropertyGeoBackfillService $geoBackfill = new \App\Services\Geocoding\PropertyGeoBackfillService(),
     ) {}
 
     /**
@@ -162,6 +163,23 @@ class PresentationGeneratorService
             $spRun = $maRun
                 ? SaleProbabilityRun::where('market_analytics_run_id', $maRun->id)->latest('id')->first()
                 : null;
+
+            // ── 3.4. Phase 3f C3 — ensure property has GPS before hydration ─
+            // The hydrator's radius_all branch is meaningless without GPS for
+            // the subject. Resolve it now synchronously (fast for cache hits;
+            // typically completes in <100ms when the address has been seen
+            // before via a prior CMA import).
+            if ($property->latitude === null || $property->longitude === null) {
+                try {
+                    $this->geoBackfill->backfillProperty($property);
+                    $property->refresh();
+                } catch (\Throwable $e) {
+                    \Log::warning('Pre-hydration GPS backfill failed', [
+                        'property_id' => $property->id,
+                        'err'         => $e->getMessage(),
+                    ]);
+                }
+            }
 
             // ── 3.5. Phase 3d — MIC snapshot hydration ─────────────────────
             // Before AnalysisDataService runs, copy any matching MIC evidence

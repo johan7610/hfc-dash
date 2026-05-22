@@ -208,6 +208,15 @@ class ParseMarketReportJob implements ShouldQueue
 
             event(new MarketReportParsed($report, dataPointsWritten: count($result->dataPoints)));
 
+            // Phase 3f C2 — when a report carries fresh subject GPS, find
+            // matching Property + TrackedProperty rows by address fragment
+            // and backfill their GPS from this report. Fires only when the
+            // report itself has subject_latitude/longitude — otherwise
+            // there's nothing to propagate.
+            if ($report->subject_latitude !== null && $report->subject_longitude !== null) {
+                BackfillPropertyGpsFromReportJob::dispatch($report->id)->afterCommit();
+            }
+
             // Dispatch spot-check unless the type is auto-approve (deterministic
             // parsers with no AI uncertainty).
             $shouldAudit = !(bool) ($report->reportType?->auto_approve ?? false);
