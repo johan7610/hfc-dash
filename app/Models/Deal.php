@@ -110,6 +110,16 @@ class Deal extends Model
         'selling_external_agency',
 
         'is_demo',
+
+        // Phase 3i — property/presentation link + canonical sale fields.
+        'property_id',
+        'presentation_id',
+        'sale_price',
+        'sale_date',
+        'link_source',
+        'link_confidence',
+        'link_reviewed_at',
+        'link_reviewed_by_user_id',
     ];
 
     protected $casts = [
@@ -124,7 +134,23 @@ class Deal extends Model
         'selling_our_share_percent' => 'decimal:2',
           'listing_split_percent' => 'decimal:2',
           'selling_split_percent' => 'decimal:2',
+        // Phase 3i.
+        'sale_price'        => 'integer',
+        'sale_date'         => 'date',
+        'link_reviewed_at'  => 'datetime',
     ];
+
+    /** Phase 3i — direct FK to the property this deal concerns. */
+    public function property()
+    {
+        return $this->belongsTo(\App\Models\Property::class, 'property_id');
+    }
+
+    /** Phase 3i — the presentation that led to this deal, when known. */
+    public function presentation()
+    {
+        return $this->belongsTo(\App\Models\Presentation::class, 'presentation_id');
+    }
 
     public function agents()
     {

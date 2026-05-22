@@ -147,6 +147,11 @@ class AnalysisDataService
                     ?? ($sizeM2 > 0 && $comp->sold_price_inc > 0
                         ? (int) round($comp->sold_price_inc / $sizeM2)
                         : null),
+                // Phase 3i — flag comps that came from HFC's own deal book so
+                // Section 3 can render a "HFC sold this" badge as a seller
+                // proof point.
+                'hfc_sold'     => in_array($source, ['internal_deals', 'internal_deals_v1'], true)
+                                  || !empty($raw['hfc_sold']),
             ];
 
             // Phase 3e B — drop implausible columns (parser bleed, bad data)

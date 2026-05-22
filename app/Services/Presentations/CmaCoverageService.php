@@ -141,17 +141,25 @@ class CmaCoverageService
 
         $fingerprints = [];
 
-        // 1. Deals — suburb LIKE on property_address (geo not available).
+        // 1. Deals — prefer FK suburb match (Phase 3i), fall back to legacy
+        //    LOWER(property_address) LIKE for unlinked deals.
         // Phase 3h Step 9 — demo/real isolation.
         $dealRows = DB::table('deals')
-            ->whereNotNull('registration_date')
+            ->leftJoin('properties', 'properties.id', '=', 'deals.property_id')
+            ->whereNotNull('deals.registration_date')
             ->where(function ($q) {
-                $q->whereNull('accepted_status')->orWhere('accepted_status', '!=', 'D');
+                $q->whereNull('deals.accepted_status')->orWhere('deals.accepted_status', '!=', 'D');
             })
-            ->where('is_demo', $subjectIsDemo)
-            ->whereBetween('registration_date', [$dateFrom, $dateTo])
-            ->whereRaw('LOWER(property_address) LIKE ?', [$like])
-            ->select(['property_address', 'registration_date', 'property_value'])
+            ->where('deals.is_demo', $subjectIsDemo)
+            ->whereBetween('deals.registration_date', [$dateFrom, $dateTo])
+            ->where(function ($q) use ($like, $suburb) {
+                $q->whereRaw('LOWER(properties.suburb) = ?', [mb_strtolower(trim($suburb))])
+                  ->orWhere(function ($qq) use ($like) {
+                      $qq->whereNull('deals.property_id')
+                         ->whereRaw('LOWER(deals.property_address) LIKE ?', [$like]);
+                  });
+            })
+            ->select(['deals.property_address', 'deals.registration_date', 'deals.property_value'])
             ->get();
         foreach ($dealRows as $r) {
             $fingerprints[$this->fingerprintDeal($r)] = true;

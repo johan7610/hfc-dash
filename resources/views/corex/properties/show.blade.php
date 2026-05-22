@@ -1521,6 +1521,51 @@
                             ? route('corex.map.index') . '?focus=' . $property->latitude . ',' . $property->longitude . '&zoom=17'
                             : null,
                     ])
+
+                    {{-- Phase 3i — HFC Sales History panel --}}
+                    @php
+                        $hfcSales = \App\Models\Deal::withoutGlobalScopes()
+                            ->where('property_id', $property->id)
+                            ->whereNotNull('registration_date')
+                            ->where(function ($q) {
+                                $q->where('accepted_status', 'R')
+                                  ->orWhereNotNull('registration_date');
+                            })
+                            ->orderByDesc('registration_date')
+                            ->limit(10)
+                            ->get();
+                    @endphp
+                    @if($hfcSales->isNotEmpty())
+                        <div style="margin-top:14px;padding:14px;background:var(--surface);border:1px solid var(--border);border-left:3px solid #00b594;border-radius:6px;">
+                            <h3 class="text-xs font-bold uppercase tracking-wider mb-2" style="color:#00b594;">
+                                HFC has sold this property before
+                            </h3>
+                            <p style="font-size:0.75rem;color:var(--text-muted);margin:0 0 10px 0;">
+                                Powerful re-mandate signal — we know this property.
+                            </p>
+                            <div style="display:flex;flex-direction:column;gap:8px;">
+                                @foreach($hfcSales as $s)
+                                    <div style="display:grid;grid-template-columns:120px 1fr auto;gap:10px;align-items:center;font-size:0.8125rem;padding:8px 10px;background:var(--surface-2);border-radius:4px;">
+                                        <div style="color:var(--text-secondary);font-weight:600;">
+                                            {{ $s->registration_date?->format('M Y') ?? '—' }}
+                                        </div>
+                                        <div style="color:var(--text-secondary);font-size:0.75rem;">
+                                            @if($s->seller_name)Seller: {{ \Illuminate\Support\Str::limit($s->seller_name, 40) }}@endif
+                                        </div>
+                                        <div style="font-weight:600;color:var(--text-primary);">
+                                            @if($s->sale_price)
+                                                R {{ number_format((int) $s->sale_price) }}
+                                            @elseif($s->property_value)
+                                                R {{ number_format((float) $s->property_value, 0) }}
+                                            @else
+                                                —
+                                            @endif
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
                 </div>
 
                 {{-- Row 2: Key Dates (cols 1-2) | Linked Contact (col 3) — headings align since rows share top --}}

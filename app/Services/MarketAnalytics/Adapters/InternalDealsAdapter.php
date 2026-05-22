@@ -34,22 +34,39 @@ class InternalDealsAdapter implements SoldTransactionsSource, HasSourceRecord
         // De-slug for LIKE matching: 'north-shore' → 'north shore'
         $suburbName = mb_strtolower(str_replace('-', ' ', $filter->suburbSlug));
 
+        // Phase 3i — when property_id is populated, prefer joining via the FK
+        // and filtering by the linked property's suburb. Falls back to the
+        // legacy LOWER(property_address) LIKE when property_id is null. Two
+        // unioned subqueries would be cleaner but adds query-hash churn for
+        // listeners; instead we expand the WHERE.
         $query = DB::table('deals')
-            ->whereNotNull('registration_date')
+            ->leftJoin('properties', 'properties.id', '=', 'deals.property_id')
+            ->whereNotNull('deals.registration_date')
             ->where(function ($q) {
                 // Exclude declined deals
-                $q->whereNull('accepted_status')
-                  ->orWhere('accepted_status', '!=', 'D');
+                $q->whereNull('deals.accepted_status')
+                  ->orWhere('deals.accepted_status', '!=', 'D');
             })
-            // Phase 3h Step 9 — demo/real isolation. Real subjects see only
-            // real deals; demo subjects see only demo deals.
-            ->where('is_demo', $filter->subjectIsDemo)
-            ->whereBetween('registration_date', [$filter->dateFrom, $filter->dateTo])
-            ->whereRaw('LOWER(property_address) LIKE ?', ['%' . $suburbName . '%'])
-            ->select(['id', 'registration_date', 'property_value', 'property_address']);
+            // Phase 3h Step 9 — demo/real isolation.
+            ->where('deals.is_demo', $filter->subjectIsDemo)
+            ->whereBetween('deals.registration_date', [$filter->dateFrom, $filter->dateTo])
+            ->where(function ($q) use ($suburbName) {
+                // Linked path: match the FK property's suburb (case-insensitive).
+                $q->whereRaw('LOWER(properties.suburb) = ?', [$suburbName])
+                  // Fallback: legacy address-LIKE for unlinked deals.
+                  ->orWhere(function ($qq) use ($suburbName) {
+                      $qq->whereNull('deals.property_id')
+                         ->whereRaw('LOWER(deals.property_address) LIKE ?', ['%' . $suburbName . '%']);
+                  });
+            })
+            ->select([
+                'deals.id', 'deals.registration_date',
+                'deals.property_value', 'deals.sale_price',
+                'deals.property_address', 'deals.property_id',
+            ]);
 
         if ($filter->branchId !== null) {
-            $query->where('branch_id', $filter->branchId);
+            $query->where('deals.branch_id', $filter->branchId);
         }
 
         // Capture stable query hash before execution
@@ -67,11 +84,14 @@ class InternalDealsAdapter implements SoldTransactionsSource, HasSourceRecord
             'source_tag'     => self::SOURCE_TAG,
             'deal_id'        => $deal->id,
             'sold_date'      => $deal->registration_date,   // Y-m-d string from DB
-            'sold_price_inc' => (float)($deal->property_value ?? 0),
+            // Phase 3i — prefer canonical sale_price, fall back to legacy decimal.
+            'sold_price_inc' => (float) ($deal->sale_price ?? $deal->property_value ?? 0),
             'suburb_slug'    => $filter->suburbSlug,
-            'property_type'  => null,  // not in deals table
-            'bedrooms'       => null,  // not in deals table
-            'listed_date'    => null,  // not in deals table
+            'property_type'  => null,
+            'bedrooms'       => null,
+            'listed_date'    => null,
+            'property_id'    => $deal->property_id ? (int) $deal->property_id : null,
+            'hfc_sold'       => true,  // every row from this adapter is HFC-internal
         ]);
     }
 

@@ -213,7 +213,15 @@
                 <tbody>
                 @foreach(array_slice($vicinityRows, 0, 10) as $row)
                     <tr>
-                        <td>{{ $row['address'] ?? '—' }}</td>
+                        <td>
+                            {{ $row['address'] ?? '—' }}
+                            @if(!empty($row['hfc_sold']))
+                                <span style="display:inline-block;margin-left:6px;padding:2px 8px;background:rgba(0,181,148,0.12);color:#00b594;border-radius:99px;font-size:0.625rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;"
+                                      title="Home Finders Coastal sold this property">
+                                    HFC sold this
+                                </span>
+                            @endif
+                        </td>
                         <td>{{ $row['sale_date'] ?? '—' }}</td>
                         <td class="num">{{ isset($row['sale_price']) ? 'R ' . number_format((int) $row['sale_price'], 0, '.', ' ') : '—' }}</td>
                         <td class="num">{{ $row['extent_m2'] ?? '—' }}</td>

@@ -353,6 +353,50 @@ final class MapPinService
             if (count($combined) >= $limit * 3) break;
         }
 
+        // (c) Phase 3i — deals with property_id populated. Reads GPS from the
+        // linked property. HFC's own sold history, distinct from market comps.
+        $dealsQ = DB::table('deals as d')
+            ->join('properties as p', 'p.id', '=', 'd.property_id')
+            ->whereNull('d.deleted_at')
+            ->where('d.agency_id', $req->agencyId)
+            ->whereNotNull('d.property_id')
+            ->whereNotNull('d.registration_date')
+            ->where(function ($q) {
+                $q->whereNull('d.accepted_status')->orWhere('d.accepted_status', '!=', 'D');
+            })
+            ->whereNotNull('p.latitude')
+            ->whereNotNull('p.longitude')
+            ->whereBetween('p.latitude',  [$req->south, $req->north])
+            ->whereBetween('p.longitude', [$req->west,  $req->east])
+            ->select([
+                'd.id', 'd.registration_date as sale_date',
+                'd.sale_price', 'd.property_value', 'd.property_address',
+                'p.address as prop_address', 'p.latitude', 'p.longitude',
+            ]);
+        $this->applyDemoFilter($dealsQ, $req, 'd.is_demo');
+        $this->applyDateFilter($dealsQ, $req, 'd.sale_date');
+        $this->applyPriceFilter($dealsQ, $req, 'd.sale_price');
+
+        foreach ($dealsQ->limit($limit)->get() as $r) {
+            $key = $this->dedupeKey($r->prop_address ?? $r->property_address ?? '', $r->sale_date ?? '');
+            if (isset($combined[$key])) continue;
+            $price = OutlierGuard::price((int) ($r->sale_price ?? $r->property_value ?? 0));
+            $combined[$key] = [
+                'id'         => 'deal:' . $r->id,
+                'layer'      => 'sold_comps',
+                'lat'        => (float) $r->latitude,
+                'lng'        => (float) $r->longitude,
+                'title'      => $r->prop_address ?? $r->property_address ?? ('Deal #' . $r->id),
+                'subtitle'   => $this->formatSoldSubtitle($price, $r->sale_date) . ' · HFC sold',
+                'price'      => $price,
+                'date'       => $r->sale_date,
+                'detail_url' => null,
+                'sensitive'  => false,
+                'hfc_sold'   => true,
+            ];
+            if (count($combined) >= $limit * 3) break;
+        }
+
         $pins = array_slice(array_values($combined), 0, $limit);
         $pins = $this->applyRadiusFilter($pins, $req);
         return [$pins, count($combined)];

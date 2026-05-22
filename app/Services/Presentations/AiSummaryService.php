@@ -176,7 +176,81 @@ TXT;
                 'agency_phone' => $agency?->phone,
                 'agency_email' => $agency?->email,
             ], fn ($v) => $v !== null && $v !== ''),
+            // Phase 3i — HFC sales we've made near the subject in the last 24mo.
+            // Empty array (not null) when none; the prompt template skips empties.
+            'hfc_neighbouring_sales' => $this->collectHfcNeighbouringSales($presentation),
         ];
+    }
+
+    /**
+     * Phase 3i — HFC's own deals within 1km of the subject in the last 24 months.
+     *
+     * Pre-requisite: deals.property_id has been backfilled (Phase 3i) and the
+     * neighbouring properties have GPS (Phase 3f geocoding cache). Returns
+     * empty array when either condition isn't met for a given subject — the
+     * prompt template silently omits the fact block.
+     *
+     * @return array{count:int, most_recent?:array{address:string,date:?string,price:?int,agent_name:?string}}
+     */
+    private function collectHfcNeighbouringSales(Presentation $presentation): array
+    {
+        $property = $presentation->property;
+        if (!$property || $property->latitude === null || $property->longitude === null) {
+            return [];
+        }
+
+        $cutoff = now()->subMonths(24)->toDateString();
+        $lat = (float) $property->latitude;
+        $lng = (float) $property->longitude;
+
+        // Crude bbox prefilter — 1km ≈ 0.009° at this latitude. The Haversine
+        // in PHP refines it. Skips SQL spatial functions to keep the query
+        // portable across the dev/staging/prod MySQL versions.
+        $deg = 0.01;
+        $candidates = \App\Models\Deal::withoutGlobalScopes()
+            ->where('agency_id', $presentation->agency_id)
+            ->whereNotNull('property_id')
+            ->whereNotNull('sale_date')
+            ->where('sale_date', '>=', $cutoff)
+            ->join('properties', 'properties.id', '=', 'deals.property_id')
+            ->whereBetween('properties.latitude', [$lat - $deg, $lat + $deg])
+            ->whereBetween('properties.longitude', [$lng - $deg, $lng + $deg])
+            ->where('deals.property_id', '!=', $property->id)
+            ->select([
+                'deals.id', 'deals.sale_date', 'deals.sale_price', 'deals.property_value',
+                'properties.address as prop_address', 'properties.latitude', 'properties.longitude',
+            ])
+            ->orderByDesc('deals.sale_date')
+            ->limit(20)
+            ->get();
+
+        $within = $candidates->filter(function ($row) use ($lat, $lng) {
+            return $this->haversineKm($lat, $lng, (float) $row->latitude, (float) $row->longitude) <= 1.0;
+        });
+
+        if ($within->isEmpty()) {
+            return [];
+        }
+
+        $most = $within->first();
+        return [
+            'count'       => $within->count(),
+            'most_recent' => [
+                'address'    => (string) $most->prop_address,
+                'date'       => $most->sale_date ? (string) $most->sale_date : null,
+                'price'      => $most->sale_price ? (int) $most->sale_price : ($most->property_value ? (int) round((float) $most->property_value) : null),
+                'agent_name' => null,
+            ],
+        ];
+    }
+
+    private function haversineKm(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $R = 6371.0;
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLng = deg2rad($lng2 - $lng1);
+        $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
+        return 2 * $R * atan2(sqrt($a), sqrt(1 - $a));
     }
 
     /**
@@ -476,6 +550,28 @@ TXT;
                 if (!empty($row['probability_label'])) $line .= ', ' . $row['probability_label'];
                 $out[] = $line;
             }
+        }
+
+        // Phase 3i — HFC's own sales near the subject.
+        $hfc = $facts['hfc_neighbouring_sales'] ?? [];
+        if (!empty($hfc['count'])) {
+            $out[] = '';
+            $line = 'HFC has sold ' . (int) $hfc['count']
+                . ' propert' . ((int) $hfc['count'] === 1 ? 'y' : 'ies')
+                . ' within 1km of the subject in the last 24 months';
+            $recent = $hfc['most_recent'] ?? null;
+            if ($recent && !empty($recent['address'])) {
+                $line .= '. Most recent: ' . $recent['address'];
+                if (!empty($recent['price'])) {
+                    $line .= ' at ' . $this->zar((int) $recent['price']);
+                }
+                if (!empty($recent['date'])) {
+                    $line .= ' in ' . \Carbon\Carbon::parse($recent['date'])->format('M Y');
+                }
+                $line .= '.';
+            }
+            $out[] = $line;
+            $out[] = '  (You may reference this as a market-familiarity proof point.)';
         }
 
         $g = $facts['agent'] ?? [];

@@ -113,9 +113,29 @@ final class PresentationOutcomeService
      */
     public function autoRecordWonSaleForDeal(Deal $deal, User $systemUser): ?PresentationOutcome
     {
-        $presentation = Presentation::where('deal_id', $deal->id)
-            ->whereDoesntHave('outcome')
-            ->first();
+        // Phase 3i — three-level match, structural first:
+        //   1. deals.presentation_id set (forward link, most reliable)
+        //   2. presentations.deal_id set (reverse link, the original Phase 8 path)
+        //   3. property_id + same agent — when both links absent but the deal
+        //      clearly relates to a known presentation by the same agent.
+        $presentation = null;
+
+        if ($deal->presentation_id) {
+            $presentation = Presentation::where('id', $deal->presentation_id)
+                ->whereDoesntHave('outcome')
+                ->first();
+        }
+        if (!$presentation) {
+            $presentation = Presentation::where('deal_id', $deal->id)
+                ->whereDoesntHave('outcome')
+                ->first();
+        }
+        if (!$presentation && $deal->property_id) {
+            $presentation = Presentation::where('property_id', $deal->property_id)
+                ->whereDoesntHave('outcome')
+                ->orderByDesc('created_at')
+                ->first();
+        }
         if (!$presentation) {
             return null;
         }

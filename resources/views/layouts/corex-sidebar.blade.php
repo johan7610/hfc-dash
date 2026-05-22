@@ -627,6 +627,31 @@
                 <a href="{{ route('admin.deals') }}" class="corex-nav-subitem {{ request()->routeIs('admin.deals*') ? 'active' : '' }}">Deal Register</a>
                 @endpermission
 
+                @if(auth()->user() && in_array((string) auth()->user()->role, ['admin', 'super_admin', 'branch_manager', 'principal'], true) && \Illuminate\Support\Facades\Route::has('corex.admin.deal-link-review.index'))
+                    @php
+                        // Phase 3i — pending deal-link review count.
+                        $dealLinkPendingCount = 0;
+                        try {
+                            $agencyId = auth()->user()?->effectiveAgencyId();
+                            if ($agencyId) {
+                                $dealLinkPendingCount = \App\Models\DealLinkReviewQueue::where('agency_id', $agencyId)
+                                    ->where('match_status', 'pending')
+                                    ->count();
+                            }
+                        } catch (\Throwable $e) { /* sidebar must never blow up */ }
+                    @endphp
+                    <a href="{{ route('corex.admin.deal-link-review.index') }}"
+                       class="corex-nav-subitem {{ request()->routeIs('corex.admin.deal-link-review.*') ? 'active' : '' }}"
+                       style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                        <span>Deal Link Review</span>
+                        @if($dealLinkPendingCount > 0)
+                            <span style="display:inline-block;min-width:18px;padding:1px 6px;background:#dc2626;color:#fff;border-radius:99px;font-size:0.625rem;font-weight:700;text-align:center;line-height:1.4;">
+                                {{ $dealLinkPendingCount > 99 ? '99+' : $dealLinkPendingCount }}
+                            </span>
+                        @endif
+                    </a>
+                @endif
+
                 <div class="corex-nav-sublabel">Setup</div>
                 @permission('edit_worksheet')
                 <a href="{{ route('bm.worksheet.market') }}" class="corex-nav-subitem {{ request()->routeIs('bm.worksheet.market*') ? 'active' : '' }}">Worksheet Market</a>
