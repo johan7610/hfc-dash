@@ -1866,6 +1866,8 @@
                     $presModerate = (int) ($presAgency->presentations_coverage_moderate_threshold ?? 3);
                     $presThin     = (int) ($presAgency->presentations_coverage_thin_threshold     ?? 1);
                     $presPeriod   = (int) ($presAgency->presentations_default_period_months       ?? 12);
+                    $presScope    = (string) ($presAgency->presentations_default_comp_scope        ?? 'radius_all');
+                    $presRadius   = (int) ($presAgency->presentations_default_radius_m             ?? 1000);
                 @endphp
 
                 <div class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
@@ -1910,6 +1912,48 @@
                                        class="w-full rounded-md px-3 py-2 text-sm"
                                        style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                 <div class="text-[11px] mt-1" style="color:var(--text-muted);">Rolling window for the comp count (default 12).</div>
+                            </div>
+                        </div>
+
+                        {{-- Phase 3b — comp scope + radius default --}}
+                        <div class="pt-4 mt-4" style="border-top:1px solid var(--border);">
+                            <div class="mb-3">
+                                <div class="text-sm font-semibold" style="color:var(--text-primary);">Comparable Scope</div>
+                                <div class="text-xs mt-0.5" style="color:var(--text-secondary);">How CoreX picks comparable sales from the agency-wide market data pool. Agents can override per presentation at generation time.</div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[11px] font-semibold uppercase tracking-wider mb-2" style="color:var(--text-muted);">Default scope</label>
+                                    <div class="space-y-1.5">
+                                        <label class="flex items-start gap-2 cursor-pointer">
+                                            <input type="radio" name="presentations_default_comp_scope" value="radius_all"
+                                                   {{ $presScope === 'radius_all' ? 'checked' : '' }}
+                                                   class="mt-0.5">
+                                            <div>
+                                                <div class="text-sm font-medium" style="color:var(--text-primary);">Radius (recommended)</div>
+                                                <div class="text-[11px]" style="color:var(--text-muted);">Match by great-circle distance from the subject property. Honest valuation default — distance is the strongest single predictor.</div>
+                                            </div>
+                                        </label>
+                                        <label class="flex items-start gap-2 cursor-pointer">
+                                            <input type="radio" name="presentations_default_comp_scope" value="suburb_only"
+                                                   {{ $presScope === 'suburb_only' ? 'checked' : '' }}
+                                                   class="mt-0.5">
+                                            <div>
+                                                <div class="text-sm font-medium" style="color:var(--text-primary);">Suburb only</div>
+                                                <div class="text-[11px]" style="color:var(--text-muted);">Match by suburb name only. Use when scheme character or municipal boundary effects matter more than raw distance.</div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Default radius (metres)</label>
+                                    <input type="number" min="50" max="5000" step="50" name="presentations_default_radius_m"
+                                           value="{{ $presRadius }}"
+                                           class="w-full rounded-md px-3 py-2 text-sm"
+                                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                    <div class="text-[11px] mt-1" style="color:var(--text-muted);">Used when scope is "Radius". Range 50–5000m. Default 1000m. Suburb-only ignores this.</div>
+                                </div>
                             </div>
                         </div>
 

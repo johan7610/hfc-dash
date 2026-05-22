@@ -84,6 +84,9 @@ class Agency extends Model
         'presentations_coverage_moderate_threshold',
         'presentations_coverage_thin_threshold',
         'presentations_default_period_months',
+        // Presentations V2 Phase 3b — comp scope + radius defaults.
+        'presentations_default_comp_scope',
+        'presentations_default_radius_m',
     ];
 
     protected $casts = [
@@ -109,6 +112,8 @@ class Agency extends Model
         'presentations_coverage_moderate_threshold' => 'integer',
         'presentations_coverage_thin_threshold'     => 'integer',
         'presentations_default_period_months'       => 'integer',
+        // Presentations V2 Phase 3b.
+        'presentations_default_radius_m'            => 'integer',
     ];
 
     public const AI_BUDGET_STATUS_HEALTHY  = 'healthy';

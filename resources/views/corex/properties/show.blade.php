@@ -306,6 +306,29 @@
                                            style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);"
                                            placeholder="e.g. 1500000">
                                 </div>
+
+                                {{-- Phase 3b — comp scope override at generation time --}}
+                                <div class="mt-4 pt-3" style="border-top:1px solid var(--border);">
+                                    <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1.5" style="color:var(--text-muted);">Comparable scope</label>
+                                    <div class="flex items-center gap-3 text-xs">
+                                        <label class="flex items-center gap-1.5 cursor-pointer">
+                                            <input type="radio" name="comp_scope" value="radius_all" x-model="compScope">
+                                            <span style="color:var(--text-primary);">Radius</span>
+                                        </label>
+                                        <label class="flex items-center gap-1.5 cursor-pointer">
+                                            <input type="radio" name="comp_scope" value="suburb_only" x-model="compScope">
+                                            <span style="color:var(--text-primary);">Suburb only</span>
+                                        </label>
+                                        <div class="flex items-center gap-1 ml-3" x-show="compScope === 'radius_all'" x-cloak>
+                                            <input type="number" min="50" max="5000" step="50" x-model.number="compRadiusM"
+                                                   class="w-20 rounded-md px-2 py-1 text-xs"
+                                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                            <span class="text-[11px]" style="color:var(--text-muted);">m</span>
+                                        </div>
+                                    </div>
+                                    <p class="text-[11px] mt-1" style="color:var(--text-muted);">Defaults to your agency setting. Override applies to this presentation only.</p>
+                                </div>
+
                                 <p class="text-[11px] mt-1" style="color:var(--text-muted);" x-show="modalError" x-text="modalError"></p>
                                 <div class="mt-4 flex items-center justify-end gap-2">
                                     <button type="button" @click="modalOpen = false"
@@ -335,6 +358,8 @@
                             askingPrice: null,
                             suggestedPrice: null,
                             generating: false,
+                            compScope: 'radius_all',   // Phase 3b — initialised from coverage response
+                            compRadiusM: 1000,
 
                             get badgeStyle() {
                                 const state = this.coverage?.state;
@@ -363,26 +388,33 @@
                                         return;
                                     }
                                     this.coverage = await r.json();
+                                    // Sync modal defaults with agency-resolved scope.
+                                    if (this.coverage?.comp_scope) this.compScope = this.coverage.comp_scope;
+                                    if (this.coverage?.comp_radius_m) this.compRadiusM = this.coverage.comp_radius_m;
                                 } catch (e) {
                                     this.coverageError = 'Coverage check failed: ' + e.message;
                                 }
                             },
                             onClickGenerate() {
                                 if (this.generating) return;
-                                if (config.hasListedPrice) {
-                                    this.fireGenerate(null);
-                                    return;
-                                }
-                                // Pre-fill suggestion: prefer suburb median from cached coverage breakdown
-                                // (server doesn't return median yet; using listedPrice if any, else null).
+                                // Phase 3b — always open the modal so the agent sees the
+                                // comp-scope toggle. Pre-fill price from listed_price
+                                // when available (one-click intent preserved — agent can
+                                // just hit Generate inside the modal without changes).
                                 this.suggestedPrice = config.listedPrice || null;
                                 this.askingPrice = this.suggestedPrice;
                                 this.modalError = null;
                                 this.modalOpen = true;
                             },
                             submitFromModal() {
-                                if (this.askingPrice === null || this.askingPrice === '' || this.askingPrice < 0) {
-                                    this.modalError = 'Please enter a positive price (or click Cancel).';
+                                // Allow blank price when the property has a listed_price —
+                                // server falls back to property->price. Negative is always invalid.
+                                if (this.askingPrice !== null && this.askingPrice !== '' && this.askingPrice < 0) {
+                                    this.modalError = 'Price cannot be negative.';
+                                    return;
+                                }
+                                if (!config.hasListedPrice && (this.askingPrice === null || this.askingPrice === '')) {
+                                    this.modalError = 'Please enter a price (this property has no listed price).';
                                     return;
                                 }
                                 this.fireGenerate(this.askingPrice);
@@ -394,6 +426,8 @@
                                 if (askingPrice !== null && askingPrice !== undefined && askingPrice !== '') {
                                     body.append('asking_price', String(askingPrice));
                                 }
+                                if (this.compScope) body.append('comp_scope', this.compScope);
+                                if (this.compRadiusM) body.append('comp_radius_m', String(this.compRadiusM));
                                 try {
                                     const r = await fetch(config.generateUrl, {
                                         method: 'POST',

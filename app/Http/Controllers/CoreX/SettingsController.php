@@ -286,6 +286,9 @@ class SettingsController extends Controller
             'presentations_coverage_moderate_threshold' => ['required', 'integer', 'min:1', 'max:999'],
             'presentations_coverage_thin_threshold'     => ['required', 'integer', 'min:1', 'max:999'],
             'presentations_default_period_months'       => ['required', 'integer', 'min:1', 'max:60'],
+            // Phase 3b
+            'presentations_default_comp_scope'          => ['nullable', 'in:radius_all,suburb_only'],
+            'presentations_default_radius_m'            => ['nullable', 'integer', 'min:50', 'max:5000'],
         ]);
 
         if (

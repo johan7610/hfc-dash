@@ -128,6 +128,107 @@ abstract class AbstractCmaInfoParser implements MarketReportParser
     }
 
     /**
+     * Phase 3b — coalesce row-wrapped tables back into logical single lines.
+     *
+     * pdftotext -layout sometimes wraps long table rows across 2-3 physical
+     * lines when a scheme/address column is wider than its column width. The
+     * data tokens (section + SS year + Residence + extent + date + R<price>)
+     * may end up on a different line from the scheme name they belong to.
+     *
+     * Algorithm: walk the text top-to-bottom. When a line contains a row
+     * "anchor" (a YYYY-MM-DD date + an R<digits> price + Residence in close
+     * proximity), back-fill it with the previous N non-anchor lines until
+     * either the previous anchor or a section break (blank line, page break,
+     * "SUBJECT PROPERTY" / "COMPARATIVE PROPERTIES" header) is reached.
+     *
+     * Emits one coalesced row per anchor. Non-anchor lines that don't get
+     * coalesced into an anchor are kept verbatim so other regex passes
+     * (subject extraction, scheme headers, etc.) still work.
+     *
+     * Returns the rewritten text — same shape as the input, just with some
+     * row blocks collapsed onto single lines.
+     */
+    protected function coalesceRowWraps(string $text): string
+    {
+        if ($text === '') return $text;
+
+        $lines = preg_split('/\r?\n/', $text);
+        if (!is_array($lines)) return $text;
+
+        // Anchor detector: a line with EITHER a date+price pair OR a distance prefix.
+        $anchorPattern = '/(?:\d{4}[\/\-]\d{2}[\/\-]\d{2}.*?R\s*[\d ,]+|R\s*[\d ,]+.*?\d{4}[\/\-]\d{2}[\/\-]\d{2}|^\s*\d{2,4}\s*m\s+[A-Z])/u';
+        $boundaryHints = [
+            'SUBJECT PROPERTY', 'COMPARATIVE PROPERTIES', 'PROPERTY INFORMATION',
+            'SOLD PROPERTIES', 'FOR SALE', 'MUNICIPAL VALUATION', 'SALE INFORMATION',
+            'ACCOMMODATION', 'CMA -', 'Page ', 'Powered by',
+            'Comparative Market Analysis Value', 'Average:',
+        ];
+
+        $out = [];
+        $i = 0;
+        $count = count($lines);
+        while ($i < $count) {
+            $line = $lines[$i];
+            $trim = trim($line);
+            $isAnchor = $trim !== '' && preg_match($anchorPattern, $trim);
+
+            if (!$isAnchor) {
+                $out[] = $line;
+                $i++;
+                continue;
+            }
+
+            // Walk backwards from current to find the start of the row block.
+            // Stop at: a previous anchor, a boundary header, a blank line, or
+            // the start of the file.
+            $start = $i;
+            for ($k = $i - 1; $k >= 0; $k--) {
+                $prevTrim = trim($lines[$k]);
+                if ($prevTrim === '') break;
+                if (preg_match($anchorPattern, $prevTrim)) break;
+                if ($this->lineIsBoundary($prevTrim, $boundaryHints)) break;
+                $start = $k;
+                // Cap look-back to avoid runaway concatenation of headers.
+                if ($i - $start >= 4) break;
+            }
+
+            if ($start === $i) {
+                // No back-fill needed.
+                $out[] = $line;
+                $i++;
+                continue;
+            }
+
+            // Replace the back-filled block with a single coalesced line.
+            // Earlier lines we already pushed onto $out — pop them.
+            $popCount = $i - $start;
+            for ($p = 0; $p < $popCount; $p++) {
+                array_pop($out);
+            }
+
+            $parts = [];
+            for ($k = $start; $k <= $i; $k++) {
+                $t = trim($lines[$k]);
+                if ($t !== '') $parts[] = $t;
+            }
+            $out[] = implode(' ', $parts);
+            $i++;
+        }
+
+        return implode("\n", $out);
+    }
+
+    private function lineIsBoundary(string $trim, array $hints): bool
+    {
+        foreach ($hints as $h) {
+            if (stripos($trim, $h) !== false) return true;
+        }
+        // Page break separator from pdftotext.
+        if ($trim === "\f" || str_contains($trim, "\f")) return true;
+        return false;
+    }
+
+    /**
      * Used by every CMA parser to seed an extracted-address record from a
      * subject-property or comparable-sale line. The orchestrator then routes
      * these through TrackedPropertyMatchOrCreateService with

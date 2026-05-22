@@ -43,6 +43,8 @@ class Presentation extends Model
         'monthly_opportunity_cost',
         'cma_selected_range',
         'vicinity_selected_range',
+        'comp_scope',
+        'comp_radius_m',
         'excluded_active_listing_indices',
         'simulator_config_json',
         'seller_live_capture_json',

@@ -87,16 +87,44 @@ class PresentationGeneratorService
                 $presentation = Presentation::create($hydrated);
             }
 
+            // Phase 3b — persist per-presentation scope override (null lets
+            // future generations inherit the agency default).
+            if (array_key_exists('comp_scope', $options) || array_key_exists('comp_radius_m', $options)) {
+                $presentation->fill([
+                    'comp_scope'    => $options['comp_scope']    ?? $presentation->comp_scope,
+                    'comp_radius_m' => $options['comp_radius_m'] ?? $presentation->comp_radius_m,
+                ])->save();
+            }
+
             // ── 2. Market Analytics run (persist=true) ─────────────────────
+            // Phase 3b — resolve comp scope + radius from presentation override
+            // first, then agency default. Subject GPS comes from the linked
+            // Property record when present; null is safe (adapter degrades to
+            // suburb match per row).
+            $agency       = $presentation->agency_id ? \App\Models\Agency::find($presentation->agency_id) : null;
+            $compScope    = $presentation->comp_scope
+                ?? $agency?->presentations_default_comp_scope
+                ?? MarketAnalyticsInput::SCOPE_RADIUS_ALL;
+            $compRadiusM  = (int) ($presentation->comp_radius_m
+                ?? $agency?->presentations_default_radius_m
+                ?? 1000);
+            $property     = $presentation->property_id ? \App\Models\Property::find($presentation->property_id) : null;
+            $subjectLat   = $property?->latitude !== null && $property?->latitude !== '' ? (float) $property->latitude : null;
+            $subjectLng   = $property?->longitude !== null && $property?->longitude !== '' ? (float) $property->longitude : null;
+
             $maInput = new MarketAnalyticsInput(
-                suburb:          (string) $presentation->suburb,
-                propertyType:    $this->normaliseTypeForAnalytics($presentation->property_type),
-                periodMonths:    12,
-                bedrooms:        $presentation->bedrooms,
-                sourceBranchId:  $presentation->branch_id,
-                subjectSizeM2:   $presentation->floor_area_m2 ?: $presentation->erf_size_m2,
-                subjectPriceInc: $presentation->asking_price_inc !== null ? (float) $presentation->asking_price_inc : null,
-                presentationId:  $presentation->id,
+                suburb:           (string) $presentation->suburb,
+                propertyType:     $this->normaliseTypeForAnalytics($presentation->property_type),
+                periodMonths:     12,
+                bedrooms:         $presentation->bedrooms,
+                sourceBranchId:   $presentation->branch_id,
+                subjectSizeM2:    $presentation->floor_area_m2 ?: $presentation->erf_size_m2,
+                subjectPriceInc:  $presentation->asking_price_inc !== null ? (float) $presentation->asking_price_inc : null,
+                presentationId:   $presentation->id,
+                compScope:        $compScope,
+                compRadiusM:      $compRadiusM,
+                subjectLatitude:  $subjectLat,
+                subjectLongitude: $subjectLng,
             );
 
             $maService = new MarketAnalyticsService(

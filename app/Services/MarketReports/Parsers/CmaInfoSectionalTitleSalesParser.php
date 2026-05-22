@@ -180,50 +180,42 @@ final class CmaInfoSectionalTitleSalesParser extends AbstractCmaInfoParser
     private function extractCompRows(string $text, bool $isInScheme, ?string $impliedScheme): array
     {
         $rows = [];
-        $lines = preg_split('/\r?\n/', $text);
-        $currentScheme  = $impliedScheme;
-        $currentAddress = null;
 
-        foreach ($lines as $line) {
-            $trim = trim($line);
-            if ($trim === '') continue;
+        // Phase 3b — scan whole-text for data tuples with lookback context.
+        $pattern = '/(?<sec>\d{1,3})\s+(?<ss>\d{2,5})\s+(?<yr>\d{4})\s+Residence\s+(?<ext>\d{1,5})\s*m\S?\s+(?<date>\d{4}[\/\-]\d{2}[\/\-]\d{2})\s+R\s*(?<sp>[\d ,]+)(?:\s+R\s*(?<ppm>[\d ,]+))?/u';
 
-            // Scheme/address header for radius variant — "SCHEME NAME, ADDR, SUBURB"
-            if (!$isInScheme && preg_match('/^([A-Z][A-Z \']{2,40}),\s+([0-9]{1,4}\s+[A-Z][A-Z \']{2,40})(?:,\s+([A-Z][A-Z \']{2,40}))?$/', $trim, $am)) {
-                $currentScheme  = trim($am[1]);
-                $currentAddress = trim($am[2]);
-                continue;
+        if (!preg_match_all($pattern, $text, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
+            return $rows;
+        }
+
+        foreach ($matches as $m) {
+            $matchStart = $m[0][1];
+            $lookback   = max(0, $matchStart - 200);
+            $context    = mb_substr($text, $lookback, $matchStart - $lookback);
+
+            $sName   = $impliedScheme;
+            $sAddress = null;
+
+            // Radius variant: each row has its own "SCHEME, ADDR, SUBURB" prefix
+            // in the lookback window.
+            if (preg_match_all('/([A-Z][A-Z \']{2,40}),\s+([0-9]{1,4}\s+[A-Z][A-Z \']{2,40})(?:,\s+([A-Z][A-Z \']{2,40}))?/u', $context, $am, PREG_SET_ORDER)) {
+                $last = end($am);
+                $sName   = trim($last[1]);
+                $sAddress = trim($last[2]);
             }
 
-            // Data row: "<sec>  <ss>  <yr>  Residence  <ext> m²  <date>  R<price>  R<ppm>"
-            // Also allow scheme name prefix sometimes ("MADEIRA GARDENS ..."):
-            if (preg_match(
-                '/^(?<lead>[A-Z][A-Z0-9 ,\'\\.]{0,80}?)?\s*(?<sec>\d{1,3})\s+(?<ss>\d{2,5})\s+(?<yr>\d{4})\s+Residence\s+(?<ext>\d{1,5})\s*m\S?\s+(?<date>\d{4}[\/\-]\d{2}[\/\-]\d{2})\s+R\s*(?<sp>[\d ,]+)(?:\s+R\s*(?<ppm>[\d ,]+))?/u',
-                $trim,
-                $rm
-            )) {
-                $sName = $currentScheme;
-                if (!empty($rm['lead']) && preg_match('/[A-Z]/', $rm['lead'])) {
-                    $candidate = trim($rm['lead']);
-                    // strip trailing commas / "address" parts; keep scheme name
-                    $candidate = preg_replace('/,.*$/', '', $candidate);
-                    if (mb_strlen($candidate) > 2 && mb_strlen($candidate) < 50) {
-                        $sName = $candidate ?: $sName;
-                    }
-                }
-                $rows[] = [
-                    'scheme_name'    => $sName,
-                    'address'        => $currentAddress,
-                    'section_number' => $rm['sec'] ?? null,
-                    'ss_number'      => $rm['ss']  ?? null,
-                    'ss_year'        => isset($rm['yr']) ? (int) $rm['yr'] : null,
-                    'property_type'  => 'Residence',
-                    'extent_m2'      => (int) $rm['ext'],
-                    'sale_date'      => $this->parseDate($rm['date']),
-                    'sale_price'     => (int) $this->parsePrice($rm['sp']),
-                    'r_per_m2'       => !empty($rm['ppm']) ? (int) $this->parsePrice($rm['ppm']) : null,
-                ];
-            }
+            $rows[] = [
+                'scheme_name'    => $sName,
+                'address'        => $sAddress,
+                'section_number' => $m['sec'][0] ?? null,
+                'ss_number'      => $m['ss'][0]  ?? null,
+                'ss_year'        => isset($m['yr'][0]) ? (int) $m['yr'][0] : null,
+                'property_type'  => 'Residence',
+                'extent_m2'      => (int) $m['ext'][0],
+                'sale_date'      => $this->parseDate($m['date'][0]),
+                'sale_price'     => (int) $this->parsePrice($m['sp'][0]),
+                'r_per_m2'       => !empty($m['ppm'][0]) ? (int) $this->parsePrice($m['ppm'][0]) : null,
+            ];
         }
 
         return $rows;

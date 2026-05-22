@@ -286,51 +286,50 @@ final class CmaInfoPropertyValuationParser extends AbstractCmaInfoParser
      */
     private function extractCmaCompRows(string $text): array
     {
-        // Find the CMA table block: between "CMA - Comparative Market Analysis"
-        // and the next "Comparative Market Analysis Value" footer.
         $rows = [];
         if (!preg_match('/CMA\s+-\s+Comparative\s+Market\s+Analysis(?<body>.*?)Comparative\s+Market\s+Analysis\s+Value/su', $text, $blockMatch)) {
             return $rows;
         }
         $body = $blockMatch['body'];
 
-        // Detect address lines (e.g. "PARKLANDS, 2 TUCKER AVENUE UVONGO") — used to
-        // attribute the next data row to that scheme address.
-        $lines = preg_split('/\r?\n/', $body);
-        $currentAddress = null;
-        $currentScheme  = null;
+        // Phase 3b — scan the whole block in one pass. The regex no longer
+        // anchors at line start; it picks up data tuples wherever they appear,
+        // including when the scheme/address text bled onto the same line.
+        // For each match we look backward up to 200 chars for the nearest
+        // SCHEME, ADDRESS pattern to attribute the comp to.
+        $pattern = '/(?<sec>\d{1,3})\s+(?<ss>\d{1,5})\s+(?<yr>\d{4})\s+Residence\s+(?<ext>\d{1,5})\s*m\S?\s+(?<date>\d{4}[\/\-]\d{2}[\/\-]\d{2})\s+R\s*(?<sp>[\d ,]+)(?:\s+R\s*(?<est>[\d ,]+))?(?:\s+R\s*(?<ppm>[\d ,]+))?/u';
 
-        foreach ($lines as $line) {
-            $trim = trim($line);
-            if ($trim === '') continue;
+        if (!preg_match_all($pattern, $body, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
+            return $rows;
+        }
 
-            // Address line ("SCHEME, NUMBER STREET SUBURB")
-            if (preg_match('/^([A-Z][A-Z0-9 \']{2,30}),\s+(\d{1,4}\s+[A-Z][A-Z0-9 \']{2,40})/', $trim, $am)) {
-                $currentScheme  = trim($am[1]);
-                $currentAddress = trim($am[2]);
+        foreach ($matches as $m) {
+            $matchStart = $m[0][1];
+            $lookback   = max(0, $matchStart - 200);
+            $context    = mb_substr($body, $lookback, $matchStart - $lookback);
+
+            $scheme  = null;
+            $address = null;
+            // Find the LAST scheme-style line in the lookback context.
+            if (preg_match_all('/([A-Z][A-Z0-9 \']{2,30}),\s+(\d{1,4}\s+[A-Z][A-Z0-9 \']{2,40})/', $context, $am, PREG_SET_ORDER)) {
+                $last = end($am);
+                $scheme  = trim($last[1]);
+                $address = trim($last[2]);
             }
 
-            // Data row: <section> <ss_no> <ss_year> Residence <extent> m² <date> R <price>
-            // Tolerate trailing R/m² figures + estimated_value.
-            if (preg_match(
-                '/^\s*(?<sec>\d{1,3})\s+(?<ss>\d{1,5})\s+(?<yr>\d{4})\s+Residence\s+(?<ext>\d{1,5})\s*m\S?\s+(?<date>\d{4}[\/\-]\d{2}[\/\-]\d{2})\s+R\s*(?<sp>[\d ,]+)(?:\s+R\s*(?<est>[\d ,]+))?(?:\s+R\s*(?<ppm>[\d ,]+))?/u',
-                $trim,
-                $rm
-            )) {
-                $rows[] = [
-                    'scheme_name'      => $currentScheme,
-                    'section_number'   => $rm['sec'] ?? null,
-                    'ss_number'        => $rm['ss'] ?? null,
-                    'ss_year'          => isset($rm['yr']) ? (int) $rm['yr'] : null,
-                    'property_type'    => 'Residence',
-                    'extent_m2'        => (int) $rm['ext'],
-                    'sale_date'        => $this->parseDate($rm['date']),
-                    'sale_price'       => (int) $this->parsePrice($rm['sp']),
-                    'estimated_value'  => !empty($rm['est']) ? (int) $this->parsePrice($rm['est']) : null,
-                    'r_per_m2'         => !empty($rm['ppm']) ? (int) $this->parsePrice($rm['ppm']) : null,
-                    'address'          => $currentAddress,
-                ];
-            }
+            $rows[] = [
+                'scheme_name'      => $scheme,
+                'section_number'   => $m['sec'][0],
+                'ss_number'        => $m['ss'][0],
+                'ss_year'          => (int) $m['yr'][0],
+                'property_type'    => 'Residence',
+                'extent_m2'        => (int) $m['ext'][0],
+                'sale_date'        => $this->parseDate($m['date'][0]),
+                'sale_price'       => (int) $this->parsePrice($m['sp'][0]),
+                'estimated_value'  => !empty($m['est'][0]) ? (int) $this->parsePrice($m['est'][0]) : null,
+                'r_per_m2'         => !empty($m['ppm'][0]) ? (int) $this->parsePrice($m['ppm'][0]) : null,
+                'address'          => $address,
+            ];
         }
 
         return $rows;
@@ -344,16 +343,36 @@ final class CmaInfoPropertyValuationParser extends AbstractCmaInfoParser
     private function extractSoldWithDistance(string $text): array
     {
         $rows = [];
-        // Match "<dist> m  SCHEME NAME, ADDRESS  <section> Residence <ext> m² <date> <dom> R <list> R <last> <diff>"
-        if (preg_match_all(
-            '/^\s*(?<dist>\d{2,4})\s*m\s+(?<addr>[A-Z][A-Z0-9 ,\']{4,80})\s+(?<sec>\d{1,3})\s+Residence\s+(?<ext>\d{1,5})\s*m\S?\s+(?<date>\d{4}[\/\-]\d{2}[\/\-]\d{2})\s+(?<dom>\d{1,5})\s+R\s*(?<lp>[\d ,]+)\s+R\s*(?<sp>[\d ,]+)/um',
-            $text,
-            $matches,
-            PREG_SET_ORDER
-        )) {
-            foreach ($matches as $m) {
+
+        // Find the SOLD PROPERTIES block to avoid matching distance tokens
+        // from elsewhere in the document.
+        if (!preg_match('/SOLD\s+PROPERTIES(?<body>.*?)(?=FOR\s+SALE|\Z)/su', $text, $blockMatch)) {
+            return $rows;
+        }
+        $body = $blockMatch['body'];
+
+        // Capture every "<dist> m" anchor anywhere in the block, then read
+        // the rest of the row to the right (within the same line OR until
+        // the next distance anchor).
+        $distAnchorPattern = '/(?<dist>\d{2,4})\s*m\s+/u';
+        if (!preg_match_all($distAnchorPattern, $body, $anchors, PREG_OFFSET_CAPTURE)) {
+            return $rows;
+        }
+
+        $count = count($anchors[0]);
+        for ($i = 0; $i < $count; $i++) {
+            $start = $anchors[0][$i][1] + strlen($anchors[0][$i][0]);
+            $end   = $i + 1 < $count ? $anchors[0][$i + 1][1] : strlen($body);
+            $segment = mb_substr($body, $start, $end - $start);
+
+            // Within the segment, capture section + Residence + ext + date + R + R.
+            if (preg_match(
+                '/(?<addr>[A-Z][A-Z0-9 ,\']{4,80}?)?\s*(?<sec>\d{1,3})\s+Residence\s+(?<ext>\d{1,5})\s*m\S?\s+(?<date>\d{4}[\/\-]\d{2}[\/\-]\d{2})\s+(?<dom>\d{1,5})\s+R\s*(?<lp>[\d ,]+)\s+R\s*(?<sp>[\d ,]+)/us',
+                $segment,
+                $m
+            )) {
                 $rows[] = [
-                    'address'               => trim($m['addr']),
+                    'address'               => isset($m['addr']) ? trim($m['addr']) : null,
                     'section_number'        => $m['sec'],
                     'property_type'         => 'Residence',
                     'extent_m2'             => (int) $m['ext'],
@@ -361,7 +380,7 @@ final class CmaInfoPropertyValuationParser extends AbstractCmaInfoParser
                     'days_on_market'        => (int) $m['dom'],
                     'list_price'            => (int) $this->parsePrice($m['lp']),
                     'sale_price'            => (int) $this->parsePrice($m['sp']),
-                    'distance_to_subject_m' => (int) $m['dist'],
+                    'distance_to_subject_m' => (int) $anchors['dist'][$i][0],
                 ];
             }
         }
@@ -378,15 +397,30 @@ final class CmaInfoPropertyValuationParser extends AbstractCmaInfoParser
     private function extractActiveListings(string $text): array
     {
         $rows = [];
-        if (preg_match_all(
-            '/^\s*(?<dist>\d{2,4})\s*m\s+(?<addr>[A-Z][A-Z0-9 ,\']{4,80})\s+(?<sec>\d{1,3})\s+Residence\s+(?<ext>\d{1,5})\s*m\S?\s+(?<date>\d{4}[\/\-]\d{2}[\/\-]\d{2})\s+R\s*(?<lp>[\d ,]+)\s+(?<dom>\d{1,5})/um',
-            $text,
-            $matches,
-            PREG_SET_ORDER
-        )) {
-            foreach ($matches as $m) {
+
+        if (!preg_match('/FOR\s+SALE(?<body>.*?)(?=\Z|2026\/|\f)/su', $text, $blockMatch)) {
+            return $rows;
+        }
+        $body = $blockMatch['body'];
+
+        $distAnchorPattern = '/(?<dist>\d{2,4})\s*m\s+/u';
+        if (!preg_match_all($distAnchorPattern, $body, $anchors, PREG_OFFSET_CAPTURE)) {
+            return $rows;
+        }
+
+        $count = count($anchors[0]);
+        for ($i = 0; $i < $count; $i++) {
+            $start = $anchors[0][$i][1] + strlen($anchors[0][$i][0]);
+            $end   = $i + 1 < $count ? $anchors[0][$i + 1][1] : strlen($body);
+            $segment = mb_substr($body, $start, $end - $start);
+
+            if (preg_match(
+                '/(?<addr>[A-Z][A-Z0-9 ,\']{4,80}?)?\s*(?<sec>\d{1,3})\s+Residence\s+(?<ext>\d{1,5})\s*m\S?\s+(?<date>\d{4}[\/\-]\d{2}[\/\-]\d{2})\s+R\s*(?<lp>[\d ,]+)\s+(?<dom>\d{1,5})/us',
+                $segment,
+                $m
+            )) {
                 $rows[] = [
-                    'address'               => trim($m['addr']),
+                    'address'               => isset($m['addr']) ? trim($m['addr']) : null,
                     'section_number'        => $m['sec'],
                     'property_type'         => 'Residence',
                     'extent_m2'             => (int) $m['ext'],
@@ -394,7 +428,7 @@ final class CmaInfoPropertyValuationParser extends AbstractCmaInfoParser
                     'days_on_market'        => (int) $m['dom'],
                     'list_price'            => (int) $this->parsePrice($m['lp']),
                     'sale_price'            => null,
-                    'distance_to_subject_m' => (int) $m['dist'],
+                    'distance_to_subject_m' => (int) $anchors['dist'][$i][0],
                 ];
             }
         }

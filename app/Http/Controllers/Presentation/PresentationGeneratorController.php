@@ -40,19 +40,31 @@ class PresentationGeneratorController extends Controller
         }
 
         $validated = $request->validate([
-            'asking_price' => ['nullable', 'numeric', 'min:0', 'max:999999999'],
+            'asking_price'  => ['nullable', 'numeric', 'min:0', 'max:999999999'],
+            // Phase 3b — per-presentation scope override.
+            'comp_scope'    => ['nullable', 'in:radius_all,suburb_only'],
+            'comp_radius_m' => ['nullable', 'integer', 'min:50', 'max:5000'],
         ]);
 
         $startedAt = microtime(true);
 
         try {
+            $options = [];
+            if (array_key_exists('asking_price', $validated)) {
+                $options['asking_price'] = $validated['asking_price'];
+            }
+            if (!empty($validated['comp_scope'])) {
+                $options['comp_scope'] = $validated['comp_scope'];
+            }
+            if (!empty($validated['comp_radius_m'])) {
+                $options['comp_radius_m'] = (int) $validated['comp_radius_m'];
+            }
+
             $version = $this->generator->generateForProperty(
                 propertyId:  $property->id,
                 agentUserId: $user->id,
                 agencyId:    (int) $property->agency_id,
-                options:     array_key_exists('asking_price', $validated)
-                    ? ['asking_price' => $validated['asking_price']]
-                    : [],
+                options:     $options,
             );
         } catch (\Throwable $e) {
             Log::error('PresentationGeneratorController: generation failed', [

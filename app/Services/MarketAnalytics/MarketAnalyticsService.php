@@ -13,6 +13,8 @@ use App\Services\MarketAnalytics\DTOs\SoldTransactionsFilter;
 use App\Services\MarketAnalytics\Helpers\InputHasher;
 use App\Services\MarketAnalytics\Helpers\SuburbNormalizer;
 use App\Services\MarketAnalytics\Adapters\ImportedListingsAdapter;
+use App\Services\MarketAnalytics\Adapters\MarketCompRowsActiveAdapter;
+use App\Services\MarketAnalytics\Adapters\MarketCompRowsSoldAdapter;
 use App\Services\MarketAnalytics\Adapters\PresentationActiveListingsAdapter;
 use App\Services\MarketAnalytics\Adapters\PresentationSoldCompsAdapter;
 use App\Services\MarketAnalytics\Metrics\AbsorptionRateMetric;
@@ -60,57 +62,91 @@ class MarketAnalyticsService
             ->toDateString();
 
         // -- 3. Sold comparable set -- Evidence-First policy --
+        // Phase 3b: scope + radius + subject geo carried into the filter so
+        // MIC adapters can do Haversine matching.
         $soldFilter = new SoldTransactionsFilter(
-            suburbSlug:   $suburbSlug,
-            propertyType: $input->propertyType,
-            dateFrom:     $dateFrom,
-            dateTo:       $referenceDate,
-            bedrooms:     $input->bedrooms,
-            branchId:     $input->sourceBranchId,
+            suburbSlug:       $suburbSlug,
+            propertyType:     $input->propertyType,
+            dateFrom:         $dateFrom,
+            dateTo:           $referenceDate,
+            bedrooms:         $input->bedrooms,
+            branchId:         $input->sourceBranchId,
+            compScope:        $input->compScope,
+            compRadiusM:      $input->compRadiusM,
+            subjectLatitude:  $input->subjectLatitude,
+            subjectLongitude: $input->subjectLongitude,
         );
 
         $threshold     = (int) config('market_analytics.min_comps_threshold', 6);
         $internalComps = (new ComparableSetBuilder($this->soldSource))->build($soldFilter);
 
+        // Phase 3b — MIC sold adapter (agency-wide CMA Info evidence).
+        $micSoldAdapter = new MarketCompRowsSoldAdapter();
+        $micSoldComps   = (new ComparableSetBuilder($micSoldAdapter))->build($soldFilter);
+
         $presentationSoldAdapter = null;
         $presentationComps       = null;
         $selectedSoldSource      = 'internal';
 
+        // Phase 3b fallback chain (Sold):
+        //   1. InternalDealsAdapter (HFC's own deals)
+        //   2. MarketCompRowsSoldAdapter (MIC — shared CMA Info pool)
+        //   3. PresentationSoldCompsAdapter (per-presentation manual uploads)
+        // The first source whose count meets the threshold wins; otherwise the
+        // largest source wins. Lower threshold than the legacy two-source case
+        // because three sources may together still be sparse.
         if ($input->presentationId !== null) {
             $presentationSoldAdapter = new PresentationSoldCompsAdapter($input->presentationId);
             $presentationComps       = (new ComparableSetBuilder($presentationSoldAdapter))->build($soldFilter);
-
-            if ($presentationComps->count >= $threshold) {
-                $comps              = $presentationComps;
-                $selectedSoldSource = 'presentation_uploads';
-            } elseif ($internalComps->count >= $threshold) {
-                $comps                   = $internalComps;
-                $presentationSoldAdapter = null;
-                $selectedSoldSource      = 'internal';
-            } else {
-                if ($presentationComps->count >= $internalComps->count) {
-                    $comps              = $presentationComps;
-                    $selectedSoldSource = 'presentation_uploads';
-                } else {
-                    $comps                   = $internalComps;
-                    $presentationSoldAdapter = null;
-                    $selectedSoldSource      = 'internal';
-                }
-            }
-        } else {
-            $comps = $internalComps;
         }
+
+        $candidates = array_filter([
+            'internal'             => $internalComps,
+            'market_report_comps'  => $micSoldComps,
+            'presentation_uploads' => $presentationComps,
+        ]);
+
+        // Priority pick: first source with >= threshold; then largest count.
+        $selectedKey = null;
+        foreach (['internal', 'market_report_comps', 'presentation_uploads'] as $k) {
+            if (isset($candidates[$k]) && $candidates[$k]->count >= $threshold) {
+                $selectedKey = $k;
+                break;
+            }
+        }
+        if ($selectedKey === null) {
+            $selectedKey = collect($candidates)
+                ->map(fn ($c) => $c->count)
+                ->sortDesc()
+                ->keys()
+                ->first() ?? 'internal';
+        }
+        $comps              = $candidates[$selectedKey] ?? $internalComps;
+        $selectedSoldSource = $selectedKey;
+
+        // Surface only the actually-selected fallback adapters for downstream
+        // source-record logging.
+        if ($selectedSoldSource !== 'presentation_uploads') {
+            $presentationSoldAdapter = null;
+        }
+        $micSoldAdapterUsed = $selectedSoldSource === 'market_report_comps' ? $micSoldAdapter : null;
 
         // -- 4. Active listings snapshot -- Evidence-First policy --
         $listingsFilter = new ActiveListingsFilter(
-            suburbSlug:   $suburbSlug,
-            propertyType: $input->propertyType,
-            asAtDate:     $referenceDate,
-            bedrooms:     $input->bedrooms,
-            branchId:     $input->sourceBranchId,
+            suburbSlug:       $suburbSlug,
+            propertyType:     $input->propertyType,
+            asAtDate:         $referenceDate,
+            bedrooms:         $input->bedrooms,
+            branchId:         $input->sourceBranchId,
+            compScope:        $input->compScope,
+            compRadiusM:      $input->compRadiusM,
+            subjectLatitude:  $input->subjectLatitude,
+            subjectLongitude: $input->subjectLongitude,
         );
 
         $importedListings = $this->listingsSource->getRecords($listingsFilter);
+        $micActiveAdapter = new MarketCompRowsActiveAdapter();
+        $micListings      = $micActiveAdapter->getRecords($listingsFilter);
 
         $presentationListingsAdapter = null;
         $presentationListings        = null;
@@ -119,27 +155,35 @@ class MarketAnalyticsService
         if ($input->presentationId !== null) {
             $presentationListingsAdapter = new PresentationActiveListingsAdapter($input->presentationId);
             $presentationListings        = $presentationListingsAdapter->getRecords($listingsFilter);
-
-            if ($presentationListings->count() >= $threshold) {
-                $listings               = $presentationListings;
-                $selectedListingsSource = 'presentation_uploads';
-            } elseif ($importedListings->count() >= $threshold) {
-                $listings                    = $importedListings;
-                $presentationListingsAdapter = null;
-                $selectedListingsSource      = 'internal';
-            } else {
-                if ($presentationListings->count() >= $importedListings->count()) {
-                    $listings               = $presentationListings;
-                    $selectedListingsSource = 'presentation_uploads';
-                } else {
-                    $listings                    = $importedListings;
-                    $presentationListingsAdapter = null;
-                    $selectedListingsSource      = 'internal';
-                }
-            }
-        } else {
-            $listings = $importedListings;
         }
+
+        $listingCandidates = array_filter([
+            'internal'             => $importedListings,
+            'market_report_comps'  => $micListings,
+            'presentation_uploads' => $presentationListings,
+        ]);
+
+        $selectedListingsKey = null;
+        foreach (['internal', 'market_report_comps', 'presentation_uploads'] as $k) {
+            if (isset($listingCandidates[$k]) && $listingCandidates[$k]->count() >= $threshold) {
+                $selectedListingsKey = $k;
+                break;
+            }
+        }
+        if ($selectedListingsKey === null) {
+            $selectedListingsKey = collect($listingCandidates)
+                ->map(fn ($c) => $c->count())
+                ->sortDesc()
+                ->keys()
+                ->first() ?? 'internal';
+        }
+        $listings               = $listingCandidates[$selectedListingsKey] ?? collect();
+        $selectedListingsSource = $selectedListingsKey;
+
+        if ($selectedListingsSource !== 'presentation_uploads') {
+            $presentationListingsAdapter = null;
+        }
+        $micActiveAdapterUsed = $selectedListingsSource === 'market_report_comps' ? $micActiveAdapter : null;
 
         // Retrieve snapshot metadata from the active listings source record
         $activeSource      = $presentationListingsAdapter ?? $this->listingsSource;
@@ -165,8 +209,10 @@ class MarketAnalyticsService
         $dataSources  = [];
         $sourcesToLog = array_filter([
             $this->soldSource,
+            $micSoldAdapterUsed,
             $presentationSoldAdapter,
             $this->listingsSource,
+            $micActiveAdapterUsed,
             $presentationListingsAdapter,
         ]);
         foreach ($sourcesToLog as $src) {
@@ -271,18 +317,24 @@ class MarketAnalyticsService
             'deal_listing_match_version' => DealListingMatcher::MATCH_VERSION,
             'source_selection' => [
                 'sold_comps' => [
-                    'selected_source'    => $selectedSoldSource,
-                    'internal_count'     => $internalComps->count,
-                    'presentation_count' => $presentationComps?->count,
-                    'threshold_used'     => $threshold,
-                    'presentation_id'    => $input->presentationId,
+                    'selected_source'           => $selectedSoldSource,
+                    'internal_count'            => $internalComps->count,
+                    'market_report_comps_count' => $micSoldComps->count,
+                    'presentation_count'        => $presentationComps?->count,
+                    'threshold_used'            => $threshold,
+                    'presentation_id'           => $input->presentationId,
+                    'comp_scope'                => $input->compScope,
+                    'comp_radius_m'             => $input->compRadiusM,
                 ],
                 'active_listings' => [
-                    'selected_source'    => $selectedListingsSource,
-                    'internal_count'     => $importedListings->count(),
-                    'presentation_count' => $presentationListings?->count(),
-                    'threshold_used'     => $threshold,
-                    'presentation_id'    => $input->presentationId,
+                    'selected_source'           => $selectedListingsSource,
+                    'internal_count'            => $importedListings->count(),
+                    'market_report_comps_count' => $micListings->count(),
+                    'presentation_count'        => $presentationListings?->count(),
+                    'threshold_used'            => $threshold,
+                    'presentation_id'           => $input->presentationId,
+                    'comp_scope'                => $input->compScope,
+                    'comp_radius_m'             => $input->compRadiusM,
                 ],
             ],
             'absorption_rate'   => $metricResult['breakdown'],
