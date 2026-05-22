@@ -46,7 +46,14 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <style>
-        .corex-embed-map { position: relative; height: 320px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border, #e2e8f0); }
+        /*
+         * Hotfix 2026-05-22 — embedded Leaflet was punching through modal
+         * overlays. position+z-index here creates a predictable stacking
+         * context: everything inside the embed (Leaflet's panes go to 200-400,
+         * controls to 1000) is contained, so a modal overlay at z >= 9999
+         * always wins on the host page.
+         */
+        .corex-embed-map { position: relative; z-index: 1; isolation: isolate; height: 320px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border, #e2e8f0); }
         .corex-embed-map .leaflet-container { background: #e5e7eb; }
         .corex-embed-subject-pulse {
             display: flex; align-items: center; justify-content: center;

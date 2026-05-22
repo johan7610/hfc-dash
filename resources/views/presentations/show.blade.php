@@ -355,7 +355,7 @@
 </div>
 
 {{-- Generate Share Link modal --}}
-<div id="share-link-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.4);z-index:1000;align-items:center;justify-content:center;padding:20px;">
+<div id="share-link-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.4);z-index:9999;align-items:center;justify-content:center;padding:20px;">
     <div style="background:var(--surface);border-radius:8px;max-width:480px;width:100%;padding:24px;box-shadow:0 10px 40px rgba(0,0,0,0.2);">
         <div class="flex items-center justify-between mb-3">
             <h3 style="font-size:1rem;font-weight:600;margin:0;">Generate share link</h3>
@@ -411,7 +411,7 @@
 </div>
 
 {{-- ── PHASE 6: Send-to-Recipient modal ──────────────────────────────── --}}
-<div id="send-presentation-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:1000;align-items:center;justify-content:center;padding:20px;">
+<div id="send-presentation-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:9999;align-items:center;justify-content:center;padding:20px;">
     <div style="background:var(--surface);border-radius:8px;max-width:780px;width:100%;max-height:92vh;overflow:auto;padding:24px;box-shadow:0 12px 48px rgba(0,0,0,0.22);">
         <div class="flex items-center justify-between mb-3">
             <h3 style="font-size:1.0625rem;font-weight:600;margin:0;">Send presentation: {{ \Illuminate\Support\Str::limit($presentation->property_address ?: ('Presentation #' . $presentation->id), 60) }}</h3>

@@ -283,7 +283,7 @@
                     {{-- Asking-price modal (shown when property has no listed price) --}}
                     <template x-teleport="body">
                         <div x-show="modalOpen" x-cloak
-                             class="fixed inset-0 z-[120] flex items-center justify-center p-4"
+                             class="fixed inset-0 z-[9999] flex items-center justify-center p-4"
                              x-transition.opacity>
                             <div class="absolute inset-0" style="background:rgba(0,0,0,0.45);" @click="modalOpen = false"></div>
                             <div class="relative rounded-md w-full max-w-md p-5 shadow-xl"
@@ -564,7 +564,7 @@
                     {{-- Click popover — overlays the panel area, click outside or close button to dismiss --}}
                     <template x-teleport="body">
                         <div x-show="openPortal !== null" x-cloak
-                             class="fixed inset-0 z-[110] flex items-center justify-center p-4"
+                             class="fixed inset-0 z-[9999] flex items-center justify-center p-4"
                              x-transition.opacity>
                             <div class="absolute inset-0" style="background:rgba(0,0,0,0.45);" @click="openPortal = null"></div>
                             @foreach($portals as $pIdx2 => [$pName2, $pLive2, $pMissingArr2])
@@ -712,7 +712,7 @@
             @endphp
             <template x-teleport="body">
             <div x-show="synOpen" x-cloak
-                 class="fixed inset-0 z-[100] flex items-center justify-center p-4"
+                 class="fixed inset-0 z-[9999] flex items-center justify-center p-4"
                  x-transition.opacity>
                 {{-- Backdrop --}}
                 <div class="absolute inset-0" style="background:rgba(0,0,0,0.55); backdrop-filter:blur(2px);"
@@ -1276,7 +1276,7 @@
     @if(!$isNew)
         <template x-teleport="body">
             <div x-show="complianceModalOpen" x-cloak
-                 class="fixed inset-0 z-[120] flex items-start justify-center p-4 overflow-y-auto"
+                 class="fixed inset-0 z-[9999] flex items-start justify-center p-4 overflow-y-auto"
                  x-transition.opacity>
                 <div class="absolute inset-0" style="background:rgba(0,0,0,0.5);" @click="complianceModalOpen = false"></div>
                 <div class="relative w-full max-w-2xl mt-12"
@@ -2062,7 +2062,7 @@
 
                     {{-- ── SPACE DETAIL MODAL ────────────────────────────────── --}}
                     <div x-show="modalOpen" x-cloak
-                         class="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+                         class="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center"
                          style="background:rgba(0,0,0,0.6);">
                         <div class="absolute inset-0" @click="featurePickerOpen ? featurePickerOpen=false : closeModal()"></div>
                         <div class="relative w-full sm:w-[500px] max-h-[90vh] flex flex-col rounded-t-2xl sm:rounded-md shadow-2xl"
@@ -2261,7 +2261,7 @@
 
                     {{-- ── ADD SPACE MODAL ───────────────────────────────────── --}}
                     <div x-show="addSpaceOpen" x-cloak
-                         class="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+                         class="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center"
                          style="background:rgba(0,0,0,0.6);">
                         <div class="absolute inset-0" @click="addSpaceOpen = false"></div>
                         <div class="relative w-full sm:w-[560px] max-h-[90vh] flex flex-col rounded-t-2xl sm:rounded-md shadow-2xl"
@@ -2402,7 +2402,7 @@
 
                     {{-- ===== INTERNAL MODAL ===== --}}
                     <div x-show="openModal === 'internal'" x-cloak
-                         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                         class="fixed inset-0 z-[9999] flex items-center justify-center p-4"
                          @keydown.escape.window="openModal = null">
                         <div class="absolute inset-0 bg-black/60" @click="openModal = null"></div>
                         <div class="relative w-full max-w-[46rem] max-h-[85vh] overflow-y-auto rounded-lg shadow-2xl"
@@ -2527,7 +2527,7 @@
 
                     {{-- ===== PUBLIC MODAL ===== --}}
                     <div x-show="openModal === 'public'" x-cloak
-                         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                         class="fixed inset-0 z-[9999] flex items-center justify-center p-4"
                          @keydown.escape.window="openModal = null">
                         <div class="absolute inset-0 bg-black/60" @click="openModal = null"></div>
                         <div class="relative w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-lg shadow-2xl"
@@ -3144,7 +3144,7 @@
                 {{-- Sort order & Custom tags popup (teleported, centered) --}}
                 <template x-teleport="body">
                     <div x-show="manageTagsOpen" x-cloak x-transition.opacity
-                         class="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4">
+                         class="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-4">
                         <div class="absolute inset-0" style="background:rgba(0,0,0,0.55);" @click="manageTagsOpen = false"></div>
                         <div class="relative w-full sm:w-[560px] max-h-[90vh] flex flex-col rounded-t-2xl sm:rounded-md shadow-2xl"
                              style="background:var(--surface); border:1px solid var(--border);"
@@ -3364,7 +3364,7 @@
 
             {{-- Lightbox with prev/next navigation --}}
             @php $galleryJsonForJs = json_encode(array_values($galleryImages)); @endphp
-            <div id="lightbox" class="hidden fixed inset-0 z-50 flex items-center justify-center"
+            <div id="lightbox" class="hidden fixed inset-0 z-[9999] flex items-center justify-center"
                  style="background:rgba(0,0,0,0.93);">
 
                 {{-- Close area (click outside image) --}}
@@ -6125,7 +6125,7 @@ function propertyMapWidget(cfg) {
 
 {{-- ── Required Fields Modal ───────────────────────────────────────────── --}}
 <div id="prop-required-modal"
-     class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4"
+     class="fixed inset-0 z-[9999] hidden items-center justify-center bg-black/60 px-4"
      role="dialog" aria-modal="true" aria-labelledby="prop-required-title">
     <div class="rounded-lg shadow-xl max-w-md w-full overflow-hidden"
          style="background:var(--surface,#fff); border:1px solid var(--border);">
@@ -6163,7 +6163,7 @@ function propertyMapWidget(cfg) {
 @permission('compliance.whistleblow.create')
 @if(!$isNew)
 <template x-teleport="body">
-<div x-show="wbReportOpen" x-cloak class="fixed inset-0 z-[100] flex items-center justify-center p-4" x-transition.opacity>
+<div x-show="wbReportOpen" x-cloak class="fixed inset-0 z-[9999] flex items-center justify-center p-4" x-transition.opacity>
     <div class="absolute inset-0" style="background:rgba(0,0,0,0.55); backdrop-filter:blur(2px);" @click="wbReportOpen = false"></div>
     <div class="relative rounded-md shadow-2xl" style="width:520px; max-width:95vw; max-height:88vh; overflow-y:auto; background:var(--surface); border:1px solid var(--border);"
          x-data="{
