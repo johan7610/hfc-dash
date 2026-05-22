@@ -89,6 +89,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/corex/deliveries/{delivery}/whatsapp-redirect', [\App\Http\Controllers\Presentation\PresentationDeliveryController::class, 'whatsappRedirect'])
         ->name('corex.deliveries.whatsapp-redirect');
 
+    // Phase 8 — outcomes dashboard.
+    Route::get('/corex/presentations/outcomes', [\App\Http\Controllers\Presentation\PresentationOutcomesDashboardController::class, 'index'])
+        ->middleware('permission:access_presentations')
+        ->name('corex.presentations.outcomes.index');
+
     // Phase 7 — refresh request inbox + per-row actions.
     Route::prefix('corex/presentations/refresh-requests')
         ->name('corex.presentations.refresh-requests.')
@@ -2071,6 +2076,12 @@ Route::middleware(['auth', 'permission:access_presentations'])->prefix('presenta
     // Phase 5 — teaser leads index.
     Route::get('/{presentation}/teaser-leads',                          [\App\Http\Controllers\Presentation\SnapshotLinkController::class, 'teaserLeads'])
         ->name('teaser-leads');
+
+    // Phase 8 — outcome capture on a single presentation.
+    Route::post('/{presentation}/outcome',  [\App\Http\Controllers\Presentation\PresentationOutcomeController::class, 'record'])
+        ->name('outcome.record');
+    Route::patch('/{presentation}/outcome', [\App\Http\Controllers\Presentation\PresentationOutcomeController::class, 'update'])
+        ->name('outcome.update');
     // Phase 3 — AI summary generation + accept.
     Route::post('/{presentation}/ai-summary/generate', [\App\Http\Controllers\Presentation\AiSummaryController::class, 'generate'])
         ->middleware('throttle:30,1')

@@ -169,6 +169,9 @@
 
 {{-- Error flash handled by global toast system --}}
 
+{{-- ── PHASE 8: OUTCOME PANEL ──────────────────────────────────────────── --}}
+@include('presentations.partials._outcome-panel', ['presentation' => $presentation])
+
 {{-- ── PHASE 7: REFRESH REQUESTS (open + recent) ───────────────────────── --}}
 @php
     $openRefreshRequests = \App\Models\PresentationRefreshRequest::where('presentation_id', $presentation->id)

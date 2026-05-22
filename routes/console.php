@@ -50,6 +50,11 @@ Schedule::command('sales-documents:send-reminders')->dailyAt('09:00');
 // Marketing insights sync — runs daily at 04:00
 Schedule::job(new \App\Jobs\SyncMarketingInsightsJob())->dailyAt('04:00');
 
+// Phase 8 — daily outcome-capture nudges (>30d old presentations with no outcome).
+Schedule::job(new \App\Jobs\PromptOutcomeCaptureJob())->dailyAt('08:30')->withoutOverlapping();
+// Phase 8 — daily auto-lock for outcomes recorded >90d ago.
+Schedule::job(new \App\Jobs\LockOldOutcomesJob())->dailyAt('02:45')->withoutOverlapping();
+
 // Prospecting claim maintenance — runs hourly
 Schedule::command('prospecting:maintain-claims')->hourly();
 

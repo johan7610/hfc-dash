@@ -163,6 +163,12 @@ class Presentation extends Model
         return $this->belongsTo(\App\Models\Deal::class, 'deal_id');
     }
 
+    /** Phase 8 — close-the-loop outcome (one per presentation). */
+    public function outcome()
+    {
+        return $this->hasOne(\App\Models\PresentationOutcome::class);
+    }
+
     // ── Scopes ──
 
     public function scopeVisibleTo($query, \App\Models\User $user)

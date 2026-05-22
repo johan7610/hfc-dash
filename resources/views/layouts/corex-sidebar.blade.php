@@ -435,6 +435,35 @@
                 @if(config('features.presentations') && \Illuminate\Support\Facades\Route::has('presentations.index'))
                 <a href="{{ route('presentations.index') }}" class="corex-nav-subitem {{ request()->routeIs('presentations.*') ? 'active' : '' }}">Presentations</a>
                 @endif
+                @if(\Illuminate\Support\Facades\Route::has('corex.presentations.outcomes.index'))
+                    @php
+                        // Phase 8 — count of presentations >30d old with no outcome (in current user's scope).
+                        $outcomePendingCount = 0;
+                        try {
+                            $user = auth()->user();
+                            $agencyId = $user?->effectiveAgencyId();
+                            if ($agencyId) {
+                                $q = \App\Models\Presentation::where('agency_id', $agencyId)
+                                    ->where('created_at', '<=', now()->subDays(30))
+                                    ->whereDoesntHave('outcome');
+                                if (!in_array((string) $user->role, ['branch_manager','principal','super_admin','admin'], true)) {
+                                    $q->where('created_by_user_id', $user->id);
+                                }
+                                $outcomePendingCount = $q->count();
+                            }
+                        } catch (\Throwable $e) { /* sidebar must never blow up */ }
+                    @endphp
+                    <a href="{{ route('corex.presentations.outcomes.index') }}"
+                       class="corex-nav-subitem {{ request()->routeIs('corex.presentations.outcomes.*') ? 'active' : '' }}"
+                       style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                        <span>Outcomes</span>
+                        @if($outcomePendingCount > 0)
+                            <span style="display:inline-block;min-width:18px;padding:1px 6px;background:#0ea5e9;color:#fff;border-radius:99px;font-size:0.625rem;font-weight:700;text-align:center;line-height:1.4;">
+                                {{ $outcomePendingCount > 99 ? '99+' : $outcomePendingCount }}
+                            </span>
+                        @endif
+                    </a>
+                @endif
                 @if(\Illuminate\Support\Facades\Route::has('corex.presentations.refresh-requests.index'))
                     @php
                         // Phase 7 — count of open refresh requests, scoped to the user's effective agency.

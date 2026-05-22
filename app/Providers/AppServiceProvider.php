@@ -175,6 +175,10 @@ class AppServiceProvider extends ServiceProvider
             // Phase B2 — agency budget signals.
             \App\Events\AI\AgencyAiBudgetWarning::class,
             \App\Events\AI\AgencyAiBudgetCapped::class,
+            // Presentations Phase 8 — outcome capture lifecycle.
+            \App\Events\Presentation\PresentationOutcomeRecorded::class,
+            \App\Events\Presentation\PresentationOutcomePrompted::class,
+            \App\Events\Presentation\PresentationOutcomeLocked::class,
         ] as $micActivityEvent) {
             Event::listen($micActivityEvent, \App\Listeners\Activity\LogAgentActivity::class);
         }
@@ -239,6 +243,11 @@ class AppServiceProvider extends ServiceProvider
             \App\Events\Presentation\PresentationFieldsExtracted::class,
             \App\Listeners\Presentation\PropagateCmaToProperty::class,
         );
+
+        // Phase 8 — auto-record outcome=won_sale when a Deal flips to registered
+        // and a linked presentation has no outcome yet. Observer is failure-
+        // isolated so outcome auto-capture never breaks a deal save.
+        \App\Models\Deal::observe(\App\Observers\DealRegisteredForOutcomeObserver::class);
 
         // buyer_preferences deprecation listener (spec D11 Phase 1).
         // Logs a WARNING to the `deprecation` channel for any query that
