@@ -18,5 +18,7 @@ class ActiveListingsFilter
         public readonly int     $compRadiusM      = 1000,
         public readonly ?float  $subjectLatitude  = null,
         public readonly ?float  $subjectLongitude = null,
+        // Phase 3h Step 9 — demo / real isolation. See SoldTransactionsFilter.
+        public readonly bool    $subjectIsDemo    = false,
     ) {}
 }

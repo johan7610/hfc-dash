@@ -89,6 +89,7 @@ final class MapPinService
             ->whereBetween('latitude',  [$req->south, $req->north])
             ->whereBetween('longitude', [$req->west,  $req->east]);
 
+        $this->applyDemoFilter($q, $req, 'is_demo');
         $this->applyPropertyTypeFilter($q, $req, 'property_type');
         $this->applyPriceFilter($q, $req, 'price');
 
@@ -143,9 +144,15 @@ final class MapPinService
         // scheme) without expanding to addresses we haven't geocoded yet.
         $mrcrQ = DB::table('market_report_comp_rows as mrcr')
             ->join('market_reports as mr', 'mr.id', '=', 'mrcr.market_report_id')
-            ->leftJoin('market_reports as mr_scheme', function ($j) {
+            ->leftJoin('market_reports as mr_scheme', function ($j) use ($req) {
                 $j->on(DB::raw('LOWER(mr_scheme.subject_scheme_name)'), '=', DB::raw('LOWER(mrcr.scheme_name)'))
                   ->whereNotNull('mr_scheme.subject_latitude');
+                // Phase 3h Step 9.5 — when demo is hidden the COALESCE
+                // fallback must not pull GPS from a demo subject report
+                // (would surface real comps at fake locations).
+                if (!$req->includeDemo) {
+                    $j->where('mr_scheme.is_demo', false);
+                }
             })
             ->whereNull('mrcr.deleted_at')
             ->where('mr.agency_id', $req->agencyId)
@@ -160,6 +167,7 @@ final class MapPinService
                 DB::raw('COALESCE(mrcr.longitude, mr_scheme.subject_longitude) as longitude'),
                 'mrcr.scheme_name', 'mrcr.section_number',
             ]);
+        $this->applyDemoFilter($mrcrQ, $req, 'mrcr.is_demo');
         $this->applyDateFilter($mrcrQ, $req, 'mrcr.sale_date');
         $this->applyPriceFilter($mrcrQ, $req, 'mrcr.sale_price');
 
@@ -252,9 +260,15 @@ final class MapPinService
         // a matching scheme has been imported.
         $mrcrQ = DB::table('market_report_comp_rows as mrcr')
             ->join('market_reports as mr', 'mr.id', '=', 'mrcr.market_report_id')
-            ->leftJoin('market_reports as mr_scheme', function ($j) {
+            ->leftJoin('market_reports as mr_scheme', function ($j) use ($req) {
                 $j->on(DB::raw('LOWER(mr_scheme.subject_scheme_name)'), '=', DB::raw('LOWER(mrcr.scheme_name)'))
                   ->whereNotNull('mr_scheme.subject_latitude');
+                // Phase 3h Step 9.5 — when demo is hidden the COALESCE
+                // fallback must not pull GPS from a demo subject report
+                // (would surface real comps at fake locations).
+                if (!$req->includeDemo) {
+                    $j->where('mr_scheme.is_demo', false);
+                }
             })
             ->whereNull('mrcr.deleted_at')
             ->where('mr.agency_id', $req->agencyId)
@@ -269,6 +283,7 @@ final class MapPinService
                 DB::raw('COALESCE(mrcr.longitude, mr_scheme.subject_longitude) as longitude'),
                 'mrcr.scheme_name', 'mrcr.section_number',
             ]);
+        $this->applyDemoFilter($mrcrQ, $req, 'mrcr.is_demo');
         $this->applyPriceFilter($mrcrQ, $req, 'mrcr.list_price');
 
         foreach ($mrcrQ->limit($limit)->get() as $r) {
@@ -361,6 +376,7 @@ final class MapPinService
                 'mrt.display_name as report_type_name',
                 'mrt.key as report_type_key',
             ]);
+        $this->applyDemoFilter($q, $req, 'market_reports.is_demo');
 
         $total = (clone $q)->count();
         $rows = $q->orderByDesc('market_reports.id')->limit($limit)->get();
@@ -405,8 +421,9 @@ final class MapPinService
                 DB::raw('MIN(mr.subject_latitude) as latitude'),
                 DB::raw('MIN(mr.subject_longitude) as longitude'),
             ]);
+        $this->applyDemoFilter($q, $req, 'so.is_demo');
 
-        $total = DB::table('scheme_owners as so')
+        $totalQ = DB::table('scheme_owners as so')
             ->join('market_reports as mr', function ($j) {
                 $j->on(DB::raw('LOWER(mr.subject_scheme_name)'), '=', DB::raw('LOWER(so.scheme_name)'));
             })
@@ -415,9 +432,9 @@ final class MapPinService
             ->where('so.agency_id', $req->agencyId)
             ->whereNotNull('mr.subject_latitude')
             ->whereBetween('mr.subject_latitude',  [$req->south, $req->north])
-            ->whereBetween('mr.subject_longitude', [$req->west,  $req->east])
-            ->distinct('so.id')
-            ->count('so.id');
+            ->whereBetween('mr.subject_longitude', [$req->west,  $req->east]);
+        $this->applyDemoFilter($totalQ, $req, 'so.is_demo');
+        $total = $totalQ->distinct('so.id')->count('so.id');
 
         $rows = $q->orderBy('so.id')->limit($limit)->get();
 
@@ -443,6 +460,18 @@ final class MapPinService
     {
         if (empty($req->propertyTypes)) return;
         $q->whereIn($column, $req->propertyTypes);
+    }
+
+    /**
+     * Phase 3h Step 9.5 — hide is_demo=true rows when the demo toggle is
+     * off. When on (default), both real and demo rows are returned. Column
+     * name is variable so the same helper works for direct tables (is_demo)
+     * and joined tables (mrcr.is_demo).
+     */
+    private function applyDemoFilter($q, MapBoundsRequest $req, string $column): void
+    {
+        if ($req->includeDemo) return;
+        $q->where($column, false);
     }
 
     private function applyPriceFilter($q, MapBoundsRequest $req, string $column): void

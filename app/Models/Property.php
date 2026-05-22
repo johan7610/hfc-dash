@@ -75,6 +75,7 @@ class Property extends Model
         'agent_id',
         'branch_id',
         'agency_id',
+        'is_demo',
         'published_at',
         'listed_date',
         'expiry_date',

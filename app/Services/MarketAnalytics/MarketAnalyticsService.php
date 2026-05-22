@@ -75,6 +75,8 @@ class MarketAnalyticsService
             compRadiusM:      $input->compRadiusM,
             subjectLatitude:  $input->subjectLatitude,
             subjectLongitude: $input->subjectLongitude,
+            // Phase 3h Step 9 — propagate demo isolation flag.
+            subjectIsDemo:    $input->subjectIsDemo,
         );
 
         $threshold     = (int) config('market_analytics.min_comps_threshold', 6);
@@ -142,6 +144,8 @@ class MarketAnalyticsService
             compRadiusM:      $input->compRadiusM,
             subjectLatitude:  $input->subjectLatitude,
             subjectLongitude: $input->subjectLongitude,
+            // Phase 3h Step 9 — propagate demo isolation flag.
+            subjectIsDemo:    $input->subjectIsDemo,
         );
 
         $importedListings = $this->listingsSource->getRecords($listingsFilter);

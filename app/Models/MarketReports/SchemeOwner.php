@@ -34,6 +34,7 @@ class SchemeOwner extends Model
         'longitude',
         'contact_id',
         'matched_at',
+        'is_demo',
     ];
 
     protected $casts = [

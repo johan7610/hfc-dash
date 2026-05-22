@@ -73,6 +73,19 @@
             </div>
             <div id="layer-cap-notice" style="display: none; margin-top: 10px; padding: 8px; font-size: 0.6875rem; color: var(--ds-amber, #d97706); background: color-mix(in srgb, var(--ds-amber, #d97706) 8%, transparent); border-radius: 4px;"></div>
 
+            {{-- Phase 3h Step 10 — demo data toggle. Default ON locally + on
+                 staging; default OFF in production. The data attribute below
+                 lets the JS read the env-aware default. --}}
+            <div style="margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);">
+                <label style="display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; font-size: 0.8125rem;">
+                    <input type="checkbox" id="demo-toggle"
+                           data-default-on="{{ app()->environment('production') ? '0' : '1' }}"
+                           style="margin: 0;">
+                    <span style="flex: 1; color: var(--text-primary);">Show demo data</span>
+                </label>
+                <div style="font-size: 0.6875rem; color: var(--text-muted); margin-top: 2px;">Synthetic pins for testing. Toggle off to see real data only.</div>
+            </div>
+
             <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 0.6875rem; color: var(--text-muted);">
                 <div style="font-weight: 600; margin-bottom: 4px;">Tips</div>
                 <ul style="padding-left: 16px; margin: 0; line-height: 1.5;">
@@ -151,6 +164,18 @@ document.addEventListener('DOMContentLoaded', function () {
     // ── State ─────────────────────────────────────────────────────────────
     let viewMode = localStorage.getItem('corex.map.view_mode') || 'agent';
     let baseLayerKey = localStorage.getItem('corex.map.base_layer') || 'streets';
+
+    // Phase 3h Step 10 — demo-data toggle. Default comes from a data attr
+    // on the checkbox so the server can decide ON/OFF per environment.
+    const demoToggleEl = document.getElementById('demo-toggle');
+    const demoDefaultOn = (demoToggleEl?.dataset.defaultOn ?? '1') === '1';
+    let includeDemo = (function () {
+        const stored = localStorage.getItem('corex.map.include_demo');
+        if (stored === '0') return false;
+        if (stored === '1') return true;
+        return demoDefaultOn;
+    })();
+    if (demoToggleEl) demoToggleEl.checked = includeDemo;
     const enabledLayers = new Set([
         'hfc_listings', 'sold_comps', 'active_listings', 'mic_subjects', 'scheme_owners',
     ]);
@@ -204,7 +229,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function boundsKey(b) {
-        return [b.south, b.west, b.north, b.east, viewMode, Array.from(enabledLayers).sort().join(',')]
+        return [b.south, b.west, b.north, b.east, viewMode, includeDemo ? '1' : '0', Array.from(enabledLayers).sort().join(',')]
             .map(v => typeof v === 'number' ? v.toFixed(4) : v).join('|');
     }
 
@@ -277,6 +302,7 @@ document.addEventListener('DOMContentLoaded', function () {
             west:  b.west.toFixed(6),
             viewMode: viewMode,
             limit: '2000',
+            include_demo: includeDemo ? '1' : '0',
         });
         // Always send all five layer keys so server gives counts for each;
         // the UI hides disabled ones at render time.
@@ -438,6 +464,16 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('reset-bounds-btn').addEventListener('click', () => {
         map.fitBounds([[HFC_BOUNDS.south, HFC_BOUNDS.west], [HFC_BOUNDS.north, HFC_BOUNDS.east]]);
     });
+
+    // Phase 3h Step 10 — demo toggle click handler.
+    if (demoToggleEl) {
+        demoToggleEl.addEventListener('change', e => {
+            includeDemo = !!e.target.checked;
+            localStorage.setItem('corex.map.include_demo', includeDemo ? '1' : '0');
+            cache.length = 0;
+            fetchPins();
+        });
+    }
 
     map.on('moveend zoomend', debouncedFetch);
 

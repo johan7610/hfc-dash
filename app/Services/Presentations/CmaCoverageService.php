@@ -48,6 +48,7 @@ class CmaCoverageService
             subjectLat:   $lat,
             subjectLng:   $lng,
             periodMonths: $periodMonths,
+            subjectIsDemo: (bool) ($property->is_demo ?? false),
         );
     }
 
@@ -63,6 +64,7 @@ class CmaCoverageService
             subjectLat:   $lat,
             subjectLng:   $lng,
             periodMonths: $periodMonths,
+            subjectIsDemo: (bool) ($property->is_demo ?? false),
         );
     }
 
@@ -73,11 +75,12 @@ class CmaCoverageService
         ?float $subjectLat,
         ?float $subjectLng,
         ?int $periodMonths,
+        bool $subjectIsDemo = false,
     ): array {
         $thresholds = $this->thresholdsForAgency($agencyId);
         $window     = $periodMonths ?? $thresholds['period_months'];
 
-        $compCount = $this->countComps($suburb, $window, $thresholds['scope'], $thresholds['radius_m'], $subjectLat, $subjectLng);
+        $compCount = $this->countComps($suburb, $window, $thresholds['scope'], $thresholds['radius_m'], $subjectLat, $subjectLng, $subjectIsDemo);
 
         $state = match (true) {
             $compCount === 0                       => self::STATE_NONE,
@@ -126,6 +129,7 @@ class CmaCoverageService
         int $radiusM,
         ?float $subjectLat,
         ?float $subjectLng,
+        bool $subjectIsDemo = false,
     ): int {
         if ($suburb === '') {
             return 0;
@@ -138,11 +142,13 @@ class CmaCoverageService
         $fingerprints = [];
 
         // 1. Deals — suburb LIKE on property_address (geo not available).
+        // Phase 3h Step 9 — demo/real isolation.
         $dealRows = DB::table('deals')
             ->whereNotNull('registration_date')
             ->where(function ($q) {
                 $q->whereNull('accepted_status')->orWhere('accepted_status', '!=', 'D');
             })
+            ->where('is_demo', $subjectIsDemo)
             ->whereBetween('registration_date', [$dateFrom, $dateTo])
             ->whereRaw('LOWER(property_address) LIKE ?', [$like])
             ->select(['property_address', 'registration_date', 'property_value'])
@@ -152,11 +158,13 @@ class CmaCoverageService
         }
 
         // 2. MIC market_report_comp_rows — scope-branched read.
+        // Phase 3h Step 9 — demo/real isolation.
         $micQuery = DB::table('market_report_comp_rows')
             ->whereNull('deleted_at')
             ->where('row_type', 'comp')
             ->whereNotNull('sale_date')
             ->whereNotNull('sale_price')
+            ->where('is_demo', $subjectIsDemo)
             ->whereBetween('sale_date', [$dateFrom, $dateTo])
             ->select(['scheme_name', 'section_number', 'address', 'sale_date', 'sale_price', 'suburb_normalised', 'latitude', 'longitude']);
 
@@ -167,10 +175,12 @@ class CmaCoverageService
         }
 
         // 3. Legacy presentation_sold_comps fallback (suburb LIKE only).
+        // Phase 3h Step 9 — demo/real isolation.
         $psRows = DB::table('presentation_sold_comps')
             ->whereNull('deleted_at')
             ->whereNotNull('sold_date')
             ->whereNotNull('sold_price_inc')
+            ->where('is_demo', $subjectIsDemo)
             ->whereBetween('sold_date', [$dateFrom, $dateTo])
             ->where(function ($q) use ($like) {
                 $q->whereNull('suburb')->orWhereRaw('LOWER(suburb) LIKE ?', [$like]);

@@ -129,6 +129,10 @@ class PresentationGeneratorService
                 compRadiusM:      $compRadiusM,
                 subjectLatitude:  $subjectLat,
                 subjectLongitude: $subjectLng,
+                // Phase 3h Step 9 — subject's demo flag determines whether
+                // adapters read demo or real comp/deal data. Real subjects
+                // (default) never see synthetic data, and vice versa.
+                subjectIsDemo:    (bool) ($property->is_demo ?? false),
             );
 
             $maService = new MarketAnalyticsService(

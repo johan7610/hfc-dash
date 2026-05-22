@@ -58,6 +58,7 @@ final class MapController extends Controller
             'priceMin'     => 'sometimes|nullable|integer|min:0',
             'priceMax'     => 'sometimes|nullable|integer|min:0',
             'limit'        => 'sometimes|integer|min:1|max:5000',
+            'include_demo' => 'sometimes|nullable',
         ]);
 
         $user = $request->user();
@@ -87,6 +88,13 @@ final class MapController extends Controller
             priceMin:      $validated['priceMin']  ?? null,
             priceMax:      $validated['priceMax']  ?? null,
             limit:         (int) ($validated['limit'] ?? 2000),
+            // Phase 3h Step 9.5 — query string accepts '0'/'false' to hide
+            // demo pins. Anything else (or missing) keeps demo data visible.
+            includeDemo:   filter_var(
+                $validated['include_demo'] ?? true,
+                FILTER_VALIDATE_BOOLEAN,
+                FILTER_NULL_ON_FAILURE,
+            ) ?? true,
         );
 
         $startedAt = microtime(true);

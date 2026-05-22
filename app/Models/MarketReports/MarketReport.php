@@ -52,6 +52,7 @@ final class MarketReport extends Model
         'subject_address', 'subject_scheme_name', 'subject_section_number',
         'subject_latitude', 'subject_longitude', 'subject_extent_m2',
         'radius_metres',
+        'is_demo',
     ];
 
     protected $casts = [

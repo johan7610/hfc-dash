@@ -50,6 +50,7 @@ final class TrackedProperty extends Model
         'promoted_to_property_id', 'promoted_at', 'promoted_by_user_id',
         'source_chain', 'first_seen_at', 'last_enriched_at', 'last_enrichment_source',
         'status', 'duplicate_of_tracked_property_id',
+        'is_demo',
     ];
 
     protected $casts = [

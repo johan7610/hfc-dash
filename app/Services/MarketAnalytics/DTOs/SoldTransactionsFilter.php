@@ -19,5 +19,9 @@ class SoldTransactionsFilter
         public readonly int     $compRadiusM      = 1000,
         public readonly ?float  $subjectLatitude  = null,
         public readonly ?float  $subjectLongitude = null,
+        // Phase 3h Step 9 — demo / real isolation. Defaults to false so
+        // legacy callers (and real subjects) read only real data; demo-
+        // tagged subjects flip this to true so they read only demo data.
+        public readonly bool    $subjectIsDemo    = false,
     ) {}
 }

@@ -53,6 +53,7 @@ class MarketReportCompRow extends Model
         'latitude',
         'longitude',
         'raw_row_json',
+        'is_demo',
     ];
 
     protected $casts = [

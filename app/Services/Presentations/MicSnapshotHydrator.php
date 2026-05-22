@@ -293,9 +293,14 @@ final class MicSnapshotHydrator
      */
     private function collectMatchedRows(Presentation $presentation, array $cfg, string $rowType): \Illuminate\Support\Collection
     {
+        // Phase 3h Step 9 — demo/real isolation. Read the subject property's
+        // is_demo flag once; comp rows must match.
+        $subjectIsDemo = (bool) ($presentation->property?->is_demo ?? false);
+
         $query = DB::table('market_report_comp_rows')
             ->whereNull('deleted_at')
-            ->where('row_type', $rowType);
+            ->where('row_type', $rowType)
+            ->where('is_demo', $subjectIsDemo);
 
         if ($rowType === MarketReportCompRow::ROW_COMP) {
             // Same-subject reports skip the strict date window — the analyst

@@ -36,6 +36,11 @@ final class MapBoundsRequest
         public readonly ?int   $priceMin = null,
         public readonly ?int   $priceMax = null,
         public readonly int    $limit = 2000,
+        // Phase 3h Step 9.5 — when false, hide is_demo=true rows from
+        // the map. Defaults to true so demo pins are visible until
+        // someone explicitly toggles them off (the left-rail switch
+        // wires this up from localStorage).
+        public readonly bool   $includeDemo = true,
     ) {}
 
     public function isSellerView(): bool

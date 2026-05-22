@@ -42,6 +42,9 @@ final class MarketCompRowsSoldAdapter implements SoldTransactionsSource, HasSour
             ->where('row_type', 'comp')
             ->whereNotNull('sale_date')
             ->whereNotNull('sale_price')
+            // Phase 3h Step 9 — demo/real isolation. Real subjects see only
+            // real comp rows; demo subjects see only demo comp rows.
+            ->where('is_demo', $filter->subjectIsDemo)
             ->whereBetween('sale_date', [$filter->dateFrom, $filter->dateTo])
             ->select([
                 'id', 'market_report_id', 'sale_date', 'sale_price',

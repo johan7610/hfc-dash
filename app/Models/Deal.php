@@ -108,6 +108,8 @@ class Deal extends Model
         'selling_split_percent',
         'selling_our_share_percent',
         'selling_external_agency',
+
+        'is_demo',
     ];
 
     protected $casts = [

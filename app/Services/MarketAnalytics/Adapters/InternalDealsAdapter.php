@@ -41,6 +41,9 @@ class InternalDealsAdapter implements SoldTransactionsSource, HasSourceRecord
                 $q->whereNull('accepted_status')
                   ->orWhere('accepted_status', '!=', 'D');
             })
+            // Phase 3h Step 9 — demo/real isolation. Real subjects see only
+            // real deals; demo subjects see only demo deals.
+            ->where('is_demo', $filter->subjectIsDemo)
             ->whereBetween('registration_date', [$filter->dateFrom, $filter->dateTo])
             ->whereRaw('LOWER(property_address) LIKE ?', ['%' . $suburbName . '%'])
             ->select(['id', 'registration_date', 'property_value', 'property_address']);

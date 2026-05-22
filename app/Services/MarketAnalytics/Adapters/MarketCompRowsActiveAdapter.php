@@ -32,6 +32,8 @@ final class MarketCompRowsActiveAdapter implements ActiveListingsSource, HasSour
             ->whereNull('deleted_at')
             ->where('row_type', 'listing')
             ->whereNotNull('list_price')
+            // Phase 3h Step 9 — demo/real isolation.
+            ->where('is_demo', $filter->subjectIsDemo)
             ->select([
                 'id', 'market_report_id', 'list_price', 'list_price as list_price_inc',
                 'suburb_normalised', 'scheme_name', 'section_number',

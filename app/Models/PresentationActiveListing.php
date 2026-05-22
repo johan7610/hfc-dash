@@ -35,6 +35,7 @@ class PresentationActiveListing extends Model
         'merge_confidence',
         'data_quality_score',
         'conflict_flags_json',
+        'is_demo',
     ];
 
     protected $casts = [
