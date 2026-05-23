@@ -293,6 +293,7 @@ class DemoDataSeeder extends Seeder
                 for ($a = 0; $a < rand(1, 3); $a++) {
                     DB::table('property_marketing_activities')->insert([
                         'property_id' => $propId,
+                        'agency_id' => $this->agencyId,
                         'activity_type' => $activities[array_rand($activities)],
                         'occurred_at' => now()->subDays(rand(1, 60)),
                         'logged_by_user_id' => $agentId,
@@ -364,6 +365,7 @@ class DemoDataSeeder extends Seeder
                 $propId = $propertyIds[array_rand($propertyIds)];
                 DB::table('buyer_property_responses')->insertOrIgnore([
                     'contact_id' => $contactId,
+                    'agency_id' => $this->agencyId,
                     'property_id' => $propId,
                     'response' => ['interested', 'interested', 'viewing_requested', 'not_interested'][rand(0, 3)],
                     'source' => 'buyer_portal',
