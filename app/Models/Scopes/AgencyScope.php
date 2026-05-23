@@ -64,7 +64,15 @@ class AgencyScope implements Scope
         // is sitting in the session from a previous login, the login event
         // listener wipes it).
         if (method_exists($user, 'isOwnerRole') && $user->isOwnerRole()) {
-            $hasOverride = session('active_agency_id') !== null
+            // Only consult the session when one is actually bound to the
+            // request. Bearer-token API requests (mobile app) have no session;
+            // calling session() in that context can stall when StartSession
+            // middleware is active with a database/file driver and two
+            // concurrent requests share a session row (row-lock deadlock).
+            $request = request();
+            $hasSession = $request && $request->hasSession() && $request->session()->isStarted();
+            $hasOverride = $hasSession
+                && session('active_agency_id') !== null
                 && session('active_agency_id') !== '';
             if (!$hasOverride) {
                 return;
