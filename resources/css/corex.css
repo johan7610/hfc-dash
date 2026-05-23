@@ -107,7 +107,7 @@ html.dark {
     padding: 1.25rem 1.25rem 0.75rem;
 }
 
-.corex-sidebar-logo span {
+.corex-sidebar-logo .corex-logo-accent {
     color: #1cb8e0;
 }
 
@@ -115,7 +115,7 @@ html.dark .corex-sidebar-logo {
     color: #ffffff;
 }
 
-html.dark .corex-sidebar-logo span {
+html.dark .corex-sidebar-logo .corex-logo-accent {
     color: #1cb8e0;
 }
 
@@ -1892,7 +1892,7 @@ main#appScroll {
     color: #0a1628;
 }
 
-.corex-sidebar-logo span {
+.corex-sidebar-logo .corex-logo-accent {
     color: #1cb8e0;
 }
 
@@ -1900,7 +1900,7 @@ html.dark .corex-sidebar-logo {
     color: #ffffff;
 }
 
-html.dark .corex-sidebar-logo span {
+html.dark .corex-sidebar-logo .corex-logo-accent {
     color: #1cb8e0;
 }
 
