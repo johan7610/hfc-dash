@@ -1646,6 +1646,13 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::put('/', [\App\Http\Controllers\Admin\DevSettingsController::class, 'update'])->name('update');
     });
 
+    // Developer Users — System Owner / Developer roster, visible across all
+    // agencies (cross-agency owner view). See .ai/specs/developer-users.md.
+    Route::middleware('owner_only')->prefix('admin/developer-users')->name('admin.developer-users.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Admin\DeveloperUserController::class, 'index'])->name('index');
+        Route::post('/{userId}/toggle', [\App\Http\Controllers\Admin\DeveloperUserController::class, 'toggleActive'])->name('toggle');
+    });
+
     // Agency Management — index/create/store/destroy/toggle-active are owner-only.
     Route::middleware('owner_only')->prefix('settings/agencies')->name('agencies.')->group(function () {
         Route::get('/',              [\App\Http\Controllers\Admin\AgencyController::class, 'index'])->name('index');
