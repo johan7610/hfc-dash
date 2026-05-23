@@ -677,7 +677,12 @@ class MarketIntelligenceController extends Controller
         }
 
         $tps = $query
-            ->orderByDesc('strong_match_count')
+            // PHASE-9E-TODO: ORDER BY strong_match_count was timing out at 30s due to
+            // correlated subquery in SELECT being computed for every tracked_property
+            // before sort. Temporarily ordering by updated_at only. Proper fix is to
+            // denormalise strong_match_count as an indexed column on tracked_properties,
+            // maintained via observer on prospecting_buyer_matches changes.
+            // See Phase 9d.1 hang investigation 2026-05-23.
             ->orderByDesc('updated_at')
             ->paginate(50)
             ->withQueryString();
