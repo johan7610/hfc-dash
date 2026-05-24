@@ -12,7 +12,7 @@
      x-init="
         document.addEventListener('click', (e) => {
             const tabBtn = e.target.closest('[data-prop-tab]');
-            if (tabBtn) console.log('[unsaved-debug] tab click', tabBtn.getAttribute('data-prop-tab'), 'formDirty=', formDirty, 'modalOpen=', unsavedModalOpen);
+            console.log('[unsaved-debug] click target=', e.target.tagName, e.target.className?.toString().slice(0,60), 'tabBtn=', tabBtn && tabBtn.getAttribute('data-prop-tab'), 'formDirty=', formDirty, 'modalOpen=', unsavedModalOpen);
             if (!formDirty || unsavedModalOpen) return;
             if (tabBtn) {
                 const key = tabBtn.getAttribute('data-prop-tab');
