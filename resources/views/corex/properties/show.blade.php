@@ -12,6 +12,17 @@
      x-init="
         document.addEventListener('click', (e) => {
             if (!formDirty || unsavedModalOpen) return;
+            const tabBtn = e.target.closest('[data-prop-tab]');
+            if (tabBtn) {
+                const key = tabBtn.getAttribute('data-prop-tab');
+                if (key && key !== activeTab) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    pendingNavTab = key;
+                    unsavedModalOpen = true;
+                }
+                return;
+            }
             const a = e.target.closest('a[href]');
             if (!a) return;
             const href = a.getAttribute('href');
@@ -1091,7 +1102,8 @@
                 @continue
             @endif
             <button type="button"
-                    @click="if (formDirty) { pendingNavTab = '{{ $tab['key'] }}'; unsavedModalOpen = true; } else { activeTab = '{{ $tab['key'] }}'; }"
+                    data-prop-tab="{{ $tab['key'] }}"
+                    @click="activeTab = '{{ $tab['key'] }}'"
                     :class="activeTab === '{{ $tab['key'] }}' ? 'border-b-2 border-sky-500 bg-sky-500/5' : 'border-b-2 border-transparent'"
                     :style="activeTab === '{{ $tab['key'] }}' ? 'color:var(--brand-icon);' : 'color:var(--text-secondary);'"
                     class="px-6 py-4 text-sm font-semibold whitespace-nowrap flex-shrink-0 transition-colors duration-150 outline-none focus:outline-none"
