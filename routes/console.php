@@ -136,6 +136,13 @@ Schedule::command('corex:leave:send-reminders')->dailyAt('06:00')->onOneServer()
 // P24 location tree sync — monthly on the 1st at 02:00
 Schedule::command('p24:sync-locations')->monthlyOn(1, '02:00')->withoutOverlapping();
 
+// Demo reset — wipe [DEMO]-prefixed data and reseed daily at 03:00.
+// Only runs when APP_ENV is local or demo (guarded inside the commands).
+if (in_array(app()->environment(), ['local', 'demo'], true)) {
+    Schedule::command('demo:cleanup --force')->dailyAt('03:00')->withoutOverlapping();
+    Schedule::command('demo:seed')->dailyAt('03:05')->withoutOverlapping();
+}
+
 // Mandate expiry — daily at 01:00. Marks stock properties whose expiry_date
 // has passed as 'expired' and fires Mandate\MandateExpired domain events.
 // Spec: .ai/specs/corex-domain-events-spec.md (Wave 6 deferred wiring).

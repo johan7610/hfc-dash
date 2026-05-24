@@ -820,8 +820,8 @@ use App\Http\Controllers\CoreX\RoleManagerController as CoreXRoleManagerControll
 
 Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::get('/', [CommandCenterDashboardController::class, 'today'])->name('corex.dashboard');
-    Route::get('/command-center/today', [CommandCenterDashboardController::class, 'today'])->name('command-center.today');
-    Route::get('/command-center/today/cards', [CommandCenterDashboardController::class, 'todayCards'])->name('command-center.today.cards');
+    Route::get('/command-center/Today', [CommandCenterDashboardController::class, 'today'])->name('command-center.today');
+    Route::get('/command-center/Today/cards', [CommandCenterDashboardController::class, 'todayCards'])->name('command-center.today.cards');
     Route::get('/legacy-dashboard', [CommandCenterDashboardController::class, 'index'])->middleware('permission:view_dashboard')->name('corex.dashboard.legacy');
 
     // ── Notifications ──

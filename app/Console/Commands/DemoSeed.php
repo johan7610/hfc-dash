@@ -7,12 +7,12 @@ use Illuminate\Console\Command;
 class DemoSeed extends Command
 {
     protected $signature = 'demo:seed';
-    protected $description = 'Seed demo data for local testing (APP_ENV=local only)';
+    protected $description = 'Seed demo data (APP_ENV=local or demo only)';
 
     public function handle(): int
     {
-        if (!app()->environment('local')) {
-            $this->error('Refusing to seed demo data — APP_ENV is not local (current: ' . app()->environment() . ')');
+        if (!in_array(app()->environment(), ['local', 'demo'], true)) {
+            $this->error('Refusing to seed demo data — APP_ENV must be local or demo (current: ' . app()->environment() . ')');
             return self::FAILURE;
         }
 

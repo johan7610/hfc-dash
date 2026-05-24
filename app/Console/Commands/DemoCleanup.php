@@ -12,8 +12,8 @@ class DemoCleanup extends Command
 
     public function handle(): int
     {
-        if (!app()->environment('local')) {
-            $this->error('Refusing — APP_ENV is not local.');
+        if (!in_array(app()->environment(), ['local', 'demo'], true)) {
+            $this->error('Refusing — APP_ENV must be local or demo (current: ' . app()->environment() . ')');
             return self::FAILURE;
         }
 

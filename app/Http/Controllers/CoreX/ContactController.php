@@ -373,6 +373,9 @@ class ContactController extends Controller
         // Remove bypass fields before creating
         unset($data['bypass_duplicate_check'], $data['override_reason']);
         $data['created_by_user_id'] = $user->id;
+        $data['branch_id'] = $user->branch_id
+            ?? \DB::table('branches')->where('agency_id', $agencyId)->min('id')
+            ?? 1;
 
         $contact = Contact::create($data);
 
