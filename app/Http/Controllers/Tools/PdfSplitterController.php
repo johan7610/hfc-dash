@@ -63,13 +63,22 @@ class PdfSplitterController extends Controller
 
         $rows = Property::query()
             ->visibleTo($request->user())
-            ->searchAddress($q)
+            ->where(function ($w) use ($q) {
+                $w->where('address', 'like', "%{$q}%")
+                  ->orWhere('street_name', 'like', "%{$q}%")
+                  ->orWhere('street_number', 'like', "%{$q}%")
+                  ->orWhere('suburb', 'like', "%{$q}%")
+                  ->orWhere('city', 'like', "%{$q}%")
+                  ->orWhere('complex_name', 'like', "%{$q}%")
+                  ->orWhere('unit_number', 'like', "%{$q}%")
+                  ->orWhere('property_number', 'like', "%{$q}%");
+            })
             ->limit(12)
-            ->get(['id', 'address', 'suburb', 'city', 'title', 'property_number']);
+            ->get(['id', 'address', 'suburb', 'city', 'property_number']);
 
         return response()->json($rows->map(fn ($p) => [
             'id'    => $p->id,
-            'label' => trim(($p->title ?: $p->address) . ($p->suburb ? ' — ' . $p->suburb : '')),
+            'label' => trim(($p->address ?: '(no address)') . ($p->suburb ? ' — ' . $p->suburb : '')),
             'ref'   => $p->property_number,
         ]));
     }
