@@ -537,17 +537,28 @@ class Property24ListingMapper
     private function resolvePropertyTypeId(?string $type): ?int
     {
         if (empty($type)) return null;
-        return match (strtolower(trim($type))) {
-            'house', 'freestanding', 'free standing'            => 4,
-            'apartment', 'flat', 'penthouse'                    => 5,
-            'townhouse', 'duplex', 'simplex', 'cluster'        => 6,
-            'vacant land', 'land', 'plot'                       => 8,
-            'farm', 'smallholding', 'small holding'             => 10,
-            'commercial', 'office', 'retail'                    => 11,
-            'industrial'                                        => 12,
-            'garden cottage', 'cottage'                         => 4,
-            default                                             => 4,
+
+        // Normalise: lowercase, replace any non-alphanum with single space, collapse, trim.
+        // Lets us match "Apartment / Flat", "Apartment/Flat", "apartment-flat", etc.
+        $norm = trim(preg_replace('/\s+/', ' ', preg_replace('/[^a-z0-9]+/i', ' ', strtolower($type))));
+
+        $padded = " {$norm} ";
+        $contains = function (string ...$needles) use ($padded): bool {
+            foreach ($needles as $n) {
+                if (str_contains($padded, " {$n} ")) return true;
+            }
+            return false;
         };
+
+        if ($contains('industrial')) return 12;
+        if ($contains('commercial', 'office', 'retail', 'hospitality')) return 11;
+        if ($contains('farm', 'smallholding', 'small holding', 'agricultural')) return 10;
+        if ($contains('vacant land', 'land', 'plot', 'stand', 'erf')) return 8;
+        if ($contains('townhouse', 'duplex', 'simplex', 'cluster')) return 6;
+        if ($contains('apartment', 'flat', 'penthouse')) return 5;
+        if ($contains('house', 'freestanding', 'free standing', 'cottage', 'garden cottage')) return 4;
+
+        return 4; // default: House
     }
 
     private function resolveContactAgentIds(Property $property, int $agencyId): array
