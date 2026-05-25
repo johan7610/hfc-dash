@@ -100,6 +100,14 @@
                                placeholder="e.g. 4123456789">
                     </div>
                     <div>
+                        <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">PPRA Registration Number</label>
+                        <input type="text" name="ppra_number" value="{{ old('ppra_number', $agency->ppra_number) }}"
+                               class="w-full rounded-md px-3 py-2 text-sm"
+                               style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                               placeholder="e.g. 2023116041">
+                        <p class="text-[10px] mt-1" style="color:var(--text-muted);">The agency's per-entity registration with the Property Practitioners Regulatory Authority (separate from individual practitioner FFCs).</p>
+                    </div>
+                    <div>
                         <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">FFC No</label>
                         <input type="text" name="ffc_no" value="{{ old('ffc_no', $agency->ffc_no) }}"
                                class="w-full rounded-md px-3 py-2 text-sm"
@@ -534,6 +542,13 @@
                                            style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);"
                                            name="vat_no" value="{{ old('vat_no', $branch->vat_no) }}"
                                            placeholder="e.g. 4123456789">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">PPRA Number Override</label>
+                                    <input class="w-full rounded-md px-3 py-2 text-sm"
+                                           style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);"
+                                           name="ppra_number" value="{{ old('ppra_number', $branch->ppra_number) }}"
+                                           placeholder="leave blank to inherit from agency">
                                 </div>
                                 <div>
                                     <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">FFC No Override</label>

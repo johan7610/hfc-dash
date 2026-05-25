@@ -163,6 +163,7 @@ class BranchAssignmentController extends Controller
             'reg_no'       => ['nullable', 'string', 'max:255'],
             'vat_no'       => ['nullable', 'string', 'max:255'],
             'ffc_no'       => ['nullable', 'string', 'max:255'],
+            'ppra_number'  => ['nullable', 'string', 'max:32'],
             'fic_no'       => ['nullable', 'string', 'max:255'],
             'p24_agency_id' => ['nullable', 'string', 'max:32'],
             'logo'         => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],

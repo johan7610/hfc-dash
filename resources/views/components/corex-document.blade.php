@@ -65,11 +65,26 @@
                         {{ $d('trading_name') ?: $d('name') }}
                     </div>
                     <div class="corex-header-details">
-                        @if($d('ffc_no'))
-                            PPRA: {{ $d('ffc_no') }}
+                        @php
+                            // Phase 9c-1 — PPRA and FFC are distinct under PPA 22/2019.
+                            // PPRA = per-agency/branch permanent registration; FFC =
+                            // certificate number. Both rendered when populated; PPRA
+                            // shows a placeholder when missing so a compliance check
+                            // catches the gap on any printed document.
+                            $pprraValue = $d('ppra_number');
+                            $ffcValue   = $d('ffc_no');
+                            $ficValue   = $d('fic_no');
+                        @endphp
+                        @if($pprraValue)
+                            PPRA: {{ $pprraValue }}
+                        @else
+                            <span style="color: #b91c1c;">PPRA: [not configured]</span>
                         @endif
-                        @if($d('fic_no'))
-                            &nbsp;|&nbsp; FIC: {{ $d('fic_no') }}
+                        @if($ffcValue)
+                            &nbsp;|&nbsp; FFC: {{ $ffcValue }}
+                        @endif
+                        @if($ficValue)
+                            &nbsp;|&nbsp; FIC: {{ $ficValue }}
                         @endif
                     </div>
                 </div>

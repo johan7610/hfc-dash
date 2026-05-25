@@ -73,12 +73,20 @@ abstract class BaseSignatureMail extends Mailable
     protected function getAgentFooter(): array
     {
         $agency = null;
+        $branch = null;
         if ($this->sendingAgent) {
             $agencyId = $this->sendingAgent->effectiveAgencyId();
             $agency = $agencyId ? Agency::find($agencyId) : Agency::where('slug', 'hfc-coastal')->first();
+            // Phase 9c-1 — resolve sending agent's branch so PPRA + FFC can
+            // cascade branch → agency.
+            $branchId = $this->sendingAgent->effectiveBranchId();
+            $branch   = $branchId ? \App\Models\Branch::find($branchId) : null;
         } else {
             $agency = Agency::where('slug', 'hfc-coastal')->first();
         }
+
+        // Branch-or-agency cascade for regulatory numbers.
+        $agencyPpra = $branch?->ppra_number ?: ($agency?->ppra_number ?? null);
 
         if (!$this->sendingAgent) {
             return [
@@ -89,6 +97,7 @@ abstract class BaseSignatureMail extends Mailable
                 'cell'             => null,
                 'fax'              => null,
                 'ffc_number'       => null,
+                'agency_ppra_number' => $agencyPpra,
                 'website'          => $agency->email ?? null,
                 'agent_photo_url'  => null,
                 'logo_url'         => $agency && $agency->logo_path ? asset('storage/' . $agency->logo_path) : null,
@@ -108,6 +117,7 @@ abstract class BaseSignatureMail extends Mailable
             'cell'             => $agent->cell ?? null,
             'fax'              => $agent->fax ?? null,
             'ffc_number'       => $agent->ffc_number ?? null,
+            'agency_ppra_number' => $agencyPpra,
             'website'          => $agent->website ?? ($agency->email ?? null),
             'agent_photo_url'  => $agent->agent_photo_path ? asset('storage/' . $agent->agent_photo_path) : null,
             'logo_url'         => $agency && $agency->logo_path ? asset('storage/' . $agency->logo_path) : null,

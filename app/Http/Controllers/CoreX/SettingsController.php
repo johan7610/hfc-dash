@@ -376,6 +376,7 @@ class SettingsController extends Controller
             'reg_no'           => ['nullable', 'string', 'max:255'],
             'vat_no'           => ['nullable', 'string', 'max:255'],
             'ffc_no'           => ['nullable', 'string', 'max:255'],
+            'ppra_number'      => ['nullable', 'string', 'max:32'],
             'fic_no'           => ['nullable', 'string', 'max:255'],
             'email_disclaimer' => ['nullable', 'string', 'max:2000'],
             'popi_url'         => ['nullable', 'string', 'max:500'],
@@ -422,7 +423,7 @@ class SettingsController extends Controller
         $overrides = $request->only([
             'trading_name', 'tagline', 'address', 'phone', 'phone_label',
             'phone_secondary', 'phone_secondary_label', 'fax', 'email',
-            'reg_no', 'vat_no', 'ffc_no', 'fic_no', 'name',
+            'reg_no', 'vat_no', 'ffc_no', 'ppra_number', 'fic_no', 'name',
         ]);
 
         // Create a clone with overrides applied

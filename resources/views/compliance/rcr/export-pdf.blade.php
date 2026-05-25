@@ -42,7 +42,8 @@
     <div>Submission deadline: {{ $submission->submission_deadline->format('j F Y') }}</div>
     <hr style="border:0;border-top:1px solid #cbd5e1;margin:8px 0;">
     <div><strong>Accountable institution:</strong> {{ $agency?->name ?? '—' }}</div>
-    <div><strong>PPRA / FFC reference:</strong> {{ $agency?->ffc_no ?? '—' }}</div>
+    <div><strong>PPRA registration:</strong> {{ $agency?->ppra_number ?? '—' }}</div>
+    <div><strong>FFC:</strong> {{ $agency?->ffc_no ?? '—' }}</div>
     <div><strong>FIC reference:</strong> {{ $agency?->fic_no ?? '—' }}</div>
     <div><strong>Submitted by:</strong> {{ $submission->submitter?->name ?? $submission->assignedCo?->name ?? '(draft — unsigned)' }}</div>
     <div><strong>Submitted on:</strong> {{ $submission->submitted_at?->format('j F Y H:i') ?? 'Draft (not yet submitted)' }}</div>

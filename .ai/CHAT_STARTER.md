@@ -1,6 +1,6 @@
 # CoreX OS — Chat Starter
 > Auto-maintained by VS Code per CLAUDE.md rule. Paste into a new Claude chat to load context.
-> Last updated: 2026-05-25 by prompts-E+F (POPIA columns + Presentations V2 phases 4-7 audits)
+> Last updated: 2026-05-25 by prompt-G (Phase 9c-1 PPRA number per agency + branch)
 
 <!-- ============================================================ -->
 <!-- STABLE SECTION — rarely changes                              -->
@@ -62,7 +62,10 @@
 ### 3.2 IN FLIGHT
 
 - **Branch `feature/map-workspace-overhaul`** — MIC collision fix landed (A.3.4); Tonight: M22 test fix + universal-signature audit + Phase 9c investigation + three small fixes (419 / CMA logo / Tools logo) shipped on same branch.
-- **Phase 9c — POPIA blockers** — investigation complete (2026-05-25). Two reports filed: `.ai/audits/mic-prospect-collision-investigation-2026-05.md` (Phase 9c initial findings) + `.ai/audits/popia-columns-investigation-2026-05-25.md` (deep column mapping). **Sharpened finding:** `ffc_no` and PPRA number are legally distinct under PPA 22/2019 (FFC = annual practitioner licence; PPRA reg = agency permanent ID). A new `agencies.ppra_number` column IS genuinely needed — NOT a rename. Also: `popi_url` exists but NULL for HFC; no `information_officer_user_id` column. Awaiting Johan's decisions on (a) PPRA per-agency vs per-branch, (b) Information Officer as User FK vs free-text + per-agency or per-branch, (c) privacy policy per-agency external link vs system-wide CoreX-hosted page.
+- **Phase 9c — POPIA blockers** — three-part build in flight.
+  - **9c-1 PPRA number ✅** — `agencies.ppra_number` + `branches.ppra_number` columns added (nullable string(32)). Settings UI fields wired in agency + branch panels (PPRA above FFC). Render fixed: `corex-document.blade.php` mislabel ("PPRA" was reading `ffc_no`) corrected; PPRA + FFC now render as separate lines with branch→agency cascade and a `[not configured]` placeholder when missing. Email agent-footer gains a PPRA line beneath FFC. RCR export-pdf relabel done. Population: Tinker after deploy (HFC numbers TBD per branch).
+  - **9c-2 Information Officer** — pending (mirror FICA appointment pattern).
+  - **9c-3 Privacy policy / Company Documents** — pending (admin-managed content, public `/legal/{token}` link, mirrors `presentation_dispatches` token pattern).
 - **Next:** Andre — Staging deploy + live DB pull after batch lands. Figure-matching audit on staging.
 
 ### 3.3 SPECCED / partial — not fully built
@@ -89,6 +92,7 @@
 
 ## 4. Recent decisions log (last 15, newest top)
 
+- **2026-05-25** — Phase 9c-1 (PPRA number) shipped: agencies + branches columns + settings UI + corex-document mislabel fix + agent-footer + RCR export. Branch-overrides-agency cascade verified via Tinker.
 - **2026-05-25** — Presentations V2 phases 4–7 audit completed; report at `.ai/audits/presentations-v2-phases-4-7-audit-2026-05-25.md`. All four phases ✅ fully built; moved into section 3.1 LIVE. End-to-end "4-month-old link → banner → refresh request → agent notified" flow operational.
 - **2026-05-25** — POPIA columns investigation completed; report at `.ai/audits/popia-columns-investigation-2026-05-25.md`. Conclusion: `ffc_no` ≠ PPRA reg number (legally distinct under PPA 22/2019). Phase 9c rename-vs-add decision = ADD new column.
 - **2026-05-25** — CLAUDE.md tightened: subagents producing audit/report files MUST write to disk via file-write tools, not return content in chat only (response to tonight's universal-signature subagent that skipped the write step).
@@ -103,7 +107,6 @@
 - **2026-05-25** — Map modes locked: Opportunities / Analyse / Seller / Buyer (Opportunities + Analyse align with MIC tabs).
 - **2026-05-25** — A.3 + A.2.7 + M22 test + MIC investigation landed.
 - **2026-04-29** — Architecture: Claude owns template design centrally. Hand-crafted Blade with declarative metadata, bypass CDS UI. Templates 116/117/119 first under this model.
-- **2026-04-22** — FICA module live deploy with corrections cycle, agent doc upload, auto-file to contact drive.
 
 ## 5. Outstanding small fixes (none blocking)
 

@@ -28,6 +28,7 @@ class Branch extends Model
         'reg_no',
         'vat_no',
         'ffc_no',
+        'ppra_number',
         'fic_no',
         'logo_path',
         'p24_agency_id',
