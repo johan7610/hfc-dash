@@ -298,17 +298,21 @@ final class MapActivityController extends Controller
 
     /**
      * Phase A.2.1 — "Prospect Now" on a competitor active listing.
+     * Phase A.2.7 — destination changed from opportunities.show to the
+     * seller-outreach compose flow. A prospecting_listings row is the route
+     * model binding for compose, so we find-or-create one from the MRCR/PAL
+     * source data when the map record isn't already a native prospecting
+     * listing.
      *
-     * The client passes through:
-     *   - tracked_property_id when known (prospecting_listings has it pre-resolved
-     *     ~100% of the time per the investigation),
-     *   - OR address + lat/lng + suburb when not (active_listings from
-     *     market_report_comp_rows / presentation_active_listings — no FK).
-     *
-     * When tracked_property_id is null we call the universal match-or-create
-     * service (CLAUDE.md non-negotiable #10) using the provided facts. The
-     * resolved tp_id then flows back to the client via $extras so it can
-     * redirect to market-intelligence.opportunities.show.
+     * Record-id shape on the map today:
+     *   "mrcr:N"  — comes from a market_report_comp_rows row_type=listing.
+     *               Find-or-create a prospecting_listing keyed by
+     *               (agency, portal_source='p24', portal_ref='mrcr:N')
+     *               so the same MRCR row always maps to the same
+     *               prospecting_listing record (idempotent).
+     *   "pal:N"   — comes from presentation_active_listings. Same idea,
+     *               keyed by portal_ref='pal:N'.
+     *   integer   — a future direct prospecting_listings source. Use as-is.
      */
     private function prospectLaunched(array $data, int $agencyId, int $userId, array &$extras): ?MapProspectLaunched
     {
@@ -322,9 +326,6 @@ final class MapActivityController extends Controller
         }
 
         if ($tp === null) {
-            // Resolve via match-or-create. The map carries minimal facts —
-            // address, GPS, suburb — same shape every other ingestion path
-            // produces.
             $facts = array_filter([
                 'address'   => $data['address']   ?? null,
                 'latitude'  => isset($data['latitude'])  ? (float) $data['latitude']  : null,
@@ -352,8 +353,16 @@ final class MapActivityController extends Controller
             }
         }
 
-        $extras['tracked_property_id'] = (int) $tp->id;
-        $extras['redirect_url']        = route('market-intelligence.opportunities.show', $tp);
+        // A.2.7 — route to the compose flow, find-or-create prospecting_listing
+        // when needed. Errors fall back to opportunities.show so a hiccup at
+        // the listing-create step never traps the agent.
+        $plId = $this->resolveProspectingListingId($data, $agencyId, $userId, (int) $tp->id);
+
+        $extras['tracked_property_id']    = (int) $tp->id;
+        $extras['prospecting_listing_id'] = $plId;
+        $extras['redirect_url']           = $plId
+            ? route('seller-outreach.entry.from-prospecting', ['prospectingListingId' => $plId])
+            : route('market-intelligence.opportunities.show', $tp);
 
         return new MapProspectLaunched(
             trackedProperty: $tp,
@@ -362,5 +371,69 @@ final class MapActivityController extends Controller
             locationKey:     (string) $data['location_key'],
             source:          (string) $data['source'],
         );
+    }
+
+    /**
+     * Find-or-create a prospecting_listings row to back the compose flow.
+     * Returns null on failure (caller falls back to opportunities.show).
+     *
+     * Idempotency key is (agency_id, portal_source, portal_ref) — the
+     * unique index on prospecting_listings. For MRCR/PAL records the
+     * portal_ref carries the layer-prefixed source ref ("mrcr:N" / "pal:N")
+     * so the same map record always maps to the same listing.
+     */
+    private function resolveProspectingListingId(array $data, int $agencyId, int $userId, int $trackedPropertyId): ?int
+    {
+        $recordId = (string) ($data['record_id'] ?? '');
+        if ($recordId === '') return null;
+
+        // Case 1 — record_id is purely numeric → native prospecting_listing.
+        if (ctype_digit($recordId)) {
+            $native = \DB::table('prospecting_listings')
+                ->where('id', (int) $recordId)
+                ->where('agency_id', $agencyId)
+                ->whereNull('deleted_at')
+                ->value('id');
+            return $native ? (int) $native : null;
+        }
+
+        // Case 2 — layer-prefixed (mrcr:N / pal:N / deal:N) → synthesise.
+        if (!preg_match('/^(mrcr|pal|deal):\d+$/', $recordId)) return null;
+
+        $existing = \DB::table('prospecting_listings')
+            ->where('agency_id', $agencyId)
+            ->where('portal_source', 'p24')   // schema enum; synthetic entries default to p24
+            ->where('portal_ref', $recordId)
+            ->whereNull('deleted_at')
+            ->value('id');
+        if ($existing) return (int) $existing;
+
+        // Create. Pull price from MRCR/PAL when we have it on the payload.
+        try {
+            $now = now();
+            $id = \DB::table('prospecting_listings')->insertGetId([
+                'agency_id'           => $agencyId,
+                'captured_by_user_id' => $userId,
+                'tracked_property_id' => $trackedPropertyId,
+                'portal_source'       => 'p24',
+                'portal_ref'          => $recordId,
+                'portal_url'          => '',   // not known for MRCR-derived listings; agent fills via compose flow
+                'address'             => mb_substr((string) ($data['address'] ?? 'Unknown'), 0, 255),
+                'suburb'              => mb_substr((string) ($data['suburb'] ?? ''), 0, 100),
+                'price'               => 0,    // not known; the compose form is what the agent uses next
+                'first_seen_at'       => $now,
+                'last_seen_at'        => $now,
+                'is_active'           => true,
+                'created_at'          => $now,
+                'updated_at'          => $now,
+            ]);
+            return (int) $id;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('resolveProspectingListingId create failed', [
+                'err' => $e->getMessage(),
+                'record_id' => $recordId,
+            ]);
+            return null;
+        }
     }
 }

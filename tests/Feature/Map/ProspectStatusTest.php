@@ -183,6 +183,147 @@ final class ProspectStatusTest extends TestCase
         });
     }
 
+    // ── A.2.7 — collision-detection + compose-redirect fixes ─────────────
+
+    /** M72 — Tucker Mews case: HFC property at GPS X + Portal Stock record
+     *        at GPS X with NO TrackedProperty linkage between them. The
+     *        GPS-proximity fallback must catch this. */
+    public function test_m72_held_via_gps_fallback_when_no_tracked_property_link(): void
+    {
+        [$agencyId, $userId] = $this->seedAgency();
+        // Property exists directly without a tracked_properties link.
+        $propertyId = $this->seedProperty($agencyId, $userId, status: 'active');
+        // NO seedTrackedProperty — the test scenario is "HFC property exists,
+        // no TP promoted_to_property_id points at it".
+
+        $status = app(\App\Services\Map\MapProspectStatusService::class)->resolve([
+            'address'   => '18 Golf Course Road',
+            'latitude'  => -30.84,
+            'longitude' => 30.39,
+            'suburb'    => 'Uvongo',
+        ], $agencyId, $userId);
+
+        $this->assertSame('held', $status['status'],
+            'GPS-proximity fallback must find the unlinked HFC property');
+        $this->assertSame($propertyId, $status['property_id']);
+    }
+
+    /** M73 — Prospect Now redirect_url points at the compose flow, not
+     *        opportunities.show. */
+    public function test_m73_prospect_now_redirects_to_compose_route(): void
+    {
+        [$agencyId, $userId] = $this->seedAgency();
+
+        $resp = $this->actingAs(User::find($userId))->postJson(route('corex.map.activity.log'), [
+            'action'       => 'prospect_launched',
+            'category'     => 'active_listings',
+            'record_id'    => 'mrcr:9001',
+            'location_key' => 'sha256:m73',
+            'source'       => 'composite_row',
+            'address'      => '99 New Street, Margate',
+            'latitude'     => -30.87,
+            'longitude'    => 30.37,
+            'suburb'       => 'Margate',
+        ]);
+
+        $resp->assertOk();
+        $url = $resp->json('redirect_url');
+        $this->assertIsString($url);
+        $this->assertStringContainsString('/prospecting/', $url,
+            'redirect_url must point at the compose route');
+        $this->assertStringContainsString('/outreach/compose', $url);
+        $this->assertStringNotContainsString('opportunities', $url,
+            'no longer goes to opportunities.show');
+    }
+
+    /** M74 — MRCR/PAL-sourced record creates a backing prospecting_listing
+     *        the first time it's prospected. */
+    public function test_m74_mrcr_record_creates_prospecting_listing(): void
+    {
+        [$agencyId, $userId] = $this->seedAgency();
+
+        $before = DB::table('prospecting_listings')->count();
+
+        $resp = $this->actingAs(User::find($userId))->postJson(route('corex.map.activity.log'), [
+            'action'       => 'prospect_launched',
+            'category'     => 'active_listings',
+            'record_id'    => 'mrcr:9002',
+            'location_key' => 'sha256:m74',
+            'source'       => 'composite_row',
+            'address'      => '88 Comp Road',
+            'latitude'     => -30.87,
+            'longitude'    => 30.37,
+            'suburb'       => 'Margate',
+        ]);
+        $resp->assertOk();
+
+        $after = DB::table('prospecting_listings')->count();
+        $this->assertSame($before + 1, $after, 'a prospecting_listing must have been created');
+
+        $plId = $resp->json('prospecting_listing_id');
+        $this->assertIsInt($plId);
+        $row = DB::table('prospecting_listings')->where('id', $plId)->first();
+        $this->assertSame('mrcr:9002', $row->portal_ref,
+            'portal_ref carries the source record id for idempotency');
+        $this->assertSame((int) $agencyId, (int) $row->agency_id);
+    }
+
+    /** M75 — re-firing prospect_launched on the same MRCR record reuses the
+     *        existing prospecting_listing (no duplicate). */
+    public function test_m75_repeat_prospect_does_not_duplicate_listing(): void
+    {
+        [$agencyId, $userId] = $this->seedAgency();
+        $user = User::find($userId);
+
+        $payload = [
+            'action'       => 'prospect_launched',
+            'category'     => 'active_listings',
+            'record_id'    => 'mrcr:9003',
+            'location_key' => 'sha256:m75',
+            'source'       => 'composite_row',
+            'address'      => '7 Repeat Road',
+            'latitude'     => -30.88,
+            'longitude'    => 30.36,
+            'suburb'       => 'Margate',
+        ];
+        $this->actingAs($user)->postJson(route('corex.map.activity.log'), $payload)->assertOk();
+        $countAfterFirst = DB::table('prospecting_listings')->count();
+
+        // Second hit — same record_id, same agency, should reuse the row.
+        $resp2 = $this->actingAs($user)->postJson(route('corex.map.activity.log'), $payload);
+        $resp2->assertOk();
+        $countAfterSecond = DB::table('prospecting_listings')->count();
+
+        $this->assertSame($countAfterFirst, $countAfterSecond,
+            'idempotency: same MRCR record must not create a duplicate listing');
+    }
+
+    /** M76 — findExistingMatch can resolve a TrackedProperty by GPS even
+     *        when the supplied address string differs significantly from
+     *        what's stored. (The TP-strategy chain already supports this
+     *        via Strategy 2 GPS proximity — this test pins the behaviour
+     *        so a future refactor doesn't regress.) */
+    public function test_m76_find_existing_match_resolves_by_gps_when_address_differs(): void
+    {
+        [$agencyId, $userId] = $this->seedAgency();
+        $propertyId = $this->seedProperty($agencyId, $userId, status: 'active');
+        $this->seedTrackedProperty($agencyId, promotedTo: $propertyId,
+            lat: -30.84, lng: 30.39, address: '18 Golf Course Road', suburb: 'Uvongo');
+
+        $matcher = app(\App\Services\Prospecting\TrackedPropertyMatchOrCreateService::class);
+        // Supply a divergent address string but identical GPS — GPS strategy
+        // in resolveMatch should still hit.
+        $tp = $matcher->findExistingMatch($agencyId, [
+            'address'   => 'Unknown Place, completely different name',
+            'latitude'  => -30.84,
+            'longitude' => 30.39,
+            'suburb'    => 'Uvongo',
+        ]);
+
+        $this->assertNotNull($tp, 'GPS match should resolve TP despite divergent address');
+        $this->assertSame($propertyId, $tp->promoted_to_property_id);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────
 
     private function seedAgency(): array

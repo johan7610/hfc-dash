@@ -61,22 +61,23 @@ final class MapProspectStatusService
             return ['status' => 'available'];
         }
 
+        // A.2.7 — two-layer match. First the TP-based 5-strategy resolver
+        // (handles addresses/scheme matches); when that yields no usable
+        // Property, fall through to a direct GPS-proximity lookup against
+        // the `properties` table itself. HFC has properties (Tucker Mews
+        // §9, Madeira Gardens, etc.) that exist as Property rows directly
+        // without a TrackedProperty linkage; the GPS fallback finds them.
+        $property = null;
         $tp = $this->matcher->findExistingMatch($agencyId, $factsForLookup);
-        if ($tp === null) {
-            return ['status' => 'available'];
+        if ($tp && $tp->promoted_to_property_id) {
+            $property = Property::withoutGlobalScopes()
+                ->where('id', $tp->promoted_to_property_id)
+                ->where('agency_id', $agencyId)
+                ->first();
         }
-
-        // No promoted Property → HFC has prospect intel but no listing.
-        // Treat as available — agent can continue prospecting.
-        if (!$tp->promoted_to_property_id) {
-            return ['status' => 'available'];
+        if ($property === null) {
+            $property = $this->findHfcPropertyByGps($factsForLookup, $agencyId);
         }
-
-        /** @var ?Property $property */
-        $property = Property::withoutGlobalScopes()
-            ->where('id', $tp->promoted_to_property_id)
-            ->where('agency_id', $agencyId)
-            ->first();
         if ($property === null) {
             return ['status' => 'available'];
         }
@@ -118,6 +119,36 @@ final class MapProspectStatusService
         // Unknown / new status — safest to allow prospect; client falls
         // through to the 'available' default.
         return ['status' => 'available'];
+    }
+
+    /**
+     * A.2.7 — GPS-proximity Property fallback. Many HFC properties exist
+     * as direct Property rows without a TrackedProperty linkage, so the
+     * TP-based matcher misses them. Coordinate-rounded lookup catches
+     * those — uses the same 5dp ≈ ~1m / ~20m bbox precedent A.1 set for
+     * location grouping.
+     *
+     * Returns the most-recently-updated matching property to prefer
+     * current state when an agent has both an active mandate and a
+     * historic sold record at the same address.
+     */
+    private function findHfcPropertyByGps(array $facts, int $agencyId): ?Property
+    {
+        if (!isset($facts['latitude'], $facts['longitude'])) return null;
+        $lat = (float) $facts['latitude'];
+        $lng = (float) $facts['longitude'];
+        if ($lat === 0.0 || $lng === 0.0) return null;
+
+        // ~20m bounding box. 0.00018° ≈ 20m at SA coastal latitudes (1°
+        // lat ≈ 111km; 1° lng ≈ 95km at -30°).
+        $box = 0.00018;
+        return Property::withoutGlobalScopes()
+            ->where('agency_id', $agencyId)
+            ->whereNull('deleted_at')
+            ->whereBetween('latitude',  [$lat - $box, $lat + $box])
+            ->whereBetween('longitude', [$lng - $box, $lng + $box])
+            ->orderByDesc('updated_at')
+            ->first();
     }
 
     private function resolveAgentName(?int $agentId): ?string
