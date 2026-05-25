@@ -99,8 +99,17 @@
                     </div>
                 @endif
                 <div class="min-w-0 flex-1">
+                    @php
+                        $listingTypeLabel = match(strtolower((string) ($property->listing_type ?? 'sale'))) {
+                            'rental' => 'For Rent',
+                            default  => 'For Sale',
+                        };
+                        $statusLabel = ucwords(str_replace('_', ' ', (string) ($property->status ?: 'Draft')));
+                        $brandPillStyle = 'background:color-mix(in srgb, var(--brand-default) 13%, transparent); color:var(--brand-default); border:1px solid color-mix(in srgb, var(--brand-default) 27%, transparent);';
+                    @endphp
                     <div class="flex items-center gap-1.5 flex-wrap">
-                        <span class="ds-badge {{ $scBadge }}">{{ ucfirst($property->status ?: 'Draft') }}</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full font-semibold" style="{{ $brandPillStyle }}">{{ $listingTypeLabel }}</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full font-semibold" style="{{ $brandPillStyle }}">{{ $statusLabel }}</span>
                         @if($property->isPublished())
                             <span class="ds-badge ds-badge-success">Published</span>
                         @endif
@@ -452,8 +461,16 @@
                     <h1 class="text-base font-extrabold leading-tight" style="color:var(--text-primary);">{{ $property->title ?: 'New Property' }}</h1>
                     <div class="text-base font-bold mt-0.5" style="color:var(--brand-default);">{{ $property->formattedPrice() }}</div>
                     <div class="flex items-center gap-2 mt-1 flex-wrap">
-                        <span class="text-xs px-2 py-0.5 rounded-full font-semibold"
-                              style="background:{{ $sc }}22; color:{{ $sc }}; border:1px solid {{ $sc }}44;">{{ ucfirst($property->status) }}</span>
+                        @php
+                            $listingTypeLabel2 = match(strtolower((string) ($property->listing_type ?? 'sale'))) {
+                                'rental' => 'For Rent',
+                                default  => 'For Sale',
+                            };
+                            $statusLabel2 = ucwords(str_replace('_', ' ', (string) ($property->status ?: 'Draft')));
+                            $brandPillStyle2 = 'background:color-mix(in srgb, var(--brand-default) 13%, transparent); color:var(--brand-default); border:1px solid color-mix(in srgb, var(--brand-default) 27%, transparent);';
+                        @endphp
+                        <span class="text-xs px-2 py-0.5 rounded-full font-semibold" style="{{ $brandPillStyle2 }}">{{ $listingTypeLabel2 }}</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full font-semibold" style="{{ $brandPillStyle2 }}">{{ $statusLabel2 }}</span>
                         <span class="text-xs" style="color:var(--text-secondary);">{{ $property->beds }}bd · {{ $property->baths }}ba</span>
                     </div>
                 </div>
