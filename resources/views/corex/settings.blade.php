@@ -92,6 +92,14 @@
                 ])),
             ],
             [
+                'label' => 'PDF Suite',
+                'items' => array_values(array_filter([
+                    $can('calculators.manage')
+                        ? ['key'=>'pdf-suite-labels', 'label'=>'Manage Labels', 'type'=>'link', 'href'=>route('admin.splitter.doc-types.index'), 'keywords'=>'pdf splitter document types labels ocr']
+                        : null,
+                ])),
+            ],
+            [
                 'label' => 'System',
                 'items' => [
                     ['key'=>'system',                'label'=>'System Info & Tools',   'type'=>'section', 'keywords'=>'environment debug'],

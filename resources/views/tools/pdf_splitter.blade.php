@@ -120,14 +120,7 @@
 }
 </style>
 
-<x-page-header title="PDF Pack Splitter" subtitle="OCR-driven splitting of multi-document PDF packs into labelled files." :flush="true">
-    <x-slot:actions>
-        @permission('calculators.manage')
-        <a href="{{ route('admin.splitter.doc-types.index') }}" class="corex-btn-outline text-xs">Manage Labels</a>
-        @endpermission
-        <button type="submit" form="pdf-upload-form" class="corex-btn-primary text-sm">Upload &amp; Split</button>
-    </x-slot:actions>
-</x-page-header>
+<x-page-header title="PDF Pack Splitter" subtitle="OCR-driven splitting of multi-document PDF packs into labelled files." :flush="true" />
 @include('tools.pdf-suite._switcher')
 
 <div class="p-4 lg:p-6">
@@ -159,7 +152,8 @@
             <form id="pdf-upload-form"
                   method="POST"
                   action="{{ route('tools.pdf_splitter.run') }}"
-                  enctype="multipart/form-data">
+                  enctype="multipart/form-data"
+                  x-data="{ hasFile: false }">
                 @csrf
 
                 <div class="field">
@@ -180,11 +174,16 @@
                     <input type="file"
                            id="pdf"
                            name="pdf"
-                           accept="application/pdf">
+                           accept="application/pdf"
+                           @change="hasFile = $event.target.files.length > 0">
                     @error('pdf')
                         <div class="field-error">{{ $message }}</div>
                     @enderror
                 </div>
+
+                <button type="submit" :disabled="!hasFile"
+                        :class="hasFile ? 'corex-btn-primary' : 'opacity-50 cursor-not-allowed corex-btn-primary'"
+                        class="text-sm w-full">Upload &amp; Split</button>
             </form>
         </div>
 
