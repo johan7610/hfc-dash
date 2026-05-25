@@ -427,6 +427,77 @@ document.addEventListener('DOMContentLoaded', function () {
     })();
     if (demoToggleEl) demoToggleEl.checked = includeDemo;
 
+    // ── Phase A.3.3 — URL state sync ──────────────────────────────────────
+    // Shareable links: on load, the URL's query string takes precedence
+    // over the saved-search default + localStorage. After every fetch,
+    // history.replaceState updates the URL so the agent can copy/share it.
+    //
+    // Encoded keys (omitted when at default to keep URLs tidy):
+    //   scope, q, types[], status[], sw,
+    //   pn/px, bdn/bdx, btn/btx, sn/sx, bn/bx, dn/dx, yf/yt
+    function buildUrlStateParams() {
+        const p = new URLSearchParams();
+        const set = (k, v) => { if (v !== null && v !== undefined && v !== '') p.set(k, String(v)); };
+        if (filters.scope && filters.scope !== SCOPE_DEFAULT) set('scope', filters.scope);
+        set('q', filters.search);
+        if (filters.yearFrom !== null) set('yf', filters.yearFrom);
+        if (filters.yearTo   !== null) set('yt', filters.yearTo);
+        if (filters.types.length !== 4) filters.types.forEach(t => p.append('types[]', t));
+        ['priceMin','priceMax','bedroomsMin','bedroomsMax','bathroomsMin','bathroomsMax',
+         'standMin','standMax','buildingMin','buildingMax','domMin','domMax']
+            .forEach(k => { if (filters[k] !== null) set(k, filters[k]); });
+        if (filters.listingStatus.length) filters.listingStatus.forEach(s => p.append('status[]', s));
+        if (filters.soldWindow) set('sw', filters.soldWindow);
+        return p;
+    }
+    function syncUrlState() {
+        try {
+            const p = buildUrlStateParams();
+            const qs = p.toString();
+            const here = window.location.pathname;
+            const next = qs ? (here + '?' + qs) : here;
+            if (next !== window.location.pathname + window.location.search) {
+                window.history.replaceState(null, '', next);
+            }
+        } catch (e) { /* history API guard for very old browsers */ }
+    }
+    function readUrlStateIntoFilters() {
+        const p = new URLSearchParams(window.location.search);
+        if (![...p.keys()].length) return false;
+
+        const intOr = (k, fallback) => {
+            if (!p.has(k)) return fallback;
+            const n = parseInt(p.get(k), 10);
+            return Number.isFinite(n) ? n : fallback;
+        };
+        const arr = (k) => p.getAll(k + '[]').length ? p.getAll(k + '[]') : null;
+
+        if (p.has('scope') && ['my','agency','all'].includes(p.get('scope'))) {
+            filters.scope = (p.get('scope') === 'all' && !SCOPE_IS_OWNER) ? 'agency' : p.get('scope');
+        }
+        if (p.has('q')) filters.search = p.get('q');
+        filters.yearFrom = intOr('yf', filters.yearFrom);
+        filters.yearTo   = intOr('yt', filters.yearTo);
+        const types = arr('types'); if (types) filters.types = types;
+        filters.priceMin     = intOr('priceMin',     filters.priceMin);
+        filters.priceMax     = intOr('priceMax',     filters.priceMax);
+        filters.bedroomsMin  = intOr('bedroomsMin',  filters.bedroomsMin);
+        filters.bedroomsMax  = intOr('bedroomsMax',  filters.bedroomsMax);
+        filters.bathroomsMin = intOr('bathroomsMin', filters.bathroomsMin);
+        filters.bathroomsMax = intOr('bathroomsMax', filters.bathroomsMax);
+        filters.standMin     = intOr('standMin',     filters.standMin);
+        filters.standMax     = intOr('standMax',     filters.standMax);
+        filters.buildingMin  = intOr('buildingMin',  filters.buildingMin);
+        filters.buildingMax  = intOr('buildingMax',  filters.buildingMax);
+        filters.domMin       = intOr('domMin',       filters.domMin);
+        filters.domMax       = intOr('domMax',       filters.domMax);
+        const statuses = arr('status'); if (statuses) filters.listingStatus = statuses;
+        if (p.has('sw') && ['','3mo','6mo','12mo','24mo'].includes(p.get('sw'))) {
+            filters.soldWindow = p.get('sw');
+        }
+        return true;
+    }
+
     // Phase 3g V2 — display mode + filter state.
     // Phase A.3.1 — extended with scope, search, range filters.
     const CURRENT_YEAR = {{ now()->year }};
@@ -1311,6 +1382,9 @@ document.addEventListener('DOMContentLoaded', function () {
             if (cache.length > CACHE_MAX) cache.shift();
 
             renderPayload(payload);
+            // Phase A.3.3 — keep the URL in sync after every successful fetch
+            // so the agent can copy/share the link and reproduce the view.
+            syncUrlState();
         } catch (e) {
             if (e.name === 'AbortError') return; // superseded by newer fetch
             console.warn('Map fetch error', e);
@@ -1995,8 +2069,13 @@ document.addEventListener('DOMContentLoaded', function () {
             savedSearches = Array.isArray(body.saved_searches) ? body.saved_searches : [];
             renderSavedSearchSelect();
             if (applyDefault) {
+                // Phase A.3.3 — URL params take precedence over the
+                // saved-search default. If the URL is empty, apply the
+                // default; otherwise the URL parse already populated
+                // filters in the boot block below.
+                const hasUrl = window.location.search.length > 1;
                 const def = savedSearches.find(s => s.is_default);
-                if (def) {
+                if (def && !hasUrl) {
                     applySavedSearch(def);
                     document.getElementById('saved-search-select').value = String(def.id);
                 }
@@ -2137,7 +2216,17 @@ document.addEventListener('DOMContentLoaded', function () {
         setTimeout(() => nameEl.focus(), 50);
     }
 
-    // Initial load — fetch list + apply default if present.
+    // Phase A.3.3 — parse URL state into filters BEFORE the saved-search
+    // default has a chance to run. Inside refreshSavedSearchList() we
+    // check `window.location.search` again to decide whether the URL
+    // already populated the state.
+    if (readUrlStateIntoFilters()) {
+        persistFilters();
+        syncFilterUi();
+    }
+
+    // Initial load — fetch list + apply default if present (skipped when
+    // the URL already drove the state).
     refreshSavedSearchList(true);
 
     // Phase 3h Step 10 — demo toggle click handler.
