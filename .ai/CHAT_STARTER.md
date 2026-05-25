@@ -1,6 +1,6 @@
 # CoreX OS — Chat Starter
 > Auto-maintained by VS Code per CLAUDE.md rule. Paste into a new Claude chat to load context.
-> Last updated: 2026-05-25 by prompt-I (Phase 9c-3 Company Documents + privacy policy infrastructure)
+> Last updated: 2026-05-25 by prompt-M6.1 (Activity Points Engine schema foundation)
 
 <!-- ============================================================ -->
 <!-- STABLE SECTION — rarely changes                              -->
@@ -62,7 +62,7 @@
 
 ### 3.2 IN FLIGHT
 
-- **Branch `feature/map-workspace-overhaul`** — MIC collision fix (A.3.4) + M22 test fix + universal-signature audit + small fixes (419 / CMA logo / Tools logo) + **complete Phase 9c trilogy** (PPRA per agency+branch, Information Officer appointments, Company Documents infrastructure with `/legal/{token}` public links) all shipped on this branch tonight. Ready to merge → Staging.
+- **Branch `feature/map-workspace-overhaul`** — MIC collision fix (A.3.4) + M22 test fix + universal-signature audit + small fixes (419 / CMA logo / Tools logo) + **complete Phase 9c trilogy** (PPRA per agency+branch, Information Officer appointments, Company Documents infrastructure with `/legal/{token}` public links) all shipped. **Module 6 (Activity Points Engine) build started:** M6.0 investigation + M6.1 schema foundation shipped (scope/agency_id on activity_definitions, point_state/source/calendar_event_id/override audit columns on daily_activity_entries, new Eloquent ActivityDefinition + DailyActivityEntry models, 41 production definitions backfilled to system scope, 1,492 production entries backfilled to confirmed/manual). M6.2-M6.5 ahead.
 - **Next:** Andre — Staging deploy + live DB pull. Figure-matching audit on staging.
 
 ### 3.3 SPECCED / partial — not fully built
@@ -89,6 +89,8 @@
 
 ## 4. Recent decisions log (last 15, newest top)
 
+- **2026-05-25** — Module 6 M6.1 shipped: activity_definitions gains scope/agency_id (varchar — `system`/`agency` enforced at model layer); daily_activity_entries gains point_state/source/calendar_event_id/confirmed_at/revoked_at/override metadata. New ActivityDefinition + DailyActivityEntry Eloquent models. 41 definitions backfilled to `system` (global → system rename). 1,492 entries backfilled to confirmed/manual. 7 tests passing.
+- **2026-05-25** — Module 6 M6.0 investigation complete; report at `.ai/audits/activity-points-integration-investigation-2026-05-25.md`. Findings drove decisions: scope is varchar (not enum); 46 calendar event classes (4 buyer-facing); CalendarEventFeedbackObserver exists (M6.4 hook surface); no CalendarEvent observer yet (M6.3 creates it); zero architectural surprises.
 - **2026-05-25** — Phase 9c-3 (Company Documents) shipped: `company_documents` table with token-based public `/legal/{token}` route mirrors `presentation_snapshot_links` pattern. Markdown content with admin live-preview editor. 6 curated types (privacy, T&Cs, complaints, AML, code of conduct, POPIA consent). Agency `privacy_policy_url` accessor cascades published doc → legacy `popi_url`. Phase 9c trilogy now LIVE.
 - **2026-05-25** — Phase 9c-2 (Information Officer) shipped: `information_officer_appointments` mirrors FICA pattern (primary + deputies, auto-end-old-primary). Admin UI under Compliance Settings, permission `manage_information_officer`, 5 lifecycle tests passing.
 - **2026-05-25** — CDS template-creation investigation completed; report at `.ai/audits/cds-template-creation-investigation-2026-05-25.md`. 125 templates total (28 CDS, 3 hand-crafted, 22 importer, 72 legacy). 71% multi-tenant safe. April hand-crafted-Blade decision stands. Brief ready for tomorrow's joint session.
@@ -101,8 +103,6 @@
 - **2026-05-25** — Universal signature audit completed; report at `.ai/audits/universal-signature-audit-2026-05-25.md`. Layers 1 + 2 both unbuilt. 8 capture surfaces total (3 authenticated, 4 token, 1 CO). Wire-up effort: M-size (~10 files); encryption at rest: S-size (independent).
 - **2026-05-25** — `.ai/CHAT_STARTER.md` bootstrap landed; CLAUDE.md close-checklist now requires updating it every prompt.
 - **2026-05-25** — Staging deploy after MIC collision fix; Andre handles deploy + live DB pull. Map + MIC walk on staging. Figure-matching audit on real data next.
-- **2026-05-25** — 1 Aug live target locked. Weekly cadence: 26 May staging stable → 2 June bug-hunt week 1 (Cindy/Rochelle/Gerda/Shawn) → 9 June feature freeze → 16 June stability → 23 June PropCon notice decision → 30 June 30-day notice → 1 Aug live.
-- **2026-05-25** — Demo stays separate (synthetic Uvongo data, midnight reseed). Staging is proving ground with live DB.
 - **2026-04-29** — Architecture: Claude owns template design centrally. Hand-crafted Blade with declarative metadata, bypass CDS UI. Templates 116/117/119 first under this model.
 
 ## 5. Outstanding small fixes (none blocking)
