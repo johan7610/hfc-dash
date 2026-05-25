@@ -6,7 +6,7 @@
 @include('tools.pdf-suite._pdfjs')
 
 <div class="p-4 lg:p-8" x-data="pdfRedact()">
-    <div class="max-w-5xl mx-auto">
+    <div class="max-w-7xl mx-auto">
         @include('tools.pdf-suite._alerts')
         <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
             <div class="lg:col-span-2">
@@ -45,7 +45,7 @@
 
                         <div x-show="loading" class="text-sm py-6 text-center" style="color: var(--text-muted);">Loading preview…</div>
 
-                        <div x-show="pages.length > 0" class="space-y-4 mb-5 max-h-[600px] overflow-y-auto p-1">
+                        <div x-show="pages.length > 0" class="space-y-4 mb-5 max-h-[900px] overflow-y-auto p-1">
                             <template x-for="(p, i) in pages" :key="p.num">
                                 <div>
                                     <div class="text-xs mb-1.5" style="color: var(--text-secondary);" x-text="'Page ' + p.num"></div>

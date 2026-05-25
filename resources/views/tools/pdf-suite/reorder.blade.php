@@ -6,7 +6,7 @@
 @include('tools.pdf-suite._pdfjs')
 
 <div class="p-4 lg:p-8" x-data="pdfReorder()">
-    <div class="max-w-5xl mx-auto">
+    <div class="max-w-7xl mx-auto">
         @include('tools.pdf-suite._alerts')
         <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
             <div class="lg:col-span-2">
@@ -45,15 +45,15 @@
 
                         <div x-show="loading" class="text-sm py-6 text-center" style="color: var(--text-muted);">Loading preview…</div>
 
-                        <div x-show="order.length > 0" class="grid grid-cols-3 sm:grid-cols-4 gap-3 mb-5 max-h-[480px] overflow-y-auto p-1">
+                        <div x-show="order.length > 0" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-5 max-h-[720px] overflow-y-auto p-1">
                             <template x-for="(num, i) in order" :key="num">
-                                <div class="relative rounded-md p-2 cursor-move"
+                                <div class="relative rounded-md p-3 cursor-move"
                                     style="background: var(--surface-2); border: 1px solid var(--border);"
                                     draggable="true"
                                     @dragstart="dragStart($event, i)"
                                     @dragover.prevent
                                     @drop.prevent="drop($event, i)">
-                                    <div class="flex items-center justify-center overflow-hidden" style="height: 140px;">
+                                    <div class="flex items-center justify-center overflow-hidden" style="height: 280px;">
                                         <img :src="thumbs[num]" style="max-width: 100%; max-height: 100%;">
                                     </div>
                                     <div class="flex items-center justify-between mt-2">
@@ -99,7 +99,7 @@ function pdfReorder() {
                 const thumbs = {};
                 for (let i = 1; i <= pdf.numPages; i++) {
                     const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({ scale: 0.3 });
+                    const viewport = page.getViewport({ scale: 0.6 });
                     const canvas = document.createElement('canvas');
                     canvas.width = viewport.width;
                     canvas.height = viewport.height;
