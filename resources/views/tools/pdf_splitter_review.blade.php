@@ -197,19 +197,17 @@
 #spr .btn-back:hover { color:var(--brand-icon, #0ea5e9); }
 </style>
 
-@include('tools.pdf-suite._switcher')
-
 <div id="spr">
 <div class="wrap">
 
     {{-- Header bar --}}
-    <div style="background:var(--brand-default, #0b2a4a);" class="rounded-md px-6 py-4 mb-4">
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+    <div class="rounded-md px-6 py-5 mb-5" style="background: var(--brand-default, #0b2a4a);">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
-                <h2 class="text-xl font-bold text-white leading-tight tracking-tight">PDF Pack Splitter &mdash; Review Labels</h2>
-                <div class="text-sm text-white/60">
-                    <strong>{{ $base }}</strong> &middot; {{ $pCount }} pages &middot; Click rows to select &middot; Use keyboard shortcuts to label
-                </div>
+                <h1 class="text-xl font-bold text-white leading-tight">PDF Pack Splitter — Review Labels</h1>
+                <p class="text-sm text-white/60">
+                    <strong>{{ $base }}</strong> · {{ $pCount }} pages · Click rows to select · Use keyboard shortcuts to label
+                </p>
             </div>
         </div>
     </div>

@@ -1,10 +1,18 @@
 @extends('layouts.corex')
 
 @section('corex-content')
-<x-page-header title="Password Protect" subtitle="Lock or unlock a PDF with a password." :flush="true" />
-@include('tools.pdf-suite._switcher')
+<div class="space-y-5">
 
-<div class="p-4 lg:p-8">
+    <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a);">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <h1 class="text-xl font-bold text-white leading-tight">Password Protect</h1>
+                <p class="text-sm text-white/60">Lock or unlock a PDF with a password.</p>
+            </div>
+        </div>
+    </div>
+
+    @include('tools.pdf-suite._switcher')
     <div class="max-w-5xl mx-auto">
         @include('tools.pdf-suite._alerts')
         <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">

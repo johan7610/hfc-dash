@@ -1,11 +1,22 @@
+{{-- DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20 --}}
 @extends('layouts.corex')
 
 @section('corex-content')
-<x-page-header title="PDF Suite" subtitle="Eight tools for everything you need to do with a PDF — split, compress, merge, rotate, redact and more." :flush="true" />
-@include('tools.pdf-suite._switcher')
+<div class="space-y-5">
 
-<div class="p-4 lg:p-8">
-    <div class="max-w-7xl mx-auto">
+    {{-- Page header (Pattern A — branded) --}}
+    <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a);">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <h1 class="text-xl font-bold text-white leading-tight">PDF Suite</h1>
+                <p class="text-sm text-white/60">Eight tools for everything you need to do with a PDF — split, compress, merge, rotate, redact and more.</p>
+            </div>
+        </div>
+    </div>
+
+    @include('tools.pdf-suite._switcher')
+
+    <div class="max-w-7xl mx-auto w-full">
 
         @php
             $tools = [
@@ -64,6 +75,7 @@
         </div>
 
     </div>
+
 </div>
 
 <style>

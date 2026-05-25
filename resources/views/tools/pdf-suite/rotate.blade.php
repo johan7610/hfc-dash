@@ -1,11 +1,21 @@
 @extends('layouts.corex')
 
 @section('corex-content')
-<x-page-header title="PDF Rotate" subtitle="Rotate the whole document or individual pages." :flush="true" />
-@include('tools.pdf-suite._switcher')
-@include('tools.pdf-suite._pdfjs')
+<div class="space-y-5" x-data="pdfRotate()">
 
-<div class="p-4 lg:p-8" x-data="pdfRotate()">
+    <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a);">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <h1 class="text-xl font-bold text-white leading-tight">PDF Rotate</h1>
+                <p class="text-sm text-white/60">Rotate the whole document or individual pages.</p>
+            </div>
+        </div>
+    </div>
+
+    @include('tools.pdf-suite._switcher')
+    @include('tools.pdf-suite._pdfjs')
+
+    <div>
     <div class="max-w-7xl mx-auto">
         @include('tools.pdf-suite._alerts')
         <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">

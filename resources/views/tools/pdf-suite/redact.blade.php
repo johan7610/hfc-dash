@@ -1,11 +1,21 @@
 @extends('layouts.corex')
 
 @section('corex-content')
-<x-page-header title="PDF Redact" subtitle="Click-drag to draw black-out boxes — POPIA-safe true redaction." :flush="true" />
-@include('tools.pdf-suite._switcher')
-@include('tools.pdf-suite._pdfjs')
+<div class="space-y-5" x-data="pdfRedact()">
 
-<div class="p-4 lg:p-8" x-data="pdfRedact()">
+    <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a);">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <h1 class="text-xl font-bold text-white leading-tight">PDF Redact</h1>
+                <p class="text-sm text-white/60">Click-drag to draw black-out boxes — POPIA-safe true redaction.</p>
+            </div>
+        </div>
+    </div>
+
+    @include('tools.pdf-suite._switcher')
+    @include('tools.pdf-suite._pdfjs')
+
+    <div>
     <div class="max-w-7xl mx-auto">
         @include('tools.pdf-suite._alerts')
         <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
