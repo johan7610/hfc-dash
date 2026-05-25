@@ -105,11 +105,11 @@
                             default  => 'For Sale',
                         };
                         $statusLabel = ucwords(str_replace('_', ' ', (string) ($property->status ?: 'Draft')));
-                        $brandPillStyle = 'background:color-mix(in srgb, var(--brand-default) 13%, transparent); color:var(--brand-default); border:1px solid color-mix(in srgb, var(--brand-default) 27%, transparent);';
+                        $brandPillStyle = 'background:var(--brand-default); color:#fff; border:none;';
                     @endphp
                     <div class="flex items-center gap-1.5 flex-wrap">
-                        <span class="text-xs px-2 py-0.5 rounded-full font-semibold" style="{{ $brandPillStyle }}">{{ $listingTypeLabel }}</span>
-                        <span class="text-xs px-2 py-0.5 rounded-full font-semibold" style="{{ $brandPillStyle }}">{{ $statusLabel }}</span>
+                        <span class="text-sm px-2.5 py-1 rounded-full font-semibold" style="{{ $brandPillStyle }}">{{ $listingTypeLabel }}</span>
+                        <span class="text-sm px-2.5 py-1 rounded-full font-semibold" style="{{ $brandPillStyle }}">{{ $statusLabel }}</span>
                         @if($property->isPublished())
                             <span class="ds-badge ds-badge-success">Published</span>
                         @endif
@@ -467,10 +467,10 @@
                                 default  => 'For Sale',
                             };
                             $statusLabel2 = ucwords(str_replace('_', ' ', (string) ($property->status ?: 'Draft')));
-                            $brandPillStyle2 = 'background:color-mix(in srgb, var(--brand-default) 13%, transparent); color:var(--brand-default); border:1px solid color-mix(in srgb, var(--brand-default) 27%, transparent);';
+                            $brandPillStyle2 = 'background:var(--brand-default); color:#fff; border:none;';
                         @endphp
-                        <span class="text-xs px-2 py-0.5 rounded-full font-semibold" style="{{ $brandPillStyle2 }}">{{ $listingTypeLabel2 }}</span>
-                        <span class="text-xs px-2 py-0.5 rounded-full font-semibold" style="{{ $brandPillStyle2 }}">{{ $statusLabel2 }}</span>
+                        <span class="text-sm px-2.5 py-1 rounded-full font-semibold" style="{{ $brandPillStyle2 }}">{{ $listingTypeLabel2 }}</span>
+                        <span class="text-sm px-2.5 py-1 rounded-full font-semibold" style="{{ $brandPillStyle2 }}">{{ $statusLabel2 }}</span>
                         <span class="text-xs" style="color:var(--text-secondary);">{{ $property->beds }}bd · {{ $property->baths }}ba</span>
                     </div>
                 </div>

@@ -494,7 +494,7 @@
             $thumb  = $images[0] ?? null;
             $listingTypeLabel = strtolower((string) ($property->listing_type ?? 'sale')) === 'rental' ? 'For Rent' : 'For Sale';
             $statusLabel = ucwords(str_replace('_', ' ', (string) ($property->status ?: 'Draft')));
-            $brandPillStyle = 'background:color-mix(in srgb, var(--brand-default) 13%, transparent); color:var(--brand-default); border:1px solid color-mix(in srgb, var(--brand-default) 27%, transparent);';
+            $brandPillStyle = 'background:var(--brand-default); color:#fff; border:none;';
         @endphp
         <div class="rounded-md overflow-hidden flex flex-col transition-all duration-300"
              style="background:var(--surface); border:1px solid var(--border);"
@@ -520,16 +520,16 @@
                 {{-- Price on image --}}
                 <span class="absolute bottom-2.5 left-3 text-base font-bold text-white" style="text-shadow:0 1px 3px rgba(0,0,0,0.4);">{{ $property->formattedPrice() }}</span>
 
-                {{-- Live badge --}}
-                @if($property->isPublished())
-                <span class="ds-badge ds-badge-info absolute top-2.5 left-2.5" style="background:var(--brand-icon);color:#fff;">Live</span>
-                @endif
-
-                {{-- Listing type + Status badges --}}
-                <div class="absolute top-2.5 right-2.5 flex flex-col items-end gap-1">
-                    <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold" style="{{ $brandPillStyle }}">{{ $listingTypeLabel }}</span>
-                    <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold" style="{{ $brandPillStyle }}">{{ $statusLabel }}</span>
+                {{-- Listing type + Status badges (left, side-by-side) --}}
+                <div class="absolute top-2.5 left-2.5 flex flex-row items-center gap-1.5">
+                    <span class="text-xs px-2.5 py-1 rounded-full font-semibold" style="{{ $brandPillStyle }}">{{ $listingTypeLabel }}</span>
+                    <span class="text-xs px-2.5 py-1 rounded-full font-semibold" style="{{ $brandPillStyle }}">{{ $statusLabel }}</span>
                 </div>
+
+                {{-- Live badge (moved to right to make room for branded pills) --}}
+                @if($property->isPublished())
+                <span class="ds-badge ds-badge-info absolute top-2.5 right-2.5" style="background:var(--brand-icon);color:#fff;">Live</span>
+                @endif
 
                 {{-- Photo count --}}
                 @if(count($images) > 0)
@@ -671,7 +671,7 @@
                 @php
                     $rowListingLabel = strtolower((string) ($property->listing_type ?? 'sale')) === 'rental' ? 'For Rent' : 'For Sale';
                     $rowStatusLabel = ucwords(str_replace('_', ' ', (string) ($property->status ?: 'Draft')));
-                    $rowBrandPillStyle = 'background:color-mix(in srgb, var(--brand-default) 13%, transparent); color:var(--brand-default); border:1px solid color-mix(in srgb, var(--brand-default) 27%, transparent);';
+                    $rowBrandPillStyle = 'background:var(--brand-default); color:#fff; border:none;';
                 @endphp
                 <tr class="transition-all duration-300" style="border-bottom:1px solid var(--border);"
                     onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
@@ -711,10 +711,10 @@
                             <span class="text-[10px]" style="color:var(--text-muted);">—</span>
                         @endif
                     </td>
-                    <td class="px-4 py-2.5 text-center">
-                        <div class="inline-flex flex-col gap-1 items-center">
-                            <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold" style="{{ $rowBrandPillStyle }}">{{ $rowListingLabel }}</span>
-                            <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold" style="{{ $rowBrandPillStyle }}">{{ $rowStatusLabel }}</span>
+                    <td class="px-4 py-2.5 text-left">
+                        <div class="inline-flex flex-row gap-1.5 items-center">
+                            <span class="text-xs px-2.5 py-1 rounded-full font-semibold" style="{{ $rowBrandPillStyle }}">{{ $rowListingLabel }}</span>
+                            <span class="text-xs px-2.5 py-1 rounded-full font-semibold" style="{{ $rowBrandPillStyle }}">{{ $rowStatusLabel }}</span>
                         </div>
                     </td>
                     <td class="px-4 py-2.5 text-right">
