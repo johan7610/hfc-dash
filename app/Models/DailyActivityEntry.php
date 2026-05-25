@@ -83,7 +83,7 @@ final class DailyActivityEntry extends Model
 
     public function calendarEvent(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Calendar\CalendarEvent::class);
+        return $this->belongsTo(\App\Models\CommandCenter\CalendarEvent::class);
     }
 
     public function overriddenBy(): BelongsTo

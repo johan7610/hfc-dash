@@ -1815,6 +1815,15 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::delete('/{id}',   [\App\Http\Controllers\Admin\CompanyDocumentController::class, 'destroy'])->whereNumber('id')->name('destroy');
     });
 
+    // Module 6 (M6.2) — Activity Points → Calendar class mappings.
+    Route::prefix('admin/activity-mappings')->name('admin.activity-mappings.')->group(function () {
+        Route::get('/',                       [\App\Http\Controllers\Admin\ActivityCalendarMappingController::class, 'index'])->name('index');
+        Route::post('/',                      [\App\Http\Controllers\Admin\ActivityCalendarMappingController::class, 'store'])->name('store');
+        Route::put('/{id}',                   [\App\Http\Controllers\Admin\ActivityCalendarMappingController::class, 'update'])->whereNumber('id')->name('update');
+        Route::post('/{id}/toggle-active',    [\App\Http\Controllers\Admin\ActivityCalendarMappingController::class, 'toggleActive'])->whereNumber('id')->name('toggle-active');
+        Route::delete('/{id}',                [\App\Http\Controllers\Admin\ActivityCalendarMappingController::class, 'destroy'])->whereNumber('id')->name('destroy');
+    });
+
     // Properties — listing sync to website
     Route::prefix('properties')->middleware(['permission:access_properties', 'agency.required'])->name('corex.properties.')->group(function () {
         // Marketing compliance — go live

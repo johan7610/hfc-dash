@@ -1,6 +1,6 @@
 # CoreX OS — Chat Starter
 > Auto-maintained by VS Code per CLAUDE.md rule. Paste into a new Claude chat to load context.
-> Last updated: 2026-05-25 by prompt-M6.1 (Activity Points Engine schema foundation)
+> Last updated: 2026-05-25 by prompt-M6.2 (calendar-class → activity-definition mapping table + admin UI)
 
 <!-- ============================================================ -->
 <!-- STABLE SECTION — rarely changes                              -->
@@ -62,7 +62,7 @@
 
 ### 3.2 IN FLIGHT
 
-- **Branch `feature/map-workspace-overhaul`** — MIC collision fix (A.3.4) + M22 test fix + universal-signature audit + small fixes (419 / CMA logo / Tools logo) + **complete Phase 9c trilogy** (PPRA per agency+branch, Information Officer appointments, Company Documents infrastructure with `/legal/{token}` public links) all shipped. **Module 6 (Activity Points Engine) build started:** M6.0 investigation + M6.1 schema foundation shipped (scope/agency_id on activity_definitions, point_state/source/calendar_event_id/override audit columns on daily_activity_entries, new Eloquent ActivityDefinition + DailyActivityEntry models, 41 production definitions backfilled to system scope, 1,492 production entries backfilled to confirmed/manual). M6.2-M6.5 ahead.
+- **Branch `feature/map-workspace-overhaul`** — MIC collision fix (A.3.4) + M22 test fix + universal-signature audit + small fixes (419 / CMA logo / Tools logo) + **complete Phase 9c trilogy** (PPRA per agency+branch, Information Officer appointments, Company Documents infrastructure with `/legal/{token}` public links) all shipped. **Module 6 (Activity Points Engine) M6.0 + M6.1 + M6.2 shipped:** investigation + schema foundation (scope/agency_id, point_state/source/calendar_event_id/override audit, Eloquent ActivityDefinition + DailyActivityEntry models, 41 defs backfilled system, 1,492 entries backfilled confirmed/manual) + per-agency mapping table `activity_definition_calendar_classes` with admin UI at `/admin/activity-mappings` (CRUD + toggle, permission `manage_activity_mappings`, `resolveForEvent()` helper for M6.3). M6.3 (observer + provisional points + anti-gaming + audit table), M6.4 (confirm hook + revoke command + override service), M6.5 (daily view + override UI) ahead in next session.
 - **Next:** Andre — Staging deploy + live DB pull. Figure-matching audit on staging.
 
 ### 3.3 SPECCED / partial — not fully built
@@ -89,6 +89,7 @@
 
 ## 4. Recent decisions log (last 15, newest top)
 
+- **2026-05-25** — Module 6 M6.2 shipped: `activity_definition_calendar_classes` mapping table (agency_id + event_class slug + activity_definition_id + value_per_event + requires_feedback + auto_revoke_after_hours + daily_cap + back_date_limit_hours + is_active). Model with `resolveForEvent(CalendarEvent)` static helper, admin CRUD at `/admin/activity-mappings`, permission `manage_activity_mappings`. 6 tests passing. Schema deviation from prompt: mapping keys off event_class slug not FK (real schema has `calendar_event_class_settings` + `calendar_events.category` string, no `calendar_event_classes` table). Stopping here for the session; M6.3 + M6.4 + M6.5 in next session per honest-scope rule.
 - **2026-05-25** — Module 6 M6.1 shipped: activity_definitions gains scope/agency_id (varchar — `system`/`agency` enforced at model layer); daily_activity_entries gains point_state/source/calendar_event_id/confirmed_at/revoked_at/override metadata. New ActivityDefinition + DailyActivityEntry Eloquent models. 41 definitions backfilled to `system` (global → system rename). 1,492 entries backfilled to confirmed/manual. 7 tests passing.
 - **2026-05-25** — Module 6 M6.0 investigation complete; report at `.ai/audits/activity-points-integration-investigation-2026-05-25.md`. Findings drove decisions: scope is varchar (not enum); 46 calendar event classes (4 buyer-facing); CalendarEventFeedbackObserver exists (M6.4 hook surface); no CalendarEvent observer yet (M6.3 creates it); zero architectural surprises.
 - **2026-05-25** — Phase 9c-3 (Company Documents) shipped: `company_documents` table with token-based public `/legal/{token}` route mirrors `presentation_snapshot_links` pattern. Markdown content with admin live-preview editor. 6 curated types (privacy, T&Cs, complaints, AML, code of conduct, POPIA consent). Agency `privacy_policy_url` accessor cascades published doc → legacy `popi_url`. Phase 9c trilogy now LIVE.
@@ -102,7 +103,6 @@
 - **2026-05-25** — Phase 9c investigation: privacy policy + Information Officer + agency PPRA number — findings reported, moved from PARKED to IN FLIGHT; awaiting architectural decisions before fix.
 - **2026-05-25** — Universal signature audit completed; report at `.ai/audits/universal-signature-audit-2026-05-25.md`. Layers 1 + 2 both unbuilt. 8 capture surfaces total (3 authenticated, 4 token, 1 CO). Wire-up effort: M-size (~10 files); encryption at rest: S-size (independent).
 - **2026-05-25** — `.ai/CHAT_STARTER.md` bootstrap landed; CLAUDE.md close-checklist now requires updating it every prompt.
-- **2026-05-25** — Staging deploy after MIC collision fix; Andre handles deploy + live DB pull. Map + MIC walk on staging. Figure-matching audit on real data next.
 - **2026-04-29** — Architecture: Claude owns template design centrally. Hand-crafted Blade with declarative metadata, bypass CDS UI. Templates 116/117/119 first under this model.
 
 ## 5. Outstanding small fixes (none blocking)
