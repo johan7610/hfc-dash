@@ -30,7 +30,31 @@ use Illuminate\Support\Facades\DB;
  */
 final class MapPinService
 {
-    /** @return array{bounds: array, layers: array, totals: array} */
+    public function __construct(private readonly ?LocationGrouper $grouper = null) {}
+
+    private function grouper(): LocationGrouper
+    {
+        return $this->grouper ?? new LocationGrouper();
+    }
+
+    /**
+     * Phase A.1 — composite-pin shape.
+     *
+     *   {
+     *     bounds, layer_counts{key→int}, totals{key→int}, capped_layers[],
+     *     locations: [
+     *       { location_key, latitude, longitude, geocode_target?, grouping_basis,
+     *         record_count, is_composite, primary_category, categories_present,
+     *         records: [ {id, category, title, subtitle, summary, deep_link, ...} ] }
+     *     ]
+     *   }
+     *
+     * Single-record locations have `is_composite=false` and `record_count=1`
+     * — the UI keeps the category colour for these. Anything composite gets
+     * a neutral icon + count badge in the renderer.
+     *
+     * @return array{bounds: array, locations: array, layer_counts: array, totals: array, capped_layers: array}
+     */
     public function getPinsInBounds(MapBoundsRequest $req): array
     {
         // Phase 9a hardening — at wide-zoom (country/region) the view gains
@@ -38,155 +62,79 @@ final class MapPinService
         // bounded. See MapBoundsRequest::zoomAwarePerLayerLimit().
         $perLayerLimit = $req->zoomAwarePerLayerLimit(count($req->layers));
 
-        $layers = [];
-        $totals = [];
+        $layerCounts  = [];
+        $totals       = [];
+        $cappedLayers = [];
+        $allRecords   = [];
 
-        if ($req->wantsLayer('hfc_listings')) {
-            [$pins, $total] = $this->hfcListings($req, $perLayerLimit);
-            $layers[] = ['key' => 'hfc_listings', 'count' => count($pins), 'total' => $total, 'capped' => $total > count($pins), 'pins' => $pins];
-            $totals['hfc_listings'] = $total;
+        $sources = [
+            'hfc_listings'    => fn () => $this->hfcListings($req, $perLayerLimit),
+            'sold_comps'      => fn () => $this->soldComps($req, $perLayerLimit),
+            'active_listings' => fn () => $this->activeListings($req, $perLayerLimit),
+            'mic_subjects'    => fn () => $this->micSubjects($req, $perLayerLimit),
+            // Scheme Owners — Agent View only.
+            'scheme_owners'   => fn () => $req->isSellerView() ? [[], 0] : $this->schemeOwners($req, $perLayerLimit),
+        ];
+
+        foreach ($sources as $key => $fetch) {
+            if (!$req->wantsLayer($key)) continue;
+            /** @var array{0: array, 1: int} $result */
+            $result = $fetch();
+            [$pins, $total] = $result;
+
+            $layerCounts[$key] = count($pins);
+            $totals[$key]      = $total;
+            if ($total > count($pins)) {
+                $cappedLayers[] = $key;
+            }
+
+            // Normalise into the record shape the grouper expects.
+            foreach ($pins as $p) {
+                $allRecords[] = $this->toRecord($key, $p);
+            }
         }
 
-        if ($req->wantsLayer('sold_comps')) {
-            [$pins, $total] = $this->soldComps($req, $perLayerLimit);
-            $layers[] = ['key' => 'sold_comps', 'count' => count($pins), 'total' => $total, 'capped' => $total > count($pins), 'pins' => $pins];
-            $totals['sold_comps'] = $total;
-        }
-
-        if ($req->wantsLayer('active_listings')) {
-            [$pins, $total] = $this->activeListings($req, $perLayerLimit);
-            $layers[] = ['key' => 'active_listings', 'count' => count($pins), 'total' => $total, 'capped' => $total > count($pins), 'pins' => $pins];
-            $totals['active_listings'] = $total;
-        }
-
-        if ($req->wantsLayer('mic_subjects')) {
-            [$pins, $total] = $this->micSubjects($req, $perLayerLimit);
-            $layers[] = ['key' => 'mic_subjects', 'count' => count($pins), 'total' => $total, 'capped' => $total > count($pins), 'pins' => $pins];
-            $totals['mic_subjects'] = $total;
-        }
-
-        // Scheme Owners — Agent View only.
-        if ($req->wantsLayer('scheme_owners') && !$req->isSellerView()) {
-            [$pins, $total] = $this->schemeOwners($req, $perLayerLimit);
-            $layers[] = ['key' => 'scheme_owners', 'count' => count($pins), 'total' => $total, 'capped' => $total > count($pins), 'pins' => $pins];
-            $totals['scheme_owners'] = $total;
-        }
-
-        // Map hotfix — cross-layer overlap coalesce. Mutates layers in-place
-        // to add colocated_count / colocated_layers on the highest-priority
-        // pin at each collision point, and shifts lower-priority pins to a
-        // small radial offset so they remain visible + clickable.
-        $this->coalesceCrossLayer($layers);
+        $locations = $this->grouper()->group($allRecords);
 
         return [
-            'bounds'  => [
+            'bounds'        => [
                 'north' => $req->north, 'south' => $req->south,
                 'east'  => $req->east,  'west'  => $req->west,
             ],
-            'layers'  => $layers,
-            'totals'  => $totals,
+            'locations'     => $locations,
+            'layer_counts'  => $layerCounts,
+            'totals'        => $totals,
+            'capped_layers' => $cappedLayers,
         ];
     }
 
     /**
-     * Map hotfix Part B — cross-layer overlap detection + offset.
-     *
-     * Same-layer overlaps are handled by Leaflet's spiderfyOnMaxZoom on the
-     * marker cluster groups (one fan per layer). This routine deals with
-     * the cross-layer case: e.g. an HFC listing pin + a sold comp pin + a
-     * MIC subject pin + scheme owner pins all sitting at the same building.
-     *
-     * Algorithm:
-     *   - Group every pin (across all layers) by GPS rounded to 5 decimal
-     *     places (~1.1m precision). Anything closer than that visually
-     *     collides on a Leaflet map at any normal zoom.
-     *   - For each group containing pins from 2+ DIFFERENT layers:
-     *       1. Sort by layer priority (higher = on top)
-     *       2. Primary pin keeps its GPS + gets `colocated_count` and
-     *          `colocated_layers` (a flat list of {layer,id,title,subtitle,
-     *          detail_url} for every other source at this point).
-     *       3. Lower-priority pins get a radial offset (12m equivalent),
-     *          evenly spaced around the primary; each gets `shifted=true`
-     *          and `original_gps={lat,lng}` so the UI can render them with
-     *          a dashed ring and link back to the actual location.
-     *   - Same-layer-only groups are left alone — spiderfy handles them.
-     *
-     * Priority order (higher wins):
-     *   hfc_listings > active_listings > sold_comps > mic_subjects > scheme_owners
-     *
-     * @param array<int, array<string, mixed>> $layers  Modified in place.
+     * Map a V1 pin payload from a per-layer fetcher into the V2 record shape
+     * the grouper + frontend expect.
      */
-    private function coalesceCrossLayer(array &$layers): void
+    private function toRecord(string $category, array $pin): array
     {
-        $priority = [
-            'hfc_listings'    => 1000,
-            'active_listings' => 800,
-            'sold_comps'      => 600,
-            'mic_subjects'    => 400,
-            'scheme_owners'   => 200,
+        // For grouping the parser needs an address — pull from the V1 title
+        // because that's where each fetcher already put the human address
+        // string. Suburb hint, when known, sharpens the parser's split.
+        $address = (string) ($pin['title'] ?? '');
+        $suburb  = $pin['suburb'] ?? null;
+
+        return [
+            'id'         => $pin['id'] ?? null,
+            'category'   => $category,
+            'title'      => $pin['title']    ?? '',
+            'subtitle'   => $pin['subtitle'] ?? '',
+            'summary'    => trim(($pin['title'] ?? '') . ($pin['subtitle'] ? ' · ' . $pin['subtitle'] : '')),
+            'deep_link'  => $pin['detail_url'] ?? null,
+            'lat'        => (float) $pin['lat'],
+            'lng'        => (float) $pin['lng'],
+            'address'    => $address,
+            'suburb'     => $suburb,
+            'sensitive'  => $pin['sensitive'] ?? false,
+            'price'      => $pin['price']     ?? null,
+            'date'       => $pin['date']      ?? null,
         ];
-
-        // Build index: gps_key → [{li, pi, priority}].
-        $byKey = [];
-        foreach ($layers as $li => $layer) {
-            foreach ($layer['pins'] as $pi => $pin) {
-                $key = round((float) $pin['lat'], 5) . ':' . round((float) $pin['lng'], 5);
-                $byKey[$key][] = [
-                    'li'        => $li,
-                    'pi'        => $pi,
-                    'priority'  => $priority[$pin['layer']] ?? 0,
-                    'layer_key' => $pin['layer'],
-                ];
-            }
-        }
-
-        foreach ($byKey as $items) {
-            if (count($items) < 2) continue;
-
-            // Only coalesce when pins come from 2+ DIFFERENT layers — same-layer
-            // overlap is spiderfy's job.
-            $distinctLayers = array_unique(array_column($items, 'layer_key'));
-            if (count($distinctLayers) < 2) continue;
-
-            usort($items, fn ($a, $b) => $b['priority'] - $a['priority']);
-
-            $primary = &$layers[$items[0]['li']]['pins'][$items[0]['pi']];
-            $primary['colocated_count']  = count($items) - 1;
-            $primary['colocated_layers'] = [];
-
-            $others = array_slice($items, 1);
-            $n      = count($others);
-            $latC   = (float) $primary['lat'];
-            $lngC   = (float) $primary['lng'];
-
-            foreach ($others as $i => $other) {
-                $pinRef = &$layers[$other['li']]['pins'][$other['pi']];
-
-                // Capture for the primary's colocated list (built BEFORE the
-                // pin is shifted so the UI can hyperlink to the original).
-                $primary['colocated_layers'][] = [
-                    'layer'      => $pinRef['layer'],
-                    'id'         => $pinRef['id'],
-                    'title'      => $pinRef['title']    ?? null,
-                    'subtitle'   => $pinRef['subtitle'] ?? null,
-                    'detail_url' => $pinRef['detail_url'],
-                ];
-
-                // Radial offset: evenly spaced bearings around the primary.
-                $bearing  = $i * (2 * M_PI / max(1, $n));
-                $distance = 12; // metres — visible at zoom ≥17 without crossing buildings
-                $dLat = ($distance * cos($bearing)) / 111_320;
-                $dLng = ($distance * sin($bearing)) / (111_320 * cos(deg2rad($latC)));
-
-                $pinRef['original_gps'] = ['lat' => $latC, 'lng' => $lngC];
-                $pinRef['lat']          = round($latC + $dLat, 7);
-                $pinRef['lng']          = round($lngC + $dLng, 7);
-                $pinRef['shifted']      = true;
-
-                unset($pinRef);
-            }
-            unset($primary);
-        }
     }
 
     /** @return array{0: array, 1: int} */

@@ -187,9 +187,21 @@
             </div>
         </main>
 
-        {{-- Right detail panel --}}
+        {{-- Right detail panel — Phase A.1 composite-aware state machine.
+             States: 'composite_list' (shows records[] of a composite location),
+                     'single_detail'  (shows a single record card, optionally with
+                                       a back arrow when entered from a composite). --}}
         <aside id="map-detail-panel"
                style="width: 360px; flex-shrink: 0; background: var(--surface); border-left: 1px solid var(--border); transform: translateX(100%); transition: transform 220ms ease; overflow-y: auto; position: relative;">
+
+            {{-- Back arrow strip — visible only when single_detail entered from composite_list. --}}
+            <button id="detail-back-btn" type="button"
+                    style="display: none; width: 100%; align-items: center; gap: 8px; padding: 10px 16px; background: var(--surface-2); border: 0; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 0.75rem; color: var(--brand-button); font-weight: 500; text-align: left;">
+                <span style="font-size: 0.875rem; line-height: 1;">←</span>
+                <span id="detail-back-label">Back</span>
+            </button>
+
+            {{-- Sticky header — title, subtitle, close. --}}
             <div style="display: flex; align-items: flex-start; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); z-index: 1;">
                 <div style="flex: 1; min-width: 0;">
                     <div id="detail-title" style="font-size: 0.9375rem; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis;"></div>
@@ -197,14 +209,24 @@
                 </div>
                 <button id="detail-close-btn" aria-label="Close panel" style="margin-left: 8px; padding: 4px; background: transparent; border: 0; color: var(--text-muted); cursor: pointer; font-size: 1rem; line-height: 1;">×</button>
             </div>
+
+            {{-- Body — composite list OR single detail, never both visible at once. --}}
             <div style="padding: 14px 16px;">
-                <div id="detail-address" style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 12px; display: none;"></div>
-                <div id="detail-facts"></div>
-                <div id="detail-sensitive" style="display: none; margin-top: 14px; padding: 10px; background: color-mix(in srgb, var(--ds-purple, #8b5cf6) 8%, transparent); border-left: 3px solid var(--ds-purple, #8b5cf6); border-radius: 4px;">
-                    <div style="font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; color: var(--ds-purple, #8b5cf6); margin-bottom: 6px;">Agent only</div>
-                    <div id="detail-sensitive-facts"></div>
+                {{-- Composite list view: rendered when state='composite_list'. --}}
+                <div id="detail-composite-list" style="display: none;">
+                    <div id="composite-records"></div>
                 </div>
-                <div id="detail-relationships" style="margin-top: 14px;"></div>
+
+                {{-- Single detail view: rendered when state='single_detail'. --}}
+                <div id="detail-single" style="display: none;">
+                    <div id="detail-address" style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 12px; display: none;"></div>
+                    <div id="detail-facts"></div>
+                    <div id="detail-sensitive" style="display: none; margin-top: 14px; padding: 10px; background: color-mix(in srgb, var(--ds-purple, #8b5cf6) 8%, transparent); border-left: 3px solid var(--ds-purple, #8b5cf6); border-radius: 4px;">
+                        <div style="font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; color: var(--ds-purple, #8b5cf6); margin-bottom: 6px;">Agent only</div>
+                        <div id="detail-sensitive-facts"></div>
+                    </div>
+                    <div id="detail-relationships" style="margin-top: 14px;"></div>
+                </div>
             </div>
         </aside>
     </div>
@@ -232,6 +254,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const PINS_URL = @json(route('corex.map.pins'));
     const CACHE_MAX = 5;
 
+    // Single-record category visuals — composite pins use the neutral scheme below.
     const LAYER_COLOURS = {
         hfc_listings:    '#00d4aa',
         sold_comps:      '#3b82f6',
@@ -243,6 +266,18 @@ document.addEventListener('DOMContentLoaded', function () {
         hfc_listings: 'H', sold_comps: 'S', active_listings: 'A',
         mic_subjects: 'M', scheme_owners: 'O',
     };
+    const LAYER_NAMES = {
+        hfc_listings:    'HFC Listing',
+        sold_comps:      'Sold Comp',
+        active_listings: 'Active Listing',
+        mic_subjects:    'MIC Subject',
+        scheme_owners:   'Scheme Owner',
+    };
+
+    // Composite pin palette — neutral slate so it reads as "multiple sources here"
+    // and never collides with any single-category colour.
+    const COMPOSITE_BG     = '#334155'; // slate-700
+    const COMPOSITE_BORDER = '#00d4aa'; // teal accent — same as HFC, marks it as workspace UI
 
     // ── State ─────────────────────────────────────────────────────────────
     let viewMode = localStorage.getItem('corex.map.view_mode') || 'agent';
@@ -326,10 +361,15 @@ document.addEventListener('DOMContentLoaded', function () {
     const enabledLayers = new Set([
         'hfc_listings', 'sold_comps', 'active_listings', 'mic_subjects', 'scheme_owners',
     ]);
-    const clusterByLayer = {}; // key → L.markerClusterGroup
+    // Phase A.1 — server pre-groups co-located records into composite
+    // locations; the client uses ONE clustering group across all categories.
+    // The per-layer cluster groups from V1 are gone — they had no role once
+    // grouping moved server-side.
+    let cluster = null;
     const cache = []; // [{ key, payload }]
     let fetchTimer = null;
     let inFlight = null;
+    let lastPayload = null; // kept for layer-toggle re-render without refetch
 
     // ── Map init ──────────────────────────────────────────────────────────
     const map = L.map('corex-map', { zoomControl: true, attributionControl: true }).fitBounds([
@@ -348,80 +388,80 @@ document.addEventListener('DOMContentLoaded', function () {
     const baseLayers = { streets: streetsLayer, satellite: satelliteLayer };
     baseLayers[baseLayerKey].addTo(map);
 
-    // Pre-create one cluster group per layer so toggles act independently.
-    // Map hotfix:
-    //   - spiderfyOnMaxZoom + spiderfyDistanceMultiplier: when 2+ pins of the
-    //     SAME layer share GPS (e.g. 14 owners of a scheme), they fan out
-    //     clickably at max zoom.
-    //   - maxClusterRadius dropped to 40px so only genuinely-close pins cluster.
-    //   - zIndexOffset by priority so HFC pins render on top of MIC/owner pins
-    //     even when the cross-layer coalesce can't physically separate them.
-    const Z_INDEX_BY_LAYER = {
-        hfc_listings:    1000,
-        active_listings:  800,
-        sold_comps:       600,
-        mic_subjects:     400,
-        scheme_owners:    200,
-    };
-    ['hfc_listings', 'sold_comps', 'active_listings', 'mic_subjects', 'scheme_owners'].forEach(k => {
-        clusterByLayer[k] = L.markerClusterGroup({
-            disableClusteringAtZoom: 14,
-            maxClusterRadius: 40,
-            chunkedLoading: true,
-            spiderfyOnMaxZoom: true,
-            showCoverageOnHover: false,
-            zoomToBoundsOnClick: true,
-            spiderfyDistanceMultiplier: 1.8,
-        });
-        // Per-cluster z-index offset — affects markers added to the group.
-        clusterByLayer[k].on('layeradd', (e) => {
-            if (e.layer && typeof e.layer.setZIndexOffset === 'function') {
-                e.layer.setZIndexOffset(Z_INDEX_BY_LAYER[k] || 0);
-            }
-        });
-        clusterByLayer[k].addTo(map);
+    // Single MarkerClusterGroup — at low zoom geographically nearby composite
+    // pins merge visually, at zoom ≥ 14 they un-cluster. Spiderfy DISABLED:
+    // composite pins are already "the spider" — exploding them at max zoom
+    // would defeat the whole grouping (a sectional title scheme has dozens
+    // of units sharing one street address).
+    cluster = L.markerClusterGroup({
+        disableClusteringAtZoom: 14,
+        maxClusterRadius: 40,
+        chunkedLoading: true,
+        spiderfyOnMaxZoom: false,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true,
     });
-
-    const LAYER_NAMES = {
-        hfc_listings:    'HFC Listing',
-        sold_comps:      'Sold Comp',
-        active_listings: 'Active Listing',
-        mic_subjects:    'MIC Subject',
-        scheme_owners:   'Scheme Owner',
-    };
+    cluster.addTo(map);
 
     // ── Helpers ───────────────────────────────────────────────────────────
     /**
-     * Build the pin icon HTML from a full pin payload (not just the layer
-     * key). Handles two server-driven states:
-     *   - pin.colocated_count > 0 → render a "+N" badge in the top-right
-     *   - pin.shifted=true        → render a dashed ring around the pin
+     * Build the Leaflet icon for a location. Two paths:
+     *   - composite (record_count > 1): neutral slate background + teal
+     *     accent border + white count badge top-right
+     *   - single record: category-coloured circle + category letter
      */
-    function pinIcon(pin) {
-        const colour = LAYER_COLOURS[pin.layer] || '#64748b';
-        const letter = LAYER_LETTERS[pin.layer] || '?';
-        const isShifted = !!pin.shifted;
-        const colocated = pin.colocated_count || 0;
+    function locationIcon(loc) {
+        if (loc.is_composite) {
+            const count = loc.record_count;
+            const html =
+                '<div style="position:relative;display:flex;align-items:center;justify-content:center;width:24px;height:24px;background:'
+                + COMPOSITE_BG + ';color:#fff;border:2px solid ' + COMPOSITE_BORDER + ';border-radius:6px;font-size:9px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.4);">'
+                +   '<span style="font-size:10px;letter-spacing:0.5px;">+</span>'
+                + '</div>'
+                + '<span style="position:absolute;top:-6px;right:-8px;background:#ffffff;color:#0f172a;font-size:10px;font-weight:700;border-radius:10px;padding:1px 5px;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.35);white-space:nowrap;border:1px solid ' + COMPOSITE_BORDER + ';">'
+                + count + '</span>';
 
-        // Outer wrapper has positioning context for the +N badge.
-        const borderStyle = isShifted
-            ? '2px dashed #ffffff'
-            : '2px solid #ffffff';
-        const ringShadow = isShifted
-            ? '0 0 0 2px rgba(148,163,184,0.55), 0 1px 3px rgba(0,0,0,.4)'
-            : '0 1px 3px rgba(0,0,0,.4)';
-
-        let html = '<div style="position:relative;display:flex;align-items:center;justify-content:center;width:22px;height:22px;background:'
-            + colour + ';color:#fff;border:' + borderStyle + ';border-radius:50%;font-size:11px;font-weight:700;box-shadow:'
-            + ringShadow + ';">' + letter;
-
-        if (colocated > 0) {
-            html += '<span style="position:absolute;top:-7px;right:-9px;background:#fff;color:#0f172a;font-size:9px;font-weight:700;border-radius:8px;padding:1px 4px;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.3);white-space:nowrap;">+'
-                + colocated + '</span>';
+            return L.divIcon({
+                html: '<div style="position:relative;width:24px;height:24px;">' + html + '</div>',
+                className: 'corex-pin corex-pin-composite',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12],
+            });
         }
-        html += '</div>';
 
+        // Single record — colour by its category.
+        const rec = loc.records[0] || {};
+        const colour = LAYER_COLOURS[rec.category] || '#64748b';
+        const letter = LAYER_LETTERS[rec.category] || '?';
+        const html = '<div style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;background:'
+            + colour + ';color:#fff;border:2px solid #ffffff;border-radius:50%;font-size:11px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.4);">'
+            + letter + '</div>';
         return L.divIcon({ html: html, className: 'corex-pin', iconSize: [22, 22], iconAnchor: [11, 11] });
+    }
+
+    /**
+     * Apply the left-rail layer toggles to a server payload. Returns a
+     * filtered copy that:
+     *   - removes records[] entries whose category is disabled
+     *   - drops locations whose records all got filtered out
+     *   - re-derives is_composite + record_count + primary_category from the
+     *     remaining records
+     */
+    function applyLayerFilters(payload) {
+        const out = [];
+        (payload.locations || []).forEach(loc => {
+            const kept = (loc.records || []).filter(r => enabledLayers.has(r.category));
+            if (kept.length === 0) return;
+            out.push({
+                ...loc,
+                records: kept,
+                record_count: kept.length,
+                is_composite: kept.length > 1,
+                primary_category: kept[0].category,
+                categories_present: Array.from(new Set(kept.map(r => r.category))),
+            });
+        });
+        return { ...payload, locations: out };
     }
 
     function currentBounds() {
@@ -448,76 +488,69 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function clearAllPins() {
-        Object.values(clusterByLayer).forEach(c => c.clearLayers());
+        if (cluster) cluster.clearLayers();
     }
 
     function renderPayload(payload) {
+        lastPayload = payload;
         clearAllPins();
-        let total = 0;
-        let cappedLayers = [];
+
+        // Update left-rail counts from layer_counts (post-filter, pre-grouping).
+        const counts = payload.layer_counts || {};
+        Object.keys(LAYER_COLOURS).forEach(key => {
+            const badge = document.querySelector('[data-layer-count="' + key + '"]');
+            if (badge) badge.textContent = String(counts[key] ?? 0);
+        });
+
+        // Apply layer toggles client-side (re-derives composite flags).
+        const filtered = applyLayerFilters(payload);
+
+        const showPins = displayMode === 'pins' || displayMode === 'both';
+        const showHeat = displayMode === 'heatmap' || displayMode === 'both';
         const heatPoints = [];
-        const showPins   = displayMode === 'pins' || displayMode === 'both';
-        const showHeat   = displayMode === 'heatmap' || displayMode === 'both';
 
-        (payload.layers || []).forEach(layer => {
-            const cluster = clusterByLayer[layer.key];
-            if (!cluster) return;
+        let total = 0;
+        (filtered.locations || []).forEach(loc => {
+            heatPoints.push([loc.latitude, loc.longitude, 1.0]);
+            total += loc.record_count;
+            if (!showPins) return;
 
-            // Update count badge
-            const badge = document.querySelector('[data-layer-count="' + layer.key + '"]');
-            if (badge) {
-                badge.textContent = layer.capped
-                    ? layer.count + ' / ' + layer.total
-                    : String(layer.count);
+            const m = L.marker([loc.latitude, loc.longitude], { icon: locationIcon(loc) });
+            const tooltipLines = [];
+            if (loc.is_composite) {
+                tooltipLines.push((loc.geocode_target || 'This address').toUpperCase());
+                tooltipLines.push(loc.record_count + ' records here — click to list');
+            } else {
+                const rec = loc.records[0];
+                tooltipLines.push(rec.title || '');
+                if (rec.subtitle) tooltipLines.push(rec.subtitle);
             }
-            if (layer.capped) cappedLayers.push(layer.key + ' (' + layer.count + '/' + layer.total + ')');
+            m.bindTooltip(tooltipLines.join('\n'), { direction: 'top' });
 
-            // Skip rendering if layer disabled via checkbox
-            if (!enabledLayers.has(layer.key)) return;
-
-            // Always feed heat points (across enabled layers, regardless of pin display).
-            (layer.pins || []).forEach(p => heatPoints.push([p.lat, p.lng, 1.0]));
-
-            if (!showPins) {
-                total += (layer.pins || []).length;
-                return;
-            }
-
-            (layer.pins || []).forEach(pin => {
-                const m = L.marker([pin.lat, pin.lng], { icon: pinIcon(pin) });
-                // Tooltip hints — shifted pins explain themselves, +N pins
-                // promise more sources on click.
-                let tooltipBody = pin.title + '\n' + (pin.subtitle || '');
-                if (pin.shifted) {
-                    tooltipBody += '\n(Shifted — multiple data sources at this address)';
-                } else if (pin.colocated_count) {
-                    tooltipBody += '\n+' + pin.colocated_count + ' more source' + (pin.colocated_count === 1 ? '' : 's') + ' here — click to choose';
+            m.on('click', () => {
+                if (loc.is_composite) {
+                    openCompositeList(loc);
+                } else {
+                    // Single-record click — go straight to the detail view,
+                    // no back arrow (there's no list to go back to).
+                    openSingleDetail(loc.records[0], null);
                 }
-                m.bindTooltip(tooltipBody, { direction: 'top' });
-                m.on('click', () => {
-                    if (pin.colocated_count && pin.colocated_count > 0 && Array.isArray(pin.colocated_layers)) {
-                        openMultiSourcePicker(pin);
-                    } else {
-                        openDetail(pin);
-                    }
-                });
-                cluster.addLayer(m);
             });
-            total += layer.pins.length;
+            cluster.addLayer(m);
         });
 
         document.getElementById('empty-state').style.display = total === 0 ? 'block' : 'none';
 
-        const cap = document.getElementById('layer-cap-notice');
-        if (cappedLayers.length > 0) {
-            cap.textContent = 'Some layers truncated: ' + cappedLayers.join(', ');
-            cap.style.display = 'block';
+        // Capped-layers warning — reuses the V1 banner.
+        const capEl = document.getElementById('layer-cap-notice');
+        const capped = payload.capped_layers || [];
+        if (capped.length > 0) {
+            capEl.textContent = 'Truncated: ' + capped.join(', ');
+            capEl.style.display = 'block';
         } else {
-            cap.style.display = 'none';
+            capEl.style.display = 'none';
         }
 
-        // Phase 3g V2 — heatmap render. Reuse the same layer instance —
-        // setLatLngs() avoids tile redraw flicker.
         renderHeatmap(showHeat ? heatPoints : []);
         document.getElementById('heat-legend').style.display = showHeat ? 'block' : 'none';
     }
@@ -620,100 +653,140 @@ document.addEventListener('DOMContentLoaded', function () {
         fetchTimer = setTimeout(fetchPins, 350);
     }
 
-    // ── Detail panel ──────────────────────────────────────────────────────
+    // ── Right panel state machine ─────────────────────────────────────────
+    // States: 'composite_list' | 'single_detail'. Closing the panel resets
+    // to no state. When opening single_detail from composite_list we keep a
+    // reference to the parent location so the back arrow can return.
     const detailPanel = document.getElementById('map-detail-panel');
+    let panelParentComposite = null; // last composite_list location (for back-nav)
+
+    function setPanelOpen(open) {
+        detailPanel.style.transform = open ? 'translateX(0)' : 'translateX(100%)';
+    }
+
     document.getElementById('detail-close-btn').addEventListener('click', () => {
-        detailPanel.style.transform = 'translateX(100%)';
+        setPanelOpen(false);
+        panelParentComposite = null;
+        document.getElementById('detail-back-btn').style.display = 'none';
+    });
+
+    document.getElementById('detail-back-btn').addEventListener('click', () => {
+        if (panelParentComposite) openCompositeList(panelParentComposite);
     });
 
     /**
-     * Multi-source picker — shown when a primary pin has colocated_count > 0.
-     * Lists every source at that GPS so the user can pick which detail card
-     * to load. Each list item is a button that swaps the panel back to the
-     * normal detail flow for the chosen source.
+     * Render the composite list — every record at this location, each
+     * clickable to drill into single_detail with a back arrow.
      */
-    function openMultiSourcePicker(primary) {
-        const all = [
-            {
-                layer:      primary.layer,
-                id:         primary.id,
-                title:      primary.title,
-                subtitle:   primary.subtitle,
-                detail_url: primary.detail_url,
-                primary:    true,
-            },
-            ...primary.colocated_layers.map(c => ({ ...c, primary: false })),
-        ];
+    function openCompositeList(loc) {
+        panelParentComposite = loc;
 
-        document.getElementById('detail-title').textContent = primary.title || '';
+        // Title = the canonical street address (geocode_target if available),
+        // subtitle = "Suburb · N records at this address".
+        const headline = loc.geocode_target
+            ? loc.geocode_target.toUpperCase()
+            : (loc.records[0]?.title || '').toUpperCase();
+        document.getElementById('detail-title').textContent = headline;
         document.getElementById('detail-subtitle').textContent =
-            all.length + ' data sources at this address';
+            loc.record_count + ' record' + (loc.record_count === 1 ? '' : 's') + ' at this address';
 
-        const addrEl = document.getElementById('detail-address');
-        addrEl.style.display = 'none';
-        document.getElementById('detail-sensitive').style.display = 'none';
-        document.getElementById('detail-relationships').innerHTML = '';
+        // Show composite view, hide single view.
+        document.getElementById('detail-composite-list').style.display = 'block';
+        document.getElementById('detail-single').style.display = 'none';
+        document.getElementById('detail-back-btn').style.display = 'none';
 
-        const itemsHtml = all.map((src, idx) => {
-            const colour = LAYER_COLOURS[src.layer] || '#64748b';
-            const letter = LAYER_LETTERS[src.layer] || '?';
-            const name   = LAYER_NAMES[src.layer] || src.layer;
-            const primaryBadge = src.primary
-                ? '<span style="margin-left:6px;font-size:0.625rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);">primary</span>'
-                : '';
-            return '<button type="button" data-pick-idx="' + idx + '" '
-                + 'style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;margin-bottom:6px;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-family:inherit;">'
-                + '<span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;background:' + colour + ';color:#fff;border:2px solid #fff;border-radius:50%;font-size:11px;font-weight:700;flex-shrink:0;">' + letter + '</span>'
-                + '<span style="flex:1;min-width:0;">'
-                +   '<div style="font-size:0.8125rem;font-weight:500;color:var(--text-primary);">' + escapeHtml(name) + primaryBadge + '</div>'
-                +   '<div style="font-size:0.75rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(src.title || '') + '</div>'
-                + '</span>'
-                + '<span style="color:var(--text-muted);">→</span>'
-                + '</button>';
-        }).join('');
+        // Group records by category for grouped rendering.
+        const byCategory = {};
+        loc.records.forEach(rec => {
+            (byCategory[rec.category] = byCategory[rec.category] || []).push(rec);
+        });
 
-        document.getElementById('detail-facts').innerHTML =
-            '<div style="font-size:0.6875rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:8px;">Choose a source</div>'
-            + itemsHtml;
+        let html = '';
+        Object.keys(byCategory).forEach(cat => {
+            const colour = LAYER_COLOURS[cat] || '#64748b';
+            const letter = LAYER_LETTERS[cat] || '?';
+            const name   = LAYER_NAMES[cat]   || cat;
+            const recs   = byCategory[cat];
 
-        // Wire each picker button — clicking loads that source's detail.
-        document.querySelectorAll('[data-pick-idx]').forEach(btn => {
+            html += '<div style="margin-bottom:14px;">'
+                +    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);font-weight:600;">'
+                +      '<span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;background:' + colour + ';color:#fff;border-radius:50%;font-size:9px;font-weight:700;">' + letter + '</span>'
+                +      escapeHtml(name) + ' · ' + recs.length
+                +    '</div>';
+
+            recs.forEach((rec, idx) => {
+                const globalIdx = loc.records.indexOf(rec);
+                html += '<button type="button" data-record-idx="' + globalIdx + '" '
+                    +     'style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;margin-bottom:6px;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-family:inherit;">'
+                    +     '<span style="flex:1;min-width:0;">'
+                    +       '<div style="font-size:0.8125rem;font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(rec.title || '') + '</div>'
+                    +       (rec.subtitle ? '<div style="font-size:0.6875rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">' + escapeHtml(rec.subtitle) + '</div>' : '')
+                    +     '</span>'
+                    +     '<span style="color:var(--text-muted);font-size:0.875rem;">→</span>'
+                    + '</button>';
+            });
+            html += '</div>';
+        });
+
+        document.getElementById('composite-records').innerHTML = html;
+
+        // Wire row clicks → single_detail with back arrow visible.
+        document.querySelectorAll('[data-record-idx]').forEach(btn => {
             btn.addEventListener('click', () => {
-                const idx = parseInt(btn.dataset.pickIdx, 10);
-                const src = all[idx];
-                openDetail({
-                    layer:      src.layer,
-                    id:         src.id,
-                    title:      src.title,
-                    subtitle:   src.subtitle,
-                    detail_url: src.detail_url,
-                });
+                const idx = parseInt(btn.dataset.recordIdx, 10);
+                openSingleDetail(loc.records[idx], loc);
             });
         });
 
-        detailPanel.style.transform = 'translateX(0)';
+        setPanelOpen(true);
     }
 
-    async function openDetail(pin) {
-        document.getElementById('detail-title').textContent = pin.title || '';
-        document.getElementById('detail-subtitle').textContent = pin.subtitle || '';
+    /**
+     * Render single-record detail. When opened from a composite, `parent`
+     * carries the parent location so the back arrow can restore the list.
+     * `parent=null` for direct single-pin clicks (no back arrow shown).
+     */
+    async function openSingleDetail(record, parent) {
+        panelParentComposite = parent;
+        const backBtn = document.getElementById('detail-back-btn');
+        if (parent) {
+            backBtn.style.display = 'flex';
+            const back = parent.record_count + ' record' + (parent.record_count === 1 ? '' : 's')
+                + ' at ' + (parent.geocode_target || parent.records[0]?.title || 'this address');
+            document.getElementById('detail-back-label').textContent = back;
+        } else {
+            backBtn.style.display = 'none';
+        }
+
+        document.getElementById('detail-composite-list').style.display = 'none';
+        document.getElementById('detail-single').style.display = 'block';
+
+        document.getElementById('detail-title').textContent = record.title || '';
+        document.getElementById('detail-subtitle').textContent = record.subtitle || '';
         document.getElementById('detail-facts').innerHTML = '<div style="font-size:0.75rem;color:var(--text-muted);">Loading…</div>';
         document.getElementById('detail-relationships').innerHTML = '';
         document.getElementById('detail-sensitive').style.display = 'none';
         document.getElementById('detail-address').style.display = 'none';
-        detailPanel.style.transform = 'translateX(0)';
+        setPanelOpen(true);
 
+        const url = record.deep_link || record.detail_url;
+        if (!url) {
+            document.getElementById('detail-facts').innerHTML =
+                '<div style="font-size:0.75rem;color:var(--text-muted);">No detail card available for this record.</div>';
+            return;
+        }
         try {
-            const url = pin.detail_url + (pin.detail_url.includes('?') ? '&' : '?') + 'viewMode=' + viewMode;
-            const resp = await fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
+            const fullUrl = url + (url.includes('?') ? '&' : '?') + 'viewMode=' + viewMode;
+            const resp = await fetch(fullUrl, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
             if (!resp.ok) {
-                document.getElementById('detail-facts').innerHTML = '<div style="color:var(--ds-red,#dc2626);font-size:0.75rem;">Could not load details.</div>';
+                document.getElementById('detail-facts').innerHTML =
+                    '<div style="color:var(--ds-red,#dc2626);font-size:0.75rem;">Could not load details.</div>';
                 return;
             }
-            const card = await resp.json();
-            renderCard(card);
+            renderCard(await resp.json());
         } catch (e) {
-            document.getElementById('detail-facts').innerHTML = '<div style="color:var(--ds-red,#dc2626);font-size:0.75rem;">' + (e.message || 'Error') + '</div>';
+            document.getElementById('detail-facts').innerHTML =
+                '<div style="color:var(--ds-red,#dc2626);font-size:0.75rem;">' + escapeHtml(e.message || 'Error') + '</div>';
         }
     }
 
@@ -763,9 +836,9 @@ document.addEventListener('DOMContentLoaded', function () {
             const key = e.target.dataset.layerCb;
             if (e.target.checked) enabledLayers.add(key);
             else enabledLayers.delete(key);
-            // Re-render without re-fetching — payload is cached.
-            const hit = cache[cache.length - 1];
-            if (hit) renderPayload(hit.payload);
+            // Re-render in place from the last payload — applyLayerFilters()
+            // re-derives composite flags from the filtered records.
+            if (lastPayload) renderPayload(lastPayload);
         });
     });
 
