@@ -1974,6 +1974,11 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::get('/scheme-owner/{owner}',   [\App\Http\Controllers\Map\MapController::class, 'schemeOwnerCard'])->name('scheme-owner');
         // Phase A.2 — activity log endpoint for map-launched actions.
         Route::post('/activity/log',          [\App\Http\Controllers\Map\MapActivityController::class, 'log'])->name('activity.log');
+        // Phase A.3.2 — per-user saved searches CRUD.
+        Route::get('/saved-searches',         [\App\Http\Controllers\Map\MapSavedSearchController::class, 'index'])->name('saved-searches.index');
+        Route::post('/saved-searches',        [\App\Http\Controllers\Map\MapSavedSearchController::class, 'store'])->name('saved-searches.store');
+        Route::patch('/saved-searches/{id}',  [\App\Http\Controllers\Map\MapSavedSearchController::class, 'update'])->name('saved-searches.update')->whereNumber('id');
+        Route::delete('/saved-searches/{id}', [\App\Http\Controllers\Map\MapSavedSearchController::class, 'destroy'])->name('saved-searches.destroy')->whereNumber('id');
     });
 
     // Ad Template Builder

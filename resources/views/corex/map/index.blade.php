@@ -60,6 +60,29 @@
                 $mapDefaultScope = $mapIsOwner ? 'agency' : 'my';
             @endphp
 
+            {{-- Phase A.3.2 — Saved searches dropdown + Save + Default star.
+                 The dropdown is rendered as a native <select> for keyboard
+                 + screen-reader ergonomics; the trailing buttons handle
+                 Save (modal) and Set as default. --}}
+            <div style="margin-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                    <div style="flex: 1; font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 600;">Saved searches</div>
+                </div>
+                <div style="display: flex; gap: 4px;">
+                    <select id="saved-search-select" style="flex: 1; min-width: 0; padding: 5px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-2); color: var(--text-primary); font-size: 0.75rem;">
+                        <option value="">— select —</option>
+                    </select>
+                    <button type="button" id="saved-search-default-btn" title="Set selected as default on load" aria-label="Set as default"
+                            style="padding: 5px 8px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); cursor: pointer; font-size: 0.875rem;">★</button>
+                    <button type="button" id="saved-search-delete-btn" title="Delete selected saved search" aria-label="Delete saved search"
+                            style="padding: 5px 8px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); cursor: pointer; font-size: 0.875rem;">×</button>
+                </div>
+                <button type="button" id="saved-search-create-btn"
+                        style="display: block; width: 100%; margin-top: 6px; padding: 5px 8px; background: transparent; border: 1px dashed var(--border); border-radius: 4px; color: var(--text-secondary); cursor: pointer; font-size: 0.6875rem;">
+                    + Save current as new
+                </button>
+            </div>
+
             {{-- Phase A.3.1 — Stock Scope pills. Default 'my' for agents,
                  'agency' for owners; 'all' visible only for owners. --}}
             <div style="margin-bottom: 12px;">
@@ -352,6 +375,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Phase A.2 — endpoints + CSRF for activity logging + launches.
     const MAP_ACTIVITY_URL = @json(route('corex.map.activity.log'));
+    // Phase A.3.2 — saved-search CRUD endpoints.
+    const SAVED_SEARCH_INDEX_URL  = @json(route('corex.map.saved-searches.index'));
+    const SAVED_SEARCH_STORE_URL  = @json(route('corex.map.saved-searches.store'));
+    const SAVED_SEARCH_UPDATE_TPL = @json(route('corex.map.saved-searches.update',  ['id' => '__ID__']));
+    const SAVED_SEARCH_DEL_TPL    = @json(route('corex.map.saved-searches.destroy', ['id' => '__ID__']));
     const CSRF_TOKEN = document.querySelector('meta[name=csrf-token]')?.content || '';
     const PROPERTY_SHOW_URL_TPL  = @json(route('corex.properties.show', ['property' => '__ID__']));
     const PROPERTY_OUTREACH_TPL  = @json(route('seller-outreach.entry.from-property', ['property' => '__ID__']));
@@ -1944,6 +1972,173 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     syncFilterUi();
+
+    // ── Phase A.3.2 — Saved searches ─────────────────────────────────────
+    // In-memory mirror of the user's saved searches. Refreshed via
+    // refreshSavedSearchList() after every successful create/update/delete.
+    let savedSearches = [];
+    let pendingDefaultId = null; // applied after the list loads on first render
+
+    function csrfFetch(url, opts) {
+        const o = { ...(opts || {}) };
+        o.headers = { 'Accept': 'application/json', 'X-CSRF-TOKEN': CSRF_TOKEN, ...(o.headers || {}) };
+        if (o.body && !o.headers['Content-Type']) o.headers['Content-Type'] = 'application/json';
+        o.credentials = 'same-origin';
+        return fetch(url, o);
+    }
+
+    async function refreshSavedSearchList(applyDefault) {
+        try {
+            const resp = await csrfFetch(SAVED_SEARCH_INDEX_URL);
+            if (!resp.ok) return;
+            const body = await resp.json();
+            savedSearches = Array.isArray(body.saved_searches) ? body.saved_searches : [];
+            renderSavedSearchSelect();
+            if (applyDefault) {
+                const def = savedSearches.find(s => s.is_default);
+                if (def) {
+                    applySavedSearch(def);
+                    document.getElementById('saved-search-select').value = String(def.id);
+                }
+            }
+        } catch (e) { /* ignore — saved-search list is optional UX */ }
+    }
+
+    function renderSavedSearchSelect() {
+        const sel = document.getElementById('saved-search-select');
+        if (!sel) return;
+        const current = sel.value;
+        sel.innerHTML = '<option value="">— select —</option>'
+            + savedSearches.map(s =>
+                '<option value="' + escapeAttr(String(s.id)) + '">'
+                + (s.is_default ? '★ ' : '')
+                + escapeHtml(s.name)
+                + '</option>'
+            ).join('');
+        // Restore selection when possible (after rename/delete).
+        if (current && savedSearches.some(s => String(s.id) === current)) sel.value = current;
+    }
+
+    function applySavedSearch(s) {
+        // Merge into FILTER_DEFAULTS shape so missing keys fall back cleanly
+        // when an older payload is restored after the shape was extended.
+        const f = s.filter_payload || {};
+        const merged = { ...FILTER_DEFAULTS, types: [...FILTER_DEFAULTS.types], listingStatus: [] };
+        Object.keys(merged).forEach(k => {
+            if (Object.prototype.hasOwnProperty.call(f, k) && f[k] !== undefined) merged[k] = f[k];
+        });
+        if (!SCOPE_IS_OWNER && merged.scope === 'all') merged.scope = 'agency';
+        filters = merged;
+        persistFilters();
+        syncFilterUi();
+        cache.length = 0;
+        fetchPins();
+    }
+
+    document.getElementById('saved-search-select')?.addEventListener('change', e => {
+        const id = e.target.value;
+        if (!id) return;
+        const s = savedSearches.find(x => String(x.id) === id);
+        if (s) applySavedSearch(s);
+    });
+
+    document.getElementById('saved-search-default-btn')?.addEventListener('click', async () => {
+        const sel = document.getElementById('saved-search-select');
+        const id = sel.value;
+        if (!id) { toastInfo('Pick a saved search first.'); return; }
+        const url = SAVED_SEARCH_UPDATE_TPL.replace('__ID__', id);
+        try {
+            const resp = await csrfFetch(url, { method: 'PATCH', body: JSON.stringify({ is_default: true }) });
+            if (resp.ok) { toastInfo('Default updated.'); await refreshSavedSearchList(false); }
+        } catch (e) { /* swallow */ }
+    });
+
+    document.getElementById('saved-search-delete-btn')?.addEventListener('click', async () => {
+        const sel = document.getElementById('saved-search-select');
+        const id = sel.value;
+        if (!id) { toastInfo('Pick a saved search first.'); return; }
+        const s = savedSearches.find(x => String(x.id) === id);
+        const name = s?.name || 'this search';
+        if (!confirm('Delete "' + name + '"?')) return;
+        const url = SAVED_SEARCH_DEL_TPL.replace('__ID__', id);
+        try {
+            const resp = await csrfFetch(url, { method: 'DELETE' });
+            if (resp.ok) { toastInfo('Deleted.'); await refreshSavedSearchList(false); }
+        } catch (e) { /* swallow */ }
+    });
+
+    document.getElementById('saved-search-create-btn')?.addEventListener('click', () => {
+        openSavedSearchCreateModal();
+    });
+
+    function openSavedSearchCreateModal() {
+        const existing = document.getElementById('map-saved-search-modal');
+        if (existing) existing.remove();
+
+        const wrap = document.createElement('div');
+        wrap.id = 'map-saved-search-modal';
+        wrap.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);padding:24px;';
+        wrap.innerHTML =
+            '<div style="background:var(--surface);border-radius:8px;max-width:420px;width:100%;padding:22px;box-shadow:0 10px 30px rgba(0,0,0,0.5);">'
+            +   '<h3 style="font-size:1rem;font-weight:600;color:var(--text-primary);margin:0 0 8px 0;">Save current search</h3>'
+            +   '<p style="font-size:0.75rem;color:var(--text-muted);margin:0 0 12px 0;">Saves the active filters under a name only you can see.</p>'
+            +   '<input type="text" id="ss-name-input" maxlength="120" placeholder="e.g. Margate houses, R1.5-2.5m" '
+            +     'style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text-primary);font-size:0.8125rem;box-sizing:border-box;">'
+            +   '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:0.75rem;cursor:pointer;">'
+            +     '<input type="checkbox" id="ss-default-input"> Set as default (loads on next visit)'
+            +   '</label>'
+            +   '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">'
+            +     '<button type="button" id="ss-cancel" style="padding:6px 14px;font-size:0.8125rem;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;">Cancel</button>'
+            +     '<button type="button" id="ss-save" disabled style="padding:6px 14px;font-size:0.8125rem;font-weight:600;background:#00d4aa;border:1px solid #00d4aa;border-radius:4px;color:#0f172a;cursor:not-allowed;opacity:0.4;">Save</button>'
+            +   '</div>'
+            + '</div>';
+        document.body.appendChild(wrap);
+
+        const nameEl = wrap.querySelector('#ss-name-input');
+        const defEl  = wrap.querySelector('#ss-default-input');
+        const save   = wrap.querySelector('#ss-save');
+        const cancel = wrap.querySelector('#ss-cancel');
+
+        nameEl.addEventListener('input', () => {
+            const ok = nameEl.value.trim().length > 0;
+            save.disabled = !ok;
+            save.style.cursor = ok ? 'pointer' : 'not-allowed';
+            save.style.opacity = ok ? '1' : '0.4';
+        });
+        cancel.addEventListener('click', () => wrap.remove());
+        wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+        save.addEventListener('click', async () => {
+            const name = nameEl.value.trim();
+            if (!name) return;
+            try {
+                const resp = await csrfFetch(SAVED_SEARCH_STORE_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        name,
+                        filter_payload: filters,
+                        is_default:     defEl.checked,
+                    }),
+                });
+                if (resp.ok) {
+                    wrap.remove();
+                    toastInfo('Saved.');
+                    await refreshSavedSearchList(false);
+                    // Auto-select the newly created entry.
+                    const created = (await resp.json()).saved_search;
+                    if (created?.id) {
+                        document.getElementById('saved-search-select').value = String(created.id);
+                    }
+                } else {
+                    const body = await resp.json().catch(() => ({}));
+                    toastInfo(body.error || 'Save failed.');
+                }
+            } catch (e) { toastInfo('Save failed.'); }
+        });
+        setTimeout(() => nameEl.focus(), 50);
+    }
+
+    // Initial load — fetch list + apply default if present.
+    refreshSavedSearchList(true);
 
     // Phase 3h Step 10 — demo toggle click handler.
     if (demoToggleEl) {
