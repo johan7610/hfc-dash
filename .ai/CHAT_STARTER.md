@@ -1,6 +1,6 @@
 # CoreX OS — Chat Starter
 > Auto-maintained by VS Code per CLAUDE.md rule. Paste into a new Claude chat to load context.
-> Last updated: 2026-05-25 by prompt-H (Phase 9c-2 Information Officer appointments)
+> Last updated: 2026-05-25 by prompt-I (Phase 9c-3 Company Documents + privacy policy infrastructure)
 
 <!-- ============================================================ -->
 <!-- STABLE SECTION — rarely changes                              -->
@@ -58,15 +58,12 @@
 - **Branch Isolation** — spec built, 14 prompts A–N
 - **Tax / Payroll** — SARS e@syFile IT3(a) submission for tax year ending Feb 2026
 - **Presentations V2 phases 4–7** — snapshot links + engagement tracking (FirstViewed + FlaggedAccess notifications) / teaser route + lead capture / send-to-recipient delivery (whatsapp + email, sticky defaults) / refresh-request flow with "data may be dated" banner (default 21d, agency-configurable 7–90), 3/10min rate limit, supersession auto-redirect. All 5 tables present (`presentation_snapshot_links`, `presentation_snapshot_views`, `presentation_teaser_leads`, `presentation_deliveries`, `presentation_refresh_requests`). End-to-end flow verified working today.
+- **Phase 9c POPIA trilogy** — (1) PPRA per-entity column on `agencies` + `branches` with branch→agency cascade, settings UI, `corex-document` mislabel fix, agent-footer + RCR export renders. (2) `information_officer_appointments` mirroring FICA pattern (primary + deputies, auto-end-old-primary), admin UI in Compliance Settings (POPIA s55 + s56), permission `manage_information_officer`, 5 lifecycle tests. (3) `company_documents` table for admin-managed legal content (privacy policy, T&Cs, complaints, AML statement, code of conduct, POPIA consent), markdown editor with live preview, public `/legal/{token}` page (clean branded layout, throttle 60/min), Agency `privacy_policy_url` accessor (CompanyDocument > popi_url legacy fallback), 7 tests covering CRUD + public access + accessor cascade.
 
 ### 3.2 IN FLIGHT
 
-- **Branch `feature/map-workspace-overhaul`** — MIC collision fix landed (A.3.4); Tonight: M22 test fix + universal-signature audit + Phase 9c investigation + three small fixes (419 / CMA logo / Tools logo) shipped on same branch.
-- **Phase 9c — POPIA blockers** — three-part build in flight.
-  - **9c-1 PPRA number ✅** — `agencies.ppra_number` + `branches.ppra_number` columns added (nullable string(32)). Settings UI fields wired in agency + branch panels (PPRA above FFC). Render fixed: `corex-document.blade.php` mislabel ("PPRA" was reading `ffc_no`) corrected; PPRA + FFC now render as separate lines with branch→agency cascade and a `[not configured]` placeholder when missing. Email agent-footer gains a PPRA line beneath FFC. RCR export-pdf relabel done. Population: Tinker after deploy (HFC numbers TBD per branch).
-  - **9c-2 Information Officer ✅** — `information_officer_appointments` table mirrors FICA pattern verbatim (primary + deputies, soft delete, auto-end-old-primary boot hook). Model `App\Models\Compliance\InformationOfficerAppointment` with `currentPrimary()` / `activeDeputiesFor()` static helpers. Controller mirrors `FicaOfficerAppointmentsController`. Agency model gains `currentInformationOfficer()` + `allActiveInformationOfficers()`. Admin UI panel under Compliance Settings (POPIA s55 + s56). Permission: `manage_information_officer`. 5 tests cover lifecycle. Population: Tinker after deploy with Elize's user_id.
-  - **9c-3 Privacy policy / Company Documents** — pending (admin-managed content, public `/legal/{token}` link, mirrors `presentation_dispatches` token pattern).
-- **Next:** Andre — Staging deploy + live DB pull after batch lands. Figure-matching audit on staging.
+- **Branch `feature/map-workspace-overhaul`** — MIC collision fix (A.3.4) + M22 test fix + universal-signature audit + small fixes (419 / CMA logo / Tools logo) + **complete Phase 9c trilogy** (PPRA per agency+branch, Information Officer appointments, Company Documents infrastructure with `/legal/{token}` public links) all shipped on this branch tonight. Ready to merge → Staging.
+- **Next:** Andre — Staging deploy + live DB pull. Figure-matching audit on staging.
 
 ### 3.3 SPECCED / partial — not fully built
 
@@ -92,6 +89,7 @@
 
 ## 4. Recent decisions log (last 15, newest top)
 
+- **2026-05-25** — Phase 9c-3 (Company Documents) shipped: `company_documents` table with token-based public `/legal/{token}` route mirrors `presentation_snapshot_links` pattern. Markdown content with admin live-preview editor. 6 curated types (privacy, T&Cs, complaints, AML, code of conduct, POPIA consent). Agency `privacy_policy_url` accessor cascades published doc → legacy `popi_url`. Phase 9c trilogy now LIVE.
 - **2026-05-25** — Phase 9c-2 (Information Officer) shipped: `information_officer_appointments` mirrors FICA pattern (primary + deputies, auto-end-old-primary). Admin UI under Compliance Settings, permission `manage_information_officer`, 5 lifecycle tests passing.
 - **2026-05-25** — CDS template-creation investigation completed; report at `.ai/audits/cds-template-creation-investigation-2026-05-25.md`. 125 templates total (28 CDS, 3 hand-crafted, 22 importer, 72 legacy). 71% multi-tenant safe. April hand-crafted-Blade decision stands. Brief ready for tomorrow's joint session.
 - **2026-05-25** — Phase 9c-1 (PPRA number) shipped: agencies + branches columns + settings UI + corex-document mislabel fix + agent-footer + RCR export. Branch-overrides-agency cascade verified via Tinker.
@@ -105,7 +103,6 @@
 - **2026-05-25** — Staging deploy after MIC collision fix; Andre handles deploy + live DB pull. Map + MIC walk on staging. Figure-matching audit on real data next.
 - **2026-05-25** — 1 Aug live target locked. Weekly cadence: 26 May staging stable → 2 June bug-hunt week 1 (Cindy/Rochelle/Gerda/Shawn) → 9 June feature freeze → 16 June stability → 23 June PropCon notice decision → 30 June 30-day notice → 1 Aug live.
 - **2026-05-25** — Demo stays separate (synthetic Uvongo data, midnight reseed). Staging is proving ground with live DB.
-- **2026-05-25** — Workflow: lightweight verification per prompt, full M1-MN sweep + dev-check every 3rd prompt or on explicit ask.
 - **2026-04-29** — Architecture: Claude owns template design centrally. Hand-crafted Blade with declarative metadata, bypass CDS UI. Templates 116/117/119 first under this model.
 
 ## 5. Outstanding small fixes (none blocking)
@@ -114,7 +111,7 @@
 
 ## 6. Next likely move
 
-Branch `feature/map-workspace-overhaul` carries everything from tonight (A.3.4 MIC fix + M22 test + 419 + CMA + Tools logo + chat starter + 3 audit reports). Next when Johan returns: (1) decide Phase 9c scope — new `agencies.ppra_number` (per-agency or per-branch?), Information Officer (User FK vs free-text + scope?), privacy policy (per-agency external URL vs CoreX-hosted page?) — then VS Code writes the fix prompt; (2) merge feature branch → Staging; (3) Andre pulls live DB, walks map + MIC + e-sign on staging; (4) figure-matching audit; (5) decide whether universal-signature pre-fill (Layer 2) makes the 1 Aug cut. Presentations V2 phases 4–7 are LIVE — no action needed there. Bug-hunt week from 2 June.
+Branch `feature/map-workspace-overhaul` carries everything from tonight: A.3.4 MIC fix + M22 test + 419 + CMA + Tools logo + chat starter + 4 audit reports + **complete Phase 9c trilogy** (PPRA, Information Officer, Company Documents). All 9c POPIA blockers closed. Next when Johan returns: (1) populate HFC's PPRA numbers + appoint Elize as primary IO + draft+publish HFC privacy policy via Tinker; (2) tomorrow's CDS architecture session (brief at `.ai/audits/cds-template-creation-investigation-2026-05-25.md`); (3) merge feature branch → Staging; (4) Andre pulls live DB, walks map + MIC + e-sign + Phase 9c surfaces on staging; (5) figure-matching audit; (6) decide whether universal-signature pre-fill (Layer 2) makes the 1 Aug cut. Bug-hunt week from 2 June.
 
 <!-- ============================================================ -->
 <!-- MAINTENANCE RULE FOR VS CODE                                 -->
