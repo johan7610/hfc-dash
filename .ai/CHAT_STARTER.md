@@ -1,6 +1,6 @@
 # CoreX OS — Chat Starter
 > Auto-maintained by VS Code per CLAUDE.md rule. Paste into a new Claude chat to load context.
-> Last updated: 2026-05-25 by tonight-batch-A-B-C (universal-sig audit + Phase 9c investigation + small-fixes)
+> Last updated: 2026-05-25 by prompt-D (CLAUDE.md subagent file-write rule)
 
 <!-- ============================================================ -->
 <!-- STABLE SECTION — rarely changes                              -->
@@ -88,6 +88,7 @@
 
 ## 4. Recent decisions log (last 15, newest top)
 
+- **2026-05-25** — CLAUDE.md tightened: subagents producing audit/report files MUST write to disk via file-write tools, not return content in chat only (response to tonight's universal-signature subagent that skipped the write step).
 - **2026-05-25** — Tonight's batch: 419 redirect + CMA cert logo + Tools page logo all shipped on `feature/map-workspace-overhaul`. Agency `logo_path` is now the canonical logo source for Tools (wins over stale `PerformanceSetting.company_logo_url`).
 - **2026-05-25** — Phase 9c investigation: privacy policy + Information Officer + agency PPRA number — findings reported, moved from PARKED to IN FLIGHT; awaiting architectural decisions before fix.
 - **2026-05-25** — Universal signature audit completed; report at `.ai/audits/universal-signature-audit-2026-05-25.md`. Layers 1 + 2 both unbuilt. 8 capture surfaces total (3 authenticated, 4 token, 1 CO). Wire-up effort: M-size (~10 files); encryption at rest: S-size (independent).
@@ -102,7 +103,6 @@
 - **2026-04-22** — FICA module live deploy with corrections cycle, agent doc upload, auto-file to contact drive.
 - **2026-03-21** — One-block-system-loops: template has one anchor per role, system renders N stacked signature blocks based on actual party count.
 - **2026-03-21** — E-sign sales documents legally allowed electronically.
-- **2026-03-19** — Sanctum tokens for Chrome extension.
 
 ## 5. Outstanding small fixes (none blocking)
 

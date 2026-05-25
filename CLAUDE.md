@@ -184,6 +184,20 @@ The reason: a stale demo is a dead demo. Walkthroughs that hit empty tables, mis
       by" header. Keep total length under 350 lines.
 ```
 
+## Subagent file-write rule
+
+When a prompt requires the agent to produce a report file (audit, investigation,
+spec, design document, anything where the prompt names a target path), the agent
+MUST use file-write tools to create the file at the requested path and verify
+the file exists on disk before declaring done. Returning report content only in
+the chat reply is not acceptable — the file must persist beyond the chat
+session so future prompts, other agents, and humans can read it. This applies
+to both the main agent and any spawned subagents.
+
+When delegating an audit task to a subagent, the parent prompt must include:
+"Write the report to `<path>` using file-write tools and verify the file exists
+before returning. Returning content only in the reply is not sufficient."
+
 ---
 
 ## How to Fix a Bug
