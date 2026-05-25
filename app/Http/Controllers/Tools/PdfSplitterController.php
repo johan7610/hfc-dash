@@ -61,26 +61,40 @@ class PdfSplitterController extends Controller
             return response()->json([]);
         }
 
+        $cols = ['address', 'street_number', 'street_name', 'suburb', 'city', 'complex_name', 'unit_number', 'property_number'];
+        $terms = preg_split('/\s+/', $q, -1, PREG_SPLIT_NO_EMPTY);
+
         $rows = Property::query()
             ->visibleTo($request->user())
-            ->where(function ($w) use ($q) {
-                $w->where('address', 'like', "%{$q}%")
-                  ->orWhere('street_name', 'like', "%{$q}%")
-                  ->orWhere('street_number', 'like', "%{$q}%")
-                  ->orWhere('suburb', 'like', "%{$q}%")
-                  ->orWhere('city', 'like', "%{$q}%")
-                  ->orWhere('complex_name', 'like', "%{$q}%")
-                  ->orWhere('unit_number', 'like', "%{$q}%")
-                  ->orWhere('property_number', 'like', "%{$q}%");
+            ->where(function ($outer) use ($terms, $cols) {
+                foreach ($terms as $term) {
+                    $outer->where(function ($w) use ($term, $cols) {
+                        foreach ($cols as $c) {
+                            $w->orWhere($c, 'like', "%{$term}%");
+                        }
+                    });
+                }
             })
             ->limit(12)
-            ->get(['id', 'address', 'suburb', 'city', 'property_number']);
+            ->get(['id', 'address', 'street_number', 'street_name', 'suburb', 'city', 'complex_name', 'unit_number', 'property_number']);
 
-        return response()->json($rows->map(fn ($p) => [
-            'id'    => $p->id,
-            'label' => trim(($p->address ?: '(no address)') . ($p->suburb ? ' — ' . $p->suburb : '')),
-            'ref'   => $p->property_number,
-        ]));
+        return response()->json($rows->map(function ($p) {
+            $addr = trim((string) $p->address);
+            if ($addr === '') {
+                $addr = trim(implode(' ', array_filter([
+                    $p->unit_number ? 'Unit ' . $p->unit_number : null,
+                    $p->complex_name,
+                    $p->street_number,
+                    $p->street_name,
+                ])));
+            }
+            if ($addr === '') { $addr = '(no address)'; }
+            return [
+                'id'    => $p->id,
+                'label' => trim($addr . ($p->suburb ? ' — ' . $p->suburb : '')),
+                'ref'   => $p->property_number,
+            ];
+        }));
     }
 
     public function run(Request $request)
