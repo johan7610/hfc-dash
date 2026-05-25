@@ -492,13 +492,9 @@
         @php
             $images = $property->allImages();
             $thumb  = $images[0] ?? null;
-            $sMap = [
-                'draft'     => ['variant' => 'ds-badge-default', 'label' => 'Draft'],
-                'active'    => ['variant' => 'ds-badge-success', 'label' => 'Active'],
-                'sold'      => ['variant' => 'ds-badge-info',    'label' => 'Sold'],
-                'withdrawn' => ['variant' => 'ds-badge-warning', 'label' => 'Withdrawn'],
-            ];
-            $sc = $sMap[$property->status] ?? ['variant' => 'ds-badge-default', 'label' => ucfirst($property->status)];
+            $listingTypeLabel = strtolower((string) ($property->listing_type ?? 'sale')) === 'rental' ? 'For Rent' : 'For Sale';
+            $statusLabel = ucwords(str_replace('_', ' ', (string) ($property->status ?: 'Draft')));
+            $brandPillStyle = 'background:color-mix(in srgb, var(--brand-default) 13%, transparent); color:var(--brand-default); border:1px solid color-mix(in srgb, var(--brand-default) 27%, transparent);';
         @endphp
         <div class="rounded-md overflow-hidden flex flex-col transition-all duration-300"
              style="background:var(--surface); border:1px solid var(--border);"
@@ -529,8 +525,11 @@
                 <span class="ds-badge ds-badge-info absolute top-2.5 left-2.5" style="background:var(--brand-icon);color:#fff;">Live</span>
                 @endif
 
-                {{-- Status badge --}}
-                <span class="ds-badge {{ $sc['variant'] }} absolute top-2.5 right-2.5">{{ $sc['label'] }}</span>
+                {{-- Listing type + Status badges --}}
+                <div class="absolute top-2.5 right-2.5 flex flex-col items-end gap-1">
+                    <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold" style="{{ $brandPillStyle }}">{{ $listingTypeLabel }}</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold" style="{{ $brandPillStyle }}">{{ $statusLabel }}</span>
+                </div>
 
                 {{-- Photo count --}}
                 @if(count($images) > 0)
@@ -670,13 +669,9 @@
             <tbody>
                 @foreach($properties as $property)
                 @php
-                    $sMap = [
-                        'draft'     => ['variant' => 'ds-badge-default', 'label' => 'Draft'],
-                        'active'    => ['variant' => 'ds-badge-success', 'label' => 'Active'],
-                        'sold'      => ['variant' => 'ds-badge-info',    'label' => 'Sold'],
-                        'withdrawn' => ['variant' => 'ds-badge-warning', 'label' => 'Withdrawn'],
-                    ];
-                    $sc = $sMap[$property->status] ?? ['variant' => 'ds-badge-default', 'label' => ucfirst($property->status)];
+                    $rowListingLabel = strtolower((string) ($property->listing_type ?? 'sale')) === 'rental' ? 'For Rent' : 'For Sale';
+                    $rowStatusLabel = ucwords(str_replace('_', ' ', (string) ($property->status ?: 'Draft')));
+                    $rowBrandPillStyle = 'background:color-mix(in srgb, var(--brand-default) 13%, transparent); color:var(--brand-default); border:1px solid color-mix(in srgb, var(--brand-default) 27%, transparent);';
                 @endphp
                 <tr class="transition-all duration-300" style="border-bottom:1px solid var(--border);"
                     onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
@@ -717,7 +712,10 @@
                         @endif
                     </td>
                     <td class="px-4 py-2.5 text-center">
-                        <span class="ds-badge {{ $sc['variant'] }}">{{ $sc['label'] }}</span>
+                        <div class="inline-flex flex-col gap-1 items-center">
+                            <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold" style="{{ $rowBrandPillStyle }}">{{ $rowListingLabel }}</span>
+                            <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold" style="{{ $rowBrandPillStyle }}">{{ $rowStatusLabel }}</span>
+                        </div>
                     </td>
                     <td class="px-4 py-2.5 text-right">
                         <div class="flex items-center justify-end gap-1">
