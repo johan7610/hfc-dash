@@ -276,7 +276,13 @@ final class MapActivityLogTest extends TestCase
         $this->assertArrayHasKey('tracked_property_id', $body);
         $this->assertIsInt($body['tracked_property_id']);
         $this->assertArrayHasKey('redirect_url', $body);
-        $this->assertStringContainsString('opportunities', (string) $body['redirect_url']);
+        // A.2.7 — Prospect Now redirects to the seller-outreach compose
+        // route, not the legacy opportunities.show. Both `prospecting` (the
+        // route prefix) and `outreach/compose` (the action suffix) must be
+        // present to prove the right route was resolved.
+        $url = (string) $body['redirect_url'];
+        $this->assertStringContainsString('prospecting', $url);
+        $this->assertStringContainsString('outreach/compose', $url);
 
         // Confirm the TP actually exists.
         $tp = \App\Models\Prospecting\TrackedProperty::withoutGlobalScopes()
