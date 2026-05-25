@@ -980,16 +980,24 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!showPins) return;
 
             const m = L.marker([loc.latitude, loc.longitude], { icon: locationIcon(loc) });
+            // A.2.6 — hover_summary is built server-side per location with a
+            // 5-priority cascade. The client just renders it. Fallback path
+            // kicks in only on legacy cached payloads from pre-A.2.6.
+            const hs = loc.hover_summary;
             const tooltipLines = [];
-            if (loc.is_composite) {
-                tooltipLines.push((loc.geocode_target || 'This address').toUpperCase());
+            if (hs && (hs.title || hs.subtitle)) {
+                if (hs.title)    tooltipLines.push(hs.title);
+                if (hs.subtitle) tooltipLines.push(hs.subtitle);
+                if (hs.footer)   tooltipLines.push(hs.footer);
+            } else if (loc.is_composite) {
+                tooltipLines.push((loc.geocode_target || (loc.records[0]?.title) || '').toUpperCase());
                 tooltipLines.push(loc.record_count + ' records here — click to list');
             } else {
                 const rec = loc.records[0];
                 tooltipLines.push(rec.title || '');
                 if (rec.subtitle) tooltipLines.push(rec.subtitle);
             }
-            m.bindTooltip(tooltipLines.join('\n'), { direction: 'top' });
+            m.bindTooltip(tooltipLines.filter(Boolean).join('\n'), { direction: 'top' });
 
             m.on('click', () => {
                 if (loc.is_composite) {

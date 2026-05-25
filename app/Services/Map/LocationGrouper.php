@@ -129,6 +129,16 @@ final class LocationGrouper
                 $loc['scheme_name'] = trim(explode(' § ', $first, 2)[0]) ?: 'Sectional Scheme';
             }
 
+            // A.2.6 — context-driven hover summary built server-side. Same
+            // structured shape for single + composite pins so the client
+            // renders them with one template. Five priority cases cascade:
+            //   1) HFC active listing present  → HFC details headline
+            //   2) Sectional Schemes only      → scheme name + unit count
+            //   3) All-same-category, non-HFC  → category-specific summary
+            //   4) Mixed categories            → category breakdown
+            //   5) Single pin                  → title + subtitle (footer empty)
+            $loc['hover_summary'] = $this->buildHoverSummary($loc);
+
             $out[] = $loc;
         }
 
@@ -188,5 +198,161 @@ final class LocationGrouper
         }
 
         return null;
+    }
+
+    /**
+     * A.2.6 — build the hover_summary block for a location. Returns
+     * {title, subtitle, footer} where subtitle/footer may be empty strings.
+     *
+     * Priority order (first match wins):
+     *   1. HFC active listing present → "HFC: 3bed · R 1,420,000 · listed 22d"
+     *      + "+N other records" footer when N > 0.
+     *   2. All scheme_owners (sectional schemes pin) → scheme name + "N units".
+     *   3. All-same-category non-scheme → "5 sold comps · most recent {date}".
+     *   4. Mixed categories → "5 records · 2 sold, 1 MIC, 1 portal".
+     *   5. Single pin → record title + subtitle (no footer).
+     *
+     * @param array<string, mixed> $loc
+     * @return array{title:string, subtitle:string, footer:string}
+     */
+    private function buildHoverSummary(array $loc): array
+    {
+        $records = $loc['records'] ?? [];
+        $count   = (int) ($loc['record_count'] ?? count($records));
+
+        // 5. Single pin — easiest case, full title + subtitle.
+        if ($count === 1) {
+            $rec = $records[0] ?? [];
+            return [
+                'title'    => $this->shortAddress((string) ($rec['title'] ?? '')),
+                'subtitle' => (string) ($rec['subtitle'] ?? ''),
+                'footer'   => '',
+            ];
+        }
+
+        $address = $this->shortAddress(
+            (string) ($loc['geocode_target'] ?? ($records[0]['title'] ?? ''))
+        );
+
+        // 1. HFC active listing wins the headline (sold HFC properties carry
+        // status=sold and surface under sold_comps' category — for hover we
+        // only single-out the LIVE listing case).
+        $hfc = collect($records)->first(fn ($r) => ($r['category'] ?? null) === 'hfc_listings');
+        if ($hfc) {
+            $subtitle = $this->hfcHoverLine($hfc);
+            $other    = $count - 1;
+            return [
+                'title'    => $address,
+                'subtitle' => $subtitle,
+                'footer'   => $other > 0 ? '+' . $other . ' other record' . ($other === 1 ? '' : 's') : '',
+            ];
+        }
+
+        // 2. Sectional Schemes pin.
+        if (($loc['display_as'] ?? '') === 'scheme') {
+            $schemeName = (string) ($loc['scheme_name'] ?? 'Sectional Scheme');
+            return [
+                'title'    => $schemeName,
+                'subtitle' => $count . ' unit' . ($count === 1 ? '' : 's'),
+                'footer'   => '',
+            ];
+        }
+
+        // 3. All-same-category non-scheme.
+        $uniqueCats = collect($records)->pluck('category')->unique()->values();
+        if ($uniqueCats->count() === 1) {
+            $cat = $uniqueCats->first();
+            $subtitle = match ($cat) {
+                'sold_comps'      => $count . ' sold comps' . $this->mostRecentDate($records, ' · most recent '),
+                'active_listings' => $count . ' Portal Stock listings',
+                'mic_subjects'    => $count . ' MIC subjects',
+                'scheme_owners'   => $count . ' scheme owners',
+                default           => $count . ' records',
+            };
+            return [
+                'title'    => $address,
+                'subtitle' => $subtitle,
+                'footer'   => '',
+            ];
+        }
+
+        // 4. Mixed categories.
+        return [
+            'title'    => $address,
+            'subtitle' => $count . ' records · ' . $this->categoryBreakdown($records),
+            'footer'   => '',
+        ];
+    }
+
+    /** "HFC: house · R 1,420,000" — uses the V1 subtitle we already compose
+     *  in MapPinService::formatPropertySubtitle as the suffix. Falls back to
+     *  a bare "HFC listing" when subtitle is empty. */
+    private function hfcHoverLine(array $rec): string
+    {
+        $sub = trim((string) ($rec['subtitle'] ?? ''));
+        return $sub !== '' ? 'HFC: ' . $sub : 'HFC listing';
+    }
+
+    /** "2 sold, 1 MIC, 1 portal" — short comma-separated category list. */
+    private function categoryBreakdown(array $records): string
+    {
+        $counts = collect($records)->groupBy('category')->map->count();
+        $labels = [
+            'sold_comps'      => 'sold',
+            'active_listings' => 'portal',
+            'mic_subjects'    => 'MIC',
+            'scheme_owners'   => 'scheme',
+            'hfc_listings'    => 'HFC',
+        ];
+        $parts = [];
+        foreach ($counts as $cat => $n) {
+            $parts[] = $n . ' ' . ($labels[$cat] ?? $cat);
+        }
+        return implode(', ', $parts);
+    }
+
+    /** Returns " · most recent 12 May 2024" or '' if no usable date. */
+    private function mostRecentDate(array $records, string $prefix): string
+    {
+        $best = null;
+        foreach ($records as $r) {
+            $d = $r['date'] ?? null;
+            if (!$d) continue;
+            try {
+                $c = \Carbon\Carbon::parse($d);
+                if ($best === null || $c->greaterThan($best)) $best = $c;
+            } catch (\Throwable) { /* skip unparseable */ }
+        }
+        return $best ? $prefix . $best->format('j M Y') : '';
+    }
+
+    /**
+     * Trim long addresses to the hover-essential bits — strip trailing postal
+     * codes, drop unit/section prefixes when a street follows them, and cap
+     * the result at ~60 chars so the tooltip stays one line.
+     */
+    private function shortAddress(string $raw): string
+    {
+        $s = trim($raw);
+        if ($s === '') return '';
+
+        // Strip trailing 4-digit postal code that appears after a comma.
+        $s = preg_replace('/,\s*\d{4}\s*$/u', '', $s) ?? $s;
+
+        // "Unit 36, Topanga, 2587 Colin Road, Uvongo" — if the last two
+        // comma segments include a numeric street prefix, prefer those.
+        $segments = array_map('trim', explode(',', $s));
+        $segments = array_values(array_filter($segments, fn ($p) => $p !== ''));
+        if (count($segments) > 3) {
+            // Take the last three segments — usually "street, suburb" or
+            // "street, suburb, town". Drops unit / scheme noise upfront.
+            $segments = array_slice($segments, -3);
+        }
+        $s = implode(', ', $segments);
+
+        if (mb_strlen($s) > 60) {
+            $s = mb_substr($s, 0, 57) . '…';
+        }
+        return $s;
     }
 }
