@@ -156,21 +156,44 @@ trait BuildsSigningSession
      * Pull the rendered document body out of the response.
      *
      * The merged_html lives inside Alpine state as a JSON-encoded string
-     * (`webTemplateHtml: "..."`) where every double-quote in the HTML is
-     * escaped to `"`. Decoding that lets assertions match the actual
-     * stamps (`data-recipient-identity="seller_1"`) rather than fighting
-     * the JSON escape sequence. Returns the raw HTML — newline-preserved,
-     * unescaped — so substring + regex assertions work the same way the
-     * browser sees them.
+     * via Blade's @json directive — which uses JSON_HEX_TAG |
+     * JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT, so HTML-significant
+     * characters land as `\u00XX` hex escapes (e.g. `"` → `"`).
+     * Regex extraction over the resulting string is unreliable for
+     * larger documents (PCRE backtracking limits + ambiguous escape
+     * handling), so we walk the response manually: find the literal
+     * `webTemplateHtml:` anchor, locate the opening `"`, then scan for
+     * the matching unescaped closing `"` byte-by-byte and pass the
+     * captured slice to json_decode for a guaranteed-correct parse.
      */
     protected function extractRenderedDocumentHtml(TestResponse $response): string
     {
         $body = (string) $response->getContent();
-        if (!preg_match('/webTemplateHtml:\s*("(?:\\\\.|[^"\\\\])*")/s', $body, $m)) {
+        $anchor = strpos($body, 'webTemplateHtml:');
+        if ($anchor === false) {
             return '';
         }
-        $decoded = json_decode($m[1], true);
-        return is_string($decoded) ? $decoded : '';
+        $openQuote = strpos($body, '"', $anchor);
+        if ($openQuote === false) {
+            return '';
+        }
+        $len = strlen($body);
+        $i = $openQuote + 1;
+        while ($i < $len) {
+            $ch = $body[$i];
+            if ($ch === '\\') {
+                // Skip the escape pair (`\"`, `\\`, `\n`, `\uXXXX`).
+                $i += ($body[$i + 1] ?? '') === 'u' ? 6 : 2;
+                continue;
+            }
+            if ($ch === '"') {
+                $json = substr($body, $openQuote, $i - $openQuote + 1);
+                $decoded = json_decode($json, true);
+                return is_string($decoded) ? $decoded : '';
+            }
+            $i++;
+        }
+        return '';
     }
 
     /**

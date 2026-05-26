@@ -288,6 +288,7 @@ final class RoleBlockDetectionService
                 'role_token'              => $role,
                 'cluster_ordinal'         => $perRoleOrdinal[$role],
                 'total_clusters_for_role' => $clustersByRole[$role],
+                'field_count'             => count($cluster['fields']),
                 'max_instance_index'      => $maxIdx,
                 'instance_groups'         => $instanceGroups,
                 'block_node'              => $blockNode,

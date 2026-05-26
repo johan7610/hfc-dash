@@ -286,6 +286,14 @@ final class RoleBlockExpansionService
         $isSales        = $template?->isSalesDocument() ?? true;
         $structuralLog  = [];
 
+        // Largest-cluster-wins: when a role has multiple disjoint clusters,
+        // we still need to auto-loop ONE of them (otherwise N>1 recipients
+        // get only the first cluster stamped and the document under-
+        // renders — the audit Q2 bug). Pick the cluster with the most
+        // fields as canonical; treat the others as "stray" references
+        // that get stamped as role_1 by convention.
+        $canonicalOrdinalByRole = $this->resolveCanonicalClusterPerRole($boundaries);
+
         foreach ($boundaries as $boundary) {
             $this->applyBoundary(
                 $dom,
@@ -294,6 +302,7 @@ final class RoleBlockExpansionService
                 $recipsByRole,
                 $isSales,
                 $structuralLog,
+                $canonicalOrdinalByRole,
             );
         }
 
@@ -485,6 +494,7 @@ final class RoleBlockExpansionService
         array $recipsByRole,
         bool $isSales,
         array &$structuralLog,
+        array $canonicalOrdinalByRole = [],
     ): void {
         $role            = $boundary['role_token'];
         $maxIdx          = $boundary['max_instance_index'];
@@ -492,6 +502,8 @@ final class RoleBlockExpansionService
         $blockNode       = $boundary['block_node'];
         $blockXpath      = $boundary['block_xpath'];
         $totalClusters   = $boundary['total_clusters_for_role'];
+        $clusterOrdinal  = $boundary['cluster_ordinal'];
+        $isCanonical     = ($canonicalOrdinalByRole[$role] ?? 0) === $clusterOrdinal;
 
         // Re-resolve block_node against THIS dom (the boundary may have
         // come from a serialise→reload roundtrip, so its DOMElement refs
@@ -523,20 +535,33 @@ final class RoleBlockExpansionService
 
         // Single-block authoring: max idx in cluster == 1.
         if ($maxIdx === 1) {
-            // Case A or C — but only safe to auto-loop when this is the
-            // ROLE's only cluster. If the role has multiple disjoint
-            // clusters in the document, duplicating just this one risks
-            // breaking the page structure (e.g. a stray "Seller name"
-            // header field sitting alongside a fuller hardcoded multi-
-            // instance block elsewhere). Stamp only in that case.
-            if ($totalClusters > 1) {
+            // Case A or C — largest-cluster-wins for multi-cluster shape.
+            //
+            // When a role has multiple disjoint clusters in document
+            // order (e.g. a stray `[Seller Name Surname ID]` reference in
+            // the opening paragraph + the main seller block below), ONE
+            // of them is the canonical block to loop; the others are
+            // stray references that go to recipient 1 by convention
+            // (legal templates typically open with a primary-party
+            // reference and list co-signers in the canonical block).
+            // The audit Q2 documented the previous bailout — which
+            // refused to loop anything in this shape — as the live bug
+            // that produced "only seller_1 fields rendered" for 3-seller
+            // sessions.
+            //
+            // Stray clusters: stamp every field as role_1 (the agent can
+            // review at Step 5 and adjust if a different attribution is
+            // needed). Canonical cluster: fall through to Case A / C
+            // duplication below.
+            if ($totalClusters > 1 && !$isCanonical) {
                 foreach ($liveInstanceGroups[1] ?? [] as $f) {
                     $this->stampFieldNode($f['node'], $role, 1, isOrphan: false);
                 }
                 $structuralLog[] = [
-                    'role' => $role, 'case' => 'A-skipped-multi-cluster',
-                    'reason' => 'Role has multiple disjoint clusters; single-block duplication skipped to preserve structure.',
-                    'cluster_ordinal' => $boundary['cluster_ordinal'],
+                    'role' => $role, 'case' => 'A-stray-cluster-stamped-as-role-1',
+                    'reason' => 'Non-canonical cluster — stamped as role_1 (primary-party convention).',
+                    'cluster_ordinal' => $clusterOrdinal,
+                    'field_count'     => count($liveInstanceGroups[1] ?? []),
                     'total_clusters'  => $totalClusters,
                 ];
                 return;
@@ -630,6 +655,37 @@ final class RoleBlockExpansionService
             toIndex: $N,
             totalInstances: $N,
         );
+    }
+
+    /**
+     * For each role, pick the canonical cluster — the one we loop when the
+     * role has more than one disjoint cluster in document order. Largest-
+     * field-count wins; ties broken by FIRST-occurring cluster (lowest
+     * cluster_ordinal) since the main body block typically appears later
+     * in the document than the opening-paragraph stray reference but
+     * carries more fields. Returns a `role → canonical_cluster_ordinal`
+     * map; absent role → ordinal 0.
+     *
+     * @return array<string, int>
+     */
+    private function resolveCanonicalClusterPerRole(Collection $boundaries): array
+    {
+        $best = [];
+        foreach ($boundaries as $b) {
+            $role = $b['role_token'];
+            $count = (int) ($b['field_count'] ?? 0);
+            if (!isset($best[$role]) || $count > $best[$role]['count']) {
+                $best[$role] = [
+                    'ordinal' => $b['cluster_ordinal'],
+                    'count'   => $count,
+                ];
+            }
+        }
+        $out = [];
+        foreach ($best as $role => $info) {
+            $out[$role] = $info['ordinal'];
+        }
+        return $out;
     }
 
     /**
