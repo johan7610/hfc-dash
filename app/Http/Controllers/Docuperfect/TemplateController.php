@@ -585,6 +585,33 @@ class TemplateController extends Controller
             $template = Template::create($templateData);
         }
 
+        // Contract-driven recipient-loop — stamp `data-role-block`
+        // attributes on every block-level ancestor of role-bearing
+        // fields BEFORE generating the blade. The renderer at signing
+        // time reads these attributes directly (no clustering /
+        // LCA-walking / cluster-decomposition guessing — the structural
+        // boundaries are declared, not inferred).
+        //
+        // Going forward every imported template carries the contract
+        // from day one. Existing templates need the one-time backfill:
+        //   php artisan docuperfect:normalize-templates
+        $normalizer = app(\App\Services\Docuperfect\RoleBlockNormalizer::class);
+        $normalisedTaggedHtml = $normalizer->normalize((string) ($draft->tagged_html ?? ''));
+        if ($normalisedTaggedHtml !== ($draft->tagged_html ?? '')) {
+            $draft->tagged_html = $normalisedTaggedHtml;
+            // Persist on the draft so re-opening the builder shows the
+            // contract-stamped state (the editor_state we wrote on the
+            // template above already carries the un-normalised version
+            // — overwrite it now with the contract-stamped one).
+            $draft->save();
+            $editorState = $template->editor_state ?? [];
+            if (is_array($editorState)) {
+                $editorState['tagged_html'] = $normalisedTaggedHtml;
+                $template->editor_state = $editorState;
+                $template->save();
+            }
+        }
+
         // Generate blade view — use tagged_html (user-edited) as source, fall back to cds_json
         $bladeView = $this->generateCdsBladeView(
             $draft->cds_json,
