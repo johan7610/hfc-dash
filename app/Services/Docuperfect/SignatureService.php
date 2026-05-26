@@ -819,9 +819,24 @@ class SignatureService
         ?User $sentBy = null,
         bool $ficaRequired = false,
         ?int $contactId = null,
-        ?int $ficaSubmissionId = null
+        ?int $ficaSubmissionId = null,
+        ?int $roleIndex = null,
     ): SignatureRequest {
         $token = $this->generateToken();
+
+        // Recipient Loop Engine B1 — split legacy suffixed party_role into
+        // (clean party_role, role_index). Callers that haven't been updated
+        // to pass $roleIndex explicitly still emit suffixed strings like
+        // 'seller_2'; we split them here so the column-level shape is
+        // always clean. Path A semantics: role_index always lives in its
+        // own column, party_role is always the base token.
+        if ($roleIndex === null && preg_match('/^(.+)_(\d+)$/', $partyRole, $m)) {
+            $partyRole = $m[1];
+            $roleIndex = (int) $m[2];
+        }
+        if ($roleIndex === null) {
+            $roleIndex = 1;
+        }
 
         // Get the highest existing signing_order for this template, then add 1
         // This ensures co-owners (two landlords) get sequential order numbers
@@ -832,6 +847,7 @@ class SignatureService
         $request = SignatureRequest::create([
             'signature_template_id' => $template->id,
             'party_role' => $partyRole,
+            'role_index' => $roleIndex,
             'signing_order' => $signingOrder,
             'signer_name' => $signerName,
             'signer_email' => $signerEmail,

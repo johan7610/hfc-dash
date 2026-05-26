@@ -1,6 +1,6 @@
 # CoreX OS — Chat Starter
 > Auto-maintained by VS Code per CLAUDE.md rule. Paste into a new Claude chat to load context.
-> Last updated: 2026-05-26 by fix-A + B0 (Step 5 chip multi-render + recipient-loop investigation)
+> Last updated: 2026-05-26 by B1 (indexed recipient identity)
 
 <!-- ============================================================ -->
 <!-- STABLE SECTION — rarely changes                              -->
@@ -89,6 +89,7 @@
 
 ## 4. Recent decisions log (last 15, newest top)
 
+- **2026-05-26** — B1 shipped: indexed recipient identity. `role_index` column added to `signature_requests` (NOT `signature_template_recipients` — B0 had table name wrong; corrected in commit message) with PHP-regex backfill that split 84 `seller_2` rows into clean `seller` + role_index=2. `SignatureRequest` model gains `role_identity` accessor + `forRoleInstance(role, idx)` scope. `Template::mapSigningPartyKeys()` extended to auto-number duplicates while leaving singletons unchanged (backward compat). New `Template::roleDisplayLabel()` per-token helper recognises wizard's raw tokens (`seller`/`lessor`/`landlord`/`tenant`) in addition to canonical `owner_party`/`acquiring_party`. Wizard's `:1924-1937` keeps the legacy suffixed party_key string for 8 downstream callers but `SignatureService::createSigningRequest()` splits the suffix at insert so the persisted column is always clean. `SigningController::show()` now exposes `$currentRecipient` + `$currentRoleIdentity` to the view (foundation for B2 renderer + B3 signing scope). 13 tests passing. Tinker walk against live session 249 confirmed Johan→agent_1, James→seller_1, Steve→seller_2.
 - **2026-05-26** — Fix A shipped: Step 5 chip rendering now iterates the full `editable_by` array. `ESignWizardController::buildFieldsFromMappings()` preserves the array as `editableBy` payload; `assignedTo` retained as legacy first-of-array string for 8 JS call sites. wizard.blade.php gains `fieldRoleTokens(f)` + `isCreatorRole(role)` helpers; chip render replaced with `<template x-for>` loop. 5 tests passing.
 - **2026-05-26** — B0 recipient-loop-engine investigation: report at `.ai/audits/recipient-loop-engine-investigation-2026-05-26.md`. Smoking gun for Break 2: wizard DOES uniquify keys to `seller`/`seller_2`/etc. at ESignWizardController:1924-1937, but SigningController:1347-1385 maps them all back to `owner_party` role token, and sign.blade.php:1941 renders all sellers' address fields with the same `data-field` attribute so only the first converts to an input. Resolver IS correct; DOM matching IS broken. B1 builds indexed identity end-to-end, B2 the loop renderer, B3 per-recipient scope, B4 Step 5 multi-instance layout. Block-detection approach: field-clustering by `party` token (cheapest).
 - **2026-05-26** — `editable_by` runtime investigation: two breaks confirmed at code level + verified vs Tinker dump of template 111 — Break 1 at `ESignWizardController.php:3508` truncates `editable_by` arrays to first element (`$editableBy[0] ?? 'agent'`) so Step 5 renders ONE chip when template has BOTH seller + agent. Break 2 in recipient signing view: multi-seller templates collapse all sellers to single `party_role='owner_party'` token, so resolver can't distinguish Seller 1 from Seller 3 — needs per-seller architectural decision. Report at `.ai/audits/editable-by-runtime-investigation-2026-05-26.md`.
@@ -102,7 +103,6 @@
 - **2026-05-25** — CDS template-creation investigation completed; report at `.ai/audits/cds-template-creation-investigation-2026-05-25.md`. 125 templates total (28 CDS, 3 hand-crafted, 22 importer, 72 legacy). 71% multi-tenant safe. April hand-crafted-Blade decision stands. Brief ready for tomorrow's joint session.
 - **2026-05-25** — Phase 9c-1 (PPRA number) shipped: agencies + branches columns + settings UI + corex-document mislabel fix + agent-footer + RCR export. Branch-overrides-agency cascade verified via Tinker.
 - **2026-05-25** — Presentations V2 phases 4–7 audit completed; report at `.ai/audits/presentations-v2-phases-4-7-audit-2026-05-25.md`. All four phases ✅ fully built; moved into section 3.1 LIVE. End-to-end "4-month-old link → banner → refresh request → agent notified" flow operational.
-- **2026-05-25** — POPIA columns investigation completed; report at `.ai/audits/popia-columns-investigation-2026-05-25.md`. Conclusion: `ffc_no` ≠ PPRA reg number (legally distinct under PPA 22/2019). Phase 9c rename-vs-add decision = ADD new column.
 - **2026-04-29** — Architecture: Claude owns template design centrally. Hand-crafted Blade with declarative metadata, bypass CDS UI. Templates 116/117/119 first under this model.
 
 ## 5. Outstanding small fixes (none blocking)

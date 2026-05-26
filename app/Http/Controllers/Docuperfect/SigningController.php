@@ -396,6 +396,8 @@ class SigningController extends Controller
 
         return view('docuperfect.signatures.external.sign', [
             'request' => $signingRequest,
+            'currentRecipient' => $signingRequest,        // B1 — alias for the loop-engine downstream layers
+            'currentRoleIdentity' => $signingRequest->role_identity,  // B1 — '{party_role}_{role_index}'
             'template' => $template,
             'document' => $document,
             'numberedClauses' => $numberedClauses,

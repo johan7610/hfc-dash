@@ -1917,27 +1917,30 @@ class ESignWizardController extends Controller
                 if (empty($orderedRecipients)) $orderedRecipients = $recipients;
             }
 
-            // Per V2 spec: each person is a SEPARATE signer in the chain.
-            // Two sellers = two separate parties with unique keys (seller, seller_2).
+            // Recipient Loop Engine B1 — each person is a SEPARATE signer in
+            // the chain. Two sellers = two parties. party_role stays clean
+            // (just 'seller'); role_index distinguishes 1 vs 2. The legacy
+            // suffixed party_key shape ('seller_2') is kept on $recipientPartyKeys
+            // for downstream callers that still expect it — but SignatureService
+            // splits the suffix on insert so the persisted column is always clean.
             $roleCounts = [];
             $recipientPartyKeys = [];
             foreach ($orderedRecipients as $i => $r) {
                 $baseRole = $roleAliases[$r['role'] ?? 'other'] ?? ($r['role'] ?? 'other');
                 if ($baseRole === 'agent') continue;
 
-                // Generate unique party key: seller, seller_2, seller_3, etc.
-                if (!isset($roleCounts[$baseRole])) {
-                    $roleCounts[$baseRole] = 1;
-                    $partyKey = $baseRole;
-                } else {
-                    $roleCounts[$baseRole]++;
-                    $partyKey = $baseRole . '_' . $roleCounts[$baseRole];
-                }
+                $roleCounts[$baseRole] = ($roleCounts[$baseRole] ?? 0) + 1;
+                $roleIndex = $roleCounts[$baseRole];
+                // Legacy suffixed key — kept so 8 callers downstream still get
+                // a unique party_key string. SignatureService::createSigningRequest
+                // splits the suffix back into (party_role, role_index) at insert.
+                $partyKey = $roleIndex === 1 ? $baseRole : $baseRole . '_' . $roleIndex;
 
                 $recipientPartyKeys[$i] = $partyKey;
                 $parties[] = [
                     'role'       => $partyKey,
                     'role_label' => $baseRole,
+                    'role_index' => $roleIndex,  // B1 — explicit index for downstream consumers
                     'name'       => $r['name'] ?? '',
                     'email'      => $r['email'] ?? '',
                     'id_number'  => $r['id_number'] ?? '',

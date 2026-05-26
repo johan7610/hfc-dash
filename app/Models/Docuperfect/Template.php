@@ -268,17 +268,60 @@ class Template extends Model
 
     /**
      * Map generic signing party keys to display names based on document context.
+     *
+     * B1 — auto-numbers duplicates while preserving order:
+     *   ['owner_party','owner_party','acquiring_party','agent'] + sales
+     *     → ['Seller 1', 'Seller 2', 'Buyer', 'Agent']
+     *
+     * Singletons remain non-indexed (just "Buyer", not "Buyer 1").
+     * Existing single-recipient callers see no behaviour change.
      */
     public static function mapSigningPartyKeys(array $keys, bool $isSales): array
     {
+        $counts = array_count_values($keys);
+        $running = [];
+        return array_values(array_map(function ($k) use ($counts, &$running, $isSales) {
+            $running[$k] = ($running[$k] ?? 0) + 1;
+            $totalForRole = $counts[$k] ?? 1;
+            return self::roleDisplayLabel($k, $isSales, $running[$k], $totalForRole);
+        }, $keys));
+    }
+
+    /**
+     * Display label for a single role token. When N > 1 instances of the
+     * same role exist on this document, the label is suffixed with the
+     * 1-based instance index ("Seller 2"). Singletons return the base
+     * label only.
+     *
+     * B1 — used by Step 5's chip render (B4) and B2's per-instance block
+     * headers. mapSigningPartyKeys() above delegates to this method.
+     */
+    public static function roleDisplayLabel(
+        string $roleToken,
+        bool $isSales,
+        ?int $instanceIndex = null,
+        int $totalInstancesForRole = 1,
+    ): string {
         $map = $isSales
             ? ['owner_party' => 'Seller', 'acquiring_party' => 'Buyer', 'agent' => 'Agent']
+            // Wizard-side aliases — see ESignWizardController $roleAliases. These
+            // tokens land in signature_requests.party_role today.
             : ['owner_party' => 'Lessor', 'acquiring_party' => 'Lessee', 'agent' => 'Agent'];
+        // Also recognise the wizard's raw tokens (seller / buyer / lessor / lessee /
+        // landlord / tenant) so labels work whether the caller passes the canonical
+        // owner_party/acquiring_party or the wizard's per-document-type token.
+        $aliases = $isSales
+            ? ['seller' => 'Seller', 'buyer' => 'Buyer']
+            : ['lessor' => 'Lessor', 'lessee' => 'Lessee', 'landlord' => 'Lessor', 'tenant' => 'Lessee'];
 
-        return array_values(array_map(
-            fn($k) => $map[$k] ?? ucfirst(str_replace('_', ' ', $k)),
-            $keys
-        ));
+        $base = $map[$roleToken]
+            ?? $aliases[$roleToken]
+            ?? ucfirst(str_replace('_', ' ', $roleToken));
+
+        if ($totalInstancesForRole > 1 && $instanceIndex !== null) {
+            return $base . ' ' . $instanceIndex;
+        }
+        return $base;
     }
 
     public function getPageImagesAttribute(): array

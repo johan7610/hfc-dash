@@ -15,6 +15,7 @@ class SignatureRequest extends Model
     protected $fillable = [
         'signature_template_id',
         'party_role',
+        'role_index',
         'signing_order',
         'signer_name',
         'signer_email',
@@ -46,6 +47,7 @@ class SignatureRequest extends Model
     ];
 
     protected $casts = [
+        'role_index' => 'integer',
         'token_expires_at' => 'datetime',
         'sent_at' => 'datetime',
         'viewed_at' => 'datetime',
@@ -175,5 +177,33 @@ class SignatureRequest extends Model
             return 0;
         }
         return (int) $this->sent_at->diffInDays(now());
+    }
+
+    // ── Recipient Loop Engine B1 — indexed identity ──
+
+    /**
+     * Indexed identity token in `{party_role}_{role_index}` form. Used by
+     * downstream renderer / signing view layers to address a specific
+     * recipient instance distinct from siblings sharing the same role.
+     *
+     *   party_role=seller, role_index=2 → 'seller_2'
+     *   party_role=agent,  role_index=1 → 'agent_1'
+     *
+     * Note: pre-B1 the suffixed form was stored ON party_role itself.
+     * The B1 migration split it into the dedicated column; this accessor
+     * reconstructs the legacy shape when callers need it for matching
+     * against template metadata that still uses the suffixed form.
+     */
+    public function getRoleIdentityAttribute(): string
+    {
+        return $this->party_role . '_' . ((int) ($this->role_index ?? 1));
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     */
+    public function scopeForRoleInstance($query, string $roleToken, int $index)
+    {
+        return $query->where('party_role', $roleToken)->where('role_index', $index);
     }
 }
