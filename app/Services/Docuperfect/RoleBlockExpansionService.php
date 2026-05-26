@@ -278,32 +278,68 @@ final class RoleBlockExpansionService
             return $this->stampIdentities($html, $recipients, $template?->id);
         }
         $xpath = new DOMXPath($dom);
-
-        // Re-detect against the SAME DOMDocument so node references stay
-        // valid through the mutation loop.
-        $boundaries     = $this->detectBoundariesOnDom($dom);
         $recipsByRole   = $this->groupRecipientsByRole($recipients);
         $isSales        = $template?->isSalesDocument() ?? true;
         $structuralLog  = [];
 
-        // Largest-cluster-wins: when a role has multiple disjoint clusters,
-        // we still need to auto-loop ONE of them (otherwise N>1 recipients
-        // get only the first cluster stamped and the document under-
-        // renders — the audit Q2 bug). Pick the cluster with the most
-        // fields as canonical; treat the others as "stray" references
-        // that get stamped as role_1 by convention.
-        $canonicalOrdinalByRole = $this->resolveCanonicalClusterPerRole($boundaries);
+        // CONTRACT-DRIVEN PATH (primary). Find every `[data-role-block]`
+        // element — these are the import-time-normalised structural
+        // anchors. Group by role, clone each per recipient. No
+        // clustering, no LCA-walking, no per-document patching.
+        //
+        // Templates normalised via cdsGenerate (every save going
+        // forward) OR via `php artisan docuperfect:normalize-templates`
+        // (one-time backfill) carry the contract. Templates without
+        // the contract fall back to the legacy clustering path below
+        // with a structured warning so they're visible in logs until
+        // the agent runs the backfill.
+        $roleBlocks = $xpath->query('//*[@data-role-block]');
+        $hasContract = ($roleBlocks !== false && $roleBlocks->length > 0);
 
-        foreach ($boundaries as $boundary) {
-            $this->applyBoundary(
+        if ($hasContract) {
+            $blocksByRole = [];
+            foreach ($roleBlocks as $block) {
+                if (!$block instanceof DOMElement) {
+                    continue;
+                }
+                $role = strtolower($block->getAttribute('data-role-block'));
+                if ($role === '') {
+                    continue;
+                }
+                $blocksByRole[$role] ??= [];
+                $blocksByRole[$role][] = $block;
+            }
+            $this->expandViaContract(
                 $dom,
-                $xpath,
-                $boundary,
+                $blocksByRole,
                 $recipsByRole,
                 $isSales,
                 $structuralLog,
-                $canonicalOrdinalByRole,
             );
+        } else {
+            // Legacy fallback — templates that pre-date the contract.
+            // Fires until the agent runs the one-time backfill command.
+            // The cluster/LCA logic remains for backward compat; the
+            // log entry makes it visible which templates still need
+            // normalisation.
+            Log::info('RoleBlockExpansionService: rendering unnormalised template via legacy clustering', [
+                'template_id' => $template?->id,
+                'hint'        => 'run `php artisan docuperfect:normalize-templates --id=' . ($template?->id ?? '?') . '` to migrate this template to the data-role-block contract',
+            ]);
+
+            $boundaries     = $this->detectBoundariesOnDom($dom);
+            $canonicalOrdinalByRole = $this->resolveCanonicalClusterPerRole($boundaries);
+            foreach ($boundaries as $boundary) {
+                $this->applyBoundary(
+                    $dom,
+                    $xpath,
+                    $boundary,
+                    $recipsByRole,
+                    $isSales,
+                    $structuralLog,
+                    $canonicalOrdinalByRole,
+                );
+            }
         }
 
         // B3 — stamp data-viewer-editable on every field the current viewer
@@ -326,6 +362,137 @@ final class RoleBlockExpansionService
         }
 
         return $this->detector->serializeFragment($dom);
+    }
+
+    /**
+     * Contract-driven expansion.
+     *
+     * For each role, group its `[data-role-block]` elements by adjacency
+     * (same parent + adjacent siblings = one segment-group sharing one
+     * header per recipient). Then for each segment-group, clone every
+     * block in the group per recipient as a sequence. The FIRST block
+     * in each recipient's sequence gets the prepended "Seller - Name"
+     * sub-heading; subsequent blocks in the same group inherit the
+     * identity stamps but don't print their own header.
+     *
+     * Process groups in REVERSE document order so earlier-group
+     * mutations don't shift later groups' DOM positions.
+     *
+     * @param  array<string, list<DOMElement>>                $blocksByRole
+     * @param  array<string, Collection<int, SignatureRequest>> $recipsByRole
+     * @param  list<array<string, mixed>>                     $structuralLog
+     */
+    private function expandViaContract(
+        DOMDocument $dom,
+        array $blocksByRole,
+        array $recipsByRole,
+        bool $isSales,
+        array &$structuralLog,
+    ): void {
+        foreach ($blocksByRole as $role => $blocks) {
+            $recipients = $recipsByRole[$role] ?? collect();
+            if ($recipients->isEmpty()) {
+                continue;
+            }
+            $n = $recipients->count();
+
+            // Group adjacent same-parent blocks so segment headers share
+            // a single "Seller - Name" per recipient at the top.
+            $groups = $this->groupAdjacentRoleBlocks($blocks);
+
+            foreach (array_reverse($groups) as $group) {
+                if (count($group) === 1) {
+                    // Single-block group — clone-per-recipient with a
+                    // header on each clone (mutateCloneForInstance with
+                    // prependHeader=true by default).
+                    $this->duplicateBlockForRecipients(
+                        $dom,
+                        $group[0],
+                        $role,
+                        $recipients,
+                        $isSales,
+                        $n,
+                    );
+                } else {
+                    // Multi-block group — segments share one header.
+                    $this->duplicateUnitGroupForRecipients(
+                        $dom,
+                        $group,
+                        $role,
+                        $recipients,
+                        $isSales,
+                        $n,
+                    );
+                }
+            }
+            $structuralLog[] = [
+                'role'      => $role,
+                'case'      => 'contract',
+                'blocks'    => count($blocks),
+                'groups'    => count($groups),
+                'recipients'=> $n,
+            ];
+        }
+    }
+
+    /**
+     * Group `[data-role-block]` elements that share a parent AND are
+     * adjacent in document order (only text nodes allowed between them).
+     * Adjacent same-role blocks form one segment-group sharing one
+     * "Seller - Name" sub-heading per recipient.
+     *
+     * @param  list<DOMElement> $blocks  in document order
+     * @return list<list<DOMElement>>
+     */
+    private function groupAdjacentRoleBlocks(array $blocks): array
+    {
+        if (empty($blocks)) {
+            return [];
+        }
+        $groups = [];
+        $current = [];
+        $prev = null;
+        foreach ($blocks as $b) {
+            if ($prev === null) {
+                $current = [$b];
+                $prev = $b;
+                continue;
+            }
+            $adjacent = ($b->parentNode === $prev->parentNode)
+                && $this->roleBlockSiblingsAreAdjacent($prev, $b);
+            if ($adjacent) {
+                $current[] = $b;
+            } else {
+                $groups[] = $current;
+                $current = [$b];
+            }
+            $prev = $b;
+        }
+        if (!empty($current)) {
+            $groups[] = $current;
+        }
+        return $groups;
+    }
+
+    /**
+     * Two role-block siblings count as "adjacent" when only text nodes
+     * sit between them in the DOM. Any intervening element-type sibling
+     * (a paragraph, heading, etc.) breaks the group — those blocks
+     * belong to different segment-groups.
+     */
+    private function roleBlockSiblingsAreAdjacent(DOMElement $a, DOMElement $b): bool
+    {
+        $cur = $a->nextSibling;
+        while ($cur !== null) {
+            if ($cur === $b) {
+                return true;
+            }
+            if ($cur instanceof DOMElement) {
+                return false;
+            }
+            $cur = $cur->nextSibling;
+        }
+        return false;
     }
 
     /**
