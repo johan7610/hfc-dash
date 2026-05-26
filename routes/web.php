@@ -53,12 +53,6 @@ Route::post('/p/{token}/refresh', [\App\Http\Controllers\Presentation\PublicPres
     ->middleware('throttle:5,1')
     ->name('presentation.public.refresh-submit');
 
-// ── Phase 9c-3 — public company documents (privacy policy, T&Cs, …).
-//    Token is the credential; 404 unless the document is published.
-Route::get('/legal/{token}', [\App\Http\Controllers\Public\CompanyDocumentController::class, 'show'])
-    ->where('token', '[A-Za-z0-9]{40,64}')
-    ->middleware('throttle:60,1')
-    ->name('public.company-document');
 Route::post('/m/{shortcode}/callback', [\App\Http\Controllers\SellerOutreach\PublicLandingController::class, 'callback'])
     ->where('shortcode', '[A-Za-z0-9]{6}')
     ->middleware('throttle:10,60')
@@ -1804,16 +1798,6 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         ->middleware('permission:manage_performance_settings')
         ->name('admin.company-settings.update');
 
-    // Phase 9c-3 — Company Documents (privacy policy, T&Cs, complaints, AML, …).
-    // Permission check is inside the controller (manage_information_officer OR owner).
-    Route::prefix('admin/company-documents')->name('admin.company-documents.')->group(function () {
-        Route::get('/',          [\App\Http\Controllers\Admin\CompanyDocumentController::class, 'index'])->name('index');
-        Route::post('/',         [\App\Http\Controllers\Admin\CompanyDocumentController::class, 'create'])->name('create');
-        Route::get('/{id}',      [\App\Http\Controllers\Admin\CompanyDocumentController::class, 'edit'])->whereNumber('id')->name('edit');
-        Route::put('/{id}',      [\App\Http\Controllers\Admin\CompanyDocumentController::class, 'update'])->whereNumber('id')->name('update');
-        Route::post('/{id}/toggle-published', [\App\Http\Controllers\Admin\CompanyDocumentController::class, 'togglePublished'])->whereNumber('id')->name('toggle-published');
-        Route::delete('/{id}',   [\App\Http\Controllers\Admin\CompanyDocumentController::class, 'destroy'])->whereNumber('id')->name('destroy');
-    });
 
     // Module 6 (M6.2) — Activity Points → Calendar class mappings.
     Route::prefix('admin/activity-mappings')->name('admin.activity-mappings.')->group(function () {

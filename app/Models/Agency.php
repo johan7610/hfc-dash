@@ -296,26 +296,6 @@ class Agency extends Model
         return $this->hasMany(InformationOfficerAppointment::class);
     }
 
-    // ── Phase 9c-3 — Privacy Policy URL accessor ──
-    //
-    // Prefers a published `privacy_policy` CompanyDocument; falls back to
-    // the legacy `popi_url` column (kept for backwards compat). Callers
-    // should switch from `$agency->popi_url` to `$agency->privacy_policy_url`
-    // so the cascade kicks in once a CompanyDocument is published.
-    public function getPrivacyPolicyUrlAttribute(): ?string
-    {
-        $doc = \App\Models\CompanyDocument::forAgency($this->id)
-            ->ofType('privacy_policy')
-            ->published()
-            ->whereNull('deleted_at')
-            ->latest('updated_at')
-            ->first();
-        if ($doc) {
-            return $doc->publicUrl();
-        }
-        return $this->popi_url ?: null;
-    }
-
     /** Returns the active primary IO's User (or null). */
     public function currentInformationOfficer(): ?\App\Models\User
     {
