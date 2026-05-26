@@ -169,11 +169,12 @@ final class CdsBuilderRedirectTest extends TestCase
     private function seedAgentWithTemplatePermissions(): User
     {
         // Seed an owner-flagged role so PermissionService::userHasPermission
-        // shortcuts to true (the agent role in production has
-        // manage_templates by seed, but tests run RefreshDatabase against
-        // an empty permissions table — using an owner role is the
-        // smallest change that gives the test the right authorisation
-        // without hand-seeding the full RBAC matrix).
+        // shortcuts to true. The Role model caches its all-rows snapshot
+        // statically (Role::$cachedRoles), so we MUST call clearCache()
+        // after the insert — otherwise an earlier test in the same suite
+        // run primes the cache without our new role, and our user's
+        // permission check returns false (the in-isolation test pass
+        // didn't catch this because the cache started empty).
         DB::table('roles')->insertOrIgnore([
             'name' => 'test_template_owner',
             'label' => 'Test Template Owner',
@@ -183,6 +184,7 @@ final class CdsBuilderRedirectTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+        \App\Models\Role::clearCache();
         $userId = (int) DB::table('users')->insertGetId([
             'name' => 'Agent Tester',
             'email' => 't-' . Str::random(8) . '@x.test',

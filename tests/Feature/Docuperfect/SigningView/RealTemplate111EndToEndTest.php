@@ -67,6 +67,23 @@ final class RealTemplate111EndToEndTest extends TestCase
 
         $body = $this->extractRenderedDocumentHtml($response);
         $this->assertStringContainsString('data-recipient-identity="seller_2"', $body);
+
+        // Walk-fix — main block loop. seller_2's stamps must appear on
+        // EVERY block unit of the seller role (opening paragraph
+        // reference AND main block lines), not just the opening
+        // paragraph (the previous largest-cluster-wins behaviour).
+        // Count must be >= the number of block units containing
+        // seller fields in the canonical fixture (opening-paragraph
+        // line + at least one main-body line). The pre-fix bug
+        // produced count = 0 because the main block was stamped as
+        // seller_1 only. Threshold of 2 is the minimum that proves
+        // both clusters duplicated.
+        $stampCount = substr_count($body, 'data-recipient-identity="seller_2"');
+        $this->assertGreaterThanOrEqual(
+            2,
+            $stampCount,
+            'seller_2 must be stamped on multiple block units (opening paragraph + main block), got ' . $stampCount,
+        );
     }
 
     /** EXPECTED FAILURE until Commit 3. Same root cause as seller_2. */

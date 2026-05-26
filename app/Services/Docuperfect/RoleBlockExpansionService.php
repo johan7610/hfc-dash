@@ -535,37 +535,38 @@ final class RoleBlockExpansionService
 
         // Single-block authoring: max idx in cluster == 1.
         if ($maxIdx === 1) {
-            // Case A or C — largest-cluster-wins for multi-cluster shape.
+            // Case A or C — every cluster of a multi-recipient role
+            // belongs to the recipient and must duplicate per recipient.
             //
-            // When a role has multiple disjoint clusters in document
-            // order (e.g. a stray `[Seller Name Surname ID]` reference in
-            // the opening paragraph + the main seller block below), ONE
-            // of them is the canonical block to loop; the others are
-            // stray references that go to recipient 1 by convention
-            // (legal templates typically open with a primary-party
-            // reference and list co-signers in the canonical block).
-            // The audit Q2 documented the previous bailout — which
-            // refused to loop anything in this shape — as the live bug
-            // that produced "only seller_1 fields rendered" for 3-seller
-            // sessions.
+            // Earlier implementations (largest-cluster-wins / canonical-
+            // ordinal) tried to pick ONE cluster as the "real" block to
+            // loop and stamp the others as role_1. That broke template
+            // 111's live shape: opening paragraph reference + main
+            // seller block both carry seller fields that BELONG to the
+            // recipient. The opening paragraph isn't a "stray" — it's
+            // where the recipient's name+ID appear; the main block is
+            // where their address+phone+email appear. Stamping the
+            // main block as role_1-only meant seller_2's address had
+            // nowhere to render.
             //
-            // Stray clusters: stamp every field as role_1 (the agent can
-            // review at Step 5 and adjust if a different attribution is
-            // needed). Canonical cluster: fall through to Case A / C
-            // duplication below.
-            if ($totalClusters > 1 && !$isCanonical) {
-                foreach ($liveInstanceGroups[1] ?? [] as $f) {
-                    $this->stampFieldNode($f['node'], $role, 1, isOrphan: false);
-                }
-                $structuralLog[] = [
-                    'role' => $role, 'case' => 'A-stray-cluster-stamped-as-role-1',
-                    'reason' => 'Non-canonical cluster — stamped as role_1 (primary-party convention).',
-                    'cluster_ordinal' => $clusterOrdinal,
-                    'field_count'     => count($liveInstanceGroups[1] ?? []),
-                    'total_clusters'  => $totalClusters,
-                ];
-                return;
-            }
+            // The corrected rule: when a role has N>1 recipients, every
+            // cluster of that role duplicates N times. The cluster's
+            // own LCA is the duplication unit — multi-cluster shape
+            // produces multiple independent loops, one per cluster.
+            //
+            // Single-cluster shape still works the same: one cluster,
+            // duplicated N times. Single-recipient shape still works
+            // the same: every cluster stamped once with role_1.
+            //
+            // Future architectural question: a template that legitimately
+            // uses the SAME role for multiple unrelated purposes (e.g.
+            // an agent block + an agent-only-witness block both flagged
+            // editable_by=agent) would over-duplicate under this rule.
+            // No such template exists in production today; if it ships
+            // the author can mark the secondary cluster with an
+            // explicit data-role-block-pinned="1" attribute to opt
+            // out of duplication. Tracked as a follow-up if it becomes
+            // a real problem.
             if ($recipientCount === 1) {
                 // Case C — stamp the existing block with role_1.
                 foreach ($liveInstanceGroups[1] ?? [] as $f) {
@@ -573,29 +574,53 @@ final class RoleBlockExpansionService
                 }
                 return;
             }
-            // Case A — duplicate the LCA N times.
-            if ($blockNodeLive === null) {
-                // No clean LCA → cannot auto-loop. Stamp existing as role_1
-                // and orphan-flag the recipient gap with a log.
+
+            // Case A — duplicate per-block-unit, NOT per-cluster.
+            //
+            // Decompose the cluster's fields into block units by walking
+            // each field up to its nearest block-level ancestor (`<div>`,
+            // `<p>`, `<li>`, `<tr>`, `<td>` etc.). Fields sharing a block
+            // ancestor form one unit; different block ancestors form
+            // separate units. Each unit duplicates N times.
+            //
+            // Why: template 111's main seller block lays the fields out
+            // as sibling `<div class="corex-clause">` lines under the
+            // page wrapper — one line for address, another for phone +
+            // email. The whole-cluster LCA of those fields walks up to
+            // `<div class="corex-page">` (the page wrapper, 19+ KB), so
+            // duplicating "the cluster" duplicates the entire page —
+            // catastrophic. Block-unit decomposition keeps duplication
+            // tight to the actual line containers the agent authored.
+            $blockUnits = $this->decomposeFieldsIntoBlockUnits(
+                $liveInstanceGroups[1] ?? [],
+            );
+            if (empty($blockUnits)) {
                 foreach ($liveInstanceGroups[1] ?? [] as $f) {
                     $this->stampFieldNode($f['node'], $role, 1, isOrphan: false);
                 }
                 $structuralLog[] = [
                     'role'   => $role,
-                    'case'   => 'A-no-clean-lca',
-                    'reason' => 'No wrapping container found for single-block role; auto-loop skipped — template author should wrap the block in a <div data-role-block="…"> or similar.',
+                    'case'   => 'A-no-block-units',
+                    'reason' => 'No block-level ancestors found for fields; auto-loop skipped.',
                     'recipients' => $recipientCount,
                 ];
                 return;
             }
-            $this->duplicateBlockForRecipients(
-                $dom,
-                $blockNodeLive,
-                $role,
-                $recipients,
-                $isSales,
-                $recipientCount,
-            );
+            // Iterate units in REVERSE document order so duplicating
+            // earlier units doesn't shift later units' DOM positions
+            // (each duplication inserts new siblings, bumping later
+            // sibling indices forward — reverse-order processing keeps
+            // every unit's parent reference stable when we mutate).
+            foreach (array_reverse($blockUnits) as $unit) {
+                $this->duplicateBlockForRecipients(
+                    $dom,
+                    $unit,
+                    $role,
+                    $recipients,
+                    $isSales,
+                    $recipientCount,
+                );
+            }
             return;
         }
 
@@ -655,6 +680,71 @@ final class RoleBlockExpansionService
             toIndex: $N,
             totalInstances: $N,
         );
+    }
+
+    /**
+     * Decompose a cluster's fields into block-level duplication units.
+     *
+     * For each field, walk up to find the nearest "block" ancestor — a
+     * `<div>`, `<p>`, `<li>`, `<tr>`, `<td>`, `<section>`, `<article>`,
+     * `<aside>` or `<header>`/`<footer>`. Fields sharing the same block
+     * ancestor form one unit (e.g. phone + email rendered side-by-side
+     * in the same `<div class="corex-clause">`). Fields in different
+     * block ancestors form separate units (e.g. address in one line-div,
+     * phone in another). Each unit is a duplication target; the caller
+     * clones the unit N times and stamps each clone with a recipient
+     * identity.
+     *
+     * Returned units are in document order. Duplicate them in REVERSE
+     * to avoid shifting later units' positions during mutation.
+     *
+     * @param  list<array{field_name:string,sub_name:?string,node:DOMElement}> $fields
+     * @return list<DOMElement>
+     */
+    private function decomposeFieldsIntoBlockUnits(array $fields): array
+    {
+        $blockTags = ['div', 'p', 'li', 'tr', 'td', 'section', 'article', 'aside', 'header', 'footer'];
+        $seen = [];
+        $units = [];
+        foreach ($fields as $f) {
+            $node = $f['node'] ?? null;
+            if (!$node instanceof DOMElement) {
+                continue;
+            }
+            $blockAncestor = $this->findBlockAncestor($node, $blockTags);
+            if ($blockAncestor === null) {
+                continue;
+            }
+            $hash = spl_object_hash($blockAncestor);
+            if (isset($seen[$hash])) {
+                continue;
+            }
+            $seen[$hash] = true;
+            $units[] = $blockAncestor;
+        }
+        return $units;
+    }
+
+    /**
+     * Walk a node's parent chain until we hit a block-level element.
+     * Stops at <body> / the wrapper root — returns null when no block
+     * ancestor exists short of the document root.
+     *
+     * @param  list<string> $blockTags
+     */
+    private function findBlockAncestor(DOMElement $node, array $blockTags): ?DOMElement
+    {
+        $cur = $node->parentNode;
+        while ($cur instanceof DOMElement) {
+            if ($cur->nodeName === 'body' || $cur->getAttribute('id') === RoleBlockDetectionService::ROOT_ID) {
+                return null;
+            }
+            if (in_array($cur->nodeName, $blockTags, true)) {
+                return $cur;
+            }
+            $cur = $cur->parentNode;
+        }
+        return null;
     }
 
     /**
