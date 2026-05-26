@@ -1,6 +1,6 @@
 # CoreX OS — Chat Starter
 > Auto-maintained by VS Code per CLAUDE.md rule. Paste into a new Claude chat to load context.
-> Last updated: 2026-05-26 by esign-full-state-audit (read-only)
+> Last updated: 2026-05-26 by editable_by-runtime-investigation (read-only)
 
 <!-- ============================================================ -->
 <!-- STABLE SECTION — rarely changes                              -->
@@ -89,6 +89,7 @@
 
 ## 4. Recent decisions log (last 15, newest top)
 
+- **2026-05-26** — `editable_by` runtime investigation: two breaks confirmed at code level + verified vs Tinker dump of template 111 — Break 1 at `ESignWizardController.php:3508` truncates `editable_by` arrays to first element (`$editableBy[0] ?? 'agent'`) so Step 5 renders ONE chip when template has BOTH seller + agent. Break 2 in recipient signing view: multi-seller templates collapse all sellers to single `party_role='owner_party'` token, so resolver can't distinguish Seller 1 from Seller 3 — needs per-seller architectural decision. Report at `.ai/audits/editable-by-runtime-investigation-2026-05-26.md`.
 - **2026-05-26** — E-Sign full state audit completed; report at `.ai/audits/esign-full-state-audit-2026-05-26.md` — comprehensive map of current state vs wet-ink target for Johan's strategic call. Headline: amendment surface was simplified (flag-based) 6h before the demo via Phase 1B.6 (commit 7521e63), NOT torn out; strikethrough endpoint returns 410 Gone deliberately; `editable_by` server-side logic at SigningController:1347-1385 reads correct per code but never operationally verified — gap between Johan's locked-fields report and the audit needs live-test resolution.
 - **2026-05-26** — Rolled back Phase 9c-3 over-build. Privacy policy now lives as Company Settings field next to Email Disclaimer with branch override (plain column names, mirrors existing override convention). Public URL via `/legal/privacy/{token}`. `effectivePopiUrl()` accessor cascades internal published → external `popi_url` → null. Documents-infrastructure audit confirmed Phase 9c-3 duplicated scope of pre-existing `agency_compliance_provisions` system — table dropped, files deleted, replaced with field pattern.
 - **2026-05-25** — Module 6 M6.2 shipped: `activity_definition_calendar_classes` mapping table (agency_id + event_class slug + activity_definition_id + value_per_event + requires_feedback + auto_revoke_after_hours + daily_cap + back_date_limit_hours + is_active). Model with `resolveForEvent(CalendarEvent)` static helper, admin CRUD at `/admin/activity-mappings`, permission `manage_activity_mappings`. 6 tests passing. Schema deviation from prompt: mapping keys off event_class slug not FK (real schema has `calendar_event_class_settings` + `calendar_events.category` string, no `calendar_event_classes` table). Stopping here for the session; M6.3 + M6.4 + M6.5 in next session per honest-scope rule.
@@ -102,7 +103,6 @@
 - **2026-05-25** — POPIA columns investigation completed; report at `.ai/audits/popia-columns-investigation-2026-05-25.md`. Conclusion: `ffc_no` ≠ PPRA reg number (legally distinct under PPA 22/2019). Phase 9c rename-vs-add decision = ADD new column.
 - **2026-05-25** — CLAUDE.md tightened: subagents producing audit/report files MUST write to disk via file-write tools, not return content in chat only (response to tonight's universal-signature subagent that skipped the write step).
 - **2026-05-25** — Tonight's batch: 419 redirect + CMA cert logo + Tools page logo all shipped on `feature/map-workspace-overhaul`. Agency `logo_path` is now the canonical logo source for Tools (wins over stale `PerformanceSetting.company_logo_url`).
-- **2026-05-25** — Phase 9c investigation: privacy policy + Information Officer + agency PPRA number — findings reported, moved from PARKED to IN FLIGHT; awaiting architectural decisions before fix.
 - **2026-04-29** — Architecture: Claude owns template design centrally. Hand-crafted Blade with declarative metadata, bypass CDS UI. Templates 116/117/119 first under this model.
 
 ## 5. Outstanding small fixes (none blocking)
