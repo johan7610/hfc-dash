@@ -312,19 +312,23 @@ class SigningController extends Controller
                     $signingRequest->party_role
                 );
 
-            // Recipient Loop Engine — B2.5 expansion pass. Detect role
-            // blocks in the rendered body, then per-block either stamp
-            // existing fields (hardcoded multi-block templates) or
-            // duplicate the block N times and pre-fill each clone from
-            // its recipient's contact (single-block authoring style).
-            // The pipeline is backward-compatible: legacy single-recipient
-            // templates and hardcoded N-block templates render unchanged.
+            // Recipient Loop Engine — B2.5/B3 expansion pass. Detects role
+            // blocks, duplicates single-block templates per recipient with
+            // per-instance contact pre-fill, AND (B3) stamps
+            // `data-viewer-editable="1"` on every field this signing
+            // recipient is authorised to edit so the signing-view JS can
+            // gate input rendering by attribute, not by name-lookup.
             $allRecipientsForTemplate = SignatureRequest::where('signature_template_id', $template->id)->get();
+            $fieldMappingsRaw = is_array($docTemplate->field_mappings ?? null)
+                ? $docTemplate->field_mappings
+                : [];
             $webTemplateHtml = app(\App\Services\Docuperfect\RoleBlockExpansionService::class)
                 ->expandWithLooping(
                     $docTemplate,
                     $webTemplateHtml,
                     $allRecipientsForTemplate,
+                    $signingRequest,
+                    $fieldMappingsRaw,
                 );
         }
 
@@ -415,6 +419,8 @@ class SigningController extends Controller
             'currentRoleIdentity' => $signingRequest->role_identity,  // B1 — '{party_role}_{role_index}'
             'template' => $template,
             'document' => $document,
+            'docTemplate' => $docTemplate,                // B3 info panel — isSalesDocument() / role labelling
+            'isRecipientSigningView' => true,             // B3 info panel — render flag (false on agent wizard)
             'numberedClauses' => $numberedClauses,
             'persistedClauseFlags' => $persistedClauseFlags,
             'partyAlreadySigned' => $partyAlreadySigned,
@@ -1057,8 +1063,14 @@ class SigningController extends Controller
 
     /**
      * Save web template field values back to the document.
-     * Merges with existing web_template_data — only updates fields
-     * assigned to the signer's party role.
+     *
+     * B3 hardening — every incoming field is validated against the
+     * server-side per-recipient editable scope (RoleBlockExpansionService's
+     * identity + role rule). DOM trust is never the security layer:
+     * even if a malicious client strips data-viewer-editable client-side,
+     * the server re-derives editability from field_mappings + viewer
+     * identity. Any field the viewer cannot edit triggers a 403 + audit
+     * log entry (one per violation, never silently dropped).
      */
     public function saveWebFields(Request $request, $token)
     {
@@ -1078,17 +1090,45 @@ class SigningController extends Controller
         $incomingFields = $request->input('fields', []);
         $partyRole = $signingRequest->party_role;
 
-        // Only allow updating fields assigned to this signer's party
-        $allowedFields = WebTemplateFieldPartyMap::getEditableFields($partyRole);
+        $docTemplate = $document->template;
+        $fieldMappingsRaw = is_array($docTemplate?->field_mappings ?? null)
+            ? $docTemplate->field_mappings
+            : [];
+
+        $authResult = $this->authoriseWebFieldWrite(
+            $signingRequest,
+            $incomingFields,
+            $fieldMappingsRaw,
+        );
+        if ($authResult['violation'] !== null) {
+            SignatureAuditLog::create([
+                'signature_template_id' => $signingRequest->template->id,
+                'action' => 'web_fields_save_denied',
+                'actor_type' => SignatureAuditLog::ACTOR_SIGNER,
+                'actor_name' => $signingRequest->signer_name,
+                'actor_email' => $signingRequest->signer_email,
+                'actor_ip_address' => $request->ip(),
+                'actor_user_agent' => $request->userAgent(),
+                'signature_request_id' => $signingRequest->id,
+                'metadata_json' => [
+                    'actor_role_identity' => $signingRequest->role_identity,
+                    'denied_field'        => $authResult['violation']['field'],
+                    'denied_identity'     => $authResult['violation']['identity'],
+                    'reason'              => $authResult['violation']['reason'],
+                ],
+            ]);
+            return response()->json([
+                'ok'    => false,
+                'error' => 'Field not editable by current party',
+                'field' => $authResult['violation']['field'],
+            ], 403);
+        }
 
         $existingData = $document->web_template_data ?? [];
         $updated = false;
 
-        foreach ($incomingFields as $fieldName => $value) {
-            if (!is_string($fieldName) || !in_array($fieldName, $allowedFields, true)) {
-                continue;
-            }
-            $existingData[$fieldName] = $value;
+        foreach ($authResult['accepted'] as $logicalName => $value) {
+            $existingData[$logicalName] = $value;
             $updated = true;
         }
 
@@ -1105,10 +1145,146 @@ class SigningController extends Controller
             'actor_ip_address' => $request->ip(),
             'actor_user_agent' => $request->userAgent(),
             'signature_request_id' => $signingRequest->id,
-            'metadata_json' => ['party_role' => $partyRole, 'field_count' => count($incomingFields)],
+            'metadata_json' => [
+                'party_role'         => $partyRole,
+                'actor_role_identity'=> $signingRequest->role_identity,
+                'field_count'        => count($authResult['accepted']),
+            ],
         ]);
 
-        return response()->json(['ok' => true]);
+        return response()->json(['ok' => true, 'saved' => count($authResult['accepted'])]);
+    }
+
+    /**
+     * Per-recipient field-write authorisation.
+     *
+     * Accepts two payload shapes for backward compat:
+     *   1. Legacy flat:   `fields: { field_name: "value", ... }`
+     *      → resolved against the viewer's party-role + WebTemplateFieldPartyMap.
+     *   2. B3 identity:   `fields: { field_name__r2: { value, identity, original_field } }`
+     *      → identity must match the viewer's role_identity AND the field's
+     *        editable_by must include the viewer's canonical role token.
+     *
+     * Returns:
+     *   - `accepted` : map of logical field name → value to persist.
+     *   - `violation`: first denial seen, or null when every field is allowed.
+     *
+     * @param  array<string, mixed>                                         $incomingFields
+     * @param  array<string, array<string, mixed>>                          $fieldMappingsRaw
+     * @return array{accepted: array<string, mixed>, violation: ?array<string, string>}
+     */
+    private function authoriseWebFieldWrite(
+        SignatureRequest $signingRequest,
+        array $incomingFields,
+        array $fieldMappingsRaw,
+    ): array {
+        $partyRole       = strtolower((string) $signingRequest->party_role);
+        $viewerIdentity  = strtolower((string) $signingRequest->role_identity);
+        $isAgent         = $partyRole === 'agent';
+
+        $roleToEditableBy = [
+            'landlord' => 'owner_party',
+            'lessor'   => 'owner_party',
+            'seller'   => 'owner_party',
+            'tenant'   => 'acquiring_party',
+            'lessee'   => 'acquiring_party',
+            'buyer'    => 'acquiring_party',
+            'agent'    => 'agent',
+            'witness'  => 'witness',
+        ];
+        $canonicalForViewer = $roleToEditableBy[$partyRole] ?? $partyRole;
+
+        // Build name → editable_by[] map (mirrors the expansion service).
+        $editableByByName = [];
+        foreach ($fieldMappingsRaw as $mapping) {
+            if (!is_array($mapping)) continue;
+            $editableBy = $mapping['editable_by'] ?? [];
+            if (!is_array($editableBy)) continue;
+            $name = $mapping['field_name'] ?? null;
+            if (!is_string($name) || $name === '') {
+                $label = (string) ($mapping['label'] ?? '');
+                if ($label === '') continue;
+                $name = strtolower(trim($label));
+                $name = preg_replace('/[^a-z0-9]+/', '_', $name);
+                $name = trim((string) $name, '_');
+            }
+            if (is_string($name) && $name !== '') {
+                $editableByByName[$name] = $editableBy;
+            }
+        }
+
+        $accepted = [];
+        foreach ($incomingFields as $fieldKey => $payload) {
+            if (!is_string($fieldKey)) continue;
+
+            // Resolve value + identity from either payload shape.
+            if (is_array($payload)) {
+                $value             = $payload['value'] ?? null;
+                $claimedIdentity   = strtolower((string) ($payload['identity'] ?? ''));
+                $declaredOriginal  = (string) ($payload['original_field'] ?? '');
+            } else {
+                $value             = $payload;
+                $claimedIdentity   = '';
+                $declaredOriginal  = '';
+            }
+            $logicalName = $declaredOriginal !== ''
+                ? $declaredOriginal
+                : preg_replace('/__r\d+$/', '', $fieldKey);
+            if (!is_string($logicalName) || $logicalName === '') continue;
+
+            $editableBy = $editableByByName[$logicalName] ?? null;
+
+            // Backward-compat lane: no field_mappings (legacy PDF template).
+            // Defer to the static party-map.
+            if ($editableBy === null) {
+                $allowed = WebTemplateFieldPartyMap::getEditableFields($partyRole);
+                if (in_array($logicalName, $allowed, true)) {
+                    $accepted[$logicalName] = $value;
+                    continue;
+                }
+                return [
+                    'accepted'  => $accepted,
+                    'violation' => [
+                        'field'    => (string) $fieldKey,
+                        'identity' => $claimedIdentity,
+                        'reason'   => 'Field not in static party map for role ' . $partyRole,
+                    ],
+                ];
+            }
+
+            $allowsAll  = in_array('all', $editableBy, true);
+            $roleAllows = $allowsAll || in_array($canonicalForViewer, $editableBy, true);
+
+            if ($isAgent) {
+                if ($allowsAll || in_array('agent', $editableBy, true)) {
+                    $accepted[$logicalName] = $value;
+                    continue;
+                }
+            } elseif ($roleAllows) {
+                // Per-instance identity check: when the incoming payload
+                // claims an identity, the viewer's must match. When no
+                // identity is claimed (legacy client), require the
+                // logical field to be assignable to the viewer's role
+                // and accept (Case B/legacy single-recipient path).
+                if ($claimedIdentity === '' || $claimedIdentity === $viewerIdentity) {
+                    $accepted[$logicalName] = $value;
+                    continue;
+                }
+            }
+
+            return [
+                'accepted'  => $accepted,
+                'violation' => [
+                    'field'    => (string) $fieldKey,
+                    'identity' => $claimedIdentity,
+                    'reason'   => $isAgent
+                        ? 'Agent role not present in editable_by for field ' . $logicalName
+                        : 'Viewer ' . $viewerIdentity . ' not authorised for field ' . $logicalName,
+                ],
+            ];
+        }
+
+        return ['accepted' => $accepted, 'violation' => null];
     }
 
     /**

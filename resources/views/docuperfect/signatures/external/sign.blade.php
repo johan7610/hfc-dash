@@ -228,9 +228,14 @@
         }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen">
+<body class="bg-slate-50 min-h-screen has-recipient-info-panel">
 
-<div x-data="externalSign()" x-init="init()" class="max-w-4xl mx-auto px-4 py-6 space-y-4">
+{{-- B3 — Left info panel: persistent on desktop, collapses to a top
+     banner under 1024px. Renders only on the recipient signing view
+     (not on the agent wizard's Step 5). --}}
+@include('docuperfect.signatures.external._info-panel')
+
+<div x-data="externalSign()" x-init="init()" class="recipient-info-main max-w-4xl mx-auto px-4 py-6 space-y-4">
 
     {{-- Phase 1B.6 (FIX 5) — banner shown when this party has already
          completed signing AND the document is now in an amendment
@@ -1742,7 +1747,17 @@ function externalSign() {
                 }
             }
 
-            // 5. Consent checkbox (always last)
+            // 5. B3 — Empty recipient-editable text fields (this viewer's only).
+            if (container) {
+                container.querySelectorAll('input.field-editable[data-viewer-editable]').forEach(inp => {
+                    if (!inp.value || !inp.value.trim()) {
+                        const placeholder = inp.getAttribute('placeholder') || inp.name || 'Field';
+                        items.push({ el: inp, label: placeholder.replace(/_/g, ' ') });
+                    }
+                });
+            }
+
+            // 6. Consent checkbox (always last)
             if (!this.webConsented) {
                 const consentEl = document.getElementById('consent-checkbox-label');
                 items.push({ el: consentEl, label: 'Consent' });
@@ -1815,6 +1830,16 @@ function externalSign() {
             // 5. Consent
             total++;
             if (!this.webConsented) incomplete++;
+
+            // 6. B3 — Recipient-editable text fields (data-viewer-editable).
+            //    Server stamps only THIS viewer's fields; counter is
+            //    automatically per-recipient.
+            if (container) {
+                container.querySelectorAll('input.field-editable[data-viewer-editable]').forEach(inp => {
+                    total++;
+                    if (!inp.value || !inp.value.trim()) incomplete++;
+                });
+            }
 
             return { total, incomplete };
         },
@@ -1936,24 +1961,52 @@ function externalSign() {
 
             // Small delay to ensure x-html has rendered
             setTimeout(() => {
-                const fields = container.querySelectorAll('.field[data-field]');
-                fields.forEach(span => {
+                // B3 — gate on the server-stamped data-viewer-editable
+                // attribute (not a name-list). Per-recipient scope is the
+                // server's job; the client just renders what the server
+                // says is editable, and the save endpoint re-checks
+                // server-side so DOM trust is never the security layer.
+                // Fallback for legacy stamped templates: if no field has
+                // data-viewer-editable, fall back to the name-list.
+                const allFields = container.querySelectorAll('[data-field]');
+                const anyStamped = container.querySelector('[data-viewer-editable]') !== null;
+                allFields.forEach(span => {
                     const fieldName = span.getAttribute('data-field');
-                    if (this.editableFields.includes(fieldName)) {
+                    const originalName = span.getAttribute('data-recipient-identity') !== null
+                        ? (span.getAttribute('data-original-field') || fieldName)
+                        : fieldName;
+                    const isEditable = anyStamped
+                        ? span.hasAttribute('data-viewer-editable')
+                        : this.editableFields.includes(originalName);
+
+                    if (isEditable) {
                         // Convert to editable input
                         const input = document.createElement('input');
                         input.type = 'text';
                         input.name = fieldName;
                         input.value = span.textContent.trim();
                         input.setAttribute('data-field', fieldName);
+                        // Preserve B3 identity attrs so save-payload + UI
+                        // counter both know which recipient this belongs to.
+                        if (span.hasAttribute('data-recipient-identity')) {
+                            input.setAttribute('data-recipient-identity', span.getAttribute('data-recipient-identity'));
+                        }
+                        if (span.hasAttribute('data-original-field')) {
+                            input.setAttribute('data-original-field', span.getAttribute('data-original-field'));
+                        }
+                        input.setAttribute('data-viewer-editable', '1');
                         input.className = span.className + ' field-editable';
                         input.style.cssText = span.style.cssText +
                             'background:rgba(251,191,36,0.08);' +
                             'border:none;border-bottom:2px solid rgba(251,191,36,0.6);' +
                             'outline:none;font:inherit;color:inherit;' +
                             'padding:0 2pt;';
-                        input.placeholder = fieldName.replace(/_/g, ' ');
-                        input.addEventListener('input', () => { this.webFieldsDirty = true; });
+                        input.placeholder = (originalName || fieldName).replace(/_/g, ' ');
+                        input.addEventListener('input', () => {
+                            this.webFieldsDirty = true;
+                            // B3 — keep the items-remaining counter live.
+                            this.updateIncompleteCount();
+                        });
                         span.replaceWith(input);
                     } else {
                         // Locked field — add locked styling
@@ -1963,15 +2016,35 @@ function externalSign() {
             }, 100);
         },
 
-        // Collect web template field values from inputs
+        // Collect web template field values from inputs. B3 payload
+        // includes per-field identity + original-field so the server's
+        // per-recipient scope check has the full context (no DOM trust).
         collectWebFieldValues() {
             const container = this.$refs.webDocContent || null;
             if (!container) return {};
             const values = {};
             container.querySelectorAll('input.field-editable[data-field]').forEach(input => {
-                values[input.name] = input.value;
+                const identity = input.getAttribute('data-recipient-identity') || '';
+                const original = input.getAttribute('data-original-field') || input.name;
+                values[input.name] = identity !== ''
+                    ? { value: input.value, identity, original_field: original }
+                    : input.value;
             });
             return values;
+        },
+
+        // B3 — per-recipient items-remaining counter. Counts only the
+        // inputs this viewer can edit (data-viewer-editable) that are
+        // still empty. Server-stamped attribute means we never count
+        // another recipient's empty fields.
+        get viewerRemainingItems() {
+            const container = this.$refs.webDocContent || null;
+            if (!container) return 0;
+            let remaining = 0;
+            container.querySelectorAll('input.field-editable[data-viewer-editable]').forEach(input => {
+                if (!input.value || input.value.trim() === '') remaining++;
+            });
+            return remaining;
         },
 
         // Save web template field values back to server

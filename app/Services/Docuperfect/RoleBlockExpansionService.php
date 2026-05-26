@@ -263,6 +263,8 @@ final class RoleBlockExpansionService
         ?Template $template,
         string $html,
         Collection $recipients,
+        ?SignatureRequest $currentViewer = null,
+        array $fieldMappings = [],
     ): string {
         if (trim($html) === '') {
             return $html;
@@ -295,6 +297,18 @@ final class RoleBlockExpansionService
             );
         }
 
+        // B3 — stamp data-viewer-editable on every field the current viewer
+        // is authorised to edit. The signing-view JS reads this attribute
+        // (not a name-list lookup) so per-recipient scope works across the
+        // mangled __r{n} data-field names introduced by Case A duplication.
+        if ($currentViewer !== null) {
+            $this->stampViewerEditability(
+                $dom,
+                $currentViewer,
+                $this->buildFieldMappingsLookup($fieldMappings),
+            );
+        }
+
         if (!empty($structuralLog)) {
             Log::info('RoleBlockExpansionService: structural notes during expansion', [
                 'template_id' => $template?->id,
@@ -304,6 +318,142 @@ final class RoleBlockExpansionService
 
         return $this->detector->serializeFragment($dom);
     }
+
+    /**
+     * Compute the snake_case identity for a given role+index. Mirrors
+     * SignatureRequest::role_identity (B1) so server stamping and client
+     * checks always agree.
+     */
+    public static function identityFor(string $roleToken, int $index): string
+    {
+        return strtolower($roleToken) . '_' . max(1, $index);
+    }
+
+    /**
+     * Build a map of original-field-name → editable_by[] for fast lookup
+     * during viewer-editability stamping. Field-mappings JSON is keyed
+     * by tag-ID with snake_case labels — derive the field name (matching
+     * what `WebTemplateDataService` injects into the rendered body) by
+     * converting the human label to snake_case.
+     *
+     * @param  array<string, array{label?: string, editable_by?: list<string>, field_name?: string}> $fieldMappings
+     * @return array<string, list<string>>  field_name → editable_by[]
+     */
+    private function buildFieldMappingsLookup(array $fieldMappings): array
+    {
+        $out = [];
+        foreach ($fieldMappings as $mapping) {
+            if (!is_array($mapping)) {
+                continue;
+            }
+            $editableBy = $mapping['editable_by'] ?? [];
+            if (!is_array($editableBy)) {
+                continue;
+            }
+            // Prefer explicit field_name, fall back to derived from label.
+            $name = $mapping['field_name'] ?? null;
+            if (!is_string($name) || $name === '') {
+                $label = (string) ($mapping['label'] ?? '');
+                if ($label === '') {
+                    continue;
+                }
+                $name = strtolower(trim($label));
+                $name = preg_replace('/[^a-z0-9]+/', '_', $name);
+                $name = trim((string) $name, '_');
+            }
+            if (!is_string($name) || $name === '') {
+                continue;
+            }
+            $out[$name] = $editableBy;
+        }
+        return $out;
+    }
+
+    /**
+     * Walk every `data-field` element and stamp `data-viewer-editable="1"`
+     * when the current viewer is authorised to edit it.
+     *
+     * Authorisation rule:
+     *   - Agent path: viewer's party_role === 'agent' AND field's
+     *     editable_by contains 'agent' (or 'all').
+     *   - Recipient path: viewer's role_identity matches the field's
+     *     data-recipient-identity AND the canonical role-token of the
+     *     viewer is present in editable_by.
+     *
+     * Field-mappings lookup falls back to a wide-open editable_by (any
+     * party) when the field name isn't found — backward-compatible with
+     * templates that don't ship field_mappings (legacy PDF templates).
+     *
+     * @param  array<string, list<string>> $editableByByField
+     */
+    private function stampViewerEditability(
+        DOMDocument $dom,
+        SignatureRequest $viewer,
+        array $editableByByField,
+    ): void {
+        $xpath = new DOMXPath($dom);
+        $fields = $xpath->query('//*[@data-field]');
+        if ($fields === false) {
+            return;
+        }
+
+        $viewerRole     = strtolower((string) ($viewer->party_role ?? ''));
+        $viewerIdentity = strtolower((string) ($viewer->role_identity ?? ''));
+        $isAgent        = $viewerRole === 'agent';
+        $editableByRole = self::CANONICAL_FOR_VIEWER[$viewerRole] ?? $viewerRole;
+
+        foreach ($fields as $f) {
+            if (!$f instanceof DOMElement) {
+                continue;
+            }
+            $fieldName     = $f->getAttribute('data-field');
+            $originalField = $f->getAttribute('data-original-field') ?: $fieldName;
+            // Strip the __r{n} DOM-uniqueness suffix to recover the
+            // logical field name for the mapping lookup.
+            $logicalName = preg_replace('/__r\d+$/', '', $originalField);
+            $editableBy  = $editableByByField[$logicalName] ?? null;
+
+            // Treat missing mapping as "any party can edit" (legacy
+            // behaviour) — the per-instance identity match below still
+            // restricts cross-recipient editing.
+            $allowedRoles = $editableBy === null
+                ? ['all', $editableByRole, 'agent']
+                : $editableBy;
+
+            $allowsAll = in_array('all', $allowedRoles, true);
+
+            if ($isAgent && ($allowsAll || in_array('agent', $allowedRoles, true))) {
+                $f->setAttribute('data-viewer-editable', '1');
+                continue;
+            }
+
+            $fieldIdentity = strtolower($f->getAttribute('data-recipient-identity'));
+            if ($fieldIdentity === '' || $viewerIdentity === '') {
+                continue;
+            }
+            $roleCanEdit = $allowsAll || in_array($editableByRole, $allowedRoles, true);
+            if ($fieldIdentity === $viewerIdentity && $roleCanEdit) {
+                $f->setAttribute('data-viewer-editable', '1');
+            }
+        }
+    }
+
+    /**
+     * Wizard's raw role tokens map to the canonical editable_by tokens
+     * used in field_mappings. Mirrors the same chain SigningController's
+     * getEditableFieldsFromMappings() uses, kept here so the rendering
+     * pipeline can compute editability without controller coupling.
+     */
+    private const CANONICAL_FOR_VIEWER = [
+        'landlord'   => 'owner_party',
+        'lessor'     => 'owner_party',
+        'seller'     => 'owner_party',
+        'tenant'     => 'acquiring_party',
+        'lessee'     => 'acquiring_party',
+        'buyer'      => 'acquiring_party',
+        'agent'      => 'agent',
+        'witness'    => 'witness',
+    ];
 
     /**
      * Re-run detection against an existing DOMDocument (so we share node
@@ -593,10 +743,43 @@ final class RoleBlockExpansionService
             }
             $lca = $found;
         }
+        // If the LCA is itself a data-field element (single idx=K field
+        // sitting alone), walk up to its wrapper so the cloned subtree
+        // carries the surrounding markup (heading, paragraphs) and not
+        // just a bare span. Verify the wrapper still contains only
+        // idx=$idx fields for this role.
+        if ($lca->hasAttribute('data-field') && $lca->parentNode instanceof DOMElement) {
+            $candidate = $lca->parentNode;
+            if (
+                $candidate->nodeName !== 'body'
+                && $candidate->getAttribute('id') !== RoleBlockDetectionService::ROOT_ID
+                && $this->subtreeOnlyContainsRoleIndex($candidate, $role, $idx)
+            ) {
+                $lca = $candidate;
+            }
+        }
         // Ensure the LCA doesn't contain any other-idx field for the same role.
-        $allFields = $xpath->query('.//*[@data-field]', $lca);
-        if ($allFields === false) {
+        if (!$this->subtreeOnlyContainsRoleIndex($lca, $role, $idx)) {
             return null;
+        }
+        // Bail if LCA is the body wrapper.
+        if ($lca->nodeName === 'body' || $lca->getAttribute('id') === RoleBlockDetectionService::ROOT_ID) {
+            return null;
+        }
+        return $lca;
+    }
+
+    /**
+     * @return bool true when $node's subtree contains only data-field
+     *              elements whose role-base is $role AND instance_index
+     *              is $idx (foreign-role fields are tolerated).
+     */
+    private function subtreeOnlyContainsRoleIndex(DOMElement $node, string $role, int $idx): bool
+    {
+        $xpath = new DOMXPath($node->ownerDocument);
+        $allFields = $xpath->query('.//*[@data-field]', $node);
+        if ($allFields === false) {
+            return false;
         }
         foreach ($allFields as $f) {
             if (!$f instanceof DOMElement) {
@@ -604,17 +787,13 @@ final class RoleBlockExpansionService
             }
             $parsed = $this->detector->parseFieldName($f->getAttribute('data-field'));
             if ($parsed['role_base'] !== $role) {
-                continue; // foreign-role field outside our concern, OK
+                continue;
             }
             if ($parsed['instance_index'] !== $idx) {
-                return null; // contains another instance, not isolable
+                return false;
             }
         }
-        // Bail if LCA is the body wrapper.
-        if ($lca->nodeName === 'body' || $lca->getAttribute('id') === RoleBlockDetectionService::ROOT_ID) {
-            return null;
-        }
-        return $lca;
+        return true;
     }
 
     /**
@@ -654,6 +833,7 @@ final class RoleBlockExpansionService
                 $recipient,
                 $isSales,
                 strippingForeignIndices: false,
+                sourceInstanceIndex: 1,
             );
             $clones[] = $clone;
         }
@@ -691,6 +871,8 @@ final class RoleBlockExpansionService
             if (!$clone instanceof DOMElement) {
                 continue;
             }
+            // sourceInstanceIndex = (fromIndex - 1) because we're cloning
+            // the LAST hardcoded block which by definition has idx=K.
             $this->mutateCloneForInstance(
                 $dom,
                 $clone,
@@ -700,6 +882,7 @@ final class RoleBlockExpansionService
                 $recipient,
                 $isSales,
                 strippingForeignIndices: false,
+                sourceInstanceIndex: $fromIndex - 1,
             );
             // Insert after the previous block (subtree or last clone).
             if ($insertAfter->nextSibling !== null) {
@@ -725,8 +908,22 @@ final class RoleBlockExpansionService
         ?SignatureRequest $recipient,
         bool $isSales,
         bool $strippingForeignIndices,
+        int $sourceInstanceIndex = 1,
     ): void {
         $xpath = new DOMXPath($dom);
+
+        // Label rewrite — rewrite indexed role labels from the source
+        // instance to the target instance. This closes B2.5's known
+        // limitation: Case D.2 clones used to carry the source block's
+        // static "Seller 2" text into a "Seller 4" instance. Only the
+        // indexed form is rewritten ("Seller 2" → "Seller 4"), bare
+        // "Seller" left alone to avoid clobbering common labels like
+        // "Seller Address". Operates on text nodes only (not attributes,
+        // not input values) so user-entered data is never touched.
+        if ($sourceInstanceIndex !== $instanceIndex) {
+            $this->rewriteCloneLabels($clone, $role, $sourceInstanceIndex, $instanceIndex, $isSales);
+        }
+
         // descendant-or-self so a clone whose root IS the field element
         // (single-field cluster edge case) still gets stamped.
         $fields = $xpath->query('descendant-or-self::*[@data-field]', $clone);
@@ -822,6 +1019,54 @@ final class RoleBlockExpansionService
             return null;
         }
         return Contact::find($recipient->contact_id);
+    }
+
+    /**
+     * Walk text nodes inside the clone and rewrite indexed role labels.
+     *
+     * Source label uses `totalInstancesForRole = 99` to force the indexed
+     * form (so a singleton block's "Seller" doesn't accidentally match —
+     * we only rewrite text the author explicitly labelled with an index).
+     * Target label uses the same trick so cloned blocks read "Seller 3"
+     * rather than the unindexed singleton.
+     *
+     * Skips text nodes inside <input>, <textarea>, <select>, <script>,
+     * <style>, <option> — user-entered data and machine-readable text
+     * must never be silently rewritten. Skips matches inside attribute
+     * values (handled by XPath text() axis which only selects text node
+     * children, never attributes).
+     */
+    private function rewriteCloneLabels(
+        DOMElement $clone,
+        string $roleToken,
+        int $sourceIndex,
+        int $targetIndex,
+        bool $isSales,
+    ): void {
+        $sourceLabel = Template::roleDisplayLabel($roleToken, $isSales, $sourceIndex, 99);
+        $targetLabel = Template::roleDisplayLabel($roleToken, $isSales, $targetIndex, 99);
+        if ($sourceLabel === $targetLabel) {
+            return;
+        }
+        $pattern = '/\b' . preg_quote($sourceLabel, '/') . '\b/i';
+
+        $xpath = new DOMXPath($clone->ownerDocument);
+        $skipParents = ['input', 'textarea', 'select', 'option', 'script', 'style'];
+        $textNodes = $xpath->query('.//text()', $clone);
+        if ($textNodes === false) {
+            return;
+        }
+        foreach ($textNodes as $textNode) {
+            $parent = $textNode->parentNode;
+            if ($parent instanceof DOMElement && in_array(strtolower($parent->nodeName), $skipParents, true)) {
+                continue;
+            }
+            $value = $textNode->nodeValue ?? '';
+            if ($value === '' || !preg_match($pattern, $value)) {
+                continue;
+            }
+            $textNode->nodeValue = preg_replace($pattern, $targetLabel, $value);
+        }
     }
 
     /**
