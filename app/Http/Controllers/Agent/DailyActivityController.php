@@ -270,6 +270,7 @@ class DailyActivityController extends Controller
                     'period' => $period,
                 ],
                 [
+                    'agency_id' => $user->agency_id,
                     'branch_id' => $branchId,
                     'period' => $period,
                     'value' => $val,
