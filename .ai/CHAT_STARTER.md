@@ -1,6 +1,6 @@
 # CoreX OS — Chat Starter
 > Auto-maintained by VS Code per CLAUDE.md rule. Paste into a new Claude chat to load context.
-> Last updated: 2026-05-26 by B2.5 (role-block auto-loop completion)
+> Last updated: 2026-05-26 by Operating Principle lock-in
 
 <!-- ============================================================ -->
 <!-- STABLE SECTION — rarely changes                              -->
@@ -17,6 +17,23 @@
 **Branches:** `main` (live), `Staging`, `HFC2402` (Johan dev), `andre` (Andre dev), feature branches off Staging. Discipline: HFC2402 + andre → Staging → staging server → main → live. Hotfix exception: direct to main, then back-sync to Staging.
 
 **VS Code Claude** is the coding agent. Johan pastes prompts, it executes. Specs in `.ai/specs/`, read at start of every prompt.
+
+## 1.5 Operating Principle (read this first, every chat)
+
+CoreX is the best real estate operating system that will ever exist. This is the decision filter for every prompt, every architectural choice, every "should we ship this now" call.
+
+- Best-in-class or rebuild — if competitors do something better, we build ours better
+- No shortcuts ever — later does not exist; build it right the first time
+- Integration is the moat — every feature seamlessly connects to every other
+- Built for agents, not screens — we absorb complexity so they don't have to
+- AI enhances, never replaces human judgement
+- Constraint is fuel — build best with what we have, never use lack of resources as an excuse
+
+Decision test before any commit: **does this make CoreX the best, or does it make CoreX merely working?** If the answer is "working", redesign.
+
+"Good enough for now" is never the answer. "We'll fix it later" is never the answer.
+
+See CLAUDE.md "CoreX Operating Principle" section for the full version.
 
 ## 2. Working Rules
 

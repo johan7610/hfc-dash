@@ -1,6 +1,6 @@
 # CoreX OS — Claude Instructions
 > **Root entry point. Read this first. Every session. No exceptions.**
-> Last updated: 2026-04-14
+> Last updated: 2026-05-26
 
 ---
 
@@ -9,6 +9,38 @@
 CoreX OS is the all-in-one operating system for Home Finders Coastal — a real estate agency on the KZN South Coast, South Africa. It is not a feature-rich website. It is a **real estate operating system** built on four core pillars that every module connects to.
 
 This is a production system used by real agents, managing real deals, real money, and real compliance obligations. There is no "good enough for now." Everything ships production-ready.
+
+---
+
+## CoreX Operating Principle
+
+CoreX is the best real estate operating system that will ever exist. This is the standard. Not a marketing line — the decision filter.
+
+### What this means in practice
+
+**1. Best-in-class or rebuild.** If DocuSign, Property24, Lightstone, Monday.com, or any other product offers a feature better than what we have — we investigate it, learn from it, and build ours better. "Better" means: more functional, more integrated, more aligned to the actual estate-agent workflow, or all three. Not "matches them" — exceeds them. Done is when ours is the better product.
+
+**2. No shortcuts. Ever.** Quick fixes that work today but require rebuilding later are forbidden. Later does not exist. Now is the only time that exists. If a fix is the wrong shape architecturally, we do it right the first time, even if it costs another hour or another prompt. Half-built features are technical debt that compounds; the only way to ship correctly is to ship correctly.
+
+**3. Integration is the moat.** Every feature in CoreX must integrate seamlessly with every other feature. An e-signed document doesn't just collect signatures — it auto-files, triggers FICA verification, updates the deal pipeline, posts to the calendar, notifies the right parties. A contact is not a record — it's a node in a graph linking properties, deals, calendars, documents, and communications. Integration is not optional; it's the difference between CoreX and a feature list.
+
+**4. Built for agents, not for screens.** Every flow is judged by one question: does this let an agent be an agent, or does it trap them behind a screen? CoreX automates the computer work so agents can do the property work. We simplify by absorbing complexity. Hours of admin become a single button press. The dream is the red button: agent clicks, makes coffee, and the system has done the work.
+
+**5. AI enhances, never replaces.** AI in CoreX accelerates human work — it does not replace the human. Agents stay agents. Compliance officers stay compliance officers. AI handles the tedious parsing, drafting, suggesting, and cross-referencing so humans handle the judgement, the relationships, and the deals.
+
+**6. Constraint is fuel, not excuse.** Where we lack live data feeds (Lightstone, CMA, etc.) we build smarter workflows around the data we have. Where we lack budget for premium APIs, we ship the best version possible with what we have today — and architect the upgrade path for when the budget is there. The constraint is never an excuse for a worse product.
+
+### How this changes every prompt and every commit
+
+Before any decision (architectural, scope, deferral, simplification), ask: **does this make CoreX the best real estate OS that will ever exist, or does it make CoreX merely working?**
+
+- If the answer is "best", proceed.
+- If the answer is "working", redesign until it's "best".
+- "We'll fix it later" is never an acceptable answer.
+- "Good enough for now" is never an acceptable answer.
+- "It's how other software does it" is not a reason — we ask whether other software does it correctly, then build ours correctly.
+
+Every line of code, every prompt, every commit message answers to this standard. This is the only standard.
 
 ---
 
@@ -182,6 +214,12 @@ The reason: a stale demo is a dead demo. Walkthroughs that hit empty tables, mis
       dated entry to the Recent decisions log if a decision was made, remove
       completed items from Outstanding small fixes, refresh the "Last updated
       by" header. Keep total length under 350 lines.
+   j. Confirm the work shipped meets the CoreX Operating Principle. If the
+      close requires noting a deferred limitation, a quick fix, or a "good
+      enough for now" compromise — STOP. Either complete the work properly in
+      this prompt, or escalate to Johan with a specific proposal for the
+      proper fix. Do not ship compromised work and document the compromise as
+      if it's acceptable.
 ```
 
 ## Subagent file-write rule

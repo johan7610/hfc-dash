@@ -1,5 +1,13 @@
 # CoreX OS — Prime Directive
 
+## Standard 0 — Operating Principle
+
+Every standard in this file is subordinate to the CoreX Operating Principle (see CLAUDE.md). If a standard conflicts with the principle, the principle wins. If a standard would let a shortcut ship, the standard is wrong and gets revised.
+
+The principle: CoreX is the best real estate OS that will ever exist. Every prompt, every commit, every deferral decision is measured against this. "Good enough for now" never ships.
+
+---
+
 CoreX OS will become the best and biggest real estate operating system in South Africa.
 
 **Technology Choices:** When multiple options exist, always choose the best one. If there is a superior library, API, approach or architecture — use it. Never choose mediocre when world class is available. Cost is a consideration but never a reason to choose inferior technology when better options exist at the same or similar cost.
