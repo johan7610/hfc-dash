@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace App\Services\Docuperfect;
 
+use App\Models\Docuperfect\Template;
+use DOMDocument;
+use DOMElement;
+use DOMNode;
+use DOMXPath;
 use Illuminate\Support\Collection;
 
 /**
@@ -153,5 +158,295 @@ final class RoleBlockDetectionService
 
         // No recognised role base.
         return ['role_base' => null, 'instance_index' => 1, 'sub_name' => null, 'pattern' => 'none'];
+    }
+
+    /**
+     * Detect block boundaries in the rendered body. A "block" is the lowest
+     * common ancestor of a contiguous cluster of `data-field` elements
+     * sharing the same role-base, restricted to ancestors that contain
+     * ONLY this role's fields.
+     *
+     * Returns a Collection of boundary descriptors per cluster:
+     *
+     *   role_token              The role-base for this cluster.
+     *   cluster_ordinal         0-based ordinal of this cluster within the role.
+     *   total_clusters_for_role How many disjoint clusters of this role exist
+     *                           in the document (1 = single-block authoring,
+     *                           >1 = the role has split content).
+     *   max_instance_index      Highest instance_index parsed from this
+     *                           cluster's field names (1 = single-block field
+     *                           authoring, >1 = hardcoded numbered fields).
+     *   instance_groups         Map of instance_index → list of field info
+     *                           {field_name, sub_name, node} for fields whose
+     *                           parsed idx matches that instance.
+     *   block_node              The chosen LCA DOMElement that wraps the
+     *                           cluster (the duplicatable unit). May be null
+     *                           when the cluster doesn't have a wrapping
+     *                           container (LCA degenerates to body) — in that
+     *                           case the cluster cannot safely auto-loop and
+     *                           the caller should fall back to stamping only.
+     *   block_xpath             Stable XPath fragment selecting block_node
+     *                           (so the expander can re-find it after
+     *                           intermediate DOM mutations).
+     *
+     * Pass-through use: the expander can ignore the block_node/block_xpath
+     * fields for Case B/C/D paths and only honours them for Case A.
+     *
+     * The optional Template parameter is reserved for future cases that need
+     * field_mappings metadata (e.g. role-token alias resolution); today
+     * detection works from field-name parsing alone.
+     *
+     * @return Collection<int, array{
+     *   role_token: string,
+     *   cluster_ordinal: int,
+     *   total_clusters_for_role: int,
+     *   max_instance_index: int,
+     *   instance_groups: array<int, list<array{field_name: string, sub_name: ?string, node: ?DOMElement}>>,
+     *   block_node: ?DOMElement,
+     *   block_xpath: ?string,
+     * }>
+     */
+    public function detectBlockBoundaries(?Template $template, string $renderedBody): Collection
+    {
+        $out = collect();
+        if (trim($renderedBody) === '') {
+            return $out;
+        }
+
+        $dom = $this->loadFragment($renderedBody);
+        if ($dom === null) {
+            return $out;
+        }
+        $xpath = new DOMXPath($dom);
+        $fieldNodes = $xpath->query('//*[@data-field]');
+        if ($fieldNodes === false || $fieldNodes->length === 0) {
+            return $out;
+        }
+
+        // Walk fields in document order; build clusters by role-base.
+        $clusters = [];
+        $current = null;
+        foreach ($fieldNodes as $node) {
+            if (!$node instanceof DOMElement) {
+                continue;
+            }
+            $fieldName = $node->getAttribute('data-field');
+            $parsed = $this->parseFieldName($fieldName);
+            $role = $parsed['role_base'];
+            if ($role === null) {
+                // Non-role field (e.g. purchase_price) breaks adjacency but
+                // doesn't form its own cluster — finalise the current run.
+                if ($current !== null) {
+                    $clusters[] = $current;
+                    $current = null;
+                }
+                continue;
+            }
+            $info = [
+                'field_name' => $fieldName,
+                'sub_name'   => $parsed['sub_name'],
+                'idx'        => $parsed['instance_index'],
+                'node'       => $node,
+            ];
+            if ($current === null || $current['role'] !== $role) {
+                if ($current !== null) {
+                    $clusters[] = $current;
+                }
+                $current = ['role' => $role, 'fields' => [$info]];
+            } else {
+                $current['fields'][] = $info;
+            }
+        }
+        if ($current !== null) {
+            $clusters[] = $current;
+        }
+
+        // Count clusters per role to populate total_clusters_for_role.
+        $clustersByRole = [];
+        foreach ($clusters as $c) {
+            $clustersByRole[$c['role']] = ($clustersByRole[$c['role']] ?? 0) + 1;
+        }
+
+        $perRoleOrdinal = [];
+        foreach ($clusters as $cluster) {
+            $role = $cluster['role'];
+            $perRoleOrdinal[$role] = ($perRoleOrdinal[$role] ?? -1) + 1;
+
+            $instanceGroups = [];
+            $maxIdx = 1;
+            foreach ($cluster['fields'] as $field) {
+                $idx = $field['idx'];
+                $maxIdx = max($maxIdx, $idx);
+                $instanceGroups[$idx] ??= [];
+                $instanceGroups[$idx][] = $field;
+            }
+
+            $blockNode  = $this->findCleanLca($xpath, $cluster['fields'], $role);
+            $blockXpath = $blockNode !== null ? $this->buildStableXpath($blockNode) : null;
+
+            $out->push([
+                'role_token'              => $role,
+                'cluster_ordinal'         => $perRoleOrdinal[$role],
+                'total_clusters_for_role' => $clustersByRole[$role],
+                'max_instance_index'      => $maxIdx,
+                'instance_groups'         => $instanceGroups,
+                'block_node'              => $blockNode,
+                'block_xpath'             => $blockXpath,
+            ]);
+        }
+
+        return $out;
+    }
+
+    /**
+     * Load a body-fragment HTML string into a DOMDocument, wrapping it in a
+     * deterministic root container so we can find it again later.
+     *
+     * Returns null when the fragment cannot be parsed (PCRE/libxml failure).
+     */
+    public function loadFragment(string $html): ?DOMDocument
+    {
+        $dom = new DOMDocument('1.0', 'UTF-8');
+        libxml_use_internal_errors(true);
+        $wrapped = '<?xml encoding="UTF-8"?><html><body><div id="' . self::ROOT_ID . '">' . $html . '</div></body></html>';
+        $ok = $dom->loadHTML(
+            $wrapped,
+            LIBXML_HTML_NODEFDTD | LIBXML_NOERROR | LIBXML_NOWARNING,
+        );
+        libxml_clear_errors();
+        return $ok ? $dom : null;
+    }
+
+    /**
+     * Serialise the children of the wrapper root back to an HTML fragment.
+     */
+    public function serializeFragment(DOMDocument $dom): string
+    {
+        $xpath = new DOMXPath($dom);
+        $root = $xpath->query('//*[@id="' . self::ROOT_ID . '"]')->item(0);
+        if (!$root instanceof DOMElement) {
+            return '';
+        }
+        $out = '';
+        foreach ($root->childNodes as $child) {
+            $out .= $dom->saveHTML($child);
+        }
+        return $out;
+    }
+
+    public const ROOT_ID = '__corex_loop_root__';
+
+    /**
+     * Find the lowest common ancestor of the cluster's field nodes that
+     * contains ONLY this role's fields (no foreign-role data-field elements).
+     * Returns null if the only such ancestor is the body/root wrapper
+     * (cluster has no proper container — auto-loop unsafe for this cluster).
+     *
+     * @param  list<array{field_name:string,sub_name:?string,idx:int,node:DOMElement}> $fields
+     */
+    private function findCleanLca(DOMXPath $xpath, array $fields, string $role): ?DOMElement
+    {
+        if (count($fields) === 0) {
+            return null;
+        }
+        // LCA across all field nodes.
+        $lca = $fields[0]['node'];
+        for ($i = 1; $i < count($fields); $i++) {
+            $lca = $this->lcaOfPair($lca, $fields[$i]['node']);
+            if ($lca === null) {
+                return null;
+            }
+        }
+        // If the LCA is itself the data-field element (single-field cluster),
+        // walk up one level to the wrapper so the duplication unit is the
+        // container — duplicating a bare span without its surrounding markup
+        // produces malformed output (e.g. a header h4 nested inside a span).
+        if ($lca->hasAttribute('data-field') && $lca->parentNode instanceof DOMElement) {
+            $candidate = $lca->parentNode;
+            if (
+                $candidate->nodeName !== 'body'
+                && $candidate->getAttribute('id') !== self::ROOT_ID
+                && $this->subtreeContainsOnlyRole($xpath, $candidate, $role)
+            ) {
+                $lca = $candidate;
+            }
+        }
+        // The bare LCA might still contain foreign-role fields if the cluster
+        // is not contiguous in DOM order. Verify; if not clean, no safe block.
+        if (!$this->subtreeContainsOnlyRole($xpath, $lca, $role)) {
+            return null;
+        }
+        // Bail if the LCA is the body wrapper itself (no real container).
+        if ($lca->nodeName === 'body' || $lca->getAttribute('id') === self::ROOT_ID) {
+            return null;
+        }
+        return $lca;
+    }
+
+    private function lcaOfPair(DOMElement $a, DOMElement $b): ?DOMElement
+    {
+        $ancestors = [];
+        $cur = $a;
+        while ($cur instanceof DOMElement) {
+            $ancestors[spl_object_hash($cur)] = $cur;
+            $parent = $cur->parentNode;
+            $cur = $parent instanceof DOMElement ? $parent : null;
+        }
+        $cur = $b;
+        while ($cur instanceof DOMElement) {
+            $key = spl_object_hash($cur);
+            if (isset($ancestors[$key])) {
+                return $cur;
+            }
+            $parent = $cur->parentNode;
+            $cur = $parent instanceof DOMElement ? $parent : null;
+        }
+        return null;
+    }
+
+    private function subtreeContainsOnlyRole(DOMXPath $xpath, DOMElement $node, string $role): bool
+    {
+        $fields = $xpath->query('.//*[@data-field]', $node);
+        if ($fields === false) {
+            return false;
+        }
+        foreach ($fields as $f) {
+            if (!$f instanceof DOMElement) {
+                continue;
+            }
+            $parsed = $this->parseFieldName($f->getAttribute('data-field'));
+            $r = $parsed['role_base'];
+            if ($r !== null && $r !== $role) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Build an absolute XPath for the given node so the expander can re-find
+     * it after intermediate mutations have invalidated DOMNode references.
+     * Walk includes the root <html> element so the path is fully absolute
+     * (queryable from DOMDocument context).
+     */
+    private function buildStableXpath(DOMElement $node): string
+    {
+        $parts = [];
+        $cur = $node;
+        while ($cur instanceof DOMElement) {
+            $name = $cur->nodeName;
+            $index = 1;
+            $sib = $cur->previousSibling;
+            while ($sib !== null) {
+                if ($sib instanceof DOMElement && $sib->nodeName === $name) {
+                    $index++;
+                }
+                $sib = $sib->previousSibling;
+            }
+            $parts[] = $name . '[' . $index . ']';
+            $parent = $cur->parentNode;
+            $cur = $parent instanceof DOMElement ? $parent : null;
+        }
+        return '/' . implode('/', array_reverse($parts));
     }
 }

@@ -312,16 +312,19 @@ class SigningController extends Controller
                     $signingRequest->party_role
                 );
 
-            // Recipient Loop Engine — B2 stamping pass. Walk every
-            // data-field element and inject data-recipient-identity +
-            // data-role-token attributes so B3 can scope editable surfaces
-            // per recipient without parsing field names client-side.
+            // Recipient Loop Engine — B2.5 expansion pass. Detect role
+            // blocks in the rendered body, then per-block either stamp
+            // existing fields (hardcoded multi-block templates) or
+            // duplicate the block N times and pre-fill each clone from
+            // its recipient's contact (single-block authoring style).
+            // The pipeline is backward-compatible: legacy single-recipient
+            // templates and hardcoded N-block templates render unchanged.
             $allRecipientsForTemplate = SignatureRequest::where('signature_template_id', $template->id)->get();
             $webTemplateHtml = app(\App\Services\Docuperfect\RoleBlockExpansionService::class)
-                ->stampIdentities(
+                ->expandWithLooping(
+                    $docTemplate,
                     $webTemplateHtml,
                     $allRecipientsForTemplate,
-                    $template->id,
                 );
         }
 
