@@ -53,6 +53,13 @@ Route::post('/p/{token}/refresh', [\App\Http\Controllers\Presentation\PublicPres
     ->middleware('throttle:5,1')
     ->name('presentation.public.refresh-submit');
 
+// Phase 9c-3 rebuild — public privacy policy by token. Token unique
+// across agencies + branches; controller picks the right one.
+Route::get('/legal/privacy/{token}', [\App\Http\Controllers\Public\PrivacyPolicyController::class, 'show'])
+    ->where('token', '[A-Za-z0-9]{40,64}')
+    ->middleware('throttle:60,1')
+    ->name('public.privacy-policy');
+
 Route::post('/m/{shortcode}/callback', [\App\Http\Controllers\SellerOutreach\PublicLandingController::class, 'callback'])
     ->where('shortcode', '[A-Za-z0-9]{6}')
     ->middleware('throttle:10,60')

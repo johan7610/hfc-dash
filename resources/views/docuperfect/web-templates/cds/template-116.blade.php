@@ -111,8 +111,9 @@
         your FICA documents &mdash; marketing only begins once all three are complete.
         <strong>POPIA:</strong> Information processed for this property&rsquo;s marketing, retained
         5 years per law.
-        @if($agency->popi_url)
-            Privacy policy: {{ $agency->popi_url }}
+        @php $popiUrl = $agency->effectivePopiUrl(); @endphp
+        @if($popiUrl)
+            Privacy policy: {{ $popiUrl }}
         @endif
     </span>
 </div>

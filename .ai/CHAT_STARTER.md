@@ -1,6 +1,6 @@
 # CoreX OS — Chat Starter
 > Auto-maintained by VS Code per CLAUDE.md rule. Paste into a new Claude chat to load context.
-> Last updated: 2026-05-25 by prompt-M6.2 (calendar-class → activity-definition mapping table + admin UI)
+> Last updated: 2026-05-26 by prompt-W (rollback Phase 9c-3 + privacy policy as Company Settings field with branch override)
 
 <!-- ============================================================ -->
 <!-- STABLE SECTION — rarely changes                              -->
@@ -58,7 +58,7 @@
 - **Branch Isolation** — spec built, 14 prompts A–N
 - **Tax / Payroll** — SARS e@syFile IT3(a) submission for tax year ending Feb 2026
 - **Presentations V2 phases 4–7** — snapshot links + engagement tracking (FirstViewed + FlaggedAccess notifications) / teaser route + lead capture / send-to-recipient delivery (whatsapp + email, sticky defaults) / refresh-request flow with "data may be dated" banner (default 21d, agency-configurable 7–90), 3/10min rate limit, supersession auto-redirect. All 5 tables present (`presentation_snapshot_links`, `presentation_snapshot_views`, `presentation_teaser_leads`, `presentation_deliveries`, `presentation_refresh_requests`). End-to-end flow verified working today.
-- **Phase 9c POPIA trilogy** — (1) PPRA per-entity column on `agencies` + `branches` with branch→agency cascade, settings UI, `corex-document` mislabel fix, agent-footer + RCR export renders. (2) `information_officer_appointments` mirroring FICA pattern (primary + deputies, auto-end-old-primary), admin UI in Compliance Settings (POPIA s55 + s56), permission `manage_information_officer`, 5 lifecycle tests. (3) `company_documents` table for admin-managed legal content (privacy policy, T&Cs, complaints, AML statement, code of conduct, POPIA consent), markdown editor with live preview, public `/legal/{token}` page (clean branded layout, throttle 60/min), Agency `privacy_policy_url` accessor (CompanyDocument > popi_url legacy fallback), 7 tests covering CRUD + public access + accessor cascade.
+- **Phase 9c POPIA trilogy** — (1) PPRA per-entity column on `agencies` + `branches` with branch→agency cascade, settings UI, `corex-document` mislabel fix, agent-footer + RCR export renders. (2) `information_officer_appointments` mirroring FICA pattern (primary + deputies, auto-end-old-primary), admin UI in Compliance Settings (POPIA s55 + s56), permission `manage_information_officer`, 5 lifecycle tests. (3) **Privacy policy: editable markdown field in Company Settings (mirrors Email Disclaimer pattern) + per-branch override (plain column names per existing override convention) + public token route at `/legal/privacy/{token}` + `Agency::effectivePopiUrl()` cascades internal published → external `popi_url` → null. Branch model has matching `effectivePopiUrl()` + `effectivePrivacyPolicyUrl()` helpers. 8 tests passing.** _(Phase 9c-3's prior `company_documents` table was rolled back 2026-05-26 per the documents-infrastructure audit — replaced by this field-based pattern.)_
 
 ### 3.2 IN FLIGHT
 
@@ -89,6 +89,7 @@
 
 ## 4. Recent decisions log (last 15, newest top)
 
+- **2026-05-26** — Rolled back Phase 9c-3 over-build. Privacy policy now lives as Company Settings field next to Email Disclaimer with branch override (plain column names, mirrors existing override convention). Public URL via `/legal/privacy/{token}`. `effectivePopiUrl()` accessor cascades internal published → external `popi_url` → null. Documents-infrastructure audit confirmed Phase 9c-3 duplicated scope of pre-existing `agency_compliance_provisions` system — table dropped, files deleted, replaced with field pattern.
 - **2026-05-25** — Module 6 M6.2 shipped: `activity_definition_calendar_classes` mapping table (agency_id + event_class slug + activity_definition_id + value_per_event + requires_feedback + auto_revoke_after_hours + daily_cap + back_date_limit_hours + is_active). Model with `resolveForEvent(CalendarEvent)` static helper, admin CRUD at `/admin/activity-mappings`, permission `manage_activity_mappings`. 6 tests passing. Schema deviation from prompt: mapping keys off event_class slug not FK (real schema has `calendar_event_class_settings` + `calendar_events.category` string, no `calendar_event_classes` table). Stopping here for the session; M6.3 + M6.4 + M6.5 in next session per honest-scope rule.
 - **2026-05-25** — Module 6 M6.1 shipped: activity_definitions gains scope/agency_id (varchar — `system`/`agency` enforced at model layer); daily_activity_entries gains point_state/source/calendar_event_id/confirmed_at/revoked_at/override metadata. New ActivityDefinition + DailyActivityEntry Eloquent models. 41 definitions backfilled to `system` (global → system rename). 1,492 entries backfilled to confirmed/manual. 7 tests passing.
 - **2026-05-25** — Module 6 M6.0 investigation complete; report at `.ai/audits/activity-points-integration-investigation-2026-05-25.md`. Findings drove decisions: scope is varchar (not enum); 46 calendar event classes (4 buyer-facing); CalendarEventFeedbackObserver exists (M6.4 hook surface); no CalendarEvent observer yet (M6.3 creates it); zero architectural surprises.
@@ -102,7 +103,6 @@
 - **2026-05-25** — Tonight's batch: 419 redirect + CMA cert logo + Tools page logo all shipped on `feature/map-workspace-overhaul`. Agency `logo_path` is now the canonical logo source for Tools (wins over stale `PerformanceSetting.company_logo_url`).
 - **2026-05-25** — Phase 9c investigation: privacy policy + Information Officer + agency PPRA number — findings reported, moved from PARKED to IN FLIGHT; awaiting architectural decisions before fix.
 - **2026-05-25** — Universal signature audit completed; report at `.ai/audits/universal-signature-audit-2026-05-25.md`. Layers 1 + 2 both unbuilt. 8 capture surfaces total (3 authenticated, 4 token, 1 CO). Wire-up effort: M-size (~10 files); encryption at rest: S-size (independent).
-- **2026-05-25** — `.ai/CHAT_STARTER.md` bootstrap landed; CLAUDE.md close-checklist now requires updating it every prompt.
 - **2026-04-29** — Architecture: Claude owns template design centrally. Hand-crafted Blade with declarative metadata, bypass CDS UI. Templates 116/117/119 first under this model.
 
 ## 5. Outstanding small fixes (none blocking)

@@ -102,7 +102,7 @@ abstract class BaseSignatureMail extends Mailable
                 'agent_photo_url'  => null,
                 'logo_url'         => $agency && $agency->logo_path ? asset('storage/' . $agency->logo_path) : null,
                 'email_disclaimer' => $agency->email_disclaimer ?? null,
-                'popi_url'         => $agency->popi_url ?? null,
+                'popi_url'         => $agency?->effectivePopiUrl() ?? null,
                 'agency_name'      => $agency->name ?? 'Home Finders Coastal',
             ];
         }

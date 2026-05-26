@@ -75,6 +75,9 @@ class CompanySettingsController extends Controller
             'fic_no'                => ['nullable', 'string', 'max:255'],
             'email_disclaimer'      => ['nullable', 'string', 'max:2000'],
             'popi_url'              => ['nullable', 'string', 'max:500'],
+            // Phase 9c-3 rebuild — privacy policy as Company Settings field.
+            'privacy_policy_markdown' => ['nullable', 'string', 'max:200000'],
+            'privacy_policy_action'   => ['nullable', 'string', 'in:publish,unpublish'],
             'sidebar_color'         => ['nullable', 'string', 'max:20'],
             'icon_color'            => ['nullable', 'string', 'max:20'],
             'default_color'         => ['nullable', 'string', 'max:20'],
@@ -87,6 +90,28 @@ class CompanySettingsController extends Controller
             // 2026-05-14 — pitch-claim integration: agency-tunable temp lock duration.
             'prospecting_pitch_temp_lock_minutes' => ['nullable', 'integer', 'min:5', 'max:240'],
         ]);
+
+        // Privacy policy: content saves as draft; publish/unpublish are
+        // explicit gestures. Token is generated lazily when first content
+        // is saved and persists across edits.
+        // TODO: token rotation endpoint (future) — for now token is fixed.
+        $privacyAction = $data['privacy_policy_action'] ?? null;
+        unset($data['privacy_policy_action']);
+        if (array_key_exists('privacy_policy_markdown', $data)) {
+            $hasContent = !empty($data['privacy_policy_markdown']);
+            if ($hasContent && empty($agency->privacy_policy_token)) {
+                $data['privacy_policy_token'] = $agency->generatePrivacyPolicyToken();
+            }
+            if (!$hasContent) {
+                // Clearing the content auto-unpublishes — can't publish empty.
+                $data['privacy_policy_published_at'] = null;
+            }
+        }
+        if ($privacyAction === 'publish') {
+            $data['privacy_policy_published_at'] = $agency->privacy_policy_published_at ?: now();
+        } elseif ($privacyAction === 'unpublish') {
+            $data['privacy_policy_published_at'] = null;
+        }
 
         $removeLogo = $data['remove_logo'] ?? false;
         unset($data['logo'], $data['remove_logo']);

@@ -54,6 +54,9 @@ class Agency extends Model
         'logo_path',
         'email_disclaimer',
         'popi_url',
+        'privacy_policy_markdown',
+        'privacy_policy_token',
+        'privacy_policy_published_at',
         'whatsapp_launch_mode_agent',
         'whatsapp_launch_mode_seller',
         'prospecting_pitch_temp_lock_minutes',
@@ -108,6 +111,7 @@ class Agency extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'is_demo' => 'boolean',
+        'privacy_policy_published_at' => 'datetime',
         'require_external_access_authorization' => 'boolean',
         'split_branches_enabled' => 'boolean',
         'default_branch_id' => 'integer',
@@ -309,6 +313,43 @@ class Agency extends Model
             ->whereNull('ended_on')
             ->orderByRaw("FIELD(role, '" . InformationOfficerAppointment::ROLE_PRIMARY . "', '" . InformationOfficerAppointment::ROLE_DEPUTY . "')")
             ->get();
+    }
+
+    // ── Privacy Policy (rebuild of Phase 9c-3 as a Company Settings field) ──
+
+    /**
+     * Lazy-generate a public token. Called when content is first saved
+     * and persists across edits — agents may share the link in advance.
+     * Token rotation is a future endpoint.
+     */
+    public function generatePrivacyPolicyToken(): string
+    {
+        do {
+            $token = \Illuminate\Support\Str::random(48);
+        } while (
+            self::where('privacy_policy_token', $token)->exists()
+            || \App\Models\Branch::where('privacy_policy_token', $token)->exists()
+        );
+        return $token;
+    }
+
+    /** Returns the public /legal/privacy/{token} URL when published, else null. */
+    public function privacyPolicyPublicUrl(): ?string
+    {
+        if (!$this->privacy_policy_token || !$this->privacy_policy_published_at) {
+            return null;
+        }
+        return route('public.privacy-policy', ['token' => $this->privacy_policy_token]);
+    }
+
+    /**
+     * Cascade: internal published URL > external popi_url > null.
+     * Use this everywhere `popi_url` was previously rendered so internal
+     * hosting takes precedence once a privacy policy is published.
+     */
+    public function effectivePopiUrl(): ?string
+    {
+        return $this->privacyPolicyPublicUrl() ?: ($this->popi_url ?: null);
     }
 
     // ── Payroll ──
