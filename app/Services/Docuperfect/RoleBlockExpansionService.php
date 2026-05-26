@@ -1058,6 +1058,22 @@ final class RoleBlockExpansionService
     ): void {
         $xpath = new DOMXPath($dom);
 
+        // Visual-layout contract — mark the clone root with the
+        // `recipient-instance` class + `data-recipient-instance`
+        // attribute so the shared CSS in docuperfect-recipient-blocks.css
+        // can target every clone uniformly across the three consumer
+        // views (wizard Step 4 preview, wizard Step 5 fill-and-review,
+        // recipient signing surface). The class is additive — the
+        // template's original class string is preserved so existing
+        // layout rules still apply.
+        $identity = $role . '_' . $instanceIndex;
+        $clone->setAttribute('data-recipient-instance', $identity);
+        $existingClass = $clone->getAttribute('class');
+        $clone->setAttribute(
+            'class',
+            trim($existingClass . ' recipient-instance recipient-instance--' . $role)
+        );
+
         // Label rewrite — rewrite indexed role labels from the source
         // instance to the target instance. This closes B2.5's known
         // limitation: Case D.2 clones used to carry the source block's
@@ -1121,7 +1137,12 @@ final class RoleBlockExpansionService
             $label .= ': ' . $recipient->signer_name;
         }
         $h = $dom->createElement('h4');
-        $h->setAttribute('class', 'recipient-block-header');
+        // Dual class — `recipient-block-header` for backward compat with
+        // any existing CSS, `recipient-instance-label` is the new
+        // canonical name targeted by docuperfect-recipient-blocks.css
+        // (the shared visual contract across Step 4 / Step 5 / signing
+        // view).
+        $h->setAttribute('class', 'recipient-block-header recipient-instance-label');
         $h->setAttribute('data-recipient-identity', $role . '_' . $instanceIndex);
         $h->appendChild($dom->createTextNode($label));
         if ($blockEl->firstChild !== null) {

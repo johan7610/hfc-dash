@@ -1029,11 +1029,25 @@
         {{-- RIGHT PANEL: Document Preview --}}
         <div class="flex-1 overflow-y-auto p-6 min-w-0" style="background: var(--bg);">
 
-            {{-- Web template preview (wrapped in CoreX document CSS) --}}
+            {{-- Web template preview (wrapped in CoreX document CSS).
+                 Shared visual contract — Step 4 / Step 5 / signing view
+                 all render through the same _document-body partial. The
+                 viewer context flips between 'wizard_preview' (Step 4)
+                 and 'wizard_fill' (Step 5) based on currentStep so the
+                 outer container class scopes Step-5-specific behaviour
+                 (e.g. fill-mode field highlighting) without forking the
+                 layout itself. --}}
             <div x-show="previewRenderType === 'web' && previewHtml" class="overflow-y-auto" style="max-height: calc(100vh - 200px);">
                 <link href="/css/corex-document.css" rel="stylesheet">
                 <div style="zoom: 0.7;">
-                    <div class="web-template-preview" x-html="previewHtml"></div>
+                    <div class="web-template-preview"
+                         :class="{ 'wizard-fill-context': currentStep === 5, 'wizard-preview-context': currentStep !== 5 }"
+                         data-viewer-context-host="1">
+                        @include('docuperfect.shared._document-body', [
+                            'viewerContext'    => 'wizard_preview',
+                            'alpineXHtml'      => 'previewHtml',
+                        ])
+                    </div>
                 </div>
             </div>
             <style>

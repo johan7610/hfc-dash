@@ -460,7 +460,49 @@
                     <div class="flex-1 overflow-auto" style="background:#e2e8f0; padding:16px 0; min-width:794px;">
                         <div x-ref="pageContainer" class="relative"
                              style="width:210mm; max-width:100%; margin:0 auto;">
-                            <div x-ref="webDocContent" x-html="webTemplateHtml"></div>
+                            {{-- Shared visual contract — Step 4 / Step 5 /
+                                 signing view all render through this same
+                                 partial so the recipient-block layout
+                                 stays uniform. Alpine injects the body via
+                                 x-html into the partial's host div; the
+                                 partial loads the shared CSS + applies the
+                                 context class + stamps the current
+                                 recipient's instance. --}}
+                            @include('docuperfect.shared._document-body', [
+                                'viewerContext'    => 'recipient_signing',
+                                'alpineXHtml'      => 'webTemplateHtml',
+                                'alpineRef'        => 'webDocContent',
+                                'currentRecipient' => $currentRecipient ?? null,
+                            ])
+
+                            {{-- Alpine watcher — stamps data-your-block="true"
+                                 on the current recipient's instance after
+                                 x-html populates the host div. The
+                                 server-side post-process in the partial
+                                 only fires for $body (server-rendered); on
+                                 the Alpine path we apply the stamp client-
+                                 side so the highlight CSS rule matches. --}}
+                            <div x-init="
+                                $watch('webTemplateHtml', () => {
+                                    const me = (currentRoleIdentity || '').toLowerCase();
+                                    if (!me) return;
+                                    setTimeout(() => {
+                                        const host = $refs.webDocContent;
+                                        if (!host) return;
+                                        const target = host.querySelector('[data-recipient-instance=\'' + me + '\']');
+                                        if (target) target.setAttribute('data-your-block', 'true');
+                                    }, 50);
+                                });
+                                // Also fire once on first render
+                                $nextTick(() => {
+                                    const me = (currentRoleIdentity || '').toLowerCase();
+                                    if (!me) return;
+                                    const host = $refs.webDocContent;
+                                    if (!host) return;
+                                    const target = host.querySelector('[data-recipient-instance=\'' + me + '\']');
+                                    if (target) target.setAttribute('data-your-block', 'true');
+                                });
+                            " style="display:none;"></div>
 
                             {{-- Floating signature markers — from zones drawn in setup.
                                  Positioned with absolute % values relative to the paginated container.
@@ -1412,6 +1454,10 @@ function externalSign() {
 
         // Web signing (CDS/web template interactive mode)
         signerRole: @json($signerRole ?? ''),
+        // B1 — '{party_role}_{role_index}' for the viewing recipient.
+        // The recipient-block layout's "your block" highlight watcher
+        // queries `[data-recipient-instance="seller_2"]` against this.
+        currentRoleIdentity: @json($currentRoleIdentity ?? ''),
         fieldMappings: @json($fieldMappings ?? []),
         webFieldValues: {},
         webSignatures: {},

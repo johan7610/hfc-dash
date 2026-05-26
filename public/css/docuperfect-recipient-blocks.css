@@ -1,0 +1,119 @@
+/*
+ * docuperfect-recipient-blocks.css
+ *
+ * Shared visual contract for the recipient-loop engine's cloned blocks.
+ * Loaded by all three consumer views of the rendered document body:
+ *
+ *   - Step 4 wizard preview      (XHR-loaded HTML into Alpine x-html)
+ *   - Step 5 wizard fill+review  (same Alpine surface)
+ *   - Recipient signing view     (server-rendered Blade x-html)
+ *
+ * The single source of truth for "how a cloned recipient block looks."
+ * Renderer markup (RoleBlockExpansionService) emits the structural
+ * attributes (`data-recipient-instance`, `data-recipient-identity`,
+ * `data-role-token`, `class="recipient-instance recipient-instance-label"`)
+ * which this stylesheet targets.
+ */
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Instance wrapper — every cloned block-unit ends up with this class.
+ * Adds breathing room between consecutive instances of the same role.
+ * ───────────────────────────────────────────────────────────────────── */
+.recipient-instance {
+    margin-bottom: 0.75rem;
+    padding-left: 0.25rem;
+}
+.recipient-instance + .recipient-instance {
+    margin-top: 0.5rem;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Instance label — the "Seller 2: Steve Jobs" sub-heading the
+ * renderer prepends to each clone. Bold, slightly larger than body
+ * text, distinct from the role's parent heading (which is styled by
+ * the template's own .corex-h2 / .corex-h1 rules).
+ * ───────────────────────────────────────────────────────────────────── */
+.recipient-instance-label {
+    font-weight: 600;
+    font-size: 1.05em;
+    margin-top: 1rem;
+    margin-bottom: 0.4rem;
+    color: var(--color-text-primary, #0f172a);
+    letter-spacing: -0.005em;
+}
+
+/* First instance label in a role group sits flush with the parent
+ * heading above it — no extra top margin. */
+.recipient-instance:first-of-type .recipient-instance-label,
+.recipient-instance-label:first-child {
+    margin-top: 0.5rem;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Field rows inside an instance — indent so the eye reads "these
+ * belong to the labelled recipient above." Works against templates
+ * that use .corex-clause (HFC's CDS convention) AND any other
+ * div/p line container the renderer's block-unit decomposition
+ * cloned per recipient.
+ * ───────────────────────────────────────────────────────────────────── */
+.recipient-instance .corex-clause,
+.recipient-instance > p,
+.recipient-instance > div:not(.recipient-instance-label) {
+    margin-left: 1.25rem;
+    line-height: 1.55;
+    margin-bottom: 0.2rem;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Highlight the CURRENT recipient's block on the signing view.
+ *
+ * The shared partial stamps `data-your-block="true"` on the
+ * `.recipient-instance` whose identity matches the signing recipient.
+ * A subtle background tint + accent left-border draws the eye to
+ * "this is where YOU need to act"; other recipients' blocks render
+ * plain (static reference).
+ * ───────────────────────────────────────────────────────────────────── */
+[data-recipient-instance][data-your-block="true"] {
+    background-color: var(--color-accent-soft, color-mix(in srgb, #06b6d4 8%, transparent));
+    border-left: 3px solid var(--color-accent, #06b6d4);
+    padding-left: 0.875rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-radius: 0 4px 4px 0;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Parent-heading dedup — templates that wrap the role's parent
+ * heading (e.g. `<div class="corex-h2">Seller</div>`) INSIDE a
+ * block-unit that gets cloned would otherwise render the heading
+ * once per recipient. Hide every parent-heading clone after the
+ * first one per role group via the `data-role-token-heading`
+ * attribute (renderer stamps this when the heading is detected
+ * inside a cloned unit). HFC's template 111 keeps the heading as
+ * a sibling of the block-units so this rule is a no-op for that
+ * template — it protects future templates from a structural foot-gun.
+ * ───────────────────────────────────────────────────────────────────── */
+.corex-h1[data-role-token-heading] ~ .corex-h1[data-role-token-heading][data-same-role],
+.corex-h2[data-role-token-heading] ~ .corex-h2[data-role-token-heading][data-same-role],
+h2[data-role-token-heading] ~ h2[data-role-token-heading][data-same-role],
+h3[data-role-token-heading] ~ h3[data-role-token-heading][data-same-role] {
+    display: none;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Visual spacing between distinct role groups — when a document has
+ * a seller section + buyer section + agent section, add breathing
+ * room between them. Targets the role-group wrapper the shared
+ * Blade partial wraps around the rendered HTML.
+ * ───────────────────────────────────────────────────────────────────── */
+[data-role-group] + [data-role-group] {
+    margin-top: 1.5rem;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Recipient signing context — apply a slightly larger gap between
+ * instances so the recipient can scan their block from the others.
+ * ───────────────────────────────────────────────────────────────────── */
+.recipient-signing-context .recipient-instance + .recipient-instance {
+    margin-top: 0.75rem;
+}
