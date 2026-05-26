@@ -591,11 +591,10 @@ final class RoleBlockExpansionService
             // duplicating "the cluster" duplicates the entire page —
             // catastrophic. Block-unit decomposition keeps duplication
             // tight to the actual line containers the agent authored.
-            $blockUnits = $this->decomposeFieldsIntoBlockUnits(
-                $liveInstanceGroups[1] ?? [],
-            );
+            $clusterFields = $liveInstanceGroups[1] ?? [];
+            $blockUnits = $this->decomposeFieldsIntoBlockUnits($clusterFields);
             if (empty($blockUnits)) {
-                foreach ($liveInstanceGroups[1] ?? [] as $f) {
+                foreach ($clusterFields as $f) {
                     $this->stampFieldNode($f['node'], $role, 1, isOrphan: false);
                 }
                 $structuralLog[] = [
@@ -604,6 +603,28 @@ final class RoleBlockExpansionService
                     'reason' => 'No block-level ancestors found for fields; auto-loop skipped.',
                     'recipients' => $recipientCount,
                 ];
+                return;
+            }
+
+            // INLINE-LIST path — when the cluster has exactly ONE block-unit
+            // AND multiple fields, the cluster is a prose sentence wrapping
+            // field placeholders (e.g. opening paragraph "I/We, [first]
+            // [last] [id], hereby grant..."). The sentence itself MUST NOT
+            // duplicate per recipient; instead the field-spans get duplicated
+            // INLINE, joined by " and " between recipients, so the prose
+            // reads: "I/We, James VDM 3112 and Steve Jobs 6789, hereby
+            // grant...". This is the contract for opening-paragraph
+            // references in legal mandate templates — the parties are
+            // listed inline, the main data block below is where each
+            // recipient gets their own labelled section.
+            if (count($blockUnits) === 1 && count($clusterFields) > 1) {
+                $this->inlineListClusterForRecipients(
+                    $dom,
+                    $clusterFields,
+                    $role,
+                    $recipients,
+                    $recipientCount,
+                );
                 return;
             }
             // Group consecutive block-units that share a parent into
@@ -1153,6 +1174,167 @@ final class RoleBlockExpansionService
     }
 
     /**
+     * Inline-list path — for clusters where the fields all live inside
+     * a single block-unit (a prose sentence with field placeholders).
+     * The block-unit is NOT cloned. Instead the FIELD SPANS get
+     * duplicated inline, joined by " and " between recipients.
+     *
+     * Template 111 opening paragraph is the canonical case:
+     *
+     *   <span class="corex-clause-text">
+     *     I/we, the undersigned …
+     *     <span data-field="seller_first_name"></span>
+     *     <span data-field="seller_last_name"></span>
+     *     <span data-field="seller_id_number"></span>
+     *     , hereby grant …
+     *   </span>
+     *
+     * For 2 sellers the post-fix output renders:
+     *
+     *   I/we, the undersigned …
+     *   James Van Der Merwe Van Der Merwe 3112
+     *    and
+     *   Steve Jobs 6789
+     *   , hereby grant …
+     *
+     * Implementation:
+     *   1. Identify the range of sibling nodes from the first field to
+     *      the last field (inclusive). This is the "field block" inside
+     *      the paragraph — duplicated per recipient with " and " between.
+     *   2. The FIRST recipient's range stays in place; the cluster's
+     *      field spans get stamped + pre-filled with that recipient's
+     *      contact values.
+     *   3. For each additional recipient, insert a ' and ' text node
+     *      after the previous range's last node, then a CLONE of the
+     *      range with field spans stamped + pre-filled.
+     *   4. No section header is prepended — the prose sentence already
+     *      carries the appropriate "I/We" / "the undersigned" framing.
+     *
+     * @param  list<array{field_name:string,sub_name:?string,node:DOMElement}> $fields
+     * @param  Collection<int, SignatureRequest>                                $recipients
+     */
+    private function inlineListClusterForRecipients(
+        DOMDocument $dom,
+        array $fields,
+        string $role,
+        Collection $recipients,
+        int $totalInstances,
+    ): void {
+        if (count($fields) === 0 || $recipients->isEmpty()) {
+            return;
+        }
+
+        $firstField = $fields[0]['node'];
+        $lastField  = end($fields)['node'];
+        $parent     = $firstField->parentNode;
+        if (!$parent instanceof DOMNode) {
+            return;
+        }
+
+        // Collect the inline range from firstField → lastField (inclusive).
+        // We re-clone these nodes per additional recipient and insert
+        // them with a ' and ' separator between groups.
+        $rangeNodes = [];
+        $cur = $firstField;
+        while ($cur !== null) {
+            $rangeNodes[] = $cur;
+            if ($cur === $lastField) {
+                break;
+            }
+            $cur = $cur->nextSibling;
+        }
+        if (empty($rangeNodes)) {
+            return;
+        }
+
+        $recipientsList = $recipients->values();
+
+        // Recipient 1 — in-place stamp + pre-fill of the existing fields.
+        $r1 = $recipientsList->first();
+        $contact1 = $this->resolveContact($r1);
+        foreach ($fields as $f) {
+            $this->stampInlineFieldForRecipient(
+                $f['node'], $role, 1, $contact1,
+            );
+        }
+
+        // Recipients 2..N — insert ' and ' + cloned range with stamped fields.
+        $insertAfter = $lastField;
+        $count = $recipientsList->count();
+        for ($i = 1; $i < $count; $i++) {
+            $n = $i + 1;
+            $recipient = $recipientsList->get($i);
+            $rContact  = $this->resolveContact($recipient);
+
+            $separator = $dom->createTextNode(' and ');
+            $insertAfter = $this->insertAfterNode($parent, $separator, $insertAfter);
+
+            $xpath = new DOMXPath($dom);
+            foreach ($rangeNodes as $orig) {
+                $clone = $orig->cloneNode(true);
+                if ($clone instanceof DOMElement) {
+                    $fieldNodes = $xpath->query('descendant-or-self::*[@data-field]', $clone);
+                    if ($fieldNodes !== false) {
+                        foreach ($fieldNodes as $fn) {
+                            if ($fn instanceof DOMElement) {
+                                $this->stampInlineFieldForRecipient($fn, $role, $n, $rContact);
+                            }
+                        }
+                    }
+                }
+                $insertAfter = $this->insertAfterNode($parent, $clone, $insertAfter);
+            }
+        }
+    }
+
+    /**
+     * Stamp a single inline field-span with the recipient's identity
+     * + pre-fill from contact. Mirrors `mutateCloneForInstance`'s
+     * per-field mutation but operates on individual nodes (the
+     * inline-list path doesn't have a block-clone wrapper).
+     */
+    private function stampInlineFieldForRecipient(
+        DOMElement $fieldNode,
+        string $role,
+        int $instanceIndex,
+        ?Contact $contact,
+    ): void {
+        $origName = $fieldNode->getAttribute('data-field');
+        // Strip any pre-existing __r{n} suffix (cloned nodes carry the
+        // previous stamping) before re-stamping for this instance.
+        $logicalName = preg_replace('/__r\d+$/', '', $origName);
+        $parsed = $this->detector->parseFieldName($logicalName);
+        if ($parsed['role_base'] === null) {
+            return;
+        }
+        $fieldNode->setAttribute('data-field', $logicalName . '__r' . $instanceIndex);
+        $fieldNode->setAttribute('data-original-field', $logicalName);
+        $fieldNode->setAttribute('data-recipient-identity', $role . '_' . $instanceIndex);
+        $fieldNode->setAttribute('data-role-token', $role);
+        if ($contact !== null && $parsed['sub_name'] !== null) {
+            $value = $this->resolveContactValue($contact, $parsed['sub_name']);
+            if ($value !== null) {
+                $this->replaceTextContent($fieldNode, $value);
+            }
+        }
+    }
+
+    /**
+     * Insert $newNode immediately after $referenceNode under $parent;
+     * return the inserted node so the caller can chain further
+     * inserts. Handles the "$referenceNode is the last child" case.
+     */
+    private function insertAfterNode(DOMNode $parent, DOMNode $newNode, DOMNode $referenceNode): DOMNode
+    {
+        if ($referenceNode->nextSibling !== null) {
+            $parent->insertBefore($newNode, $referenceNode->nextSibling);
+        } else {
+            $parent->appendChild($newNode);
+        }
+        return $newNode;
+    }
+
+    /**
      * Case D.2 path — duplicate the idx=K subtree for instances K+1..N.
      *
      * @param  Collection<int, SignatureRequest> $recipients   (all recipients, ordered by role_index)
@@ -1290,7 +1472,20 @@ final class RoleBlockExpansionService
 
     /**
      * Prepend a recipient-block header so the rendered signing surface
-     * shows "Seller 1: James" / "Lessor 2" etc. above each instance.
+     * shows "Seller - James Van Der Merwe" / "Lessor - Liam" etc.
+     * above each block-duplicated instance.
+     *
+     * Format per Johan's spec: `{role_base_label} - {signer_name}`.
+     * The indexed form ("Seller 1:") was used in an earlier iteration
+     * but doesn't match the agency-facing convention — the opening
+     * paragraph already lists names inline with "and"; the main block
+     * heading just identifies whose data follows. We pass index=1 +
+     * totalInstances=1 to `roleDisplayLabel` so it returns the
+     * singleton form ("Seller" not "Seller 1"), then append " - Name".
+     *
+     * Fallback when no recipient is supplied (synthetic templates,
+     * orphan-stamping paths): "{role_base_label} {instanceIndex}" so
+     * the header still distinguishes instances visually.
      */
     private function prependSectionHeader(
         DOMDocument $dom,
@@ -1301,9 +1496,11 @@ final class RoleBlockExpansionService
         bool $isSales,
         ?SignatureRequest $recipient,
     ): void {
-        $label = Template::roleDisplayLabel($role, $isSales, $instanceIndex, $totalInstances);
+        $baseLabel = Template::roleDisplayLabel($role, $isSales, 1, 1);
         if ($recipient !== null && !empty($recipient->signer_name)) {
-            $label .= ': ' . $recipient->signer_name;
+            $label = $baseLabel . ' - ' . $recipient->signer_name;
+        } else {
+            $label = $baseLabel . ' ' . $instanceIndex;
         }
         $h = $dom->createElement('h4');
         // Dual class — `recipient-block-header` for backward compat with
