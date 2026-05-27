@@ -2778,6 +2778,7 @@
                     <input type="hidden" name="baths"   value="{{ (int) ($property->baths ?? 0) }}">
                     <input type="hidden" name="garages" value="{{ (int) ($property->garages ?? 0) }}">
                     <input type="hidden" name="status"  value="{{ $property->status }}">
+                    <input type="hidden" name="agent_id" value="{{ $property->agent_id }}">
 
                     <label class="flex items-center gap-3 px-4 py-3 rounded-md border border-dashed cursor-pointer transition-colors text-sm"
                            style="border-color:var(--border-hover); color:var(--text-secondary);"
