@@ -6,6 +6,7 @@ namespace App\Services\Map;
 
 use App\Support\MarketAnalytics\OutlierGuard;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Phase 3g B1/B2 — return pins for the Map module in a single bounding-box query.
@@ -68,19 +69,31 @@ final class MapPinService
         $allRecords   = [];
 
         $sources = [
-            'hfc_listings'    => fn () => $this->hfcListings($req, $perLayerLimit),
-            'sold_comps'      => fn () => $this->soldComps($req, $perLayerLimit),
-            'active_listings' => fn () => $this->activeListings($req, $perLayerLimit),
-            'mic_subjects'    => fn () => $this->micSubjects($req, $perLayerLimit),
+            'hfc_listings'       => fn () => $this->hfcListings($req, $perLayerLimit),
+            'sold_comps'         => fn () => $this->soldComps($req, $perLayerLimit),
+            'active_listings'    => fn () => $this->activeListings($req, $perLayerLimit),
+            'mic_subjects'       => fn () => $this->micSubjects($req, $perLayerLimit),
             // A.2.3 Item 3 — Sectional schemes now appear in Seller View too,
             // but with owner identity redacted at the toRecord boundary below.
             // (Pre-A.2.3 the whole layer was suppressed in Seller View — that
             // was over-cautious and hid useful scheme metadata.)
-            'scheme_owners'   => fn () => $this->schemeOwners($req, $perLayerLimit),
+            'scheme_owners'      => fn () => $this->schemeOwners($req, $perLayerLimit),
+            // T layer — prospecting candidates with geocoded GPS. Sensitive:
+            // suppressed entirely from Seller View (see the dispatch guard
+            // below). Wired post-2026-05-27 Google geocoding backfill.
+            'tracked_properties' => fn () => $this->trackedProperties($req, $perLayerLimit),
         ];
 
         foreach ($sources as $key => $fetch) {
             if (!$req->wantsLayer($key)) continue;
+            // Seller View suppression for sensitive layers. scheme_owners
+            // has per-pin redaction (A.2.3); tracked_properties is dropped
+            // wholesale because prospecting intelligence is agent-only.
+            if ($key === 'tracked_properties' && $req->isSellerView()) {
+                $layerCounts[$key] = 0;
+                $totals[$key]      = 0;
+                continue;
+            }
             /** @var array{0: array, 1: int} $result */
             $result = $fetch();
             [$pins, $total] = $result;
@@ -263,6 +276,101 @@ final class MapPinService
                 // A.2.3 Item 4 — full per-portal map so the JS can render a
                 // portal strip (one icon per active portal).
                 'public_listing_urls'  => $p->publicListingUrls(),
+            ];
+        })->all();
+
+        $pins = $this->applyRadiusFilter($pins, $req);
+        return [$pins, $total];
+    }
+
+    /**
+     * Tracked Properties layer (T) — prospecting candidates with geocoded
+     * GPS that are NOT yet on agency stock. Wired here so the 2026-05-27
+     * Google geocoding backfill flows into the map per geocoding-spec.md.
+     *
+     * Excludes:
+     *   - promoted_to_property_id IS NOT NULL (already on stock → H layer
+     *     covers them; double-counting would inflate composite-pin counts)
+     *   - geocode_needs_review = 1 (the SA-centroid / wrong-city pins
+     *     flagged for operator review on 2026-05-27)
+     *   - latitude / longitude IS NULL (not yet geocoded)
+     *   - status != 'active' (archived / duplicate / promoted are out)
+     *
+     * Sensitive layer — Seller View suppression is handled at
+     * getPinsInBounds() level (the dispatch skips this layer entirely
+     * when isSellerView is true).
+     *
+     * @return array{0: array, 1: int}
+     */
+    private function trackedProperties(MapBoundsRequest $req, int $limit): array
+    {
+        $q = DB::table('tracked_properties')
+            ->whereNull('deleted_at')
+            ->whereNotNull('latitude')->whereNotNull('longitude')
+            ->whereNull('promoted_to_property_id')
+            ->where('status', 'active')
+            ->whereBetween('latitude',  [$req->south, $req->north])
+            ->whereBetween('longitude', [$req->west,  $req->east]);
+
+        if (Schema::hasColumn('tracked_properties', 'geocode_needs_review')) {
+            $q->where(function ($qq) {
+                $qq->where('geocode_needs_review', 0)
+                   ->orWhereNull('geocode_needs_review');
+            });
+        }
+
+        // Scope (always agency — tracked_properties are agency-scoped by
+        // design; "all" admin scope is intentionally not supported here).
+        $q->where('agency_id', $req->agencyId);
+
+        if (Schema::hasColumn('tracked_properties', 'is_demo')) {
+            $this->applyDemoFilter($q, $req, 'is_demo');
+        }
+        $this->applyPropertyTypeFilter($q, $req, 'property_type');
+        $this->applyDateFilter($q, $req, 'first_seen_at');
+        $this->applySearchFilter($q, $req, ['street_name', 'suburb', 'erf_number']);
+
+        $total = (clone $q)->count();
+
+        $rows = $q->select([
+                'id', 'agency_id',
+                'street_number', 'street_name', 'suburb', 'town', 'province',
+                'erf_number', 'property_type',
+                'latitude', 'longitude',
+                'first_seen_at', 'last_enriched_at',
+                'geo_source', 'geo_confidence',
+            ])
+            ->orderBy('id')
+            ->limit($limit)
+            ->get();
+
+        $pins = $rows->map(function ($r) {
+            $streetParts = array_filter([$r->street_number ?? null, $r->street_name ?? null]);
+            $street      = trim(implode(' ', $streetParts));
+            $title       = $street !== ''
+                ? $street . ($r->suburb ? ', ' . $r->suburb : '')
+                : ($r->suburb ? $r->suburb : 'Tracked #' . $r->id);
+
+            $subParts = array_filter([
+                $r->property_type ?? null,
+                $r->erf_number ? 'Erf ' . $r->erf_number : null,
+                $r->geo_confidence ? 'GPS: ' . $r->geo_confidence : null,
+            ]);
+
+            return [
+                'id'                  => (int) $r->id,
+                'layer'               => 'tracked_properties',
+                'lat'                 => (float) $r->latitude,
+                'lng'                 => (float) $r->longitude,
+                'title'               => $title,
+                'subtitle'            => implode(' · ', $subParts),
+                'price'               => null,
+                'date'                => $r->first_seen_at ?: null,
+                'detail_url'          => route('corex.tracked-properties.show', ['trackedProperty' => $r->id]),
+                'sensitive'           => true,
+                'status'              => null,
+                'tracked_property_id' => (int) $r->id,
+                'suburb'              => $r->suburb,
             ];
         })->all();
 

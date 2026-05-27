@@ -18,6 +18,7 @@ final class MapBoundsRequest
     /** @var string[] */
     public const VALID_LAYERS = [
         'hfc_listings', 'sold_comps', 'active_listings', 'mic_subjects', 'scheme_owners',
+        'tracked_properties',
     ];
 
     public function __construct(

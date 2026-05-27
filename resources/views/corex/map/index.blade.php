@@ -109,6 +109,7 @@
                             ['key' => 'active_listings', 'label' => 'Portal Stock',      'colour' => '#f59e0b', 'letter' => 'P', 'title' => 'Portal Stock — competitor listings captured from Property24 and Private Property'],
                             ['key' => 'mic_subjects',    'label' => 'MIC Subjects',      'colour' => '#64748b', 'letter' => 'M'],
                             ['key' => 'scheme_owners',   'label' => 'Sectional Schemes', 'colour' => '#8b5cf6', 'letter' => 'O', 'sensitive' => true],
+                            ['key' => 'tracked_properties', 'label' => 'Tracked',        'colour' => '#14b8a6', 'letter' => 'T', 'sensitive' => true, 'title' => 'Tracked — prospecting candidates with geocoded GPS, not yet on agency stock (Agent View only)'],
                         ];
                     @endphp
                     @foreach($layerDefs as $l)
@@ -388,22 +389,24 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Single-record category visuals — composite pins use the neutral scheme below.
     const LAYER_COLOURS = {
-        hfc_listings:    '#00d4aa',
-        sold_comps:      '#3b82f6',
+        hfc_listings: '#00d4aa',
+        sold_comps: '#3b82f6',
         active_listings: '#f59e0b',
-        mic_subjects:    '#64748b',
-        scheme_owners:   '#8b5cf6',
+        mic_subjects: '#64748b',
+        scheme_owners: '#8b5cf6',
+        tracked_properties: '#14b8a6',
     };
     const LAYER_LETTERS = {
         hfc_listings: 'H', sold_comps: 'S', active_listings: 'P',
-        mic_subjects: 'M', scheme_owners: 'O',
+        mic_subjects: 'M', scheme_owners: 'O', tracked_properties: 'T',
     };
     const LAYER_NAMES = {
-        hfc_listings:    'HFC Listing',
-        sold_comps:      'Sold Comp',
+        hfc_listings: 'HFC Listing',
+        sold_comps: 'Sold Comp',
         active_listings: 'Portal Stock',
-        mic_subjects:    'MIC Subject',
-        scheme_owners:   'Sectional Scheme',
+        mic_subjects: 'MIC Subject',
+        scheme_owners: 'Sectional Scheme',
+        tracked_properties: 'Tracked',
     };
 
     // Composite pin palette — neutral slate so it reads as "multiple sources here"
@@ -617,6 +620,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     const enabledLayers = new Set([
         'hfc_listings', 'sold_comps', 'active_listings', 'mic_subjects', 'scheme_owners',
+        'tracked_properties',
     ]);
     // Phase A.1 — server pre-groups co-located records into composite
     // locations; the client uses ONE clustering group across all categories.
@@ -1332,9 +1336,9 @@ document.addEventListener('DOMContentLoaded', function () {
             limit: '2000',
             include_demo: includeDemo ? '1' : '0',
         });
-        // Always send all five layer keys so server gives counts for each;
+        // Always send all six layer keys so server gives counts for each;
         // the UI hides disabled ones at render time.
-        ['hfc_listings','sold_comps','active_listings','mic_subjects','scheme_owners'].forEach(k => params.append('layers[]', k));
+        ['hfc_listings','sold_comps','active_listings','mic_subjects','scheme_owners','tracked_properties'].forEach(k => params.append('layers[]', k));
 
         // Filters — only send when narrowed beyond defaults so the URL stays
         // clean in the common case.
