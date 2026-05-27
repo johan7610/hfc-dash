@@ -192,6 +192,14 @@ class AgencyController extends Controller
             unset($data['p24_password']);
         }
 
+        // Auto-enable P24 when both username and an effective password are present
+        // (either newly supplied, or already stored). Stops the common footgun
+        // of saving creds with the enable checkbox left unticked.
+        $effectivePassword = $data['p24_password'] ?? $agency->p24_password;
+        if (!empty($data['p24_username']) && !empty($effectivePassword)) {
+            $data['p24_enabled'] = true;
+        }
+
         // Detect P24 cred changes — trigger auto-sync after save.
         $credsChanged = ($agency->p24_username !== ($data['p24_username'] ?? null))
             || (isset($data['p24_password']) && $data['p24_password'] !== $agency->p24_password)
