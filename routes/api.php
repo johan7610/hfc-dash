@@ -35,10 +35,18 @@ $loginHandler = function (Request $request) {
 
     $user = User::where('email', $request->email)->first();
 
-    if (! $user || ! Hash::check($request->password, $user->password)) {
-        throw ValidationException::withMessages([
-            'email' => ['The provided credentials are incorrect.'],
-        ]);
+    if (! $user) {
+        return response()->json([
+            'message' => 'No user account found for this email.',
+            'code'    => 'user_not_found',
+        ], 404);
+    }
+
+    if (! Hash::check($request->password, $user->password)) {
+        return response()->json([
+            'message' => 'Incorrect password.',
+            'code'    => 'invalid_password',
+        ], 401);
     }
 
     $token = $user->createToken('corex-mobile')->plainTextToken;
