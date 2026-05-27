@@ -176,6 +176,35 @@ class PortalLeadController extends Controller
         elseif (!$fcmMessagingBound) $pushBlocker = 'Firebase Messaging not configured — check FIREBASE_CREDENTIALS / service provider binding.';
         elseif ($agentDeviceCount === 0) $pushBlocker = "Agent has 0 device tokens registered. They must log into the mobile app to register a device.";
 
+        // Direct FCM send to the AGENT only, with per-token report.
+        $fcmReport = null;
+        if ($pushReadiness) {
+            try {
+                $tokens = DeviceToken::query()->where('user_id', $agent->id)->pluck('token')->all();
+                $messaging = app(\Kreait\Firebase\Contract\Messaging::class);
+                $message = \Kreait\Firebase\Messaging\CloudMessage::new()
+                    ->withNotification(\Kreait\Firebase\Messaging\Notification::create(
+                        'CoreX test lead',
+                        'Diagnostic push from Portal Leads test button.'
+                    ))
+                    ->withData(['type' => 'portal_lead_test', 'lead_id' => (string) $lead->id]);
+                $report = $messaging->sendMulticast($message, $tokens);
+                $fcmReport = [
+                    'attempted'         => count($tokens),
+                    'successes'         => $report->successes()->count(),
+                    'failures'          => $report->failures()->count(),
+                    'invalid_tokens'    => count($report->invalidTokens()),
+                    'unknown_tokens'    => count($report->unknownTokens()),
+                    'failure_reasons'   => array_values(array_map(
+                        fn ($f) => $f->error()?->getMessage() ?? 'unknown',
+                        $report->failures()->getItems()
+                    )),
+                ];
+            } catch (\Throwable $e) {
+                $fcmReport = ['error' => $e->getMessage()];
+            }
+        }
+
         return response()->json([
             'ok'         => true,
             'lead_id'    => $lead->id,
@@ -187,6 +216,7 @@ class PortalLeadController extends Controller
                 'agency_device_tokens' => $agencyDeviceCount,
                 'fcm_class_exists'     => $fcmClassExists,
                 'fcm_messaging_bound'  => $fcmMessagingBound,
+                'fcm_report'           => $fcmReport,
             ],
         ]);
     }
