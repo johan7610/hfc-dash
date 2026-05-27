@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace App\Models\Prospecting;
 
 use App\Models\Concerns\BelongsToAgency;
+use App\Models\MarketReports\MarketDataPoint;
 use App\Models\Property;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
@@ -39,6 +41,7 @@ final class TrackedProperty extends Model
         'street_number', 'street_name', 'unit_number', 'complex_name',
         'suburb', 'suburb_normalised', 'town', 'province', 'postal_code',
         'latitude', 'longitude', 'cma_gps_lat', 'cma_gps_lng',
+        'geo_source', 'geo_confidence', 'geo_resolved_at',
         'erf_number', 'title_deed_number', 'cadastral_extent',
         'municipal_valuation', 'municipal_valuation_year',
         'last_known_asking_price', 'last_known_sold_price', 'last_known_sold_date',
@@ -47,6 +50,7 @@ final class TrackedProperty extends Model
         'promoted_to_property_id', 'promoted_at', 'promoted_by_user_id',
         'source_chain', 'first_seen_at', 'last_enriched_at', 'last_enrichment_source',
         'status', 'duplicate_of_tracked_property_id',
+        'is_demo',
     ];
 
     protected $casts = [
@@ -54,6 +58,7 @@ final class TrackedProperty extends Model
         'longitude'                => 'decimal:7',
         'cma_gps_lat'              => 'decimal:7',
         'cma_gps_lng'              => 'decimal:7',
+        'geo_resolved_at'          => 'datetime',
         'municipal_valuation'      => 'decimal:2',
         'municipal_valuation_year' => 'integer',
         'last_known_asking_price'  => 'decimal:2',
@@ -110,6 +115,48 @@ final class TrackedProperty extends Model
         return $this->hasMany(TrackedPropertyExternalRef::class);
     }
 
+    /**
+     * Portal listings linked back to this Tracked Property via the
+     * `prospecting_listings.tracked_property_id` FK. Used by the MIC
+     * Opportunities tab (Phase D4) to surface strong-match counts per TP
+     * and by the detail page to list portal observations.
+     */
+    public function prospectingListings(): HasMany
+    {
+        return $this->hasMany(\App\Models\ProspectingListing::class, 'tracked_property_id');
+    }
+
+    /**
+     * Address history (one row per source contribution). Exactly one row
+     * has is_primary=true; the TrackedPropertyAddressObserver keeps this TP's
+     * address-field cache (street_number, street_name, suburb, … latitude,
+     * longitude) in sync with that primary row.
+     */
+    public function addresses(): HasMany
+    {
+        return $this->hasMany(TrackedPropertyAddress::class, 'tracked_property_id');
+    }
+
+    /**
+     * The current primary address. Mirrored to this TP's address-field cache
+     * by the observer. Spec §3.2.1.
+     */
+    public function primaryAddress(): HasOne
+    {
+        return $this->hasOne(TrackedPropertyAddress::class, 'tracked_property_id')
+                    ->where('is_primary', true);
+    }
+
+    /**
+     * Market data points anchored to this property (per-TP metric history).
+     * The shared-pool default scope on MarketDataPoint is global — this
+     * relation pre-filters to rows whose tracked_property_id matches.
+     */
+    public function marketDataPoints(): HasMany
+    {
+        return $this->hasMany(MarketDataPoint::class, 'tracked_property_id');
+    }
+
     public function promotedProperty(): BelongsTo
     {
         return $this->belongsTo(Property::class, 'promoted_to_property_id');
@@ -132,5 +179,12 @@ final class TrackedProperty extends Model
             $this->suburb,
         ]);
         return implode(', ', $parts) ?: '(no address)';
+    }
+
+    // ── Presentations V2 ──
+
+    public function presentations(): HasMany
+    {
+        return $this->hasMany(\App\Models\Presentation::class, 'tracked_property_id')->latest();
     }
 }

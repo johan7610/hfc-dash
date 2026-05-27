@@ -60,7 +60,34 @@ return [
     ],
 
     'anthropic' => [
-        'key' => env('ANTHROPIC_API_KEY'),
+        // Legacy key — kept for backwards compatibility with existing consumers
+        // (AiFieldMapperService, ClaudeVisionParserService, ImporterAiService,
+        // MarketingCopyService, AIExtractionService). DO NOT REMOVE without
+        // migrating those services to read `api_key` instead.
+        'key'     => env('ANTHROPIC_API_KEY'),
+        // Canonical name per MIC spec §4.8.
+        'api_key' => env('ANTHROPIC_API_KEY'),
+
+        'api_base'      => env('ANTHROPIC_API_BASE', 'https://api.anthropic.com'),
+        'default_model' => env('ANTHROPIC_DEFAULT_MODEL', 'claude-haiku-4-5'),
+        'models' => [
+            'fast'    => env('ANTHROPIC_FAST_MODEL', 'claude-haiku-4-5'),
+            'quality' => env('ANTHROPIC_QUALITY_MODEL', 'claude-sonnet-4-6'),
+        ],
+        'timeout'     => (int) env('ANTHROPIC_TIMEOUT', 30),
+        'max_retries' => (int) env('ANTHROPIC_MAX_RETRIES', 3),
+        'enabled'     => filter_var(env('ANTHROPIC_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        // ZAR conversion — current as of May 2026. Refresh quarterly or when
+        // the rate moves > 5%. NB: this is a forward-looking rate only —
+        // historical ai_narrative_cache rows are NOT retroactively repriced.
+        // Each row's cost_zar is a snapshot at the time of generation.
+        'usd_to_zar' => (float) env('ANTHROPIC_USD_TO_ZAR', 16.50),
+        // USD per million tokens — refresh when Anthropic changes pricing.
+        'pricing' => [
+            'claude-haiku-4-5'  => ['input' => 1.00, 'output' => 5.00],
+            'claude-sonnet-4-6' => ['input' => 3.00, 'output' => 15.00],
+            'claude-opus-4-7'   => ['input' => 5.00, 'output' => 25.00],
+        ],
     ],
 
     'property24_syndication' => [
@@ -86,6 +113,16 @@ return [
     'pdf' => [
         'puppeteer_browser_path' => env('PUPPETEER_BROWSER_PATH', ''),
         'node_wrapper'           => env('PDF_NODE_WRAPPER', ''),
+    ],
+
+    // Phase 3f — Geocoding waterfall (AddressResolverService).
+    'google' => [
+        'geocoding_api_key' => env('GOOGLE_GEOCODING_API_KEY'),
+    ],
+
+    'nominatim' => [
+        'enabled'    => filter_var(env('NOMINATIM_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+        'user_agent' => env('NOMINATIM_UA', 'CoreXOS/1.0 (admin@corexos.co.za)'),
     ],
 
 ];

@@ -27,6 +27,39 @@ Route::post('/buyer/portal/{token}/respond', [\App\Http\Controllers\BuyerPortalC
 Route::get('/m/{shortcode}', [\App\Http\Controllers\SellerOutreach\PublicLandingController::class, 'show'])
     ->where('shortcode', '[A-Za-z0-9]{6}')
     ->name('seller-outreach.public.landing');
+
+// ── Presentations V2 Phase 4 — public snapshot share links (no auth).
+//    Token is the credential; controller checks revoked_at + expires_at.
+//    Track endpoint is rate-limited 60req/min/IP to stop beacon abuse.
+Route::get('/p/{token}', [\App\Http\Controllers\Presentation\PublicPresentationController::class, 'show'])
+    ->where('token', '[A-Za-z0-9]{40,64}')
+    ->middleware('throttle:60,1')
+    ->name('presentation.public.show');
+Route::post('/p/{token}/track', [\App\Http\Controllers\Presentation\PublicPresentationController::class, 'track'])
+    ->where('token', '[A-Za-z0-9]{40,64}')
+    ->middleware('throttle:60,1')
+    ->name('presentation.public.track');
+// Phase 5 — teaser lead capture (POST). Rate-limited 5/min/IP.
+Route::post('/p/{token}/capture-lead', [\App\Http\Controllers\Presentation\PublicPresentationController::class, 'captureLead'])
+    ->where('token', '[A-Za-z0-9]{40,64}')
+    ->middleware('throttle:5,1')
+    ->name('presentation.public.capture-lead');
+Route::get('/p/{token}/refresh', [\App\Http\Controllers\Presentation\PublicPresentationController::class, 'refreshForm'])
+    ->where('token', '[A-Za-z0-9]{40,64}')
+    ->middleware('throttle:60,1')
+    ->name('presentation.public.refresh-form');
+Route::post('/p/{token}/refresh', [\App\Http\Controllers\Presentation\PublicPresentationController::class, 'refreshSubmit'])
+    ->where('token', '[A-Za-z0-9]{40,64}')
+    ->middleware('throttle:5,1')
+    ->name('presentation.public.refresh-submit');
+
+// Phase 9c-3 rebuild — public privacy policy by token. Token unique
+// across agencies + branches; controller picks the right one.
+Route::get('/legal/privacy/{token}', [\App\Http\Controllers\Public\PrivacyPolicyController::class, 'show'])
+    ->where('token', '[A-Za-z0-9]{40,64}')
+    ->middleware('throttle:60,1')
+    ->name('public.privacy-policy');
+
 Route::post('/m/{shortcode}/callback', [\App\Http\Controllers\SellerOutreach\PublicLandingController::class, 'callback'])
     ->where('shortcode', '[A-Za-z0-9]{6}')
     ->middleware('throttle:10,60')
@@ -61,6 +94,85 @@ Route::get('/dashboard', function () {
 
 Route::middleware('auth')->group(function () {
 
+    // Phase 6 — agent-side WhatsApp click-through tracker → records the
+    // click + 302s to the wa.me URL. Agency-scoped inside the controller.
+    Route::get('/corex/deliveries/{delivery}/whatsapp-redirect', [\App\Http\Controllers\Presentation\PresentationDeliveryController::class, 'whatsappRedirect'])
+        ->name('corex.deliveries.whatsapp-redirect');
+
+    // Phase 8 — outcomes dashboard.
+    Route::get('/corex/presentations/outcomes', [\App\Http\Controllers\Presentation\PresentationOutcomesDashboardController::class, 'index'])
+        ->middleware('permission:access_presentations')
+        ->name('corex.presentations.outcomes.index');
+    // Phase 9a — full-funnel analytics dashboard.
+    Route::get('/corex/presentations/analytics', [\App\Http\Controllers\Presentation\PresentationAnalyticsController::class, 'index'])
+        ->middleware('permission:access_presentations')
+        ->name('corex.presentations.analytics.index');
+
+    // Phase 9d — RCR submission flow.
+    Route::bind('rcrSubmission', fn ($id) => \App\Models\Compliance\Rcr\RcrSubmission::findOrFail($id));
+    Route::bind('rcrAnswer',     fn ($id) => \App\Models\Compliance\Rcr\RcrAnswer::findOrFail($id));
+    Route::bind('rcrQuestionnaire', fn ($id) => \App\Models\Compliance\Rcr\RcrQuestionnaire::findOrFail($id));
+
+    Route::prefix('corex/compliance/rcr')
+        ->name('corex.compliance.rcr.')
+        ->group(function () {
+            Route::get('/',                                          [\App\Http\Controllers\Compliance\Rcr\RcrSubmissionController::class, 'index'])->name('index');
+            Route::post('/',                                         [\App\Http\Controllers\Compliance\Rcr\RcrSubmissionController::class, 'store'])->name('store');
+            Route::get('/{rcrSubmission}',                           [\App\Http\Controllers\Compliance\Rcr\RcrSubmissionController::class, 'show'])->name('show');
+            Route::patch('/{rcrSubmission}/answers/{rcrAnswer}',     [\App\Http\Controllers\Compliance\Rcr\RcrSubmissionController::class, 'saveAnswer'])->name('answers.save');
+            Route::post('/{rcrSubmission}/answers/{rcrAnswer}/evidence', [\App\Http\Controllers\Compliance\Rcr\RcrSubmissionController::class, 'attachEvidence'])->name('answers.evidence');
+            Route::post('/{rcrSubmission}/auto-populate-all',        [\App\Http\Controllers\Compliance\Rcr\RcrSubmissionController::class, 'autoPopulateAll'])->name('auto-populate');
+            Route::post('/{rcrSubmission}/send-for-review',          [\App\Http\Controllers\Compliance\Rcr\RcrSubmissionController::class, 'sendForReview'])->name('send-for-review');
+            Route::post('/{rcrSubmission}/submit',                   [\App\Http\Controllers\Compliance\Rcr\RcrSubmissionController::class, 'submit'])->name('submit');
+            Route::get('/{rcrSubmission}/export/{format}',           [\App\Http\Controllers\Compliance\Rcr\RcrSubmissionController::class, 'export'])->name('export');
+            // Phase 9d.1 — per-question deep view + clipboard endpoints.
+            Route::get('/{rcrSubmission}/question/{questionCode}',   [\App\Http\Controllers\Compliance\Rcr\RcrSubmissionController::class, 'showQuestion'])
+                ->where('questionCode', '[A-Za-z0-9._]+')
+                ->name('question.show');
+            Route::post('/answer/copied',                            [\App\Http\Controllers\Compliance\Rcr\RcrSubmissionController::class, 'logAnswerCopied'])->name('answer.copied');
+            Route::post('/answer/transposed',                        [\App\Http\Controllers\Compliance\Rcr\RcrSubmissionController::class, 'markAnswerTransposed'])->name('answer.transposed');
+        });
+
+    Route::prefix('corex/admin/rcr/questionnaires')
+        ->name('corex.admin.rcr.questionnaires.')
+        ->group(function () {
+            Route::get('/',                          [\App\Http\Controllers\Compliance\Rcr\RcrQuestionnaireAdminController::class, 'index'])->name('index');
+            Route::get('/{rcrQuestionnaire}',        [\App\Http\Controllers\Compliance\Rcr\RcrQuestionnaireAdminController::class, 'show'])->name('show');
+            Route::post('/{rcrQuestionnaire}/import-csv', [\App\Http\Controllers\Compliance\Rcr\RcrQuestionnaireAdminController::class, 'importCsv'])->name('import-csv');
+        });
+
+    // Phase 3i — admin deal-link-review queue.
+    Route::bind('reviewItem', fn ($id) => \App\Models\DealLinkReviewQueue::findOrFail($id));
+    // Phase 3j — SG document binding.
+    Route::bind('sgDoc', fn ($id) => \App\Models\PropertySgDocument::findOrFail($id));
+    Route::prefix('corex/admin/deal-link-review')
+        ->name('corex.admin.deal-link-review.')
+        ->group(function () {
+            Route::get('/',                        [\App\Http\Controllers\Admin\DealLinkReviewController::class, 'index'])->name('index');
+            Route::get('/{reviewItem}',            [\App\Http\Controllers\Admin\DealLinkReviewController::class, 'show'])->name('show');
+            Route::post('/{reviewItem}/link',      [\App\Http\Controllers\Admin\DealLinkReviewController::class, 'link'])->name('link');
+            Route::post('/{reviewItem}/skip',      [\App\Http\Controllers\Admin\DealLinkReviewController::class, 'skip'])->name('skip');
+            Route::post('/{reviewItem}/unlink',    [\App\Http\Controllers\Admin\DealLinkReviewController::class, 'unlink'])->name('unlink');
+        });
+
+    // Phase 7 — refresh request inbox + per-row actions.
+    Route::prefix('corex/presentations/refresh-requests')
+        ->name('corex.presentations.refresh-requests.')
+        ->group(function () {
+            Route::get('/', [\App\Http\Controllers\Presentation\RefreshRequestController::class, 'index'])
+                ->middleware('permission:access_presentations')
+                ->name('index');
+            Route::post('/{refreshRequest}/acknowledge', [\App\Http\Controllers\Presentation\RefreshRequestController::class, 'acknowledge'])
+                ->middleware('permission:access_presentations')
+                ->name('acknowledge');
+            Route::post('/{refreshRequest}/resolve', [\App\Http\Controllers\Presentation\RefreshRequestController::class, 'resolve'])
+                ->middleware('permission:access_presentations')
+                ->name('resolve');
+            Route::post('/{refreshRequest}/decline', [\App\Http\Controllers\Presentation\RefreshRequestController::class, 'decline'])
+                ->middleware('permission:access_presentations')
+                ->name('decline');
+        });
+
     // P24 location tree read-API (called from Blade pages over fetch with
     // session cookies — must live in web.php so the `web` middleware group
     // applies, not in routes/api.php where session isn't set up).
@@ -72,6 +184,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/admin/api', [\App\Http\Controllers\Admin\ApiCatalogController::class, 'index'])
         ->middleware('permission:manage_users')
         ->name('admin.api.catalog');
+
+    // ── Admin: AI usage / cost dashboard (MIC Phase B2) ──
+    Route::get('/admin/ai-usage', [\App\Http\Controllers\Admin\AiUsageController::class, 'index'])
+        ->name('admin.ai-usage.index');
+    Route::post('/admin/ai-usage/agencies/{agency}/budget', [\App\Http\Controllers\Admin\AiUsageController::class, 'updateBudget'])
+        ->name('admin.ai-usage.budget.update');
 
 // ── CoreX Global API v1 (session-authenticated, browser-visible XHR) ──
     Route::prefix('api/v1')->name('api.v1.')->group(function () {
@@ -313,8 +431,11 @@ Route::prefix('onboarding/{token}')->middleware(['onboarding.portal'])->name('on
 });
 
 // ===== P24 MARKET INTELLIGENCE =====
+// Phase D1 — /admin/p24 root GET redirects to the new Market Pulse tab.
+// /listings (admin browse) and /import (POST upload trigger) stay mounted
+// for admin use; Phase D6 will fold them into the Market Pulse tab proper.
 Route::prefix('admin/p24')->middleware(['auth', 'permission:manage_p24'])->group(function () {
-    Route::get('/', [\App\Http\Controllers\Admin\P24Controller::class, 'index'])->name('admin.p24.index');
+    Route::redirect('/', '/corex/market-intelligence/market-pulse', 301)->name('admin.p24.index');
     Route::get('/listings', [\App\Http\Controllers\Admin\P24Controller::class, 'listings'])->name('admin.p24.listings');
     Route::post('/import', [\App\Http\Controllers\Admin\P24Controller::class, 'runImport'])->name('admin.p24.import');
 });
@@ -1264,6 +1385,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/{submission}/resubmit-corrections', [\App\Http\Controllers\Compliance\FicaController::class, 'resubmitCorrections'])->name('resubmit-corrections');
         Route::post('/{submission}/reopen', [\App\Http\Controllers\Compliance\FicaController::class, 'reopenRejected'])->name('reopen');
         Route::post('/{submission}/agent-upload', [\App\Http\Controllers\Compliance\FicaController::class, 'agentUpload'])->name('agent-upload');
+        Route::post('/{submission}/documents/{document}/remove', [\App\Http\Controllers\Compliance\FicaController::class, 'removeDocument'])->name('documents.remove');
     });
 
     // ── Whistleblower Compliance Reporting ──
@@ -1496,6 +1618,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::post('/settings/my-portal', [CoreXSettingsController::class, 'updatePortalPreferences'])->middleware('permission:access_settings')->name('corex.settings.my-portal.update');
     Route::post('/settings/marketing-enabled', [CoreXSettingsController::class, 'updateMarketingEnabled'])->middleware('permission:access_settings')->name('corex.settings.marketing-enabled');
     Route::post('/settings/syndication-portals', [CoreXSettingsController::class, 'updateSyndicationPortals'])->middleware('permission:access_settings')->name('corex.settings.syndication-portals');
+    Route::post('/settings/presentations', [CoreXSettingsController::class, 'updatePresentations'])->middleware('permission:access_settings')->name('corex.settings.presentations.update');
     Route::post('/settings/matches-enabled', [CoreXSettingsController::class, 'updateMatchesEnabled'])->middleware('permission:access_settings')->name('corex.settings.matches-enabled');
     Route::post('/settings/matches-wa-message', [CoreXSettingsController::class, 'updateMatchesWaMessage'])->middleware('permission:access_settings')->name('corex.settings.matches-wa-message');
     Route::post('/settings/matches-show-on-properties', [CoreXSettingsController::class, 'updateMatchesShowOnProperties'])->middleware('permission:access_settings')->name('corex.settings.matches-show-on-properties');
@@ -1608,6 +1731,14 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         ->middleware('permission:manage_compliance_officer')->name('corex.settings.fica-officers.mlros');
     Route::post('/settings/fica-officers/{appointment}/end', [\App\Http\Controllers\Compliance\FicaOfficerAppointmentsController::class, 'endAppointment'])
         ->middleware('permission:manage_compliance_officer')->name('corex.settings.fica-officers.end');
+
+    // ── Phase 9c-2 — Information Officer Appointments (POPIA s55) ──
+    Route::post('/settings/information-officers/primary', [\App\Http\Controllers\Compliance\InformationOfficerAppointmentsController::class, 'savePrimary'])
+        ->middleware('permission:manage_information_officer')->name('corex.settings.information-officers.primary');
+    Route::post('/settings/information-officers/deputies', [\App\Http\Controllers\Compliance\InformationOfficerAppointmentsController::class, 'saveDeputies'])
+        ->middleware('permission:manage_information_officer')->name('corex.settings.information-officers.deputies');
+    Route::post('/settings/information-officers/{appointment}/end', [\App\Http\Controllers\Compliance\InformationOfficerAppointmentsController::class, 'endAppointment'])
+        ->middleware('permission:manage_information_officer')->name('corex.settings.information-officers.end');
     Route::put('/settings/agency', [CoreXSettingsController::class, 'updateAgency'])->middleware('permission:access_settings')->name('corex.settings.agency.update');
 
     // Split Branches toggle (Agency Settings tab)
@@ -1683,10 +1814,41 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         ->middleware('permission:manage_performance_settings')
         ->name('admin.company-settings.update');
 
+
+    // Module 6 (M6.2) — Activity Points → Calendar class mappings.
+    Route::prefix('admin/activity-mappings')->name('admin.activity-mappings.')->group(function () {
+        Route::get('/',                       [\App\Http\Controllers\Admin\ActivityCalendarMappingController::class, 'index'])->name('index');
+        Route::post('/',                      [\App\Http\Controllers\Admin\ActivityCalendarMappingController::class, 'store'])->name('store');
+        Route::put('/{id}',                   [\App\Http\Controllers\Admin\ActivityCalendarMappingController::class, 'update'])->whereNumber('id')->name('update');
+        Route::post('/{id}/toggle-active',    [\App\Http\Controllers\Admin\ActivityCalendarMappingController::class, 'toggleActive'])->whereNumber('id')->name('toggle-active');
+        Route::delete('/{id}',                [\App\Http\Controllers\Admin\ActivityCalendarMappingController::class, 'destroy'])->whereNumber('id')->name('destroy');
+    });
+
     // Properties — listing sync to website
     Route::prefix('properties')->middleware(['permission:access_properties', 'agency.required'])->name('corex.properties.')->group(function () {
         // Marketing compliance — go live
         Route::post('/{property}/go-live', [\App\Http\Controllers\CoreX\PropertyController::class, 'goLive'])->name('go-live');
+
+        // Presentations V2 — one-button generator (Phase 1) + coverage scorer (Phase 2)
+        Route::post('/{property}/generate-presentation', [\App\Http\Controllers\Presentation\PresentationGeneratorController::class, 'generate'])
+            ->name('generate-presentation');
+        Route::get('/{property}/presentation-coverage', [\App\Http\Controllers\Presentation\PresentationGeneratorController::class, 'coverage'])
+            ->name('presentation-coverage');
+
+        // Phase 3j — SG document integration (server-side proxy + save to drive).
+        // The /search endpoint is the only one that may HTTP out to SG; rate
+        // limit it per-user (30/hr) and per-agency at the controller via cache.
+        Route::post('/{property}/sg/search', [\App\Http\Controllers\CoreX\PropertySgController::class, 'search'])
+            ->middleware('throttle:30,60')
+            ->name('sg.search');
+        Route::post('/{property}/sg/save-all', [\App\Http\Controllers\CoreX\PropertySgController::class, 'saveAll'])
+            ->middleware('throttle:30,60')
+            ->name('sg.save-all');
+        Route::post('/{property}/sg/documents/{sgDoc}/save', [\App\Http\Controllers\CoreX\PropertySgController::class, 'saveDocument'])
+            ->middleware('throttle:60,60')
+            ->name('sg.save-document');
+        Route::get('/{property}/sg/documents/{sgDoc}/download', [\App\Http\Controllers\CoreX\PropertySgController::class, 'download'])
+            ->name('sg.download');
 
         // Seller Live Links — agent management
         Route::post('/seller-links/generate', [\App\Http\Controllers\SellerLinkController::class, 'generate'])->name('seller-links.generate');
@@ -1783,6 +1945,8 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/wizard/{property}/finalize',      [\App\Http\Controllers\CoreX\PropertyWizardController::class, 'finalize'])->name('wizard.finalize');
         Route::delete('/wizard/{property}',             [\App\Http\Controllers\CoreX\PropertyWizardController::class, 'discardDraft'])->name('wizard.discard');
         Route::get('/{property}',              [\App\Http\Controllers\CoreX\PropertyController::class, 'show'])->name('show');
+        // Phase 3g — JSON detail card for the Map module.
+        Route::get('/{property}/map-card',     [\App\Http\Controllers\Map\MapController::class, 'propertyCard'])->name('map-card');
         Route::get('/{property}/edit',         [\App\Http\Controllers\CoreX\PropertyController::class, 'edit'])->name('edit');
         Route::get('/{property}/ad',           [\App\Http\Controllers\CoreX\PropertyController::class, 'ad'])->name('ad');
         Route::put('/{property}',              [\App\Http\Controllers\CoreX\PropertyController::class, 'update'])->name('update');
@@ -1832,6 +1996,24 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/{property}/p24-syndication/reactivate', [\App\Http\Controllers\Property24\P24SyndicationController::class, 'reactivate'])->name('p24-syndication.reactivate');
         Route::get('/{property}/p24-syndication/status',      [\App\Http\Controllers\Property24\P24SyndicationController::class, 'status'])->name('p24-syndication.status');
         Route::get('/{property}/p24-syndication/readiness',   [\App\Http\Controllers\Property24\P24SyndicationController::class, 'readiness'])->name('p24-syndication.readiness');
+    });
+
+    // Phase 3g — Map module (standalone page + JSON pin + detail endpoints).
+    // Same permission as Properties; agency scoping enforced inside the service.
+    Route::prefix('map')->middleware(['permission:access_properties', 'agency.required'])->name('corex.map.')->group(function () {
+        Route::get('/',                       [\App\Http\Controllers\Map\MapController::class, 'index'])->name('index');
+        Route::get('/pins',                   [\App\Http\Controllers\Map\MapController::class, 'pins'])->name('pins');
+        Route::get('/sold/{layerId}',         [\App\Http\Controllers\Map\MapController::class, 'soldCard'])->name('sold');
+        Route::get('/active/{layerId}',       [\App\Http\Controllers\Map\MapController::class, 'activeCard'])->name('active');
+        Route::get('/mic-subject/{report}',   [\App\Http\Controllers\Map\MapController::class, 'micSubjectCard'])->name('mic-subject');
+        Route::get('/scheme-owner/{owner}',   [\App\Http\Controllers\Map\MapController::class, 'schemeOwnerCard'])->name('scheme-owner');
+        // Phase A.2 — activity log endpoint for map-launched actions.
+        Route::post('/activity/log',          [\App\Http\Controllers\Map\MapActivityController::class, 'log'])->name('activity.log');
+        // Phase A.3.2 — per-user saved searches CRUD.
+        Route::get('/saved-searches',         [\App\Http\Controllers\Map\MapSavedSearchController::class, 'index'])->name('saved-searches.index');
+        Route::post('/saved-searches',        [\App\Http\Controllers\Map\MapSavedSearchController::class, 'store'])->name('saved-searches.store');
+        Route::patch('/saved-searches/{id}',  [\App\Http\Controllers\Map\MapSavedSearchController::class, 'update'])->name('saved-searches.update')->whereNumber('id');
+        Route::delete('/saved-searches/{id}', [\App\Http\Controllers\Map\MapSavedSearchController::class, 'destroy'])->name('saved-searches.destroy')->whereNumber('id');
     });
 
     // Ad Template Builder
@@ -1996,6 +2178,40 @@ Route::middleware(['auth', 'permission:access_presentations'])->prefix('presenta
     Route::get('/{presentation}/edit',         [\App\Http\Controllers\Presentation\PresentationController::class, 'edit'])     ->name('edit');
     Route::patch('/{presentation}',            [\App\Http\Controllers\Presentation\PresentationController::class, 'update'])   ->name('update');
     Route::get('/{presentation}/analysis',     [\App\Http\Controllers\Presentation\PresentationController::class, 'analysis']) ->name('analysis');
+    // Phase 3g V2 Part D — embedded spatial view JSON for the analysis screen.
+    Route::get('/{presentation}/spatial-pins', [\App\Http\Controllers\Map\MapController::class, 'presentationPins'])->name('spatial-pins');
+
+    // Phase 4 — snapshot share link management (agent-side).
+    Route::post('/{presentation}/snapshot-links',                       [\App\Http\Controllers\Presentation\SnapshotLinkController::class, 'store'])
+        ->name('snapshot-links.store');
+    Route::post('/{presentation}/snapshot-links/{link}/revoke',         [\App\Http\Controllers\Presentation\SnapshotLinkController::class, 'revoke'])
+        ->name('snapshot-links.revoke');
+    Route::post('/{presentation}/snapshot-links/{link}/extend',         [\App\Http\Controllers\Presentation\SnapshotLinkController::class, 'extend'])
+        ->name('snapshot-links.extend');
+    // Phase 5 — teaser leads index.
+    Route::get('/{presentation}/teaser-leads',                          [\App\Http\Controllers\Presentation\SnapshotLinkController::class, 'teaserLeads'])
+        ->name('teaser-leads');
+
+    // Phase 8 — outcome capture on a single presentation.
+    Route::post('/{presentation}/outcome',  [\App\Http\Controllers\Presentation\PresentationOutcomeController::class, 'record'])
+        ->name('outcome.record');
+    Route::patch('/{presentation}/outcome', [\App\Http\Controllers\Presentation\PresentationOutcomeController::class, 'update'])
+        ->name('outcome.update');
+    // Phase 3 — AI summary generation + accept.
+    Route::post('/{presentation}/ai-summary/generate', [\App\Http\Controllers\Presentation\AiSummaryController::class, 'generate'])
+        ->middleware('throttle:30,1')
+        ->name('ai-summary.generate');
+    Route::post('/{presentation}/ai-summary/accept',   [\App\Http\Controllers\Presentation\AiSummaryController::class, 'accept'])
+        ->name('ai-summary.accept');
+
+    // Phase 6 — Send-to-Recipient flow.
+    Route::post('/{presentation}/deliveries/preview',                   [\App\Http\Controllers\Presentation\PresentationDeliveryController::class, 'preview'])
+        ->name('deliveries.preview');
+    Route::post('/{presentation}/deliveries/send',                      [\App\Http\Controllers\Presentation\PresentationDeliveryController::class, 'send'])
+        ->middleware('throttle:30,1')
+        ->name('deliveries.send');
+    Route::get('/{presentation}/deliveries',                            [\App\Http\Controllers\Presentation\PresentationDeliveryController::class, 'index'])
+        ->name('deliveries.index');
     Route::post('/{presentation}/analysis/run',[\App\Http\Controllers\Presentation\PresentationController::class, 'runAnalysis'])  ->name('analysis.run');
     Route::patch('/{presentation}/analysis-selections', [\App\Http\Controllers\Presentation\PresentationController::class, 'updateAnalysisSelections'])
         ->name('analysis-selections.update');
@@ -2234,10 +2450,9 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
     Route::get('/esign/api/contacts', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'searchContacts'])->name('docuperfect.esign.api.contacts');
     Route::get('/esign/api/template/{templateId}/pages', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'templatePages'])->name('docuperfect.esign.api.templatePages');
 
-    // Pack chaining
-    Route::post('/esign/pack-chain/init', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'initPackChain'])->name('docuperfect.esign.initPackChain');
-    Route::post('/esign/{flow}/next-pack-doc', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'nextPackDocument'])->name('docuperfect.esign.nextPackDoc');
-    Route::get('/esign/{flow}/pack-status', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'packStatus'])->name('docuperfect.esign.packStatus');
+    // Pack FICA per-party duplication (MERGE pack model — the legacy
+    // initPackChain/nextPackDocument/packStatus CHAIN engine was removed:
+    // dead, unreferenced, no SignatureRequest<->pack linkage; audit BL-1).
     Route::post('/esign/{flow}/duplicate-fica', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'duplicateFicaPerParty'])->name('docuperfect.esign.duplicateFica');
     Route::post('/esign/documents/{signatureTemplate}/cancel', [\App\Http\Controllers\Docuperfect\ESignWizardController::class, 'cancelDocument'])->name('docuperfect.esign.cancelDocument');
 
@@ -2258,6 +2473,17 @@ Route::prefix('docuperfect')->middleware(['auth', 'permission:access_docuperfect
     Route::delete('/import/parties/{id}', [\App\Http\Controllers\Docuperfect\DocumentImporterController::class, 'destroyParty'])->name('docuperfect.import.parties.destroy');
     Route::post('/import/parties/reorder', [\App\Http\Controllers\Docuperfect\DocumentImporterController::class, 'reorderParties'])->name('docuperfect.import.parties.reorder');
     Route::post('/import/template/{id}/edit', [\App\Http\Controllers\Docuperfect\DocumentImporterController::class, 'editFromTemplate'])->name('docuperfect.import.template.edit');
+
+    // ===== ES-9 / ES-3 — Other Conditions + Strikethrough + Amendment Review =====
+    // Add a condition or propose a strikethrough during signing or agent preparation
+    Route::post('/signing/{signatureTemplate}/conditions',     [\App\Http\Controllers\Docuperfect\ConditionsController::class, 'storeCondition'])->name('docuperfect.conditions.store');
+    Route::post('/signing/{signatureTemplate}/strikethroughs', [\App\Http\Controllers\Docuperfect\ConditionsController::class, 'storeStrikethrough'])->name('docuperfect.strikethroughs.store');
+
+    // Agent review surface
+    Route::get('/amendments/{amendment}/review',           [\App\Http\Controllers\Docuperfect\AmendmentController::class, 'review'])->name('docuperfect.amendments.review');
+    Route::post('/amendments/{amendment}/approve',         [\App\Http\Controllers\Docuperfect\AmendmentController::class, 'approve'])->name('docuperfect.amendments.approve');
+    Route::post('/amendments/{amendment}/reject-change',   [\App\Http\Controllers\Docuperfect\AmendmentController::class, 'rejectChange'])->name('docuperfect.amendments.rejectChange');
+    Route::post('/amendments/{amendment}/reject-document', [\App\Http\Controllers\Docuperfect\AmendmentController::class, 'rejectDocument'])->name('docuperfect.amendments.rejectDocument');
 
     // ===== RENDERER TEST =====
     Route::get('/renderer-test', function () {
@@ -2472,7 +2698,36 @@ Route::prefix('sign')->group(function () {
     Route::get('/{token}/amendment-review', [\App\Http\Controllers\Docuperfect\SigningController::class, 'amendmentReview'])->name('signatures.external.amendment-review');
     Route::post('/{token}/amendment/{amendment}/accept', [\App\Http\Controllers\Docuperfect\SigningController::class, 'acceptAmendment'])->name('signatures.external.acceptAmendment');
     Route::post('/{token}/amendment/{amendment}/reject', [\App\Http\Controllers\Docuperfect\SigningController::class, 'rejectAmendment'])->name('signatures.external.rejectAmendment');
+
+    // Phase 1B.5 — recipient Other Conditions / focused initialing
+    Route::post('/{token}/conditions',          [\App\Http\Controllers\Docuperfect\SigningController::class, 'addCondition'])->name('signatures.external.addCondition');
+    Route::post('/{token}/initial-amendments', [\App\Http\Controllers\Docuperfect\SigningController::class, 'initialAmendments'])->name('signatures.external.initialAmendments');
+    // Phase 1B.7 — inline per-condition initialing (distinct from bulk
+    // amendment cascade above).
+    Route::post('/{token}/conditions/{condition}/initial', [\App\Http\Controllers\Docuperfect\SigningController::class, 'initialCondition'])->name('signatures.external.initialCondition');
+
+    // Phase 1B.6 (FIX 2) — recipient clause-flag (replaces Phase 1B.5 strikethrough modal).
+    Route::post('/{token}/flag-clause',         [\App\Http\Controllers\Docuperfect\SigningController::class, 'flagClause'])->name('signatures.external.flagClause');
+    // Phase 1B.9 (FIX 1) — recipient self-undo pre-completion.
+    Route::delete('/{token}/flag/{clauseRef}',  [\App\Http\Controllers\Docuperfect\SigningController::class, 'removeOwnFlag'])->name('signatures.external.removeOwnFlag');
+    // Soft-deprecated Phase 1B.5 endpoint — returns 410 with redirect hint.
+    Route::post('/{token}/strikethroughs',      [\App\Http\Controllers\Docuperfect\SigningController::class, 'proposeStrikethrough'])->name('signatures.external.proposeStrikethrough');
 });
+
+// Phase 1B.9 (FIX 1) — Flag Removal consent flow.
+// Agent-side request (auth required) + recipient consent screen (public,
+// token-authenticated).
+Route::middleware(['auth'])->group(function () {
+    Route::post('/docuperfect/flags/{amendment}/request-removal',
+        [\App\Http\Controllers\Docuperfect\FlagRemovalController::class, 'requestRemoval'])
+        ->name('docuperfect.flags.requestRemoval');
+});
+Route::get('/flag-removal/{token}',
+    [\App\Http\Controllers\Docuperfect\FlagRemovalController::class, 'showConsent'])
+    ->name('signatures.flag-removal.consent.show');
+Route::post('/flag-removal/{token}/consent',
+    [\App\Http\Controllers\Docuperfect\FlagRemovalController::class, 'submitConsent'])
+    ->name('signatures.flag-removal.consent.submit');
 
 // ===== SIGNED DOCUMENT DOWNLOAD (no auth, token-based) =====
 Route::get('/documents/download/{token}', [\App\Http\Controllers\Docuperfect\SigningController::class, 'downloadPage'])->name('signatures.download.page');
@@ -2506,9 +2761,37 @@ Route::middleware(['auth', 'permission:access_prospecting'])
     ->prefix('corex/tracked-properties')
     ->name('corex.tracked-properties.')
     ->group(function () {
-        Route::get('/',                      [\App\Http\Controllers\CoreX\TrackedPropertyController::class, 'index'])->name('index');
-        Route::get('/{trackedProperty}',     [\App\Http\Controllers\CoreX\TrackedPropertyController::class, 'show'])->name('show');
+        // Phase D1 — legacy GET root redirects to the Opportunities tab.
+        // Phase D4 — legacy GET detail also 301-redirects so any bookmark
+        // resolves to the new MIC URL. The POST endpoints (edit, set-primary,
+        // promote, merge stub) stay mounted at the original paths because
+        // redirecting POSTs would break form submissions.
+        Route::redirect('/', '/corex/market-intelligence/opportunities', 301)->name('index');
+        Route::get('/{trackedProperty}', function ($trackedProperty) {
+            return redirect('/corex/market-intelligence/opportunities/' . $trackedProperty, 301);
+        })->where('trackedProperty', '[0-9]+')->name('show');
         Route::post('/{trackedProperty}/promote', [\App\Http\Controllers\CoreX\TrackedPropertyController::class, 'promote'])->name('promote');
+
+        // Phase C3 — address management on the TP detail page.
+        Route::post('/{trackedProperty}/address/edit',
+            [\App\Http\Controllers\CoreX\TrackedPropertyController::class, 'editAddress'])
+            ->middleware('permission:mic.edit_address')
+            ->name('address.edit');
+
+        Route::post('/{trackedProperty}/address/add-alternative',
+            [\App\Http\Controllers\CoreX\TrackedPropertyController::class, 'addAlternativeAddress'])
+            ->middleware('permission:mic.edit_address')
+            ->name('address.add-alternative');
+
+        Route::post('/{trackedProperty}/address/{address}/set-primary',
+            [\App\Http\Controllers\CoreX\TrackedPropertyController::class, 'setPrimaryAddress'])
+            ->middleware('permission:mic.edit_address')
+            ->name('address.set-primary');
+
+        Route::get('/{trackedProperty}/merge',
+            [\App\Http\Controllers\CoreX\TrackedPropertyController::class, 'stubMergeDuplicate'])
+            ->middleware('permission:mic.merge_duplicates')
+            ->name('merge');
     });
 
 // ===== MARKET INTELLIGENCE (Build F.1 — rename of Prospecting) =====
@@ -2527,7 +2810,59 @@ Route::middleware(['auth', 'permission:access_prospecting'])
     ->prefix('corex/market-intelligence')
     ->name('market-intelligence.')
     ->group(function () {
-        Route::get('/', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'index'])->name('index');
+        // Phase D1 — four-tab structure. Work is the default landing.
+        Route::get('/',              [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'work'])->name('work');
+        Route::get('/work',          [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'work']);
+        Route::get('/opportunities',                       [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'opportunities'])->name('opportunities');
+        Route::get('/opportunities/{tp}',                  [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'opportunityShow'])
+            ->where('tp', '[0-9]+')
+            ->name('opportunities.show');
+        Route::get('/analyse',       [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'analyse'])->name('analyse');
+        Route::get('/market-pulse',  [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'marketPulse'])->name('market-pulse');
+
+        // Phase G2 — BM team dashboard. Permission-gated via the controller.
+        Route::get('/team', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'team'])->name('team');
+
+        // Phase G3 — feedback-template JSON for the claim slide-over.
+        Route::get('/feedback-templates', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'feedbackTemplates'])->name('feedback-templates');
+
+        // Phase D5 — AI surfaces.
+        Route::post('/analyse/regenerate-brief',
+            [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'regenerateBrief'])
+            ->middleware('permission:mic.regenerate_brief')
+            ->name('brief.regenerate');
+        Route::get('/analyse/pocket-narrative',
+            [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'pocketNarrative'])
+            ->name('pocket-narrative');
+        Route::get('/suburb/{suburb}',
+            [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'suburbDeepDive'])
+            ->where('suburb', '[A-Za-z0-9 \-\&\']+')
+            ->name('suburb-deep-dive');
+
+        // Phase E3 — per-listing "why this matches" tooltip (Sonnet 4.6).
+        Route::get('/listing/{listing}/match-tooltip',
+            [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'matchTooltip'])
+            ->name('match-tooltip');
+
+        // Phase F — CMA report import pipeline. Every route gated by
+        // permission:mic.upload_reports (Laravel 11 — middleware is at the
+        // route level, not the controller constructor).
+        Route::prefix('reports')->name('reports.')
+            ->middleware('permission:mic.upload_reports')
+            ->group(function () {
+                Route::get('/',                       [\App\Http\Controllers\CoreX\MarketReportController::class, 'index'])->name('index');
+                Route::get('/create',                 [\App\Http\Controllers\CoreX\MarketReportController::class, 'create'])->name('create');
+                Route::post('/',                      [\App\Http\Controllers\CoreX\MarketReportController::class, 'store'])->name('store');
+                // Phase 3c — bulk multi-file import (declared BEFORE /{report} so
+                // model-binding doesn't shadow the literal segment).
+                Route::get('/bulk-import',            [\App\Http\Controllers\CoreX\MarketReportController::class, 'bulkImportShow'])->name('bulk-import');
+                Route::post('/bulk-import',           [\App\Http\Controllers\CoreX\MarketReportController::class, 'bulkImportStore'])->name('bulk-import.store');
+                Route::get('/parsers',                [\App\Http\Controllers\CoreX\MarketReportController::class, 'parserDashboard'])->name('parser-dashboard');
+                Route::get('/{report}',               [\App\Http\Controllers\CoreX\MarketReportController::class, 'show'])->name('show');
+                Route::delete('/{report}',            [\App\Http\Controllers\CoreX\MarketReportController::class, 'destroy'])->name('destroy');
+                Route::post('/{report}/spot-check',   [\App\Http\Controllers\CoreX\MarketReportController::class, 'runSpotCheck'])->name('spot-check');
+                Route::get('/{report}/discrepancies', [\App\Http\Controllers\CoreX\MarketReportController::class, 'discrepancies'])->name('discrepancies');
+            });
 
         // Intelligence layer — declared before the {listing} catch-alls so
         // model-binding doesn't shadow them.
@@ -2561,36 +2896,36 @@ Route::middleware(['auth', 'permission:access_prospecting'])
         Route::get('/{listing}',           [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'show'])->name('show');
     });
 
-// ===== PROSPECTING (legacy — kept mounted for F.1 migration window) =====
+// ===== PROSPECTING (legacy URL prefix — Phase I1 retirement) =====
+// Phase I1 retired ProspectingController. The /prospecting URL prefix
+// remains mounted (preserves the prospecting.* route names that legacy
+// blade partials in resources/views/prospecting/ still reference + keeps
+// any external bookmarks working) but every handler now lives on
+// MarketIntelligenceController. The controller file ProspectingController
+// .php has been deleted.
 Route::middleware(['auth', 'permission:access_prospecting'])->prefix('prospecting')->name('prospecting.')->group(function () {
-    Route::get('/', [\App\Http\Controllers\ProspectingController::class, 'index'])->name('index');
+    Route::get('/', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'work'])->name('index');
 
-    // Intelligence layer endpoints — must be declared BEFORE the {listing}
-    // catch-alls below or Laravel's model-binding would shadow these paths.
-    Route::get('/snapshot.json', [\App\Http\Controllers\ProspectingController::class, 'snapshotJson'])->name('snapshot');
-    Route::get('/segment/{dimension}/{value}/buyers',  [\App\Http\Controllers\ProspectingController::class, 'segmentBuyers'])
+    Route::get('/snapshot.json', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'snapshotJson'])->name('snapshot');
+    Route::get('/segment/{dimension}/{value}/buyers',  [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'segmentBuyers'])
         ->where('dimension', 'town|property_type|bedrooms|price_band|unmapped_suburb')
         ->name('segment.buyers');
-    Route::get('/segment/{dimension}/{value}/listings', [\App\Http\Controllers\ProspectingController::class, 'segmentListings'])
+    Route::get('/segment/{dimension}/{value}/listings', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'segmentListings'])
         ->where('dimension', 'town|property_type|bedrooms|price_band|unmapped_suburb')
         ->name('segment.listings');
 
-    // Side-panel: tier-ranked buyer matches for one listing. Declared before the
-    // {listing} catch-all routes below so model-binding doesn't shadow it.
-    Route::get('/{listing}/buyer-matches', [\App\Http\Controllers\ProspectingController::class, 'buyerMatches'])
+    Route::get('/{listing}/buyer-matches', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'buyerMatches'])
         ->name('buyer-matches');
 
-    // BM/admin or owner: release a claim with reason. Path-scoped to /claims/
-    // so model-binding for ProspectingListing doesn't interfere.
-    Route::post('/claims/{claimId}/release-as-manager', [\App\Http\Controllers\ProspectingController::class, 'releaseAsManager'])
+    Route::post('/claims/{claimId}/release-as-manager', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'releaseAsManager'])
         ->where('claimId', '\d+')
         ->name('claims.release-as-manager');
 
-    Route::get('/thumbnail/{listing}', [\App\Http\Controllers\ProspectingController::class, 'thumbnail'])->name('thumbnail');
-    Route::post('/{listing}/claim', [\App\Http\Controllers\ProspectingController::class, 'claim'])->name('claim');
-    Route::post('/{listing}/feedback', [\App\Http\Controllers\ProspectingController::class, 'feedback'])->name('feedback');
-    Route::post('/{listing}/release', [\App\Http\Controllers\ProspectingController::class, 'release'])->name('release');
-    Route::get('/{listing}', [\App\Http\Controllers\ProspectingController::class, 'show'])->name('show');
+    Route::get('/thumbnail/{listing}', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'thumbnail'])->name('thumbnail');
+    Route::post('/{listing}/claim',    [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'claim'])->name('claim');
+    Route::post('/{listing}/feedback', [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'feedback'])->name('feedback');
+    Route::post('/{listing}/release',  [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'release'])->name('release');
+    Route::get('/{listing}',           [\App\Http\Controllers\CoreX\MarketIntelligenceController::class, 'show'])->name('show');
 });
 
 // Bookmark-continuity redirect from the legacy bare /prospecting URL to the new

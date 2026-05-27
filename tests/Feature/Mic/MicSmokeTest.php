@@ -1,0 +1,181 @@
+<?php
+
+namespace Tests\Feature\Mic;
+
+use App\Models\Agency;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
+use Tests\TestCase;
+
+/**
+ * MIC Phase J2 — end-to-end smoke test.
+ *
+ * Walks the unified MIC agent journey: visits each of the four tabs,
+ * exercises the secondary surfaces (reports, team), and verifies that
+ * legacy URLs 301 to the new module. Doesn't deep-test data — that's
+ * what the per-phase Tinker scripts did. This is the regression guard
+ * that future refactors run against to confirm the surface didn't drift.
+ *
+ * Spec: .ai/specs/mic-complete-spec.md §17.
+ */
+class MicSmokeTest extends TestCase
+{
+    public function test_route_names_are_registered(): void
+    {
+        // Phase D1+D2+D3+G2 — four tabs + team.
+        $this->assertTrue(Route::has('market-intelligence.work'));
+        $this->assertTrue(Route::has('market-intelligence.opportunities'));
+        $this->assertTrue(Route::has('market-intelligence.analyse'));
+        $this->assertTrue(Route::has('market-intelligence.market-pulse'));
+        $this->assertTrue(Route::has('market-intelligence.team'));
+
+        // Phase D4 — opportunities detail.
+        $this->assertTrue(Route::has('market-intelligence.opportunities.show'));
+
+        // Phase D5 — AI surfaces.
+        $this->assertTrue(Route::has('market-intelligence.brief.regenerate'));
+        $this->assertTrue(Route::has('market-intelligence.pocket-narrative'));
+        $this->assertTrue(Route::has('market-intelligence.suburb-deep-dive'));
+
+        // Phase E3 — match tooltip.
+        $this->assertTrue(Route::has('market-intelligence.match-tooltip'));
+
+        // Phase F — reports.
+        $this->assertTrue(Route::has('market-intelligence.reports.index'));
+        $this->assertTrue(Route::has('market-intelligence.reports.create'));
+        $this->assertTrue(Route::has('market-intelligence.reports.store'));
+        $this->assertTrue(Route::has('market-intelligence.reports.show'));
+        $this->assertTrue(Route::has('market-intelligence.reports.parser-dashboard'));
+        $this->assertTrue(Route::has('market-intelligence.reports.discrepancies'));
+        $this->assertTrue(Route::has('market-intelligence.reports.spot-check'));
+
+        // Phase G3 — feedback templates JSON.
+        $this->assertTrue(Route::has('market-intelligence.feedback-templates'));
+
+        // Legacy redirect names still registered.
+        $this->assertTrue(Route::has('corex.tracked-properties.index'));
+        $this->assertTrue(Route::has('corex.tracked-properties.show'));
+        $this->assertTrue(Route::has('admin.p24.index'));
+        $this->assertTrue(Route::has('prospecting.index'));
+        $this->assertTrue(Route::has('prospecting.show'));
+    }
+
+    public function test_legacy_urls_redirect_to_mic(): void
+    {
+        $agent = $this->resolveTestAgent();
+        if ($agent === null) {
+            $this->markTestSkipped('No active agent user in the test DB — cannot exercise authenticated redirects.');
+        }
+        $this->actingAs($agent);
+
+        // /corex/tracked-properties → 301 to /opportunities (Phase D1).
+        $this->get('/corex/tracked-properties')
+            ->assertStatus(301)
+            ->assertRedirect('/corex/market-intelligence/opportunities');
+
+        // /admin/p24 → 301 to /market-pulse (Phase D1).
+        // The admin route is gated by permission:manage_p24, which the test
+        // agent may not have — the redirect should still fire because
+        // Route::redirect is mounted before any controller permission check.
+        if ($agent->hasPermission('manage_p24')) {
+            $this->get('/admin/p24')
+                ->assertStatus(301)
+                ->assertRedirect('/corex/market-intelligence/market-pulse');
+        }
+
+        // /prospecting → 301 to /corex/market-intelligence (Phase D1).
+        $this->get('/prospecting')
+            ->assertStatus(301);
+    }
+
+    public function test_mic_tabs_render_for_authorised_agent(): void
+    {
+        $agent = $this->resolveTestAgent();
+        if ($agent === null) {
+            $this->markTestSkipped('No active agent user in the test DB.');
+        }
+        if (!$agent->hasPermission('access_prospecting')) {
+            $this->markTestSkipped('Test agent lacks access_prospecting permission.');
+        }
+        $this->actingAs($agent);
+
+        // Work tab — landing.
+        $work = $this->get(route('market-intelligence.work'));
+        $work->assertOk();
+        $work->assertSee('Market intelligence');
+
+        // Opportunities — paginated TP list.
+        $this->get(route('market-intelligence.opportunities'))
+            ->assertOk();
+
+        // Analyse — strategic brief lives here.
+        $analyse = $this->get(route('market-intelligence.analyse'));
+        $analyse->assertOk();
+        // Footer copy from the Ellie brief partial — may say "Generated by
+        // Ellie" or be the fallback line. Either is acceptable proof the
+        // brief partial rendered.
+        $this->assertTrue(
+            str_contains((string) $analyse->getContent(), 'Generated by Ellie')
+            || str_contains((string) $analyse->getContent(), 'Weekly market brief'),
+            'Analyse view did not include the Ellie brief partial.',
+        );
+
+        // Market Pulse — P24 firehose.
+        $this->get(route('market-intelligence.market-pulse'))
+            ->assertOk();
+
+        // Reports index.
+        if ($agent->hasPermission('mic.upload_reports')) {
+            $this->get(route('market-intelligence.reports.index'))->assertOk();
+        }
+
+        // Team — only if the agent can view it.
+        if ($agent->hasPermission('mic.view_team')) {
+            $this->get(route('market-intelligence.team'))->assertOk();
+        }
+    }
+
+    public function test_feedback_templates_endpoint_returns_json(): void
+    {
+        $agent = $this->resolveTestAgent();
+        if ($agent === null) {
+            $this->markTestSkipped('No active agent user in the test DB.');
+        }
+        if (!$agent->hasPermission('access_prospecting')) {
+            $this->markTestSkipped('Test agent lacks access_prospecting permission.');
+        }
+        $this->actingAs($agent);
+
+        $response = $this->getJson(route('market-intelligence.feedback-templates'));
+        $response->assertOk();
+        $response->assertJsonStructure(['templates' => [['key', 'emoji', 'label', 'note', 'status']]]);
+        $this->assertGreaterThan(0, count($response->json('templates')));
+    }
+
+    /**
+     * Resolve an active agent/admin user from the test DB. Returns null
+     * when the DB is empty (CI cold-start) — the caller marks itself skipped.
+     * Also returns null if the configured test DB doesn't exist (local dev
+     * where the dedicated test database hasn't been provisioned).
+     */
+    private function resolveTestAgent(): ?User
+    {
+        try {
+            DB::connection()->getPdo();
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        try {
+            return User::query()
+                ->where('is_active', true)
+                ->whereIn('role', ['admin', 'super_admin', 'branch_manager', 'agent'])
+                ->whereNotNull('agency_id')
+                ->orderByRaw("FIELD(role, 'super_admin', 'admin', 'branch_manager', 'agent')")
+                ->first();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+}

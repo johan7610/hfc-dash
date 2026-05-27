@@ -1,0 +1,319 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services\MarketReports\Parsers;
+
+use App\Domain\Presentation\TextExtractionService;
+use App\Models\Prospecting\TrackedProperty;
+use App\Services\MarketReports\Contracts\MarketReportParser;
+use App\Services\MarketReports\DTOs\ParserConfidence;
+use Illuminate\Support\Facades\Log;
+
+/**
+ * Shared scaffolding for the CMA Info family of parsers.
+ *
+ * Subclasses override canParse()/parse() and reuse:
+ *   - extractText()          — pdftotext via the existing service
+ *   - normaliseSuburb()      — same as TrackedProperty::normaliseSuburb
+ *   - parsePrice()           — strips R + comma + spaces from "R 1,234,567"
+ *   - parseDate()            — flexible Carbon parse with null-on-fail
+ *   - findHeader()           — case-insensitive substring check
+ *   - looksLikeCmaInfo()     — common gate ("CMA Info", "CMAInfo") + page count band
+ *
+ * On Windows local without pdftotext, extractText() returns ''. Each subclass'
+ * canParse() must handle empty text and return ParserConfidence::none() so
+ * the GenericFallbackParser ends up winning.
+ *
+ * Spec: .ai/specs/mic-complete-spec.md §8.
+ */
+abstract class AbstractCmaInfoParser implements MarketReportParser
+{
+    public function __construct(
+        protected readonly TextExtractionService $textExtractor,
+    ) {}
+
+    /**
+     * Returns raw pdftotext output (preferring -layout mode so column-based
+     * CMA Info reports survive extraction) or '' when extraction is
+     * unavailable / fails. NEVER throws.
+     *
+     * Falls back to the standard TextExtractionService (no -layout) when the
+     * pdftotext binary is unavailable on PATH.
+     */
+    protected function extractText(string $filePath): string
+    {
+        if (!is_file($filePath)) return '';
+
+        // -layout preserves table columns — essential for CMA Info reports
+        // where labels and values are positioned side-by-side, not stacked.
+        $layout = $this->tryPdftotextLayout($filePath);
+        if ($layout !== '') {
+            return $layout;
+        }
+
+        return $this->textExtractor->extractText($filePath, 'application/pdf');
+    }
+
+    private function tryPdftotextLayout(string $absolutePath): string
+    {
+        $whereCmd = PHP_OS_FAMILY === 'Windows' ? 'where pdftotext 2>NUL' : 'command -v pdftotext 2>/dev/null';
+        $exists = @shell_exec($whereCmd);
+        if (empty($exists)) return '';
+
+        try {
+            $escaped = escapeshellarg($absolutePath);
+            $output  = @shell_exec("pdftotext -layout {$escaped} -");
+            if (!is_string($output)) return '';
+
+            // pdftotext emits U+FFFD (replacement char) for glyphs it cannot
+            // decode (e.g. ° / ²). The bytes look like 0xEF 0xBF 0xBD which
+            // IS valid UTF-8 — but pdftotext on Windows sometimes emits
+            // lone 0xEF or 0xBD bytes that break /u-modifier regex matches.
+            // Strip invalid UTF-8 silently so subsequent /u regex calls
+            // don't throw preg_last_error 4 (PREG_BAD_UTF8_ERROR).
+            $cleaned = @mb_convert_encoding($output, 'UTF-8', 'UTF-8');
+            return trim(is_string($cleaned) ? $cleaned : $output);
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
+    protected function normaliseSuburb(?string $s): ?string
+    {
+        return TrackedProperty::normaliseSuburb($s);
+    }
+
+    /** Strip "R", commas, whitespace from a price string. Returns float|null. */
+    protected function parsePrice(?string $raw): ?float
+    {
+        if ($raw === null || $raw === '') return null;
+        $digits = preg_replace('/[^\d.]/', '', (string) $raw);
+        if ($digits === '' || $digits === '.') return null;
+        return (float) $digits;
+    }
+
+    /**
+     * Phase 3e A1 — parse a captured price and reject implausible outliers.
+     *
+     * Default sanity window 50,000 ≤ price ≤ 50,000,000 catches the most
+     * common parser failure mode (column bleed concatenating digits across
+     * adjacent columns, e.g. "R 810 000 18.25%" → R 81,000,018). Out-of-range
+     * captures are logged with the raw matched segment so we can audit and
+     * tighten the regex later. Returns null when raw is empty or out of band.
+     */
+    protected function parsePriceBounded(
+        ?string $raw,
+        string $field,
+        ?string $matchedSegment = null,
+        int $min = 50_000,
+        int $max = 50_000_000,
+    ): ?int {
+        $val = $this->parsePrice($raw);
+        if ($val === null) return null;
+        $int = (int) $val;
+        if ($int < $min || $int > $max) {
+            Log::warning('CMA parser price out of range; dropping value.', [
+                'field'   => $field,
+                'parser'  => static::class,
+                'raw'     => $raw,
+                'value'   => $int,
+                'min'     => $min,
+                'max'     => $max,
+                'segment' => $matchedSegment !== null ? mb_substr($matchedSegment, 0, 200) : null,
+            ]);
+            return null;
+        }
+        return $int;
+    }
+
+    protected function parseDate(?string $raw): ?string
+    {
+        if (!$raw) return null;
+        try {
+            return \Carbon\Carbon::parse($raw)->toDateString();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    protected function findHeader(string $haystack, string $needle): bool
+    {
+        return stripos($haystack, $needle) !== false;
+    }
+
+    /**
+     * Heuristic shared by all CMA Info variants. The original gate looked
+     * only for "CMA Info" / "CMAinfo" branding, but the real reports HFC
+     * uses don't carry that wordmark in extractable PDF text. We broaden
+     * to recognise the actual structural signatures we see across the
+     * five sample types:
+     *
+     *   - "CMA - <something>" section headers (Property Valuation, Market
+     *     Analysis, Indexed Value, Comparative Market Analysis)
+     *   - "Sectional Title sales" header (in-scheme + radius variants)
+     *   - "Sectional Title Scheme Owners List" header
+     *   - "ST Residential Sales Analysis" header (Median Sales Analysis)
+     *   - "PROPERTY INFORMATION" + "SALE INFORMATION" block (Property Valuation)
+     *
+     * Returns true if any of these markers appear. Returns false for
+     * unrelated documents so the GenericFallbackParser still wins on
+     * non-CMA-Info content.
+     */
+    protected function looksLikeCmaInfo(string $text): bool
+    {
+        if ($text === '') return false;
+
+        // Legacy wordmark — still match when the source has it.
+        if (stripos($text, 'CMA Info') !== false) return true;
+        if (stripos($text, 'CMAinfo') !== false) return true;
+
+        // Structural signatures.
+        if (preg_match('/\bCMA\s*-\s*/i', $text)) return true;
+        if (stripos($text, 'Sectional Title sales') !== false) return true;
+        if (stripos($text, 'Sectional Title Scheme Owners List') !== false) return true;
+        if (stripos($text, 'ST Residential Sales Analysis') !== false) return true;
+        if (stripos($text, 'PROPERTY INFORMATION') !== false
+            && stripos($text, 'SALE INFORMATION') !== false) return true;
+
+        return false;
+    }
+
+    protected function pageCount(string $text): int
+    {
+        if ($text === '') return 0;
+        // pdftotext separates pages with form-feed (\f).
+        return substr_count($text, "\f") + 1;
+    }
+
+    /**
+     * Phase 3b — coalesce row-wrapped tables back into logical single lines.
+     *
+     * pdftotext -layout sometimes wraps long table rows across 2-3 physical
+     * lines when a scheme/address column is wider than its column width. The
+     * data tokens (section + SS year + Residence + extent + date + R<price>)
+     * may end up on a different line from the scheme name they belong to.
+     *
+     * Algorithm: walk the text top-to-bottom. When a line contains a row
+     * "anchor" (a YYYY-MM-DD date + an R<digits> price + Residence in close
+     * proximity), back-fill it with the previous N non-anchor lines until
+     * either the previous anchor or a section break (blank line, page break,
+     * "SUBJECT PROPERTY" / "COMPARATIVE PROPERTIES" header) is reached.
+     *
+     * Emits one coalesced row per anchor. Non-anchor lines that don't get
+     * coalesced into an anchor are kept verbatim so other regex passes
+     * (subject extraction, scheme headers, etc.) still work.
+     *
+     * Returns the rewritten text — same shape as the input, just with some
+     * row blocks collapsed onto single lines.
+     */
+    protected function coalesceRowWraps(string $text): string
+    {
+        if ($text === '') return $text;
+
+        $lines = preg_split('/\r?\n/', $text);
+        if (!is_array($lines)) return $text;
+
+        // Anchor detector: a line with EITHER a date+price pair OR a distance prefix.
+        $anchorPattern = '/(?:\d{4}[\/\-]\d{2}[\/\-]\d{2}.*?R\s*[\d ,]+|R\s*[\d ,]+.*?\d{4}[\/\-]\d{2}[\/\-]\d{2}|^\s*\d{2,4}\s*m\s+[A-Z])/u';
+        $boundaryHints = [
+            'SUBJECT PROPERTY', 'COMPARATIVE PROPERTIES', 'PROPERTY INFORMATION',
+            'SOLD PROPERTIES', 'FOR SALE', 'MUNICIPAL VALUATION', 'SALE INFORMATION',
+            'ACCOMMODATION', 'CMA -', 'Page ', 'Powered by',
+            'Comparative Market Analysis Value', 'Average:',
+        ];
+
+        $out = [];
+        $i = 0;
+        $count = count($lines);
+        while ($i < $count) {
+            $line = $lines[$i];
+            $trim = trim($line);
+            $isAnchor = $trim !== '' && preg_match($anchorPattern, $trim);
+
+            if (!$isAnchor) {
+                $out[] = $line;
+                $i++;
+                continue;
+            }
+
+            // Walk backwards from current to find the start of the row block.
+            // Stop at: a previous anchor, a boundary header, a blank line, or
+            // the start of the file.
+            $start = $i;
+            for ($k = $i - 1; $k >= 0; $k--) {
+                $prevTrim = trim($lines[$k]);
+                if ($prevTrim === '') break;
+                if (preg_match($anchorPattern, $prevTrim)) break;
+                if ($this->lineIsBoundary($prevTrim, $boundaryHints)) break;
+                $start = $k;
+                // Cap look-back to avoid runaway concatenation of headers.
+                if ($i - $start >= 4) break;
+            }
+
+            if ($start === $i) {
+                // No back-fill needed.
+                $out[] = $line;
+                $i++;
+                continue;
+            }
+
+            // Replace the back-filled block with a single coalesced line.
+            // Earlier lines we already pushed onto $out — pop them.
+            $popCount = $i - $start;
+            for ($p = 0; $p < $popCount; $p++) {
+                array_pop($out);
+            }
+
+            $parts = [];
+            for ($k = $start; $k <= $i; $k++) {
+                $t = trim($lines[$k]);
+                if ($t !== '') $parts[] = $t;
+            }
+            $out[] = implode(' ', $parts);
+            $i++;
+        }
+
+        return implode("\n", $out);
+    }
+
+    private function lineIsBoundary(string $trim, array $hints): bool
+    {
+        foreach ($hints as $h) {
+            if (stripos($trim, $h) !== false) return true;
+        }
+        // Page break separator from pdftotext.
+        if ($trim === "\f" || str_contains($trim, "\f")) return true;
+        return false;
+    }
+
+    /**
+     * Used by every CMA parser to seed an extracted-address record from a
+     * subject-property or comparable-sale line. The orchestrator then routes
+     * these through TrackedPropertyMatchOrCreateService with
+     * source_type='cmainfo'.
+     */
+    protected function makeAddress(array $bits): array
+    {
+        return array_filter([
+            'street_number' => $bits['street_number'] ?? null,
+            'street_name'   => $bits['street_name'] ?? null,
+            'suburb'        => $bits['suburb'] ?? null,
+            'town'          => $bits['town'] ?? null,
+            'latitude'      => $bits['latitude'] ?? null,
+            'longitude'     => $bits['longitude'] ?? null,
+            'erf_number'    => $bits['erf_number'] ?? null,
+            'sale_price'    => $bits['sale_price'] ?? null,
+            'sale_date'     => $bits['sale_date'] ?? null,
+        ], fn ($v) => $v !== null && $v !== '');
+    }
+
+    public function getVersion(): string
+    {
+        return '1.0.0';
+    }
+
+    /** Subclasses override. */
+    abstract public function canParse(string $filePath): ParserConfidence;
+    abstract public function getReportTypeKey(): string;
+}

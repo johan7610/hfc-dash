@@ -17,6 +17,10 @@ class Presentation extends Model
         'branch_id',
         'created_by_user_id',
         'listing_id',
+        'property_id',
+        'tracked_property_id',
+        'seller_contact_id',
+        'deal_id',
         'title',
         'property_address',
         'suburb',
@@ -39,6 +43,8 @@ class Presentation extends Model
         'monthly_opportunity_cost',
         'cma_selected_range',
         'vicinity_selected_range',
+        'comp_scope',
+        'comp_radius_m',
         'excluded_active_listing_indices',
         'simulator_config_json',
         'seller_live_capture_json',
@@ -107,6 +113,12 @@ class Presentation extends Model
         return $this->hasMany(PresentationVersion::class);
     }
 
+    /** Phase 4 — public snapshot share links (tokenised). */
+    public function snapshotLinks()
+    {
+        return $this->hasMany(PresentationSnapshotLink::class);
+    }
+
     public function articles()
     {
         return $this->hasMany(PresentationArticle::class);
@@ -127,6 +139,34 @@ class Presentation extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    // ── Pillar links (V2 Phase 1) ──
+
+    public function property()
+    {
+        return $this->belongsTo(\App\Models\Property::class, 'property_id');
+    }
+
+    public function trackedProperty()
+    {
+        return $this->belongsTo(\App\Models\Prospecting\TrackedProperty::class, 'tracked_property_id');
+    }
+
+    public function sellerContact()
+    {
+        return $this->belongsTo(\App\Models\Contact::class, 'seller_contact_id');
+    }
+
+    public function deal()
+    {
+        return $this->belongsTo(\App\Models\Deal::class, 'deal_id');
+    }
+
+    /** Phase 8 — close-the-loop outcome (one per presentation). */
+    public function outcome()
+    {
+        return $this->hasOne(\App\Models\PresentationOutcome::class);
     }
 
     // ── Scopes ──

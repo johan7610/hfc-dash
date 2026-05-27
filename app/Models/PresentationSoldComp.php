@@ -26,6 +26,7 @@ class PresentationSoldComp extends Model
         'listed_date',
         'raw_row_json',
         'parser_version',
+        'is_demo',
     ];
 
     protected $casts = [

@@ -4,14 +4,18 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\SellerOutreach;
 
+use App\Events\Map\MapProspectLaunched;
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
 use App\Models\Property;
+use App\Models\Prospecting\TrackedProperty;
+use App\Services\Map\MapProspectStatusService;
 use App\Services\Prospecting\PitchLockConflictException;
 use App\Services\Prospecting\ProspectingClaimService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 
 /**
  * Entry-point controller for the seller-outreach composer.
@@ -30,6 +34,10 @@ final class EntryPointController extends Controller
 {
     /** Pivot roles considered "seller-side" for outreach. */
     private const SELLER_ROLES = ['seller', 'owner', 'landlord', 'lessor'];
+
+    public function __construct(
+        private readonly MapProspectStatusService $prospectStatus = new MapProspectStatusService(),
+    ) {}
 
     public function fromProperty(Request $request, Property $property)
     {
@@ -70,6 +78,15 @@ final class EntryPointController extends Controller
             ->first();
         abort_if(!$listing, 404);
 
+        // A.3.4 — prospect-collision detection. Before the temp-lock fires
+        // (which would tie up the listing for the next 30 minutes), check
+        // whether HFC already has a relationship to this address. The same
+        // service drives the map's Portal Stock Prospect Now flow.
+        $collision = $this->resolveCollisionForListing($listing, $agencyId, (int) $request->user()->id);
+        if ($collision !== null) {
+            return $collision;
+        }
+
         // Temp lock: prevent two agents from pitching the same listing concurrently.
         // The lock auto-expires after the agency-configured window (default 30 min)
         // and is consumed when the pitch submits successfully.
@@ -85,7 +102,7 @@ final class EntryPointController extends Controller
                 ? $e->expiresAt->diffForHumans()
                 : \Carbon\Carbon::parse($e->expiresAt)->diffForHumans();
             return redirect()
-                ->route('prospecting.index')
+                ->route('market-intelligence.work')
                 ->with('error', "⏳ {$blockerName} is currently pitching this listing. Try again after their lock expires ({$expiresIn}).");
         }
 
@@ -109,7 +126,11 @@ final class EntryPointController extends Controller
             'last_name'  => 'nullable|string|max:100',
             'phone'      => 'nullable|string|max:30',
             'email'      => 'nullable|email|max:255',
+            // A.2.5 — optional SA ID number with format + checksum validation.
+            'id_number'  => ['nullable', 'string', 'max:20', new \App\Rules\SouthAfricanIdNumber()],
         ]);
+
+        $idNumber = isset($validated['id_number']) ? preg_replace('/\s+/', '', (string) $validated['id_number']) : null;
 
         if (empty($validated['phone']) && empty($validated['email'])) {
             return back()
@@ -120,22 +141,38 @@ final class EntryPointController extends Controller
         $existing = $this->findExistingContact($agencyId, $validated);
         $isNew = $existing === null;
 
-        $result = DB::transaction(function () use ($request, $agencyId, $listing, $validated, $existing) {
+        $result = DB::transaction(function () use ($request, $agencyId, $listing, $validated, $existing, $idNumber) {
             // Branch context is mandatory on Contact rows in CoreX schema.
             $branchId = $request->user()->branch_id;
 
-            $contact = $existing ?: Contact::create([
-                'agency_id'          => $agencyId,
-                'branch_id'          => $branchId,
-                'first_name'         => $validated['first_name'],
+            $contact = $existing ?: Contact::create(array_filter([
+                'agency_id'             => $agencyId,
+                'branch_id'             => $branchId,
+                'first_name'            => $validated['first_name'],
                 // contacts.last_name is NOT NULL in the schema — store an empty
                 // string when the agent skipped it. The spec's S3 dedupe only
                 // needs first_name + phone/email anyway.
-                'last_name'          => $validated['last_name'] ?? '',
-                'phone'              => $validated['phone'] ?? null,
-                'email'              => $validated['email'] ?? null,
-                'created_by_user_id' => $request->user()->id,
-            ]);
+                'last_name'             => $validated['last_name'] ?? '',
+                'phone'                 => $validated['phone'] ?? null,
+                'email'                 => $validated['email'] ?? null,
+                'created_by_user_id'    => $request->user()->id,
+                // A.2.5 — POPIA audit. captured_at + source are only set when
+                // the agent actually filled in the ID; null otherwise.
+                'id_number'             => $idNumber,
+                'id_number_captured_at' => $idNumber ? now() : null,
+                'id_number_source'      => $idNumber ? 'seller_outreach_entry' : null,
+            ], static fn ($v) => $v !== null && $v !== ''));
+
+            // If the contact ALREADY existed (deduped) but the agent supplied
+            // an ID at this entry point, capture-fill it on the existing row
+            // when previously absent — never overwrite.
+            if ($existing && $idNumber && empty($existing->id_number)) {
+                $existing->update([
+                    'id_number'             => $idNumber,
+                    'id_number_captured_at' => now(),
+                    'id_number_source'      => 'seller_outreach_entry',
+                ]);
+            }
 
             $property = $this->promoteListingToProperty($agencyId, $listing, $request->user());
 
@@ -309,6 +346,22 @@ final class EntryPointController extends Controller
             }))
             ->first();
         if ($existing) {
+            // Heal a property promoted before this fix (or any reuse) that
+            // has no structured street — only when BOTH are empty, so a
+            // manually-edited address is never overwritten.
+            if (empty($existing->street_number) && empty($existing->street_name)) {
+                [$sNo, $sName] = $this->parseStreet($address, $suburb);
+                $patch = [];
+                if ($sNo !== null && $sNo !== '') {
+                    $patch['street_number'] = $sNo;
+                }
+                if ($sName !== null && $sName !== '') {
+                    $patch['street_name'] = $sName;
+                }
+                if ($patch !== []) {
+                    $existing->forceFill($patch)->save();
+                }
+            }
             return $existing;
         }
 
@@ -320,6 +373,12 @@ final class EntryPointController extends Controller
         $propertyBranchId = $actor->branch_id
             ?? \DB::table('users')->where('id', $propertyAgentId)->value('branch_id');
 
+        // Parse the free-text address into structured fields so the pitched
+        // property's Internal Address modal + the outreach address line
+        // (built from street_number+street_name+suburb) are populated.
+        [$streetNumber, $streetName] = $this->parseStreet($address, $suburb);
+        $district = trim((string) ($listing->district ?? ''));
+
         // properties.beds/baths/garages/price/suburb/property_type/status are
         // NOT NULL — fall back to the schema defaults (0 / empty / 'house' /
         // 'draft') when the prospecting row doesn't carry the value.
@@ -330,7 +389,10 @@ final class EntryPointController extends Controller
             'external_id'   => 'prospecting:' . $listing->id,
             'title'         => $address !== '' ? $address : 'Prospecting listing ' . $listing->id,
             'address'       => $address !== '' ? $address : null,
+            'street_number' => $streetNumber,
+            'street_name'   => $streetName,
             'suburb'        => $suburb !== '' ? $suburb : '',
+            'district'      => $district !== '' ? $district : null,
             'price'         => $listing->price ?? 0,
             'beds'          => $listing->bedrooms ?? 0,
             'baths'         => $listing->bathrooms ?? 0,
@@ -340,6 +402,35 @@ final class EntryPointController extends Controller
             'listing_type'  => 'sale',
             'status'        => 'draft',
         ]);
+    }
+
+    /**
+     * Prospecting listings carry only a free-text `address` string (plus a
+     * separate suburb/district) — NO structured street fields. Parse the
+     * street line (the segment before the first comma) into
+     * [street_number, street_name] so a pitched Property's Internal Address
+     * and the outreach address line are populated instead of "(no address)".
+     * Returns [null, null] when there is no real street (e.g. the address is
+     * just the suburb).
+     */
+    private function parseStreet(string $address, string $suburb): array
+    {
+        $address = trim($address);
+        if ($address === '') {
+            return [null, null];
+        }
+        $streetLine = trim((string) (explode(',', $address)[0] ?? ''));
+        $suburb = trim($suburb);
+        if ($streetLine === ''
+            || ($suburb !== '' && mb_strtolower($streetLine) === mb_strtolower($suburb))) {
+            return [null, null];
+        }
+        // Leading street number: "173", "12A", "1/3", "12-14".
+        if (preg_match('/^\s*(\d+[A-Za-z]?(?:\s*[\/-]\s*\d+[A-Za-z]?)?)\s+(.+)$/u', $streetLine, $m)) {
+            return [trim($m[1]), trim($m[2])];
+        }
+        // No leading number — the whole line is the street name.
+        return [null, $streetLine];
     }
 
     private function resolvePromotionAgentId(int $agencyId, $actor): int
@@ -378,5 +469,111 @@ final class EntryPointController extends Controller
             : ($user->agency_id ?? null);
         abort_if($id === null, 403, 'No agency context — super_admin without an active agency cannot compose pitches.');
         return (int) $id;
+    }
+
+    /**
+     * A.3.4 — apply the map's 6-state prospect-collision rules to a
+     * MIC-initiated pitch attempt. Returns a redirect Response when the
+     * agent must be diverted (held / own_draft / other_draft); returns
+     * null for available, previously_sold, previously_held — those three
+     * proceed to the normal contact-capture flow with a warning flash on
+     * the "previously_" branches.
+     */
+    private function resolveCollisionForListing(
+        object $listing,
+        int $agencyId,
+        int $currentUserId,
+    ): ?\Symfony\Component\HttpFoundation\Response {
+        // prospecting_listings carries address + suburb but no GPS columns.
+        // When a TrackedProperty is linked we lift lat/lng from there so the
+        // resolver can use GPS-proximity matching (Strategy 2) — otherwise
+        // fall back to the normalised-address chain (Strategies 4/5).
+        $lat = null;
+        $lng = null;
+        if (!empty($listing->tracked_property_id)) {
+            $tpGps = DB::table('tracked_properties')
+                ->where('id', (int) $listing->tracked_property_id)
+                ->where('agency_id', $agencyId)
+                ->first(['latitude', 'longitude']);
+            if ($tpGps) {
+                $lat = $tpGps->latitude !== null ? (float) $tpGps->latitude : null;
+                $lng = $tpGps->longitude !== null ? (float) $tpGps->longitude : null;
+            }
+        }
+
+        $facts = [
+            'address'   => $listing->address ?? null,
+            'latitude'  => $lat,
+            'longitude' => $lng,
+            'suburb'    => $listing->suburb ?? null,
+        ];
+
+        $status = $this->prospectStatus->resolve($facts, $agencyId, $currentUserId);
+
+        switch ($status['status']) {
+            case 'held':
+                return redirect()
+                    ->route('corex.properties.show', ['property' => $status['property_id']])
+                    ->with('warning', "This property is already on HFC's books — opened the existing record instead of starting a new prospect.");
+
+            case 'own_draft':
+                $days = (int) ($status['days_in_state'] ?? 0);
+                return redirect()
+                    ->route('corex.properties.show', ['property' => $status['property_id']])
+                    ->with('info', "You already have a draft on this property ({$days} days). Continuing your draft.");
+
+            case 'other_draft':
+                $agent = $status['agent_name'] ?? 'another agent';
+                $days  = (int) ($status['days_in_state'] ?? 0);
+                $state = $status['state_label'] ?? 'draft';
+                return redirect()
+                    ->route('market-intelligence.work')
+                    ->with('warning', "{$agent} has a draft on this property ({$days} days in {$state}). Coordinate with them before prospecting. To override, use the map's override flow.");
+
+            case 'previously_sold':
+                $date = $status['sale_date'] ?? null;
+                session()->flash('warning', $date
+                    ? "Previously sold by HFC on {$date}. Continuing as new prospect."
+                    : 'Previously sold by HFC. Continuing as new prospect.');
+                $this->fireMicProspectLaunched($listing, $agencyId, $currentUserId);
+                return null;
+
+            case 'previously_held':
+                $expired = $status['expired_at'] ?? null;
+                session()->flash('warning', $expired
+                    ? "Previously held by HFC (mandate ended {$expired}). Continuing as new prospect."
+                    : 'Previously held by HFC. Continuing as new prospect.');
+                $this->fireMicProspectLaunched($listing, $agencyId, $currentUserId);
+                return null;
+
+            case 'available':
+            default:
+                $this->fireMicProspectLaunched($listing, $agencyId, $currentUserId);
+                return null;
+        }
+    }
+
+    /**
+     * Fire MapProspectLaunched with source='mic_entry_point' so the audit
+     * trail attributes the MIC-initiated launch to the correct surface.
+     * Skips silently when no TrackedProperty is linked to the listing —
+     * the downstream pitch send will produce its own audit row.
+     */
+    private function fireMicProspectLaunched(object $listing, int $agencyId, int $currentUserId): void
+    {
+        $tpId = $listing->tracked_property_id ?? null;
+        if (!$tpId) return;
+        $tp = TrackedProperty::withoutGlobalScopes()
+            ->where('id', (int) $tpId)
+            ->where('agency_id', $agencyId)
+            ->first();
+        if (!$tp) return;
+        Event::dispatch(new MapProspectLaunched(
+            trackedProperty: $tp,
+            agencyId:        $agencyId,
+            actingUserId:    $currentUserId,
+            locationKey:     'mic_entry:listing_' . (int) $listing->id,
+            source:          'mic_entry_point',
+        ));
     }
 }

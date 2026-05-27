@@ -100,6 +100,14 @@
                                placeholder="e.g. 4123456789">
                     </div>
                     <div>
+                        <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">PPRA Registration Number</label>
+                        <input type="text" name="ppra_number" value="{{ old('ppra_number', $agency->ppra_number) }}"
+                               class="w-full rounded-md px-3 py-2 text-sm"
+                               style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                               placeholder="e.g. 2023116041">
+                        <p class="text-[10px] mt-1" style="color:var(--text-muted);">The agency's per-entity registration with the Property Practitioners Regulatory Authority (separate from individual practitioner FFCs).</p>
+                    </div>
+                    <div>
                         <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">FFC No</label>
                         <input type="text" name="ffc_no" value="{{ old('ffc_no', $agency->ffc_no) }}"
                                class="w-full rounded-md px-3 py-2 text-sm"
@@ -177,12 +185,51 @@
                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
                                   placeholder="Email disclaimer text shown at bottom of all outgoing emails">{{ old('email_disclaimer', $agency->email_disclaimer) }}</textarea>
                     </div>
+                </div>
+
+                {{-- Phase 9c-3 rebuild — Privacy Policy lives next to Email Disclaimer. --}}
+                <div class="text-xs font-bold uppercase tracking-wider pb-1" style="color:var(--text-muted); border-bottom:1px solid var(--border);">Privacy Policy</div>
+                <div class="space-y-3">
                     <div>
-                        <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">POPI Policy URL</label>
+                        <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Privacy Policy Content</label>
+                        <textarea name="privacy_policy_markdown" rows="4"
+                                  class="w-full rounded-md px-3 py-2 text-sm"
+                                  style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                                  placeholder="# Privacy Policy&#10;&#10;Effective date: …">{{ old('privacy_policy_markdown', $agency->privacy_policy_markdown) }}</textarea>
+                        <p class="text-[10px] mt-1" style="color:var(--text-muted);">Markdown supported. Will be rendered on a public page accessible to anyone with the link.</p>
+                    </div>
+
+                    @php
+                        $hasContent  = !empty($agency->privacy_policy_markdown);
+                        $isPublished = $hasContent && $agency->privacy_policy_published_at !== null;
+                        $publicUrl   = $agency->privacyPolicyPublicUrl();
+                    @endphp
+
+                    <div class="flex items-center gap-3 flex-wrap">
+                        @if($isPublished)
+                            <span class="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded"
+                                  style="background: color-mix(in srgb, var(--ds-green) 15%, transparent); color: var(--ds-green);">Published</span>
+                            <button type="button"
+                                    onclick="navigator.clipboard.writeText('{{ $publicUrl }}'); this.innerText='Copied ✓'; setTimeout(()=>this.innerText='Copy public link',1500);"
+                                    class="corex-btn-outline text-xs">Copy public link</button>
+                            <a href="{{ $publicUrl }}" target="_blank" rel="noopener" class="text-xs" style="color:var(--text-secondary);">View public page →</a>
+                            <button type="submit" name="privacy_policy_action" value="unpublish" class="corex-btn-outline text-xs ml-auto">Unpublish</button>
+                        @elseif($hasContent)
+                            <span class="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded"
+                                  style="background: color-mix(in srgb, var(--ds-amber) 15%, transparent); color: var(--ds-amber);">Draft — not yet public</span>
+                            <button type="submit" name="privacy_policy_action" value="publish" class="corex-btn-primary text-xs ml-auto">Publish</button>
+                        @else
+                            <p class="text-xs" style="color:var(--text-muted);">Enter content above and save to begin. You'll be able to publish on the next save.</p>
+                        @endif
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">External Privacy URL (Optional)</label>
                         <input type="text" name="popi_url" value="{{ old('popi_url', $agency->popi_url) }}"
                                class="w-full rounded-md px-3 py-2 text-sm"
                                style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
                                placeholder="e.g. https://coastalcrest.example/popi-policy">
+                        <p class="text-[10px] mt-1" style="color:var(--text-muted);">If you host your privacy policy externally and prefer to use that URL instead of CoreX's internal hosting, paste the full URL here. CoreX's internal published version takes precedence when both are set.</p>
                     </div>
                 </div>
 
@@ -536,11 +583,48 @@
                                            placeholder="e.g. 4123456789">
                                 </div>
                                 <div>
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">PPRA Number Override</label>
+                                    <input class="w-full rounded-md px-3 py-2 text-sm"
+                                           style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);"
+                                           name="ppra_number" value="{{ old('ppra_number', $branch->ppra_number) }}"
+                                           placeholder="leave blank to inherit from agency">
+                                </div>
+                                <div>
                                     <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">FFC No Override</label>
                                     <input class="w-full rounded-md px-3 py-2 text-sm"
                                            style="background: var(--surface); border: 1px solid var(--border); color: var(--text-primary);"
                                            name="ffc_no" value="{{ old('ffc_no', $branch->ffc_no) }}"
                                            placeholder="e.g. FFC50/12345/3">
+                                </div>
+                                <div class="md:col-span-2 pt-3" style="border-top:1px dashed var(--border);">
+                                    <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Privacy Policy Content Override</label>
+                                    <textarea name="privacy_policy_markdown" rows="3"
+                                              class="w-full rounded-md px-3 py-2 text-sm"
+                                              style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                                              placeholder="Leave blank to inherit the agency's privacy policy">{{ old('privacy_policy_markdown', $branch->privacy_policy_markdown) }}</textarea>
+                                    @php
+                                        $branchHasContent  = !empty($branch->privacy_policy_markdown);
+                                        $branchIsPublished = $branchHasContent && $branch->privacy_policy_published_at !== null;
+                                        $branchPublicUrl   = $branchIsPublished
+                                            ? route('public.privacy-policy', ['token' => $branch->privacy_policy_token])
+                                            : null;
+                                    @endphp
+                                    <div class="flex items-center gap-3 flex-wrap mt-2 text-xs">
+                                        @if($branchIsPublished)
+                                            <span class="inline-flex items-center px-2 py-0.5 font-semibold rounded"
+                                                  style="background: color-mix(in srgb, var(--ds-green) 15%, transparent); color: var(--ds-green);">Published — branch override active</span>
+                                            <button type="button"
+                                                    onclick="navigator.clipboard.writeText('{{ $branchPublicUrl }}'); this.innerText='Copied ✓'; setTimeout(()=>this.innerText='Copy branch link',1500);"
+                                                    class="corex-btn-outline text-xs">Copy branch link</button>
+                                            <button type="submit" name="privacy_policy_action" value="unpublish" class="corex-btn-outline text-xs ml-auto">Unpublish branch override</button>
+                                        @elseif($branchHasContent)
+                                            <span class="inline-flex items-center px-2 py-0.5 font-semibold rounded"
+                                                  style="background: color-mix(in srgb, var(--ds-amber) 15%, transparent); color: var(--ds-amber);">Draft — branch override not yet public</span>
+                                            <button type="submit" name="privacy_policy_action" value="publish" class="corex-btn-primary text-xs ml-auto">Publish branch override</button>
+                                        @else
+                                            <span style="color:var(--text-muted);">Inheriting agency policy. Type content to override.</span>
+                                        @endif
+                                    </div>
                                 </div>
                                 <div>
                                     <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">FIC No Override</label>

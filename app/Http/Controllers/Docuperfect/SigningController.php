@@ -4,6 +4,10 @@ namespace App\Http\Controllers\Docuperfect;
 
 use App\Http\Controllers\Controller;
 use App\Models\Agency;
+use App\Models\Docuperfect\ConditionInitial;
+use App\Models\Docuperfect\DocumentAmendment;
+use App\Models\Docuperfect\DocumentClauseStrikethrough;
+use App\Models\Docuperfect\DocumentCondition;
 use App\Models\Docuperfect\ESignConsentLog;
 use App\Models\Docuperfect\SignatureAuditLog;
 use App\Models\Docuperfect\SignatureMarker;
@@ -12,9 +16,12 @@ use App\Models\Docuperfect\SignatureTemplate;
 use App\Models\FicaSubmission;
 use App\Services\Docuperfect\DocumentFlattener;
 use App\Services\Docuperfect\SignatureService;
+use App\Services\Docuperfect\LetterheadRefresher;
+use App\Services\Docuperfect\SignatureSurfaceNormalizer;
 use App\Services\WebTemplateFieldPartyMap;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -45,7 +52,16 @@ class SigningController extends Controller
         }
 
         // Already completed — show enhanced summary
-        if ($signingRequest->status === SignatureRequest::STATUS_COMPLETED) {
+        // Phase 1B.7 (FIX H) — BUT bypass this early-return when the
+        // parent template is in an amendment-initialing cascade. The
+        // recipient previously signed; an amendment was raised and the
+        // agent approved it; the recipient must now initial the changed
+        // regions. Falling through to the show() body lets the existing
+        // showInitialingView() switch (Phase 1B.5) route them into the
+        // focused initialing view.
+        if ($signingRequest->status === SignatureRequest::STATUS_COMPLETED
+            && optional($signingRequest->template)->status !== SignatureTemplate::STATUS_AMENDMENT_INITIALING
+        ) {
             $branding = $this->getAgencyBranding($signingRequest);
             $consentLog = ESignConsentLog::where('signature_request_id', $signingRequest->id)
                 ->orderBy('created_at', 'desc')
@@ -82,6 +98,18 @@ class SigningController extends Controller
             ]);
         }
 
+        // Phase 1B.5 — focused initialing view-switch.
+        // When the parent template's amendment_status indicates an
+        // initialing cascade is in progress, recipients land on a focused
+        // view showing only changed regions (not the entire document).
+        $tplForSwitch = $signingRequest->template;
+        if ($tplForSwitch
+            && $tplForSwitch->status === SignatureTemplate::STATUS_AMENDMENT_INITIALING
+            && $tplForSwitch->amendment_status === SignatureTemplate::AMENDMENT_STATUS_INITIALING
+        ) {
+            return $this->showInitialingView($signingRequest, $token);
+        }
+
         // Gateway gate — signer must verify ID AND accept consent before seeing documents
         if (!empty($signingRequest->signer_id_number)) {
             if (!session("signing_verified_{$token}")) {
@@ -108,7 +136,19 @@ class SigningController extends Controller
                         ->first();
 
                 $signingUrl = route('signatures.external', $token);
-                $ficaUrl = $ficaSub
+
+                // Defensive: fica_submissions.token is nullable; tokenless
+                // submissions exist (reused drafts, seeder/wet-ink/legacy).
+                // route('fica.form', null) throws UrlGenerationException and
+                // 500s the signing page. Mint a token if one is missing so
+                // the FICA link always works — the page must never 500 here.
+                if ($ficaSub && empty($ficaSub->token)) {
+                    $ficaSub->token = \Illuminate\Support\Str::random(64);
+                    $ficaSub->token_expires_at = now()->addDays(14);
+                    $ficaSub->save();
+                }
+
+                $ficaUrl = ($ficaSub && $ficaSub->token)
                     ? route('fica.form', $ficaSub->token) . '?return_url=' . urlencode($signingUrl)
                     : null;
 
@@ -211,6 +251,17 @@ class SigningController extends Controller
             // Fallback: web template without flattening — use iframe (legacy path)
             $isWebTemplate = true;
 
+            // E-sign reset Q3 Layer B — re-render merged_html when the
+            // template has been edited since the snapshot was captured.
+            // Closes the "served a stale snapshot" path identified in
+            // the audit (template 111 / document 399).
+            $rerendered = app(\App\Services\Docuperfect\MergedHtmlFreshnessGuard::class)
+                ->ensureFresh($document, $template);
+            if ($rerendered) {
+                $document->refresh();
+                $webTemplateData = $document->web_template_data ?? [];
+            }
+
             if (!empty($webTemplateData['merged_html'])) {
                 $webTemplateHtml = $webTemplateData['merged_html'];
             } else {
@@ -242,6 +293,54 @@ class SigningController extends Controller
             } else {
                 $editableFields = WebTemplateFieldPartyMap::getEditableFields($signingRequest->party_role);
             }
+
+            // Inline templates carry data-marker-party on a .signature-col /
+            // .signature-section wrapper but never emit data-marker-type, so the
+            // signing engine's [data-marker-party][data-marker-type="signature"]
+            // selector finds zero surfaces. Normalise additively so every web
+            // template is signable without touching the template files (BL-5/6).
+            $webTemplateHtml = SignatureSurfaceNormalizer::normalize($webTemplateHtml);
+
+            // Re-resolve the letterhead so a stored merged_html snapshot
+            // never serves stale agency data ("The Mandate Company /
+            // Margate") at signing — always show CURRENT agency.
+            $webTemplateHtml = LetterheadRefresher::refresh($webTemplateHtml);
+
+            // Phase 1B.5 — replace `~~~~MARKER~~~~` tokens with styled
+            // insertable-block partials. Recipient context wires the
+            // "+ Add condition" affordance + per-condition initial slots
+            // (Phase 1B.7). Phase 1B.7 also passes the current party_role
+            // so the renderer can mark THIS party's pending initial slots
+            // as actionable.
+            $blocksMeta = $docTemplate->insertable_blocks ?? [];
+            $webTemplateHtml = app(\App\Services\Docuperfect\InsertableBlockRenderer::class)
+                ->renderInDocument(
+                    $webTemplateHtml,
+                    $template,
+                    is_array($blocksMeta) ? $blocksMeta : [],
+                    \App\Services\Docuperfect\InsertableBlockRenderer::CONTEXT_RECIPIENT_SIGNING,
+                    $token,
+                    $signingRequest->party_role
+                );
+
+            // Recipient Loop Engine — B2.5/B3 expansion pass. Detects role
+            // blocks, duplicates single-block templates per recipient with
+            // per-instance contact pre-fill, AND (B3) stamps
+            // `data-viewer-editable="1"` on every field this signing
+            // recipient is authorised to edit so the signing-view JS can
+            // gate input rendering by attribute, not by name-lookup.
+            $allRecipientsForTemplate = SignatureRequest::where('signature_template_id', $template->id)->get();
+            $fieldMappingsRaw = is_array($docTemplate->field_mappings ?? null)
+                ? $docTemplate->field_mappings
+                : [];
+            $webTemplateHtml = app(\App\Services\Docuperfect\RoleBlockExpansionService::class)
+                ->expandWithLooping(
+                    $docTemplate,
+                    $webTemplateHtml,
+                    $allRecipientsForTemplate,
+                    $signingRequest,
+                    $fieldMappingsRaw,
+                );
         }
 
         // Build page image URLs — use flattened images when available (PDF path)
@@ -296,10 +395,54 @@ class SigningController extends Controller
             'label' => ucfirst(str_replace('_', ' ', $p['role_label'] ?? $p['role'] ?? 'unknown')),
         ])->values()->toArray();
 
+        // Phase 1B.6 (FIX 4) — extract numbered clauses from the body for
+        // the Add Condition + Flag Clause modal pickers.
+        $numberedClauses = $this->extractNumberedClauses($webTemplateHtml);
+
+        // Phase 1B.6 (FIX 6) — seed the persisted clause flags state so a
+        // page refresh restores the visible flag UI (the legacy webData
+        // path only persisted at signComplete; reading it back means a
+        // mid-session flag survives reload).
+        $persistedClauseFlags = $webTemplateData['clause_flags'] ?? [];
+
+        // Phase 1B.6 (FIX 5) — flag whether this signing party has already
+        // completed signing. The view uses this to render captured
+        // signatures read-only instead of "click to sign" affordances when
+        // the document is in an amendment cycle.
+        $partyAlreadySigned = $signingRequest->status === SignatureRequest::STATUS_COMPLETED
+            || $signingRequest->completed_at !== null;
+        $inAmendmentInitialing = $template->status === SignatureTemplate::STATUS_AMENDMENT_INITIALING;
+
+        // CONSENT GATE — Apply-to-all initials is an agent-only affordance.
+        // Recipients must initial each page individually for legal informed-
+        // consent reasons (each initial = explicit affirm).
+        //
+        // The gate is `signingRequest.party_role === 'agent'` ALONE. The
+        // viewing browser session's permissions are NOT consulted: a
+        // dispatching agent who opens a recipient's signing link in their
+        // own browser (testing, screen-share, supervision) must NOT inherit
+        // the apply-to-all bypass — that token belongs to the recipient,
+        // and the recipient's per-page consent surface is what renders.
+        //
+        // The previous OR-with-hasPermission predicate (pre-2026-05-27) is
+        // the bug fixed by .ai/audits/esign-reset-investigation-2026-05-27.md
+        // Q4 — it conflated viewer permissions with token identity and
+        // exposed a legal bypass.
+        $isAgent = ($signingRequest->party_role === 'agent');
+
         return view('docuperfect.signatures.external.sign', [
             'request' => $signingRequest,
+            'currentRecipient' => $signingRequest,        // B1 — alias for the loop-engine downstream layers
+            'currentRoleIdentity' => $signingRequest->role_identity,  // B1 — '{party_role}_{role_index}'
             'template' => $template,
             'document' => $document,
+            'docTemplate' => $docTemplate,                // B3 info panel — isSalesDocument() / role labelling
+            'isRecipientSigningView' => true,             // B3 info panel — render flag (false on agent wizard)
+            'numberedClauses' => $numberedClauses,
+            'persistedClauseFlags' => $persistedClauseFlags,
+            'partyAlreadySigned' => $partyAlreadySigned,
+            'inAmendmentInitialing' => $inAmendmentInitialing,
+            'isAgent' => $isAgent,
             'allMarkers' => $allMarkers,
             'myMarkers' => $myMarkers,
             'signedCount' => $signedCount,
@@ -319,6 +462,7 @@ class SigningController extends Controller
             'sectionAcceptances' => $sectionAcceptances,
             'signingParties' => $signingParties,
             'storedInitials' => $webTemplateData['signed_initials'] ?? [],
+            'storedDisclosure' => $webTemplateData['disclosure_answers'] ?? [],
         ]);
     }
 
@@ -936,8 +1080,14 @@ class SigningController extends Controller
 
     /**
      * Save web template field values back to the document.
-     * Merges with existing web_template_data — only updates fields
-     * assigned to the signer's party role.
+     *
+     * B3 hardening — every incoming field is validated against the
+     * server-side per-recipient editable scope (RoleBlockExpansionService's
+     * identity + role rule). DOM trust is never the security layer:
+     * even if a malicious client strips data-viewer-editable client-side,
+     * the server re-derives editability from field_mappings + viewer
+     * identity. Any field the viewer cannot edit triggers a 403 + audit
+     * log entry (one per violation, never silently dropped).
      */
     public function saveWebFields(Request $request, $token)
     {
@@ -957,17 +1107,45 @@ class SigningController extends Controller
         $incomingFields = $request->input('fields', []);
         $partyRole = $signingRequest->party_role;
 
-        // Only allow updating fields assigned to this signer's party
-        $allowedFields = WebTemplateFieldPartyMap::getEditableFields($partyRole);
+        $docTemplate = $document->template;
+        $fieldMappingsRaw = is_array($docTemplate?->field_mappings ?? null)
+            ? $docTemplate->field_mappings
+            : [];
+
+        $authResult = $this->authoriseWebFieldWrite(
+            $signingRequest,
+            $incomingFields,
+            $fieldMappingsRaw,
+        );
+        if ($authResult['violation'] !== null) {
+            SignatureAuditLog::create([
+                'signature_template_id' => $signingRequest->template->id,
+                'action' => 'web_fields_save_denied',
+                'actor_type' => SignatureAuditLog::ACTOR_SIGNER,
+                'actor_name' => $signingRequest->signer_name,
+                'actor_email' => $signingRequest->signer_email,
+                'actor_ip_address' => $request->ip(),
+                'actor_user_agent' => $request->userAgent(),
+                'signature_request_id' => $signingRequest->id,
+                'metadata_json' => [
+                    'actor_role_identity' => $signingRequest->role_identity,
+                    'denied_field'        => $authResult['violation']['field'],
+                    'denied_identity'     => $authResult['violation']['identity'],
+                    'reason'              => $authResult['violation']['reason'],
+                ],
+            ]);
+            return response()->json([
+                'ok'    => false,
+                'error' => 'Field not editable by current party',
+                'field' => $authResult['violation']['field'],
+            ], 403);
+        }
 
         $existingData = $document->web_template_data ?? [];
         $updated = false;
 
-        foreach ($incomingFields as $fieldName => $value) {
-            if (!is_string($fieldName) || !in_array($fieldName, $allowedFields, true)) {
-                continue;
-            }
-            $existingData[$fieldName] = $value;
+        foreach ($authResult['accepted'] as $logicalName => $value) {
+            $existingData[$logicalName] = $value;
             $updated = true;
         }
 
@@ -984,10 +1162,146 @@ class SigningController extends Controller
             'actor_ip_address' => $request->ip(),
             'actor_user_agent' => $request->userAgent(),
             'signature_request_id' => $signingRequest->id,
-            'metadata_json' => ['party_role' => $partyRole, 'field_count' => count($incomingFields)],
+            'metadata_json' => [
+                'party_role'         => $partyRole,
+                'actor_role_identity'=> $signingRequest->role_identity,
+                'field_count'        => count($authResult['accepted']),
+            ],
         ]);
 
-        return response()->json(['ok' => true]);
+        return response()->json(['ok' => true, 'saved' => count($authResult['accepted'])]);
+    }
+
+    /**
+     * Per-recipient field-write authorisation.
+     *
+     * Accepts two payload shapes for backward compat:
+     *   1. Legacy flat:   `fields: { field_name: "value", ... }`
+     *      → resolved against the viewer's party-role + WebTemplateFieldPartyMap.
+     *   2. B3 identity:   `fields: { field_name__r2: { value, identity, original_field } }`
+     *      → identity must match the viewer's role_identity AND the field's
+     *        editable_by must include the viewer's canonical role token.
+     *
+     * Returns:
+     *   - `accepted` : map of logical field name → value to persist.
+     *   - `violation`: first denial seen, or null when every field is allowed.
+     *
+     * @param  array<string, mixed>                                         $incomingFields
+     * @param  array<string, array<string, mixed>>                          $fieldMappingsRaw
+     * @return array{accepted: array<string, mixed>, violation: ?array<string, string>}
+     */
+    private function authoriseWebFieldWrite(
+        SignatureRequest $signingRequest,
+        array $incomingFields,
+        array $fieldMappingsRaw,
+    ): array {
+        $partyRole       = strtolower((string) $signingRequest->party_role);
+        $viewerIdentity  = strtolower((string) $signingRequest->role_identity);
+        $isAgent         = $partyRole === 'agent';
+
+        $roleToEditableBy = [
+            'landlord' => 'owner_party',
+            'lessor'   => 'owner_party',
+            'seller'   => 'owner_party',
+            'tenant'   => 'acquiring_party',
+            'lessee'   => 'acquiring_party',
+            'buyer'    => 'acquiring_party',
+            'agent'    => 'agent',
+            'witness'  => 'witness',
+        ];
+        $canonicalForViewer = $roleToEditableBy[$partyRole] ?? $partyRole;
+
+        // Build name → editable_by[] map (mirrors the expansion service).
+        $editableByByName = [];
+        foreach ($fieldMappingsRaw as $mapping) {
+            if (!is_array($mapping)) continue;
+            $editableBy = $mapping['editable_by'] ?? [];
+            if (!is_array($editableBy)) continue;
+            $name = $mapping['field_name'] ?? null;
+            if (!is_string($name) || $name === '') {
+                $label = (string) ($mapping['label'] ?? '');
+                if ($label === '') continue;
+                $name = strtolower(trim($label));
+                $name = preg_replace('/[^a-z0-9]+/', '_', $name);
+                $name = trim((string) $name, '_');
+            }
+            if (is_string($name) && $name !== '') {
+                $editableByByName[$name] = $editableBy;
+            }
+        }
+
+        $accepted = [];
+        foreach ($incomingFields as $fieldKey => $payload) {
+            if (!is_string($fieldKey)) continue;
+
+            // Resolve value + identity from either payload shape.
+            if (is_array($payload)) {
+                $value             = $payload['value'] ?? null;
+                $claimedIdentity   = strtolower((string) ($payload['identity'] ?? ''));
+                $declaredOriginal  = (string) ($payload['original_field'] ?? '');
+            } else {
+                $value             = $payload;
+                $claimedIdentity   = '';
+                $declaredOriginal  = '';
+            }
+            $logicalName = $declaredOriginal !== ''
+                ? $declaredOriginal
+                : preg_replace('/__r\d+$/', '', $fieldKey);
+            if (!is_string($logicalName) || $logicalName === '') continue;
+
+            $editableBy = $editableByByName[$logicalName] ?? null;
+
+            // Backward-compat lane: no field_mappings (legacy PDF template).
+            // Defer to the static party-map.
+            if ($editableBy === null) {
+                $allowed = WebTemplateFieldPartyMap::getEditableFields($partyRole);
+                if (in_array($logicalName, $allowed, true)) {
+                    $accepted[$logicalName] = $value;
+                    continue;
+                }
+                return [
+                    'accepted'  => $accepted,
+                    'violation' => [
+                        'field'    => (string) $fieldKey,
+                        'identity' => $claimedIdentity,
+                        'reason'   => 'Field not in static party map for role ' . $partyRole,
+                    ],
+                ];
+            }
+
+            $allowsAll  = in_array('all', $editableBy, true);
+            $roleAllows = $allowsAll || in_array($canonicalForViewer, $editableBy, true);
+
+            if ($isAgent) {
+                if ($allowsAll || in_array('agent', $editableBy, true)) {
+                    $accepted[$logicalName] = $value;
+                    continue;
+                }
+            } elseif ($roleAllows) {
+                // Per-instance identity check: when the incoming payload
+                // claims an identity, the viewer's must match. When no
+                // identity is claimed (legacy client), require the
+                // logical field to be assignable to the viewer's role
+                // and accept (Case B/legacy single-recipient path).
+                if ($claimedIdentity === '' || $claimedIdentity === $viewerIdentity) {
+                    $accepted[$logicalName] = $value;
+                    continue;
+                }
+            }
+
+            return [
+                'accepted'  => $accepted,
+                'violation' => [
+                    'field'    => (string) $fieldKey,
+                    'identity' => $claimedIdentity,
+                    'reason'   => $isAgent
+                        ? 'Agent role not present in editable_by for field ' . $logicalName
+                        : 'Viewer ' . $viewerIdentity . ' not authorised for field ' . $logicalName,
+                ],
+            ];
+        }
+
+        return ['accepted' => $accepted, 'violation' => null];
     }
 
     /**
@@ -1067,6 +1381,17 @@ class SigningController extends Controller
             $webData['clause_flags'] = array_merge($existingFlags, [
                 $signingRequest->party_role => $clauseFlags,
             ]);
+
+            // ES-4 — Promote each flag to a first-class DocumentAmendment row
+            // so it flows through the same agent review surface used by
+            // Other Conditions + Strikethroughs (Phase 1B). The JSON note in
+            // web_template_data is preserved for backward compatibility and
+            // forensic context; it is no longer the sole record.
+            $this->promoteClauseFlagsToAmendments(
+                $signingRequest,
+                $document,
+                $clauseFlags
+            );
         }
 
         // Save signatures (base64 data URIs keyed by block ID)
@@ -1095,10 +1420,25 @@ class SigningController extends Controller
             $webData['signed_initials'] = $existingInitials;
         }
 
+        // §19 Option 2 — the client posts the EXACT signed-and-paginated DOM,
+        // but it is NOT fed back into merged_html (doing so caused the
+        // re-pagination accretion loop: accreted .corex-a4-page, stacked
+        // stale footers, inflated gate). merged_html stays the CANONICAL,
+        // UN-paginated document; the embed step below applies THIS signer's
+        // values to its un-paginated markers so the next signer, loading
+        // canonical merged_html, sees all prior marks. The paginated DOM is
+        // persisted ONCE to signed_paginated_html (below) and consumed only
+        // by splitMergedHtml()/the PDF generator — never re-paginated.
+        $paginatedHtml = (string) $request->input('paginated_html', '');
+
         // Embed this signer's signatures, initials, and ceremony values into merged_html
         if (!empty($webData['merged_html']) && (!empty($signatures) || !empty($pageBreakInitials) || !empty($ceremonyValues))) {
             $sigController = app(SignatureController::class);
-            $html = $webData['merged_html'];
+            // Stamp the engine's signature convention onto inline templates so
+            // embedSignaturesIntoHtml's [data-marker-party][data-marker-type=
+            // "signature"] match finds the surface and the final PDF carries
+            // the signature (idempotent — no-op once embedded). BL-5/6.
+            $html = SignatureSurfaceNormalizer::normalize($webData['merged_html']);
             if (!empty($signatures)) {
                 $html = $sigController->embedSignaturesIntoHtml($html, $signatures, $signingRequest->party_role, $signingRequest->signer_name ?? '');
             }
@@ -1111,7 +1451,15 @@ class SigningController extends Controller
             $webData['merged_html'] = $html;
         }
 
-        $document->update(['web_template_data' => $webData]);
+        // Two-write: canonical un-paginated merged_html (above) + the exact
+        // signed paginated DOM persisted ONCE to the derived-artifact column.
+        $updates = ['web_template_data' => $webData];
+        if (trim($paginatedHtml) !== '' && (
+                str_contains($paginatedHtml, 'corex-a4-page') ||
+                str_contains($paginatedHtml, 'corex-document-wrapper'))) {
+            $updates['signed_paginated_html'] = $paginatedHtml;
+        }
+        $document->update($updates);
 
         // --- Amendment Detection (Other Conditions) ---
         $otherConditionsText = $request->input('other_conditions_text', '');
@@ -1892,8 +2240,36 @@ class SigningController extends Controller
         }
 
         $cleanupCss = $this->getPdfCleanupCss();
+        $brandFontCss = $this->embeddedBrandFontFaces();
+
+        // Zero external requests during PDF render: strip any remote Google
+        // Fonts <link>/@import the stored merged_html may carry. Chromium
+        // loading these over a network it cannot reach is what hung
+        // page.goto(networkidle0) for the full timeout. Fonts are now
+        // self-hosted via $brandFontCss (embedded below).
+        $mergedHtml = preg_replace(
+            '#<link\b[^>]*href=["\']https?://fonts\.(?:googleapis|gstatic)\.com[^"\']*["\'][^>]*>#i',
+            '',
+            $mergedHtml
+        );
+        $mergedHtml = preg_replace(
+            '#@import\s+(?:url\()?["\']?https?://fonts\.(?:googleapis|gstatic)\.com[^;]*;#i',
+            '',
+            $mergedHtml
+        );
+
+        // Zero external requests of ANY kind: inline local storage assets
+        // (agency logo etc.) as base64 data: URIs and neutralise any
+        // remaining remote/loopback <img>/<link>/<script>. Runs BEFORE the
+        // path branch so BOTH return paths emit a fully self-contained doc
+        // (the loopback logo on a single-threaded dev server was the last
+        // network dependency that could stall page.goto).
+        $mergedHtml = $this->inlineLocalAssetsAndStripRemote($mergedHtml);
 
         $pdfStyles = <<<CSS
+/* === Self-hosted brand fonts (embedded — NO external network) === */
+{$brandFontCss}
+
 /* === CDS Document Stylesheet (inlined from corex-document.css) === */
 {$cdsStylesheet}
 
@@ -1979,7 +2355,6 @@ CSS;
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Dancing+Script:wght@400;700&display=swap" rel="stylesheet">
     <style>
         {$pdfStyles}
     </style>
@@ -1992,6 +2367,136 @@ HTML;
     }
 
     /**
+     * Self-hosted @font-face rules for the document's brand families,
+     * embedded as base64 data: URIs so PDF rendering makes ZERO external
+     * network requests (the remote Google Fonts <link> previously hung
+     * Puppeteer's networkidle0 for the full timeout when the server could
+     * not reach fonts.googleapis.com).
+     *
+     * The brand woff2 (Plus Jakarta Sans / Dancing Script) are not bundled
+     * in the repo and cannot be fetched offline; the bundled DejaVu faces
+     * (already shipped with dompdf) are mapped under the brand family names
+     * so every signed PDF renders deterministically and identically in any
+     * environment. Pixel-exact brand typeface is a follow-up asset task —
+     * it does not block correctness, determinism, or the legal record.
+     * Fail-open: if a face file is unreadable, that face is skipped and
+     * Chromium's default sans is used (still zero external requests).
+     */
+    private function embeddedBrandFontFaces(): string
+    {
+        $fontDir = base_path('vendor/dompdf/dompdf/lib/fonts');
+        $faces = [
+            ['family' => 'Plus Jakarta Sans', 'weight' => 400, 'style' => 'normal', 'file' => 'DejaVuSans.ttf'],
+            ['family' => 'Plus Jakarta Sans', 'weight' => 700, 'style' => 'normal', 'file' => 'DejaVuSans-Bold.ttf'],
+            ['family' => 'Plus Jakarta Sans', 'weight' => 400, 'style' => 'italic', 'file' => 'DejaVuSans-Oblique.ttf'],
+            ['family' => 'Dancing Script',    'weight' => 400, 'style' => 'normal', 'file' => 'DejaVuSans.ttf'],
+            ['family' => 'Dancing Script',    'weight' => 700, 'style' => 'normal', 'file' => 'DejaVuSans-Bold.ttf'],
+        ];
+
+        $css = '';
+        $cache = [];
+        foreach ($faces as $f) {
+            $path = $fontDir . DIRECTORY_SEPARATOR . $f['file'];
+            if (!array_key_exists($f['file'], $cache)) {
+                $cache[$f['file']] = is_readable($path)
+                    ? base64_encode((string) file_get_contents($path))
+                    : null;
+            }
+            $b64 = $cache[$f['file']];
+            if ($b64 === null) {
+                continue; // fail-open — skip this face, no external fallback
+            }
+            $css .= "@font-face{font-family:'{$f['family']}';font-style:{$f['style']};"
+                  . "font-weight:{$f['weight']};font-display:block;"
+                  . "src:url(data:font/ttf;base64,{$b64}) format('truetype');}\n";
+        }
+
+        return $css;
+    }
+
+    /**
+     * Make the PDF source fully self-contained: inline local storage assets
+     * (agency logo etc.) as base64 data: URIs and neutralise any remaining
+     * remote/loopback resource the renderer would issue a network request
+     * for. After this, Puppeteer's page.goto fetches NOTHING over the
+     * network — eliminating the loopback-logo stall on a single-threaded
+     * server. Fail-open: an unresolved local asset is left untouched; an
+     * unresolved REMOTE <img> is replaced with a 1x1 transparent pixel so
+     * it can never block the load event.
+     */
+    private function inlineLocalAssetsAndStripRemote(string $html): string
+    {
+        if (trim($html) === '') {
+            return $html;
+        }
+
+        $mimeFor = function (string $path): string {
+            return match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
+                'jpg', 'jpeg' => 'image/jpeg',
+                'png'         => 'image/png',
+                'gif'         => 'image/gif',
+                'svg'         => 'image/svg+xml',
+                'webp'        => 'image/webp',
+                default       => 'image/jpeg',
+            };
+        };
+
+        // Resolve a "/storage/<rel>" web path (absolute, loopback, or bare)
+        // to a local file under the public disk; return base64 data URI or
+        // null if it cannot be resolved locally.
+        $toDataUri = function (string $url) use ($mimeFor): ?string {
+            $clean = preg_replace('/[?#].*$/', '', $url);
+            if (!preg_match('#(?:^|//[^/]+)?/storage/(.+)$#i', $clean, $m)) {
+                return null;
+            }
+            $rel = ltrim($m[1], '/');
+            $candidates = [
+                storage_path('app/public/' . $rel),
+                public_path('storage/' . $rel),
+            ];
+            foreach ($candidates as $file) {
+                if (is_file($file) && is_readable($file)) {
+                    return 'data:' . $mimeFor($file) . ';base64,'
+                        . base64_encode((string) file_get_contents($file));
+                }
+            }
+            return null;
+        };
+
+        $transparentPx = 'data:image/png;base64,'
+            . 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgAAIAAAUAAeImBZsAAAAASUVORK5CYII=';
+
+        // 1. <img src="..."> — inline local storage assets; any remaining
+        //    remote/loopback src becomes a transparent pixel (no request).
+        $html = preg_replace_callback(
+            '#(<img\b[^>]*\bsrc=)(["\'])(.*?)\2#is',
+            function ($mm) use ($toDataUri, $transparentPx) {
+                $src = $mm[3];
+                if (stripos($src, 'data:') === 0) {
+                    return $mm[0];
+                }
+                $data = $toDataUri($src);
+                if ($data !== null) {
+                    return $mm[1] . $mm[2] . $data . $mm[2];
+                }
+                if (preg_match('#^(?:https?:)?//#i', $src) || str_contains($src, '127.0.0.1') || str_contains($src, 'localhost')) {
+                    return $mm[1] . $mm[2] . $transparentPx . $mm[2];
+                }
+                return $mm[0]; // local/relative non-storage — leave as-is
+            },
+            $html
+        );
+
+        // 2. Remove any remaining remote stylesheet/script the renderer
+        //    would fetch (googleapis already stripped above; this catches
+        //    any other remote <link rel=stylesheet>/<script src>).
+        $html = preg_replace('#<link\b[^>]*\bhref=["\'](?:https?:)?//[^"\']*["\'][^>]*>#i', '', $html);
+        $html = preg_replace('#<script\b[^>]*\bsrc=["\'](?:https?:)?//[^"\']*["\'][^>]*>\s*</script>#i', '', $html);
+
+        return $html;
+    }
+
+    /**
      * CSS rules to hide interactive UI elements from PDF output.
      */
     private function getPdfCleanupCss(): string
@@ -2000,15 +2505,38 @@ HTML;
 /* Hide interactive signing UI elements */
 .web-sig-prompt { display: none !important; }
 .init-prompt { display: none !important; }
-.web-sig-interactive {
-    border: 1px solid #94a3b8 !important;
+/* Neutralise interactive signing-UI state in the FLATTENED PDF ONLY.
+   The green/dashed box, tinted background and 0.8 opacity are correct
+   DURING signing but must NOT appear in a legal PDF. Selectors match the
+   signing view's specificity (.web-sig-interactive.web-sig-signed) so its
+   !important box rule cannot win by specificity + source order. Every
+   signed surface — agent, seller, seller_2…seller_n, native OR
+   resolver-injected — collapses to ONE consistent neutral signature line
+   (border-bottom kept; box/tint/opacity stripped). */
+.web-sig-interactive,
+.web-sig-interactive.web-sig-signed,
+.web-sig-signed,
+.web-sig-other-signed,
+.web-sig-other-party {
+    border: none !important;
+    border-bottom: 1px solid #333 !important;
     background: transparent !important;
-    min-height: 28pt;
+    box-shadow: none !important;
+    opacity: 1 !important;
 }
+/* Container-independent signature size: a fixed box (aspect preserved via
+   object-fit) so the SAME capture renders identically whether its cell is
+   full-width (agent, cols-1) or half-width (seller, cols-2). A stylesheet
+   !important beats embedSigIntoElement's inline max-height. Height equals
+   the previous 50px cap → no vertical growth → no re-pagination (§19.7). */
 .web-sig-signed-img {
-    display: block;
-    max-height: 50px;
-    object-fit: contain;
+    display: block !important;
+    width: 160px !important;
+    height: 50px !important;
+    max-height: 50px !important;
+    object-fit: contain !important;
+    margin: 2px auto !important;
+    opacity: 1 !important;
 }
 /* Hide marker overlays, toolbars, panels */
 [class*="marker-overlay"],
@@ -2239,9 +2767,12 @@ CSS;
                 ->with('error', 'Signed PDF has not been generated yet. Please try again later.');
         }
 
-        $pdfPath = storage_path("app/{$template->signed_pdf_path}");
+        // Resolve via the 'local' disk (where signed PDFs are written) —
+        // raw storage_path('app/..') is one dir outside the disk root.
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+        $pdfPath = $disk->path($template->signed_pdf_path);
 
-        if (!file_exists($pdfPath)) {
+        if (!$disk->exists($template->signed_pdf_path)) {
             Log::error('Signed PDF file not found on disk', [
                 'path' => $template->signed_pdf_path,
                 'template_id' => $template->id,
@@ -2519,5 +3050,934 @@ CSS;
             'rejected' => true,
             'acceptance_id' => $acceptance->id,
         ]);
+    }
+
+    /**
+     * Phase 1B.6 — extract numbered clause refs + previews from a document
+     * HTML body so the Add Condition + Flag Clause modals can offer a
+     * "Relates to clause" / "Flag clause" picker.
+     *
+     * Matches paragraphs/list items/divs that begin with a clause-number
+     * pattern (1., 1.1, 4.8, 12.3.4). Skips anything inside an
+     * .insertable-block container.
+     *
+     * @return array<int, array{ref:string, preview:string}>
+     */
+    public function extractNumberedClauses(?string $documentHtml): array
+    {
+        if (! is_string($documentHtml) || $documentHtml === '') {
+            return [];
+        }
+
+        // Strip insertable-block scopes first so we don't pick up
+        // conditions inside their own block as "clauses".
+        $stripped = preg_replace(
+            '/<div\b[^>]*class="[^"]*insertable-block[^"]*"[^>]*>.*?<\/div>/si',
+            '',
+            $documentHtml
+        ) ?? $documentHtml;
+
+        $clauses = [];
+        $seen = [];
+
+        if (preg_match_all('/<(p|li|div)\b[^>]*>(.*?)<\/\1>/si', $stripped, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $inner = trim(strip_tags($m[2]));
+                if ($inner === '') continue;
+                if (preg_match('/^\s*(\d+(?:\.\d+)*)\b[\.\s]\s*(.*)$/su', $inner, $cm)) {
+                    $ref = $cm[1];
+                    if (isset($seen[$ref])) continue;
+                    $seen[$ref] = true;
+                    $preview = trim(preg_replace('/\s+/', ' ', $cm[2]));
+                    $clauses[] = [
+                        'ref'     => $ref,
+                        'preview' => mb_substr($preview, 0, 80) . (mb_strlen($preview) > 80 ? '…' : ''),
+                    ];
+                }
+            }
+        }
+
+        return $clauses;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Phase 1B.5 — recipient-side Other Conditions, strikethrough, and
+    // focused initialing endpoints + helpers.
+    // ─────────────────────────────────────────────────────────────────
+
+    /**
+     * GET surface routed to from show() when amendment_status indicates
+     * an initialing cascade is in progress for this signing party.
+     */
+    private function showInitialingView(SignatureRequest $signingRequest, string $token)
+    {
+        $template = $signingRequest->template;
+
+        // Amendments that are approved + still need initials from this party.
+        $amendments = DocumentAmendment::query()
+            ->where('signature_template_id', $template->id)
+            ->where('status', DocumentAmendment::STATUS_ACCEPTED)
+            ->orderBy('id')
+            ->get();
+
+        $alreadyInitialedAmendmentIds = ConditionInitial::query()
+            ->whereIn('amendment_id', $amendments->pluck('id'))
+            ->where('signature_request_id', $signingRequest->id)
+            ->pluck('amendment_id')
+            ->unique();
+
+        $pendingAmendments = $amendments->reject(
+            fn($a) => $alreadyInitialedAmendmentIds->contains($a->id)
+        )->values();
+
+        // Build initialing items per pending amendment: associated conditions
+        // and strikethroughs.
+        $items = [];
+        foreach ($pendingAmendments as $amendment) {
+            $conds = DocumentCondition::query()
+                ->where('amendment_id', $amendment->id)
+                ->whereNull('superseded_at')
+                ->orderBy('condition_number')
+                ->get();
+            $strikes = DocumentClauseStrikethrough::query()
+                ->where('amendment_id', $amendment->id)
+                ->get();
+            $items[] = [
+                'amendment'      => $amendment,
+                'conditions'     => $conds,
+                'strikethroughs' => $strikes,
+            ];
+        }
+
+        return view('docuperfect.signatures.external.initialing', [
+            'request'      => $signingRequest,
+            'template'     => $template,
+            'document'     => $template->document,
+            'token'        => $token,
+            'pendingItems' => $items,
+            'noItems'      => empty($items),
+        ]);
+    }
+
+    /**
+     * POST /docuperfect/api/sign/{token}/conditions
+     * Recipient adds a condition to one of the document's insertable blocks.
+     */
+    public function addCondition(Request $request, string $token): \Illuminate\Http\JsonResponse
+    {
+        $signingRequest = SignatureRequest::where('token', $token)
+            ->with('template')
+            ->firstOrFail();
+
+        if (! $this->signerCanAct($signingRequest)) {
+            return response()->json(['error' => 'Not authorised at this stage.'], 403);
+        }
+
+        $validated = $request->validate([
+            'block_id'              => ['required', 'string', 'max:100'],
+            'block_purpose'         => ['required', 'in:other_conditions,included_items,excluded_items,custom_named'],
+            'content'               => ['required', 'string', 'max:4000'],
+            // Phase 1B.6 — recipient writes are always source=custom (no
+            // library access from the recipient side). Accept the field for
+            // backward compatibility with stored client payloads but force
+            // the value to 'custom' below.
+            'source'                => ['sometimes', 'in:library,custom'],
+            'library_clause_id'     => ['nullable', 'integer'],
+            // Phase 1B.8: relates_to_clause_ref dropdown removed from the
+            // recipient modal. The DB column is retained for legacy rows;
+            // recipient writes no longer populate it.
+        ]);
+        $validated['source'] = 'custom';
+        $validated['library_clause_id'] = null;
+
+        $template = $signingRequest->template;
+        $document = $template->document;
+        $agencyId = $signingRequest->template?->creator?->effectiveAgencyId();
+
+        $result = DB::transaction(function () use ($validated, $signingRequest, $template, $document, $agencyId) {
+            $amendment = $this->openOrReusePendingAmendment(
+                $template,
+                $document,
+                DocumentAmendment::TYPE_ADDITION,
+                originalText: '',
+                newText: $validated['content']
+            );
+
+            $next = (int) DocumentCondition::query()
+                ->where('signature_template_id', $template->id)
+                ->where('block_id', $validated['block_id'])
+                ->whereNull('superseded_at')
+                ->max('condition_number');
+
+            $condition = DocumentCondition::create([
+                'signature_template_id' => $template->id,
+                'agency_id'             => $agencyId,
+                'block_id'              => $validated['block_id'],
+                'block_purpose'         => $validated['block_purpose'],
+                'condition_number'      => $next + 1,
+                'content'               => $validated['content'],
+                'is_locked'             => false,
+                'is_override'           => false,
+                'added_by_user_id'      => $signingRequest->signed_by_user_id ?? null,
+                'added_by_party_id'     => $signingRequest->id,
+                'added_via'             => 'recipient_signing',
+                'source'                => $validated['source'],
+                'library_clause_id'     => $validated['library_clause_id'] ?? null,
+                'amendment_id'          => $amendment->id,
+            ]);
+
+            $template->update([
+                'amendment_status' => SignatureTemplate::AMENDMENT_STATUS_PENDING_REVIEW,
+                'status'           => SignatureTemplate::STATUS_AMENDMENT_REVIEW,
+            ]);
+
+            SignatureAuditLog::log(
+                $template,
+                'condition_added_by_recipient',
+                SignatureAuditLog::ACTOR_SIGNER,
+                $signingRequest->signer_name ?? 'Unknown',
+                metadata: [
+                    'amendment_id'  => $amendment->id,
+                    'condition_id'  => $condition->id,
+                    'block_id'      => $validated['block_id'],
+                    'block_purpose' => $validated['block_purpose'],
+                ],
+            );
+
+            return compact('amendment', 'condition');
+        });
+
+        // Phase 1B.9 (FIX 3) — render the new row HTML server-side so the
+        // client can append it in place without reloading the page (the
+        // previous location.reload() wiped Alpine signature state — the
+        // critical reset bug Phase 1B.9 eliminates).
+        $newCondition = $result['condition']->fresh(['initials']);
+        $renderedRow  = app(\App\Services\Docuperfect\InsertableBlockRenderer::class)
+            ->renderConditionRowPublic(
+                $newCondition,
+                \App\Services\Docuperfect\InsertableBlockRenderer::CONTEXT_RECIPIENT_SIGNING,
+                $signingRequest->template,
+                $token,
+                $signingRequest->party_role
+            );
+
+        return response()->json([
+            'ok'               => true,
+            'condition'        => $newCondition,
+            'amendment_id'     => $result['amendment']->id,
+            'rendered_row'     => $renderedRow,
+            'amendment_status' => 'pending_review',
+        ], 201);
+    }
+
+    /**
+     * POST /docuperfect/api/sign/{token}/flag-clause   (Phase 1B.6 — FIX 2)
+     *
+     * Recipient flags a numbered clause with a suggested change. Creates a
+     * DocumentAmendment row with amendment_type = 'flag_raised' (existing
+     * Phase 2 ES-4 enum value) and ALSO writes through to the legacy
+     * web_template_data.clause_flags JSON so the orange-flag display
+     * survives page refresh.
+     *
+     * Replaces Phase 1B.5's proposeStrikethrough — the override modal was
+     * the wrong abstraction. The flag UI is the recipient's clause-change
+     * path. Agent approval of a flag-raised amendment creates a numbered
+     * condition in the Other Conditions block with is_override = true.
+     */
+    public function flagClause(Request $request, string $token): \Illuminate\Http\JsonResponse
+    {
+        $signingRequest = SignatureRequest::where('token', $token)
+            ->with('template.document')
+            ->firstOrFail();
+
+        if (! $this->signerCanAct($signingRequest)) {
+            return response()->json(['error' => 'Not authorised at this stage.'], 403);
+        }
+
+        $validated = $request->validate([
+            'clause_ref'           => ['required', 'string', 'max:50'],
+            'clause_original_text' => ['required', 'string', 'max:4000'],
+            'suggested_change'     => ['required', 'string', 'max:4000'],
+            'reason'               => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $template = $signingRequest->template;
+        $document = $template->document;
+
+        $result = DB::transaction(function () use ($validated, $signingRequest, $template, $document) {
+            $version = (int) ($template->document_version ?? 1);
+
+            // Compose the flag-raised reason text — pair the suggested
+            // change with an optional why-explanation so the agent review
+            // surface (Phase 1B AmendmentController) has full context.
+            $flagReason = $validated['suggested_change'];
+            if (! empty($validated['reason'])) {
+                $flagReason .= "\n\nReason: " . $validated['reason'];
+            }
+
+            $amendment = DocumentAmendment::create([
+                'document_id'             => $document?->id,
+                'signature_template_id'   => $template->id,
+                'amended_by_request_id'   => $signingRequest->id,
+                'amendment_type'          => DocumentAmendment::TYPE_FLAG_RAISED,
+                'flag_origin'             => DocumentAmendment::FLAG_ORIGIN_SIGNING_PARTY,
+                'flag_clause_ref'         => $validated['clause_ref'],
+                'flag_reason'             => $flagReason,
+                'section_reference'       => 'Clause ' . $validated['clause_ref'],
+                'original_text'           => $validated['clause_original_text'],
+                'new_text'                => $validated['suggested_change'],
+                'document_version_before' => $version,
+                'document_version_after'  => $version,
+                'document_hash_before'    => $template->document_hash,
+                'document_hash_after'     => null,
+                'status'                  => DocumentAmendment::STATUS_PENDING,
+            ]);
+
+            // Phase 1B.6 (FIX 6) — write through to web_template_data
+            // .clause_flags JSON immediately so a refresh of the signing
+            // page can re-seed the visible flag indicator (was previously
+            // only persisted at signComplete time).
+            if ($document) {
+                $webData = $document->web_template_data ?? [];
+                $existing = $webData['clause_flags'][$signingRequest->party_role] ?? [];
+                $existing[] = [
+                    'clauseNum'         => $validated['clause_ref'],
+                    'concern'           => $validated['suggested_change'],
+                    'reason'            => $validated['reason'] ?? null,
+                    'amendment_id'      => $amendment->id,
+                    'flagged_at'        => now()->toIso8601String(),
+                    'status'            => 'pending_review',
+                ];
+                $webData['clause_flags'][$signingRequest->party_role] = $existing;
+                $document->update(['web_template_data' => $webData]);
+            }
+
+            $template->update([
+                'amendment_status' => SignatureTemplate::AMENDMENT_STATUS_PENDING_REVIEW,
+                'status'           => SignatureTemplate::STATUS_AMENDMENT_REVIEW,
+            ]);
+
+            SignatureAuditLog::log(
+                $template,
+                'clause_flagged_by_recipient',
+                SignatureAuditLog::ACTOR_SIGNER,
+                $signingRequest->signer_name ?? 'Unknown',
+                metadata: [
+                    'amendment_id' => $amendment->id,
+                    'clause_ref'   => $validated['clause_ref'],
+                ],
+            );
+
+            return $amendment;
+        });
+
+        // E-sign walk-fix FIX 4 — legal trail. Send the recipient an
+        // email confirming their proposed amendments are under agent
+        // review. Critical line for legal compliance: "this document
+        // is NOT legally binding until the agent has resolved your
+        // amendments and you have completed signing." Failures here
+        // never block the flag persistence — the amendment is already
+        // safe in the database; the email is the recipient-facing
+        // confirmation only.
+        try {
+            $agent = $template->creator;
+            $documentName = $template->document->name ?? 'Document';
+            $signingUrl = route('signatures.external', $signingRequest->token);
+            \Illuminate\Support\Facades\Mail::to($signingRequest->signer_email)
+                ->send((new \App\Mail\Signatures\AmendmentSubmittedToAgent(
+                    recipientName:   $signingRequest->signer_name ?? 'Signing party',
+                    documentName:    $documentName,
+                    agentName:       $agent?->name ?? 'the agent',
+                    clauseRef:       $validated['clause_ref'],
+                    suggestedChange: $validated['suggested_change'],
+                    reason:          $validated['reason'] ?? null,
+                    signingUrl:      $signingUrl,
+                ))->fromAgent($agent));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to send AmendmentSubmittedToAgent email', [
+                'amendment_id' => $result->id,
+                'recipient_email' => $signingRequest->signer_email,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return response()->json([
+            'ok'           => true,
+            'amendment_id' => $result->id,
+            'clause_ref'   => $validated['clause_ref'],
+        ], 201);
+    }
+
+    /**
+     * DELETE /docuperfect/api/sign/{token}/flag/{clauseRef}   (Phase 1B.9 — FIX 1, pre-completion)
+     *
+     * Recipient self-removes a flag they raised — allowed ONLY while the
+     * party has not yet completed signing AND the amendment is still in
+     * 'pending' state (agent hasn't acted on it).
+     *
+     * After signing completes, removal must go through the agent-initiated
+     * consent flow via FlagRemovalController.
+     */
+    public function removeOwnFlag(Request $request, string $token, string $clauseRef): \Illuminate\Http\JsonResponse
+    {
+        $signingRequest = SignatureRequest::where('token', $token)
+            ->with('template.document')
+            ->firstOrFail();
+
+        // Pre-completion gate. After completed_at is set the recipient
+        // can no longer unilaterally remove their own flag — they must
+        // go through the consent path.
+        if ($signingRequest->status === SignatureRequest::STATUS_COMPLETED
+            || $signingRequest->completed_at !== null
+        ) {
+            return response()->json([
+                'error' => 'You have already signed. Removing a flag now requires the agent to request your authenticated consent.',
+            ], 409);
+        }
+
+        $template = $signingRequest->template;
+        $document = $template?->document;
+        if (! $document) {
+            return response()->json(['error' => 'Document not found.'], 404);
+        }
+
+        // Find a pending amendment matching the clause + this party.
+        $amendment = DocumentAmendment::query()
+            ->where('signature_template_id', $template->id)
+            ->where('amendment_type', DocumentAmendment::TYPE_FLAG_RAISED)
+            ->where('flag_clause_ref', $clauseRef)
+            ->where('amended_by_request_id', $signingRequest->id)
+            ->where('status', DocumentAmendment::STATUS_PENDING)
+            ->latest('id')
+            ->first();
+
+        DB::transaction(function () use ($document, $signingRequest, $clauseRef, $amendment, $template) {
+            // Scrub the matching entry from clause_flags JSON.
+            $webData = $document->web_template_data ?? [];
+            $partyRole = $signingRequest->party_role;
+            $flagsByParty = $webData['clause_flags'] ?? [];
+            if ($partyRole && isset($flagsByParty[$partyRole]) && is_array($flagsByParty[$partyRole])) {
+                $flagsByParty[$partyRole] = array_values(array_filter(
+                    $flagsByParty[$partyRole],
+                    fn($f) => (string) ($f['clauseNum'] ?? '') !== (string) $clauseRef
+                ));
+                if (empty($flagsByParty[$partyRole])) {
+                    unset($flagsByParty[$partyRole]);
+                }
+                $webData['clause_flags'] = $flagsByParty;
+                $document->update(['web_template_data' => $webData]);
+            }
+
+            // Soft-delete the pending amendment (audit retained).
+            if ($amendment) {
+                $amendment->update(['status' => DocumentAmendment::STATUS_REJECTED]);
+                $amendment->delete();
+            }
+
+            // If this was the only pending amendment, clear amendment_status.
+            $stillPending = DocumentAmendment::query()
+                ->where('signature_template_id', $template->id)
+                ->where('status', DocumentAmendment::STATUS_PENDING)
+                ->exists();
+            if (! $stillPending) {
+                $template->update([
+                    'status'           => SignatureTemplate::STATUS_SIGNING,
+                    'amendment_status' => null,
+                ]);
+            }
+
+            SignatureAuditLog::log(
+                $template,
+                'flag_self_removed_pre_completion',
+                SignatureAuditLog::ACTOR_SIGNER,
+                $signingRequest->signer_name ?? 'Recipient',
+                metadata: [
+                    'clause_ref'    => $clauseRef,
+                    'amendment_id'  => $amendment?->id,
+                    'party_role'    => $partyRole,
+                ],
+            );
+        });
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * POST /docuperfect/api/sign/{token}/strikethroughs  (Phase 1B.5 — deprecated)
+     *
+     * Phase 1B.6 (FIX 2): retained as a soft-deprecated endpoint that 410s
+     * with a clear message. The recipient flow now uses flagClause()
+     * exclusively. Agent-side strikethrough creation (if introduced
+     * later) will go through a different path.
+     */
+    public function proposeStrikethrough(Request $request, string $token): \Illuminate\Http\JsonResponse
+    {
+        return response()->json([
+            'error' => 'The strikethrough override flow has been replaced by clause flagging. '
+                . 'Use POST /sign/{token}/flag-clause instead.',
+        ], 410);
+
+        // The original implementation is retained below behind an
+        // unreachable return so the diff stays auditable. The legacy
+        // path can be deleted in a follow-up commit once no client
+        // payload mentions it.
+        $signingRequest = SignatureRequest::where('token', $token)
+            ->with('template')
+            ->firstOrFail();
+
+        if (! $this->signerCanAct($signingRequest)) {
+            return response()->json(['error' => 'Not authorised at this stage.'], 403);
+        }
+
+        $validated = $request->validate([
+            'clause_ref'           => ['required', 'string', 'max:50'],
+            'clause_original_text' => ['required', 'string', 'max:4000'],
+            'replacement_content'  => ['required', 'string', 'max:4000'],
+            'library_clause_id'    => ['nullable', 'integer'],
+        ]);
+
+        $template = $signingRequest->template;
+        $document = $template->document;
+        $agencyId = $template?->creator?->effectiveAgencyId();
+
+        // The template MUST declare an other_conditions block for the
+        // override to have a destination. Without it, fail fast.
+        // SignatureTemplate has no direct template relation; walk through
+        // its document → template → insertable_blocks.
+        $hasOtherConditionsBlock = false;
+        $otherConditionsBlockId  = 'other_conditions';
+        $liveTemplate = $template->document?->template;
+        foreach ((array) ($liveTemplate?->insertable_blocks ?? []) as $b) {
+            if (($b['purpose'] ?? null) === 'other_conditions') {
+                $hasOtherConditionsBlock = true;
+                $otherConditionsBlockId  = (string) ($b['id'] ?? 'other_conditions');
+                break;
+            }
+        }
+        if (! $hasOtherConditionsBlock) {
+            return response()->json([
+                'error' => 'This document does not support clause overrides. Contact the agent.',
+            ], 400);
+        }
+
+        $result = DB::transaction(function () use ($validated, $signingRequest, $template, $document, $agencyId, $otherConditionsBlockId) {
+            $amendment = $this->openOrReusePendingAmendment(
+                $template,
+                $document,
+                DocumentAmendment::TYPE_STRIKEOUT,
+                originalText: $validated['clause_original_text'],
+                newText: $validated['replacement_content']
+            );
+
+            $referenced = sprintf('As per clause %s, %s', $validated['clause_ref'], $validated['replacement_content']);
+
+            $next = (int) DocumentCondition::query()
+                ->where('signature_template_id', $template->id)
+                ->where('block_id', $otherConditionsBlockId)
+                ->whereNull('superseded_at')
+                ->max('condition_number');
+
+            $condition = DocumentCondition::create([
+                'signature_template_id' => $template->id,
+                'agency_id'             => $agencyId,
+                'block_id'              => $otherConditionsBlockId,
+                'block_purpose'         => 'other_conditions',
+                'condition_number'      => $next + 1,
+                'content'               => $referenced,
+                'is_locked'             => false,
+                'is_override'           => true,
+                'overrides_clause_ref'  => $validated['clause_ref'],
+                'added_by_user_id'      => null,
+                'added_by_party_id'     => $signingRequest->id,
+                'added_via'             => 'recipient_signing',
+                'source'                => isset($validated['library_clause_id']) ? 'library' : 'custom',
+                'library_clause_id'     => $validated['library_clause_id'] ?? null,
+                'amendment_id'          => $amendment->id,
+            ]);
+
+            $strike = DocumentClauseStrikethrough::create([
+                'signature_template_id'    => $template->id,
+                'agency_id'                => $agencyId,
+                'clause_ref'               => $validated['clause_ref'],
+                'clause_original_text'     => $validated['clause_original_text'],
+                'replacement_condition_id' => $condition->id,
+                'proposed_by_user_id'      => null,
+                'proposed_by_party_id'     => $signingRequest->id,
+                'amendment_id'             => $amendment->id,
+                'status'                   => DocumentClauseStrikethrough::STATUS_PROPOSED,
+            ]);
+
+            $template->update([
+                'amendment_status' => SignatureTemplate::AMENDMENT_STATUS_PENDING_REVIEW,
+                'status'           => SignatureTemplate::STATUS_AMENDMENT_REVIEW,
+            ]);
+
+            SignatureAuditLog::log(
+                $template,
+                'strikethrough_proposed_by_recipient',
+                SignatureAuditLog::ACTOR_SIGNER,
+                $signingRequest->signer_name ?? 'Unknown',
+                metadata: [
+                    'amendment_id'  => $amendment->id,
+                    'clause_ref'    => $validated['clause_ref'],
+                    'condition_id'  => $condition->id,
+                    'strike_id'     => $strike->id,
+                ],
+            );
+
+            return compact('amendment', 'condition', 'strike');
+        });
+
+        return response()->json([
+            'ok'            => true,
+            'strikethrough' => $result['strike'],
+            'condition'     => $result['condition'],
+            'amendment_id'  => $result['amendment']->id,
+        ], 201);
+    }
+
+    /**
+     * POST /docuperfect/api/sign/{token}/conditions/{condition}/initial   (Phase 1B.7 — FIX C)
+     *
+     * Per-condition initialing for the current signing party. This is the
+     * inline initialing path used while the recipient is reading through
+     * the conditions block — distinct from initialAmendments() which is
+     * the bulk-submit path used by the focused initialing view during a
+     * full amendment-initialing cascade.
+     *
+     * Insert-only via ConditionInitial::save() (Phase 1B model protection
+     * throws DomainException on existing rows). If the party already has
+     * an initial for this condition we 409 with the existing record.
+     */
+    public function initialCondition(Request $request, string $token, int $conditionId): \Illuminate\Http\JsonResponse
+    {
+        $signingRequest = SignatureRequest::where('token', $token)
+            ->with('template')
+            ->firstOrFail();
+        if (! $this->signerCanAct($signingRequest)) {
+            return response()->json(['error' => 'Not authorised at this stage.'], 403);
+        }
+
+        $condition = DocumentCondition::query()
+            ->where('id', $conditionId)
+            ->where('signature_template_id', $signingRequest->signature_template_id)
+            ->whereNull('superseded_at')
+            ->whereNull('deleted_at')
+            ->first();
+        if (! $condition) {
+            return response()->json(['error' => 'Condition not found on this document.'], 404);
+        }
+
+        $partyKey = (string) $signingRequest->party_role;
+        if ($partyKey === '') {
+            return response()->json(['error' => 'No party_role on this signing request.'], 400);
+        }
+
+        // Duplicate-initial guard (the insert-only model would throw, but
+        // a 409 is friendlier than a 500).
+        $existing = ConditionInitial::query()
+            ->where('initialable_type', DocumentCondition::class)
+            ->where('initialable_id', $condition->id)
+            ->where('party_key', $partyKey)
+            ->first();
+        if ($existing) {
+            return response()->json([
+                'error'   => 'Already initialed by this party.',
+                'initial' => $existing,
+            ], 409);
+        }
+
+        $initial = ConditionInitial::create([
+            'initialable_type'     => DocumentCondition::class,
+            'initialable_id'       => $condition->id,
+            'party_key'            => $partyKey,
+            'signature_request_id' => $signingRequest->id,
+            'amendment_id'         => $condition->amendment_id,
+            'initial_image_path'   => null,
+            'ip_address'           => $request->ip(),
+            'user_agent'           => substr((string) $request->userAgent(), 0, 500),
+        ]);
+
+        SignatureAuditLog::log(
+            $signingRequest->template,
+            'condition_initialed',
+            SignatureAuditLog::ACTOR_SIGNER,
+            $signingRequest->signer_name ?? 'Unknown',
+            metadata: [
+                'condition_id'   => $condition->id,
+                'condition_no'   => $condition->condition_number,
+                'block_id'       => $condition->block_id,
+                'party_key'      => $partyKey,
+                'amendment_id'   => $condition->amendment_id,
+            ],
+        );
+
+        return response()->json([
+            'ok'      => true,
+            'initial' => $initial,
+        ], 201);
+    }
+
+    /**
+     * POST /docuperfect/api/sign/{token}/initial-amendments
+     * Submit per-party initials for the changed regions of one or more
+     * approved amendments. Insert-only via the ConditionInitial model.
+     */
+    public function initialAmendments(Request $request, string $token): \Illuminate\Http\JsonResponse
+    {
+        $signingRequest = SignatureRequest::where('token', $token)
+            ->with('template')
+            ->firstOrFail();
+
+        $template = $signingRequest->template;
+        if (! $template
+            || $template->status !== SignatureTemplate::STATUS_AMENDMENT_INITIALING
+        ) {
+            return response()->json(['error' => 'Document is not currently in an initialing cascade.'], 400);
+        }
+
+        $validated = $request->validate([
+            'amendments'                          => ['required', 'array', 'min:1'],
+            'amendments.*.amendment_id'           => ['required', 'integer'],
+            'amendments.*.initials'               => ['required', 'array', 'min:1'],
+            'amendments.*.initials.*.initialable_type'  => ['required', 'in:condition,strikethrough'],
+            'amendments.*.initials.*.initialable_id'    => ['required', 'integer'],
+            'amendments.*.initials.*.initial_image_path' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $partyKey = $signingRequest->party_role ?? 'unknown';
+        $created  = 0;
+
+        DB::transaction(function () use ($validated, $signingRequest, $template, $partyKey, $request, &$created) {
+            foreach ($validated['amendments'] as $amend) {
+                foreach ($amend['initials'] as $ini) {
+                    $morphClass = $ini['initialable_type'] === 'strikethrough'
+                        ? DocumentClauseStrikethrough::class
+                        : DocumentCondition::class;
+                    ConditionInitial::create([
+                        'initialable_type'     => $morphClass,
+                        'initialable_id'       => $ini['initialable_id'],
+                        'party_key'            => $partyKey,
+                        'signature_request_id' => $signingRequest->id,
+                        'amendment_id'         => $amend['amendment_id'],
+                        'initial_image_path'   => $ini['initial_image_path'] ?? null,
+                        'ip_address'           => $request->ip(),
+                        'user_agent'           => substr((string) $request->userAgent(), 0, 500),
+                    ]);
+                    $created++;
+                }
+                SignatureAuditLog::log(
+                    $template,
+                    'amendment_initialed_by_party',
+                    SignatureAuditLog::ACTOR_SIGNER,
+                    $signingRequest->signer_name ?? 'Unknown',
+                    metadata: [
+                        'amendment_id' => $amend['amendment_id'],
+                        'party'        => $partyKey,
+                    ],
+                );
+            }
+        });
+
+        // Cascade completion check — if every other signing party has also
+        // recorded initials for every accepted amendment, close the cascade.
+        $this->checkInitialingCascadeComplete($template);
+
+        return response()->json([
+            'ok'         => true,
+            'created'    => $created,
+            'next_url'   => route('signatures.external', ['token' => $token]),
+        ]);
+    }
+
+    /**
+     * Return the active pending amendment (if one exists for this template
+     * window) or open a new one. Re-using a pending amendment keeps every
+     * condition/strikethrough proposed in the same review window grouped
+     * together for the agent.
+     */
+    private function openOrReusePendingAmendment(
+        SignatureTemplate $template,
+        $document,
+        string $type,
+        string $originalText,
+        string $newText
+    ): DocumentAmendment {
+        $existing = DocumentAmendment::query()
+            ->where('signature_template_id', $template->id)
+            ->where('status', DocumentAmendment::STATUS_PENDING)
+            ->latest('id')
+            ->first();
+        if ($existing) {
+            return $existing;
+        }
+        $version = (int) ($template->document_version ?? 1);
+        return DocumentAmendment::create([
+            'document_id'             => $document?->id,
+            'signature_template_id'   => $template->id,
+            'amended_by_request_id'   => null,
+            'amendment_type'          => $type,
+            'section_reference'       => 'Other Conditions',
+            'original_text'           => $originalText,
+            'new_text'                => $newText,
+            'document_version_before' => $version,
+            'document_version_after'  => $version + 1,
+            'document_hash_before'    => $template->document_hash,
+            'document_hash_after'     => null,
+            'status'                  => DocumentAmendment::STATUS_PENDING,
+        ]);
+    }
+
+    /**
+     * Is this signing request authorised to add conditions / propose
+     * strikethroughs right now? Allowed when the request hasn't completed
+     * and the template isn't terminal-state.
+     */
+    private function signerCanAct(SignatureRequest $req): bool
+    {
+        if (in_array($req->status, [
+            SignatureRequest::STATUS_COMPLETED,
+            SignatureRequest::STATUS_DECLINED,
+        ], true)) {
+            return false;
+        }
+        $tplStatus = $req->template?->status;
+        return ! in_array($tplStatus, [
+            SignatureTemplate::STATUS_REJECTED,
+            SignatureTemplate::STATUS_CANCELLED,
+            SignatureTemplate::STATUS_EXPIRED,
+            SignatureTemplate::STATUS_COMPLETED,
+        ], true);
+    }
+
+    /**
+     * If every signing party has recorded initials for every accepted
+     * amendment, return the template to its prior signing flow.
+     */
+    private function checkInitialingCascadeComplete(SignatureTemplate $template): void
+    {
+        $acceptedAmendmentIds = DocumentAmendment::query()
+            ->where('signature_template_id', $template->id)
+            ->where('status', DocumentAmendment::STATUS_ACCEPTED)
+            ->pluck('id');
+        if ($acceptedAmendmentIds->isEmpty()) {
+            return;
+        }
+
+        $partyKeys = collect($template->requests()->where('status', '!=', SignatureRequest::STATUS_DECLINED)->get())
+            ->pluck('party_role')
+            ->unique()
+            ->values();
+
+        foreach ($acceptedAmendmentIds as $amendId) {
+            foreach ($partyKeys as $key) {
+                $initialed = ConditionInitial::query()
+                    ->where('amendment_id', $amendId)
+                    ->where('party_key', $key)
+                    ->exists();
+                if (! $initialed) {
+                    return; // still pending
+                }
+            }
+        }
+
+        // All initialed — flip back to signing state.
+        $template->update([
+            'status'           => SignatureTemplate::STATUS_SIGNING,
+            'amendment_status' => SignatureTemplate::AMENDMENT_STATUS_RESOLVED,
+        ]);
+        SignatureAuditLog::log(
+            $template,
+            'amendment_initialing_cascade_complete',
+            SignatureAuditLog::ACTOR_SYSTEM,
+            'System',
+            metadata: ['amendment_ids' => $acceptedAmendmentIds->toArray()],
+        );
+    }
+
+    /**
+     * ES-4 — promote signer-raised clause flags into first-class
+     * DocumentAmendment rows. Each flag becomes its own amendment so the
+     * agent review surface (Phase 1B) can render and action it through the
+     * same approve / reject / reject-document workflow as conditions and
+     * strikethroughs.
+     *
+     * Backward compatibility: the JSON note in
+     * docuperfect_documents.web_template_data['clause_flags'] is preserved
+     * by the caller — this method only ADDS the relational record.
+     *
+     * Failures are logged but never abort the signing transaction: a flag
+     * record that fails to write should not block the signer's signature
+     * commit.
+     *
+     * @param array $clauseFlags Array of { clauseNum, clauseIndex, concern }
+     *
+     * Spec: .ai/specs/esign-v3-complete-spec.md §17 ES-4
+     */
+    private function promoteClauseFlagsToAmendments(
+        SignatureRequest $signingRequest,
+        $document,
+        array $clauseFlags
+    ): void {
+        try {
+            $template = $signingRequest->template
+                ?? SignatureTemplate::find($signingRequest->signature_template_id);
+            if (! $template) {
+                return;
+            }
+
+            foreach ($clauseFlags as $flag) {
+                $clauseRef = $flag['clauseNum'] ?? $flag['clause_num'] ?? null;
+                $reason    = trim((string) ($flag['concern'] ?? $flag['reason'] ?? ''));
+                if ($reason === '') {
+                    // A flag without a concern note is still a signal the
+                    // signer stopped — but we can't action a blank. Skip
+                    // promotion in that case (the JSON note is still kept).
+                    continue;
+                }
+
+                $currentVersion = (int) ($template->document_version ?? 1);
+
+                DocumentAmendment::create([
+                    'document_id'              => $document->id,
+                    'signature_template_id'    => $template->id,
+                    'amended_by_request_id'    => $signingRequest->id,
+                    'amendment_type'           => DocumentAmendment::TYPE_FLAG_RAISED,
+                    'flag_origin'              => DocumentAmendment::FLAG_ORIGIN_SIGNING_PARTY,
+                    'flag_clause_ref'          => $clauseRef ? (string) $clauseRef : null,
+                    'flag_reason'              => $reason,
+                    'section_reference'        => $clauseRef ? ('Clause ' . $clauseRef) : 'Flag',
+                    'original_text'            => '',
+                    'new_text'                 => $reason,
+                    'document_version_before'  => $currentVersion,
+                    'document_version_after'   => $currentVersion,
+                    'document_hash_before'     => $template->document_hash,
+                    'document_hash_after'      => null,
+                    'status'                   => DocumentAmendment::STATUS_PENDING,
+                ]);
+            }
+
+            // Transition into review state so the agent picks it up.
+            $template->update([
+                'status'           => SignatureTemplate::STATUS_AMENDMENT_REVIEW,
+                'amendment_status' => SignatureTemplate::AMENDMENT_STATUS_PENDING_REVIEW,
+            ]);
+
+            SignatureAuditLog::log(
+                $template,
+                'flag_raised',
+                SignatureAuditLog::ACTOR_SIGNER,
+                $signingRequest->signer_name ?? 'Unknown',
+                metadata: [
+                    'flag_count'   => count($clauseFlags),
+                    'party_role'   => $signingRequest->party_role,
+                ],
+            );
+        } catch (\Throwable $e) {
+            Log::warning('ES-4 flag promotion failed', [
+                'request_id' => $signingRequest->id,
+                'error'      => $e->getMessage(),
+            ]);
+        }
     }
 }

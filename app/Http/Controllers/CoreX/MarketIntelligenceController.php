@@ -4,18 +4,29 @@ namespace App\Http\Controllers\CoreX;
 
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
+use App\Models\P24ImportLog;
+use App\Models\P24Listing;
+use App\Models\P24PriceChange;
+use App\Models\Prospecting\TrackedProperty;
 use App\Models\ProspectingClaim;
 use App\Models\ProspectingListing;
 use App\Models\User;
+use App\Services\AI\AnthropicGateway;
+use App\Services\AI\DTOs\NarrativeRequest;
+use App\Services\MarketIntelligence\OpportunityPocketService;
+use App\Services\MarketIntelligence\StrategicBriefService;
 use App\Services\Prospecting\ProspectingConfigurationService;
 use App\Services\Prospecting\ProspectingIntelligenceService;
 use App\Services\Prospecting\ProspectingListingResolver;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Models\SuggestedActionThresholds;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -34,23 +45,20 @@ use Illuminate\Support\Facades\Storage;
  */
 class MarketIntelligenceController extends Controller
 {
-    public function index(
+    /**
+     * Work tab — the daily working surface. Builds the canvass-pool listing
+     * list with filters, action presets, and the "This Week" hero block
+     * (Phase D2). Legacy ?mode=analyse query branch removed — Analyse lives
+     * at its own route now (Phase D1).
+     *
+     * Spec: .ai/specs/mic-complete-spec.md §5.2, §5.3, §6.
+     */
+    public function work(
         Request $request,
         ProspectingIntelligenceService $intelligence,
         ProspectingListingResolver $resolver,
         ProspectingConfigurationService $config,
     ) {
-        // F.6 — when ?mode=analyse, dispatch to the Analyse mode handler.
-        // Work mode (default) continues to render the legacy listings flow.
-        if ($request->query('mode') === 'analyse') {
-            return $this->analyse(
-                $request,
-                app(\App\Services\MarketIntelligence\AnalyseModeOrchestrator::class),
-                $intelligence,
-                $config,
-            );
-        }
-
         $user = $request->user();
         $agencyId = $user->effectiveAgencyId() ?? $user->agency_id ?? 1;
         $isProspectingManager = $user?->hasPermission('prospecting_setup.manage') ?? false;
@@ -483,7 +491,25 @@ class MarketIntelligenceController extends Controller
                 ->count(),
         );
 
-        return view('corex.market-intelligence.index', compact(
+        // Phase D2 — "This Week" hero block tiles. Deterministic for now;
+        // AI narration plugs into TileDTO->sentence at Phase E1.
+        $tiles = collect();
+        $tilesGeneratedAt = null;
+        try {
+            $tiles = app(\App\Services\MarketIntelligence\ThisWeekTileBuilder::class)->buildFor($user);
+            // Read generated_at from the cache row we just wrote — same query
+            // pattern the builder uses internally; lets the hero block show
+            // "Generated X ago".
+            $cacheKey = 'tiles:user:' . $user->id . ':date:' . now()->toDateString();
+            $tilesGeneratedAt = \App\Models\AI\AINarrativeCache::query()
+                ->where('cache_key', $cacheKey)
+                ->whereNull('deleted_at')
+                ->value('generated_at');
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Work tab tile build failed', ['error' => $e->getMessage()]);
+        }
+
+        return view('corex.market-intelligence.work', compact(
             'listings', 'stats', 'suburbs', 'propertyTypes', 'users', 'claimStats', 'regenerating',
             'prospectingSetupTowns', 'prospectingSetupPropertyTypes', 'prospectingSetupBedroomSegments',
             'prospectingSetupPriceBandsSale', 'prospectingSetupPriceBandsRental', 'prospectingSetupSuggestionRegions',
@@ -496,7 +522,9 @@ class MarketIntelligenceController extends Controller
             // F.2 Work mode shell data
             'snapshotKpis', 'actionPresetCounts', 'filterRailAggregates',
             'demandPockets', 'actionPreset', 'includeInStock',
-            'marketIntelligenceSidebarCount'
+            'marketIntelligenceSidebarCount',
+            // Phase D2 — This Week hero
+            'tiles', 'tilesGeneratedAt'
         ));
     }
 
@@ -546,7 +574,7 @@ class MarketIntelligenceController extends Controller
         // urlWith closure used by the lifted buyer-funnel partial.
         $urlWith = function (array $params) {
             $merged = array_merge(request()->except(['page']), $params);
-            return route('market-intelligence.index', $merged);
+            return route('market-intelligence.work', $merged);
         };
 
         // Sidebar count consistency with Work mode.
@@ -564,13 +592,908 @@ class MarketIntelligenceController extends Controller
         // shell (sidebar + top bar + theme tokens + sidebar nav state) wraps
         // the analyse body. The previous direct-return bypassed @extends
         // entirely, producing a shellless page in production.
-        return view('corex.market-intelligence.index', compact(
+        return view('corex.market-intelligence.analyse', compact(
             'data',
             'snapshotKpis', 'actionPresetCounts',
             'snapshot', 'filters', 'segmentLabels', 'urlWith',
             'isProspectingManager', 'includeInStock',
             'marketIntelligenceSidebarCount',
         ));
+    }
+
+    /**
+     * Opportunities tab — Phase D4. Replaces the D1 stub. Surfaces every
+     * TrackedProperty for the viewer's agency with filter chips, secondary
+     * dropdowns, and a strong-match-count badge per row. Detail page lives
+     * at opportunityShow() (route market-intelligence.opportunities.show).
+     *
+     * Spec: .ai/specs/mic-complete-spec.md §5.4.
+     */
+    public function opportunities(Request $request)
+    {
+        $user = $request->user();
+        $agencyId = $user->effectiveAgencyId() ?? $user->agency_id;
+        if ($agencyId === null) abort(403);
+
+        $filter = (string) $request->query('filter', 'all');
+        $suburbParam = trim((string) $request->query('suburb', ''));
+        $sourceParam = trim((string) $request->query('source', ''));
+        $statusParam = trim((string) $request->query('status', ''));
+        $search      = trim((string) $request->query('search', ''));
+
+        $base = TrackedProperty::query()
+            ->withoutGlobalScopes()
+            ->where('agency_id', $agencyId)
+            ->whereNull('deleted_at');
+
+        $query = (clone $base)
+            ->with(['primaryAddress', 'externalRefs'])
+            ->withCount(['prospectingListings as listing_count'])
+            ->withCount([
+                'prospectingListings as strong_match_count' => function ($q) {
+                    $q->whereHas('buyerMatches', fn ($qb) => $qb->where('score', '>=', 80));
+                },
+            ]);
+
+        // Filter chip — primary filter from §5.4.3.
+        match ($filter) {
+            'with_address'      => $query->whereHas('primaryAddress', fn ($q) => $q->whereNotNull('street_name')),
+            'without_address'   => $query->whereDoesntHave('primaryAddress', fn ($q) => $q->whereNotNull('street_name')),
+            'company_stock'     => $query->where(function ($q) {
+                                       $q->where('status', TrackedProperty::STATUS_PROMOTED)
+                                         ->orWhereNotNull('promoted_to_property_id');
+                                   }),
+            'recently_enriched' => $query->where('last_enriched_at', '>=', now()->subDays(7)),
+            default             => null, // 'all'
+        };
+
+        // Secondary filters.
+        if ($suburbParam !== '') {
+            $query->where('suburb_normalised', TrackedProperty::normaliseSuburb($suburbParam));
+        }
+        if ($sourceParam !== '') {
+            $query->whereExists(function ($q) use ($sourceParam, $agencyId) {
+                $q->select(\DB::raw(1))
+                  ->from('tracked_property_external_refs as tper')
+                  ->whereColumn('tper.tracked_property_id', 'tracked_properties.id')
+                  ->where('tper.agency_id', $agencyId)
+                  ->where('tper.source_type', $sourceParam)
+                  ->whereNull('tper.deleted_at');
+            });
+        }
+        if ($statusParam !== '') {
+            $query->where('status', $statusParam);
+        }
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('street_name', 'LIKE', "%{$search}%")
+                  ->orWhere('suburb', 'LIKE', "%{$search}%")
+                  ->orWhere('erf_number', 'LIKE', "%{$search}%")
+                  ->orWhere('external_id', 'LIKE', "%{$search}%")
+                  ->orWhereHas('primaryAddress', function ($qa) use ($search) {
+                      $qa->where('street_name', 'LIKE', "%{$search}%");
+                  });
+            });
+        }
+
+        $tps = $query
+            // PHASE-9E-TODO: ORDER BY strong_match_count was timing out at 30s due to
+            // correlated subquery in SELECT being computed for every tracked_property
+            // before sort. Temporarily ordering by updated_at only. Proper fix is to
+            // denormalise strong_match_count as an indexed column on tracked_properties,
+            // maintained via observer on prospecting_buyer_matches changes.
+            // See Phase 9d.1 hang investigation 2026-05-23.
+            ->orderByDesc('updated_at')
+            ->paginate(50)
+            ->withQueryString();
+
+        // ── Stats strip (§5.4.2) — agency-wide totals, NOT filter-scoped. ──
+        $stats = [
+            'total'             => (clone $base)->count(),
+            'matching_buyers'   => (clone $base)
+                ->whereHas('prospectingListings.buyerMatches', fn ($q) => $q->where('score', '>=', 80))
+                ->count(),
+            'unclaimed'         => (clone $base)
+                ->whereDoesntHave('prospectingListings.activeClaim')
+                ->count(),
+            'with_address'      => (clone $base)
+                ->whereHas('primaryAddress', fn ($q) => $q->whereNotNull('street_name'))
+                ->count(),
+            'promoted_to_stock' => (clone $base)
+                ->where(function ($q) {
+                    $q->where('status', TrackedProperty::STATUS_PROMOTED)
+                      ->orWhereNotNull('promoted_to_property_id');
+                })
+                ->count(),
+        ];
+
+        // Source attribution chips.
+        $sourceCounts = \DB::table('tracked_property_external_refs')
+            ->where('agency_id', $agencyId)
+            ->whereNull('deleted_at')
+            ->select('source_type', \DB::raw('COUNT(DISTINCT tracked_property_id) as cnt'))
+            ->groupBy('source_type')
+            ->orderByDesc('cnt')
+            ->get()
+            ->keyBy('source_type');
+
+        // Suburb dropdown options (top 30).
+        $suburbCounts = (clone $base)
+            ->whereNotNull('suburb')->where('suburb', '!=', '')
+            ->select('suburb', \DB::raw('COUNT(*) as cnt'))
+            ->groupBy('suburb')
+            ->orderByDesc('cnt')
+            ->limit(30)
+            ->get();
+
+        return view('corex.market-intelligence.opportunities', [
+            'tps'            => $tps,
+            'stats'          => $stats,
+            'sourceCounts'   => $sourceCounts,
+            'suburbCounts'   => $suburbCounts,
+            'activeFilter'   => $filter,
+            'activeSuburb'   => $suburbParam,
+            'activeSource'   => $sourceParam,
+            'activeStatus'   => $statusParam,
+            'activeSearch'   => $search,
+        ]);
+    }
+
+    /**
+     * Opportunities detail — Phase D4. Folds the Tracked-Property show page
+     * under the MIC unified URL. Reuses the C3 edit-address / add-alternative
+     * / set-primary modals via their existing /corex/tracked-properties/{tp}/
+     * address/* POST endpoints (unchanged).
+     */
+    public function opportunityShow(Request $request, TrackedProperty $tp)
+    {
+        $user = $request->user();
+        $agencyId = $user->effectiveAgencyId() ?? $user->agency_id;
+        if ($agencyId === null || (int) $tp->agency_id !== (int) $agencyId) {
+            abort(404);
+        }
+
+        $tp->load([
+            'externalRefs',
+            'promotedProperty',
+            'promotedBy',
+            'addresses' => function ($q) {
+                $q->orderByDesc('is_primary')
+                  ->orderByRaw("FIELD(confidence, 'verified', 'high', 'medium', 'low')")
+                  ->orderByDesc('last_seen_at');
+            },
+            'addresses.verifier',
+            'primaryAddress',
+            'primaryAddress.verifier',
+            'prospectingListings',
+        ]);
+
+        $linkedListings = \DB::table('prospecting_listings')
+            ->where('tracked_property_id', $tp->id)
+            ->where('agency_id', $agencyId)
+            ->whereNull('deleted_at')
+            ->select(
+                'id', 'portal_source', 'portal_ref', 'portal_url',
+                'address', 'suburb', 'price', 'bedrooms', 'bathrooms',
+                'property_type', 'first_seen_at', 'is_active'
+            )
+            ->orderByDesc('first_seen_at')
+            ->get();
+
+        $externalRefsBySource = $tp->externalRefs->groupBy('source_type');
+        $chain = $tp->source_chain ?? [];
+
+        return view('corex.market-intelligence.opportunity-detail', [
+            'tp'                   => $tp,
+            'linkedListings'       => $linkedListings,
+            'externalRefsBySource' => $externalRefsBySource,
+            'sourceChain'          => $chain,
+        ]);
+    }
+
+    /**
+     * Market Pulse tab — Phase D6. Folds the legacy /admin/p24 surface into
+     * the unified MIC URL. Same queries as Admin\P24Controller::index();
+     * different chrome (tabs + MIC look). The /admin/p24 root GET still
+     * 301-redirects here (Phase D1).
+     *
+     * Spec: .ai/specs/mic-complete-spec.md §5.6.
+     */
+    public function marketPulse(Request $request)
+    {
+        $user = $request->user();
+        $agencyId = $user->effectiveAgencyId() ?? $user->agency_id;
+        if ($agencyId === null) abort(403);
+
+        $now = Carbon::now();
+        $thisMonthStart = $now->copy()->startOfMonth()->toDateString();
+
+        $lastImport = P24ImportLog::orderByDesc('created_at')->first();
+        $emailsProcessed30d = P24ImportLog::where('created_at', '>=', $now->copy()->subDays(30))
+            ->where('status', 'success')
+            ->count();
+        $activeListings = P24Listing::active()->count();
+        $newThisMonth = P24Listing::where('first_seen_date', '>=', $thisMonthStart)->count();
+        $avgAskingPrice = (float) P24Listing::active()->avg('asking_price');
+
+        $imapConfigured = !empty(config('services.p24_imap.host'))
+            && !empty(config('services.p24_imap.username'))
+            && !empty(config('services.p24_imap.password'));
+
+        $kpis = [
+            'last_import_at'      => $lastImport?->created_at,
+            'last_import_status'  => $lastImport?->status,
+            'emails_30d'          => $emailsProcessed30d,
+            'active_listings'     => $activeListings,
+            'new_this_month'      => $newThisMonth,
+            'avg_price'           => $avgAskingPrice,
+            'imap_status'         => $imapConfigured ? 'configured' : 'not configured',
+        ];
+
+        $suburbStats = P24Listing::active()
+            ->select(
+                'suburb',
+                DB::raw('COUNT(*) as listing_count'),
+                DB::raw('AVG(asking_price) as avg_price'),
+                DB::raw('MIN(asking_price) as min_price'),
+                DB::raw('MAX(asking_price) as max_price'),
+                DB::raw('SUM(CASE WHEN first_seen_date >= "' . $thisMonthStart . '" THEN 1 ELSE 0 END) as new_this_month'),
+            )
+            ->whereNotNull('suburb')
+            ->groupBy('suburb')
+            ->orderByDesc('listing_count')
+            ->get();
+
+        $recentListings = P24Listing::orderByDesc('first_seen_date')
+            ->orderByDesc('created_at')
+            ->limit(200)
+            ->get(['id', 'p24_listing_number', 'p24_url', 'suburb', 'property_type', 'asking_price', 'bedrooms', 'bathrooms', 'listing_status', 'first_seen_date']);
+
+        $priceChanges = P24PriceChange::with('listing:id,p24_listing_number,p24_url,suburb')
+            ->orderByDesc('change_date')
+            ->orderByDesc('created_at')
+            ->limit(200)
+            ->get();
+
+        $importLog = P24ImportLog::orderByDesc('created_at')
+            ->limit(50)
+            ->get();
+
+        return view('corex.market-intelligence.market-pulse', compact(
+            'kpis',
+            'suburbStats',
+            'recentListings',
+            'priceChanges',
+            'importLog',
+        ));
+    }
+
+    /**
+     * Phase D5 — force-refresh the agency's Strategic Brief AI narrative.
+     * Permission-gated (mic.regenerate_brief) at the route level. Bypasses
+     * the 24h cache by setting forceRefresh on the gateway request.
+     */
+    public function regenerateBrief(Request $request)
+    {
+        $user = $request->user();
+        $agencyId = $user->effectiveAgencyId() ?? $user->agency_id;
+        if ($agencyId === null) abort(403);
+
+        try {
+            app(StrategicBriefService::class)->buildFor((int) $agencyId, forceRefresh: true);
+            return redirect()->route('market-intelligence.analyse')
+                ->with('status', 'Strategic brief regenerated.');
+        } catch (\Throwable $e) {
+            Log::warning('regenerateBrief failed', ['error' => $e->getMessage()]);
+            return redirect()->route('market-intelligence.analyse')
+                ->with('error', 'Could not regenerate brief: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Phase D5 — lazy demand-pocket narrative. Returns JSON for the slide-
+     * over panel in the Analyse heatmap. Cached 24h via AnthropicGateway.
+     *
+     * Spec: .ai/specs/mic-complete-spec.md §4.4 + §5.5.3.
+     */
+    public function pocketNarrative(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $agencyId = $user->effectiveAgencyId() ?? $user->agency_id;
+        if ($agencyId === null) abort(403);
+
+        $request->validate([
+            'suburb'   => ['required', 'string', 'max:120'],
+            'bedrooms' => ['required', 'integer', 'min:1', 'max:20'],
+        ]);
+
+        $suburb = trim((string) $request->query('suburb'));
+        $bedrooms = (int) $request->query('bedrooms');
+        $suburbSlug = str_replace([' ', '/'], ['-', '-'], strtolower($suburb));
+
+        // Build the pocket facts from existing data — agency_id-scoped.
+        $facts = $this->buildPocketFacts((int) $agencyId, $suburb, $bedrooms);
+        $fallbackText = $this->buildPocketFallback($facts);
+
+        try {
+            $response = app(AnthropicGateway::class)->generate(new NarrativeRequest(
+                narrativeType:   'suburb_pocket',
+                cacheKey:        "demand_pocket:agency:{$agencyId}:{$suburbSlug}:{$bedrooms}bed",
+                modelAlias:      'quality',
+                systemPrompt:    $this->pocketSystemPrompt(),
+                userPrompt:      $this->pocketUserPrompt($facts),
+                inputData:       $facts,
+                maxTokens:       300,
+                temperature:     0.6,
+                cacheTtlMinutes: 24 * 60,
+                agencyId:        (int) $agencyId,
+                fallbackData:    ['text' => $fallbackText],
+                promptVersion:   'v1',
+            ));
+
+            return response()->json([
+                'suburb'        => $suburb,
+                'bedrooms'      => $bedrooms,
+                'narrative'     => $response->outputText,
+                'from_cache'    => $response->fromCache,
+                'from_fallback' => $response->fromFallback,
+                'generated_at'  => $response->generatedAt->toIso8601String(),
+                'facts'         => $facts,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('pocketNarrative failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'suburb'        => $suburb,
+                'bedrooms'      => $bedrooms,
+                'narrative'     => $fallbackText,
+                'from_cache'    => false,
+                'from_fallback' => true,
+                'generated_at'  => now()->toIso8601String(),
+                'facts'         => $facts,
+            ]);
+        }
+    }
+
+    /**
+     * Phase D5 — suburb deep-dive panel (HTML partial — slide-over body).
+     * Pulls active listings + buyer demand + an AI summary if the surface
+     * has anything to say. Market history is sparse until Phase F populates
+     * market_data_points; the panel explains that gracefully.
+     */
+    public function suburbDeepDive(Request $request, string $suburb)
+    {
+        $user = $request->user();
+        $agencyId = $user->effectiveAgencyId() ?? $user->agency_id;
+        if ($agencyId === null) abort(403);
+
+        $suburb = trim($suburb);
+        if ($suburb === '') abort(404);
+
+        $facts = $this->buildSuburbDeepDiveFacts((int) $agencyId, $suburb);
+        $fallbackText = $this->buildSuburbDeepDiveFallback($facts);
+
+        $narrative = $fallbackText;
+        $fromCache = false;
+        $fromFallback = true;
+        $generatedAt = now();
+
+        try {
+            $suburbSlug = str_replace([' ', '/'], ['-', '-'], strtolower($suburb));
+            $response = app(AnthropicGateway::class)->generate(new NarrativeRequest(
+                narrativeType:   'suburb_pocket',
+                cacheKey:        "suburb_deep_dive:agency:{$agencyId}:{$suburbSlug}",
+                modelAlias:      'quality',
+                systemPrompt:    $this->suburbDeepDiveSystemPrompt(),
+                userPrompt:      $this->suburbDeepDiveUserPrompt($facts),
+                inputData:       $facts,
+                maxTokens:       300,
+                temperature:     0.6,
+                cacheTtlMinutes: 24 * 60,
+                agencyId:        (int) $agencyId,
+                fallbackData:    ['text' => $fallbackText],
+                promptVersion:   'v1',
+            ));
+            $narrative = $response->outputText;
+            $fromCache = $response->fromCache;
+            $fromFallback = $response->fromFallback;
+            $generatedAt = $response->generatedAt;
+        } catch (\Throwable $e) {
+            Log::warning('suburbDeepDive AI failed', ['error' => $e->getMessage()]);
+        }
+
+        return view('corex.market-intelligence.partials.suburb-deep-dive', [
+            'suburb'       => $suburb,
+            'facts'        => $facts,
+            'narrative'    => $narrative,
+            'fromCache'    => $fromCache,
+            'fromFallback' => $fromFallback,
+            'generatedAt'  => $generatedAt,
+        ]);
+    }
+
+    /**
+     * MIC Phase G2 — BM team dashboard. Per-agent claim + outreach stats
+     * for managers, ordered to surface the worst performers first (highest
+     * stale count → lowest feedback rate).
+     *
+     * Permission: mic.view_team (seeded Phase A2).
+     *
+     * Spec: .ai/specs/mic-complete-spec.md §10.2.
+     */
+    public function team(Request $request)
+    {
+        $user = $request->user();
+        if (!$user?->hasPermission('mic.view_team')) abort(403);
+
+        $agencyId = (int) ($user->effectiveAgencyId() ?? $user->agency_id);
+        if ($agencyId === 0) abort(403);
+
+        $thirtyDaysAgo = Carbon::now()->subDays(30);
+        $oneDayAgo     = Carbon::now()->subDay();
+
+        $agents = User::query()
+            ->where('agency_id', $agencyId)
+            ->where('is_active', true)
+            ->whereIn('role', ['agent', 'branch_manager', 'admin'])
+            ->orderBy('name')
+            ->get(['id', 'name', 'role', 'branch_id']);
+
+        $rows = $agents->map(function (User $agent) use ($thirtyDaysAgo, $oneDayAgo) {
+            $base = ProspectingClaim::query()->where('user_id', $agent->id);
+            $activeClaims = (clone $base)->where('is_active', true)->whereNull('released_at')->count();
+
+            $last30 = (clone $base)->where('claimed_at', '>=', $thirtyDaysAgo);
+            $totalRecent = (clone $last30)->count();
+            $withFeedback = (clone $last30)->whereNotNull('feedback_at')->count();
+            $feedbackRate = $totalRecent > 0 ? round(($withFeedback / $totalRecent) * 100, 1) : null;
+
+            $expiring24h = (clone $base)
+                ->where('is_active', true)
+                ->whereNull('released_at')
+                ->whereNull('feedback_at')
+                ->where('claimed_at', '<', $oneDayAgo)
+                ->count();
+
+            $staleFlagged = (clone $base)
+                ->where('is_active', true)
+                ->whereNull('released_at')
+                ->whereNotNull('flagged_at')
+                ->count();
+
+            // Pitches in last 30 days — count of every pitch / outreach event
+            // for this agent (LogAgentActivity rows). pitch.sent is the
+            // canonical event for SellerOutreach sends; the others are
+            // direct-channel variants kept for future use.
+            $pitches30d = 0;
+            if (Schema::hasTable('agent_activity_events')) {
+                $pitches30d = (int) DB::table('agent_activity_events')
+                    ->where('user_id', $agent->id)
+                    ->where('occurred_at', '>=', $thirtyDaysAgo)
+                    ->whereIn('event_type', [
+                        'pitch.sent',
+                        'whatsapp_message.sent',
+                        'email_message.sent',
+                        'call.logged',
+                    ])->count();
+            }
+
+            $presentations30d = 0;
+            if (Schema::hasTable('presentations') && Schema::hasColumn('presentations', 'created_by_user_id')) {
+                $presentations30d = (int) DB::table('presentations')
+                    ->where('created_by_user_id', $agent->id)
+                    ->where('created_at', '>=', $thirtyDaysAgo)
+                    ->whereNull('deleted_at')
+                    ->count();
+            }
+
+            return [
+                'agent'             => $agent,
+                'active_claims'     => $activeClaims,
+                'feedback_rate'     => $feedbackRate,
+                'expiring_24h'      => $expiring24h,
+                'stale_flagged'     => $staleFlagged,
+                'pitches_30d'       => $pitches30d,
+                'presentations_30d' => $presentations30d,
+            ];
+        })
+        // Sort worst performers first: high stale count, then low feedback rate.
+        ->sortByDesc(fn ($row) => [
+            $row['stale_flagged'],
+            $row['feedback_rate'] === null ? -1 : -$row['feedback_rate'],
+        ])
+        ->values();
+
+        return view('corex.market-intelligence.team', [
+            'rows' => $rows,
+        ]);
+    }
+
+    /**
+     * MIC Phase G3 — return the quick-pick claim-feedback template list
+     * as JSON. The slide-over Alpine component fetches this and renders
+     * the button row when the agent opens a claim's feedback panel.
+     */
+    public function feedbackTemplates(Request $request)
+    {
+        return response()->json([
+            'templates' => \App\Services\Prospecting\ClaimFeedbackTemplates::getTemplates(),
+        ]);
+    }
+
+    /**
+     * Phase E3 — per-listing "why this matches your buyers" tooltip.
+     * Sonnet 4.6 (quality matters for client-facing copy). Anonymised buyer
+     * summaries — no names, no exact prices, no contact details. 7-day cache
+     * per (listing × agency). Anti-overpricing baked into the system prompt.
+     *
+     * Spec: .ai/specs/mic-complete-spec.md §4.3.
+     */
+    public function matchTooltip(Request $request, ProspectingListing $listing): JsonResponse
+    {
+        $user = $request->user();
+        $agencyId = $user->effectiveAgencyId() ?? $user->agency_id;
+        if ($agencyId === null || (int) $listing->agency_id !== (int) $agencyId) {
+            abort(404);
+        }
+
+        // Top 3 strong-tier matches. Secondary sort by contact_id is
+        // critical: without a stable tie-breaker, MySQL returns ties in
+        // non-deterministic order, so the inputData hash drifts across
+        // consecutive calls and the gateway cache misses every time.
+        $matches = DB::table('prospecting_buyer_matches as pbm')
+            ->join('contacts as c', 'c.id', '=', 'pbm.contact_id')
+            ->where('pbm.prospecting_listing_id', $listing->id)
+            ->where('pbm.score', '>=', 80)
+            ->whereNull('pbm.dismissed_at')
+            ->select('pbm.score', 'c.id as contact_id', 'c.created_at as contact_created_at',
+                     'c.preapproval_amount', 'c.buyer_state')
+            ->orderByDesc('pbm.score')
+            ->orderBy('c.id')
+            ->limit(3)
+            ->get();
+
+        if ($matches->isEmpty()) {
+            return response()->json([
+                'tooltip'       => 'No strong-tier buyers matched yet — keep this in your radar as new buyers arrive.',
+                'from_cache'    => false,
+                'from_fallback' => true,
+            ]);
+        }
+
+        $matchSummaries = $matches->map(fn ($m) => $this->anonymiseBuyer($m, $listing))->all();
+
+        $facts = [
+            'listing' => [
+                'suburb'        => $listing->suburb,
+                'property_type' => $listing->property_type,
+                'bedrooms'      => $listing->bedrooms,
+                'price'         => $listing->price,
+            ],
+            'matches' => $matchSummaries,
+        ];
+
+        $fallback = $this->buildTooltipFallback($facts);
+
+        try {
+            $response = app(AnthropicGateway::class)->generate(new NarrativeRequest(
+                narrativeType:   'listing_tooltip',
+                cacheKey:        "tooltip:listing:{$listing->id}:agency:{$agencyId}",
+                modelAlias:      'quality', // Sonnet 4.6
+                systemPrompt:    $this->tooltipSystemPrompt(),
+                userPrompt:      $this->tooltipUserPrompt($facts),
+                inputData:       $facts,
+                maxTokens:       120,
+                temperature:     0.6,
+                cacheTtlMinutes: 7 * 24 * 60, // 7 days
+                agencyId:        (int) $agencyId,
+                fallbackData:    ['text' => $fallback],
+                promptVersion:   'v1',
+            ));
+
+            return response()->json([
+                'tooltip'       => $response->outputText,
+                'from_cache'    => $response->fromCache,
+                'from_fallback' => $response->fromFallback,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('matchTooltip failed', [
+                'listing_id' => $listing->id,
+                'error'      => $e->getMessage(),
+            ]);
+            return response()->json([
+                'tooltip'       => $fallback,
+                'from_cache'    => false,
+                'from_fallback' => true,
+            ]);
+        }
+    }
+
+    /**
+     * Anonymise a single buyer match for AI input. Strips PII: no name,
+     * no email, no phone, no exact price (rounded to nearest R100k band).
+     */
+    private function anonymiseBuyer($row, ProspectingListing $listing): array
+    {
+        // Search duration — weeks since the buyer became a contact.
+        // Cast to int — Carbon 3's diffInWeeks returns a float, which would
+        // make the input hash drift between consecutive calls (cache miss).
+        $createdAt = $row->contact_created_at ? Carbon::parse($row->contact_created_at) : Carbon::now();
+        $weeks = (int) max(0, floor((float) $createdAt->diffInWeeks(Carbon::now())));
+
+        // Budget band: round to nearest R100k, expressed as a range around it.
+        $budget = $row->preapproval_amount !== null ? (float) $row->preapproval_amount : null;
+        $budgetBand = null;
+        if ($budget !== null && $budget > 0) {
+            $centerK = round($budget / 100_000) * 100; // hundreds of thousands
+            $lowK    = max(0, $centerK - 100);
+            $highK   = $centerK + 100;
+            $budgetBand = 'R' . number_format($lowK / 1_000, 2, '.', '') . 'm-R' . number_format($highK / 1_000, 2, '.', '') . 'm';
+        }
+
+        $state = (string) ($row->buyer_state ?? '');
+        $archetype = match (true) {
+            $weeks <= 2  => 'newly registered buyer',
+            $weeks <= 8  => 'actively searching buyer',
+            $weeks <= 26 => 'patient buyer (in market for 2+ months)',
+            default      => 'long-term buyer',
+        };
+
+        return [
+            'archetype'             => $archetype,
+            'search_duration_weeks' => $weeks,
+            'budget_band'           => $budgetBand,
+            'state'                 => $state !== '' ? $state : null,
+            'match_score'           => (int) $row->score,
+        ];
+    }
+
+    private function buildTooltipFallback(array $facts): string
+    {
+        $count = count($facts['matches']);
+        $sub   = (string) ($facts['listing']['suburb'] ?? 'this area');
+        $beds  = $facts['listing']['bedrooms'] ?? null;
+        $bedsPart = $beds ? "{$beds}-bed " : '';
+        return "{$count} strong-tier {$bedsPart}buyers are actively looking in {$sub} right now. Reach out to gauge fit — then check comparable sales before quoting any list price.";
+    }
+
+    private function tooltipSystemPrompt(): string
+    {
+        return <<<PROMPT
+        You write one-sentence tooltips that explain why a listing matches a
+        small group of active buyers. The tooltip pops on hover for a real
+        estate agent considering whether to pitch this listing's seller.
+
+        Strict rules:
+        - One sentence, ≤ 28 words.
+        - Reference WHY the match fits (search duration, budget overlap).
+        - Plain English. No jargon. No hype words.
+        - NEVER imply the agent should quote a high price. NEVER mention
+          "top dollar", "premium price", "flying off the market", "highest
+          value", or similar overpricing prompts.
+        - NEVER include any buyer's name, email, phone, or exact price.
+        - If buyers are early in their search (≤ 2 weeks), say they're
+          newly registered. If patient (> 8 weeks), say they're patient.
+
+        Return ONLY the sentence. No JSON. No markdown. No preamble.
+        PROMPT;
+    }
+
+    private function tooltipUserPrompt(array $facts): string
+    {
+        return "Listing context + anonymised buyer matches:\n\n"
+            . json_encode($facts, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+            . "\n\nWrite the tooltip per the rules. One sentence.";
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Phase D5/D6 helpers
+    // ─────────────────────────────────────────────────────────────────
+
+    private function buildPocketFacts(int $agencyId, string $suburb, int $bedrooms): array
+    {
+        $pl = 'prospecting_listings';
+        $pbm = 'prospecting_buyer_matches';
+
+        $base = DB::table($pl)
+            ->where("$pl.agency_id", $agencyId)
+            ->whereNull("$pl.deleted_at")
+            ->where("$pl.is_active", true)
+            ->whereNull("$pl.matched_property_id")
+            ->where("$pl.suburb", $suburb)
+            ->where("$pl.bedrooms", $bedrooms);
+
+        $listingCount = (clone $base)->count();
+        $avgPrice = (clone $base)->avg('price');
+
+        $buyerCount = (int) DB::table("$pbm as pbm")
+            ->join("$pl as pl", 'pl.id', '=', 'pbm.prospecting_listing_id')
+            ->where('pl.agency_id', $agencyId)
+            ->where('pl.suburb', $suburb)
+            ->where('pl.bedrooms', $bedrooms)
+            ->whereNull('pbm.dismissed_at')
+            ->where('pbm.score', '>=', 80)
+            ->distinct('pbm.contact_id')
+            ->count('pbm.contact_id');
+
+        return [
+            'suburb'         => $suburb,
+            'bedrooms'       => $bedrooms,
+            'listing_count'  => (int) $listingCount,
+            'buyer_count'    => $buyerCount,
+            'ratio'          => $listingCount > 0 ? round($buyerCount / $listingCount, 2) : null,
+            'avg_price'      => $avgPrice ? (int) round((float) $avgPrice) : null,
+        ];
+    }
+
+    private function buildPocketFallback(array $facts): string
+    {
+        $supply = $facts['listing_count'] ?? 0;
+        $demand = $facts['buyer_count'] ?? 0;
+        if ($demand === 0 && $supply === 0) {
+            return "Quiet pocket — no active listings or strong-tier buyer matches recorded for {$facts['suburb']} {$facts['bedrooms']}-bed right now.";
+        }
+        $ratioPart = $facts['ratio'] !== null
+            ? ' (' . $facts['ratio'] . '× demand-to-supply)'
+            : '';
+        $listingWord = $supply === 1 ? 'listing' : 'listings';
+        $buyerWord = $demand === 1 ? 'buyer' : 'buyers';
+        $priceLine = '';
+        if (!empty($facts['avg_price'])) {
+            $priceLine = ' Average asking price across this band is R' . number_format($facts['avg_price'], 0, '.', ',') . '.';
+        }
+        return sprintf(
+            "%s · %d-bed: %d strong-tier %s chasing %d active %s%s.%s Pitch sellers in this band with confidence on demand — but check comparable sales before quoting a list price.",
+            $facts['suburb'],
+            $facts['bedrooms'],
+            $demand,
+            $buyerWord,
+            $supply,
+            $listingWord,
+            $ratioPart,
+            $priceLine,
+        );
+    }
+
+    private function pocketSystemPrompt(): string
+    {
+        return <<<PROMPT
+        You write short briefings on demand-supply pockets for South African
+        real estate agents. Strict rules:
+
+        - 3-4 sentences, plain English, no headers, no bullets.
+        - Lead with the demand:supply situation (specific buyer & listing counts).
+        - One sentence on what kind of buyers chase this band (entry, family,
+          investor) if average price suggests it.
+        - Anti-overpricing anchor: ALWAYS include a sentence reminding the agent
+          that strong demand does not justify above-market pricing — verified
+          comparable sales must drive the list price.
+        - No price predictions. No hype language. Confident, factual tone.
+
+        Return ONLY the narrative text. No JSON, no markdown, no preamble.
+        PROMPT;
+    }
+
+    private function pocketUserPrompt(array $facts): string
+    {
+        return "Write the demand-pocket briefing for {$facts['suburb']} {$facts['bedrooms']}-bed:\n\n"
+            . json_encode($facts, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+            . "\n\nFollow the rules. 3-4 sentences only.";
+    }
+
+    private function buildSuburbDeepDiveFacts(int $agencyId, string $suburb): array
+    {
+        $now = Carbon::now();
+
+        $activeListings = P24Listing::active()->where('suburb', $suburb)->count();
+        $avgAsking = (float) P24Listing::active()->where('suburb', $suburb)->avg('asking_price');
+
+        $listingTypeBreakdown = P24Listing::active()
+            ->where('suburb', $suburb)
+            ->select('property_type', DB::raw('COUNT(*) as cnt'))
+            ->groupBy('property_type')
+            ->orderByDesc('cnt')
+            ->limit(10)
+            ->get()
+            ->map(fn ($r) => ['type' => (string) ($r->property_type ?? '—'), 'count' => (int) $r->cnt])
+            ->all();
+
+        $activeBuyers = (int) DB::table('prospecting_buyer_matches as pbm')
+            ->join('prospecting_listings as pl', 'pl.id', '=', 'pbm.prospecting_listing_id')
+            ->where('pl.agency_id', $agencyId)
+            ->where('pl.suburb', $suburb)
+            ->whereNull('pbm.dismissed_at')
+            ->where('pbm.score', '>=', 80)
+            ->distinct('pbm.contact_id')
+            ->count('pbm.contact_id');
+
+        $bedroomDemand = DB::table('prospecting_buyer_matches as pbm')
+            ->join('prospecting_listings as pl', 'pl.id', '=', 'pbm.prospecting_listing_id')
+            ->where('pl.agency_id', $agencyId)
+            ->where('pl.suburb', $suburb)
+            ->whereNull('pbm.dismissed_at')
+            ->where('pbm.score', '>=', 80)
+            ->whereNotNull('pl.bedrooms')
+            ->select('pl.bedrooms', DB::raw('COUNT(DISTINCT pbm.contact_id) as buyers'))
+            ->groupBy('pl.bedrooms')
+            ->orderBy('pl.bedrooms')
+            ->get()
+            ->map(fn ($r) => ['bedrooms' => (int) $r->bedrooms, 'buyers' => (int) $r->buyers])
+            ->all();
+
+        // market_data_points populated by Phase F — may be empty. Schema
+        // uses (metric_key, metric_value_numeric, metric_date) so the lookup
+        // is a metric-keyed read, not a flat sales-row read.
+        $marketHistory = null;
+        if (Schema::hasTable('market_data_points')) {
+            $row = DB::table('market_data_points')
+                ->where('agency_id', $agencyId)
+                ->where('suburb_normalised', TrackedProperty::normaliseSuburb($suburb))
+                ->where('is_superseded', false)
+                ->orderByDesc('metric_date')
+                ->first();
+            if ($row) {
+                $marketHistory = [
+                    'observed_at'  => $row->metric_date,
+                    'metric_key'   => $row->metric_key,
+                    'metric_value' => $row->metric_value_numeric,
+                ];
+            }
+        }
+
+        return [
+            'suburb'                  => $suburb,
+            'active_listings'         => $activeListings,
+            'avg_asking'              => $avgAsking > 0 ? (int) round($avgAsking) : null,
+            'listing_type_breakdown'  => $listingTypeBreakdown,
+            'active_buyers'           => $activeBuyers,
+            'bedroom_demand'          => $bedroomDemand,
+            'market_history'          => $marketHistory,
+            'has_historical_data'     => $marketHistory !== null,
+        ];
+    }
+
+    private function buildSuburbDeepDiveFallback(array $facts): string
+    {
+        $supply = $facts['active_listings'] ?? 0;
+        $demand = $facts['active_buyers'] ?? 0;
+        if ($supply === 0 && $demand === 0) {
+            return "Quiet suburb — no active P24 listings or strong-tier buyer interest recorded for {$facts['suburb']} right now.";
+        }
+        $listingWord = $supply === 1 ? 'listing' : 'listings';
+        $buyerWord = $demand === 1 ? 'buyer' : 'buyers';
+        $priceLine = !empty($facts['avg_asking'])
+            ? ' Average asking is R' . number_format($facts['avg_asking'], 0, '.', ',') . '.'
+            : '';
+        $histLine = empty($facts['has_historical_data'])
+            ? ' Historical sales data is not loaded for this suburb yet — upload a CMA Info report to enrich.'
+            : '';
+        return "{$facts['suburb']}: {$supply} active P24 {$listingWord}, {$demand} strong-tier {$buyerWord} matched.{$priceLine}{$histLine}";
+    }
+
+    private function suburbDeepDiveSystemPrompt(): string
+    {
+        return <<<PROMPT
+        You write a short suburb intelligence panel for South African real estate
+        agents. Strict rules:
+
+        - 3 sentences, plain English, no headers, no bullets.
+        - First sentence: the supply-demand picture (active listings, active
+          buyers).
+        - Second sentence: where the demand is concentrated (bedroom band /
+          property type) if the data shows a clear concentration.
+        - Third sentence: a realism anchor — strong activity does NOT justify
+          above-market pricing; comparable sales drive the list price.
+        - No price predictions. Confident, factual tone. No hype words.
+
+        Return ONLY the narrative text. No JSON, no markdown.
+        PROMPT;
+    }
+
+    private function suburbDeepDiveUserPrompt(array $facts): string
+    {
+        return "Write the suburb intelligence panel for {$facts['suburb']}:\n\n"
+            . json_encode($facts, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+            . "\n\nFollow the rules. 3 sentences only.";
     }
 
     /**

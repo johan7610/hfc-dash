@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Sign Document â€” Home Finders Coastal</title>
+    <title>Sign Document — Home Finders Coastal</title>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -228,9 +228,59 @@
         }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen">
+<body class="bg-slate-50 min-h-screen has-recipient-info-panel">
 
-<div x-data="externalSign()" x-init="init()" class="max-w-4xl mx-auto px-4 py-6 space-y-4">
+{{-- B3 — Left info panel: persistent on desktop, collapses to a top
+     banner under 1024px. Renders only on the recipient signing view
+     (not on the agent wizard's Step 5). --}}
+@include('docuperfect.signatures.external._info-panel')
+
+<div x-data="externalSign()" x-init="init()" class="recipient-info-main max-w-4xl mx-auto px-4 py-6 space-y-4">
+
+    {{-- Phase 1B.6 (FIX 5) — banner shown when this party has already
+         completed signing AND the document is now in an amendment
+         initialing cascade. The original signatures stay rendered as
+         captured below; this banner explains why the page reopened. --}}
+    @if(!empty($partyAlreadySigned) && !empty($inAmendmentInitialing))
+        <div class="rounded-2xl px-5 py-4"
+             style="background: color-mix(in srgb, #92400e 8%, transparent);
+                    border: 1px solid color-mix(in srgb, #92400e 30%, transparent);">
+            <div class="flex items-start gap-3">
+                <span style="font-size: 1.25rem; line-height: 1;">⚑</span>
+                <div style="flex: 1;">
+                    <div style="font-weight: 700; color: #92400e;">
+                        You signed this document on {{ optional($request->completed_at)->format('d M Y') ?: 'an earlier date' }}.
+                    </div>
+                    <div style="color: #78350f; font-size: 0.9rem; margin-top: 0.25rem;">
+                        An amendment was added — please initial the changes below to confirm
+                        your agreement. Your original signature is preserved.
+                    </div>
+                    <div style="margin-top: 0.75rem;">
+                        <a href="{{ route('signatures.external', ['token' => $request->token]) }}"
+                           style="display: inline-block; padding: 0.5rem 1rem; background: #92400e; color: #fff; border-radius: 4px; text-decoration: none; font-size: 0.85rem; font-weight: 600;">
+                            Go to focused initialing view &rarr;
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- Phase 1B.6 (FIX 5) — party-has-signed indicator when not in an
+         amendment cycle. Reassures the recipient that their signature
+         is recorded and explains why the affordances are read-only. --}}
+    @if(!empty($partyAlreadySigned) && empty($inAmendmentInitialing))
+        <div class="rounded-2xl px-5 py-3"
+             style="background: color-mix(in srgb, #047857 8%, transparent);
+                    border: 1px solid color-mix(in srgb, #047857 30%, transparent);">
+            <div class="flex items-center gap-2" style="color: #065f46; font-size: 0.9rem;">
+                <span style="font-size: 1.1rem;">✓</span>
+                <span>You signed this document on
+                    {{ optional($request->completed_at)->format('d M Y H:i') ?: 'an earlier date' }}.
+                    Your signatures and initials are recorded and locked.</span>
+            </div>
+        </div>
+    @endif
 
     {{-- Header --}}
     <div class="rounded-2xl px-6 py-4" style="background:#0b2a4a;">
@@ -279,7 +329,7 @@
         </div>
     @endif
 
-    {{-- Section-by-Section Navigator â€” DISABLED (Phase 2: needs proper clause-level rejection, not section-level) --}}
+    {{-- Section-by-Section Navigator — DISABLED (Phase 2: needs proper clause-level rejection, not section-level) --}}
 
     {{-- Wet ink pending review notice --}}
     @if($wetInkPendingReview)
@@ -361,9 +411,9 @@
         </div>
     </div>
 
-    {{-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    {{-- ══════════════════════════════════════════════
          ELECTRONIC SIGNING
-    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• --}}
+    ══════════════════════════════════════════════ --}}
     <template x-if="signingMethod === 'electronic'">
         <div class="space-y-4">
 
@@ -381,7 +431,7 @@
                 </div>
             </div>
 
-            {{-- Completion overlay â€” prevents Alpine re-render issues --}}
+            {{-- Completion overlay — prevents Alpine re-render issues --}}
             <div x-show="completionDone" x-cloak class="bg-white rounded-2xl shadow-sm border border-emerald-200 p-8 text-center" style="min-height:300px;">
                 <div class="flex flex-col items-center justify-center gap-4 py-12">
                     <svg class="w-16 h-16 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -391,7 +441,7 @@
                     <p class="text-sm text-gray-500">Your signatures have been saved successfully.</p>
                     <div class="flex flex-col items-center gap-3 mt-4">
                         <a href="{{ route('docuperfect.esign.myDocuments') }}"
-                           style="background: #00d4aa; color: #fff; border-radius:6px; padding: 10px 24px; font-size: 14px; font-weight: 600; text-decoration: none; display: inline-block; transition: opacity 0.2s;"
+                           style="background: #00d4aa; color: #fff; border-radius: 3px; padding: 10px 24px; font-size: 14px; font-weight: 600; text-decoration: none; display: inline-block; transition: opacity 0.2s;"
                            onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
                             Back to My Documents
                         </a>
@@ -405,14 +455,56 @@
             {{-- Document viewer --}}
             <div x-show="!completionDone" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 overflow-hidden flex flex-col" style="min-height:600px;">
 
-                {{-- Web template: render HTML directly â€” document elements are the interactive surface --}}
+                {{-- Web template: render HTML directly — document elements are the interactive surface --}}
                 <template x-if="isWebTemplate">
                     <div class="flex-1 overflow-auto" style="background:#e2e8f0; padding:16px 0; min-width:794px;">
                         <div x-ref="pageContainer" class="relative"
                              style="width:210mm; max-width:100%; margin:0 auto;">
-                            <div x-ref="webDocContent" x-html="webTemplateHtml"></div>
+                            {{-- Shared visual contract — Step 4 / Step 5 /
+                                 signing view all render through this same
+                                 partial so the recipient-block layout
+                                 stays uniform. Alpine injects the body via
+                                 x-html into the partial's host div; the
+                                 partial loads the shared CSS + applies the
+                                 context class + stamps the current
+                                 recipient's instance. --}}
+                            @include('docuperfect.shared._document-body', [
+                                'viewerContext'    => 'recipient_signing',
+                                'alpineXHtml'      => 'webTemplateHtml',
+                                'alpineRef'        => 'webDocContent',
+                                'currentRecipient' => $currentRecipient ?? null,
+                            ])
 
-                            {{-- Floating signature markers â€” from zones drawn in setup.
+                            {{-- Alpine watcher — stamps data-your-block="true"
+                                 on the current recipient's instance after
+                                 x-html populates the host div. The
+                                 server-side post-process in the partial
+                                 only fires for $body (server-rendered); on
+                                 the Alpine path we apply the stamp client-
+                                 side so the highlight CSS rule matches. --}}
+                            <div x-init="
+                                $watch('webTemplateHtml', () => {
+                                    const me = (currentRoleIdentity || '').toLowerCase();
+                                    if (!me) return;
+                                    setTimeout(() => {
+                                        const host = $refs.webDocContent;
+                                        if (!host) return;
+                                        const target = host.querySelector('[data-recipient-instance=\'' + me + '\']');
+                                        if (target) target.setAttribute('data-your-block', 'true');
+                                    }, 50);
+                                });
+                                // Also fire once on first render
+                                $nextTick(() => {
+                                    const me = (currentRoleIdentity || '').toLowerCase();
+                                    if (!me) return;
+                                    const host = $refs.webDocContent;
+                                    if (!host) return;
+                                    const target = host.querySelector('[data-recipient-instance=\'' + me + '\']');
+                                    if (target) target.setAttribute('data-your-block', 'true');
+                                });
+                            " style="display:none;"></div>
+
+                            {{-- Floating signature markers — from zones drawn in setup.
                                  Positioned with absolute % values relative to the paginated container.
                                  Container width locked to 210mm (A4) to match setup coordinate system. --}}
                             <template x-for="marker in markers" :key="'wm-' + marker.id">
@@ -547,7 +639,7 @@
                                         {{-- Strikethrough field: interactive toggle for signer --}}
                                         <template x-if="field.type === 'strikethrough'">
                                             <div class="w-full h-full relative cursor-pointer"
-                                                 :style="field.active ? 'background:color-mix(in srgb, var(--ds-crimson) 8%, transparent);border:2px solid rgba(239,68,68,0.4);border-radius:4px;' : 'background:rgba(251,191,36,0.08);border:2px solid rgba(251,191,36,0.5);border-radius:4px;'"
+                                                 :style="field.active ? 'background:rgba(239,68,68,0.08);border:2px solid rgba(239,68,68,0.4);border-radius:4px;' : 'background:rgba(251,191,36,0.08);border:2px solid rgba(251,191,36,0.5);border-radius:4px;'"
                                                  @click="field.active = !field.active; fieldsDirty = true;">
                                                 <template x-if="field.active && (field.strikethroughType || 'horizontal') === 'horizontal'">
                                                     <div class="absolute top-1/2 left-0 w-full h-0.5 bg-red-500 -translate-y-1/2"></div>
@@ -674,7 +766,7 @@
                                     </div>
                                 </template>
 
-                                {{-- My signed marker (only shown when NOT flattened â€” when flattened, sig is baked in) --}}
+                                {{-- My signed marker (only shown when NOT flattened — when flattened, sig is baked in) --}}
                                 <template x-if="marker.is_mine && marker.signed && !hasFlattened">
                                     <div class="flex flex-col items-center justify-center w-full h-full relative">
                                         <template x-if="marker.signature_data && marker.type !== 'date' && marker.type !== 'text'">
@@ -722,8 +814,39 @@
                 </template>
             </div>
 
-            {{-- Web Template Consent + Submit (only for live HTML signing) --}}
-            <template x-if="isWebTemplate">
+            {{-- Walk-fix FIX 4 — flag-blocks-signing.
+                 When the recipient has flagged any clause, the consent +
+                 submit surface is HIDDEN and a single "Amendments under
+                 review" CTA replaces it. No signature possible while the
+                 agent has not yet resolved the recipient's proposed
+                 amendments — informed-consent legal requirement.
+                 Surface unlocks automatically once the server marks the
+                 flags as resolved (status moves out of 'pending_review'). --}}
+            <template x-if="isWebTemplate && hasPendingRecipientFlags">
+                <div class="bg-amber-50 rounded-2xl shadow-sm border border-amber-300 p-5 space-y-3"
+                     data-flag-blocks-signing="active">
+                    <div class="flex items-start gap-3">
+                        <svg class="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M12 3v18M5 9l7-6 7 6"/>
+                        </svg>
+                        <div class="flex-1">
+                            <h3 class="text-base font-semibold text-amber-900 mb-1">
+                                Your proposed amendments are under review
+                            </h3>
+                            <p class="text-sm text-amber-800 leading-relaxed">
+                                You've flagged <span x-text="webClauseFlaggedItems.length"></span>
+                                clause<span x-show="webClauseFlaggedItems.length !== 1">s</span> for the agent to review. Signing is paused until the agent has resolved your proposed amendments. You'll receive an email when the agent acts — return to this link then to complete signing.
+                            </p>
+                            <p class="text-xs text-amber-700 mt-3">
+                                This document is not legally binding until the agent has resolved your amendments and you have completed signing.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            {{-- Web Template Consent + Submit (only for live HTML signing). Hidden by flag-blocks-signing above. --}}
+            <template x-if="isWebTemplate && !hasPendingRecipientFlags">
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 space-y-4">
                     <label id="consent-checkbox-label" class="flex items-start gap-3 cursor-pointer">
                         <input type="checkbox" x-model="webConsented"
@@ -756,7 +879,7 @@
                 </div>
             </template>
 
-            {{-- Complete Signing (standard marker-based flow â€” hidden for web templates) --}}
+            {{-- Complete Signing (standard marker-based flow — hidden for web templates) --}}
             <div x-show="!isWebTemplate" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex items-center justify-between">
                 <div class="text-sm text-slate-600">
                     <template x-if="signedCount < totalRequired">
@@ -783,7 +906,7 @@
                 </div>
             </div>
 
-            {{-- Floating progress bar â€” unified incomplete tracker for web templates --}}
+            {{-- Floating progress bar — unified incomplete tracker for web templates --}}
             <template x-if="isWebTemplate">
                 <div x-show="signingMethod === 'electronic'" x-cloak x-transition
                      class="fixed bottom-4 left-1/2 transform -translate-x-1/2 shadow-lg rounded-xl px-5 py-3 flex items-center gap-3 z-40 border border-gray-700"
@@ -835,7 +958,7 @@
                     <div class="px-6 py-4 border-b border-slate-200" style="background:#0b2a4a;">
                         <h3 class="text-white font-semibold text-lg">
                             Sign: <span x-text="activeMarker ? markerLabel(activeMarker) : ''"></span>
-                            <span class="text-white/50 text-sm" x-text="activeMarker ? 'â€” Page ' + activeMarker.page_number : ''"></span>
+                            <span class="text-white/50 text-sm" x-text="activeMarker ? '— Page ' + activeMarker.page_number : ''"></span>
                         </h3>
                     </div>
 
@@ -970,7 +1093,7 @@
                     <div class="px-6 py-4 border-b border-slate-200" style="background:#0b2a4a;">
                         <h3 class="text-white font-semibold text-lg">
                             Enter Text: <span x-text="activeMarker ? (activeMarker.label || markerLabel(activeMarker)) : ''"></span>
-                            <span class="text-white/50 text-sm" x-text="activeMarker ? 'â€” Page ' + activeMarker.page_number : ''"></span>
+                            <span class="text-white/50 text-sm" x-text="activeMarker ? '— Page ' + activeMarker.page_number : ''"></span>
                         </h3>
                     </div>
                     <div class="p-6 space-y-4">
@@ -1001,9 +1124,9 @@
         </div>
     </template>
 
-    {{-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    {{-- ══════════════════════════════════════════════
          WET INK PATH
-    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• --}}
+    ══════════════════════════════════════════════ --}}
     <template x-if="signingMethod === 'wet_ink'">
         <div class="space-y-4">
 
@@ -1046,7 +1169,7 @@
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                     </svg>
-                    Generating PDFâ€¦
+                    Generating PDF…
                 </div>
                 <div x-show="dlDone && !dlError" x-cloak class="mt-2 text-xs text-green-600 flex items-center gap-1">
                     <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
@@ -1319,6 +1442,11 @@ function externalSign() {
         applyingAll: false,
         firstSignatureDone: false,
 
+        // Phase 1B.9 (FIX 2) — Apply-to-all initial/signature is agent-only.
+        // Recipients must initial each page individually for legal informed-
+        // consent reasons. Computed server-side and seeded into Alpine here.
+        isAgent: @json($isAgent ?? false),
+
         // Decline
         showDeclineModal: false,
         declineReason: '',
@@ -1326,17 +1454,38 @@ function externalSign() {
 
         // Web signing (CDS/web template interactive mode)
         signerRole: @json($signerRole ?? ''),
+        // B1 — '{party_role}_{role_index}' for the viewing recipient.
+        // The recipient-block layout's "your block" highlight watcher
+        // queries `[data-recipient-instance="seller_2"]` against this.
+        currentRoleIdentity: @json($currentRoleIdentity ?? ''),
         fieldMappings: @json($fieldMappings ?? []),
         webFieldValues: {},
         webSignatures: {},
         webDisclosureAnswers: {},
+        storedDisclosure: @json($storedDisclosure ?? new \stdClass),
         webConsented: false,
         showWebSigCapture: false,
         currentWebSigBlockId: null,
         webSigMode: 'draw',
         webTypedSignature: '',
         webCeremonyValues: {},
-        webClauseFlaggedItems: [],
+        // Phase 1B.6 (FIX 6) — seed from server-persisted clause_flags so
+        // a refresh after flagging restores the visible flag UI. The
+        // persistedClauseFlags JSON shape is keyed by party_role; we
+        // flatten to a per-clause list for client use.
+        webClauseFlaggedItems: (function () {
+            const persisted = @json($persistedClauseFlags ?? []);
+            const me = @json($request->party_role ?? '');
+            const mine = (persisted && persisted[me]) ? persisted[me] : [];
+            if (!Array.isArray(mine)) return [];
+            return mine.map((f, idx) => ({
+                clauseNum: f.clauseNum ?? f.clause_num ?? '',
+                clauseIndex: idx,
+                concern: f.concern ?? f.suggested_change ?? '',
+                amendment_id: f.amendment_id ?? null,
+                status: f.status ?? 'pending_review',
+            }));
+        })(),
         otherConditionsText: '',
         totalDisclosureRows: 0,
         webIsDrawing: false,
@@ -1380,14 +1529,14 @@ function externalSign() {
                 this.$nextTick(() => {
                     setTimeout(() => {
                         paginateDocument(this.$refs.webDocContent, this.signingParties);
+                        this._syncTotalPagesFromPagination(this.$refs.webDocContent);
                         restoreStoredInitials(this.$refs.webDocContent, this.storedInitials);
                         if (this.editableFields.length > 0) {
                             this.initWebTemplateFields();
                         }
                         this._makeWebElementsInteractive();
                         this._makeCeremonyFieldsEditable();
-                        this.processWebDisclosureChecklists();
-                        this._processDisclosureTable();
+                        this._processAllDisclosures();
                         this._initClauseFlagging();
                         // Compute incomplete count after all interactive elements are set up
                         setTimeout(() => {
@@ -1403,7 +1552,7 @@ function externalSign() {
         /**
          * Web template interactive signing: find all [data-marker-party][data-marker-type="signature"]
          * elements in the document HTML and make the current signer's elements clickable.
-         * No floating overlays â€” the document elements ARE the signing surface.
+         * No floating overlays — the document elements ARE the signing surface.
          */
         _makeWebElementsInteractive() {
             const container = this.$refs.webDocContent || (this.$refs.pageContainer ? this.$refs.pageContainer.querySelector('[x-html]') : null);
@@ -1447,11 +1596,11 @@ function externalSign() {
                             self.$nextTick(() => self.initWebSigCanvas());
                         });
                     } else {
-                        // Other party â€” check if already signed (img embedded in HTML)
+                        // Other party — check if already signed (img embedded in HTML)
                         const existingImg = el.querySelector('img.web-sig-signed-img, img[alt="Signature"]');
                         if (existingImg) {
                             el.classList.add('web-sig-other-signed');
-                            // Already has a signature image embedded â€” leave as is
+                            // Already has a signature image embedded — leave as is
                         } else {
                             el.classList.add('web-sig-other-party');
                             const partyLabel = rawParty.replace(/_/g, ' ');
@@ -1480,7 +1629,7 @@ function externalSign() {
                 attempts++;
                 if (tryInit() || attempts > 20) {
                     clearInterval(interval);
-                    // Recompute counts after elements are interactive â€” ensures top/bottom agree
+                    // Recompute counts after elements are interactive — ensures top/bottom agree
                     setTimeout(() => this.updateIncompleteCount(), 100);
                 }
             }, 200);
@@ -1488,7 +1637,7 @@ function externalSign() {
 
         /**
          * Make "Thus done and signed" ceremony fields editable for the current signer.
-         * Adapted from agent sign.blade.php â€” filters to current signer's party only.
+         * Adapted from agent sign.blade.php — filters to current signer's party only.
          */
         _makeCeremonyFieldsEditable() {
             const container = this.$refs.webDocContent || null;
@@ -1523,7 +1672,7 @@ function externalSign() {
                     const isMine = self.isMyWebSigBlock(rawParty);
 
                     if (!isMine) {
-                        // Other party or already-filled â€” leave as read-only
+                        // Other party or already-filled — leave as read-only
                         if (!el.textContent.trim()) {
                             el.style.opacity = '0.5';
                         }
@@ -1564,7 +1713,7 @@ function externalSign() {
 
         /**
          * Make page-break initials elements interactive for the current signer.
-         * Adapted from agent sign.blade.php â€” filters to current signer's party.
+         * Adapted from agent sign.blade.php — filters to current signer's party.
          */
         _makeWebInitialsInteractive(container) {
             if (!container) return;
@@ -1659,10 +1808,10 @@ function externalSign() {
 
             // 4. Unanswered disclosure rows
             if (this.totalDisclosureRows > 0) {
-                const answered = Object.keys(this.webDisclosureAnswers).filter(k => k.startsWith('disclosure_row_')).length;
+                const answered = Object.keys(this.webDisclosureAnswers).filter(k => this._isDisclosureAnswerKey(k)).length;
                 if (answered < this.totalDisclosureRows) {
                     if (container) {
-                        const allRadioGroups = container.querySelectorAll('input[type="radio"][name^="disclosure_row_"]');
+                        const allRadioGroups = container.querySelectorAll('input[type="radio"][name^="disclosure_"]');
                         const answeredNames = new Set();
                         allRadioGroups.forEach(r => { if (r.checked) answeredNames.add(r.name); });
                         allRadioGroups.forEach(r => {
@@ -1675,7 +1824,17 @@ function externalSign() {
                 }
             }
 
-            // 5. Consent checkbox (always last)
+            // 5. B3 — Empty recipient-editable text fields (this viewer's only).
+            if (container) {
+                container.querySelectorAll('input.field-editable[data-viewer-editable]').forEach(inp => {
+                    if (!inp.value || !inp.value.trim()) {
+                        const placeholder = inp.getAttribute('placeholder') || inp.name || 'Field';
+                        items.push({ el: inp, label: placeholder.replace(/_/g, ' ') });
+                    }
+                });
+            }
+
+            // 6. Consent checkbox (always last)
             if (!this.webConsented) {
                 const consentEl = document.getElementById('consent-checkbox-label');
                 items.push({ el: consentEl, label: 'Consent' });
@@ -1704,7 +1863,7 @@ function externalSign() {
             let total = 0;
             let incomplete = 0;
 
-            // 0. DB markers (from zones drawn in setup â€” works for web templates too)
+            // 0. DB markers (from zones drawn in setup — works for web templates too)
             this.markers.forEach(m => {
                 if (m.is_mine) {
                     total++;
@@ -1712,7 +1871,7 @@ function externalSign() {
                 }
             });
 
-            // 1. Signature blocks (mine â€” marked with .web-sig-interactive from inline HTML)
+            // 1. Signature blocks (mine — marked with .web-sig-interactive from inline HTML)
             if (container) {
                 container.querySelectorAll('.web-sig-interactive').forEach(el => {
                     total++;
@@ -1728,7 +1887,7 @@ function externalSign() {
                 }
             });
 
-            // 3. Ceremony fields (mine â€” inputs with data-ceremony-field)
+            // 3. Ceremony fields (mine — inputs with data-ceremony-field)
             if (container) {
                 container.querySelectorAll('input[data-ceremony-field="true"]').forEach(inp => {
                     total++;
@@ -1736,16 +1895,28 @@ function externalSign() {
                 });
             }
 
-            // 4. Disclosure rows
-            if (this.totalDisclosureRows > 0) {
+            // 4. Disclosure rows — gate-counted ONLY for the disclosing
+            //    owner/seller party. A non-owner external signer (buyer)
+            //    sees the grid read-only and is NOT gated on it (PPA s70).
+            if (this._signerIsDisclosingParty() && this.totalDisclosureRows > 0) {
                 total += this.totalDisclosureRows;
-                const answered = Object.keys(this.webDisclosureAnswers).filter(k => k.startsWith('disclosure_row_')).length;
+                const answered = Object.keys(this.webDisclosureAnswers).filter(k => this._isDisclosureAnswerKey(k)).length;
                 incomplete += (this.totalDisclosureRows - answered);
             }
 
             // 5. Consent
             total++;
             if (!this.webConsented) incomplete++;
+
+            // 6. B3 — Recipient-editable text fields (data-viewer-editable).
+            //    Server stamps only THIS viewer's fields; counter is
+            //    automatically per-recipient.
+            if (container) {
+                container.querySelectorAll('input.field-editable[data-viewer-editable]').forEach(inp => {
+                    total++;
+                    if (!inp.value || !inp.value.trim()) incomplete++;
+                });
+            }
 
             return { total, incomplete };
         },
@@ -1782,7 +1953,7 @@ function externalSign() {
             }
         },
 
-        // â”€â”€ Section-by-section navigation â”€â”€
+        // ── Section-by-section navigation ──
         goToSection(idx) {
             if (idx < 0 || idx >= this.totalSections) return;
             this.currentSection = idx;
@@ -1860,49 +2031,97 @@ function externalSign() {
             return this.hasSections && this.sectionStates.every(s => s === 'accepted');
         },
 
-        // â”€â”€ Web template field editing â”€â”€
+        // ── Web template field editing ──
         initWebTemplateFields() {
             const container = this.$refs.webDocContent || null;
             if (!container) return;
 
             // Small delay to ensure x-html has rendered
             setTimeout(() => {
-                const fields = container.querySelectorAll('.field[data-field]');
-                fields.forEach(span => {
+                // B3 — gate on the server-stamped data-viewer-editable
+                // attribute (not a name-list). Per-recipient scope is the
+                // server's job; the client just renders what the server
+                // says is editable, and the save endpoint re-checks
+                // server-side so DOM trust is never the security layer.
+                // Fallback for legacy stamped templates: if no field has
+                // data-viewer-editable, fall back to the name-list.
+                const allFields = container.querySelectorAll('[data-field]');
+                const anyStamped = container.querySelector('[data-viewer-editable]') !== null;
+                allFields.forEach(span => {
                     const fieldName = span.getAttribute('data-field');
-                    if (this.editableFields.includes(fieldName)) {
+                    const originalName = span.getAttribute('data-recipient-identity') !== null
+                        ? (span.getAttribute('data-original-field') || fieldName)
+                        : fieldName;
+                    const isEditable = anyStamped
+                        ? span.hasAttribute('data-viewer-editable')
+                        : this.editableFields.includes(originalName);
+
+                    if (isEditable) {
                         // Convert to editable input
                         const input = document.createElement('input');
                         input.type = 'text';
                         input.name = fieldName;
                         input.value = span.textContent.trim();
                         input.setAttribute('data-field', fieldName);
+                        // Preserve B3 identity attrs so save-payload + UI
+                        // counter both know which recipient this belongs to.
+                        if (span.hasAttribute('data-recipient-identity')) {
+                            input.setAttribute('data-recipient-identity', span.getAttribute('data-recipient-identity'));
+                        }
+                        if (span.hasAttribute('data-original-field')) {
+                            input.setAttribute('data-original-field', span.getAttribute('data-original-field'));
+                        }
+                        input.setAttribute('data-viewer-editable', '1');
                         input.className = span.className + ' field-editable';
                         input.style.cssText = span.style.cssText +
                             'background:rgba(251,191,36,0.08);' +
                             'border:none;border-bottom:2px solid rgba(251,191,36,0.6);' +
                             'outline:none;font:inherit;color:inherit;' +
                             'padding:0 2pt;';
-                        input.placeholder = fieldName.replace(/_/g, ' ');
-                        input.addEventListener('input', () => { this.webFieldsDirty = true; });
+                        input.placeholder = (originalName || fieldName).replace(/_/g, ' ');
+                        input.addEventListener('input', () => {
+                            this.webFieldsDirty = true;
+                            // B3 — keep the items-remaining counter live.
+                            this.updateIncompleteCount();
+                        });
                         span.replaceWith(input);
                     } else {
-                        // Locked field â€” add locked styling
+                        // Locked field — add locked styling
                         span.style.opacity = '0.85';
                     }
                 });
             }, 100);
         },
 
-        // Collect web template field values from inputs
+        // Collect web template field values from inputs. B3 payload
+        // includes per-field identity + original-field so the server's
+        // per-recipient scope check has the full context (no DOM trust).
         collectWebFieldValues() {
             const container = this.$refs.webDocContent || null;
             if (!container) return {};
             const values = {};
             container.querySelectorAll('input.field-editable[data-field]').forEach(input => {
-                values[input.name] = input.value;
+                const identity = input.getAttribute('data-recipient-identity') || '';
+                const original = input.getAttribute('data-original-field') || input.name;
+                values[input.name] = identity !== ''
+                    ? { value: input.value, identity, original_field: original }
+                    : input.value;
             });
             return values;
+        },
+
+        // B3 — per-recipient items-remaining counter. Counts only the
+        // inputs this viewer can edit (data-viewer-editable) that are
+        // still empty. Server-stamped attribute means we never count
+        // another recipient's empty fields.
+        get viewerRemainingItems() {
+            const container = this.$refs.webDocContent || null;
+            if (!container) return 0;
+            let remaining = 0;
+            container.querySelectorAll('input.field-editable[data-viewer-editable]').forEach(input => {
+                if (!input.value || input.value.trim() === '') remaining++;
+            });
+            return remaining;
         },
 
         // Save web template field values back to server
@@ -1937,7 +2156,7 @@ function externalSign() {
             }
         },
 
-        // â”€â”€ Method choice â”€â”€
+        // ── Method choice ──
         async chooseMethod(method) {
             try {
                 const resp = await fetch('/sign/' + this.token + '/choose-method', {
@@ -1957,14 +2176,14 @@ function externalSign() {
                         this.$nextTick(() => {
                             setTimeout(() => {
                                 paginateDocument(this.$refs.webDocContent, this.signingParties);
+                                this._syncTotalPagesFromPagination(this.$refs.webDocContent);
                                 restoreStoredInitials(this.$refs.webDocContent, this.storedInitials);
                                 if (this.editableFields.length > 0) {
                                     this.initWebTemplateFields();
                                 }
                                 this._makeWebElementsInteractive();
                                 this._makeCeremonyFieldsEditable();
-                                this.processWebDisclosureChecklists();
-                                this._processDisclosureTable();
+                                this._processAllDisclosures();
                                 this._initClauseFlagging();
                                 setTimeout(() => this.updateIncompleteCount(), 300);
                             }, 150);
@@ -1976,9 +2195,59 @@ function externalSign() {
             }
         },
 
-        // â”€â”€ Navigation â”€â”€
+        // ── Navigation ──
         prevPage() { if (this.currentPage > 1) this.currentPage--; },
         nextPage() { if (this.currentPage < this.totalPages) this.currentPage++; },
+
+        // The server $pageCount is provisional — for a web pack it counts
+        // TEMPLATES, not rendered A4 pages. The real total is only known once
+        // paginateDocument() has built the .corex-a4-page elements. Re-derive
+        // totalPages from the actual paginated DOM (continuous across the
+        // whole merged pack — never per-template) on EVERY pagination so the
+        // counter and prev/next bounds stay correct after re-pagination too.
+        _syncTotalPagesFromPagination(container) {
+            const root = container || this.$refs.webDocContent;
+            if (!root) return;
+            // §19.2 — per-DOCUMENT numbering. A pack is N documents; "Page X
+            // of N" reflects the document the signer is currently viewing
+            // (the .corex-a4-page nearest the viewport top), N = THAT
+            // document's page count (data-doc-total), restarting at 1 per
+            // document. Single docs: all pages share one docTotal → 1..N as
+            // before. Stays live as the signer scrolls through the pack.
+            const recompute = () => {
+                const pages = Array.from(root.querySelectorAll('.corex-a4-page'));
+                if (pages.length === 0) return;
+                let ref = pages[0], best = Infinity;
+                pages.forEach(p => {
+                    const top = p.getBoundingClientRect().top;
+                    const d = top >= -2 ? top : (Math.abs(top) + 1e6);
+                    if (d < best) { best = d; ref = p; }
+                });
+                const docTotal = parseInt(ref.getAttribute('data-doc-total') || '0', 10);
+                const pageIdx = parseInt(ref.getAttribute('data-page-index') || '0', 10);
+                if (docTotal > 0) {
+                    this.totalPages = docTotal;
+                    this.currentPage = Math.min(Math.max(pageIdx + 1, 1), docTotal);
+                } else {
+                    this.totalPages = pages.length;
+                    if (this.currentPage > this.totalPages) this.currentPage = this.totalPages;
+                    if (this.currentPage < 1) this.currentPage = 1;
+                }
+            };
+            recompute();
+            if (!this._cxPageScrollBound) {
+                this._cxPageScrollBound = true;
+                let raf = null;
+                const onScroll = () => {
+                    if (raf) return;
+                    raf = requestAnimationFrame(() => { raf = null; recompute(); });
+                };
+                let sc = root.parentElement;
+                while (sc && sc.scrollHeight <= sc.clientHeight && sc !== document.body) sc = sc.parentElement;
+                (sc || window).addEventListener('scroll', onScroll, { passive: true });
+                window.addEventListener('scroll', onScroll, { passive: true });
+            }
+        },
 
         markersForCurrentPage() {
             return this.markers.filter(m => m.page_number === this.currentPage);
@@ -2029,7 +2298,7 @@ function externalSign() {
             return css;
         },
 
-        // â”€â”€ Field assignment helpers â”€â”€
+        // ── Field assignment helpers ──
         normalizeRole(role) {
             const aliases = { lessor: 'landlord', lessee: 'tenant' };
             return aliases[role] || role;
@@ -2101,7 +2370,7 @@ function externalSign() {
             }
         },
 
-        // â”€â”€ Marker display â”€â”€
+        // ── Marker display ──
         markerLabel(m) {
             const partyLabel = m.assigned_party.replace('_', ' ');
             const typeLabel = m.type.charAt(0).toUpperCase() + m.type.slice(1);
@@ -2129,7 +2398,7 @@ function externalSign() {
             return base + 'border-slate-300 bg-slate-100/70 cursor-default';
         },
 
-        // â”€â”€ Marker interaction â”€â”€
+        // ── Marker interaction ──
         handleMarkerClick(marker) {
             if (!marker.is_mine || marker.signed) return;
 
@@ -2156,7 +2425,7 @@ function externalSign() {
             this.$nextTick(() => this.initCanvas());
         },
 
-        // â”€â”€ Canvas â”€â”€
+        // ── Canvas ──
         initCanvas() {
             const canvas = this.$refs.signatureCanvas;
             if (!canvas) return;
@@ -2213,7 +2482,7 @@ function externalSign() {
             return canvas.toDataURL('image/png');
         },
 
-        // â”€â”€ Date marker auto-sign (plain text, rendered server-side) â”€â”€
+        // ── Date marker auto-sign (plain text, rendered server-side) ──
         async signDateMarker(marker) {
             const dateStr = this.formatDate(new Date());
             const success = await this.submitSignature(marker, null, 'typed', dateStr);
@@ -2223,7 +2492,7 @@ function externalSign() {
             }
         },
 
-        // â”€â”€ Text marker input (plain text, rendered server-side) â”€â”€
+        // ── Text marker input (plain text, rendered server-side) ──
         async applyTextValue() {
             if (!this.activeMarker || !this.textInputValue.trim()) return;
             this.applying = true;
@@ -2243,7 +2512,7 @@ function externalSign() {
             return d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0');
         },
 
-        // â”€â”€ Apply signature â”€â”€
+        // ── Apply signature ──
         async applySignature() {
             if (!this.activeMarker) return;
             this.applying = true;
@@ -2278,7 +2547,14 @@ function externalSign() {
                     m.is_mine && !m.signed && m.type === currentType
                 );
 
-                if (!this.firstSignatureDone && (currentType === 'signature' || currentType === 'initial') && remainingMarkers.length > 0) {
+                // Phase 1B.9 (FIX 2) — only the agent gets the apply-to-all
+                // prompt. Recipients must initial each page individually for
+                // legal informed-consent reasons.
+                if (this.isAgent
+                    && !this.firstSignatureDone
+                    && (currentType === 'signature' || currentType === 'initial')
+                    && remainingMarkers.length > 0
+                ) {
                     this.lastSignatureData = signatureData;
                     this.lastSignatureType = signatureType;
                     this.showApplyAll = true;
@@ -2290,7 +2566,7 @@ function externalSign() {
             this.applying = false;
         },
 
-        // â”€â”€ Submit signature â”€â”€
+        // ── Submit signature ──
         async submitSignature(marker, signatureData, signatureType, textValue = null) {
             try {
                 const body = { signature_type: signatureType };
@@ -2333,7 +2609,7 @@ function externalSign() {
             }
         },
 
-        // â”€â”€ Apply to all (signatures or initials) â”€â”€
+        // ── Apply to all (signatures or initials) ──
         async applyToAllSignatureMarkers() {
             this.applyingAll = true;
 
@@ -2359,15 +2635,15 @@ function externalSign() {
         },
         set remainingSignatureCount(v) {},
 
-        // â”€â”€ Complete signing (with guided navigation if unsigned remain) â”€â”€
+        // ── Complete signing (with guided navigation if unsigned remain) ──
         async completeSigning() {
-            // Check locally first â€” guide to unsigned markers
+            // Check locally first — guide to unsigned markers
             const unsignedMarkers = this.markers.filter(m => m.is_mine && !m.signed);
             if (unsignedMarkers.length > 0) {
                 const first = unsignedMarkers[0];
                 const typeLabel = first.type === 'text' ? 'enter text' : (first.type === 'initial' ? 'initial' : 'sign');
                 this.showNotification(
-                    `Please ${typeLabel} here â€” ${unsignedMarkers.length} remaining`,
+                    `Please ${typeLabel} here — ${unsignedMarkers.length} remaining`,
                     'warning'
                 );
                 this.navigateToMarker(first);
@@ -2431,7 +2707,7 @@ function externalSign() {
             if (!this.completionDone) this.completing = false;
         },
 
-        // â”€â”€ Navigate to next unsigned marker â”€â”€
+        // ── Navigate to next unsigned marker ──
         goToNextUnsigned() {
             const unsigned = this.markers.filter(m => m.is_mine && !m.signed);
             if (unsigned.length === 0) return;
@@ -2452,7 +2728,7 @@ function externalSign() {
             });
         },
 
-        // â”€â”€ Notification toast â”€â”€
+        // ── Notification toast ──
         _notificationTimeout: null,
         notificationText: '',
         notificationType: '',
@@ -2468,7 +2744,7 @@ function externalSign() {
             }, 5000);
         },
 
-        // â”€â”€ Web template signing helpers â”€â”€
+        // ── Web template signing helpers ──
         webTotalSigBlocksCount: 0,
 
         get webTotalSigBlocks() {
@@ -2476,10 +2752,37 @@ function externalSign() {
         },
 
         get canSubmitWeb() {
+            // Walk-fix FIX 4 — when the recipient has flagged any
+            // clause, signing is locked until the agent has resolved
+            // the amendment. The recipient sees the locked surface
+            // (sign + initial actions hidden, "amendments under
+            // review" status banner). canSubmitWeb returning false
+            // also disables the submit button as a defence-in-depth
+            // gate alongside the template-level x-if guard below.
+            if (this.hasPendingRecipientFlags) return false;
             return this.webConsented && this.webIncompleteCount === 0;
         },
 
-        // Legacy â€” replaced by _makeWebElementsInteractive()
+        /**
+         * Walk-fix FIX 4 — true when this recipient has at least one
+         * clause flag in `pending_review` status. Drives the lockout
+         * UI: hides sign / initial actions, swaps in the "amendments
+         * under review" CTA, and disables canSubmitWeb.
+         *
+         * Reads from webClauseFlaggedItems — pre-seeded from the
+         * server's persistedClauseFlags map for THIS recipient's
+         * party_role at page render, then live-updated when the
+         * recipient adds/removes flags during the session. The lock
+         * survives refreshes because the server re-seeds the same
+         * data on every page render.
+         */
+        get hasPendingRecipientFlags() {
+            const items = this.webClauseFlaggedItems || [];
+            if (!Array.isArray(items) || items.length === 0) return false;
+            return items.some(f => (f.status || 'pending_review') === 'pending_review');
+        },
+
+        // Legacy — replaced by _makeWebElementsInteractive()
         processWebSignatureBlocks() { /* no-op */ },
 
         isMyWebSigBlock(partyRole) {
@@ -2507,52 +2810,28 @@ function externalSign() {
             return false;
         },
 
-        processWebDisclosureChecklists() {
-            const container = this.$refs.webDocContent || null;
-            if (!container) return;
-
-            setTimeout(() => {
-                const checklists = container.querySelectorAll('.corex-disclosure-checklist');
-                const self = this;
-
-                checklists.forEach(checklist => {
-                    // Check which party should fill this disclosure
-                    // Default to owner_party for mandatory disclosure (seller discloses defects)
-                    // Honour data-disclosure-party attribute if set on the checklist element
-                    const disclosureParty = checklist.getAttribute('data-disclosure-party') || 'owner_party';
-
-                    const rows = checklist.querySelectorAll('.corex-disclosure-row');
-                    rows.forEach((row, rowIdx) => {
-                        const isEditable = this.isMyWebSigBlock(disclosureParty);
-                        row.setAttribute('data-editable', isEditable ? 'true' : 'false');
-
-                        if (isEditable) {
-                            const radios = row.querySelectorAll('.corex-radio-placeholder');
-                            radios.forEach(radio => {
-                                radio.setAttribute('data-selected', 'false');
-                                radio.style.cursor = 'pointer';
-                                radio.style.fontSize = '16pt';
-                                radio.textContent = '\u25CB';
-
-                                radio.addEventListener('click', () => {
-                                    radios.forEach(r => {
-                                        r.setAttribute('data-selected', 'false');
-                                        r.textContent = '\u25CB';
-                                    });
-                                    radio.setAttribute('data-selected', 'true');
-                                    radio.textContent = '\u25CF';
-                                    self.webDisclosureAnswers['row-' + rowIdx] = radio.dataset.value || '';
-                                });
-                            });
-                        }
-                    });
-                });
-            }, 150);
+        // \u00A719 Part A \u2014 shared disclosure logic (single source; agent +
+        // external both pull this in). Provides processWebDisclosureChecklists,
+        // _disclosureEditable, _seedDisclosureFromStore, _restoreDisclosureAnswers,
+        // _processAllDisclosures. Editable only for owner_party (seller).
+        _currentSignerRole() {
+            return (this.signerRole || this.partyRole || '').toLowerCase();
         },
+        @include('docuperfect.signatures.partials.disclosure-logic')
 
         /**
          * Attach clause-level flagging to numbered clauses in the document.
-         * Signer can flag individual clauses with a concern â€” does NOT block signing.
+         *
+         * Phase 1B.6 (FIX 2 + FIX 6) — the flag icon now dispatches the
+         * `open-flag-clause-modal` event consumed by the flag-clause-modal
+         * partial. The modal POSTs to /sign/{token}/flag-clause which
+         * persists immediately (DocumentAmendment + clause_flags JSON), so
+         * a page refresh re-seeds the visible flag indicator without
+         * losing recipient input.
+         *
+         * On init we ALSO re-paint clauses that were flagged in a prior
+         * session (data seeded server-side via persistedClauseFlags) so
+         * the visible state survives reload.
          */
         _initClauseFlagging() {
             const container = this.$refs.webDocContent || null;
@@ -2561,78 +2840,123 @@ function externalSign() {
             const self = this;
             const clauses = container.querySelectorAll('.corex-clause');
 
+            // Build a quick lookup of clauses already flagged from
+            // persisted state — so we can paint the orange treatment on
+            // them at init.
+            const flaggedByNum = new Set(
+                (self.webClauseFlaggedItems || []).map(f => String(f.clauseNum))
+            );
+
             clauses.forEach((clause, idx) => {
-                // Only flag clauses that have a clause number
                 const numEl = clause.querySelector('.corex-clause-number');
                 if (!numEl) return;
                 const clauseNum = numEl.textContent.trim();
 
-                // Make the clause container relative for positioning
                 clause.style.position = 'relative';
 
-                // Create flag icon
+                // Repaint flagged state if persisted.
+                if (flaggedByNum.has(clauseNum)) {
+                    clause.classList.add('clause-flagged');
+                }
+
+                // Render the flag icon — always visible at the clause
+                // edge. For flagged clauses we still show it (as the
+                // "you flagged this" indicator) but use a distinct title.
                 const flagBtn = document.createElement('span');
                 flagBtn.className = 'clause-flag-icon';
-                flagBtn.title = 'Flag this clause';
-                flagBtn.textContent = 'âš‘';
+                flagBtn.title = flaggedByNum.has(clauseNum)
+                    ? 'You flagged this clause for agent review'
+                    : 'Flag / suggest change to this clause';
+                flagBtn.textContent = '⚑';
                 flagBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     e.preventDefault();
-                    console.log('[ClauseFlag] Clicked clause', clauseNum, 'idx', idx);
-                    self._toggleClauseFlag(clause, clauseNum, idx);
+                    self._openClauseFlagModal(clause, clauseNum, idx);
                 });
-
                 clause.appendChild(flagBtn);
-            });
 
+                // Phase 1B.9 (FIX 1, pre-completion) — when this party has
+                // raised a flag AND hasn't signed yet, show a small "X"
+                // affordance that lets them undo it. After signing
+                // completes the affordance disappears (gated by
+                // partyHasCompleted, computed below) — removal then
+                // requires the agent-initiated consent flow.
+                const partyHasCompleted = @json($partyAlreadySigned ?? false);
+                if (flaggedByNum.has(clauseNum) && !partyHasCompleted) {
+                    const removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.className = 'clause-flag-remove';
+                    removeBtn.title = 'Remove this flag';
+                    removeBtn.textContent = '✕';
+                    removeBtn.style.cssText = 'margin-left:0.4rem; padding:0 0.4rem; '
+                        + 'background:transparent; border:1px solid #d97706; color:#92400e; '
+                        + 'border-radius:3px; cursor:pointer; font-size:0.7rem; line-height:1.4;';
+                    removeBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        if (!confirm('Remove this flag? You can re-flag the clause later if you change your mind.')) return;
+                        await self._removeOwnFlag(clauseNum, clause, removeBtn);
+                    });
+                    clause.appendChild(removeBtn);
+                }
+            });
         },
 
-        _toggleClauseFlag(clauseEl, clauseNum, idx) {
-            const isFlagged = clauseEl.classList.contains('clause-flagged');
-            if (isFlagged) {
-                // Remove flag
-                clauseEl.classList.remove('clause-flagged');
-                const commentDiv = clauseEl.querySelector('.clause-flag-comment');
-                if (commentDiv) commentDiv.remove();
-                this.webClauseFlaggedItems = this.webClauseFlaggedItems.filter(f => f.clauseNum !== clauseNum);
-            } else {
-                // Add flag
-                clauseEl.classList.add('clause-flagged');
-
-                const commentDiv = document.createElement('div');
-                commentDiv.className = 'clause-flag-comment';
-
-                const input = document.createElement('input');
-                input.type = 'text';
-                input.placeholder = 'What is your concern with clause ' + clauseNum + '?';
-                input.addEventListener('input', () => {
-                    const existing = this.webClauseFlaggedItems.find(f => f.clauseNum === clauseNum);
-                    if (existing) {
-                        existing.concern = input.value;
-                    }
+        async _removeOwnFlag(clauseNum, clauseEl, removeBtn) {
+            try {
+                const csrf = document.querySelector('meta[name=csrf-token]')?.content;
+                const token = @json($request->token);
+                const url = '/sign/' + token + '/flag/' + encodeURIComponent(clauseNum);
+                const r = await fetch(url, {
+                    method: 'DELETE',
+                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
                 });
-                input.addEventListener('click', (e) => e.stopPropagation());
-
-                commentDiv.appendChild(input);
-                clauseEl.appendChild(commentDiv);
-
-                this.webClauseFlaggedItems.push({
-                    clauseNum: clauseNum,
-                    clauseIndex: idx,
-                    concern: '',
-                });
-
-                // Focus input
-                setTimeout(() => input.focus(), 50);
+                if (r.ok) {
+                    clauseEl.classList.remove('clause-flagged');
+                    removeBtn.remove();
+                    const commentDiv = clauseEl.querySelector('.clause-flag-comment');
+                    if (commentDiv) commentDiv.remove();
+                    this.webClauseFlaggedItems = this.webClauseFlaggedItems.filter(f => String(f.clauseNum) !== String(clauseNum));
+                } else {
+                    const j = await r.json().catch(() => ({}));
+                    alert(j.error || ('Could not remove flag (' + r.status + ')'));
+                }
+            } catch (e) {
+                alert('Network error: ' + e.message);
             }
+        },
+
+        /**
+         * Phase 1B.6 — open the flag-clause modal. Captures the full
+         * clause text (sans the flag icon glyph itself) and dispatches
+         * the open-flag-clause-modal event. The modal handles the POST
+         * + reload; this side just gathers context.
+         */
+        _openClauseFlagModal(clauseEl, clauseNum, idx) {
+            // Lift the original clause text — strip our own flag icon
+            // glyph so it doesn't appear inside the modal.
+            const clone = clauseEl.cloneNode(true);
+            clone.querySelectorAll('.clause-flag-icon, .clause-flag-comment')
+                .forEach(n => n.remove());
+            const clauseText = (clone.innerText || clone.textContent || '').trim();
+
+            window.dispatchEvent(new CustomEvent('open-flag-clause-modal', {
+                detail: { clauseRef: clauseNum, clauseText: clauseText },
+            }));
+        },
+
+        // Legacy hook kept for any caller that still references the
+        // toggle API; routes to the modal instead of inline input.
+        _toggleClauseFlag(clauseEl, clauseNum, idx) {
+            this._openClauseFlagModal(clauseEl, clauseNum, idx);
         },
 
         /**
          * Process disclosure tables (corex-table with YES/NO/N/A headers)
          * and inject radio button inputs into each data row.
          */
-        _processDisclosureTable() {
-            const container = this.$refs.webDocContent || null;
+        _processDisclosureTable(root) {
+            const container = root || this.$refs.webDocContent || null;
             if (!container) return;
 
             const self = this;
@@ -2640,6 +2964,17 @@ function externalSign() {
             let totalRows = 0;
 
             tables.forEach(table => {
+                // §19/§20 — a checklist-owned table is processed SOLELY by
+                // processWebDisclosureChecklists(). Double-processing here
+                // double-counts totalDisclosureRows (required=2x,
+                // satisfied=1x → gate never clears) and destroys the
+                // .corex-radio-placeholder controls. Pagination-safe: the
+                // primary check is the table's OWN class (survives §19
+                // per-wrapper pagination moving the node); closest() is a
+                // fallback (ancestry can be broken by reflow in a pack —
+                // that was the "6 items remaining" pack bug).
+                if (table.classList.contains('corex-disclosure-table') || table.closest('.corex-disclosure-checklist')) return;
+
                 // Check if this table has YES/NO/N/A headers
                 const headers = table.querySelectorAll('thead th');
                 if (headers.length < 2) return;
@@ -2664,7 +2999,7 @@ function externalSign() {
                     if (cells.length === 1) return;
 
                     // Certificate compliance rows: 5 cells, cells[0] empty, cells[1] has cert text
-                    // e.g. [empty] | [Cert Name â€“ If Yes, when was it issued?] | [] | [] | []
+                    // e.g. [empty] | [Cert Name – If Yes, when was it issued?] | [] | [] | []
                     const cell0Text = (cells[0]?.textContent || '').trim();
                     const cell1Text = (cells[1]?.textContent || '').trim();
 
@@ -2674,7 +3009,7 @@ function externalSign() {
                         return;
                     }
 
-                    // Normal disclosure rows â€” need question text in cells[0]
+                    // Normal disclosure rows — need question text in cells[0]
                     if (!cell0Text) return;
 
                     // Skip sub-header rows like "Are you in possession of..." that end with ":"
@@ -2683,7 +3018,8 @@ function externalSign() {
                         cell0Text.endsWith(':');
                     if (isSubHeader) return;
 
-                    const radioGroupName = 'disclosure_row_' + rowIdx;
+                    const radioGroupName = self._disclosureKeyFor(row);
+                    row.setAttribute('data-disclosure-key', radioGroupName);
                     totalRows++;
 
                     optionCols.forEach(opt => {
@@ -2712,25 +3048,32 @@ function externalSign() {
                     });
                 });
 
-                // Process Additional Information rows â€” make them editable
+                // Process Additional Information rows — make them editable
                 self._processAdditionalInfoSection(table);
             });
 
-            this.totalDisclosureRows = totalRows;
+            // += (not =): _processAllDisclosures resets to 0 then invokes
+            // this once PER .corex-document-wrapper — accumulate the
+            // genuine bare-table rows across all pack segments.
+            this.totalDisclosureRows = (this.totalDisclosureRows || 0) + totalRows;
         },
 
         /**
          * Process a certificate compliance row with YES/NO radios + conditional date input.
-         * These rows have 5 cells: [spacer] | [Cert Name â€“ If Yes, when was it issued?] | [] | [] | []
+         * These rows have 5 cells: [spacer] | [Cert Name – If Yes, when was it issued?] | [] | [] | []
          * Radio buttons go in cells[2] (YES) and cells[3] (NO). Date input in cells[4].
          */
         _processCertificateRow(row, cells, rowIdx) {
             const self = this;
-            const radioGroupName = 'disclosure_row_' + rowIdx;
+            // §20 intrinsic keys (docKey + per-doc index), identical
+            // derivation as the checklist + normal bare-table rows.
+            const radioGroupName = self._disclosureKeyFor(row);
+            const dateKey = self._disclosureDateKeyFor(row);
+            row.setAttribute('data-disclosure-key', radioGroupName);
 
             // Extract certificate name from cells[1] (everything before the dash)
             const fullText = cells[1].textContent.trim();
-            const certName = fullText.replace(/\s*[â€“-]\s*If Yes.*$/i, '').trim();
+            const certName = fullText.replace(/\s*[–-]\s*If Yes.*$/i, '').trim();
 
             // Replace cells[1] with just the certificate name
             cells[1].textContent = certName;
@@ -2769,7 +3112,7 @@ function externalSign() {
                             const dateInput = dateWrapper.querySelector('input[type="date"]');
                             if (dateInput) {
                                 dateInput.value = '';
-                                delete self.webDisclosureAnswers['disclosure_date_' + rowIdx];
+                                delete self.webDisclosureAnswers[dateKey];
                             }
                         }
                     }
@@ -2783,7 +3126,7 @@ function externalSign() {
                 opt.cell.appendChild(label);
             });
 
-            // Date input in cells[4] (or cells[3] if only 4 cells) â€” hidden until YES
+            // Date input in cells[4] (or cells[3] if only 4 cells) — hidden until YES
             const dateCell = cells[4] || cells[3];
             if (dateCell && dateCell !== cells[3]) {
                 const wrapper = document.createElement('div');
@@ -2799,7 +3142,7 @@ function externalSign() {
                 dateInput.style.cssText = 'border:1px solid #cbd5e1;border-radius:4px;padding:2px 4px;font-size:11px;width:130px;';
 
                 dateInput.addEventListener('change', () => {
-                    self.webDisclosureAnswers['disclosure_date_' + rowIdx] = dateInput.value;
+                    self.webDisclosureAnswers[dateKey] = dateInput.value;
                 });
 
                 wrapper.appendChild(dateLabel);
@@ -2842,7 +3185,7 @@ function externalSign() {
                         inAdditionalInfo = false;
                         return;
                     }
-                    // Empty row â€” mark for removal
+                    // Empty row — mark for removal
                     if (!text) {
                         emptyRowsToRemove.push(row);
                     }
@@ -2998,10 +3341,12 @@ function externalSign() {
             // updateIncompleteCount is the single source of truth for all counters
             this.updateIncompleteCount();
 
-            // For initials: offer apply-to-all prompt if there are remaining unsigned initials
+            // For initials: offer apply-to-all prompt if there are remaining unsigned initials.
+            // Phase 1B.9 (FIX 2) — gated on isAgent. Recipients initial each
+            // page individually for legal informed-consent reasons.
             if (isInitial) {
                 const unsignedInitials = (this.webInitialElements || []).filter(e => e.isMine && !e.signed);
-                if (unsignedInitials.length > 0 && !this.webInitialSigData) {
+                if (this.isAgent && unsignedInitials.length > 0 && !this.webInitialSigData) {
                     this.pendingInitialSigData = sigData;
                     this.pendingInitialBlockId = sigId;
                     this.showInitialApplyAll = true;
@@ -3036,7 +3381,7 @@ function externalSign() {
             this.showNotification('Initial applied to all page breaks.', 'info');
         },
 
-        // Decline apply-to-all â€” keep only the one that was just signed
+        // Decline apply-to-all — keep only the one that was just signed
         declineInitialApplyAll() {
             this.showInitialApplyAll = false;
             this.pendingInitialSigData = null;
@@ -3061,7 +3406,7 @@ function externalSign() {
                     this.showNotification('Please accept the consent checkbox to continue.', 'warning');
                     return;
                 }
-                const answeredRows = Object.keys(this.webDisclosureAnswers).filter(k => k.startsWith('disclosure_row_')).length;
+                const answeredRows = Object.keys(this.webDisclosureAnswers).filter(k => this._isDisclosureAnswerKey(k)).length;
                 if (this.totalDisclosureRows > 0 && answeredRows < this.totalDisclosureRows) {
                     this.showNotification('Please complete all disclosure items before signing. (' + answeredRows + ' of ' + this.totalDisclosureRows + ' answered)', 'warning');
                     return;
@@ -3112,6 +3457,12 @@ function externalSign() {
                                 .filter(e => e.isMine && e.signed && e.sigData)
                                 .map(e => [e.initKey, e.sigData])
                         ),
+                        // §19.7 — exact signed-and-paginated DOM (per-doc
+                        // .corex-a4-page + per-page initial slots). Server uses
+                        // it verbatim as merged_html (no server re-pagination)
+                        // so the filed PDF/split carry per-page initials
+                        // exactly as the signer saw them.
+                        paginated_html: this.$refs.webDocContent ? this.$refs.webDocContent.innerHTML : null,
                     }),
                 });
                 const data = await resp.json();
@@ -3127,7 +3478,7 @@ function externalSign() {
             this.completing = false;
         },
 
-        // â”€â”€ Decline â”€â”€
+        // ── Decline ──
         async submitDecline() {
             this.declining = true;
             try {
@@ -3187,6 +3538,21 @@ function uploadForm() {
     };
 }
 </script>
+
+{{-- Phase 1B.5 + 1B.6 — recipient Other Conditions + Flag Clause modals.
+     The modal partials wire themselves via window CustomEvent dispatch:
+       open-add-condition-modal — fired by + Add condition buttons inside
+         InsertableBlockRenderer-rendered blocks
+       open-flag-clause-modal   — fired by the existing _toggleClauseFlag
+         icon handler (Phase 1B.6 replaces the inline-input UX with this
+         richer modal — see _initClauseFlagging / _toggleClauseFlag).
+     The Phase 1B.5 override-modal partial was removed in Phase 1B.6 — the
+     clause-flag flow is the canonical recipient change-proposal path. --}}
+@isset($request)
+    @php $token = $request->token; @endphp
+    @include('docuperfect.signatures._partials.add-condition-modal', ['token' => $token, 'numberedClauses' => $numberedClauses ?? []])
+    @include('docuperfect.signatures._partials.flag-clause-modal', ['token' => $token])
+@endisset
 
 </body>
 </html>

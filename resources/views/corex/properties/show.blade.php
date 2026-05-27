@@ -224,6 +224,227 @@
                 </a>
                 @endif
 
+                {{-- Presentations V2 — one-button generator (Phase 1) + coverage badge + asking-price modal (Phase 2) --}}
+                @if(auth()->user()->hasPermission('create_presentations'))
+                <div x-data="presentationGenerator({
+                        propertyId: {{ $property->id }},
+                        coverageUrl: '{{ route('corex.properties.presentation-coverage', $property) }}',
+                        generateUrl: '{{ route('corex.properties.generate-presentation', $property) }}',
+                        csrf: '{{ csrf_token() }}',
+                        hasListedPrice: {{ $property->price ? 'true' : 'false' }},
+                        listedPrice: {{ $property->price ? (int) $property->price : 'null' }},
+                    })"
+                    x-init="loadCoverage()"
+                    class="space-y-2">
+
+                    {{-- Coverage badge (loaded async; placeholder shown until coverage resolves) --}}
+                    <div class="rounded-md px-2.5 py-2 text-[11px] leading-snug"
+                         x-show="coverage"
+                         x-cloak
+                         :style="badgeStyle">
+                        <div class="font-semibold uppercase tracking-wider text-[9px] mb-0.5" x-text="badgeHeading"></div>
+                        <div x-text="coverage?.recommendation"></div>
+                    </div>
+                    <div class="rounded-md px-2.5 py-2 text-[11px]" style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-muted);"
+                         x-show="!coverage && !coverageError" x-cloak>
+                        Checking comp coverage…
+                    </div>
+                    <div class="rounded-md px-2.5 py-2 text-[11px]" style="background:color-mix(in srgb, #dc2626 10%, transparent); border:1px solid color-mix(in srgb, #dc2626 30%, transparent); color:#dc2626;"
+                         x-show="coverageError" x-cloak
+                         x-text="coverageError"></div>
+
+                    {{-- Generate button --}}
+                    <button type="button"
+                            @click="onClickGenerate()"
+                            class="prop-action-btn prop-action-btn-brand w-full"
+                            :disabled="generating"
+                            :class="generating ? 'opacity-60 cursor-wait' : ''"
+                            title="Generate a market-analytics presentation pack for this property">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" x-show="!generating">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"/>
+                        </svg>
+                        <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" x-show="generating" x-cloak>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"/>
+                        </svg>
+                        <span x-text="generating ? 'Generating…' : 'Generate Presentation'"></span>
+                    </button>
+
+                    {{-- Asking-price modal (shown when property has no listed price) --}}
+                    <template x-teleport="body">
+                        <div x-show="modalOpen" x-cloak
+                             class="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+                             x-transition.opacity>
+                            <div class="absolute inset-0" style="background:rgba(0,0,0,0.45);" @click="modalOpen = false"></div>
+                            <div class="relative rounded-md w-full max-w-md p-5 shadow-xl"
+                                 style="background:var(--surface); border:1px solid var(--border);"
+                                 @click.stop>
+                                <h3 class="text-base font-bold mb-1" style="color:var(--text-primary);">What price are you testing?</h3>
+                                <p class="text-xs mb-3" style="color:var(--text-secondary);">
+                                    This property has no listed price. Enter a price you want the analysis to test.
+                                </p>
+                                <div class="mb-2 text-xs" style="color:var(--text-muted);" x-show="suggestedPrice">
+                                    Suggestion based on suburb data:
+                                    <span class="font-semibold" style="color:var(--text-primary);"
+                                          x-text="formatZar(suggestedPrice)"></span>
+                                </div>
+                                <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Asking price (ZAR)</label>
+                                <div class="relative">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-sm pointer-events-none" style="color:var(--text-muted);">R</span>
+                                    <input type="number" min="0" step="1000" x-model.number="askingPrice"
+                                           class="w-full rounded-md pl-7 pr-3 py-2 text-sm"
+                                           style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);"
+                                           placeholder="e.g. 1500000">
+                                </div>
+
+                                {{-- Phase 3b — comp scope override at generation time --}}
+                                <div class="mt-4 pt-3" style="border-top:1px solid var(--border);">
+                                    <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1.5" style="color:var(--text-muted);">Comparable scope</label>
+                                    <div class="flex items-center gap-3 text-xs">
+                                        <label class="flex items-center gap-1.5 cursor-pointer">
+                                            <input type="radio" name="comp_scope" value="radius_all" x-model="compScope">
+                                            <span style="color:var(--text-primary);">Radius</span>
+                                        </label>
+                                        <label class="flex items-center gap-1.5 cursor-pointer">
+                                            <input type="radio" name="comp_scope" value="suburb_only" x-model="compScope">
+                                            <span style="color:var(--text-primary);">Suburb only</span>
+                                        </label>
+                                        <div class="flex items-center gap-1 ml-3" x-show="compScope === 'radius_all'" x-cloak>
+                                            <input type="number" min="50" max="5000" step="50" x-model.number="compRadiusM"
+                                                   class="w-20 rounded-md px-2 py-1 text-xs"
+                                                   style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                            <span class="text-[11px]" style="color:var(--text-muted);">m</span>
+                                        </div>
+                                    </div>
+                                    <p class="text-[11px] mt-1" style="color:var(--text-muted);">Defaults to your agency setting. Override applies to this presentation only.</p>
+                                </div>
+
+                                <p class="text-[11px] mt-1" style="color:var(--text-muted);" x-show="modalError" x-text="modalError"></p>
+                                <div class="mt-4 flex items-center justify-end gap-2">
+                                    <button type="button" @click="modalOpen = false"
+                                            class="px-3 py-1.5 text-sm font-medium rounded-md"
+                                            style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-secondary);">
+                                        Cancel
+                                    </button>
+                                    <button type="button" @click="submitFromModal()"
+                                            :disabled="generating"
+                                            class="prop-action-btn prop-action-btn-brand"
+                                            :class="generating ? 'opacity-60 cursor-wait' : ''">
+                                        <span x-text="generating ? 'Generating…' : 'Generate'"></span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                <script>
+                if (typeof window.presentationGenerator !== 'function') {
+                    window.presentationGenerator = function(config) {
+                        return {
+                            coverage: null,
+                            coverageError: null,
+                            modalOpen: false,
+                            modalError: null,
+                            askingPrice: null,
+                            suggestedPrice: null,
+                            generating: false,
+                            compScope: 'radius_all',   // Phase 3b — initialised from coverage response
+                            compRadiusM: 1000,
+
+                            get badgeStyle() {
+                                const state = this.coverage?.state;
+                                const palettes = {
+                                    rich:     { bg: 'color-mix(in srgb, var(--ds-green) 10%, transparent)',  border: 'color-mix(in srgb, var(--ds-green) 35%, transparent)',  fg: 'var(--ds-green)' },
+                                    moderate: { bg: 'color-mix(in srgb, var(--ds-amber) 12%, transparent)',  border: 'color-mix(in srgb, var(--ds-amber) 35%, transparent)',  fg: 'var(--ds-amber)' },
+                                    thin:     { bg: 'color-mix(in srgb, var(--ds-amber) 12%, transparent)',  border: 'color-mix(in srgb, var(--ds-amber) 35%, transparent)',  fg: 'var(--ds-amber)' },
+                                    none:     { bg: 'color-mix(in srgb, #dc2626 10%, transparent)',          border: 'color-mix(in srgb, #dc2626 30%, transparent)',          fg: '#dc2626' },
+                                };
+                                const p = palettes[state] ?? palettes.none;
+                                return `background:${p.bg}; border:1px solid ${p.border}; color:${p.fg};`;
+                            },
+                            get badgeHeading() {
+                                const labels = { rich: 'Strong data', moderate: 'Moderate data', thin: 'Thin data', none: 'No data' };
+                                return labels[this.coverage?.state] ?? 'Coverage';
+                            },
+                            formatZar(n) {
+                                if (n === null || n === undefined) return '—';
+                                return 'R ' + Number(n).toLocaleString('en-ZA');
+                            },
+                            async loadCoverage() {
+                                try {
+                                    const r = await fetch(config.coverageUrl, { headers: { 'Accept': 'application/json' } });
+                                    if (!r.ok) {
+                                        this.coverageError = 'Coverage check failed (' + r.status + ').';
+                                        return;
+                                    }
+                                    this.coverage = await r.json();
+                                    // Sync modal defaults with agency-resolved scope.
+                                    if (this.coverage?.comp_scope) this.compScope = this.coverage.comp_scope;
+                                    if (this.coverage?.comp_radius_m) this.compRadiusM = this.coverage.comp_radius_m;
+                                } catch (e) {
+                                    this.coverageError = 'Coverage check failed: ' + e.message;
+                                }
+                            },
+                            onClickGenerate() {
+                                if (this.generating) return;
+                                // Phase 3b — always open the modal so the agent sees the
+                                // comp-scope toggle. Pre-fill price from listed_price
+                                // when available (one-click intent preserved — agent can
+                                // just hit Generate inside the modal without changes).
+                                this.suggestedPrice = config.listedPrice || null;
+                                this.askingPrice = this.suggestedPrice;
+                                this.modalError = null;
+                                this.modalOpen = true;
+                            },
+                            submitFromModal() {
+                                // Allow blank price when the property has a listed_price —
+                                // server falls back to property->price. Negative is always invalid.
+                                if (this.askingPrice !== null && this.askingPrice !== '' && this.askingPrice < 0) {
+                                    this.modalError = 'Price cannot be negative.';
+                                    return;
+                                }
+                                if (!config.hasListedPrice && (this.askingPrice === null || this.askingPrice === '')) {
+                                    this.modalError = 'Please enter a price (this property has no listed price).';
+                                    return;
+                                }
+                                this.fireGenerate(this.askingPrice);
+                            },
+                            async fireGenerate(askingPrice) {
+                                this.generating = true;
+                                const body = new FormData();
+                                body.append('_token', config.csrf);
+                                if (askingPrice !== null && askingPrice !== undefined && askingPrice !== '') {
+                                    body.append('asking_price', String(askingPrice));
+                                }
+                                if (this.compScope) body.append('comp_scope', this.compScope);
+                                if (this.compRadiusM) body.append('comp_radius_m', String(this.compRadiusM));
+                                try {
+                                    const r = await fetch(config.generateUrl, {
+                                        method: 'POST',
+                                        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                                        body,
+                                    });
+                                    const data = await r.json().catch(() => null);
+                                    if (!r.ok) {
+                                        this.modalError = (data && data.error) || ('Generation failed (' + r.status + ').');
+                                        this.generating = false;
+                                        return;
+                                    }
+                                    if (data?.redirect_url) {
+                                        window.location.href = data.redirect_url;
+                                    } else {
+                                        window.location.reload();
+                                    }
+                                } catch (e) {
+                                    this.modalError = 'Generation failed: ' + e.message;
+                                    this.generating = false;
+                                }
+                            },
+                        };
+                    };
+                }
+                </script>
+                @endif
+
                 <form method="POST" action="{{ route('corex.properties.duplicate', $property) }}" onsubmit="return confirm('Duplicate this property?')">
                     @csrf
                     <button type="submit" class="prop-action-btn prop-action-btn-neutral">
@@ -332,7 +553,7 @@
                     {{-- Click popover — overlays the panel area, click outside or close button to dismiss --}}
                     <template x-teleport="body">
                         <div x-show="openPortal !== null" x-cloak
-                             class="fixed inset-0 z-[110] flex items-center justify-center p-4"
+                             class="fixed inset-0 z-[9999] flex items-center justify-center p-4"
                              x-transition.opacity>
                             <div class="absolute inset-0" style="background:rgba(0,0,0,0.45);" @click="openPortal = null"></div>
                             @foreach($portals as $pIdx2 => [$pName2, $pLive2, $pMissingArr2])
@@ -488,7 +709,7 @@
             @endphp
             <template x-teleport="body">
             <div x-show="synOpen" x-cloak
-                 class="fixed inset-0 z-[100] flex items-center justify-center p-4"
+                 class="fixed inset-0 z-[9999] flex items-center justify-center p-4"
                  x-transition.opacity>
                 {{-- Backdrop --}}
                 <div class="absolute inset-0" style="background:rgba(0,0,0,0.55); backdrop-filter:blur(2px);"
@@ -674,6 +895,8 @@
                                 'matterportId'    => $property->matterport_id ?? '',
                                 'ppDelayUntil'    => $property->pp_delay_until ? $property->pp_delay_until->format('d M Y') : '',
                                 'ppDelayUntilRaw' => $property->pp_delay_until ? $property->pp_delay_until->toIso8601String() : '',
+                                // A.2.1 — single source of truth for the public URL lives on Property.
+                                'publicUrl'       => $property->publicListingUrls()['pp'] ?? '',
                             ];
                         @endphp
                         <div x-data="ppSyndication({{ Js::from($ppConfig) }})" @click.stop class="space-y-3">
@@ -874,6 +1097,8 @@
                                 'ppDelayUntil'    => $property->pp_delay_until ? $property->pp_delay_until->format('d M Y') : '',
                                 'resolvedP24AgencyId'    => $resolvedP24AgencyId ?? '',
                                 'resolvedP24AgencyLabel' => $resolvedP24AgencyLabel ?? '',
+                                // A.2.1 — single source of truth for the public URL lives on Property.
+                                'publicUrl'              => $property->publicListingUrls()['p24'] ?? '',
                             ];
                         @endphp
                         <div x-data="p24Syndication({{ Js::from($p24Config) }})" @click.stop class="space-y-3 mt-2">
@@ -1052,7 +1277,7 @@
     @if(!$isNew)
         <template x-teleport="body">
             <div x-show="complianceModalOpen" x-cloak
-                 class="fixed inset-0 z-[120] flex items-start justify-center p-4 overflow-y-auto"
+                 class="fixed inset-0 z-[9999] flex items-start justify-center p-4 overflow-y-auto"
                  x-transition.opacity>
                 <div class="absolute inset-0" style="background:rgba(0,0,0,0.5);" @click="complianceModalOpen = false"></div>
                 <div class="relative w-full max-w-2xl mt-12"
@@ -1271,6 +1496,84 @@
                         </div>
                     </div>
                 @endif
+
+                {{-- Phase 3g V2 Part C — Property Location embedded map.
+                     Centred on property's GPS (resolved by Phase 3f geocoding),
+                     shows sold + active comps within 1km. Falls back to a
+                     placeholder when GPS is missing. --}}
+                <div class="lg:col-span-3">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-xs font-bold uppercase tracking-wider" style="color:var(--text-muted);">Property Location</h3>
+                        @if($property->latitude && $property->longitude)
+                            <a href="{{ route('corex.map.index') }}?focus={{ $property->latitude }},{{ $property->longitude }}&zoom=17"
+                               class="text-xs font-medium" style="color: var(--brand-button); text-decoration: none;">
+                                Open full map →
+                            </a>
+                        @endif
+                    </div>
+                    @include('corex.map.partials._embed-map', [
+                        'containerId'  => 'corex-prop-map-' . $property->id,
+                        'centerLat'    => $property->latitude,
+                        'centerLng'    => $property->longitude,
+                        'radiusM'      => 1000,
+                        'subjectTitle' => $property->address ?: ('Property #' . $property->id),
+                        'mode'         => 'bounds',
+                        'enabledLayers' => ['sold_comps', 'active_listings'],
+                        'fullMapUrl'   => $property->latitude
+                            ? route('corex.map.index') . '?focus=' . $property->latitude . ',' . $property->longitude . '&zoom=17'
+                            : null,
+                    ])
+
+                    {{-- Phase 3i — HFC Sales History panel --}}
+                    @php
+                        $hfcSales = \App\Models\Deal::withoutGlobalScopes()
+                            ->where('property_id', $property->id)
+                            ->whereNotNull('registration_date')
+                            ->where(function ($q) {
+                                $q->where('accepted_status', 'R')
+                                  ->orWhereNotNull('registration_date');
+                            })
+                            ->orderByDesc('registration_date')
+                            ->limit(10)
+                            ->get();
+                    @endphp
+                    @if($hfcSales->isNotEmpty())
+                        <div style="margin-top:14px;padding:14px;background:var(--surface);border:1px solid var(--border);border-left:3px solid #00b594;border-radius:6px;">
+                            <h3 class="text-xs font-bold uppercase tracking-wider mb-2" style="color:#00b594;">
+                                HFC has sold this property before
+                            </h3>
+                            <p style="font-size:0.75rem;color:var(--text-muted);margin:0 0 10px 0;">
+                                Powerful re-mandate signal — we know this property.
+                            </p>
+                            <div style="display:flex;flex-direction:column;gap:8px;">
+                                @foreach($hfcSales as $s)
+                                    <div style="display:grid;grid-template-columns:120px 1fr auto;gap:10px;align-items:center;font-size:0.8125rem;padding:8px 10px;background:var(--surface-2);border-radius:4px;">
+                                        <div style="color:var(--text-secondary);font-weight:600;">
+                                            {{ $s->registration_date?->format('M Y') ?? '—' }}
+                                        </div>
+                                        <div style="color:var(--text-secondary);font-size:0.75rem;">
+                                            @if($s->seller_name)Seller: {{ \Illuminate\Support\Str::limit($s->seller_name, 40) }}@endif
+                                        </div>
+                                        <div style="font-weight:600;color:var(--text-primary);">
+                                            @if($s->sale_price)
+                                                R {{ number_format((int) $s->sale_price) }}
+                                            @elseif($s->property_value)
+                                                R {{ number_format((float) $s->property_value, 0) }}
+                                            @else
+                                                —
+                                            @endif
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- Phase 3j — SG Documents panel (server-side SG search + save to drive) --}}
+                    <div style="margin-top:14px;">
+                        @include('corex.properties.partials._sg-documents-panel', ['property' => $property])
+                    </div>
+                </div>
 
                 {{-- Row 2: Key Dates (cols 1-2) | Linked Contact (col 3) — headings align since rows share top --}}
                 @if(count($keyDates))
@@ -1809,7 +2112,7 @@
 
                     {{-- ── SPACE DETAIL MODAL ────────────────────────────────── --}}
                     <div x-show="modalOpen" x-cloak
-                         class="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+                         class="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center"
                          style="background:rgba(0,0,0,0.6);">
                         <div class="absolute inset-0" @click="featurePickerOpen ? featurePickerOpen=false : closeModal()"></div>
                         <div class="relative w-full sm:w-[500px] max-h-[90vh] flex flex-col rounded-t-2xl sm:rounded-md shadow-2xl"
@@ -2008,7 +2311,7 @@
 
                     {{-- ── ADD SPACE MODAL ───────────────────────────────────── --}}
                     <div x-show="addSpaceOpen" x-cloak
-                         class="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+                         class="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center"
                          style="background:rgba(0,0,0,0.6);">
                         <div class="absolute inset-0" @click="addSpaceOpen = false"></div>
                         <div class="relative w-full sm:w-[560px] max-h-[90vh] flex flex-col rounded-t-2xl sm:rounded-md shadow-2xl"
@@ -2149,7 +2452,7 @@
 
                     {{-- ===== INTERNAL MODAL ===== --}}
                     <div x-show="openModal === 'internal'" x-cloak
-                         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                         class="fixed inset-0 z-[9999] flex items-center justify-center p-4"
                          @keydown.escape.window="openModal = null">
                         <div class="absolute inset-0 bg-black/60" @click="openModal = null"></div>
                         <div class="relative w-full max-w-[46rem] max-h-[85vh] overflow-y-auto rounded-lg shadow-2xl"
@@ -2274,7 +2577,7 @@
 
                     {{-- ===== PUBLIC MODAL ===== --}}
                     <div x-show="openModal === 'public'" x-cloak
-                         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                         class="fixed inset-0 z-[9999] flex items-center justify-center p-4"
                          @keydown.escape.window="openModal = null">
                         <div class="absolute inset-0 bg-black/60" @click="openModal = null"></div>
                         <div class="relative w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-lg shadow-2xl"
@@ -2891,7 +3194,7 @@
                 {{-- Sort order & Custom tags popup (teleported, centered) --}}
                 <template x-teleport="body">
                     <div x-show="manageTagsOpen" x-cloak x-transition.opacity
-                         class="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4">
+                         class="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-4">
                         <div class="absolute inset-0" style="background:rgba(0,0,0,0.55);" @click="manageTagsOpen = false"></div>
                         <div class="relative w-full sm:w-[560px] max-h-[90vh] flex flex-col rounded-t-2xl sm:rounded-md shadow-2xl"
                              style="background:var(--surface); border:1px solid var(--border);"
@@ -3111,7 +3414,7 @@
 
             {{-- Lightbox with prev/next navigation --}}
             @php $galleryJsonForJs = json_encode(array_values($galleryImages)); @endphp
-            <div id="lightbox" class="hidden fixed inset-0 z-50 flex items-center justify-center"
+            <div id="lightbox" class="hidden fixed inset-0 z-[9999] flex items-center justify-center"
                  style="background:rgba(0,0,0,0.93);">
 
                 {{-- Close area (click outside image) --}}
@@ -3417,6 +3720,16 @@
                                 <input type="text" name="role" placeholder="e.g. owner, buyer, tenant"
                                        class="w-full rounded-md px-3 py-2 text-sm"
                                        style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                            </div>
+                            {{-- A.2.5 — optional SA ID number with client-side hint. --}}
+                            <div class="sm:col-span-2">
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-muted);">ID number (optional)</label>
+                                <input type="text" name="id_number" inputmode="numeric" maxlength="13"
+                                       pattern="\d{13}" placeholder="e.g. 7610025020081"
+                                       title="13 digits — empty is fine"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                <p class="mt-1 text-[11px]" style="color:var(--text-muted);">SA ID — 13 digits. Leave blank if not known.</p>
                             </div>
                         </div>
                         <button type="submit"
@@ -5431,7 +5744,10 @@ function ppSyndication(config) {
         },
 
         ppListingUrl() {
-            return this.ppRef ? `https://www.privateproperty.co.za/search?q=${this.ppRef}` : '#';
+            // A.2.1 — sourced from Property::publicListingUrls()['pp'] server-side.
+            // Falls through to the legacy search-by-ref pattern if the server
+            // hasn't populated publicUrl (e.g. status not 'active' yet).
+            return this.publicUrl || (this.ppRef ? `https://www.privateproperty.co.za/search?q=${this.ppRef}` : '#');
         },
 
         showMessage(msg, type = 'success') {
@@ -5720,6 +6036,10 @@ function p24Syndication(config) {
             return styles[this.status] || styles[''];
         },
         p24ListingUrl() {
+            // A.2.1 — single source of truth lives on Property::publicListingUrls()['p24'].
+            // Server-rendered URL when status is 'active'. Sandbox testing still
+            // computes locally because the sandbox domain isn't in the accessor.
+            if (this.publicUrl) return this.publicUrl;
             const domain = this.isSandbox ? 'www.exdev.property24-test.com' : 'www.property24.com';
             const slug = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'property';
             const section = this.listingType === 'rental' ? 'to-rent' : 'for-sale';
@@ -6001,7 +6321,7 @@ function propertyMapWidget(cfg) {
 
 {{-- ── Required Fields Modal ───────────────────────────────────────────── --}}
 <div id="prop-required-modal"
-     class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4"
+     class="fixed inset-0 z-[9999] hidden items-center justify-center bg-black/60 px-4"
      role="dialog" aria-modal="true" aria-labelledby="prop-required-title">
     <div class="rounded-lg shadow-xl max-w-md w-full overflow-hidden"
          style="background:var(--surface,#fff); border:1px solid var(--border);">
@@ -6039,7 +6359,7 @@ function propertyMapWidget(cfg) {
 @permission('compliance.whistleblow.create')
 @if(!$isNew)
 <template x-teleport="body">
-<div x-show="wbReportOpen" x-cloak class="fixed inset-0 z-[100] flex items-center justify-center p-4" x-transition.opacity>
+<div x-show="wbReportOpen" x-cloak class="fixed inset-0 z-[9999] flex items-center justify-center p-4" x-transition.opacity>
     <div class="absolute inset-0" style="background:rgba(0,0,0,0.55); backdrop-filter:blur(2px);" @click="wbReportOpen = false"></div>
     <div class="relative rounded-md shadow-2xl" style="width:520px; max-width:95vw; max-height:88vh; overflow-y:auto; background:var(--surface); border:1px solid var(--border);"
          x-data="{

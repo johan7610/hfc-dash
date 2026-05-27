@@ -178,6 +178,42 @@
             </div>
         </div>
 
+        {{-- Phase 9a G2 — Presentations widget (light agent stats) --}}
+        @if(isset($presentationStats))
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:6px; overflow:hidden; margin-top:16px;">
+            <div class="px-5 py-3 flex items-center justify-between" style="border-bottom:1px solid var(--border);">
+                <h3 class="text-sm font-bold" style="color:var(--text-primary);">My Presentations</h3>
+                @if(\Illuminate\Support\Facades\Route::has('presentations.index'))
+                    <a href="{{ route('presentations.index') }}" style="font-size:0.6875rem;color:var(--brand-button);text-decoration:none;">View all →</a>
+                @endif
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:1px;background:var(--border);">
+                <div style="background:var(--surface);padding:14px;text-align:center;">
+                    <div style="font-size:0.625rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">This week</div>
+                    <div style="font-size:1.5rem;color:var(--text-primary);font-weight:700;margin-top:3px;">{{ $presentationStats['this_week_count'] }}</div>
+                </div>
+                <div style="background:var(--surface);padding:14px;text-align:center;">
+                    <div style="font-size:0.625rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">Awaiting outcome</div>
+                    <div style="font-size:1.5rem;font-weight:700;margin-top:3px;color:{{ $presentationStats['awaiting_outcome_count'] > 0 ? '#d97706' : 'var(--text-primary)' }};">
+                        {{ $presentationStats['awaiting_outcome_count'] }}
+                    </div>
+                    @if($presentationStats['awaiting_outcome_count'] > 0 && \Illuminate\Support\Facades\Route::has('corex.presentations.outcomes.index'))
+                        <a href="{{ route('corex.presentations.outcomes.index') }}?status=open" style="font-size:0.625rem;color:#d97706;text-decoration:none;">Record →</a>
+                    @endif
+                </div>
+                <div style="background:var(--surface);padding:14px;text-align:center;">
+                    <div style="font-size:0.625rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">Refresh requests</div>
+                    <div style="font-size:1.5rem;font-weight:700;margin-top:3px;color:{{ $presentationStats['refresh_requests_count'] > 0 ? '#dc2626' : 'var(--text-primary)' }};">
+                        {{ $presentationStats['refresh_requests_count'] }}
+                    </div>
+                    @if($presentationStats['refresh_requests_count'] > 0 && \Illuminate\Support\Facades\Route::has('corex.presentations.refresh-requests.index'))
+                        <a href="{{ route('corex.presentations.refresh-requests.index') }}" style="font-size:0.625rem;color:#dc2626;text-decoration:none;">Open inbox →</a>
+                    @endif
+                </div>
+            </div>
+        </div>
+        @endif
+
         {{-- Recent activity --}}
         <div style="background:var(--surface); border:1px solid var(--border); border-radius:6px; overflow:hidden; margin-top:16px;">
             <div class="px-5 py-3" style="border-bottom:1px solid var(--border);">

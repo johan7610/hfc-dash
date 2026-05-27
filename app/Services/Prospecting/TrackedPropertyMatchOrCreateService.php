@@ -9,10 +9,13 @@ use App\Events\Prospecting\TrackedPropertyEnriched;
 use App\Events\Prospecting\TrackedPropertyPromotedToStock;
 use App\Models\Property;
 use App\Models\Prospecting\TrackedProperty;
+use App\Models\Prospecting\TrackedPropertyAddress;
 use App\Models\Prospecting\TrackedPropertyExternalRef;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * THE central hub for Universal Match-or-Create.
@@ -22,6 +25,9 @@ use Illuminate\Support\Facades\DB;
  * before deciding what to do with incoming property data.
  *
  * Resolution strategy (priority order, first match wins):
+ *   0. Address-history match — incoming address found in tracked_property_addresses
+ *      (Phase C2 silent-killer fix: agent edits an address once, every future
+ *      wrong-address ingestion re-resolves to the same TP). Confidence-ordered.
  *   1. Source-ref match — exact match in tracked_property_external_refs
  *   2. GPS proximity match — within ~5m on cma_gps_lat/lng OR lat/lng
  *   3. Erf number + suburb match
@@ -83,10 +89,38 @@ final class TrackedPropertyMatchOrCreateService
         return DB::transaction(function () use ($agencyId, $facts, $source, $actorUserId) {
             $matched = $this->resolveMatch($agencyId, $facts, $source);
 
-            return $matched
+            $tp = $matched
                 ? $this->enrich($matched, $facts, $source, $actorUserId)
                 : $this->create($agencyId, $facts, $source, $actorUserId);
+
+            // Phase C2 — append (or bump) the ingested address in the TP's
+            // address history. Failure-isolated: the underlying match-or-create
+            // operation MUST succeed even if the history append blows up.
+            $this->appendIngestedAddressToHistory($tp, $facts, $source);
+
+            return $tp;
         });
+    }
+
+    /**
+     * Phase A.2.5 — read-only equivalent of matchOrCreate(). Returns an
+     * existing TrackedProperty when one of the 5 strategies finds a match,
+     * or null without creating anything. Used by the prospect-collision
+     * detector on Portal Stock cards: we need to know if HFC already has
+     * this address without accidentally minting a TP from a hover.
+     *
+     * Wraps resolveMatch() so future strategy changes apply to both paths.
+     *
+     * @param array<string, mixed> $facts   Same shape as matchOrCreate.
+     * @param array<string, mixed> $source  Same shape as matchOrCreate. Defaults
+     *                                      to an empty source to bypass the
+     *                                      source-ref strategy when the caller
+     *                                      doesn't have one (matching purely on
+     *                                      GPS / erf / address tokens).
+     */
+    public function findExistingMatch(int $agencyId, array $facts, array $source = []): ?TrackedProperty
+    {
+        return $this->resolveMatch($agencyId, $facts, $source);
     }
 
     /**
@@ -97,6 +131,19 @@ final class TrackedPropertyMatchOrCreateService
      */
     private function resolveMatch(int $agencyId, array $facts, array $source): ?TrackedProperty
     {
+        // Strategy 0: Address-history match (Phase C2 silent-killer fix).
+        // Consult tracked_property_addresses BEFORE the portal-ref / GPS / erf
+        // strategies — an agent who has corrected a wrong address once should
+        // never see the same wrong-address ingestion create a duplicate TP again.
+        $historyHit = $this->resolveByAddressHistory($agencyId, $facts);
+        if ($historyHit) {
+            Log::debug('TrackedPropertyMatchOrCreateService::resolveMatch matched via strategy=0_address_history', [
+                'agency_id'           => $agencyId,
+                'tracked_property_id' => $historyHit->id,
+            ]);
+            return $historyHit;
+        }
+
         // Strategy 1: Source-ref exact match (the strongest signal — a portal told us this is the same listing)
         if (!empty($source['type']) && !empty($source['ref'])) {
             $ref = TrackedPropertyExternalRef::queryWithoutAgencyScope()
@@ -110,7 +157,12 @@ final class TrackedPropertyMatchOrCreateService
                     ->where('agency_id', $agencyId)
                     ->whereNull('deleted_at')
                     ->find($ref->tracked_property_id);
-                if ($tp) return $tp;
+                if ($tp) {
+                    Log::debug('TrackedPropertyMatchOrCreateService::resolveMatch matched via strategy=1_source_ref', [
+                        'agency_id' => $agencyId, 'tracked_property_id' => $tp->id,
+                    ]);
+                    return $tp;
+                }
             }
         }
 
@@ -125,7 +177,12 @@ final class TrackedPropertyMatchOrCreateService
                 ->whereBetween('cma_gps_lat', [$lat - $tol, $lat + $tol])
                 ->whereBetween('cma_gps_lng', [$lng - $tol, $lng + $tol])
                 ->first();
-            if ($byCmaGps) return $byCmaGps;
+            if ($byCmaGps) {
+                Log::debug('TrackedPropertyMatchOrCreateService::resolveMatch matched via strategy=2_gps_cma', [
+                    'agency_id' => $agencyId, 'tracked_property_id' => $byCmaGps->id,
+                ]);
+                return $byCmaGps;
+            }
 
             $byGps = TrackedProperty::queryWithoutAgencyScope()
                 ->where('agency_id', $agencyId)
@@ -133,7 +190,12 @@ final class TrackedPropertyMatchOrCreateService
                 ->whereBetween('latitude', [$lat - $tol, $lat + $tol])
                 ->whereBetween('longitude', [$lng - $tol, $lng + $tol])
                 ->first();
-            if ($byGps) return $byGps;
+            if ($byGps) {
+                Log::debug('TrackedPropertyMatchOrCreateService::resolveMatch matched via strategy=2_gps_latlng', [
+                    'agency_id' => $agencyId, 'tracked_property_id' => $byGps->id,
+                ]);
+                return $byGps;
+            }
         }
 
         // Strategy 3: Erf number + suburb (works even when address is unknown).
@@ -144,7 +206,12 @@ final class TrackedPropertyMatchOrCreateService
                 ->where('erf_number', trim((string) $facts['erf_number']))
                 ->where('suburb_normalised', TrackedProperty::normaliseSuburb($facts['suburb']))
                 ->first();
-            if ($erfMatch) return $erfMatch;
+            if ($erfMatch) {
+                Log::debug('TrackedPropertyMatchOrCreateService::resolveMatch matched via strategy=3_erf_suburb', [
+                    'agency_id' => $agencyId, 'tracked_property_id' => $erfMatch->id,
+                ]);
+                return $erfMatch;
+            }
         }
 
         // Strategy 4: Normalised structured address.
@@ -156,7 +223,12 @@ final class TrackedPropertyMatchOrCreateService
                 ->where('street_name', $this->normaliseStreetName($facts['street_name']))
                 ->where('suburb_normalised', TrackedProperty::normaliseSuburb($facts['suburb']))
                 ->first();
-            if ($addressMatch) return $addressMatch;
+            if ($addressMatch) {
+                Log::debug('TrackedPropertyMatchOrCreateService::resolveMatch matched via strategy=4_normalised_address', [
+                    'agency_id' => $agencyId, 'tracked_property_id' => $addressMatch->id,
+                ]);
+                return $addressMatch;
+            }
         }
 
         // Strategy 5: Token-overlap address match (loose, last resort).
@@ -179,6 +251,9 @@ final class TrackedPropertyMatchOrCreateService
                     );
                     $overlap = array_intersect($factTokens, $candTokens);
                     if (count($overlap) >= 2) {
+                        Log::debug('TrackedPropertyMatchOrCreateService::resolveMatch matched via strategy=5_token_overlap', [
+                            'agency_id' => $agencyId, 'tracked_property_id' => $cand->id,
+                        ]);
                         return $cand;
                     }
                 }
@@ -186,6 +261,175 @@ final class TrackedPropertyMatchOrCreateService
         }
 
         return null;
+    }
+
+    /**
+     * Strategy 0 — consult tracked_property_addresses history before the
+     * deterministic fact-based strategies. Two sub-matches:
+     *   A. Exact street_number + normalised street_name + normalised suburb
+     *   B. GPS proximity (~5m) on the address row's lat/lng
+     *
+     * Returns the highest-confidence hit (verified > high > medium > low,
+     * is_primary as tie-breaker). Ignores soft-deleted address rows.
+     *
+     * Suburb-only ingestions (no street_name AND no GPS) are NOT matched —
+     * too risky; we'd collapse independent properties in the same suburb.
+     */
+    private function resolveByAddressHistory(int $agencyId, array $facts): ?TrackedProperty
+    {
+        $streetName = TrackedPropertyAddress::normaliseStreet($facts['street_name'] ?? null);
+        $streetNumber = isset($facts['street_number']) ? trim((string) $facts['street_number']) : '';
+        $suburbNormalised = TrackedPropertyAddress::normaliseSuburb($facts['suburb'] ?? null);
+        $lat = $facts['cma_gps_lat'] ?? $facts['latitude'] ?? null;
+        $lng = $facts['cma_gps_lng'] ?? $facts['longitude'] ?? null;
+
+        $hasStreet = $streetNumber !== '' && !empty($streetName) && !empty($suburbNormalised);
+        $hasGps    = $lat !== null && $lng !== null;
+        if (!$hasStreet && !$hasGps) {
+            return null;
+        }
+
+        // Match A — exact structured address.
+        if ($hasStreet) {
+            $hit = DB::table('tracked_property_addresses')
+                ->where('agency_id', $agencyId)
+                ->whereNull('deleted_at')
+                ->where('street_number', $streetNumber)
+                ->where('street_name', $streetName)
+                ->where('suburb_normalised', $suburbNormalised)
+                ->orderByRaw("FIELD(confidence, 'verified', 'high', 'medium', 'low')")
+                ->orderByDesc('is_primary')
+                ->first(['tracked_property_id']);
+            if ($hit) {
+                $tp = TrackedProperty::queryWithoutAgencyScope()
+                    ->where('agency_id', $agencyId)
+                    ->whereNull('deleted_at')
+                    ->find((int) $hit->tracked_property_id);
+                if ($tp) return $tp;
+            }
+        }
+
+        // Match B — GPS proximity on the address row itself.
+        if ($hasGps) {
+            $tol = self::GPS_TOLERANCE_DEGREES;
+            $hit = DB::table('tracked_property_addresses')
+                ->where('agency_id', $agencyId)
+                ->whereNull('deleted_at')
+                ->whereNotNull('latitude')
+                ->whereNotNull('longitude')
+                ->whereBetween('latitude', [$lat - $tol, $lat + $tol])
+                ->whereBetween('longitude', [$lng - $tol, $lng + $tol])
+                ->orderByRaw("FIELD(confidence, 'verified', 'high', 'medium', 'low')")
+                ->orderByDesc('is_primary')
+                ->first(['tracked_property_id']);
+            if ($hit) {
+                $tp = TrackedProperty::queryWithoutAgencyScope()
+                    ->where('agency_id', $agencyId)
+                    ->whereNull('deleted_at')
+                    ->find((int) $hit->tracked_property_id);
+                if ($tp) return $tp;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Phase C2 — append (or bump) the incoming address in the TP's address
+     * history. Deduplicates on (street_number + street_name + suburb_normalised)
+     * when a street is present, else on GPS proximity. Bumps last_seen_at on
+     * the existing row when found; inserts a non-primary row otherwise.
+     *
+     * NEVER throws — wrapped in try/catch + Log::warning so the underlying
+     * matchOrCreate operation cannot be broken by a history-append hiccup.
+     */
+    private function appendIngestedAddressToHistory(TrackedProperty $tp, array $facts, array $source): void
+    {
+        try {
+            $streetName = TrackedPropertyAddress::normaliseStreet($facts['street_name'] ?? null);
+            $streetNumber = isset($facts['street_number']) ? trim((string) $facts['street_number']) : '';
+            $suburbNormalised = TrackedPropertyAddress::normaliseSuburb($facts['suburb'] ?? null);
+            $lat = $facts['cma_gps_lat'] ?? $facts['latitude'] ?? null;
+            $lng = $facts['cma_gps_lng'] ?? $facts['longitude'] ?? null;
+
+            $hasStreet = $streetNumber !== '' && !empty($streetName) && !empty($suburbNormalised);
+            $hasGps    = $lat !== null && $lng !== null;
+            if (!$hasStreet && !$hasGps) {
+                // Nothing meaningful to record — suburb-only / no-address ingest.
+                return;
+            }
+
+            // Dedup probe: prefer structured-address match, fall back to GPS.
+            $existingId = null;
+            if ($hasStreet) {
+                $existingId = DB::table('tracked_property_addresses')
+                    ->where('agency_id', $tp->agency_id)
+                    ->where('tracked_property_id', $tp->id)
+                    ->whereNull('deleted_at')
+                    ->where('street_number', $streetNumber)
+                    ->where('street_name', $streetName)
+                    ->where('suburb_normalised', $suburbNormalised)
+                    ->value('id');
+            }
+            if ($existingId === null && $hasGps) {
+                $tol = self::GPS_TOLERANCE_DEGREES;
+                $existingId = DB::table('tracked_property_addresses')
+                    ->where('agency_id', $tp->agency_id)
+                    ->where('tracked_property_id', $tp->id)
+                    ->whereNull('deleted_at')
+                    ->whereNotNull('latitude')
+                    ->whereNotNull('longitude')
+                    ->whereBetween('latitude', [$lat - $tol, $lat + $tol])
+                    ->whereBetween('longitude', [$lng - $tol, $lng + $tol])
+                    ->value('id');
+            }
+
+            if ($existingId !== null) {
+                // Bump last_seen_at via raw update to skip the observer +
+                // booted hooks — the row already has its canonical fields.
+                DB::table('tracked_property_addresses')
+                    ->where('id', $existingId)
+                    ->update(['last_seen_at' => now(), 'updated_at' => now()]);
+                return;
+            }
+
+            // No matching row — insert via Eloquent so the booted hooks run
+            // (suburb_normalised auto-set, street_name normalised, first/last
+            // _seen_at defaulted). is_primary stays false — only manual edits
+            // via Phase C3 can promote.
+            TrackedPropertyAddress::create([
+                'agency_id'           => $tp->agency_id,
+                'tracked_property_id' => $tp->id,
+                'street_number'       => $streetNumber !== '' ? $streetNumber : null,
+                'street_name'         => $streetName,
+                'unit_number'         => $facts['unit_number'] ?? null,
+                'complex_name'        => $facts['complex_name'] ?? null,
+                'suburb'              => $facts['suburb'] ?? null,
+                'suburb_normalised'   => $suburbNormalised,
+                'town'                => $facts['town'] ?? null,
+                'province'            => $facts['province'] ?? null,
+                'postal_code'         => $facts['postal_code'] ?? null,
+                'latitude'            => $lat,
+                'longitude'           => $lng,
+                'source_type'         => (string) ($source['type'] ?? 'unknown'),
+                'source_ref'          => isset($source['ref']) ? (string) $source['ref'] : null,
+                'confidence'          => TrackedPropertyAddress::confidenceForSource(
+                    (string) ($source['type'] ?? 'unknown'),
+                    $streetName,
+                ),
+                'is_primary'          => false,
+                'first_seen_at'       => now(),
+                'last_seen_at'        => now(),
+            ]);
+        } catch (Throwable $e) {
+            Log::warning('TrackedPropertyMatchOrCreateService::appendIngestedAddressToHistory failed', [
+                'agency_id'           => $tp->agency_id ?? null,
+                'tracked_property_id' => $tp->id ?? null,
+                'source_type'         => $source['type'] ?? null,
+                'source_ref'          => $source['ref'] ?? null,
+                'error'               => $e->getMessage(),
+            ]);
+        }
     }
 
     private function create(int $agencyId, array $facts, array $source, ?int $actorUserId): TrackedProperty

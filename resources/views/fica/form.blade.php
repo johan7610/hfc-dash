@@ -13,8 +13,8 @@
         [x-cloak] { display: none !important; }
 
         .fica-card { background: #fff; border: 1px solid #e2e8f0; padding: 2rem; margin-bottom: 1.5rem; }
-        .fica-section-title { font-size: 1.125rem; font-weight: 700; color: var(--text-primary); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid #0d9488; }
-        .fica-subsection-title { font-size: 0.9375rem; font-weight: 700; color: var(--text-primary); margin: 1.25rem 0 0.75rem; padding-bottom: 0.375rem; border-bottom: 1px solid #e2e8f0; }
+        .fica-section-title { font-size: 1.125rem; font-weight: 700; color: var(--text-primary, #111827); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid #0d9488; }
+        .fica-subsection-title { font-size: 0.9375rem; font-weight: 700; color: var(--text-primary, #111827); margin: 1.25rem 0 0.75rem; padding-bottom: 0.375rem; border-bottom: 1px solid #e2e8f0; }
         .fica-label { display: block; font-weight: 600; font-size: 0.875rem; color: #334155; margin-bottom: 0.25rem; }
         .fica-label .req { color: #dc2626; }
         .fica-hint { font-size: 0.8rem; color: #94a3b8; margin-top: 0.25rem; line-height: 1.4; }
@@ -32,8 +32,16 @@
         .fica-checkbox-group { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.25rem; }
         .fica-checkbox-label { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.8125rem; color: #334155; cursor: pointer; line-height: 1.4; }
         .fica-checkbox-label input { margin-top: 0.15rem; flex-shrink: 0; accent-color: #0d9488; }
-        .fica-btn { display: inline-block; padding: 0.75rem 2rem; background: var(--text-primary); color: #fff; font-weight: 600; font-size: 1rem; border: none; cursor: pointer; transition: background 0.15s; }
-        .fica-btn:hover { background: #1e293b; }
+        /* DS primary button (mirrors .corex-btn-primary, UI_DESIGN_SYSTEM.md).
+           This public page does NOT load corex.css, so the token cascade is
+           absent — the old `background: var(--text-primary)` (no fallback)
+           resolved to nothing → invisible white-on-white at rest; only the
+           :hover background made it appear. Use --brand-button WITH the F.7
+           fallback so it is fully visible at rest with or without the
+           cascade; hover is a normal brightness affordance, not a
+           visibility toggle. */
+        .fica-btn { display: inline-block; padding: 0.75rem 2rem; background: var(--brand-button, #0ea5e9); color: #fff; font-weight: 600; font-size: 1rem; border: none; border-radius: 6px; cursor: pointer; transition: all 0.3s; box-shadow: 0 4px 12px color-mix(in srgb, var(--brand-button, #0ea5e9) 25%, transparent); }
+        .fica-btn:hover { filter: brightness(1.1); box-shadow: 0 6px 16px color-mix(in srgb, var(--brand-button, #0ea5e9) 35%, transparent); }
         .fica-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
         .repeatable-card { background: #f8fafc; border: 1px solid #e2e8f0; padding: 1rem; margin-bottom: 0.75rem; position: relative; }
@@ -65,7 +73,7 @@
             @if($agency->logo_path)
                 <img src="{{ asset('storage/' . $agency->logo_path) }}" alt="{{ $agency->name }}" style="max-height: 60px; margin: 0 auto 1rem;">
             @endif
-            <h1 style="font-size: 1.5rem; font-weight: 700; color: var(--text-primary); margin: 0;">FICA Verification Form</h1>
+            <h1 style="font-size: 1.5rem; font-weight: 700; color: var(--text-primary, #111827); margin: 0;">FICA Verification Form</h1>
             <p style="color: #64748b; margin: 0.5rem 0 0; font-size: 0.875rem;">Financial Intelligence Centre Act — Client Due Diligence</p>
         </div>
 

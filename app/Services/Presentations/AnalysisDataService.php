@@ -5,6 +5,7 @@ namespace App\Services\Presentations;
 use App\Models\PortalCapture;
 use App\Models\Presentation;
 use App\Services\Presentations\Analytics\AbsorptionInflowService;
+use App\Support\MarketAnalytics\OutlierGuard;
 use Illuminate\Support\Collection;
 
 /**
@@ -146,7 +147,23 @@ class AnalysisDataService
                     ?? ($sizeM2 > 0 && $comp->sold_price_inc > 0
                         ? (int) round($comp->sold_price_inc / $sizeM2)
                         : null),
+                // Phase 3i — flag comps that came from HFC's own deal book so
+                // Section 3 can render a "HFC sold this" badge as a seller
+                // proof point.
+                'hfc_sold'     => in_array($source, ['internal_deals', 'internal_deals_v1'], true)
+                                  || !empty($raw['hfc_sold']),
             ];
+
+            // Phase 3e B — drop implausible columns (parser bleed, bad data)
+            // before they pollute averages and analytics. Row is kept; only
+            // the offending column is nulled.
+            $row = OutlierGuard::sanitiseRow($row);
+            if (empty($row['sale_price'])) {
+                // Without a sale_price the row is useless for comparable-sales
+                // averaging; skip it but log via parser_version chain (already
+                // captured in raw_row_json).
+                continue;
+            }
 
             $key = match ($source) {
                 'vicinity_sales', 'vicinity_sales_sectional' => 'vicinity',
@@ -401,6 +418,14 @@ class AnalysisDataService
             }
         }
 
+        // Phase 3e B — sanitise each row's price/extent/dom columns before
+        // dedup/avg. Out-of-band columns become null; rows whose list_price
+        // can't be salvaged are dropped (they'd skew avg_asking_price).
+        $rows = array_values(array_filter(
+            array_map(fn ($r) => OutlierGuard::sanitiseRow($r), $rows),
+            fn ($r) => !empty($r['list_price']),
+        ));
+
         $rawListingCount = count($rows);
 
         // Deduplicate by physical property: P24 shows the same property listed by
@@ -562,7 +587,7 @@ class AnalysisDataService
 
         $benchmarks = [
             [
-                'label'     => 'vs CMA Valuation (' . $cmaSelectedRange . ')',
+                'label'     => 'vs CMA Evaluation (' . $cmaSelectedRange . ')',
                 'benchmark' => $cmaValue,
                 'thresholds' => ['warning' => 5, 'danger' => 15],
             ],
@@ -768,12 +793,15 @@ class AnalysisDataService
             }
         }
 
-        // Rank: count of listings priced higher + 1
-        $rank = $moreExpensive + 1;
-        $total = count($prices);
+        // Phase 3e D — rank reads "subject's position among all priced
+        // properties INCLUDING the subject", so the denominator must include
+        // the subject too. Without this we get "#2 of 1" when there's one
+        // competitor priced higher than the subject.
+        $rank  = $moreExpensive + 1;
+        $total = count($prices) + 1; // +1 for the subject property itself
 
         // Percentile: % of listings priced lower (0 = cheapest, 100 = most expensive)
-        $percentile = round(($cheaper / $total) * 100);
+        $percentile = $total > 0 ? (int) round(($cheaper / $total) * 100) : 0;
 
         // Position label
         if ($percentile >= 80) {

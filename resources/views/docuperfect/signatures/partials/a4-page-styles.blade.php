@@ -84,252 +84,227 @@
  * @param {HTMLElement} container  The DOM element containing the document HTML
  * @param {Array}       parties   [{role:'agent',label:'Agent'}, ...] for initials between pages
  */
+/**
+ * §19 — Per-document pagination. A pack is an ENVELOPE of N documents, not a
+ * merge: each .corex-document-wrapper paginates within its OWN boundary with
+ * its own page numbering, per-page initials and terminal signature block. No
+ * page straddles two documents. Single (non-pack) docs = one wrapper, behave
+ * as before plus the new per-page initial footer rows.
+ */
 function paginateDocument(container, parties) {
     if (!container) return;
-    if (container.dataset.paginated === 'true') return;
-    container.dataset.paginated = 'true';
-
     parties = parties || [];
 
-    // Remove all pre-existing server-side initial elements and page-break markers.
-    // Client-side pagination will create fresh initials at the correct page boundaries.
-    container.querySelectorAll('[data-marker-type="initial"]').forEach(function(el) { el.remove(); });
-    container.querySelectorAll('.corex-page-break').forEach(function(el) { el.remove(); });
-
-    // ── Strategy 1: Paged templates (multiple .corex-page divs) ──
-    // Use querySelectorAll to find ALL .corex-page elements across ALL wrappers.
-    // Web packs have multiple sibling .corex-document-wrapper divs, each with one .corex-page.
-    var allCorexPages = Array.from(container.querySelectorAll('.corex-document-wrapper > .corex-page'));
-    // Fallback: check for .corex-page directly under container (no wrapper)
-    if (allCorexPages.length === 0) {
-        var wrapper = container.querySelector('.corex-document-wrapper');
-        var searchIn = wrapper || container;
-        allCorexPages = Array.from(searchIn.children).filter(function(el) {
-            return el.classList && el.classList.contains('corex-page');
+    // §19.4 — idempotent re-anchor. If already paginated (content edit / zoom
+    // re-flow), snapshot every applied initial/signature by its stable
+    // (party|type|docIdx-pageIdx-partyIdx) key, de-paginate back to flat
+    // per-wrapper content, then rebuild and re-apply by key. No duplicate
+    // rows, no lost applied values, orphaned rows dropped on shrink, and the
+    // signature block follows the document's (possibly new) last page.
+    var applied = {};
+    if (container.dataset.paginated === 'true') {
+        container.querySelectorAll('[data-marker-type="initial"][data-signed="true"], [data-marker-type="signature"][data-signed="true"]').forEach(function (el) {
+            applied[_markerKey(el)] = { html: el.innerHTML, signed: el.getAttribute('data-signed'), style: el.getAttribute('style') || '' };
         });
+        _dePaginate(container);
     }
-    var corexPages = allCorexPages;
+    container.dataset.paginated = 'true';
 
-    if (corexPages.length > 1) {
-        // Collect <style>/<link> tags to preserve
-        var styles = [];
-        Array.from(container.children).forEach(function(el) {
-            if (el.tagName === 'STYLE' || el.tagName === 'LINK') styles.push(el);
-        });
+    // Fresh client build — drop stale server-side initials / page-break markers.
+    container.querySelectorAll('[data-marker-type="initial"]').forEach(function (el) { el.remove(); });
+    container.querySelectorAll('.corex-page-break').forEach(function (el) { el.remove(); });
 
-        var pageEls = Array.from(corexPages);
-        container.innerHTML = '';
-        styles.forEach(function(s) { container.appendChild(s); });
-
-        var totalPages = pageEls.length;
-        pageEls.forEach(function(pageEl, idx) {
-            var pageDiv = document.createElement('div');
-            pageDiv.className = 'corex-a4-page';
-            while (pageEl.firstChild) pageDiv.appendChild(pageEl.firstChild);
-
-            // Page number
-            var pageNum = document.createElement('div');
-            pageNum.className = 'page-number';
-            pageNum.textContent = 'Page ' + (idx + 1) + ' of ' + totalPages;
-            pageDiv.appendChild(pageNum);
-
-            // Initials between pages (not after last)
-            if (idx < totalPages - 1 && parties.length > 0) {
-                pageDiv.appendChild(_buildInitialsRow(parties, idx));
-            }
-
-            container.appendChild(pageDiv);
-
-            if (idx < totalPages - 1) {
-                var gap = document.createElement('div');
-                gap.className = 'corex-page-gap';
-                container.appendChild(gap);
-            }
-        });
-        return;
-    }
-
-    // ── Strategy 2: Continuous HTML — measure actual element heights ──
-
-    // A4 content area dimensions (accounting for .corex-a4-page padding)
-    // Page: 210mm x 297mm.  Padding: 20mm top, 25mm bottom, 18mm left/right.
-    // Content area: 174mm x 252mm.  At 96dpi ≈ 658px x 953px.
-    var PAGE_CONTENT_HEIGHT = 1500;
-    var PAGE_CONTENT_WIDTH = 658;
-
-    // Find the innermost content container (unwrap nested wrappers)
-    var contentEl = container;
-    var innerWrapper = container.querySelector('.corex-document-wrapper');
-    if (innerWrapper) contentEl = innerWrapper;
-    var innerPage = contentEl.querySelector('.corex-page');
-    if (innerPage && innerPage.parentElement === contentEl) contentEl = innerPage;
-
-    // Collect <style>/<link> tags before restructuring
+    // Preserve global <style>/<link>; re-add at container top after restructure.
     var styleEls = [];
-    Array.from(container.querySelectorAll('style, link[rel="stylesheet"]')).forEach(function(el) {
+    Array.from(container.querySelectorAll('style, link[rel="stylesheet"]')).forEach(function (el) {
         styleEls.push(el.cloneNode(true));
     });
 
-    // Get all direct children to measure
-    var children = Array.from(contentEl.children);
+    // Each document = one .corex-document-wrapper. None => one implicit doc.
+    var wrappers = Array.from(container.children).filter(function (el) {
+        return el.classList && el.classList.contains('corex-document-wrapper');
+    });
+    if (wrappers.length === 0) {
+        wrappers = Array.from(container.querySelectorAll('.corex-document-wrapper'));
+    }
+    if (wrappers.length === 0) {
+        var synthetic = document.createElement('div');
+        synthetic.className = 'corex-document-wrapper';
+        Array.from(container.childNodes).forEach(function (n) {
+            if (n.nodeType === 1 && (n.tagName === 'STYLE' || n.tagName === 'LINK')) return;
+            synthetic.appendChild(n);
+        });
+        container.innerHTML = '';
+        container.appendChild(synthetic);
+        wrappers = [synthetic];
+    }
+
+    // Lift style tags out of wrappers to the container top.
+    container.querySelectorAll('style, link[rel="stylesheet"]').forEach(function (el) { el.remove(); });
+    styleEls.forEach(function (s) { container.insertBefore(s, container.firstChild); });
+
+    wrappers.forEach(function (wrapper, docIdx) {
+        _paginateWrapper(wrapper, docIdx, parties);
+    });
+
+    // §19.4 — re-apply captured initial/signature state by stable key.
+    if (Object.keys(applied).length) {
+        container.querySelectorAll('[data-marker-type="initial"], [data-marker-type="signature"]').forEach(function (el) {
+            var s = applied[_markerKey(el)];
+            if (!s) return;
+            el.innerHTML = s.html;
+            if (s.signed) el.setAttribute('data-signed', s.signed);
+            if (s.style) el.setAttribute('style', s.style);
+        });
+    }
+
+    _stripInnerStyling(container);
+}
+
+/** Stable re-anchor key (§19.4): party | type | docIdx-pageIdx-partyIdx. */
+function _markerKey(el) {
+    return (el.getAttribute('data-marker-party') || '') + '|' +
+           (el.getAttribute('data-marker-type') || '') + '|' +
+           (el.getAttribute('data-marker-index') || '');
+}
+
+/** Pull each wrapper's body back out of its .corex-a4-page pages (drop the
+ *  page-number / initials-row decorations) so it can be re-measured. */
+function _dePaginate(container) {
+    container.querySelectorAll('.corex-document-wrapper').forEach(function (wrapper) {
+        var pages = Array.from(wrapper.querySelectorAll(':scope > .corex-a4-page'));
+        if (pages.length === 0) return;
+        var frag = wrapper.ownerDocument.createDocumentFragment();
+        pages.forEach(function (pageDiv) {
+            Array.from(pageDiv.childNodes).forEach(function (node) {
+                if (node.nodeType === 1 && (
+                    node.classList.contains('page-number') ||
+                    node.classList.contains('corex-page-initials-row'))) {
+                    return; // decoration — rebuilt fresh
+                }
+                frag.appendChild(node);
+            });
+        });
+        wrapper.innerHTML = '';
+        wrapper.appendChild(frag);
+    });
+    container.querySelectorAll('.corex-page-gap').forEach(function (g) { g.remove(); });
+}
+
+/**
+ * Height-paginate ONE document wrapper within its own boundary, rebuilding it
+ * IN PLACE as a per-document sequence of .corex-a4-page elements. The wrapper
+ * element is retained so SignatureService::splitMergedHtml() still splits the
+ * already-paginated DOM per document (§19.7). Page numbering restarts at 1 per
+ * document; an initial slot is placed on every page where
+ * pageIndex < lastPageIndex; the signature section is forced onto the last
+ * page (§19.3) — a single-page document gets the signature block, no initial.
+ */
+function _paginateWrapper(wrapper, docIdx, parties) {
+    var doc = wrapper.ownerDocument;
+
+    var contentEl = wrapper;
+    var innerPage = wrapper.querySelector(':scope > .corex-page');
+    if (innerPage) contentEl = innerPage;
+
+    var children = Array.from(contentEl.children).filter(function (el) {
+        return !(el.tagName === 'STYLE' || el.tagName === 'LINK');
+    });
     if (children.length === 0) return;
 
-    // Temporarily set container to A4 content width for accurate height measurement
-    var origStyles = {
-        width: container.style.width,
-        maxWidth: container.style.maxWidth,
-        position: container.style.position,
-        visibility: container.style.visibility
-    };
-    container.style.width = PAGE_CONTENT_WIDTH + 'px';
-    container.style.maxWidth = PAGE_CONTENT_WIDTH + 'px';
-
-    // Also strip wrapper/page styling that could interfere with measurement
-    if (innerWrapper) {
-        innerWrapper.style.width = '100%';
-        innerWrapper.style.maxWidth = '100%';
-        innerWrapper.style.padding = '0';
-        innerWrapper.style.margin = '0';
-        innerWrapper.style.boxShadow = 'none';
-    }
-    if (innerPage && innerPage !== contentEl) {
-        innerPage.style.width = '100%';
-        innerPage.style.maxWidth = '100%';
-        innerPage.style.padding = '0';
-        innerPage.style.margin = '0';
-        innerPage.style.minHeight = 'auto';
-    }
-
-    // Measure each child and assign to pages
-    var pages = [];
-    var currentPage = [];
-    var currentHeight = 0;
-    var inSigSection = false;
-
-    // Minimum visible content (px) a clause must have on a page to avoid orphaning
+    // A4 content area: 210x297mm minus 20/25/18/18mm padding ≈ 658x ~1500px.
+    var PAGE_CONTENT_HEIGHT = 1500;
+    var PAGE_CONTENT_WIDTH = 658;
     var MIN_CLAUSE_VISIBLE = 100;
 
-    children.forEach(function(child, idx) {
-        // Skip non-element nodes (text nodes, comments)
-        if (child.nodeType !== 1) {
-            currentPage.push(child);
-            return;
-        }
+    var origW = wrapper.style.width, origMW = wrapper.style.maxWidth;
+    wrapper.style.width = PAGE_CONTENT_WIDTH + 'px';
+    wrapper.style.maxWidth = PAGE_CONTENT_WIDTH + 'px';
+    if (innerPage) {
+        innerPage.style.width = '100%'; innerPage.style.maxWidth = '100%';
+        innerPage.style.padding = '0'; innerPage.style.margin = '0'; innerPage.style.minHeight = 'auto';
+    }
 
-        // Skip <style> and <link> — they'll be re-added globally
-        if (child.tagName === 'STYLE' || child.tagName === 'LINK') return;
+    var pages = [];
+    var cur = [];
+    var curH = 0;
+    var inSig = false;
 
-        // Detect signature section — keep it together on the last page
+    children.forEach(function (child, idx) {
+        if (child.nodeType !== 1) { cur.push(child); return; }
+
         if (child.classList.contains('sig-section') ||
             child.classList.contains('corex-signature-section')) {
-            inSigSection = true;
+            inSig = true;
         }
 
         var rect = child.getBoundingClientRect();
-        var childHeight = rect.height;
-        // Include margins in height calculation
-        var computedStyle = window.getComputedStyle(child);
-        var marginTop = parseFloat(computedStyle.marginTop) || 0;
-        var marginBottom = parseFloat(computedStyle.marginBottom) || 0;
-        childHeight += marginTop + marginBottom;
+        var cs = window.getComputedStyle(child);
+        var h = rect.height + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0);
 
-        // Check if this element is a heading / section header
         var tag = child.tagName;
         var isHeading = tag === 'H1' || tag === 'H2' || tag === 'H3' || tag === 'H4' ||
                         child.classList.contains('corex-h1') ||
                         child.classList.contains('corex-h2') ||
                         child.classList.contains('corex-h3') ||
                         child.classList.contains('corex-section-heading');
-
-        // If heading, measure height INCLUDING the next sibling so they stay together
-        var groupHeight = childHeight;
+        var groupH = h;
         if (isHeading && idx + 1 < children.length && children[idx + 1].nodeType === 1) {
-            var nextRect = children[idx + 1].getBoundingClientRect();
-            var nextStyle = window.getComputedStyle(children[idx + 1]);
-            groupHeight += nextRect.height + (parseFloat(nextStyle.marginTop) || 0) + (parseFloat(nextStyle.marginBottom) || 0);
+            var nr = children[idx + 1].getBoundingClientRect();
+            var ns = window.getComputedStyle(children[idx + 1]);
+            groupH += nr.height + (parseFloat(ns.marginTop) || 0) + (parseFloat(ns.marginBottom) || 0);
         }
+        var isClause = child.classList.contains('corex-clause') &&
+                       child.querySelector('.corex-clause-number');
 
-        // Check if this is a numbered clause that would be orphaned at page bottom
-        var isNumberedClause = child.classList.contains('corex-clause') &&
-                               child.querySelector('.corex-clause-number');
-
-        if (inSigSection) {
-            // Inside signature section — never break
-            currentPage.push(child);
-            currentHeight += childHeight;
-        } else if (isHeading && currentHeight + groupHeight > PAGE_CONTENT_HEIGHT && currentPage.length > 0) {
-            // Heading + its first child would overflow — push heading to next page
-            pages.push(currentPage);
-            currentPage = [child];
-            currentHeight = childHeight;
-        } else if (currentHeight + childHeight > PAGE_CONTENT_HEIGHT && currentPage.length > 0) {
-            // Normal overflow — start new page
-            pages.push(currentPage);
-            currentPage = [child];
-            currentHeight = childHeight;
-        } else if (isNumberedClause && currentHeight + childHeight > PAGE_CONTENT_HEIGHT - MIN_CLAUSE_VISIBLE && currentPage.length > 0) {
-            // Numbered clause would barely fit — less than MIN_CLAUSE_VISIBLE visible. Push to next page.
-            pages.push(currentPage);
-            currentPage = [child];
-            currentHeight = childHeight;
+        if (inSig) {
+            cur.push(child); curH += h;
+        } else if (isHeading && curH + groupH > PAGE_CONTENT_HEIGHT && cur.length > 0) {
+            pages.push(cur); cur = [child]; curH = h;
+        } else if (curH + h > PAGE_CONTENT_HEIGHT && cur.length > 0) {
+            pages.push(cur); cur = [child]; curH = h;
+        } else if (isClause && curH + h > PAGE_CONTENT_HEIGHT - MIN_CLAUSE_VISIBLE && cur.length > 0) {
+            pages.push(cur); cur = [child]; curH = h;
         } else {
-            currentPage.push(child);
-            currentHeight += childHeight;
+            cur.push(child); curH += h;
         }
     });
+    if (cur.length > 0) pages.push(cur);
 
-    // Last page
-    if (currentPage.length > 0) {
-        pages.push(currentPage);
-    }
+    wrapper.style.width = origW;
+    wrapper.style.maxWidth = origMW;
 
-    // Restore container styles
-    container.style.width = origStyles.width;
-    container.style.maxWidth = origStyles.maxWidth;
-    container.style.position = origStyles.position;
-    container.style.visibility = origStyles.visibility;
+    var total = pages.length;
 
-    // If only 1 page, no need to wrap — just strip inner container styling
-    if (pages.length <= 1) {
-        _stripInnerStyling(container);
-        return;
-    }
-
-    // Rebuild DOM: clear container, re-add styles, then wrap each page in .corex-a4-page
-    container.innerHTML = '';
-    styleEls.forEach(function(s) { container.appendChild(s); });
-
-    var totalPages = pages.length;
-    pages.forEach(function(pageChildren, pageIdx) {
-        var pageDiv = document.createElement('div');
+    // Rebuild the wrapper in place (retained for split + per-doc identity).
+    wrapper.innerHTML = '';
+    pages.forEach(function (pageChildren, p) {
+        var pageDiv = doc.createElement('div');
         pageDiv.className = 'corex-a4-page';
+        pageDiv.setAttribute('data-doc-index', String(docIdx));
+        pageDiv.setAttribute('data-page-index', String(p));
+        pageDiv.setAttribute('data-doc-total', String(total));
+        pageChildren.forEach(function (c) { pageDiv.appendChild(c); });
 
-        // Move children into page wrapper
-        pageChildren.forEach(function(child) { pageDiv.appendChild(child); });
+        var pn = doc.createElement('div');
+        pn.className = 'page-number';
+        pn.textContent = 'Page ' + (p + 1) + ' of ' + total; // per-document
+        pageDiv.appendChild(pn);
 
-        // Page number footer
-        var pageNum = document.createElement('div');
-        pageNum.className = 'page-number';
-        pageNum.textContent = 'Page ' + (pageIdx + 1) + ' of ' + totalPages;
-        pageDiv.appendChild(pageNum);
-
-        // Initials between pages (not after last)
-        if (pageIdx < totalPages - 1 && parties.length > 0) {
-            pageDiv.appendChild(_buildInitialsRow(parties, pageIdx));
+        // §19.3 — initial slot on every page EXCEPT this document's last page.
+        // _buildInitialsRow encodes the key as docIdx-pageIdx-partyIdx.
+        if (p < total - 1 && parties.length > 0) {
+            pageDiv.appendChild(_buildInitialsRow(parties, docIdx + '-' + p));
         }
 
-        container.appendChild(pageDiv);
+        wrapper.appendChild(pageDiv);
 
-        // Gap between pages (not after last)
-        if (pageIdx < totalPages - 1) {
-            var gap = document.createElement('div');
+        if (p < total - 1) {
+            var gap = doc.createElement('div');
             gap.className = 'corex-page-gap';
-            container.appendChild(gap);
+            wrapper.appendChild(gap);
         }
     });
-
-    // Strip inner container styling
-    _stripInnerStyling(container);
 }
 
 /**
@@ -414,6 +389,153 @@ function restoreStoredInitials(container, storedInitials) {
             }
         });
     });
+}
+
+/**
+ * Disclosure restore-on-render (§20). Shared, read-only re-application of a
+ * signer's stored YES/NO/N/A disclosure answers onto a freshly-rendered grid.
+ *
+ * Stored answers (web_template_data['disclosure_answers']) are keyed
+ * disclosure_row_0..N in document order — the exact order the signing-view
+ * converter used. Signatures get embedded into merged_html; disclosure
+ * answers do not, so any LATER viewer (agent review, a subsequent signer,
+ * any future passive viewer) renders a blank grid unless restored here.
+ *
+ * Purely visual + read-only: marks the selected radio/placeholder, attaches
+ * NO listeners. The reviewing agent (and any non-disclosing party) sees the
+ * seller's selections but cannot alter them — the approved §20 legal rule.
+ * Keyed off disclosure_answers, NOT per-template — works for every
+ * disclosure grid (Addendum B #119, Seller Mandatory Addendum #120) and,
+ * best-effort, the bare YES/NO/N/A table form (Sales Mandatory Disclosure
+ * #123). Fail-open: any error leaves the grid untouched.
+ */
+// §20 — THE single source of disclosure-key derivation. The signing-view
+// gate (disclosure-logic.blade.php), the persisted store, and the agent
+// review restore (restoreStoredDisclosure below) ALL key disclosure rows
+// through this one object. Two implementations of this rule is the exact
+// defect that caused the prior rounds — there is now exactly one.
+//
+// Key is INTRINSIC + STATELESS: disclosure_<docKey>_<ordinal-of-this-row
+// among the canonical disclosure rows of its own .corex-document-wrapper>.
+// docKey is the instance-stable token stamped server-side. No counter, no
+// walk-order or pack-position dependence: the same row yields the same key
+// from any caller.
+window.CoreXDisclosure = window.CoreXDisclosure || {
+    docKeyOf: function (el) {
+        var w = (el && el.closest) ? el.closest('.corex-document-wrapper') : null;
+        var k = w ? (w.getAttribute('data-disclosure-doc') || '') : '';
+        return (k && k.trim() !== '') ? k.trim() : 'doc';
+    },
+    // Canonical, ordered disclosure ANSWER rows within ONE wrapper:
+    //   checklist form  -> every .corex-disclosure-row
+    //   bare YES/NO/N/A -> tbody <tr> that are real answer/cert rows
+    // (checklist-owned <table class="corex-disclosure-table"> excluded —
+    // that IS the checklist form, counted above). ONE definition of the
+    // row-set, consumed by the gate converters AND restore.
+    rowsInWrapper: function (w) {
+        if (!w) return [];
+        var out = [];
+        // Order MUST mirror _processAllDisclosures' per-scope order:
+        // _processDisclosureTable (bare) THEN processWebDisclosureChecklists
+        // (checklist), so the stateless ordinal == the gate's assignment.
+        w.querySelectorAll('table').forEach(function (table) {
+            if (table.classList.contains('corex-disclosure-table') ||
+                table.closest('.corex-disclosure-checklist')) return;
+            var ths = table.querySelectorAll('thead th');
+            if (ths.length < 2) return;
+            var H = Array.prototype.map.call(ths, function (h) {
+                return (h.textContent || '').trim().toUpperCase();
+            });
+            var yi = H.indexOf('YES'), ni = H.indexOf('NO');
+            if (yi === -1 || ni === -1) return;
+            table.querySelectorAll('tbody tr').forEach(function (tr) {
+                var tds = tr.querySelectorAll('td');
+                if (tds.length < ths.length) return;
+                if (tds.length === 1) return;
+                var c0 = ((tds[0] && tds[0].textContent) || '').trim();
+                var c1 = ((tds[1] && tds[1].textContent) || '').trim();
+                if (tds.length > ths.length && !c0 &&
+                    c1.indexOf('If Yes, when was it issued') !== -1) { out.push(tr); return; }
+                if (!c0) return;
+                var sub = (!(tds[yi] && tds[yi].textContent.trim())) &&
+                          (!(tds[ni] && tds[ni].textContent.trim())) &&
+                          c0.charAt(c0.length - 1) === ':';
+                if (sub) return;
+                out.push(tr);
+            });
+        });
+        w.querySelectorAll('.corex-disclosure-row').forEach(function (r) { out.push(r); });
+        return out;
+    },
+    _ordinal: function (rowEl) {
+        var w = (rowEl && rowEl.closest) ? rowEl.closest('.corex-document-wrapper') : null;
+        var rows = w ? this.rowsInWrapper(w) : [rowEl];
+        var i = Array.prototype.indexOf.call(rows, rowEl);
+        return i < 0 ? 0 : i;
+    },
+    keyForRow: function (rowEl) {
+        return 'disclosure_' + this.docKeyOf(rowEl) + '_' + this._ordinal(rowEl);
+    },
+    dateKeyForRow: function (rowEl) {
+        return 'disclosure_' + this.docKeyOf(rowEl) + '_date_' + this._ordinal(rowEl);
+    },
+    isAnswerKey: function (k) {
+        return typeof k === 'string' && k.indexOf('disclosure_') === 0 && k.indexOf('_date_') === -1;
+    }
+};
+
+// Read-only restore of stored YES/NO/N/A onto a freshly-rendered (NOT
+// signing-Alpine) page — the agent review. Per .corex-document-wrapper
+// (every pack segment), both the checklist AND the bare-table form, keyed
+// via the ONE CoreXDisclosure rule so it matches what the gate stored.
+function restoreStoredDisclosure(container, disclosureAnswers) {
+    if (!container || !disclosureAnswers || typeof disclosureAnswers !== 'object') return;
+    try {
+        var CD = window.CoreXDisclosure;
+        var wrappers = container.querySelectorAll('.corex-document-wrapper');
+        var scopes = wrappers.length ? Array.prototype.slice.call(wrappers) : [container];
+        scopes.forEach(function (w) {
+            CD.rowsInWrapper(w).forEach(function (row) {
+                var key = CD.keyForRow(row);
+                var rawv = disclosureAnswers[key];
+                var val = (rawv === undefined || rawv === null) ? '' : ('' + rawv).trim().toLowerCase();
+                if (!val) return;
+                // Checklist form
+                var phs = row.querySelectorAll('.corex-radio-placeholder');
+                if (phs.length) {
+                    phs.forEach(function (ph) {
+                        var sel = ((ph.getAttribute('data-value') || '').trim().toLowerCase() === val);
+                        ph.setAttribute('data-selected', sel ? 'true' : 'false');
+                        ph.textContent = sel ? '●' : '○';
+                        ph.style.cursor = 'default';
+                    });
+                    return;
+                }
+                // Bare YES/NO/N/A <tr>: mark the matching column cell.
+                var table = row.closest('table');
+                if (!table) return;
+                var ths = table.querySelectorAll('thead th');
+                var col = {};
+                Array.prototype.forEach.call(ths, function (th, ci) {
+                    var t = (th.textContent || '').trim().toUpperCase();
+                    if (t === 'YES') col.yes = ci;
+                    else if (t === 'NO') col.no = ci;
+                    else if (t === 'N/A' || t === 'NA') col.na = ci;
+                });
+                var tds = row.querySelectorAll('td');
+                var target = val === 'yes' ? col.yes : (val === 'no' ? col.no : col.na);
+                if (target === undefined || !tds[target]) return;
+                tds[target].textContent = '●';
+                tds[target].style.textAlign = 'center';
+                row.querySelectorAll('input[type="radio"]').forEach(function (r) {
+                    r.checked = ((r.value || '').trim().toLowerCase() === val);
+                    r.disabled = true;
+                });
+            });
+        });
+    } catch (e) {
+        if (window.console) console.warn('restoreStoredDisclosure failed', e);
+    }
 }
 
 /**

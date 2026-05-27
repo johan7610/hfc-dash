@@ -30,7 +30,7 @@
 <body>
     <div class="gate-card">
         @if(!empty($agencyLogo))
-            <img src="{{ asset('storage/' . $agencyLogo) }}" alt="{{ $agencyName }}">
+            <img src="{{ $agencyLogo }}" alt="{{ $agencyName }}">
         @endif
 
         @if(($ficaStatus ?? 'none') === 'pending_review')

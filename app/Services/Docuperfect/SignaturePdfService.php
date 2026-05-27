@@ -25,13 +25,21 @@ class SignaturePdfService
             $docTemplate = $document->template;
 
             $webTemplateData = $document->web_template_data ?? [];
-            $hasMergedHtml = !empty($webTemplateData['merged_html']);
+            // §19 Option 2 — generate the PDF from the EXACT signed-and-
+            // paginated DOM the signer saw (per-document .corex-a4-page +
+            // per-page initials). Fall back to canonical merged_html for
+            // legacy / never-web-signed documents. No server re-pagination.
+            $signedPaginated = $document->signed_paginated_html;
+            $renderHtml = (is_string($signedPaginated) && trim($signedPaginated) !== '')
+                ? $signedPaginated
+                : ($webTemplateData['merged_html'] ?? '');
+            $hasMergedHtml = trim((string) $renderHtml) !== '';
             $hasDocPages = !empty($webTemplateData['flattened_page_count']);
             $isWebTemplate = $docTemplate && ($docTemplate->render_type ?? 'pdf') === 'web';
 
             // Web templates with merged_html: use Puppeteer (Chromium) for pixel-perfect rendering
             if ($isWebTemplate && $hasMergedHtml) {
-                return $this->generateFromHtml($template, $document, $webTemplateData['merged_html']);
+                return $this->generateFromHtml($template, $document, $renderHtml);
             }
 
             // Page-image templates: use DomPDF with overlay rendering
@@ -62,16 +70,19 @@ class SignaturePdfService
             $clientStoragePath = "{$baseDir}/client_signed.pdf";
             $internalStoragePath = "{$baseDir}/final_signed.pdf";
 
-            $targetDir = storage_path("app/{$baseDir}");
-            if (!is_dir($targetDir)) {
-                mkdir($targetDir, 0755, true);
-            }
+            // Write to the 'local' disk ROOT (Laravel 11: storage/app/private)
+            // so Storage::disk('local') — used by Document::downloadResponse()
+            // and the completion-email / signing-download readers — resolves
+            // the EXACT file. Raw storage_path('app/..') put PDFs one dir
+            // OUTSIDE the disk, causing Flysystem 500s on download.
+            $disk = \Illuminate\Support\Facades\Storage::disk('local');
+            $disk->makeDirectory($baseDir);
 
             if (file_exists($clientTempPath)) {
-                rename($clientTempPath, storage_path("app/{$clientStoragePath}"));
+                rename($clientTempPath, $disk->path($clientStoragePath));
             }
             if (file_exists($internalTempPath)) {
-                rename($internalTempPath, storage_path("app/{$internalStoragePath}"));
+                rename($internalTempPath, $disk->path($internalStoragePath));
             }
 
             return [
@@ -100,8 +111,22 @@ class SignaturePdfService
     {
         $signingController = app(\App\Http\Controllers\Docuperfect\SigningController::class);
 
+        // Per-step timing (the ~83s gap between copy 1 finishing and copy 2
+        // starting was unexplained — measure each step, do not assume).
+        $step = function (string $label, callable $fn) use ($template, $document) {
+            $t0 = microtime(true);
+            $result = $fn();
+            Log::info('SignaturePdfService timing', [
+                'step'        => $label,
+                'elapsed_ms'  => (int) round((microtime(true) - $t0) * 1000),
+                'template_id' => $template->id,
+                'document_id' => $document->id,
+            ]);
+            return $result;
+        };
+
         // 1. Client copy — document with signatures (no audit certificate)
-        $clientTempPath = $signingController->generatePdfFromHtml($mergedHtml, $document->id);
+        $clientTempPath = $step('copy1_generatePdfFromHtml', fn () => $signingController->generatePdfFromHtml($mergedHtml, $document->id));
         if (!$clientTempPath || !file_exists($clientTempPath)) {
             Log::error('SignaturePdfService: Puppeteer client PDF generation failed', [
                 'template_id' => $template->id,
@@ -111,12 +136,12 @@ class SignaturePdfService
         }
 
         // 2. Internal copy — document + audit certificate appended
-        $auditData = $this->buildAuditData($template, $document);
-        $auditHtml = view('docuperfect.signatures.pdf.audit-certificate', $auditData)->render();
-        $htmlWithAudit = $mergedHtml
+        $auditData = $step('buildAuditData', fn () => $this->buildAuditData($template, $document));
+        $auditHtml = $step('audit_certificate_view_render', fn () => view('docuperfect.signatures.pdf.audit-certificate', $auditData)->render());
+        $htmlWithAudit = $step('htmlWithAudit_concat', fn () => $mergedHtml
             . '<div style="page-break-before:always;"></div>'
-            . $auditHtml;
-        $internalTempPath = $signingController->generatePdfFromHtml($htmlWithAudit, $document->id);
+            . $auditHtml);
+        $internalTempPath = $step('copy2_generatePdfFromHtml', fn () => $signingController->generatePdfFromHtml($htmlWithAudit, $document->id));
         if (!$internalTempPath || !file_exists($internalTempPath)) {
             Log::warning('SignaturePdfService: Puppeteer internal PDF failed, using client copy as fallback', [
                 'template_id' => $template->id,
@@ -129,18 +154,18 @@ class SignaturePdfService
         $clientStoragePath = "{$baseDir}/client_signed.pdf";
         $internalStoragePath = "{$baseDir}/final_signed.pdf";
 
-        $targetDir = storage_path("app/{$baseDir}");
-        if (!is_dir($targetDir)) {
-            mkdir($targetDir, 0755, true);
-        }
+        // Write to the 'local' disk ROOT (see generate()) so the filed
+        // Document and every reader resolve the same physical file.
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+        $disk->makeDirectory($baseDir);
 
         if ($clientTempPath !== $internalTempPath) {
-            rename($clientTempPath, storage_path("app/{$clientStoragePath}"));
-            rename($internalTempPath, storage_path("app/{$internalStoragePath}"));
+            rename($clientTempPath, $disk->path($clientStoragePath));
+            rename($internalTempPath, $disk->path($internalStoragePath));
         } else {
             // Same file — copy for client, move for internal
-            copy($clientTempPath, storage_path("app/{$clientStoragePath}"));
-            rename($clientTempPath, storage_path("app/{$internalStoragePath}"));
+            copy($clientTempPath, $disk->path($clientStoragePath));
+            rename($clientTempPath, $disk->path($internalStoragePath));
         }
 
         Log::info('SignaturePdfService: Web template PDFs generated via Puppeteer', [

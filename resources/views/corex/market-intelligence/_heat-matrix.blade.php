@@ -31,7 +31,7 @@
     };
 
     $cellUrl = function (string $suburb, int $bedrooms): string {
-        return route('market-intelligence.index', [
+        return route('market-intelligence.work', [
             'suburb'         => $suburb,
             'bedrooms_exact' => $bedrooms,
             'mode'           => 'work',
@@ -89,16 +89,22 @@
                 @foreach($m['rows'] as $row)
                 <tr>
                     <td style="padding: 4px 6px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;">
-                        {{ $row['suburb'] }}
+                        <span data-mic-suburb="{{ $row['suburb'] }}" title="Click for suburb deep-dive">{{ $row['suburb'] }}</span>
                     </td>
                     @foreach($row['cells'] as $cell)
                     <td>
                         @if($cell['tier'] === 'empty')
                             <span style="{{ $cellStyle($cell) }}" title="No supply or demand">{{ $cellLabel($cell) }}</span>
                         @else
+                            {{-- Phase D5: data-mic-pocket="1" intercepts the click and opens the
+                                 demand-pocket narrative panel; the href is the fallback for
+                                 right-click / open-in-new-tab. --}}
                             <a href="{{ $cellUrl($row['suburb'], $cell['bedrooms']) }}"
+                               data-mic-pocket="1"
+                               data-suburb="{{ $row['suburb'] }}"
+                               data-bedrooms="{{ $cell['bedrooms'] }}"
                                style="{{ $cellStyle($cell) }}"
-                               title="{{ $cell['demand'] }} strong buyer{{ $cell['demand'] === 1 ? '' : 's' }} · {{ $cell['supply'] }} listing{{ $cell['supply'] === 1 ? '' : 's' }} → open in Work mode">
+                               title="{{ $cell['demand'] }} strong buyer{{ $cell['demand'] === 1 ? '' : 's' }} · {{ $cell['supply'] }} listing{{ $cell['supply'] === 1 ? '' : 's' }} → open demand-pocket briefing">
                                 {{ $cellLabel($cell) }}
                             </a>
                         @endif

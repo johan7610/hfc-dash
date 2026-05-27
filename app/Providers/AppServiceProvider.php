@@ -73,6 +73,13 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(\App\Services\SellerOutreach\SellerOutreachSenderService::class);
         $this->app->singleton(\App\Services\SellerOutreach\SellerOutreachLandingService::class);
         $this->app->singleton(\App\Services\SellerOutreach\SellerOutreachOptOutService::class);
+
+        // MIC Phase B1 — Anthropic gateway + cost aggregator. Singletons so
+        // the cache lookup, retry config, and pricing table resolve once per
+        // request. The gateway is stateless; the cost aggregator is read-only.
+        // Spec: .ai/specs/mic-complete-spec.md §4.8.
+        $this->app->singleton(\App\Services\AI\AnthropicGateway::class);
+        $this->app->singleton(\App\Services\AI\AICostAggregator::class);
     }
 
     public function boot(): void
@@ -101,6 +108,11 @@ class AppServiceProvider extends ServiceProvider
         \App\Models\DealV2\DealV2::observe(\App\Observers\DealV2Observer::class);
         \App\Models\DealV2\DealStepInstance::observe(\App\Observers\DealStepInstanceObserver::class);
 
+        // MIC Phase A3 — TrackedPropertyAddress observer keeps the cached
+        // address fields on tracked_properties in sync with the primary row.
+        // Spec: .ai/specs/mic-complete-spec.md §3.2.1.
+        \App\Models\Prospecting\TrackedPropertyAddress::observe(\App\Observers\TrackedPropertyAddressObserver::class);
+
         // Register calendar source services (Phase 1)
         $registry = $this->app->make(\App\Services\CommandCenter\Calendar\CalendarSourceRegistry::class);
         $registry->register(\App\Services\CommandCenter\Calendar\Sources\ComplianceCalendarSource::class);
@@ -120,6 +132,95 @@ class AppServiceProvider extends ServiceProvider
         // class — so this listens on the DomainEvent interface, which every
         // AbstractDomainEvent subclass implements transitively.
         Event::listen(DomainEvent::class, RecordDomainEvent::class);
+
+        // ─────────────────────────────────────────────────────────────────
+        // MIC Phase A3 — log every activity-relevant domain event to
+        // agent_activity_events. Spec §14.6: ONE listener for now;
+        // additional listeners (points engine, etc.) hook into the same
+        // events without rewrites.
+        //
+        // Listed explicitly (per spec instruction) rather than subscribing
+        // to the DomainEvent base, so the activity log captures only the
+        // events intentionally categorised as "agent activity" — not, e.g.,
+        // configuration-change events or migration-bookkeeping events.
+        // ─────────────────────────────────────────────────────────────────
+        foreach ([
+            // 14.1 Tracked Property
+            \App\Events\Prospecting\TrackedPropertyCreated::class,
+            \App\Events\Prospecting\TrackedPropertyEnriched::class,
+            \App\Events\Prospecting\TrackedPropertyPromotedToStock::class,
+            \App\Events\Prospecting\TrackedPropertyAddressAdded::class,
+            \App\Events\Prospecting\TrackedPropertyAddressVerified::class,
+            \App\Events\Prospecting\TrackedPropertyAddressPrimaryChanged::class,
+            \App\Events\Prospecting\TrackedPropertyMerged::class,
+            // 14.2 Claims
+            \App\Events\Prospecting\ClaimCreated::class,
+            \App\Events\Prospecting\ClaimConvertedFromLock::class,
+            \App\Events\Prospecting\ClaimFeedbackRecorded::class,
+            \App\Events\Prospecting\ClaimFlaggedAsStale::class,
+            \App\Events\Prospecting\ClaimReleased::class,
+            \App\Events\Prospecting\ClaimAutoReleased::class,
+            // 14.3 Communication
+            \App\Events\Communication\WhatsAppDraftOpened::class,
+            \App\Events\Communication\WhatsAppMessageSent::class,
+            \App\Events\Communication\EmailDraftOpened::class,
+            \App\Events\Communication\EmailMessageSent::class,
+            \App\Events\Communication\CallLogged::class,
+            // 14.4 Market Reports
+            \App\Events\MarketReports\MarketReportUploaded::class,
+            \App\Events\MarketReports\MarketReportParsed::class,
+            \App\Events\MarketReports\MarketReportSpotCheckFlagged::class,
+            \App\Events\MarketReports\MarketDataPointSuperseded::class,
+            // 14.5 AI
+            \App\Events\AI\AINarrativeGenerated::class,
+            \App\Events\AI\AINarrativeFailedFallback::class,
+            // Phase B2 — agency budget signals.
+            \App\Events\AI\AgencyAiBudgetWarning::class,
+            \App\Events\AI\AgencyAiBudgetCapped::class,
+            // Presentations Phase 8 — outcome capture lifecycle.
+            \App\Events\Presentation\PresentationOutcomeRecorded::class,
+            \App\Events\Presentation\PresentationOutcomePrompted::class,
+            \App\Events\Presentation\PresentationOutcomeLocked::class,
+            // Phase 3j — SG document save.
+            \App\Events\Property\PropertySgDocumentSaved::class,
+            // Phase 9d — RCR submission lifecycle.
+            \App\Events\Compliance\RcrSubmissionSubmitted::class,
+            // Phase A.2 — map workspace launches.
+            \App\Events\Map\MapPitchLaunched::class,
+            \App\Events\Map\MapWhatsAppLaunched::class,
+            \App\Events\Map\MapContactOwnerLaunched::class,
+            \App\Events\Map\MapComparableAdded::class,
+            \App\Events\Map\MapCmaOpened::class,
+            // Phase A.2.1 — "Prospect Now" from competitor active listings.
+            \App\Events\Map\MapProspectLaunched::class,
+            // Phase A.2.3 — portal-strip click on an HFC listing.
+            \App\Events\Map\MapListingOpened::class,
+            // Phase A.2.4 — Copy ID click on a sensitive fact (PII audit).
+            \App\Events\Map\MapIdCopied::class,
+            // Phase A.2.5 — agent overrode a coordinate-with-X prompt.
+            \App\Events\Map\MapProspectOverride::class,
+        ] as $micActivityEvent) {
+            Event::listen($micActivityEvent, \App\Listeners\Activity\LogAgentActivity::class);
+        }
+
+        // MIC Phase B2 — narrative cache invalidation on upstream input changes.
+        // Each listener is failure-isolated (try/catch + log) so a cache-cleanup
+        // hiccup never breaks the originating domain event. Spec §4.8.
+        Event::listen(
+            \App\Events\Prospecting\TrackedPropertyAddressVerified::class,
+            \App\Listeners\AI\InvalidateOnTrackedPropertyAddressVerified::class,
+        );
+        Event::listen(
+            \App\Events\MarketReports\MarketReportParsed::class,
+            \App\Listeners\AI\InvalidateOnMarketReportParsed::class,
+        );
+        foreach ([
+            \App\Events\Prospecting\ClaimCreated::class,
+            \App\Events\Prospecting\ClaimReleased::class,
+            \App\Events\Prospecting\ClaimAutoReleased::class,
+        ] as $claimEvent) {
+            Event::listen($claimEvent, \App\Listeners\AI\InvalidateOnClaimChange::class);
+        }
 
         // Prospecting setup: clear the ProspectingConfigurationService's
         // per-request cache for the affected agency on any configuration write.
@@ -206,6 +307,11 @@ class AppServiceProvider extends ServiceProvider
             \App\Events\Presentation\PresentationFieldsExtracted::class,
             \App\Listeners\Presentation\PropagateCmaToProperty::class,
         );
+
+        // Phase 8 — auto-record outcome=won_sale when a Deal flips to registered
+        // and a linked presentation has no outcome yet. Observer is failure-
+        // isolated so outcome auto-capture never breaks a deal save.
+        \App\Models\Deal::observe(\App\Observers\DealRegisteredForOutcomeObserver::class);
 
         // buyer_preferences deprecation listener (spec D11 Phase 1).
         // Logs a WARNING to the `deprecation` channel for any query that

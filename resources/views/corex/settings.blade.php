@@ -69,6 +69,7 @@
                     ['key'=>'feature-rentals',       'label'=>'Rentals',               'type'=>'section', 'keywords'=>'rental document types reminders'],
                     ['key'=>'feature-contacts',      'label'=>'Contacts',              'type'=>'section', 'keywords'=>'contact types sources tags'],
                     ['key'=>'feature-properties',    'label'=>'Properties & Listings', 'type'=>'section', 'keywords'=>'syndication portals marketing'],
+                    ['key'=>'feature-presentations', 'label'=>'Presentations',         'type'=>'section', 'keywords'=>'cma coverage thresholds comps period rich moderate thin'],
                     ['key'=>'feature-matches',       'label'=>'Matches',               'type'=>'section', 'keywords'=>'whatsapp message'],
                     ['key'=>'feature-dashboard',     'label'=>'Dashboard',             'type'=>'section', 'keywords'=>'cockpit widgets'],
                     ['key'=>'notifications',         'label'=>'Notifications',         'type'=>'section', 'keywords'=>'reminders push email alerts overdue'],
@@ -669,6 +670,131 @@
                             @endforeach
                         </div>
                         <button type="submit" class="corex-btn-primary text-xs">Save MLROs</button>
+                    </form>
+                </div>
+            </div>
+            @endpermission
+
+            {{-- Phase 9c-2: Information Officers (POPIA s55) — mirrors FICA pattern --}}
+            @permission('manage_information_officer')
+            @php
+                $currentInfoPrimary = \App\Models\Compliance\InformationOfficerAppointment::currentPrimary($settingsAgencyId);
+                $infoPrimaryHistory = \App\Models\Compliance\InformationOfficerAppointment::where('agency_id', $settingsAgencyId)
+                    ->primary()->whereNotNull('ended_on')->orderByDesc('ended_on')->get();
+                $activeDeputyIOs = \App\Models\Compliance\InformationOfficerAppointment::where('agency_id', $settingsAgencyId)
+                    ->deputies()->active()->get();
+                $activeDeputyIOUserIds = $activeDeputyIOs->pluck('user_id')->filter()->toArray();
+            @endphp
+
+            {{-- Primary Information Officer --}}
+            <div>
+                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Primary Information Officer (POPIA s55)</h3>
+                <div class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
+                    @if($currentInfoPrimary)
+                    <div class="flex items-start justify-between mb-3">
+                        <div>
+                            <div class="text-sm font-semibold" style="color:var(--text-primary);">{{ $currentInfoPrimary->full_name }}</div>
+                            <div class="text-xs mt-0.5" style="color:var(--text-muted);">
+                                {{ $currentInfoPrimary->title }} — appointed {{ $currentInfoPrimary->appointed_on->format('d M Y') }}
+                                @if($currentInfoPrimary->id_number) | ID: {{ $currentInfoPrimary->id_number }} @endif
+                            </div>
+                        </div>
+                        <span class="inline-flex items-center px-2 py-0.5 text-xs font-semibold" style="background: color-mix(in srgb, var(--ds-green) 15%, transparent); color: var(--ds-green); border-radius:6px;">Active</span>
+                    </div>
+                    @else
+                    <div class="mb-3 px-3 py-2 text-xs font-semibold" style="background: color-mix(in srgb, var(--ds-crimson) 10%, transparent); border:1px solid color-mix(in srgb, var(--ds-crimson) 30%, transparent); border-radius:6px; color: var(--ds-crimson);">
+                        No Information Officer appointed. POPIA s55 requires every responsible party to designate an IO.
+                    </div>
+                    @endif
+
+                    <div class="mb-2 px-3 py-2 text-xs" style="background: color-mix(in srgb, var(--ds-amber) 10%, transparent); border:1px solid color-mix(in srgb, var(--ds-amber) 30%, transparent); border-radius:6px; color: var(--text-primary);">
+                        The Information Officer is the contact for all data-subject queries + Information Regulator submissions. Their details appear on the published privacy policy.
+                    </div>
+
+                    <form method="POST" action="{{ route('corex.settings.information-officers.primary') }}" enctype="multipart/form-data" class="space-y-3 mt-3">
+                        @csrf
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Link to user</label>
+                                <select name="user_id" class="w-full px-2 py-1.5 text-sm border rounded" style="border-color:var(--border); background:var(--surface); color:var(--text-primary);">
+                                    <option value="">-- External person --</option>
+                                    @foreach($agencyUsers as $u)
+                                    <option value="{{ $u->id }}">{{ $u->name }} ({{ $u->email }})</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Full Name *</label>
+                                <input type="text" name="full_name" required class="w-full px-2 py-1.5 text-sm border rounded" style="border-color:var(--border); background:var(--surface); color:var(--text-primary);">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">ID Number</label>
+                                <input type="text" name="id_number" class="w-full px-2 py-1.5 text-sm border rounded" style="border-color:var(--border); background:var(--surface); color:var(--text-primary);">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Cell</label>
+                                <input type="text" name="cell" class="w-full px-2 py-1.5 text-sm border rounded" style="border-color:var(--border); background:var(--surface); color:var(--text-primary);">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Email</label>
+                                <input type="email" name="email" class="w-full px-2 py-1.5 text-sm border rounded" style="border-color:var(--border); background:var(--surface); color:var(--text-primary);">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Appointed On *</label>
+                                <input type="date" name="appointed_on" value="{{ now()->format('Y-m-d') }}" required class="w-full px-2 py-1.5 text-sm border rounded" style="border-color:var(--border); background:var(--surface); color:var(--text-primary);">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Appointment Letter (PDF)</label>
+                                <input type="file" name="appointment_letter" accept=".pdf" class="w-full px-2 py-1.5 text-xs border rounded" style="border-color:var(--border); background:var(--surface); color:var(--text-primary);">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1" style="color:var(--text-secondary);">Notes</label>
+                            <textarea name="notes" rows="2" class="w-full rounded-md px-3 py-2 text-sm" style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"></textarea>
+                        </div>
+                        <button type="submit" class="corex-btn-primary text-xs">Appoint Information Officer</button>
+                    </form>
+
+                    @if($infoPrimaryHistory->isNotEmpty())
+                    <div x-data="{ showInfoHistory: false }" class="mt-3">
+                        <button @click="showInfoHistory = !showInfoHistory" class="text-xs font-semibold flex items-center gap-1" style="color:var(--text-muted);">
+                            <svg class="w-3 h-3 transition-transform" :class="showInfoHistory && 'rotate-90'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m9 5 7 7-7 7"/></svg>
+                            Previous appointments ({{ $infoPrimaryHistory->count() }})
+                        </button>
+                        <div x-show="showInfoHistory" x-cloak class="mt-2 space-y-1">
+                            @foreach($infoPrimaryHistory as $prev)
+                            <div class="flex items-center justify-between px-2 py-1 text-xs" style="background:var(--surface); border-radius:6px;">
+                                <span style="color:var(--text-primary);">{{ $prev->full_name }}</span>
+                                <span style="color:var(--text-muted);">{{ $prev->appointed_on->format('d M Y') }} — {{ $prev->ended_on->format('d M Y') }}</span>
+                            </div>
+                            @endforeach
+                        </div>
+                    </div>
+                    @endif
+                </div>
+            </div>
+
+            {{-- Deputy Information Officers --}}
+            <div>
+                <h3 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:var(--text-muted);">Deputy Information Officers (POPIA s56)</h3>
+                <div class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
+                    <div class="text-xs font-semibold mb-2" style="color:var(--text-secondary);">Designate deputies who may handle POPIA requests when the primary IO is unavailable</div>
+                    <form method="POST" action="{{ route('corex.settings.information-officers.deputies') }}">
+                        @csrf
+                        <div class="space-y-1 max-h-48 overflow-y-auto mb-3 rounded-md p-2" style="border:1px solid var(--border); background:var(--surface);">
+                            @foreach($agencyUsers as $u)
+                            <label class="flex items-center gap-2 py-1 px-1 text-sm cursor-pointer hover:bg-white/5 rounded">
+                                <input type="checkbox" name="deputy_user_ids[]" value="{{ $u->id }}" {{ in_array($u->id, $activeDeputyIOUserIds) ? 'checked' : '' }} style="accent-color: #0d9488;">
+                                <span style="color:var(--text-primary);">{{ $u->name }}</span>
+                                <span class="text-xs" style="color:var(--text-muted);">{{ $u->role }}</span>
+                            </label>
+                            @endforeach
+                        </div>
+                        <button type="submit" class="corex-btn-primary text-xs">Save Deputy IOs</button>
                     </form>
                 </div>
             </div>
@@ -1785,6 +1911,116 @@
                 @endforeach
 
             </div>{{-- /properties --}}
+
+            {{-- PRESENTATIONS section (V2 Phase 2) --}}
+            <div x-show="activeSection === 'feature-presentations'" x-cloak class="space-y-3">
+                @php
+                    $presAgency = $agency ?? null;
+                    $presRich     = (int) ($presAgency->presentations_coverage_rich_threshold     ?? 6);
+                    $presModerate = (int) ($presAgency->presentations_coverage_moderate_threshold ?? 3);
+                    $presThin     = (int) ($presAgency->presentations_coverage_thin_threshold     ?? 1);
+                    $presPeriod   = (int) ($presAgency->presentations_default_period_months       ?? 12);
+                    $presScope    = (string) ($presAgency->presentations_default_comp_scope        ?? 'radius_all');
+                    $presRadius   = (int) ($presAgency->presentations_default_radius_m             ?? 1000);
+                @endphp
+
+                <div class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
+                    <div class="mb-3">
+                        <div class="text-sm font-semibold" style="color:var(--text-primary);">CMA Coverage Thresholds</div>
+                        <div class="text-xs mt-0.5" style="color:var(--text-secondary);">Controls the data-quality badge shown on the property page above the Generate Presentation button. Counts are sold (registered) deals in the property's suburb within the rolling window.</div>
+                    </div>
+
+                    @if($presAgency)
+                    <form method="POST" action="{{ route('corex.settings.presentations.update') }}" class="space-y-3">
+                        @csrf
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Rich (default 6)</label>
+                                <input type="number" min="1" max="999" name="presentations_coverage_rich_threshold"
+                                       value="{{ $presRich }}"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                <div class="text-[11px] mt-1" style="color:var(--text-muted);">≥ this many comps → green badge "Strong data".</div>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Moderate (default 3)</label>
+                                <input type="number" min="1" max="999" name="presentations_coverage_moderate_threshold"
+                                       value="{{ $presModerate }}"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                <div class="text-[11px] mt-1" style="color:var(--text-muted);">≥ this many comps → amber badge "Moderate data".</div>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Thin (default 1)</label>
+                                <input type="number" min="1" max="999" name="presentations_coverage_thin_threshold"
+                                       value="{{ $presThin }}"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                <div class="text-[11px] mt-1" style="color:var(--text-muted);">≥ this many comps → amber badge "Thin data". 0 comps → red badge.</div>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Default period (months)</label>
+                                <input type="number" min="1" max="60" name="presentations_default_period_months"
+                                       value="{{ $presPeriod }}"
+                                       class="w-full rounded-md px-3 py-2 text-sm"
+                                       style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                <div class="text-[11px] mt-1" style="color:var(--text-muted);">Rolling window for the comp count (default 12).</div>
+                            </div>
+                        </div>
+
+                        {{-- Phase 3b — comp scope + radius default --}}
+                        <div class="pt-4 mt-4" style="border-top:1px solid var(--border);">
+                            <div class="mb-3">
+                                <div class="text-sm font-semibold" style="color:var(--text-primary);">Comparable Scope</div>
+                                <div class="text-xs mt-0.5" style="color:var(--text-secondary);">How CoreX picks comparable sales from the agency-wide market data pool. Agents can override per presentation at generation time.</div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[11px] font-semibold uppercase tracking-wider mb-2" style="color:var(--text-muted);">Default scope</label>
+                                    <div class="space-y-1.5">
+                                        <label class="flex items-start gap-2 cursor-pointer">
+                                            <input type="radio" name="presentations_default_comp_scope" value="radius_all"
+                                                   {{ $presScope === 'radius_all' ? 'checked' : '' }}
+                                                   class="mt-0.5">
+                                            <div>
+                                                <div class="text-sm font-medium" style="color:var(--text-primary);">Radius (recommended)</div>
+                                                <div class="text-[11px]" style="color:var(--text-muted);">Match by great-circle distance from the subject property. Honest evaluation default — distance is the strongest single predictor.</div>
+                                            </div>
+                                        </label>
+                                        <label class="flex items-start gap-2 cursor-pointer">
+                                            <input type="radio" name="presentations_default_comp_scope" value="suburb_only"
+                                                   {{ $presScope === 'suburb_only' ? 'checked' : '' }}
+                                                   class="mt-0.5">
+                                            <div>
+                                                <div class="text-sm font-medium" style="color:var(--text-primary);">Suburb only</div>
+                                                <div class="text-[11px]" style="color:var(--text-muted);">Match by suburb name only. Use when scheme character or municipal boundary effects matter more than raw distance.</div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-semibold uppercase tracking-wider mb-1" style="color:var(--text-muted);">Default radius (metres)</label>
+                                    <input type="number" min="50" max="5000" step="50" name="presentations_default_radius_m"
+                                           value="{{ $presRadius }}"
+                                           class="w-full rounded-md px-3 py-2 text-sm"
+                                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                    <div class="text-[11px] mt-1" style="color:var(--text-muted);">Used when scope is "Radius". Range 50–5000m. Default 1000m. Suburb-only ignores this.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pt-2 flex items-center gap-2">
+                            <button type="submit" class="prop-action-btn prop-action-btn-brand">Save Thresholds</button>
+                            <p class="text-[11px]" style="color:var(--text-muted);">Thresholds must satisfy: rich ≥ moderate ≥ thin ≥ 1.</p>
+                        </div>
+                    </form>
+                    @else
+                    <p class="text-xs" style="color:var(--text-muted);">No agency context — cannot edit thresholds.</p>
+                    @endif
+                </div>
+            </div>{{-- /presentations --}}
 
             {{-- MATCHES section --}}
             <div x-show="activeSection === 'feature-matches'" x-cloak class="space-y-5">

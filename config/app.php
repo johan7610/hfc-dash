@@ -30,6 +30,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Environment Label
+    |--------------------------------------------------------------------------
+    |
+    | An explicit, human-readable environment marker (LOCAL / STAGING / DEMO)
+    | shown as a top banner so it is impossible to mistake one environment for
+    | another. APP_ENV cannot be the discriminator — demo, staging AND live
+    | all run APP_ENV=production — so this is the source of truth. Leave unset
+    | on LIVE: an empty value renders no banner at all (clean for clients).
+    |
+    */
+
+    'env_label' => env('APP_ENV_LABEL'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Debug Mode
     |--------------------------------------------------------------------------
     |

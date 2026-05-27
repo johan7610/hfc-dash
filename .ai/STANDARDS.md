@@ -1,5 +1,13 @@
 # CoreX OS — Prime Directive
 
+## Standard 0 — Operating Principle
+
+Every standard in this file is subordinate to the CoreX Operating Principle (see CLAUDE.md). If a standard conflicts with the principle, the principle wins. If a standard would let a shortcut ship, the standard is wrong and gets revised.
+
+The principle: CoreX is the best real estate OS that will ever exist. Every prompt, every commit, every deferral decision is measured against this. "Good enough for now" never ships.
+
+---
+
 CoreX OS will become the best and biggest real estate operating system in South Africa.
 
 **Technology Choices:** When multiple options exist, always choose the best one. If there is a superior library, API, approach or architecture — use it. Never choose mediocre when world class is available. Cost is a consideration but never a reason to choose inferior technology when better options exist at the same or similar cost.
@@ -91,6 +99,31 @@ Every record created in any module must link to at least one pillar (Property, C
 
 ### Document Fidelity is Non-Negotiable
 A web document rendered to PDF must be character-for-character identical to the intended legal document. No autocorrection. No smart quotes. No rewording. No reformatting. If a word changes, the document is legally compromised.
+
+### E-Sign — Signing-view state preservation
+
+During an active signing session, the recipient's signing-view state (captured signatures, captured initials, filled fields, party signing status) is the authoritative record. This state lives in two layers:
+
+1. Persisted server-side: `party.signed_at`, `party.signature_locked_at`, captured signature data, field values stored on the document model
+2. Hydrated client-side from #1 on page load via server-rendered Blade
+
+**Forbidden operations during signing:**
+
+- `location.reload()` after any AJAX action — wipes Alpine state including any captured-but-not-yet-submitted signatures
+- Full re-fetch of the signing view from JS after an inline action
+- Re-rendering signature widgets, initial widgets, or field widgets from JS based on document HTML metadata
+- Resetting Alpine `x-data` on partial updates
+
+**Required pattern for inline mutations** (e.g. add condition, flag clause, capture initial):
+
+1. Client POSTs to endpoint
+2. Controller returns JSON containing a `rendered_row` (or `rendered_html`) field — server-rendered HTML for ONLY the new/changed element
+3. Client appends/replaces ONLY the affected node in the DOM
+4. No other widgets touched. No re-render of anything else.
+
+**Canonical implementation:** Phase 1B.9 commit `bb6cc9f` — `SigningController::addCondition()` + `InsertableBlockRenderer::renderConditionRowPublic()` + `add-condition-modal.blade.php` `_appendConditionRow()` handler.
+
+**Why this matters:** Recipients spend 5–15 minutes signing a document. A single inadvertent re-render wipes all that work and destroys trust in the system. This is a P0 invariant.
 
 ### Flows Carry Data Forward
 When a flow moves from one stage to the next, all relevant data from previous stages is carried forward and pre-filled. Agents never re-enter data the system already knows.

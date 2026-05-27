@@ -102,7 +102,7 @@
                 </p>
             </div>
             <div>
-                <span class="text-xs" style="color: var(--text-muted);">Municipal Valuation</span>
+                <span class="text-xs" style="color: var(--text-muted);">Municipal Evaluation</span>
                 <p class="font-medium" style="color: var(--text-primary);">
                     @if($subject['municipal_value'])
                         R {{ number_format($subject['municipal_value']) }}
@@ -237,6 +237,31 @@
             Price data available for {{ $stock['listings_with_price'] }} of {{ $stock['search_total_count'] }} listings &mdash; actual competition may be higher.
         </p>
         @endif
+    </div>
+    @endif
+
+    {{-- Phase 3g V2 Part D — Spatial View. Shows the actual comps backing
+         this presentation as map pins around the subject. --}}
+    @php
+        $_p = $presentation ?? null;
+        $_property = $_p?->property;
+        $_subjectLat = $_property?->latitude;
+        $_subjectLng = $_property?->longitude;
+    @endphp
+    @if($_p && $_subjectLat && $_subjectLng)
+    <div class="ds-status-card mb-4" style="border-left-color: var(--brand-button);" id="spatial-view">
+        <h3 class="ds-section-header">Spatial View</h3>
+        @include('corex.map.partials._embed-map', [
+            'containerId'    => 'presentation-spatial-' . $_p->id,
+            'centerLat'      => $_subjectLat,
+            'centerLng'      => $_subjectLng,
+            'radiusM'        => 1000,
+            'subjectTitle'   => $_p->property_address ?: 'Subject',
+            'mode'           => 'presentation',
+            'presentationId' => $_p->id,
+            'enabledLayers'  => ['sold_comps', 'active_listings'],
+            'fullMapUrl'     => route('corex.map.index') . '?focus=' . $_subjectLat . ',' . $_subjectLng . '&zoom=17',
+        ])
     </div>
     @endif
 
@@ -589,10 +614,10 @@
     </div>
     @endif
 
-    {{-- ── 4. CMA VALUATION ─────────────────────────────────────────────── --}}
+    {{-- ── 4. CMA EVALUATION ────────────────────────────────────────────── --}}
     @if($cma['cma_middle'] || $cma['vicinity_middle'])
     <div class="ds-status-card mb-4" style="border-left-color: var(--ds-cyan);">
-        <h3 class="ds-section-header">4. CMA Valuation</h3>
+        <h3 class="ds-section-header">4. CMA Evaluation</h3>
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
             {{-- CMA Range — clickable tiles --}}
             @if($cma['cma_middle'])
@@ -658,7 +683,7 @@
                         @if($cma['asking_vs_cma_pct'] > 0)+@endif{{ $cma['asking_vs_cma_pct'] }}%
                     </p>
                     @if($cma['is_overpriced'])
-                        <p id="asking-cma-note" class="text-xs text-red-500 font-medium">Above CMA valuation</p>
+                        <p id="asking-cma-note" class="text-xs text-red-500 font-medium">Above CMA evaluation</p>
                     @else
                         <p id="asking-cma-note" class="text-xs text-emerald-500 font-medium hidden"></p>
                     @endif

@@ -17,6 +17,8 @@ use App\Services\Docuperfect\DocumentFlattener;
 use App\Services\Docuperfect\SignaturePdfService;
 use App\Models\Docuperfect\NamedField;
 use App\Services\Docuperfect\SignatureService;
+use App\Services\Docuperfect\LetterheadRefresher;
+use App\Services\Docuperfect\SignatureSurfaceNormalizer;
 use App\Services\PermissionService;
 use App\Services\WebTemplateFieldPartyMap;
 use Illuminate\Http\Request;
@@ -286,6 +288,25 @@ class SignatureController extends Controller
                 }
                 $webTemplateHtml = $styles . $bodyHtml;
                 $pageCount = 1;
+            }
+
+            // Markers/setup uniquely bypassed the signing-path normalisation
+            // that every other web-template render runs (cf. lines ~926-927,
+            // SigningController). Two consequences this fixes:
+            //   1. Stale letterhead: the stored merged_html snapshot is frozen
+            //      with whatever agency data existed at prepareSigning (old
+            //      FFC / "Mandate Company"). LetterheadRefresher swaps in the
+            //      live company-header (current HFC agency).
+            //   2. Layout regression: the snapshot can carry unbalanced <div>
+            //      tags; injected raw via {!! !!} those stray closes climb the
+            //      DOM and break the flex two-column row (panel drops below) —
+            //      min-w-0 cannot defend a broken DOM. LetterheadRefresher's
+            //      DOMDocument round-trip re-serialises BALANCED markup, so the
+            //      document can no longer over-close its column regardless of
+            //      what the template HTML contains.
+            if ($webTemplateHtml !== '') {
+                $webTemplateHtml = SignatureSurfaceNormalizer::normalize($webTemplateHtml);
+                $webTemplateHtml = LetterheadRefresher::refresh($webTemplateHtml);
             }
         } else {
             $pageCount = $hasFlattened ? count($flattenedPages) : ($docTemplate ? $docTemplate->page_count : 0);
@@ -917,6 +938,12 @@ class SignatureController extends Controller
                     $webTemplateHtml = '<p>Document preview unavailable.</p>';
                 }
             }
+
+            // Make inline-template signature blocks signable for the agent's
+            // first-signer pass (same engine selector as the external signer);
+            // additive + idempotent, never touches the template files (BL-5/6).
+            $webTemplateHtml = SignatureSurfaceNormalizer::normalize($webTemplateHtml);
+            $webTemplateHtml = LetterheadRefresher::refresh($webTemplateHtml);
         } else {
             $pageCount = $hasFlattened ? count($flattenedPages) : ($docTemplate ? $docTemplate->page_count : 0);
             for ($n = 0; $n < $pageCount; $n++) {
@@ -972,6 +999,7 @@ class SignatureController extends Controller
             'esignFlowId' => $esignFlowId,
             'signingParties' => $signingParties,
             'storedInitials' => $webTemplateData['signed_initials'] ?? [],
+            'storedDisclosure' => $webTemplateData['disclosure_answers'] ?? [],
         ]);
     }
 
@@ -1367,6 +1395,26 @@ class SignatureController extends Controller
                 $webData['ceremony_values'] = array_merge($webData['ceremony_values'] ?? [], $ceremonyValues);
             }
 
+            // §19 Part A — persist disclosure answers on the agent's submit
+            // (mirrors SigningController::completeWeb). The agent does not
+            // FILL the seller's mandatory disclosure, but its completion
+            // must not drop whatever answers already exist.
+            $disclosureAnswers = $request->input('disclosure_answers', []);
+            if (!empty($disclosureAnswers)) {
+                $webData['disclosure_answers'] = array_merge(
+                    $webData['disclosure_answers'] ?? [],
+                    $disclosureAnswers
+                );
+            }
+
+            // §19 Option 2 — do NOT feed the paginated DOM back into
+            // merged_html (that caused the re-pagination accretion loop).
+            // merged_html stays the CANONICAL, un-paginated document; the
+            // embed below applies the agent's values to its un-paginated
+            // markers so the next signer sees them. The exact paginated DOM
+            // is persisted ONCE to signed_paginated_html (below).
+            $paginatedHtml = (string) $request->input('paginated_html', '');
+
             // Embed agent signature images and initials into merged_html so next signer sees them
             if (!empty($webData['merged_html'])) {
                 $html = $webData['merged_html'];
@@ -1380,7 +1428,15 @@ class SignatureController extends Controller
                 $webData['merged_html'] = $html;
             }
 
-            $document->update(['web_template_data' => $webData]);
+            // Two-write: canonical un-paginated merged_html + exact signed
+            // paginated DOM persisted ONCE to the derived-artifact column.
+            $docUpdates = ['web_template_data' => $webData];
+            if (trim($paginatedHtml) !== '' && (
+                    str_contains($paginatedHtml, 'corex-a4-page') ||
+                    str_contains($paginatedHtml, 'corex-document-wrapper'))) {
+                $docUpdates['signed_paginated_html'] = $paginatedHtml;
+            }
+            $document->update($docUpdates);
 
             // Find agent request for audit logging
             $agentRequest = $template->requests()
@@ -1511,6 +1567,26 @@ class SignatureController extends Controller
                 }
             }
 
+            // Strategy 3 (§20 identity-driven — the pack-embed fix): a
+            // signer's captured signature must appear on EVERY surface
+            // bearing that signer's party key, across ALL pack segments —
+            // not just the first N matched positionally (which left e.g.
+            // Addendum B's trailing seller surfaces blank). Fill any
+            // STILL-unsigned same-party surface with a representative
+            // capture (apply-to-all => all of a signer's captures are the
+            // same image). Idempotent (skips data-signed="true"), strictly
+            // party-scoped (never touches another recipient's surfaces).
+            $rep = !empty($signatures) ? reset($signatures) : null;
+            if ($rep !== null) {
+                foreach ($xpath->query('//*[@data-marker-party][@data-marker-type="signature"]') as $el) {
+                    if ($el->getAttribute('data-signed') === 'true') continue;
+                    $elParty = strtolower($el->getAttribute('data-marker-party'));
+                    if (in_array($elParty, $partyAliases) || $elParty === $partyRole) {
+                        $this->embedSigIntoElement($dom, $el, $rep, $partyRole, $signerName);
+                    }
+                }
+            }
+
             $result = $dom->saveHTML();
             $result = preg_replace('/^<\?xml encoding="utf-8"\?>/', '', $result);
             return trim($result);
@@ -1607,7 +1683,29 @@ class SignatureController extends Controller
                 $img->setAttribute('style', 'display:block;max-height:28px;margin:1px auto;object-fit:contain;');
                 $el->appendChild($img);
                 $el->setAttribute('data-signed', 'true');
-                $el->classList !== null && $el->setAttribute('class', ($el->getAttribute('class') ?: '') . ' initial-signed');
+                $el->setAttribute('class', ($el->getAttribute('class') ?: '') . ' initial-signed');
+            }
+
+            // §20 identity-driven (same fix as signatures): every initial
+            // surface for this signer, across ALL pack segments, gets their
+            // initial — not just the first N keyed positionally. Idempotent;
+            // strictly party-scoped (no cross-recipient contamination).
+            $repInit = !empty($initials) ? reset($initials) : null;
+            if ($repInit !== null) {
+                foreach ($xpath->query('//*[@data-marker-type="initial"][@data-marker-party]') as $el) {
+                    if ($el->getAttribute('data-signed') === 'true') continue;
+                    $elParty = strtolower($el->getAttribute('data-marker-party'));
+                    if (!in_array($elParty, $partyAliases) && $elParty !== $partyRole) continue;
+                    while ($el->firstChild) { $el->removeChild($el->firstChild); }
+                    $img = $dom->createElement('img');
+                    $img->setAttribute('src', $repInit);
+                    $img->setAttribute('class', 'web-sig-signed-img');
+                    $img->setAttribute('alt', 'Initial');
+                    $img->setAttribute('style', 'display:block;max-height:28px;margin:1px auto;object-fit:contain;');
+                    $el->appendChild($img);
+                    $el->setAttribute('data-signed', 'true');
+                    $el->setAttribute('class', ($el->getAttribute('class') ?: '') . ' initial-signed');
+                }
             }
 
             $result = $dom->saveHTML();
@@ -1860,9 +1958,12 @@ class SignatureController extends Controller
             return redirect()->back()->with('error', 'Signed PDF has not been generated yet.');
         }
 
-        $pdfPath = storage_path("app/{$template->signed_pdf_path}");
+        // Resolve via the 'local' disk (where signed PDFs are written) —
+        // raw storage_path('app/..') is one dir outside the disk root.
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+        $pdfPath = $disk->path($template->signed_pdf_path);
 
-        if (!file_exists($pdfPath)) {
+        if (!$disk->exists($template->signed_pdf_path)) {
             return redirect()->back()->with('error', 'Signed PDF file not found.');
         }
 
@@ -2190,9 +2291,25 @@ class SignatureController extends Controller
             'label' => ucfirst(str_replace('_', ' ', $p['role_label'] ?? $p['role'] ?? 'unknown')),
         ])->unique('role')->values()->toArray();
 
+        // §20 — per-segment titles for the (possibly pack) review body.
+        // Ordered to match the merged_html .corex-document-wrapper order
+        // (the pack loop concatenates segments in template_ids order).
+        // Single (non-pack) document => one title = the document name.
+        $packTemplateIds = $webTemplateData['template_ids'] ?? [];
+        $packSegmentTitles = [];
+        if (is_array($packTemplateIds) && count($packTemplateIds) > 0) {
+            foreach ($packTemplateIds as $tid) {
+                $segTpl = \App\Models\Docuperfect\Template::find($tid);
+                $packSegmentTitles[] = $segTpl->name ?? ('Document ' . $tid);
+            }
+        } else {
+            $packSegmentTitles[] = $document->name;
+        }
+
         return view('docuperfect.signatures.review', [
             'document' => $document,
             'template' => $template,
+            'packSegmentTitles' => $packSegmentTitles,
             'completedRequest' => $completedRequest,
             'nextParty' => $nextParty,
             'progress' => $progress,

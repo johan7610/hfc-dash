@@ -819,9 +819,24 @@ class SignatureService
         ?User $sentBy = null,
         bool $ficaRequired = false,
         ?int $contactId = null,
-        ?int $ficaSubmissionId = null
+        ?int $ficaSubmissionId = null,
+        ?int $roleIndex = null,
     ): SignatureRequest {
         $token = $this->generateToken();
+
+        // Recipient Loop Engine B1 — split legacy suffixed party_role into
+        // (clean party_role, role_index). Callers that haven't been updated
+        // to pass $roleIndex explicitly still emit suffixed strings like
+        // 'seller_2'; we split them here so the column-level shape is
+        // always clean. Path A semantics: role_index always lives in its
+        // own column, party_role is always the base token.
+        if ($roleIndex === null && preg_match('/^(.+)_(\d+)$/', $partyRole, $m)) {
+            $partyRole = $m[1];
+            $roleIndex = (int) $m[2];
+        }
+        if ($roleIndex === null) {
+            $roleIndex = 1;
+        }
 
         // Get the highest existing signing_order for this template, then add 1
         // This ensures co-owners (two landlords) get sequential order numbers
@@ -832,6 +847,7 @@ class SignatureService
         $request = SignatureRequest::create([
             'signature_template_id' => $template->id,
             'party_role' => $partyRole,
+            'role_index' => $roleIndex,
             'signing_order' => $signingOrder,
             'signer_name' => $signerName,
             'signer_email' => $signerEmail,
@@ -1479,19 +1495,38 @@ class SignatureService
             $documentName = $template->document->name ?? 'Document';
             $dashboardUrl = route('docuperfect.rental');
 
-            $typeLabel = $type === 'final_signoff' ? 'final sign-off' : 'review and authorisation';
+            // ES-7 — dedicated SupervisorApprovalMail (replaces placeholder
+            // copy that previously rode on SigningRequestMail with a
+            // subject like "Please sign: [Candidate Authorisation] ...").
+            $document        = $template->document;
+            $documentType    = $document?->document_type ?? null;
+            $documentTypeLbl = $documentType
+                ? ucwords(str_replace('_', ' ', $documentType))
+                : null;
+
+            // Best-effort recipient + property surfacing for the email body
+            $firstRequest = $template->requests()
+                ->whereNotIn('party_role', ['agent', 'supervisor', 'supervisor_final', 'witness'])
+                ->orderBy('signing_order')
+                ->first();
+            $contactName     = $firstRequest?->signer_name;
+            $propertyAddress = $document?->property_address;
 
             foreach ($authorisers as $authoriser) {
                 try {
                     Mail::to($authoriser->email)->send(
-                        (new SigningRequestMail(
-                            signerName: $authoriser->name,
-                            documentName: "[Candidate Authorisation] {$documentName}",
-                            signingUrl: $dashboardUrl,
-                            personalMessage: "Candidate practitioner {$candidateUser->name} has a document requiring your {$typeLabel}. "
-                                . "Please review it from your dashboard. Any eligible authoriser can action this.",
-                            expiresAt: now()->addDays(14),
-                        ))
+                        (new \App\Mail\Signatures\SupervisorApprovalMail(
+                            supervisorName:    $authoriser->name,
+                            candidateName:     $candidateUser->name,
+                            documentName:      $documentName,
+                            documentTypeLabel: $documentTypeLbl,
+                            contactName:       $contactName,
+                            propertyAddress:   $propertyAddress,
+                            candidatePhone:    $candidateUser->phone ?? $candidateUser->cell ?? null,
+                            reviewUrl:         $dashboardUrl,
+                            expiresAt:         now()->addDays(7),
+                            reviewType:        $type,
+                        ))->fromAgent($candidateUser)
                     );
                 } catch (\Throwable $e) {
                     Log::error('Failed to send authorisation notification', [
@@ -1646,51 +1681,76 @@ class SignatureService
             documentHash: $template->document_hash,
         );
 
-        // 2. Generate both signed PDF versions (internal + client)
-        $pdfPaths = $this->pdfService->generate($template);
+        // Steps 2-6 run AFTER the completion commits. Completion (status +
+        // audit above) is the legal record and must be durable on its own.
+        // PDF generation (Puppeteer) is slow/external-failure-prone and was
+        // previously executed INSIDE approveAndAdvance's DB::transaction, so
+        // a 2-minute Puppeteer hang + force-close rolled back a legally
+        // completed signing and made retries hang identically. Deferring via
+        // DB::afterCommit guarantees: completion is committed first; a slow
+        // or failing PDF/file/email NEVER undoes completion; failures are
+        // logged and recoverable. (No active transaction => runs inline,
+        // same effect, still after the status write.)
+        DB::afterCommit(function () use ($template) {
+            try {
+                // 2. Generate both signed PDF versions (internal + client)
+                $pdfPaths = $this->pdfService->generate($template);
 
-        if ($pdfPaths) {
-            $template->update([
-                'signed_pdf_path' => $pdfPaths['internal'],
-                'signed_pdf_client_path' => $pdfPaths['client'],
-            ]);
+                if ($pdfPaths) {
+                    $template->update([
+                        'signed_pdf_path' => $pdfPaths['internal'],
+                        'signed_pdf_client_path' => $pdfPaths['client'],
+                    ]);
 
-            SignatureAuditLog::log(
-                $template,
-                SignatureAuditLog::ACTION_DOCUMENT_COMPLETED,
-                SignatureAuditLog::ACTOR_SYSTEM,
-                'System',
-                metadata: [
-                    'signed_pdf_path' => $pdfPaths['internal'],
-                    'signed_pdf_client_path' => $pdfPaths['client'],
-                    'total_signatures' => $template->signatures()->count(),
-                    'parties_completed' => $template->partyProgress(),
-                ],
-                documentHash: $template->document_hash,
-            );
-        } else {
-            Log::error('SignatureService: Signed PDF generation failed, emails will NOT include PDF attachment', [
-                'template_id' => $template->id,
-                'document_id' => $template->document_id,
-                'document_name' => $template->document->name ?? 'unknown',
-                'has_flattened_pages' => !empty($template->flattened_pages_json),
-                'page_count' => $template->document->template?->page_count ?? 0,
-            ]);
-        }
+                    SignatureAuditLog::log(
+                        $template,
+                        SignatureAuditLog::ACTION_DOCUMENT_COMPLETED,
+                        SignatureAuditLog::ACTOR_SYSTEM,
+                        'System',
+                        metadata: [
+                            'signed_pdf_path' => $pdfPaths['internal'],
+                            'signed_pdf_client_path' => $pdfPaths['client'],
+                            'total_signatures' => $template->signatures()->count(),
+                            'parties_completed' => $template->partyProgress(),
+                        ],
+                        documentHash: $template->document_hash,
+                    );
+                } else {
+                    Log::error('SignatureService: Signed PDF generation failed, emails will NOT include PDF attachment', [
+                        'template_id' => $template->id,
+                        'document_id' => $template->document_id,
+                        'document_name' => $template->document->name ?? 'unknown',
+                        'has_flattened_pages' => !empty($template->flattened_pages_json),
+                        'page_count' => $template->document->template?->page_count ?? 0,
+                    ]);
+                }
 
-        // 3. Email signed copies — client copy to signers, internal copy to agent
-        $this->sendCompletionEmails($template, $pdfPaths);
+                // 3. Email signed copies — client to signers, internal to agent
+                $this->sendCompletionEmails($template, $pdfPaths);
 
-        // 4. Link document to contacts via pivot (for FICA tracking / compliance)
-        $this->linkDocumentToContacts($template, $pdfPaths);
+                // 4. Link document to contacts via pivot (FICA / compliance)
+                $this->linkDocumentToContacts($template, $pdfPaths);
 
-        // 5. Auto-file signed document to Contact Drive and Property Drive
-        $this->autoFileSignedDocument($template, $pdfPaths);
+                // 5. Auto-file signed document to Contact + Property Drive
+                $this->autoFileSignedDocument($template, $pdfPaths);
 
-        // 6. Extract lease data if this is a lease/rental document
-        if ($this->isLeaseDocument($template)) {
-            $this->createLeaseRecord($template);
-        }
+                // 6. Extract lease data if this is a lease/rental document
+                if ($this->isLeaseDocument($template)) {
+                    $this->createLeaseRecord($template);
+                }
+            } catch (\Throwable $e) {
+                // The signing is already COMPLETED and committed. Post-
+                // completion delivery/filing failure is logged and
+                // recoverable — it must NOT surface as a rollback or a
+                // 500 that implies the signing failed.
+                Log::error('SignatureService: post-completion (PDF/file/email) step failed — document remains COMPLETED', [
+                    'template_id' => $template->id,
+                    'document_id' => $template->document_id,
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+            }
+        });
     }
 
     /**
@@ -1750,7 +1810,14 @@ class SignatureService
 
         $webTemplateData = $document->web_template_data ?? [];
         $templateIds = $webTemplateData['template_ids'] ?? [];
-        $mergedHtml = $webTemplateData['merged_html'] ?? '';
+        // §19 Option 2 — split/file from the EXACT signed-and-paginated DOM
+        // (per-document .corex-a4-page + per-page initials, as the signer
+        // saw). Fall back to canonical merged_html for legacy / never-web-
+        // signed documents. The server never re-paginates here.
+        $signedPaginated = $document->signed_paginated_html;
+        $mergedHtml = (is_string($signedPaginated) && trim($signedPaginated) !== '')
+            ? $signedPaginated
+            : ($webTemplateData['merged_html'] ?? '');
         $propertyId = $document->property_id;
 
         // Resolve signing contacts once (shared across all filed documents)
@@ -1784,12 +1851,28 @@ class SignatureService
         $docTemplate = $document->template;
         $docName = ($document->name ?? 'Signed Document') . ' (Signed).pdf';
 
+        // FIX 2 — never file a Document that points at a non-existent PDF.
+        // Validate via the SAME disk Document::downloadResponse() reads
+        // (Storage::disk('local')) so a guard pass GUARANTEES the download
+        // works. is_file(storage_path('app/..')) checked the wrong root
+        // (one dir outside the disk) → guard passed, download 500'd.
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+        if (!$disk->exists($pdfPath)) {
+            Log::error('Auto-file: refusing to create a Document for a missing PDF', [
+                'template_id'  => $template->id,
+                'document_id'  => $document->id ?? null,
+                'storage_path' => $pdfPath,
+                'recoverable'  => true,
+            ]);
+            return;
+        }
+
         $filedDoc = \App\Models\Document::create([
             'original_name'    => $docName,
             'storage_path'     => $pdfPath,
             'disk'             => 'local',
             'mime_type'        => 'application/pdf',
-            'size'             => file_exists(storage_path("app/{$pdfPath}")) ? filesize(storage_path("app/{$pdfPath}")) : 0,
+            'size'             => $disk->size($pdfPath),
             'document_type_id' => $docTemplate?->document_type_id,
             'source_type'      => 'esign',
             'source_id'        => $template->id,
@@ -1834,18 +1917,18 @@ class SignatureService
         }
 
         $signingController = app(\App\Http\Controllers\Docuperfect\SigningController::class);
+        // Write under the 'local' disk ROOT so the filed Document
+        // (Storage::disk('local')->download) resolves the exact file.
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
         $baseDir = "docuperfect/signed-documents/{$template->id}/individual";
-        $targetDir = storage_path("app/{$baseDir}");
-        if (!is_dir($targetDir)) {
-            mkdir($targetDir, 0755, true);
-        }
+        $disk->makeDirectory($baseDir);
 
         foreach ($templateIds as $idx => $tplId) {
             $tpl = \App\Models\Docuperfect\Template::find($tplId);
             if (!$tpl) continue;
 
             $individualPdfPath = "{$baseDir}/{$tplId}_client.pdf";
-            $fullStoragePath = storage_path("app/{$individualPdfPath}");
+            $fullStoragePath = $disk->path($individualPdfPath);
 
             // Dedup check
             if (\App\Models\Document::where('storage_path', $individualPdfPath)->where('source_type', 'esign')->exists()) {
@@ -1876,7 +1959,22 @@ class SignatureService
             }
 
             $docName = ($tpl->name ?? 'Document') . ' (Signed).pdf';
-            $fileSize = file_exists($fullStoragePath) ? filesize($fullStoragePath) : 0;
+
+            // FIX 2 — validate via the SAME disk Document::downloadResponse()
+            // reads (Storage::disk('local')) so a guard pass GUARANTEES the
+            // download works. is_file(storage_path('app/..')) checked a path
+            // one dir outside the disk root → guard passed, download 500'd.
+            if (!$disk->exists($individualPdfPath)) {
+                Log::error('Auto-file pack: refusing to create a Document for a missing PDF', [
+                    'template_id'      => $template->id,
+                    'pack_template_id' => $tplId,
+                    'template_name'    => $tpl->name,
+                    'storage_path'     => $individualPdfPath,
+                    'recoverable'      => true,
+                ]);
+                continue;
+            }
+            $fileSize = $disk->size($individualPdfPath);
 
             $filedDoc = \App\Models\Document::create([
                 'original_name'    => $docName,
@@ -1916,13 +2014,23 @@ class SignatureService
             $styles = implode("\n", $styleMatches[0]);
         }
 
-        // Split at .corex-document-wrapper boundaries
-        // Pattern: find each <div class="corex-document-wrapper">...</div> (outermost closing)
+        // Split at .corex-document-wrapper boundaries.
+        // §20: stampDisclosureDocKeys() (ESignWizardController) inserts
+        // data-disclosure-doc="..." BETWEEN <div and class=, so the real tag
+        // is `<div data-disclosure-doc="..." class="corex-document-wrapper"`.
+        // A literal '<div class="corex-document-wrapper"' strpos therefore
+        // matches NOTHING → 0 fragments → filePackDocuments fallback fires →
+        // the whole pack is mis-filed as one document. Detect the wrapper's
+        // opening <div> by the SAME attribute-order-independent regex that
+        // stampDisclosureDocKeys() uses to find wrappers — one shared rule,
+        // so the stamp (or any future added attribute) can never desync the
+        // split again.
         $fragments = [];
         $offset = 0;
-        $wrapperTag = '<div class="corex-document-wrapper"';
+        $wrapperRe = '/<div\b[^>]*\bclass\s*=\s*"[^"]*\bcorex-document-wrapper\b[^"]*"[^>]*>/i';
 
-        while (($pos = strpos($mergedHtml, $wrapperTag, $offset)) !== false) {
+        while (preg_match($wrapperRe, $mergedHtml, $m, PREG_OFFSET_CAPTURE, $offset)
+            && ($pos = $m[0][1]) !== false) {
             // Find the matching closing </div> — count nested divs
             $depth = 0;
             $searchPos = $pos;
@@ -2728,17 +2836,17 @@ class SignatureService
             $viewUrl = url("/docuperfect/documents/{$template->document_id}/signatures/audit");
             $progress = $template->partyProgress();
 
+            // Resolve via the 'local' disk (where signed PDFs are written)
+            // so attachments survive the disk-root path fix.
+            $disk = \Illuminate\Support\Facades\Storage::disk('local');
+
             // Client copy — for external signers (no audit trail)
-            $clientPdfPath = $pdfPaths ? storage_path("app/{$pdfPaths['client']}") : null;
-            if ($clientPdfPath && !file_exists($clientPdfPath)) {
-                $clientPdfPath = null;
-            }
+            $clientPdfPath = ($pdfPaths && !empty($pdfPaths['client']) && $disk->exists($pdfPaths['client']))
+                ? $disk->path($pdfPaths['client']) : null;
 
             // Internal copy — for agent (with audit trail)
-            $internalPdfPath = $pdfPaths ? storage_path("app/{$pdfPaths['internal']}") : null;
-            if ($internalPdfPath && !file_exists($internalPdfPath)) {
-                $internalPdfPath = null;
-            }
+            $internalPdfPath = ($pdfPaths && !empty($pdfPaths['internal']) && $disk->exists($pdfPaths['internal']))
+                ? $disk->path($pdfPaths['internal']) : null;
 
             $pdfFilename = "Signed - {$documentName}.pdf";
 
@@ -2940,6 +3048,7 @@ class SignatureService
                             documentName: $template->document->name ?? 'Document',
                             signingUrl: $signingUrl,
                             personalMessage: "{$amendingRequest->signer_name} has added conditions to this document. Please review and initial each amendment to continue.",
+                            expiresAt: $previousRequest->token_expires_at,
                         )
                     );
 
@@ -2966,6 +3075,184 @@ class SignatureService
 
             // Also notify the agent
             $this->sendAgentAmendmentNotification($template, $amendment, $amendingRequest);
+        });
+    }
+
+    /**
+     * ES-3 — Initialing Cascade.
+     *
+     * Replaces the full re-sign cascade for amendment review approvals.
+     * After the agent approves a proposed amendment (a new condition or a
+     * strikethrough override), this requeues every previously-signed party
+     * for a focused initialing view that shows ONLY the changed regions.
+     *
+     * Original signatures are preserved verbatim — they don't get
+     * superseded — only the new conditions/strikethroughs introduced by
+     * the amendment need fresh initials.
+     *
+     * Spec: .ai/specs/esign-v3-complete-spec.md §7.5.7, §8
+     */
+    public function requeueAllPartiesForInitialing(
+        SignatureTemplate $template,
+        DocumentAmendment $amendment
+    ): void {
+        DB::transaction(function () use ($template, $amendment) {
+            // 1. Move template into initialing-cascade state. The amendment
+            //    table row already exists (created when the condition or
+            //    strikethrough was proposed) — we just flip it to ACCEPTED-
+            //    by-agent and start the cascade.
+            $template->update([
+                'status'           => SignatureTemplate::STATUS_AMENDMENT_INITIALING,
+                'amendment_status' => SignatureTemplate::AMENDMENT_STATUS_INITIALING,
+            ]);
+            $amendment->update(['status' => DocumentAmendment::STATUS_ACCEPTED]);
+
+            // 2. Find all previous signers. Same query as the legacy
+            //    handleAmendment() flow, but we route them into the
+            //    initialing view rather than full re-sign.
+            $previousSigners = $template->requests()
+                ->where('status', SignatureRequest::STATUS_COMPLETED)
+                ->orderBy('signing_order')
+                ->get();
+
+            foreach ($previousSigners as $previousRequest) {
+                // Skip duplicate acceptance rows for this amendment
+                $existing = AmendmentAcceptance::where('amendment_id', $amendment->id)
+                    ->where('signature_request_id', $previousRequest->id)
+                    ->first();
+                if (! $existing) {
+                    AmendmentAcceptance::create([
+                        'amendment_id'         => $amendment->id,
+                        'signature_request_id' => $previousRequest->id,
+                        'accepted'             => false,
+                        'rejected'             => false,
+                    ]);
+                }
+
+                // Mint a fresh token so the party can land on the focused
+                // initialing view (existing request rows are re-issued —
+                // signed_at / original signatures NOT touched).
+                $initialingToken = $this->generateToken();
+                $previousRequest->update([
+                    'token'            => $initialingToken,
+                    'token_expires_at' => now()->addDays(14),
+                ]);
+
+                // Best-effort email send. Existing amendment-review route is
+                // used so the previous signer lands on the focused initialing
+                // view we render server-side from the same surface.
+                try {
+                    $url = route('signatures.external.amendment-review', $initialingToken);
+                    Mail::to($previousRequest->signer_email)->send(
+                        new SigningRequestMail(
+                            signerName:      $previousRequest->signer_name,
+                            documentName:    $template->document->name ?? 'Document',
+                            signingUrl:      $url,
+                            personalMessage: 'A change to this document was approved. Please initial the changed sections to confirm — your original signature stays in place.',
+                            expiresAt:       $previousRequest->token_expires_at,
+                        )
+                    );
+                } catch (\Throwable $e) {
+                    Log::warning('Initialing cascade — mail send failed', [
+                        'amendment_id' => $amendment->id,
+                        'request_id'   => $previousRequest->id,
+                        'error'        => $e->getMessage(),
+                    ]);
+                }
+
+                SignatureAuditLog::log(
+                    $template,
+                    'amendment_initialing_invited',
+                    SignatureAuditLog::ACTOR_SYSTEM,
+                    'System',
+                    metadata: [
+                        'amendment_id'  => $amendment->id,
+                        'party_role'    => $previousRequest->party_role,
+                        'signer_name'   => $previousRequest->signer_name,
+                    ],
+                );
+            }
+        });
+    }
+
+    /**
+     * ES-3 — Reject the amendment but keep the document alive.
+     * Restores prior amendment_status and clears any proposed conditions
+     * tied to this amendment so the original document continues.
+     */
+    public function rejectAmendmentChange(
+        SignatureTemplate $template,
+        DocumentAmendment $amendment,
+        ?string $reason = null
+    ): void {
+        DB::transaction(function () use ($template, $amendment, $reason) {
+            $amendment->update([
+                'status' => DocumentAmendment::STATUS_REJECTED,
+            ]);
+
+            // Mark conditions tied to this amendment as superseded (soft-
+            // delete so they remain auditable).
+            \App\Models\Docuperfect\DocumentCondition::where('amendment_id', $amendment->id)
+                ->update([
+                    'superseded_at' => now(),
+                ]);
+            \App\Models\Docuperfect\DocumentCondition::where('amendment_id', $amendment->id)->delete();
+
+            \App\Models\Docuperfect\DocumentClauseStrikethrough::where('amendment_id', $amendment->id)
+                ->update([
+                    'status'               => \App\Models\Docuperfect\DocumentClauseStrikethrough::STATUS_REJECTED,
+                    'rejected_by_agent_at' => now(),
+                    'rejection_reason'     => $reason,
+                ]);
+
+            // Return template to its prior status (best guess — back to
+            // signing). Calling code may override.
+            $template->update([
+                'status'           => SignatureTemplate::STATUS_SIGNING,
+                'amendment_status' => SignatureTemplate::AMENDMENT_STATUS_REJECTED,
+            ]);
+
+            SignatureAuditLog::log(
+                $template,
+                'amendment_change_rejected',
+                SignatureAuditLog::ACTOR_USER,
+                \Illuminate\Support\Facades\Auth::user()?->name ?? 'Agent',
+                metadata: [
+                    'amendment_id' => $amendment->id,
+                    'reason'       => $reason,
+                ],
+            );
+        });
+    }
+
+    /**
+     * ES-3 — Hard-reject the document. Terminal state.
+     */
+    public function rejectAmendmentDocument(
+        SignatureTemplate $template,
+        DocumentAmendment $amendment,
+        ?string $reason = null
+    ): void {
+        DB::transaction(function () use ($template, $amendment, $reason) {
+            $amendment->update(['status' => DocumentAmendment::STATUS_REJECTED]);
+            $template->update([
+                'status'            => SignatureTemplate::STATUS_REJECTED,
+                'rejected_at'       => now(),
+                'rejected_by'       => \Illuminate\Support\Facades\Auth::id(),
+                'rejection_reason'  => $reason,
+                'amendment_status'  => SignatureTemplate::AMENDMENT_STATUS_REJECTED,
+            ]);
+
+            SignatureAuditLog::log(
+                $template,
+                'amendment_document_rejected',
+                SignatureAuditLog::ACTOR_USER,
+                \Illuminate\Support\Facades\Auth::user()?->name ?? 'Agent',
+                metadata: [
+                    'amendment_id' => $amendment->id,
+                    'reason'       => $reason,
+                ],
+            );
         });
     }
 

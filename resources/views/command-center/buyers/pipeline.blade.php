@@ -63,7 +63,7 @@
                 </div>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
-                <a href="{{ route('prospecting.show', $contextListing->id) }}"
+                <a href="{{ route('market-intelligence.show', $contextListing->id) }}"
                    class="text-xs no-underline hover:underline" style="color: var(--brand-button);">View listing →</a>
                 <a href="{{ route('command-center.buyers.pipeline', array_merge(request()->except('prospecting_listing_id'), [])) }}"
                    class="text-xs no-underline hover:underline" style="color: var(--text-muted);">Clear filter</a>

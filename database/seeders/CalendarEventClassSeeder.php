@@ -17,6 +17,44 @@ class CalendarEventClassSeeder extends Seeder
                 );
         }
 
+        // Reassert actor_role + completion_behaviour from the authoritative
+        // map declared in migration 2026_05_06_000001. That migration runs
+        // BEFORE this seeder creates the class rows, so its per-class
+        // UPDATE matches zero rows on a fresh migrate — leaving every
+        // class on the column defaults ('neither' / 'freeform'). With
+        // 'viewing' stuck on 'freeform' the calendar event-detail panel
+        // never offered "Capture Feedback to Complete" (blade gate at
+        // resources/views/command-center/calendar/index.blade.php:1383
+        // requires completion_behaviour === 'require_feedback'). Applying
+        // the map here — at the canonical creation point — fixes ALL
+        // event classes coherently on every fresh demo:seed. Idempotent.
+        $behaviourMap = [
+            'viewing'              => ['actor_role' => 'buyer_action',  'completion_behaviour' => 'require_feedback'],
+            'listing_presentation' => ['actor_role' => 'seller_action', 'completion_behaviour' => 'require_feedback'],
+            'property_evaluation'  => ['actor_role' => 'seller_action', 'completion_behaviour' => 'require_feedback'],
+            'meeting'              => ['actor_role' => 'both',          'completion_behaviour' => 'freeform'],
+            'other'                => ['actor_role' => 'both',          'completion_behaviour' => 'freeform'],
+            'task'                 => ['actor_role' => 'neither',       'completion_behaviour' => 'freeform'],
+            'leave_annual'         => ['actor_role' => 'neither',       'completion_behaviour' => 'freeform'],
+            'leave_sick'           => ['actor_role' => 'neither',       'completion_behaviour' => 'freeform'],
+            'agent_birthday'       => ['actor_role' => 'neither',       'completion_behaviour' => 'freeform'],
+            'contact_birthday'     => ['actor_role' => 'neither',       'completion_behaviour' => 'freeform'],
+            'leave_cycle_end'      => ['actor_role' => 'neither',       'completion_behaviour' => 'freeform'],
+            'ffc_expiry'           => ['actor_role' => 'neither',       'completion_behaviour' => 'require_reason'],
+            'mandate_expiry'       => ['actor_role' => 'neither',       'completion_behaviour' => 'require_reason'],
+            'portal_listing_expiry'=> ['actor_role' => 'neither',       'completion_behaviour' => 'require_reason'],
+            'signature_expiry'     => ['actor_role' => 'neither',       'completion_behaviour' => 'require_reason'],
+            'lease_expiry'         => ['actor_role' => 'neither',       'completion_behaviour' => 'require_reason'],
+            'tax_clearance_expiry' => ['actor_role' => 'neither',       'completion_behaviour' => 'require_reason'],
+            'pi_insurance_expiry'  => ['actor_role' => 'neither',       'completion_behaviour' => 'require_reason'],
+        ];
+        foreach ($behaviourMap as $eventClass => $values) {
+            CalendarEventClassSetting::withoutGlobalScopes()
+                ->where('event_class', $eventClass)
+                ->whereNull('agency_id')
+                ->update($values);
+        }
+
         $this->command->info('Seeded ' . count($this->classes()) . ' calendar event class settings.');
     }
 
@@ -805,6 +843,12 @@ class CalendarEventClassSeeder extends Seeder
                 'label'               => 'Property viewing',
                 'description'         => 'Buyer viewing a property. Short cycle, same-day actionable. Red on event day = capture feedback after.',
                 'is_active'           => true,
+                // A buyer viewing trip covers several properties in one
+                // outing — viewing is the multi-property class (migration
+                // 2026_05_05_000019 intended this; it was lost because the
+                // migration ran before the seeder created the row + the
+                // column was not fillable). All other classes stay single.
+                'allow_multiple_properties' => true,
                 'green_days'          => 7,
                 'amber_days'          => 2,
                 'red_days'            => 0,

@@ -347,6 +347,64 @@
                     </div>
                 </div>
 
+                {{-- ===== ES-9: INSERT BLOCK + CLAUSES ===== --}}
+                {{-- Insert insertable-block placeholders + insert from the clause library
+                     (data layer: GET /docuperfect/api/clauses, exists per CDS audit §1.6). --}}
+                <div class="mb-4 border border-gray-200 rounded-lg overflow-hidden">
+                    <button type="button" @click="insertBlockExpanded = !insertBlockExpanded"
+                            class="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors text-left">
+                        <span class="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                            <span>&#10133;</span> Insertable Blocks &amp; Clauses
+                        </span>
+                        <span class="text-xs text-gray-500" x-text="insertBlockExpanded ? '&#9650;' : '&#9660;'"></span>
+                    </button>
+
+                    <div x-show="insertBlockExpanded" x-transition class="border-t border-gray-200 p-3 space-y-3">
+                        <div>
+                            <label class="text-[10px] font-semibold text-gray-500 uppercase block mb-1">Insert block placeholder</label>
+                            <p class="text-[10px] text-gray-400 mb-2">Click in the document where you want the block, then click an option.</p>
+                            <div class="flex flex-wrap gap-2">
+                                <button type="button" @click="insertBlockMarker('OTHER_CONDITIONS')"
+                                        class="text-[11px] px-2 py-1 rounded border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800">
+                                    Other Conditions
+                                </button>
+                                <button type="button" @click="insertBlockMarker('INCLUDED_ITEMS')"
+                                        class="text-[11px] px-2 py-1 rounded border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800">
+                                    Included Items
+                                </button>
+                                <button type="button" @click="insertBlockMarker('EXCLUDED_ITEMS')"
+                                        class="text-[11px] px-2 py-1 rounded border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800">
+                                    Excluded Items
+                                </button>
+                                <button type="button" @click="insertBlockMarker('CUSTOM')"
+                                        class="text-[11px] px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-700">
+                                    Custom Named…
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="border-t border-gray-100 pt-3">
+                            <label class="text-[10px] font-semibold text-gray-500 uppercase block mb-1">Clause library</label>
+                            <p class="text-[10px] text-gray-400 mb-2">Insert pre-approved clause text at cursor.</p>
+                            <input type="text" x-model="clauseSearch" @input.debounce.300ms="loadClauses()"
+                                   placeholder="Search clauses…"
+                                   class="w-full text-xs border border-gray-300 rounded px-2 py-1.5 bg-white mb-2">
+                            <div class="max-h-48 overflow-y-auto border border-gray-100 rounded">
+                                <template x-if="!clauseList.length">
+                                    <div class="text-[10px] text-gray-400 px-2 py-2" x-text="clausesLoading ? 'Loading…' : 'No clauses match.'"></div>
+                                </template>
+                                <template x-for="c in clauseList" :key="c.id">
+                                    <button type="button" @click="insertClauseAtCursor(c)"
+                                            class="w-full text-left text-xs px-2 py-1.5 hover:bg-teal-50 border-b border-gray-50 last:border-b-0">
+                                        <div class="font-semibold text-gray-700" x-text="c.name"></div>
+                                        <div class="text-[10px] text-gray-500 line-clamp-2" x-text="(c.text || '').substring(0, 90)"></div>
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 {{-- ===== TAG TOOLS ===== --}}
                 <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Tag Tools</h3>
                 <div class="flex gap-2 mb-4">
@@ -869,6 +927,12 @@ function cdsEditor() {
         saveStatus: '',
         draftId: @json($draftId),
         csrfToken: '{{ csrf_token() }}',
+        // E-sign reset Q3 Layer A — populated by _validateMarkerTokens()
+        // pre-save. Each entry: { raw: string, suggestion: string }.
+        // Surfaced inline in the builder (see the marker-warnings UI
+        // partial) so the author can fix malformed `~~~~…~~~~` tokens
+        // before they reach a recipient.
+        markerWarnings: [],
 
         // CDS-specific data
         cdsJson: @json($cds),
@@ -894,6 +958,11 @@ function cdsEditor() {
         settingsExpanded: false,
 
         get isSalesContext() {
+            // Category is authoritative (matches Template::isSalesDocument):
+            // a sales template offers Seller/Buyer roles regardless of name.
+            const cat = (this.templateCategory || '').toLowerCase();
+            if (cat.includes('sale')) return true;
+            if (cat.includes('rent') || cat.includes('lett') || cat.includes('lease')) return false;
             const name = (this.templateName || '').toLowerCase();
             return name.includes('sell') || name.includes('sale')
                 || name.includes('authority') || name.includes('otp')
@@ -920,6 +989,72 @@ function cdsEditor() {
         editingPartyId: null,
         addingParty: false,
         partiesUrl: @json(route('docuperfect.import.parties.index')),
+
+        // ES-9: Insert Block + Clauses panel state
+        insertBlockExpanded: false,
+        clauseSearch: '',
+        clauseList: [],
+        clausesLoading: false,
+        clausesUrl: @json(route('docuperfect.clauses.json')),
+
+        // Insert a `~~~~MARKER~~~~` placeholder at the current cursor position
+        // in the contenteditable doc. For CUSTOM, prompts for a label.
+        insertBlockMarker(purpose) {
+            let token = purpose;
+            if (purpose === 'CUSTOM') {
+                const label = (prompt('Block label (e.g. "Outstanding Repairs"):') || '').trim();
+                if (!label) return;
+                token = 'CUSTOM:' + label;
+            }
+            const marker = '~~~~' + token + '~~~~';
+            this._insertTextAtCursor(marker);
+        },
+
+        async loadClauses() {
+            this.clausesLoading = true;
+            try {
+                const url = this.clausesUrl + (this.clauseSearch ? '?q=' + encodeURIComponent(this.clauseSearch) : '');
+                const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+                if (r.ok) {
+                    const data = await r.json();
+                    this.clauseList = Array.isArray(data) ? data : (data.data || data.clauses || []);
+                } else {
+                    this.clauseList = [];
+                }
+            } catch (e) {
+                console.warn('Clause library fetch failed:', e);
+                this.clauseList = [];
+            }
+            this.clausesLoading = false;
+        },
+
+        insertClauseAtCursor(clause) {
+            // Insert the clause text into the document at the current cursor.
+            // The clause is plain text — agent can edit before saving template.
+            this._insertTextAtCursor(clause.text || clause.content || '');
+        },
+
+        _insertTextAtCursor(text) {
+            const container = document.getElementById('docContainer');
+            if (!container) return;
+            container.focus();
+            const sel = window.getSelection();
+            let range;
+            if (sel && sel.rangeCount > 0 && container.contains(sel.anchorNode)) {
+                range = sel.getRangeAt(0);
+            } else {
+                range = document.createRange();
+                range.selectNodeContents(container);
+                range.collapse(false);
+            }
+            range.deleteContents();
+            const node = document.createTextNode(text);
+            range.insertNode(node);
+            range.setStartAfter(node);
+            range.setEndAfter(node);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        },
 
         // Undo stack for tag actions (max 20)
         undoStack: [],
@@ -1000,8 +1135,76 @@ function cdsEditor() {
             formEl.submit();
         },
 
+        // E-sign reset Q3 Layer A — surface a warning when the agent
+        // has typed something inside `~~~~…~~~~` that won't resolve
+        // to a canonical marker at render time. Doesn't block save
+        // (the agent might be using a CUSTOM: token that's legitimate)
+        // but flags malformed cases like `~~~~Other Contitions~~~~`
+        // or `~~~~<span>OTHER CONDITIONS</span>~~~~` so they get fixed
+        // at authoring time rather than at recipient-render time.
+        _validateMarkerTokens(taggedHtml) {
+            const canonical = ['OTHER_CONDITIONS', 'INCLUDED_ITEMS', 'EXCLUDED_ITEMS'];
+            const warnings = [];
+            const re = /~{4,}([^~]{1,200}?)~{4,}/gs;
+            let match;
+            while ((match = re.exec(taggedHtml)) !== null) {
+                const raw = match[1];
+                // Strip HTML and normalise like InsertableBlockRenderer's
+                // normalisePurposeToken() does on the server.
+                const tmp = document.createElement('div');
+                tmp.innerHTML = raw;
+                const stripped = (tmp.textContent || tmp.innerText || '').trim();
+                if (stripped === '') continue;
+                if (/^custom\s*:/i.test(stripped)) continue; // CUSTOM:<label> OK
+                const normalised = stripped
+                    .toUpperCase()
+                    .replace(/\s+/g, '_')
+                    .replace(/[^A-Z0-9_:]/g, '');
+                if (canonical.includes(normalised)) continue;
+                // Levenshtein for fuzzy-close tokens — surface a hint.
+                const close = canonical.find(c => this._levenshtein(normalised, c) <= 2);
+                warnings.push({
+                    raw: match[0],
+                    suggestion: close
+                        ? `Did you mean \`~~~~${close}~~~~\`?`
+                        : 'Marker text does not match a known purpose (OTHER_CONDITIONS, INCLUDED_ITEMS, EXCLUDED_ITEMS) — will render as a generic custom block.',
+                });
+            }
+            return warnings;
+        },
+
+        _levenshtein(a, b) {
+            if (a === b) return 0;
+            const m = a.length, n = b.length;
+            if (m === 0) return n;
+            if (n === 0) return m;
+            const dp = Array.from({length: m + 1}, () => new Array(n + 1).fill(0));
+            for (let i = 0; i <= m; i++) dp[i][0] = i;
+            for (let j = 0; j <= n; j++) dp[0][j] = j;
+            for (let i = 1; i <= m; i++) {
+                for (let j = 1; j <= n; j++) {
+                    const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                    dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+                }
+            }
+            return dp[m][n];
+        },
+
         async _doSaveDraft(showToast) {
             this.draftSaving = true;
+            // Q3 Layer A — pre-save marker-token sanity check. Save still
+            // proceeds even if warnings fire — we don't want to block
+            // the agent's workflow — but the warnings surface in the
+            // builder so the author can clean them up before the
+            // template ever reaches a recipient's screen.
+            const taggedHtml = document.getElementById('docContainer')?.innerHTML ?? '';
+            const markerWarnings = this._validateMarkerTokens(taggedHtml);
+            if (markerWarnings.length > 0) {
+                this.markerWarnings = markerWarnings;
+                console.warn('[CDS builder] Malformed marker tokens detected:', markerWarnings);
+            } else {
+                this.markerWarnings = [];
+            }
             try {
                 const response = await fetch(this.draftSaveUrl, {
                     method: 'POST',

@@ -61,7 +61,22 @@ class ContactController extends Controller
         }
 
         if ($request->filled('type')) {
-            $query->where('contact_type_id', $request->type);
+            // Buyer/seller truth is NOT in contact_type_id (a nullable, mostly-
+            // unpopulated classification). Buyer = is_buyer; seller = a
+            // contact_property pivot with role 'owner'. Resolve the submitted
+            // contact_type to its esign_role (dynamic — ids differ per env) and
+            // query the canonical column. Genuine classifications (Witness, etc.)
+            // keep the contact_type_id filter.
+            $typeId = (int) $request->type;
+            $esignRole = ContactType::whereKey($typeId)->value('esign_role');
+
+            if ($esignRole === 'buyer') {
+                $query->where('is_buyer', 1);
+            } elseif ($esignRole === 'seller') {
+                $query->whereHas('properties', fn ($q) => $q->where('contact_property.role', 'owner'));
+            } else {
+                $query->where('contact_type_id', $typeId);
+            }
         }
 
         $contacts     = $query->paginate(25)->withQueryString();

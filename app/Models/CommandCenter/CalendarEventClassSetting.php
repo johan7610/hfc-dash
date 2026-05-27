@@ -19,6 +19,20 @@ class CalendarEventClassSetting extends Model
         'green_notifications', 'amber_notifications', 'red_notifications',
         'daily_digest_enabled', 'daily_digest_roles',
         'label', 'description',
+        // Added by migration 2026_05_05_000019 but never added to $fillable,
+        // so CalendarEventClassSeeder's updateOrCreate silently dropped it
+        // (mass-assignment) — every class defaulted to false and the
+        // migration's "viewing => true" was unreproducible on a fresh seed.
+        'allow_multiple_properties',
+        // Added by migration 2026_05_06_000001 (actor_role +
+        // completion_behaviour). Same migration-before-seeder defect as
+        // allow_multiple_properties: the migration's per-class UPDATE is a
+        // no-op on a fresh DB (class rows don't exist yet) and these were
+        // never in $fillable, so every class fell back to the column
+        // defaults ('neither' / 'freeform'). With 'viewing' stuck on
+        // 'freeform' the panel never offered "Capture Feedback to
+        // Complete". CalendarEventClassSeeder now reasserts the map.
+        'actor_role', 'completion_behaviour',
     ];
 
     public const NATURE_ACTIONABLE    = 'actionable';
@@ -27,6 +41,7 @@ class CalendarEventClassSetting extends Model
     protected $casts = [
         'is_active'             => 'boolean',
         'daily_digest_enabled'  => 'boolean',
+        'allow_multiple_properties' => 'boolean',
         'green_days'            => 'integer',
         'amber_days'            => 'integer',
         'red_days'              => 'integer',

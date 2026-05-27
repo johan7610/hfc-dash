@@ -585,6 +585,33 @@ class TemplateController extends Controller
             $template = Template::create($templateData);
         }
 
+        // Contract-driven recipient-loop — stamp `data-role-block`
+        // attributes on every block-level ancestor of role-bearing
+        // fields BEFORE generating the blade. The renderer at signing
+        // time reads these attributes directly (no clustering /
+        // LCA-walking / cluster-decomposition guessing — the structural
+        // boundaries are declared, not inferred).
+        //
+        // Going forward every imported template carries the contract
+        // from day one. Existing templates need the one-time backfill:
+        //   php artisan docuperfect:normalize-templates
+        $normalizer = app(\App\Services\Docuperfect\RoleBlockNormalizer::class);
+        $normalisedTaggedHtml = $normalizer->normalize((string) ($draft->tagged_html ?? ''));
+        if ($normalisedTaggedHtml !== ($draft->tagged_html ?? '')) {
+            $draft->tagged_html = $normalisedTaggedHtml;
+            // Persist on the draft so re-opening the builder shows the
+            // contract-stamped state (the editor_state we wrote on the
+            // template above already carries the un-normalised version
+            // — overwrite it now with the contract-stamped one).
+            $draft->save();
+            $editorState = $template->editor_state ?? [];
+            if (is_array($editorState)) {
+                $editorState['tagged_html'] = $normalisedTaggedHtml;
+                $template->editor_state = $editorState;
+                $template->save();
+            }
+        }
+
         // Generate blade view — use tagged_html (user-edited) as source, fall back to cds_json
         $bladeView = $this->generateCdsBladeView(
             $draft->cds_json,
@@ -600,10 +627,52 @@ class TemplateController extends Controller
         // Clear compiled view cache so the e-sign wizard renders the fresh blade file
         Artisan::call('view:clear');
 
-        // Mark draft as saved
+        // E-sign reset Commit 5 (Q1) — drop tag-ids that no longer
+        // appear in the saved tagged_html / cds_json. Without this
+        // step a delete of "Seller 2" block in the visual builder
+        // leaves the 5 corresponding field_mappings entries behind,
+        // and the next builder load reads them and re-renders the
+        // deleted block — the bug Johan saw as "save 1 seller, reload
+        // 4 sellers".
+        $prunedCount = $template->fresh()->pruneOrphanFieldMappings();
+        if ($prunedCount > 0) {
+            \Illuminate\Support\Facades\Log::info('cdsGenerate: pruned orphan field_mappings', [
+                'template_id' => $template->id,
+                'removed'     => $prunedCount,
+            ]);
+        }
+
+        // E-sign reset Commit 5 (Q1) — draft lifecycle cleanup.
+        //
+        // The draft is marked `saved` but NOT soft-deleted. Soft-deleting
+        // the draft (the original Commit 5 behaviour) had a critical side
+        // effect: any browser tab open at /docuperfect/templates/cds/
+        // builder/{draft_id} 404'd on the next refresh, because the
+        // route-model-binding `CdsDraft $draft` excludes trashed rows.
+        // That broke the walk Johan ran the day after the reset shipped.
+        //
+        // Walk-fix FIX 3 redesign — keep the draft row alive with
+        // status='saved'. The /cds/builder/{draft_id} URL still resolves
+        // (read-only view of the saved state); `edit()` still creates a
+        // fresh draft on each new editing session because it filters on
+        // `status='draft'`; `canonicalFieldMappings()` also filters tier
+        // 1 to `status='draft'` so saved drafts don't override the
+        // template's editor_state.mappings.
         $draft->update(['status' => 'saved']);
 
-        return redirect()->route('docuperfect.templates.index')
+        // E-sign walk-fix FIX 3 — post-save redirect lands on the builder
+        // page (via templates.edit), not templates.index. The walk-test
+        // expectation is "save → keep editing"; templates.index dropped
+        // the user out of the builder onto the template list, which the
+        // prompt framed as a 404 (the user lost their builder context).
+        //
+        // templates.edit creates a fresh CdsDraft for this template
+        // (Commit 5 just soft-deleted the applied draft) and routes back
+        // to docuperfect.cds.builder with the new draft id. The
+        // experience is "save → fresh builder draft of the same
+        // template" without exposing the user to the 404 they'd hit on
+        // a stale-draft URL.
+        return redirect()->route('docuperfect.templates.edit', $template->id)
             ->with('success', 'Template saved: ' . $template->name);
     }
 
@@ -836,11 +905,18 @@ BLADE;
 
         $blade .= $html . "\n\n";
 
-        // Signature block
+        // Signature block — use the authoritative sales/rental classifier
+        // (category/template_type aware) so a sales CDS template bakes
+        // Seller/Buyer blocks, not Lessor/Lessee. The Template row is saved
+        // before this runs (saveCds), so it resolves here. Name heuristic
+        // only as a last resort for a not-yet-persisted template.
         $nameLower = strtolower($templateName);
-        $isSalesDoc = str_contains($nameLower, 'sell') || str_contains($nameLower, 'sale')
-            || str_contains($nameLower, 'authority') || str_contains($nameLower, 'otp')
-            || str_contains($nameLower, 'purchase');
+        $tplForCtx = Template::find($templateId);
+        $isSalesDoc = $tplForCtx
+            ? $tplForCtx->isSalesDocument()
+            : (str_contains($nameLower, 'sell') || str_contains($nameLower, 'sale')
+                || str_contains($nameLower, 'authority') || str_contains($nameLower, 'otp')
+                || str_contains($nameLower, 'purchase'));
 
         if (!empty($signingParties)) {
             $displayParties = Template::mapSigningPartyKeys($signingParties, $isSalesDoc);
@@ -1192,7 +1268,10 @@ BLADE;
             ->orderBy('sort_order')
             ->get(['id', 'name', 'sort_order', 'is_default']);
 
-        if ($parties->isEmpty()) {
+        // effectiveAgencyId() is nullable; seedDefaultsForAgency() requires a
+        // concrete int. With no resolvable agency we cannot seed agency-scoped
+        // defaults — load the editor with whatever exists rather than 500.
+        if ($parties->isEmpty() && $agencyId !== null) {
             AgencySigningParty::seedDefaultsForAgency($agencyId);
             $parties = AgencySigningParty::forAgency($agencyId)
                 ->orderBy('sort_order')

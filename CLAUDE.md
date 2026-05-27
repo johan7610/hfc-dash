@@ -1,6 +1,6 @@
 # CoreX OS — Claude Instructions
 > **Root entry point. Read this first. Every session. No exceptions.**
-> Last updated: 2026-04-14
+> Last updated: 2026-05-26
 
 ---
 
@@ -12,6 +12,38 @@ This is a production system used by real agents, managing real deals, real money
 
 ---
 
+## CoreX Operating Principle
+
+CoreX is the best real estate operating system that will ever exist. This is the standard. Not a marketing line — the decision filter.
+
+### What this means in practice
+
+**1. Best-in-class or rebuild.** If DocuSign, Property24, Lightstone, Monday.com, or any other product offers a feature better than what we have — we investigate it, learn from it, and build ours better. "Better" means: more functional, more integrated, more aligned to the actual estate-agent workflow, or all three. Not "matches them" — exceeds them. Done is when ours is the better product.
+
+**2. No shortcuts. Ever.** Quick fixes that work today but require rebuilding later are forbidden. Later does not exist. Now is the only time that exists. If a fix is the wrong shape architecturally, we do it right the first time, even if it costs another hour or another prompt. Half-built features are technical debt that compounds; the only way to ship correctly is to ship correctly.
+
+**3. Integration is the moat.** Every feature in CoreX must integrate seamlessly with every other feature. An e-signed document doesn't just collect signatures — it auto-files, triggers FICA verification, updates the deal pipeline, posts to the calendar, notifies the right parties. A contact is not a record — it's a node in a graph linking properties, deals, calendars, documents, and communications. Integration is not optional; it's the difference between CoreX and a feature list.
+
+**4. Built for agents, not for screens.** Every flow is judged by one question: does this let an agent be an agent, or does it trap them behind a screen? CoreX automates the computer work so agents can do the property work. We simplify by absorbing complexity. Hours of admin become a single button press. The dream is the red button: agent clicks, makes coffee, and the system has done the work.
+
+**5. AI enhances, never replaces.** AI in CoreX accelerates human work — it does not replace the human. Agents stay agents. Compliance officers stay compliance officers. AI handles the tedious parsing, drafting, suggesting, and cross-referencing so humans handle the judgement, the relationships, and the deals.
+
+**6. Constraint is fuel, not excuse.** Where we lack live data feeds (Lightstone, CMA, etc.) we build smarter workflows around the data we have. Where we lack budget for premium APIs, we ship the best version possible with what we have today — and architect the upgrade path for when the budget is there. The constraint is never an excuse for a worse product.
+
+### How this changes every prompt and every commit
+
+Before any decision (architectural, scope, deferral, simplification), ask: **does this make CoreX the best real estate OS that will ever exist, or does it make CoreX merely working?**
+
+- If the answer is "best", proceed.
+- If the answer is "working", redesign until it's "best".
+- "We'll fix it later" is never an acceptable answer.
+- "Good enough for now" is never an acceptable answer.
+- "It's how other software does it" is not a reason — we ask whether other software does it correctly, then build ours correctly.
+
+Every line of code, every prompt, every commit message answers to this standard. This is the only standard.
+
+---
+
 ## MANDATORY: Session Start Protocol
 
 Before touching a single line of code, every session — Johan's or Andre's — must follow this sequence:
@@ -20,9 +52,10 @@ Before touching a single line of code, every session — Johan's or Andre's — 
 1. Read /.ai/SYSTEM.md          — pillars, architecture, data model, non-negotiables
 2. Read /.ai/STANDARDS.md       — UX rules, execution rules, done criteria
 3. Read /.ai/CODEBASE_MAP.md    — file paths, patterns, common gotchas
-4. Find the relevant spec in /.ai/specs/[module].md
-5. If no spec exists → STOP. Create the spec first. Get approval. Then build.
-6. If the feature touches multiple modules → confirm pillar connections before starting.
+4. Git sync (non-negotiable #11) — fetch + pull origin/<current branch> AND origin/Staging into the working branch. Resolve conflicts BEFORE touching any other file.
+5. Find the relevant spec in /.ai/specs/[module].md
+6. If no spec exists → STOP. Create the spec first. Get approval. Then build.
+7. If the feature touches multiple modules → confirm pillar connections before starting.
 ```
 
 **There is no step 0 that skips this.**
@@ -122,6 +155,16 @@ There are two property tiers, clearly separated:
 
 Promotion from Tracked → Stock happens when a mandate is signed, via `promoteToStock()`. Promotion preserves the audit chain — the Tracked Property record stays as the long-lived audit trail, and its `promoted_to_property_id` points at the operational Property. Resolution uses a 5-strategy match: source-ref exact → GPS proximity (~5m) → erf+suburb → normalised address → token overlap. This is the architectural mechanism by which CoreX builds a comprehensive property intelligence dataset organically through normal agent work.
 
+### 11. Git sync at session boundaries.
+Every VS Code session begins with the mandatory pre-reads (CLAUDE.md, STANDARDS.md, CODEBASE_MAP.md, the relevant spec) and THEN — before any other work — runs `git fetch --all --prune`, `git pull --rebase origin <current branch>`, and merges/rebases `origin/Staging` into the working branch. Conflicts are resolved on the spot, before any other file is touched. Every session ends with `git add` of the changed files, a focused commit message, and `git push origin <current branch>`.
+
+This replaces all separate "sync prompts" — there is no scenario where work begins without a pull or ends without a push. The reason: HFC2402 and andre branches diverge daily; without forced sync at session boundaries, the two developers' commits race each other into Staging with predictable merge pain. Pulling Staging at session start surfaces conflicts on the developer's local clock — not at merge time, not at deploy time. Pushing at session end keeps the remote branch the source of truth for the next session.
+
+### 12. Demo is always a working copy.
+The demo environment (`demo1.corexos.co.za`, `/mnt/HC_Volume_103099143/hfc-demo` on the production host, tracking `HFC2402`) is not a snapshot — it is a living working copy. Every dev cycle that touches the database, schema, or any seeder MUST end with the demo migrated, seeded, and verified to match local. The demo's `nexus_os_demo` database is the proving ground: if it can be regenerated end-to-end from `php artisan migrate:fresh --database=demo --force && php artisan demo:seed`, the work is complete; if not, it isn't.
+
+The reason: a stale demo is a dead demo. Walkthroughs that hit empty tables, missing columns, or pre-fix bugs cost trust with every customer interaction. The demo must always be exactly one fetch+migrate behind local — never more.
+
 ---
 
 ## How to Build Something New
@@ -159,7 +202,70 @@ Promotion from Tracked → Stock happens when a mandate is signed, via `promoteT
       - If you saved data: verify it persists and loads
       - If you built a form: verify the POST endpoint accepts data
       Do NOT mark done until all verification passes.
+   g. git add + commit + push to origin/<current branch> (non-negotiable #11).
+      No work is "done" until it is on the remote.
+   h. Demo deployment (non-negotiable #12) — if the change touches DB, schema,
+      seeder, or anything the demo persona will see: deploy to the demo host
+      (git pull + php artisan migrate + view:clear + config:clear; reseed if
+      data-shape changed) and verify parity against local. Report the demo
+      verification result.
+   i. Update `.ai/CHAT_STARTER.md` — move items between sections
+      (LIVE / IN FLIGHT / SPECCED / PARKED) to reflect what landed, prepend a
+      dated entry to the Recent decisions log if a decision was made, remove
+      completed items from Outstanding small fixes, refresh the "Last updated
+      by" header. Keep total length under 350 lines.
+   j. Confirm the work shipped meets the CoreX Operating Principle. If the
+      close requires noting a deferred limitation, a quick fix, or a "good
+      enough for now" compromise — STOP. Either complete the work properly in
+      this prompt, or escalate to Johan with a specific proposal for the
+      proper fix. Do not ship compromised work and document the compromise as
+      if it's acceptable.
 ```
+
+### E-sign integration moat — pipeline gate
+
+`scripts/dev-check.ps1` enforces a hard rule for changes to the recipient
+signing pipeline:
+
+  Pipeline files (any change here MUST be accompanied by a test diff in
+  `tests/Feature/Docuperfect/SigningView/` or its supporting fixtures /
+  trait):
+
+  - `app/Models/Docuperfect/Template.php`
+  - `app/Models/Docuperfect/CdsDraft.php`
+  - `app/Services/Docuperfect/SurfaceNormalizer.php`
+  - `app/Services/Docuperfect/SignatureSurfaceNormalizer.php`
+  - `app/Services/Docuperfect/LetterheadRefresher.php`
+  - `app/Services/Docuperfect/InsertableBlockRenderer.php`
+  - `app/Services/Docuperfect/RoleBlockDetectionService.php`
+  - `app/Services/Docuperfect/RoleBlockExpansionService.php`
+  - `app/Services/Docuperfect/MergedHtmlFreshnessGuard.php`
+  - `app/Http/Controllers/Docuperfect/SigningController.php`
+
+The gate exists because the audit at
+`.ai/audits/esign-reset-investigation-2026-05-27.md` found that these
+files had zero integration tests before the reset — 49 RecipientLoop
+unit tests were green while five live bugs shipped to the browser.
+Locking the discipline structurally is the answer.
+
+Bypass: `scripts/dev-check.ps1 -SkipPipelineGate` — use ONLY when the
+test diff landed in a previous commit and the current commit is a
+follow-up cleanup (e.g. a CHAT_STARTER doc update). Never use this
+flag to skirt writing a test when you're touching the runtime.
+
+## Subagent file-write rule
+
+When a prompt requires the agent to produce a report file (audit, investigation,
+spec, design document, anything where the prompt names a target path), the agent
+MUST use file-write tools to create the file at the requested path and verify
+the file exists on disk before declaring done. Returning report content only in
+the chat reply is not acceptable — the file must persist beyond the chat
+session so future prompts, other agents, and humans can read it. This applies
+to both the main agent and any spawned subagents.
+
+When delegating an audit task to a subagent, the parent prompt must include:
+"Write the report to `<path>` using file-write tools and verify the file exists
+before returning. Returning content only in the reply is not sufficient."
 
 ---
 

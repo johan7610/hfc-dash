@@ -2,22 +2,37 @@
 
 namespace App\Console\Commands;
 
+use Database\Seeders\DemoDataSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 class DemoCleanup extends Command
 {
-    protected $signature = 'demo:cleanup {--force : Skip confirmation}';
-    protected $description = 'Remove all demo-prefixed data seeded by demo:seed. Local only.';
+    protected $signature = 'demo:cleanup {--force : Skip confirmation; also REQUIRED (with DEMO_SEED_ALLOWED=true in .env) to run on a non-local environment}';
+    protected $description = 'Remove all demo-prefixed data seeded by demo:seed. Local: runs directly. Non-local: requires --force AND DEMO_SEED_ALLOWED=true in that environment\'s .env (double-lock; a real production box can never be demo-cleaned).';
 
     public function handle(): int
     {
-        if (!in_array(app()->environment(), ['local', 'demo'], true)) {
-            $this->error('Refusing — APP_ENV must be local or demo (current: ' . app()->environment() . ')');
+        $force = (bool) $this->option('force');
+
+        if ($refusal = DemoDataSeeder::environmentGateRefusal($force)) {
+            $this->error($refusal);
             return self::FAILURE;
         }
 
-        if (!$this->option('force') && !$this->confirm('This will delete ALL [DEMO]-prefixed records. Continue?')) {
+        // Cleanup ALWAYS operates on the dedicated 'demo' connection
+        // (nexus_os_demo), NEVER the real working DB. Switch the default
+        // connection so every DB::table() delete below is scoped to demo,
+        // then hard-refuse if that connection resolves to a protected DB.
+        DB::setDefaultConnection('demo');
+        $demoDb = DB::connection()->getDatabaseName();
+        if ($refusal = DemoDataSeeder::protectedDatabaseRefusal($demoDb)) {
+            $this->error($refusal);
+            return self::FAILURE;
+        }
+        $this->info("Target: 'demo' connection ({$demoDb})");
+
+        if (!$force && !$this->confirm('This will delete ALL [DEMO]-prefixed records. Continue?')) {
             return self::SUCCESS;
         }
 

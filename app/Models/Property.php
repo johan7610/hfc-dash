@@ -75,6 +75,7 @@ class Property extends Model
         'agent_id',
         'branch_id',
         'agency_id',
+        'is_demo',
         'published_at',
         'listed_date',
         'expiry_date',
@@ -87,6 +88,9 @@ class Property extends Model
         'town',
         'latitude',
         'longitude',
+        'geo_source',
+        'geo_confidence',
+        'geo_resolved_at',
         'pp_suburb_id',
         'p24_suburb_id',
         'p24_city_id',
@@ -177,6 +181,7 @@ class Property extends Model
         'marketing_fee'       => 'float',
         'latitude'                => 'decimal:7',
         'longitude'               => 'decimal:7',
+        'geo_resolved_at'         => 'datetime',
         'pp_suburb_id'            => 'integer',
         'p24_suburb_id'           => 'integer',
         'p24_city_id'             => 'integer',
@@ -288,6 +293,24 @@ class Property extends Model
                     ->withTimestamps();
     }
 
+    // ── Presentations V2 ──
+
+    public function presentations(): HasMany
+    {
+        return $this->hasMany(Presentation::class, 'property_id')->latest();
+    }
+
+    /** Phase 3j — SG documents referenced for this property. */
+    public function sgDocuments(): HasMany
+    {
+        return $this->hasMany(\App\Models\PropertySgDocument::class, 'property_id')->latest();
+    }
+
+    public function latestPresentation(): ?Presentation
+    {
+        return $this->presentations()->first();
+    }
+
     // ── Address Helpers ──
 
     /**
@@ -369,6 +392,115 @@ class Property extends Model
     public function formattedPrice(): string
     {
         return 'R ' . number_format((int) $this->price, 0, '.', ' ');
+    }
+
+    /**
+     * Phase A.2.1 — public-facing ad URLs across the portals we syndicate to.
+     * Returns one slot per portal; null when that portal isn't currently
+     * activated or doesn't have a working URL pattern.
+     *
+     * URL composition lives here (single source of truth) — see the legacy
+     * inline Alpine helpers in resources/views/corex/properties/show.blade.php
+     * which used to compute these client-side. Map "Open listing →" and any
+     * future "View on portal" CTA pull from this accessor.
+     *
+     * @return array{p24:?string, pp:?string, hfc:?string}
+     */
+    public function publicListingUrls(): array
+    {
+        return [
+            'p24' => $this->buildP24Url(),
+            'pp'  => $this->buildPpUrl(),
+            'hfc' => $this->isOnHfcWebsite() ? $this->buildHfcUrl() : null,
+        ];
+    }
+
+    /**
+     * PLACEHOLDER (A.2.3 Item 4) — until the HFC website integration writes
+     * back a per-listing syndication status, assume any active mandate for
+     * agency_id=1 is published on hfcoastal.co.za.
+     *
+     * TODO post-PropCon takeover: replace with an
+     * `hfc_website_syndication_status === 'active'` check on the model.
+     */
+    public function isOnHfcWebsite(): bool
+    {
+        return $this->status === 'active' && (int) $this->agency_id === 1;
+    }
+
+    /**
+     * Compose the canonical hfcoastal.co.za listing URL. Pattern (live):
+     *   https://www.hfcoastal.co.za/listing/{listing_id}/{type}-{transaction}-in-{suburb}-{city}-{province}
+     *
+     * `listing_id` falls back to the CoreX property id when the HFC website
+     * hasn't written back its own ref yet — same placeholder approach as
+     * isOnHfcWebsite() above.
+     */
+    public function buildHfcUrl(): string
+    {
+        $listingId   = $this->hfc_website_ref ?? $this->id;
+        $type        = \Illuminate\Support\Str::slug($this->property_type ?? 'property');
+        $transaction = $this->listing_type === 'rental' ? 'to-let' : 'for-sale';
+        $suburb      = \Illuminate\Support\Str::slug($this->suburb ?? '');
+        $city        = \Illuminate\Support\Str::slug($this->city ?? $this->town ?? '');
+        $province    = \Illuminate\Support\Str::slug($this->province ?? 'kwazulu-natal');
+
+        $slug = "{$type}-{$transaction}-in-{$suburb}-{$city}-{$province}";
+        return "https://www.hfcoastal.co.za/listing/{$listingId}/{$slug}";
+    }
+
+    /**
+     * Pick the best public URL for "Open listing" actions. Priority:
+     * P24 active > PP active > company website > null.
+     */
+    public function preferredPublicListingUrl(): ?string
+    {
+        $urls = $this->publicListingUrls();
+        return $urls['p24'] ?? $urls['pp'] ?? $urls['hfc'] ?? null;
+    }
+
+    /**
+     * P24 slug-composed direct listing URL. Returns null unless we have an
+     * activated p24_ref. Sandbox vs production picked from p24_syndication_status
+     * to stay consistent with the legacy inline JS — only 'active' listings
+     * earn a real URL; in-flight states (submitted, pending) don't yet point
+     * at a live page on P24.
+     */
+    private function buildP24Url(): ?string
+    {
+        if (empty($this->p24_ref) || $this->p24_syndication_status !== 'active') {
+            return null;
+        }
+        $slugify = static function (?string $s): string {
+            $s = (string) ($s ?? '');
+            $s = strtolower(preg_replace('/[^a-z0-9]+/i', '-', $s) ?? '');
+            return trim($s, '-') ?: 'property';
+        };
+        $section = $this->listing_type === 'rental' ? 'to-rent' : 'for-sale';
+        $domain  = 'www.property24.com';
+        return sprintf(
+            'https://%s/%s/%s/%s/%s/%s/%s',
+            $domain,
+            $section,
+            $slugify($this->suburb),
+            $slugify($this->city),
+            $slugify($this->province),
+            $this->pp_suburb_id ?? '0',
+            $this->p24_ref,
+        );
+    }
+
+    /**
+     * Private Property search-by-ref fallback. PP doesn't return a direct
+     * listing URL from syndication, so we hop through their search page.
+     * Returns null unless the listing is activated.
+     */
+    private function buildPpUrl(): ?string
+    {
+        if (empty($this->pp_ref) || $this->pp_syndication_status !== 'active') {
+            return null;
+        }
+        return 'https://www.privateproperty.co.za/search?q=' . urlencode((string) $this->pp_ref);
     }
 
     /**

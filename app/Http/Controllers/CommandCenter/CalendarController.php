@@ -786,6 +786,13 @@ class CalendarController extends Controller
             'attendees'         => 'nullable|array',
             'attendees.*.id'    => 'required_with:attendees|integer',
             'attendees.*.type'  => 'required_with:attendees|string|in:contact,agent',
+            // Whitelist the per-attendee role so $request->validate() does NOT
+            // strip it. Without this the role never reached syncEventLinks
+            // (which honours $attendee['role']) → it fell back to the class
+            // default (attendee/seller) and a "Schedule Viewing" buyer was
+            // mis-bucketed instead of landing under BUYERS. buildLinkedRecords
+            // already maps buyer_contact => buyers correctly.
+            'attendees.*.role'  => 'nullable|string|in:attendee,buyer_contact,seller_contact,agent_contact',
             'deal_id'           => 'nullable|integer',
         ]);
 

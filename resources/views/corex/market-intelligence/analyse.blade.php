@@ -1,12 +1,17 @@
 {{-- DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20 (F.7 audit). --}}
 {{--
-    F.6 Analyse mode body. Same sticky top bar + stats strip as Work mode,
-    different content below: Ellie brief, then a 2-column grid with the
-    heat matrix + market velocity + buyer funnel on the left and
-    opportunity pockets + agency share on the right.
+    MIC Phase D1 — Analyse tab (standalone view extending the layout).
+    Body content unchanged from F.6: Ellie brief, 2-col grid with matrix +
+    velocity + funnel left, pockets + agency share right.
 
-    Spec: build-f-market-intelligence-redesign-spec.md §9.
+    Spec: build-f-market-intelligence-redesign-spec.md §9 +
+          .ai/specs/mic-complete-spec.md §5.2.
 --}}
+@extends('layouts.corex-app')
+
+@section('corex-content')
+
+@include('corex.market-intelligence.partials.tabs')
 
 <header class="mi-header"
         style="position: sticky; top: 0; z-index: 10; background: var(--surface);">
@@ -45,6 +50,38 @@
     </div>
 </div>
 
+{{-- Phase D5 — suburb + demand-pocket slide-over (lazy AJAX). --}}
+@include('corex.market-intelligence.partials.mic-slideover')
+
+{{-- Phase D5 — wire suburb name clicks + pocket cell clicks to the slide-over. --}}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Heatmap cells with data-suburb + data-bedrooms → pocket panel
+        document.querySelectorAll('[data-mic-pocket="1"]').forEach(function (el) {
+            el.addEventListener('click', function (e) {
+                e.preventDefault();
+                const suburb = el.dataset.suburb;
+                const bedrooms = parseInt(el.dataset.bedrooms, 10);
+                if (suburb && bedrooms) {
+                    window.dispatchEvent(new CustomEvent('mic-open-pocket', { detail: { suburb, bedrooms } }));
+                }
+            });
+        });
+        // Suburb name spans → suburb deep-dive panel
+        document.querySelectorAll('[data-mic-suburb]').forEach(function (el) {
+            el.addEventListener('click', function (e) {
+                if (e.target.closest('a, button')) return; // don't hijack links/buttons inside
+                e.preventDefault();
+                const suburb = el.dataset.micSuburb;
+                if (suburb) {
+                    window.dispatchEvent(new CustomEvent('mic-open-suburb', { detail: { suburb } }));
+                }
+            });
+            el.style.cursor = 'pointer';
+        });
+    });
+</script>
+
 <style>
     @media (max-width: 1024px) {
         .mi-analyse-grid { grid-template-columns: 1fr !important; }
@@ -75,3 +112,4 @@
         margin-bottom: 10px;
     }
 </style>
+@endsection

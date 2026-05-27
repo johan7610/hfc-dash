@@ -89,6 +89,16 @@ class ProspectingListing extends Model
         return $this->hasOne(ProspectingClaim::class)->where('is_active', true);
     }
 
+    /**
+     * Tier-scored buyer matches against this listing. Used by the MIC
+     * Opportunities tab (Phase D4) to surface strong-match counts per
+     * tracked property (whereHas predicate joins on score ≥ 80).
+     */
+    public function buyerMatches()
+    {
+        return $this->hasMany(ProspectingBuyerMatch::class, 'prospecting_listing_id');
+    }
+
     public function claimedBy()
     {
         return $this->activeClaim?->user;

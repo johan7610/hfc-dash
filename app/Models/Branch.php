@@ -28,6 +28,7 @@ class Branch extends Model
         'reg_no',
         'vat_no',
         'ffc_no',
+        'ppra_number',
         'fic_no',
         'logo_path',
         'p24_agency_id',
@@ -35,12 +36,16 @@ class Branch extends Model
         'pp_agency_id',
         'pp_credentials',
         'p24_credentials',
+        'privacy_policy_markdown',
+        'privacy_policy_token',
+        'privacy_policy_published_at',
     ];
 
     protected $casts = [
         'syndication_override_enabled' => 'boolean',
         'pp_credentials'  => 'encrypted:array',
         'p24_credentials' => 'encrypted:array',
+        'privacy_policy_published_at' => 'datetime',
     ];
 
     /**
@@ -50,6 +55,59 @@ class Branch extends Model
     public function contactDetail(string $field): ?string
     {
         return $this->{$field} ?? $this->agency->{$field} ?? null;
+    }
+
+    // ── Privacy Policy (per-branch override) ──
+
+    /** Branch markdown if set, else inherit from agency. */
+    public function effectivePrivacyPolicyMarkdown(): ?string
+    {
+        return $this->privacy_policy_markdown ?: ($this->agency?->privacy_policy_markdown ?: null);
+    }
+
+    /**
+     * Resolution helper that decides which (token, published_at) pair
+     * to honour for this branch context. If the branch has its own
+     * token, use it together with the branch's published flag. Else
+     * fall back to the agency's pair. Returns [token, publishedAt] or
+     * [null, null] when nothing is configured.
+     *
+     * @return array{0: ?string, 1: ?\Carbon\CarbonInterface}
+     */
+    private function resolvePolicyTokenAndPublishedAt(): array
+    {
+        if ($this->privacy_policy_token) {
+            return [$this->privacy_policy_token, $this->privacy_policy_published_at];
+        }
+        $agency = $this->agency;
+        if ($agency && $agency->privacy_policy_token) {
+            return [$agency->privacy_policy_token, $agency->privacy_policy_published_at];
+        }
+        return [null, null];
+    }
+
+    public function effectivePrivacyPolicyToken(): ?string
+    {
+        return $this->resolvePolicyTokenAndPublishedAt()[0];
+    }
+
+    public function effectivePrivacyPolicyUrl(): ?string
+    {
+        [$token, $publishedAt] = $this->resolvePolicyTokenAndPublishedAt();
+        if (!$token || !$publishedAt) {
+            return null;
+        }
+        return route('public.privacy-policy', ['token' => $token]);
+    }
+
+    /**
+     * Cascade: internal published URL (branch or agency) > external popi_url
+     * (branch falls back to agency for that too) > null.
+     */
+    public function effectivePopiUrl(): ?string
+    {
+        return $this->effectivePrivacyPolicyUrl()
+            ?: ($this->agency?->effectivePopiUrl() ?: null);
     }
 
     /**

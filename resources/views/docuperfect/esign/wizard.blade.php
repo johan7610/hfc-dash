@@ -51,6 +51,33 @@
         </div>
     </div>
 
+    {{-- ===== SERVER FEEDBACK BANNER =====
+         prepareSigning() / prepareWetInk() catch \Throwable and
+         redirect()->withErrors() (or ->with('error', ...)) back to this
+         view. Without rendering the bag a failure looks identical to
+         "the wizard just reset" (audit BL-2a). Mirrors
+         my-documents.blade.php:48-58. --}}
+    @if($errors->any() || session('error'))
+        <div class="mx-6 mt-4 rounded-md px-4 py-3 text-sm flex items-start gap-3 flex-shrink-0"
+             style="background: color-mix(in srgb, var(--ds-crimson, #dc2626) 10%, transparent);
+                    border: 1px solid color-mix(in srgb, var(--ds-crimson, #dc2626) 30%, transparent);
+                    color: var(--text-primary, #111827);">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                 stroke="var(--ds-crimson, #dc2626)" style="width:18px;height:18px;flex-shrink:0;margin-top:1px;">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+            </svg>
+            <div class="flex-1">
+                @if(session('error'))
+                    <div>{{ session('error') }}</div>
+                @endif
+                @foreach($errors->all() as $error)
+                    <div>{{ $error }}</div>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
     {{-- ===== TWO-PANEL LAYOUT ===== --}}
     <div class="flex-1 flex min-h-0 overflow-hidden">
 
@@ -677,18 +704,31 @@
             {{-- ======== STEP 5: Fill & Review ======== --}}
             <div x-show="currentStep === 5" x-cloak>
                 <h3 class="text-lg font-semibold mb-4" style="color: var(--text-primary);">Fill & Review</h3>
-                <p class="text-xs mb-4" style="color: var(--text-muted);">Fields are shown in document order. Pre-filled values come from property and recipient data.</p>
+                <p class="text-xs mb-4" style="color: var(--text-muted);">Fields are shown in document order. Pre-filled values come from property and recipient data. Multi-recipient roles render one input per recipient.</p>
 
-                {{-- All fields in document order (no party grouping) --}}
+                {{-- All fields in document order — walk-fix B uses
+                     expandedWizardFields when present (N inputs per N
+                     recipients with per-instance pre-fill + chip label)
+                     so the live recipient-loop engine governs the
+                     wizard surface, not the legacy concatenation. --}}
                 <div class="space-y-3">
-                    <template x-for="(f, fi) in allWizardFields" :key="f.id">
+                    <template x-for="(f, fi) in (expandedWizardFields && expandedWizardFields.length ? expandedWizardFields : allWizardFields)" :key="f.id">
                         <div>
                             <div class="flex items-center justify-between mb-1">
                                 <label class="block text-xs font-medium" style="color: var(--text-secondary);">
                                     <span x-text="fieldLabel(f)"></span>
-                                    <span class="ds-badge ml-1"
-                                          :class="isCreatorField(f) ? 'ds-badge-info' : 'ds-badge-warning'"
-                                          x-text="fieldRoleLabel(f)"></span>
+                                    {{-- Walk-fix B — when a field carries _instance_index, prepend
+                                         a per-instance chip ("Seller 2: Steve Jobs") so the agent
+                                         immediately sees which recipient this input belongs to. --}}
+                                    <template x-if="f._instance_index">
+                                        <span class="ds-badge ds-badge-warning ml-1" x-text="f.instance_label"></span>
+                                    </template>
+                                    {{-- Fix A — render one chip per role in editable_by (preserves array; pre-fix only first element rendered). --}}
+                                    <template x-for="(roleToken, ci) in fieldRoleTokens(f)" :key="f.id + '_' + ci + '_' + roleToken">
+                                        <span class="ds-badge ml-1"
+                                              :class="isCreatorRole(roleToken) ? 'ds-badge-info' : 'ds-badge-warning'"
+                                              x-text="getRoleLabel(roleToken)"></span>
+                                    </template>
                                 </label>
                                 <select @change="setFieldParty(f.id, $event.target.value)"
                                         class="text-xs rounded-md px-1.5 py-0.5 ml-2"
@@ -989,11 +1029,25 @@
         {{-- RIGHT PANEL: Document Preview --}}
         <div class="flex-1 overflow-y-auto p-6 min-w-0" style="background: var(--bg);">
 
-            {{-- Web template preview (wrapped in CoreX document CSS) --}}
+            {{-- Web template preview (wrapped in CoreX document CSS).
+                 Shared visual contract — Step 4 / Step 5 / signing view
+                 all render through the same _document-body partial. The
+                 viewer context flips between 'wizard_preview' (Step 4)
+                 and 'wizard_fill' (Step 5) based on currentStep so the
+                 outer container class scopes Step-5-specific behaviour
+                 (e.g. fill-mode field highlighting) without forking the
+                 layout itself. --}}
             <div x-show="previewRenderType === 'web' && previewHtml" class="overflow-y-auto" style="max-height: calc(100vh - 200px);">
                 <link href="/css/corex-document.css" rel="stylesheet">
                 <div style="zoom: 0.7;">
-                    <div class="web-template-preview" x-html="previewHtml"></div>
+                    <div class="web-template-preview"
+                         :class="{ 'wizard-fill-context': currentStep === 5, 'wizard-preview-context': currentStep !== 5 }"
+                         data-viewer-context-host="1">
+                        @include('docuperfect.shared._document-body', [
+                            'viewerContext'    => 'wizard_preview',
+                            'alpineXHtml'      => 'previewHtml',
+                        ])
+                    </div>
                 </div>
             </div>
             <style>
@@ -1206,6 +1260,13 @@ function esignWizard() {
     const serverFields = @json($fields ?? []);
     const serverCreatorFields = @json($creatorFields ?? []);
     const serverSignerFields = @json($signerFields ?? []);
+    // Walk-fix B — per-recipient expanded fields for Step 5. When the
+    // session has multi-recipient roles, this array contains N copies
+    // of each role-bound field with unique ids ({field_id}__r{n}),
+    // instance_index metadata, and a per-instance value resolved from
+    // THAT specific recipient's contact. Single-recipient roles +
+    // creator/agent fields pass through with no suffix.
+    const serverExpandedWizardFields = @json($expandedWizardFields ?? []);
     const serverAllWizardFields = @json($allWizardFields ?? []);
     const serverPageImages = @json($pageImages ?? []);
     const serverRecipients = @json($recipients ?? []);
@@ -1613,6 +1674,7 @@ function esignWizard() {
         // Step 5: Fields
         creatorFields: serverCreatorFields || [],
         signerFields: serverSignerFields || [],
+        expandedWizardFields: serverExpandedWizardFields || [],
         allWizardFields: serverAllWizardFields || [],
         fieldValues: {},
         fieldPartyOverrides: {},
@@ -1665,10 +1727,16 @@ function esignWizard() {
         _resizing: false,
 
         init() {
-            // Initialize field values from server data (unified ordered list)
-            const allFields = this.allWizardFields.length > 0
-                ? this.allWizardFields
-                : [...(this.creatorFields || []), ...(this.signerFields || [])];
+            // Initialize field values from server data (unified ordered list).
+            // Walk-fix B — when expandedWizardFields is populated it
+            // carries the per-instance suffix ids ({orig}__r{n}) with
+            // per-recipient pre-fill, so prefer it over allWizardFields
+            // (which has the concatenated " and "-joined values).
+            const allFields = (this.expandedWizardFields && this.expandedWizardFields.length > 0)
+                ? this.expandedWizardFields
+                : (this.allWizardFields.length > 0
+                    ? this.allWizardFields
+                    : [...(this.creatorFields || []), ...(this.signerFields || [])]);
             allFields.forEach(f => {
                 if (f.value) this.fieldValues[f.id] = f.value;
             });
@@ -2123,9 +2191,25 @@ function esignWizard() {
             return ['creator', 'user', 'agent'].includes(role);
         },
 
+        isCreatorRole(role) {
+            return ['creator', 'user', 'agent'].includes(role);
+        },
+
         fieldRoleLabel(f) {
             const role = this.fieldPartyOverrides[f.id] || f.assignedTo || f.assigned_to || 'creator';
             return getRoleLabel(role);
+        },
+
+        // Fix A — returns ALL role tokens that may edit this field. When
+        // an override exists (agent narrowed the assignment via the SELECT),
+        // returns only the overridden role. Otherwise iterates the full
+        // editable_by array preserved by ESignWizardController.
+        fieldRoleTokens(f) {
+            const override = this.fieldPartyOverrides[f.id];
+            if (override) return [override];
+            if (Array.isArray(f.editableBy) && f.editableBy.length > 0) return f.editableBy;
+            const legacy = f.assignedTo || f.assigned_to || 'creator';
+            return [legacy];
         },
 
         highlightField(fieldId) {
@@ -2637,18 +2721,40 @@ function esignWizard() {
                         break;
                 }
 
-                // Submit as a regular form POST — browser follows the redirect natively.
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = prepareUrl;
-                const tokenInput = document.createElement('input');
-                tokenInput.type = 'hidden';
-                tokenInput.name = '_token';
-                tokenInput.value = csrfToken;
-                form.appendChild(tokenInput);
-                document.body.appendChild(form);
-                form.submit();
-                // Browser will navigate away — no further JS executes
+                if (this.deliveryMode === 'download' || this.deliveryMode === 'wet_ink') {
+                    // download / wet-ink endpoints still redirect — native submit.
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = prepareUrl;
+                    const tokenInput = document.createElement('input');
+                    tokenInput.type = 'hidden';
+                    tokenInput.name = '_token';
+                    tokenInput.value = csrfToken;
+                    form.appendChild(tokenInput);
+                    document.body.appendChild(form);
+                    form.submit();
+                    return; // browser navigates away
+                }
+
+                // e-sign: fetch JSON so a server-side failure is surfaced in
+                // the UI instead of a blind navigation (audit BL-2b).
+                const prepResp = await fetch(prepareUrl, {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+                });
+                let prep = null;
+                try { prep = await prepResp.json(); } catch (_) { prep = null; }
+
+                if (prepResp.ok && prep && prep.ok && prep.redirect) {
+                    window.location.href = prep.redirect; // → signatures.setup
+                    return;
+                }
+
+                const failMsg = (prep && prep.error)
+                    ? prep.error
+                    : ('Failed to prepare signing (HTTP ' + prepResp.status + ')');
+                this.showToast(failMsg, 'error');
+                this.loading = false;
             } catch (e) {
                 this.showToast('Error: ' + (e.message || 'Something went wrong'), 'error');
                 this.loading = false;

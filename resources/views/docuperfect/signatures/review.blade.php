@@ -310,8 +310,27 @@
                 document.addEventListener('DOMContentLoaded', function() {
                     var container = document.getElementById('reviewDocContent');
                     paginateDocument(container, @json($signingParties ?? []));
+                    // §20 — pack agent review is SEGMENT-AWARE: label each
+                    // .corex-document-wrapper with its OWN document title so
+                    // the body matches its header (Bug A). Single doc => one
+                    // title (= document name), behaviour unchanged.
+                    (function () {
+                        var segTitles = @json($packSegmentTitles ?? []);
+                        var wraps = container.querySelectorAll('.corex-document-wrapper');
+                        Array.prototype.forEach.call(wraps, function (w, i) {
+                            if (w.querySelector('.review-seg-title')) return;
+                            var h = document.createElement('div');
+                            h.className = 'review-seg-title';
+                            h.textContent = segTitles[i] || ('Document ' + (i + 1));
+                            h.style.cssText = 'font-weight:700;font-size:13px;color:#0f172a;background:#e2e8f0;border-bottom:2px solid #94a3b8;padding:8px 12px;margin:0 0 6px;';
+                            w.insertBefore(h, w.firstChild);
+                        });
+                    })();
                     // Restore previously signed initials so reviewer sees them
                     restoreStoredInitials(container, @json($storedInitials ?? []));
+                    // §20 — restore the seller's stored YES/NO/N/A disclosure
+                    // answers (read-only) so the reviewing agent sees them.
+                    restoreStoredDisclosure(container, @json($disclosureAnswers ?? []));
                 });
             </script>
         @else

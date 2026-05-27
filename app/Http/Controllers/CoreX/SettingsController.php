@@ -288,6 +288,44 @@ class SettingsController extends Controller
         return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('success', 'Syndication portals updated.');
     }
 
+    /**
+     * Presentations V2 Phase 2 — CMA coverage thresholds + default period.
+     */
+    public function updatePresentations(Request $request)
+    {
+        $user = auth()->user();
+        abort_unless($user, 403);
+
+        $agencyId = $user->effectiveAgencyId();
+        $agency   = $agencyId ? Agency::find($agencyId) : null;
+        abort_unless($agency, 404, 'No agency in scope.');
+
+        $data = $request->validate([
+            'presentations_coverage_rich_threshold'     => ['required', 'integer', 'min:1', 'max:999'],
+            'presentations_coverage_moderate_threshold' => ['required', 'integer', 'min:1', 'max:999'],
+            'presentations_coverage_thin_threshold'     => ['required', 'integer', 'min:1', 'max:999'],
+            'presentations_default_period_months'       => ['required', 'integer', 'min:1', 'max:60'],
+            // Phase 3b
+            'presentations_default_comp_scope'          => ['nullable', 'in:radius_all,suburb_only'],
+            'presentations_default_radius_m'            => ['nullable', 'integer', 'min:50', 'max:5000'],
+        ]);
+
+        if (
+            $data['presentations_coverage_rich_threshold'] < $data['presentations_coverage_moderate_threshold']
+            || $data['presentations_coverage_moderate_threshold'] < $data['presentations_coverage_thin_threshold']
+        ) {
+            return redirect()
+                ->route('corex.settings', ['s' => 'feature-presentations'])
+                ->withErrors(['presentations_coverage_rich_threshold' => 'Thresholds must satisfy: rich ≥ moderate ≥ thin.']);
+        }
+
+        $agency->update($data);
+
+        return redirect()
+            ->route('corex.settings', ['s' => 'feature-presentations'])
+            ->with('success', 'Presentation coverage thresholds saved.');
+    }
+
     public function updateMatchesEnabled(Request $request)
     {
         $enabled = $request->boolean('matches_enabled');
@@ -357,6 +395,7 @@ class SettingsController extends Controller
             'reg_no'           => ['nullable', 'string', 'max:255'],
             'vat_no'           => ['nullable', 'string', 'max:255'],
             'ffc_no'           => ['nullable', 'string', 'max:255'],
+            'ppra_number'      => ['nullable', 'string', 'max:32'],
             'fic_no'           => ['nullable', 'string', 'max:255'],
             'email_disclaimer' => ['nullable', 'string', 'max:2000'],
             'popi_url'         => ['nullable', 'string', 'max:500'],
@@ -403,7 +442,7 @@ class SettingsController extends Controller
         $overrides = $request->only([
             'trading_name', 'tagline', 'address', 'phone', 'phone_label',
             'phone_secondary', 'phone_secondary_label', 'fax', 'email',
-            'reg_no', 'vat_no', 'ffc_no', 'fic_no', 'name',
+            'reg_no', 'vat_no', 'ffc_no', 'ppra_number', 'fic_no', 'name',
         ]);
 
         // Create a clone with overrides applied

@@ -129,11 +129,19 @@
             </a>
         @endif
         @if(config('features.presentation_blueprint'))
+            @php
+                // Phase 3 — Compile Pack also requires an AI summary on the latest version.
+                $hasAiSummary    = $latestVersion?->ai_summary_text;
+                $canCompileFull  = $readiness['can_compile'] && $hasAiSummary;
+                $compileBlockMsg = !$readiness['can_compile']
+                    ? 'Missing required evidence — see checklist below'
+                    : (!$hasAiSummary ? 'Generate AI Summary first (see Executive Summary panel below)' : '');
+            @endphp
             <form method="POST" action="{{ route('presentations.compile', $presentation) }}" class="inline">
                 @csrf
                 <button type="submit"
-                        class="{{ $readiness['can_compile'] ? 'corex-btn-primary' : 'corex-btn-primary' }}" style="{{ $readiness['can_compile'] ? '' : 'opacity:0.5;cursor:not-allowed;' }}"
-                        {{ $readiness['can_compile'] ? '' : 'disabled title="Missing required evidence — see checklist below"' }}>
+                        class="corex-btn-primary" style="{{ $canCompileFull ? '' : 'opacity:0.5;cursor:not-allowed;' }}"
+                        {{ $canCompileFull ? '' : 'disabled title="' . e($compileBlockMsg) . '"' }}>
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
                     Compile Pack
                 </button>
@@ -160,6 +168,743 @@
 </div>
 
 {{-- Error flash handled by global toast system --}}
+
+{{-- ── PHASE 8: OUTCOME PANEL ──────────────────────────────────────────── --}}
+@include('presentations.partials._outcome-panel', ['presentation' => $presentation])
+
+{{-- ── PHASE 7: REFRESH REQUESTS (open + recent) ───────────────────────── --}}
+@php
+    $openRefreshRequests = \App\Models\PresentationRefreshRequest::where('presentation_id', $presentation->id)
+        ->whereIn('status', [
+            \App\Models\PresentationRefreshRequest::STATUS_PENDING,
+            \App\Models\PresentationRefreshRequest::STATUS_ACKNOWLEDGED,
+        ])
+        ->orderByDesc('created_at')
+        ->limit(5)
+        ->get();
+@endphp
+@if($openRefreshRequests->isNotEmpty())
+<div class="ds-status-card mb-4" style="border-left:3px solid #f59e0b;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+        <div style="flex:1;">
+            <h2 class="ds-section-header" style="margin-bottom:6px;color:#92400e;">
+                {{ $openRefreshRequests->count() }} open refresh {{ \Illuminate\Support\Str::plural('request', $openRefreshRequests->count()) }}
+            </h2>
+            <div style="font-size:0.8125rem;color:var(--text-secondary);">
+                @foreach($openRefreshRequests as $rr)
+                    <div style="padding:6px 0;border-top:{{ $loop->first ? '0' : '1px solid var(--border)' }};">
+                        <strong>{{ $rr->requester_name }}</strong>
+                        <span style="color:var(--text-muted);font-size:0.75rem;">· {{ $rr->created_at?->diffForHumans() }}</span>
+                        @if($rr->message)
+                            <div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px;">{{ \Illuminate\Support\Str::limit($rr->message, 120) }}</div>
+                        @endif
+                    </div>
+                @endforeach
+            </div>
+        </div>
+        <a href="{{ route('corex.presentations.refresh-requests.index') }}"
+           style="white-space:nowrap;font-size:0.75rem;color:#92400e;text-decoration:none;font-weight:600;padding:6px 12px;background:#fef3c7;border:1px solid #fde68a;border-radius:4px;">
+            Open inbox →
+        </a>
+    </div>
+</div>
+@endif
+
+{{-- ── PHASE 4: SHARE LINKS ──────────────────────────────────────────────── --}}
+@php
+    $shareLinkService = app(\App\Services\Presentations\SnapshotLinkService::class);
+    $shareLinks       = $shareLinkService->listForPresentation($presentation);
+    $contactsForLink  = $presentation->property
+        ? $presentation->property->contacts()->select('contacts.id', 'first_name', 'last_name', 'email', 'phone')
+            ->withPivot('role')->get()
+        : collect();
+    $sendDefaults = [
+        'channel' => auth()->user()->last_presentation_send_channel ?: 'email',
+        'mode'    => auth()->user()->last_presentation_send_mode    ?: 'full',
+    ];
+    $shareLinkSummary = $shareLinkService->engagementSummary($presentation);
+@endphp
+<div class="ds-status-card mb-8" id="share-links">
+    <div class="flex items-center justify-between mb-3">
+        <div>
+            <h2 class="ds-section-header" style="margin-bottom:0">Share Links</h2>
+            <p class="text-xs" style="color: var(--text-muted); margin: 2px 0 0 0;">
+                Tokenised public links for sellers. Static snapshots — locked to the version when the link was created.
+            </p>
+        </div>
+        <div style="display:flex;gap:8px;">
+            <button type="button" onclick="document.getElementById('send-presentation-modal').style.display='flex';window.__corexSendInit && window.__corexSendInit();"
+                    class="corex-btn-primary">
+                📧 Send to Recipient
+            </button>
+            <button type="button" onclick="document.getElementById('share-link-modal').style.display='flex'"
+                    class="corex-btn-outline">
+                🔗 Generate Link Only
+            </button>
+        </div>
+    </div>
+
+    @if($shareLinks->isEmpty())
+        <div style="padding: 18px; text-align: center; background: var(--surface-2); border: 1px dashed var(--border); border-radius: 6px; color: var(--text-muted); font-size: 0.875rem;">
+            No links created yet. Click <strong style="color: var(--text-primary);">Send to Recipient</strong> or <strong style="color: var(--text-primary);">Generate Link Only</strong> to create one.
+        </div>
+    @else
+        @if($shareLinkSummary['total_views'] > 0)
+        <div style="margin-bottom: 12px; padding: 10px 12px; background: color-mix(in srgb, var(--ds-green, #16a34a) 8%, transparent); border-left: 3px solid var(--ds-green, #16a34a); border-radius: 4px; font-size: 0.8125rem;">
+            <strong>Recent activity:</strong>
+            Sellers opened the presentation
+            <strong>{{ $shareLinkSummary['total_views'] }}</strong> {{ \Illuminate\Support\Str::plural('time', $shareLinkSummary['total_views']) }}
+            @if($shareLinkSummary['last_viewed_at'])
+                · most recent {{ $shareLinkSummary['last_viewed_at']->diffForHumans() }}
+            @endif
+            @if($shareLinkSummary['avg_duration_seconds'])
+                · avg {{ floor($shareLinkSummary['avg_duration_seconds'] / 60) }}m {{ $shareLinkSummary['avg_duration_seconds'] % 60 }}s on page
+            @endif
+            @if($shareLinkSummary['any_flagged'])
+                · <span style="color: var(--ds-amber, #d97706); font-weight: 600;">⚠ at least one flagged access</span>
+            @endif
+        </div>
+        @endif
+
+        <div style="overflow:auto;">
+        <table style="width:100%;font-size:0.8125rem;">
+            <thead>
+                <tr style="text-align:left;color:var(--text-muted);font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);">
+                    <th style="padding:8px 6px;">Recipient</th>
+                    <th style="padding:8px 6px;">Mode</th>
+                    <th style="padding:8px 6px;">Created</th>
+                    <th style="padding:8px 6px;">Expires</th>
+                    <th style="padding:8px 6px;text-align:center;">Views</th>
+                    <th style="padding:8px 6px;text-align:center;">Leads</th>
+                    <th style="padding:8px 6px;">First viewed</th>
+                    <th style="padding:8px 6px;">URL</th>
+                    <th style="padding:8px 6px;text-align:right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach($shareLinks as $sl)
+                @php
+                    $expDays = $sl->expires_at ? now()->diffInDays($sl->expires_at, false) : null;
+                    $expBadgeClass = $expDays === null ? '' : ($expDays < 0 ? 'ds-badge-danger' : ($expDays <= 7 ? 'ds-badge-warning' : 'ds-badge-success'));
+                @endphp
+                <tr style="border-bottom:1px solid var(--border);">
+                    <td style="padding:8px 6px;">
+                        @if($sl->recipientContact)
+                            {{ trim(($sl->recipientContact->first_name ?? '') . ' ' . ($sl->recipientContact->last_name ?? '')) ?: 'Contact #' . $sl->recipientContact->id }}
+                        @elseif($sl->recipient_label)
+                            {{ $sl->recipient_label }}
+                        @else
+                            <span style="color: var(--text-muted);">Untargeted</span>
+                        @endif
+                        @if($sl->flagged_at)
+                            <span class="ds-badge ds-badge-warning" title="{{ $sl->flagged_reason }}" style="margin-left:6px;">⚠ Flagged</span>
+                        @endif
+                    </td>
+                    <td style="padding:8px 6px;">
+                        @if($sl->mode === 'teaser')
+                            <span class="ds-badge ds-badge-info">Teaser</span>
+                        @else
+                            <span class="ds-badge" style="background:var(--surface-2);color:var(--text-secondary);">Full</span>
+                        @endif
+                    </td>
+                    <td style="padding:8px 6px;color:var(--text-muted);font-size:0.75rem;">{{ $sl->created_at->diffForHumans() }}</td>
+                    <td style="padding:8px 6px;">
+                        @if($expDays !== null)
+                            <span class="ds-badge {{ $expBadgeClass }}">
+                                {{ $expDays < 0 ? 'Expired ' . abs((int) $expDays) . 'd ago' : 'in ' . (int) $expDays . 'd' }}
+                            </span>
+                        @endif
+                    </td>
+                    <td style="padding:8px 6px;text-align:center;font-variant-numeric:tabular-nums;">{{ $sl->view_count }}</td>
+                    <td style="padding:8px 6px;text-align:center;font-variant-numeric:tabular-nums;">
+                        @if($sl->mode === 'teaser')
+                            @if(($sl->teaser_leads_count ?? 0) > 0)
+                                <a href="{{ route('presentations.teaser-leads', $presentation) }}" style="color:var(--brand-button);font-weight:600;">{{ $sl->teaser_leads_count }}</a>
+                            @else
+                                <span style="color:var(--text-muted);">—</span>
+                            @endif
+                        @else
+                            <span style="color:var(--text-muted);">n/a</span>
+                        @endif
+                    </td>
+                    <td style="padding:8px 6px;color:var(--text-muted);font-size:0.75rem;">
+                        {{ $sl->first_viewed_at ? $sl->first_viewed_at->diffForHumans() : 'Not yet viewed' }}
+                    </td>
+                    <td style="padding:8px 6px;">
+                        <button type="button" class="corex-btn-outline corex-btn-xs"
+                                data-share-url="{{ route('presentation.public.show', $sl->token) }}"
+                                onclick="navigator.clipboard.writeText(this.dataset.shareUrl).then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy URL',1500);})">
+                            Copy URL
+                        </button>
+                    </td>
+                    <td style="padding:8px 6px;text-align:right;white-space:nowrap;">
+                        <form method="POST" action="{{ route('presentations.snapshot-links.extend', [$presentation, $sl]) }}" style="display:inline;">
+                            @csrf
+                            <input type="hidden" name="days" value="7">
+                            <button type="submit" class="corex-btn-outline corex-btn-xs">+7d</button>
+                        </form>
+                        <form method="POST" action="{{ route('presentations.snapshot-links.revoke', [$presentation, $sl]) }}" style="display:inline;"
+                              onsubmit="return confirm('Revoke this link? The seller will no longer be able to view it.');">
+                            @csrf
+                            <button type="submit" class="corex-btn-outline corex-btn-xs" style="color: var(--ds-red, #dc2626);">Revoke</button>
+                        </form>
+                    </td>
+                </tr>
+            @endforeach
+            </tbody>
+        </table>
+        </div>
+    @endif
+</div>
+
+{{-- Generate Share Link modal --}}
+<div id="share-link-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.4);z-index:9999;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:var(--surface);border-radius:8px;max-width:480px;width:100%;padding:24px;box-shadow:0 10px 40px rgba(0,0,0,0.2);">
+        <div class="flex items-center justify-between mb-3">
+            <h3 style="font-size:1rem;font-weight:600;margin:0;">Generate share link</h3>
+            <button type="button" onclick="document.getElementById('share-link-modal').style.display='none'"
+                    style="background:none;border:0;font-size:1.25rem;color:var(--text-muted);cursor:pointer;">×</button>
+        </div>
+        <form method="POST" action="{{ route('presentations.snapshot-links.store', $presentation) }}">
+            @csrf
+
+            <div style="margin-bottom:12px;">
+                <label style="display:block;font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);font-weight:600;margin-bottom:4px;">Mode</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:0.8125rem;padding:4px 0;">
+                    <input type="radio" name="mode" value="full" checked>
+                    <span>Full presentation</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:0.8125rem;padding:4px 0;">
+                    <input type="radio" name="mode" value="teaser">
+                    <span>Teaser (lead-capture mode)</span>
+                </label>
+                <div style="font-size:0.6875rem;color:var(--text-muted);margin-top:2px;line-height:1.4;">
+                    Recipient sees suburb context but must submit their details to unlock the full report. Use for cold prospects.
+                </div>
+            </div>
+
+            <div style="margin-bottom:12px;">
+                <label for="recipient_contact_id" style="display:block;font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);font-weight:600;margin-bottom:4px;">Recipient (optional)</label>
+                <select name="recipient_contact_id" id="recipient_contact_id" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);font-size:0.875rem;">
+                    <option value="">— Untargeted —</option>
+                    @foreach($contactsForLink as $c)
+                        <option value="{{ $c->id }}">{{ trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '')) ?: ('Contact #' . $c->id) }}</option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div style="margin-bottom:12px;">
+                <label for="recipient_label" style="display:block;font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);font-weight:600;margin-bottom:4px;">Or free-text label</label>
+                <input type="text" name="recipient_label" id="recipient_label" maxlength="200" placeholder="e.g. Seller WhatsApp" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);font-size:0.875rem;">
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <label for="expires_days" style="display:block;font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);font-weight:600;margin-bottom:4px;">Expires in (days)</label>
+                <input type="number" name="expires_days" id="expires_days" min="1" max="365"
+                       value="{{ optional(\App\Models\Agency::find($presentation->agency_id))->snapshot_link_default_expiry_days ?? 21 }}"
+                       style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);font-size:0.875rem;">
+            </div>
+
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+                <button type="button" onclick="document.getElementById('share-link-modal').style.display='none'" class="corex-btn-outline">Cancel</button>
+                <button type="submit" class="corex-btn-primary">Generate</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{{-- ── PHASE 6: Send-to-Recipient modal ──────────────────────────────── --}}
+<div id="send-presentation-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:9999;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:var(--surface);border-radius:8px;max-width:780px;width:100%;max-height:92vh;overflow:auto;padding:24px;box-shadow:0 12px 48px rgba(0,0,0,0.22);">
+        <div class="flex items-center justify-between mb-3">
+            <h3 style="font-size:1.0625rem;font-weight:600;margin:0;">Send presentation: {{ \Illuminate\Support\Str::limit($presentation->property_address ?: ('Presentation #' . $presentation->id), 60) }}</h3>
+            <button type="button" onclick="document.getElementById('send-presentation-modal').style.display='none'"
+                    style="background:none;border:0;font-size:1.25rem;color:var(--text-muted);cursor:pointer;">×</button>
+        </div>
+
+        {{-- Step indicators --}}
+        <div style="display:flex;gap:6px;margin-bottom:16px;font-size:0.6875rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">
+            <span id="step-tab-1" style="padding:4px 10px;border-radius:999px;background:var(--brand-button);color:#fff;font-weight:600;">1 · Pick</span>
+            <span id="step-tab-2" style="padding:4px 10px;border-radius:999px;background:var(--surface-2);font-weight:500;">2 · Preview</span>
+            <span id="step-tab-3" style="padding:4px 10px;border-radius:999px;background:var(--surface-2);font-weight:500;">3 · Send</span>
+        </div>
+
+        {{-- ─ Step 1: Pick Recipients ─ --}}
+        <div id="send-step-1">
+            <div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:8px;">
+                Select recipients linked to this property, or add an ad-hoc address. Each recipient gets their own unique tracked link.
+            </div>
+            <div style="border:1px solid var(--border);border-radius:6px;max-height:240px;overflow-y:auto;background:var(--surface-2);">
+                @forelse($contactsForLink as $c)
+                    <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;">
+                        <input type="checkbox" data-recip-contact-id="{{ $c->id }}"
+                               data-recip-name="{{ trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '')) }}"
+                               data-recip-first="{{ $c->first_name }}"
+                               data-recip-email="{{ $c->email }}"
+                               data-recip-phone="{{ $c->phone }}"
+                               data-recip-role="{{ $c->pivot->role ?? '' }}"
+                               class="recip-check" checked>
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-size:0.875rem;color:var(--text-primary);font-weight:500;">
+                                {{ trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '')) ?: ('Contact #' . $c->id) }}
+                                @if($c->pivot->role)<span class="ds-badge" style="margin-left:6px;background:var(--surface);color:var(--text-secondary);font-size:0.6875rem;">{{ ucfirst($c->pivot->role) }}</span>@endif
+                            </div>
+                            <div style="font-size:0.6875rem;color:var(--text-muted);">{{ $c->email }}{{ $c->email && $c->phone ? ' · ' : '' }}{{ $c->phone }}</div>
+                        </div>
+                    </label>
+                @empty
+                    <div style="padding:14px;color:var(--text-muted);font-size:0.8125rem;text-align:center;">No contacts linked to this property yet. Add an ad-hoc recipient below.</div>
+                @endforelse
+            </div>
+
+            {{-- Ad-hoc recipient --}}
+            <details style="margin-top:10px;">
+                <summary style="font-size:0.75rem;color:var(--brand-button);cursor:pointer;">+ Add ad-hoc recipient</summary>
+                <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                    <input type="text" id="adhoc-name" placeholder="Name" style="padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:0.8125rem;">
+                    <input type="email" id="adhoc-email" placeholder="Email" style="padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:0.8125rem;">
+                    <input type="tel" id="adhoc-phone" placeholder="Phone" style="padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:0.8125rem;">
+                    <button type="button" onclick="window.__corexSendAddAdhoc()" class="corex-btn-outline corex-btn-xs">Add</button>
+                </div>
+                <div id="adhoc-list" style="margin-top:6px;font-size:0.75rem;color:var(--text-muted);"></div>
+            </details>
+
+            {{-- Default channel + mode --}}
+            <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+                <div>
+                    <label style="font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);font-weight:600;">Default channel</label>
+                    <div style="display:flex;flex-direction:column;gap:3px;margin-top:4px;font-size:0.8125rem;">
+                        <label><input type="radio" name="default_channel" value="email" {{ $sendDefaults['channel'] === 'email' ? 'checked' : '' }}> Email</label>
+                        <label><input type="radio" name="default_channel" value="whatsapp" {{ $sendDefaults['channel'] === 'whatsapp' ? 'checked' : '' }}> WhatsApp</label>
+                        <label><input type="radio" name="default_channel" value="copy" {{ $sendDefaults['channel'] === 'copy' ? 'checked' : '' }}> Copy URL only</label>
+                    </div>
+                </div>
+                <div>
+                    <label style="font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);font-weight:600;">Default mode</label>
+                    <div style="display:flex;flex-direction:column;gap:3px;margin-top:4px;font-size:0.8125rem;">
+                        <label><input type="radio" name="default_mode" value="full" {{ $sendDefaults['mode'] === 'full' ? 'checked' : '' }}> Full presentation</label>
+                        <label><input type="radio" name="default_mode" value="teaser" {{ $sendDefaults['mode'] === 'teaser' ? 'checked' : '' }}> Teaser (lead capture)</label>
+                    </div>
+                </div>
+            </div>
+            <div style="font-size:0.6875rem;color:var(--text-muted);margin-top:6px;">You can override mode and channel per-recipient on the next step.</div>
+
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+                <button type="button" onclick="document.getElementById('send-presentation-modal').style.display='none'" class="corex-btn-outline">Cancel</button>
+                <button type="button" id="send-step-1-next" class="corex-btn-primary">Continue →</button>
+            </div>
+        </div>
+
+        {{-- ─ Step 2: Preview & Customise ─ --}}
+        <div id="send-step-2" style="display:none;">
+            <div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:8px;">
+                Review per-recipient. Customise the message templates below — placeholders auto-substitute per recipient on send.
+            </div>
+            <div id="recipient-table-wrap" style="border:1px solid var(--border);border-radius:6px;overflow:hidden;font-size:0.8125rem;">
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead><tr style="background:var(--surface-2);color:var(--text-muted);font-size:0.625rem;text-transform:uppercase;letter-spacing:0.04em;">
+                        <th style="padding:6px 8px;text-align:left;">Recipient</th>
+                        <th style="padding:6px 8px;text-align:left;">Channel</th>
+                        <th style="padding:6px 8px;text-align:left;">Mode</th>
+                        <th style="padding:6px 8px;text-align:left;">Status</th>
+                    </tr></thead>
+                    <tbody id="recipient-table-body"></tbody>
+                </table>
+            </div>
+
+            <details style="margin-top:14px;" id="template-details">
+                <summary style="font-size:0.75rem;color:var(--text-secondary);cursor:pointer;font-weight:600;">Customise message templates</summary>
+                <div style="margin-top:10px;">
+                    <label style="font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);font-weight:600;">Email subject</label>
+                    <input type="text" id="send-subject" maxlength="300" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:0.8125rem;margin-top:4px;margin-bottom:8px;"
+                           value="{{ optional(\App\Models\Agency::find($presentation->agency_id))->email_default_subject_template }}">
+                    <label style="font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);font-weight:600;">Email body</label>
+                    <textarea id="send-body" rows="8" maxlength="8000" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:0.8125rem;margin-top:4px;font-family:inherit;">{{ optional(\App\Models\Agency::find($presentation->agency_id))->email_default_body_template }}</textarea>
+                    <div style="font-size:0.625rem;color:var(--text-muted);margin-top:4px;">
+                        Placeholders: <code>{recipient_first_name}</code> <code>{property_address}</code> <code>{agent_name}</code> <code>{agency_name}</code> <code>{presentation_url}</code>
+                    </div>
+                </div>
+            </details>
+
+            <div style="display:flex;gap:8px;justify-content:space-between;margin-top:16px;">
+                <button type="button" id="send-step-2-back" class="corex-btn-outline">← Back</button>
+                <button type="button" id="send-step-2-send" class="corex-btn-primary">Send Now →</button>
+            </div>
+        </div>
+
+        {{-- ─ Step 3: Send / Results ─ --}}
+        <div id="send-step-3" style="display:none;">
+            <div id="send-progress" style="font-size:0.8125rem;color:var(--text-secondary);"></div>
+            <div id="send-results" style="margin-top:14px;"></div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+                <button type="button" onclick="document.getElementById('send-presentation-modal').style.display='none';window.location.reload();" class="corex-btn-primary">Done</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+    const PREVIEW_URL = @json(route('presentations.deliveries.preview', $presentation));
+    const SEND_URL    = @json(route('presentations.deliveries.send', $presentation));
+    const CSRF        = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    const adhocList   = [];
+    let collected     = [];
+
+    function $(id) { return document.getElementById(id); }
+    function show(id) { $(id).style.display = 'block'; }
+    function hide(id) { $(id).style.display = 'none'; }
+    function activeTab(n) {
+        ['step-tab-1','step-tab-2','step-tab-3'].forEach((t,i) => {
+            const el = $(t);
+            const active = (i+1) === n;
+            el.style.background = active ? 'var(--brand-button)' : 'var(--surface-2)';
+            el.style.color      = active ? '#fff' : '';
+            el.style.fontWeight = active ? '600' : '500';
+        });
+    }
+
+    window.__corexSendInit = function () {
+        adhocList.length = 0;
+        $('adhoc-list').innerHTML = '';
+        document.querySelectorAll('.recip-check').forEach(cb => cb.checked = true);
+        show('send-step-1'); hide('send-step-2'); hide('send-step-3');
+        activeTab(1);
+    };
+
+    window.__corexSendAddAdhoc = function () {
+        const name  = $('adhoc-name').value.trim();
+        const email = $('adhoc-email').value.trim();
+        const phone = $('adhoc-phone').value.trim();
+        if (!name || (!email && !phone)) {
+            alert('Provide name + (email or phone).'); return;
+        }
+        adhocList.push({ name, email, phone });
+        $('adhoc-name').value = $('adhoc-email').value = $('adhoc-phone').value = '';
+        renderAdhocList();
+    };
+    function renderAdhocList() {
+        $('adhoc-list').innerHTML = adhocList.map((r, i) =>
+            '<div>+ ' + escHtml(r.name) + (r.email ? ' · ' + escHtml(r.email) : '') + (r.phone ? ' · ' + escHtml(r.phone) : '')
+            + ' <button type="button" data-rm="' + i + '" style="margin-left:6px;background:none;border:0;color:#dc2626;cursor:pointer;font-size:0.6875rem;">remove</button></div>'
+        ).join('');
+        $('adhoc-list').querySelectorAll('[data-rm]').forEach(btn => btn.addEventListener('click', () => {
+            adhocList.splice(parseInt(btn.dataset.rm, 10), 1);
+            renderAdhocList();
+        }));
+    }
+
+    function collectRecipients() {
+        const picked = Array.from(document.querySelectorAll('.recip-check:checked')).map(cb => ({
+            contact_id: parseInt(cb.dataset.recipContactId, 10),
+            name:       cb.dataset.recipName,
+            first_name: cb.dataset.recipFirst || cb.dataset.recipName.split(' ')[0],
+            email:      cb.dataset.recipEmail || null,
+            phone:      cb.dataset.recipPhone || null,
+        }));
+        return picked.concat(adhocList.map(r => ({
+            name: r.name, first_name: r.name.split(' ')[0],
+            email: r.email || null, phone: r.phone || null,
+        })));
+    }
+
+    $('send-step-1-next').addEventListener('click', async () => {
+        const recipients = collectRecipients();
+        if (!recipients.length) { alert('Pick at least one recipient.'); return; }
+        const defaultChannel = document.querySelector('[name=default_channel]:checked').value;
+        const defaultMode    = document.querySelector('[name=default_mode]:checked').value;
+        recipients.forEach(r => { r.channel = defaultChannel; r.mode = defaultMode; });
+        collected = recipients;
+        await renderStep2();
+        hide('send-step-1'); show('send-step-2'); activeTab(2);
+    });
+
+    async function renderStep2() {
+        const body = $('recipient-table-body');
+        body.innerHTML = '';
+        collected.forEach((r, i) => {
+            body.insertAdjacentHTML('beforeend',
+                '<tr style="border-top:1px solid var(--border);">'
+                + '<td style="padding:6px 8px;"><div style="font-weight:500;">' + escHtml(r.name) + '</div>'
+                +   '<div style="font-size:0.6875rem;color:var(--text-muted);">' + escHtml(r.email || r.phone || '') + '</div></td>'
+                + '<td style="padding:6px 8px;"><select data-row="' + i + '" data-field="channel" style="padding:3px 6px;border:1px solid var(--border);border-radius:3px;font-size:0.75rem;">'
+                +   '<option value="email"'    + (r.channel === 'email'    ? ' selected' : '') + '>Email</option>'
+                +   '<option value="whatsapp"' + (r.channel === 'whatsapp' ? ' selected' : '') + '>WhatsApp</option>'
+                +   '<option value="copy"'     + (r.channel === 'copy'     ? ' selected' : '') + '>Copy URL</option>'
+                + '</select></td>'
+                + '<td style="padding:6px 8px;"><select data-row="' + i + '" data-field="mode" style="padding:3px 6px;border:1px solid var(--border);border-radius:3px;font-size:0.75rem;">'
+                +   '<option value="full"'   + (r.mode === 'full'   ? ' selected' : '') + '>Full</option>'
+                +   '<option value="teaser"' + (r.mode === 'teaser' ? ' selected' : '') + '>Teaser</option>'
+                + '</select></td>'
+                + '<td style="padding:6px 8px;" data-status="' + i + '"><span style="color:var(--text-muted);">Ready</span></td>'
+                + '</tr>');
+        });
+        body.querySelectorAll('select').forEach(sel => sel.addEventListener('change', () => {
+            const idx = parseInt(sel.dataset.row, 10);
+            collected[idx][sel.dataset.field] = sel.value;
+            previewValidate();
+        }));
+        previewValidate();
+    }
+    async function previewValidate() {
+        try {
+            const resp = await fetch(PREVIEW_URL, {
+                method: 'POST',
+                headers: { 'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':CSRF },
+                body: JSON.stringify({
+                    recipients: collected,
+                    subject: $('send-subject').value,
+                    body:    $('send-body').value,
+                }),
+                credentials: 'same-origin',
+            });
+            const j = await resp.json();
+            const errors = j.errors || {};
+            collected.forEach((r, i) => {
+                const cell = document.querySelector('[data-status="' + i + '"]');
+                if (errors[i]) {
+                    cell.innerHTML = '<span style="color:#dc2626;font-size:0.6875rem;">' + escHtml(errors[i]) + '</span>';
+                } else {
+                    cell.innerHTML = '<span style="color:var(--ds-green,#16a34a);">Ready</span>';
+                }
+            });
+        } catch (e) { /* silent */ }
+    }
+    $('send-step-2-back').addEventListener('click', () => {
+        hide('send-step-2'); show('send-step-1'); activeTab(1);
+    });
+    $('send-step-2-send').addEventListener('click', async () => {
+        hide('send-step-2'); show('send-step-3'); activeTab(3);
+        $('send-progress').textContent = 'Sending to ' + collected.length + ' recipient' + (collected.length === 1 ? '' : 's') + '…';
+        try {
+            const resp = await fetch(SEND_URL, {
+                method: 'POST',
+                headers: { 'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':CSRF },
+                body: JSON.stringify({
+                    recipients: collected,
+                    subject: $('send-subject').value,
+                    body:    $('send-body').value,
+                }),
+                credentials: 'same-origin',
+            });
+            const j = await resp.json();
+            if (!resp.ok || !j.ok) {
+                $('send-progress').innerHTML = '<span style="color:#dc2626;">Send failed: ' + escHtml(j.errors ? JSON.stringify(j.errors) : 'unknown error') + '</span>';
+                return;
+            }
+            renderResults(j.results, j.summary);
+        } catch (e) {
+            $('send-progress').innerHTML = '<span style="color:#dc2626;">Network error.</span>';
+        }
+    });
+
+    function renderResults(results, summary) {
+        const lines = results.map(r => {
+            const emoji = r.status === 'failed' ? '✗' : '✓';
+            const colour = r.status === 'failed' ? '#dc2626' : 'var(--ds-green,#16a34a)';
+            let row = '<div style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;margin-bottom:6px;font-size:0.8125rem;">'
+                + '<span style="color:' + colour + ';font-weight:600;">' + emoji + '</span> '
+                + escHtml(r.recipient) + ' — ' + r.channel + ' / ' + r.mode + ' · ' + r.status;
+            if (r.whatsapp_url) {
+                const waRedirect = @json(route('corex.deliveries.whatsapp-redirect', '__ID__')).replace('__ID__', r.delivery_id);
+                row += ' · <a href="' + waRedirect + '" target="_blank" style="color:var(--brand-button);">Open WhatsApp →</a>';
+            }
+            if (r.channel === 'copy' && r.snapshot_url) {
+                row += ' · <button type="button" onclick="navigator.clipboard.writeText(\'' + r.snapshot_url + '\').then(()=>this.textContent=\'Copied!\')" class="corex-btn-outline corex-btn-xs">Copy URL</button>';
+            }
+            if (r.error) row += '<div style="color:#dc2626;font-size:0.6875rem;margin-top:2px;">' + escHtml(r.error) + '</div>';
+            row += '</div>';
+            return row;
+        }).join('');
+        $('send-progress').innerHTML = '<strong>Sent ' + (summary.by_status.sent || 0) + ' of ' + summary.total + '</strong>'
+            + (summary.whatsapp_links > 0 ? ' · ' + summary.whatsapp_links + ' WhatsApp link' + (summary.whatsapp_links === 1 ? '' : 's') + ' ready to open.' : '');
+        $('send-results').innerHTML = lines;
+    }
+
+    function escHtml(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+})();
+</script>
+
+{{-- ── PHASE 3: AI SUMMARY ───────────────────────────────────────────────── --}}
+@php
+    $aiVariants    = \App\Models\PresentationAiVariant::where('is_active', true)->orderBy('sort_order')->get();
+    $currentSummary = $latestVersion?->ai_summary_text;
+    $summaryStale   = $latestVersion && $latestSnapshot && $latestVersion->ai_summary_generated_at
+        && $latestSnapshot->created_at && $latestVersion->ai_summary_generated_at->lt($latestSnapshot->created_at);
+    $summaryHistory = $latestVersion
+        ? \App\Models\PresentationAiSummaryHistory::where('presentation_version_id', $latestVersion->id)
+            ->with('variant:id,key,display_name')
+            ->orderByDesc('id')
+            ->limit(8)
+            ->get()
+        : collect();
+@endphp
+<div class="ds-status-card mb-8" id="ai-summary">
+    <div class="flex items-center justify-between mb-3">
+        <div>
+            <h2 class="ds-section-header" style="margin-bottom:0">Executive Summary <span style="font-size:0.6875rem;color:var(--text-muted);font-weight:500;text-transform:none;letter-spacing:0;">(AI-generated, agent-reviewable)</span></h2>
+            <p class="text-xs" style="color:var(--text-muted);margin:2px 0 0 0;">
+                Choose a tone, generate the narrative, edit if needed, then accept before compiling the pack.
+            </p>
+        </div>
+        @if($currentSummary)
+            <span class="ds-badge ds-badge-success">Summary set</span>
+        @elseif($latestVersion)
+            <span class="ds-badge ds-badge-warning">No summary yet</span>
+        @endif
+    </div>
+
+    @if(!$latestVersion)
+        <div style="padding:14px;background:var(--surface-2);border:1px dashed var(--border);border-radius:6px;font-size:0.8125rem;color:var(--text-muted);">
+            Run analysis first — the AI summary needs the compiled analytics snapshot.
+        </div>
+    @else
+        @if($summaryStale)
+            <div style="margin-bottom:10px;padding:8px 12px;background:color-mix(in srgb, var(--ds-amber, #d97706) 10%, transparent);border-left:3px solid var(--ds-amber, #d97706);border-radius:4px;font-size:0.8125rem;">
+                Analysis was re-run after this summary was generated — consider regenerating.
+            </div>
+        @endif
+
+        <div style="display:grid;grid-template-columns:200px 1fr;gap:12px;align-items:start;margin-bottom:10px;">
+            <div>
+                <label style="display:block;font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);font-weight:600;margin-bottom:4px;">Variant</label>
+                <select id="ai-variant-select" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);font-size:0.875rem;">
+                    @foreach($aiVariants as $v)
+                        <option value="{{ $v->id }}" data-desc="{{ $v->description }}" {{ $latestVersion->ai_variant_id === $v->id ? 'selected' : '' }}>
+                            {{ $v->display_name }}
+                        </option>
+                    @endforeach
+                </select>
+                <div id="ai-variant-desc" style="font-size:0.6875rem;color:var(--text-muted);margin-top:4px;line-height:1.4;"></div>
+                <button type="button" id="ai-generate-btn" class="corex-btn-primary corex-btn-xs" style="margin-top:10px;width:100%;">
+                    {{ $currentSummary ? 'Regenerate' : 'Generate Summary' }}
+                </button>
+            </div>
+            <div>
+                <label style="display:block;font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);font-weight:600;margin-bottom:4px;">Summary text (editable)</label>
+                <textarea id="ai-summary-text" rows="9" maxlength="5000"
+                          style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);font-size:0.875rem;font-family:inherit;line-height:1.55;">{{ $currentSummary }}</textarea>
+                <div style="display:flex;justify-content:space-between;font-size:0.6875rem;color:var(--text-muted);margin-top:4px;">
+                    <span id="ai-summary-meta">
+                        @if($latestVersion->ai_summary_generated_at)
+                            Generated {{ $latestVersion->ai_summary_generated_at->diffForHumans() }}
+                            @if($latestVersion->ai_summary_edited_by_agent) · <strong>edited by agent</strong>@endif
+                        @endif
+                    </span>
+                    <span><span id="ai-summary-word-count">0</span> words · <span id="ai-summary-char-count">0</span>/5000 chars</span>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">
+                    <button type="button" id="ai-accept-btn" class="corex-btn-primary corex-btn-xs" disabled>Accept &amp; Save</button>
+                </div>
+            </div>
+        </div>
+
+        @if($summaryHistory->isNotEmpty())
+            <details style="margin-top:10px;">
+                <summary style="font-size:0.6875rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;font-weight:600;cursor:pointer;">Previous attempts ({{ $summaryHistory->count() }})</summary>
+                <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
+                    @foreach($summaryHistory as $h)
+                        <div style="padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-size:0.75rem;">
+                            <strong>{{ $h->variant->display_name ?? '—' }}</strong>
+                            · {{ $h->generated_at->diffForHumans() }}
+                            @if($h->was_saved)<span class="ds-badge ds-badge-success" style="margin-left:6px;">Saved</span>@endif
+                            @if($h->failure_reason)<span style="color:#dc2626;margin-left:6px;">FAILED</span>@endif
+                            @if($h->tokens_used)<span style="color:var(--text-muted);"> · {{ $h->tokens_used }} tokens · {{ $h->latency_ms }}ms</span>@endif
+                        </div>
+                    @endforeach
+                </div>
+            </details>
+        @endif
+    @endif
+</div>
+
+<script>
+(function () {
+    'use strict';
+    const GENERATE_URL = @json(route('presentations.ai-summary.generate', $presentation));
+    const ACCEPT_URL   = @json(route('presentations.ai-summary.accept',   $presentation));
+    const CSRF         = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    let currentHistoryId = null;
+    const textArea  = document.getElementById('ai-summary-text');
+    const acceptBtn = document.getElementById('ai-accept-btn');
+    const generateBtn = document.getElementById('ai-generate-btn');
+    const variantSelect = document.getElementById('ai-variant-select');
+    const descEl  = document.getElementById('ai-variant-desc');
+    const wordEl  = document.getElementById('ai-summary-word-count');
+    const charEl  = document.getElementById('ai-summary-char-count');
+    const metaEl  = document.getElementById('ai-summary-meta');
+
+    if (!textArea) return; // panel hidden when no version
+
+    function updateCounts() {
+        const t = textArea.value || '';
+        wordEl.textContent = (t.trim().match(/\S+/g) || []).length;
+        charEl.textContent = t.length;
+        acceptBtn.disabled = !(currentHistoryId && t.trim().length >= 50);
+    }
+    function refreshDesc() {
+        const opt = variantSelect.options[variantSelect.selectedIndex];
+        descEl.textContent = opt?.dataset.desc || '';
+    }
+    variantSelect.addEventListener('change', refreshDesc);
+    textArea.addEventListener('input', updateCounts);
+    refreshDesc();
+    updateCounts();
+
+    generateBtn.addEventListener('click', async () => {
+        generateBtn.disabled = true;
+        generateBtn.textContent = 'Generating…';
+        try {
+            const resp = await fetch(GENERATE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':CSRF },
+                body: JSON.stringify({ variant_id: parseInt(variantSelect.value, 10) }),
+                credentials: 'same-origin',
+            });
+            const j = await resp.json();
+            if (resp.ok && j.ok) {
+                textArea.value = j.text;
+                currentHistoryId = j.history_id;
+                metaEl.innerHTML = 'Just generated · ' + (j.tokens_used || 0) + ' tokens · ' + (j.latency_ms || 0) + 'ms · ' + (j.model || '—') + (j.from_cache ? ' · <strong>cached</strong>' : '');
+                updateCounts();
+            } else {
+                alert('Generation failed: ' + (j.error || 'unknown'));
+            }
+        } catch (e) {
+            alert('Network error: ' + e.message);
+        } finally {
+            generateBtn.disabled = false;
+            generateBtn.textContent = 'Regenerate';
+        }
+    });
+
+    acceptBtn.addEventListener('click', async () => {
+        if (!currentHistoryId) return;
+        acceptBtn.disabled = true;
+        acceptBtn.textContent = 'Saving…';
+        try {
+            const resp = await fetch(ACCEPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':CSRF },
+                body: JSON.stringify({ history_id: currentHistoryId, edited_text: textArea.value }),
+                credentials: 'same-origin',
+            });
+            const j = await resp.json();
+            if (resp.ok && j.ok) {
+                window.location.reload();
+            } else {
+                alert('Save failed: ' + (j.error || 'unknown'));
+            }
+        } catch (e) {
+            alert('Network error: ' + e.message);
+        } finally {
+            acceptBtn.disabled = false;
+            acceptBtn.textContent = 'Accept & Save';
+        }
+    });
+})();
+</script>
 
 {{-- ── READINESS CHECKLIST (P16) ──────────────────────────────────────────── --}}
 <div class="ds-status-card mb-8">
@@ -1955,7 +2700,7 @@
             $docTypeLabels = [
                 'suburb_stats'   => 'Suburb Report',
                 'vicinity_sales' => 'Vicinity Sales Report',
-                'cma'            => 'CMA Valuation Report',
+                'cma'            => 'CMA Evaluation Report',
                 'market_article' => 'Market Article',
                 'other'          => 'Other',
             ];
@@ -2103,9 +2848,9 @@
                         @endphp
 
                         @if($hasDocExtract && $upload->type === 'cma')
-                            {{-- ── CMA Valuation Summary Card ── --}}
+                            {{-- ── CMA Evaluation Summary Card ── --}}
                             <div class="mt-2 bg-emerald-50 rounded-lg px-3 py-2 text-xs text-gray-700 space-y-1">
-                                <div class="font-semibold text-[#0f172a]">CMA Valuation Summary</div>
+                                <div class="font-semibold text-[#0f172a]">CMA Evaluation Summary</div>
                                 @if(isset($uFields['cma.lower_range']) || isset($uFields['cma.middle_range']) || isset($uFields['cma.upper_range']))
                                     <div>
                                         <span class="text-gray-500">Price Range:</span>

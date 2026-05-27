@@ -163,7 +163,11 @@ class BranchAssignmentController extends Controller
             'reg_no'       => ['nullable', 'string', 'max:255'],
             'vat_no'       => ['nullable', 'string', 'max:255'],
             'ffc_no'       => ['nullable', 'string', 'max:255'],
+            'ppra_number'  => ['nullable', 'string', 'max:32'],
             'fic_no'       => ['nullable', 'string', 'max:255'],
+            // Phase 9c-3 rebuild — per-branch privacy policy override.
+            'privacy_policy_markdown' => ['nullable', 'string', 'max:200000'],
+            'privacy_policy_action'   => ['nullable', 'string', 'in:publish,unpublish'],
             'p24_agency_id' => ['nullable', 'string', 'max:32'],
             'logo'         => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'remove_logo'  => ['nullable', 'boolean'],
@@ -172,6 +176,31 @@ class BranchAssignmentController extends Controller
         // Empty-string → null so "blank means inherit from agency" semantics hold.
         if (array_key_exists('p24_agency_id', $data) && $data['p24_agency_id'] === '') {
             $data['p24_agency_id'] = null;
+        }
+
+        // Privacy policy override: same draft/publish gesture as agency level.
+        // Token lazily generated and persists across edits.
+        $privacyAction = $data['privacy_policy_action'] ?? null;
+        unset($data['privacy_policy_action']);
+        if (array_key_exists('privacy_policy_markdown', $data)) {
+            $hasContent = !empty($data['privacy_policy_markdown']);
+            if ($hasContent && empty($branch->privacy_policy_token)) {
+                // Reuse agency's token generator so the unique check spans both
+                // tables (privacy policy tokens are unique across all agencies
+                // + all branches — controller resolves the route by querying
+                // both tables).
+                $data['privacy_policy_token'] = $branch->agency
+                    ? $branch->agency->generatePrivacyPolicyToken()
+                    : \Illuminate\Support\Str::random(48);
+            }
+            if (!$hasContent) {
+                $data['privacy_policy_published_at'] = null;
+            }
+        }
+        if ($privacyAction === 'publish') {
+            $data['privacy_policy_published_at'] = $branch->privacy_policy_published_at ?: now();
+        } elseif ($privacyAction === 'unpublish') {
+            $data['privacy_policy_published_at'] = null;
         }
 
         $removeLogo = $data['remove_logo'] ?? false;

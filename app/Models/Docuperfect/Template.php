@@ -34,6 +34,7 @@ class Template extends Model
         'field_mappings',
         'allowed_delivery_modes',
         'security_tier',
+        'insertable_blocks',
         'owner_id',
         'archived_at',
     ];
@@ -46,6 +47,7 @@ class Template extends Model
         'editor_state' => 'array',
         'cds_json' => 'array',
         'field_mappings' => 'array',
+        'insertable_blocks' => 'array',
         'is_global' => 'boolean',
         'is_esign' => 'boolean',
         'archived_at' => 'datetime',
@@ -54,6 +56,164 @@ class Template extends Model
     public function owner()
     {
         return $this->belongsTo(User::class, 'owner_id');
+    }
+
+    /**
+     * E-sign reset Commit 5 (Q1) — single read site for field_mappings.
+     *
+     * Returns the authoritative tag-id → field-config map used across
+     * the rendering pipeline + the wizard's editable-scope resolver.
+     * Replaces direct `$template->field_mappings` reads, which today
+     * fan out across six divergent sources (cds_json, editor_state.tags,
+     * editor_state.mappings, tagged_html, field_mappings, fields_json,
+     * blade_view) with no canonical owner — the divergence is what
+     * caused Johan's "save 1 seller, reload 4 sellers" template revert.
+     *
+     * Priority order (first non-empty wins):
+     *
+     *   1. cds_drafts row for this template (most recent, not deleted).
+     *      The builder writes to drafts continuously while the agent
+     *      edits — if a draft exists, it represents the most recent
+     *      authored state.
+     *   2. editor_state.mappings — the builder's last full save into
+     *      this template's `editor_state` JSON column.
+     *   3. field_mappings column — legacy fallback for templates that
+     *      pre-date the editor_state column.
+     *
+     * The result is normalised to a tag-id keyed array of field
+     * descriptors. Empty sources yield an empty array.
+     *
+     * Companion behaviour:
+     *
+     *   • `pruneOrphanFieldMappings()` removes tag-ids that no longer
+     *     appear in the saved tagged_html / cds_json — guards against
+     *     the "blade has 1 seller, field_mappings has 14" divergence.
+     *   • `applyDraftAndCleanup()` (TemplateController:cdsGenerate)
+     *     deletes the applied draft on successful save so the next
+     *     reload reads the freshly-saved template, not the now-stale
+     *     draft.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function canonicalFieldMappings(): array
+    {
+        // Tier 1 — most recent IN-PROGRESS draft for this template.
+        //
+        // Filter on `status = 'draft'` so a previously-saved draft
+        // (status='saved') doesn't override the template's
+        // editor_state.mappings written by the same save. The
+        // status='saved' rows stay alive in the DB (so old browser
+        // URLs at /cds/builder/{saved_id} keep resolving) but they
+        // no longer outrank the freshly-saved editor_state in the
+        // canonical-accessor priority chain.
+        if (\Illuminate\Support\Facades\Schema::hasTable('cds_drafts')) {
+            $draft = \Illuminate\Support\Facades\DB::table('cds_drafts')
+                ->where('source_template_id', $this->id)
+                ->where('status', 'draft')
+                ->whereNull('deleted_at')
+                ->orderByDesc('updated_at')
+                ->first();
+            if ($draft !== null && !empty($draft->mappings)) {
+                $decoded = is_string($draft->mappings) ? json_decode($draft->mappings, true) : $draft->mappings;
+                if (is_array($decoded) && count($decoded) > 0) {
+                    return $decoded;
+                }
+            }
+        }
+
+        // Tier 2 — editor_state.mappings.
+        $editorState = $this->editor_state ?? [];
+        if (is_array($editorState) && !empty($editorState['mappings']) && is_array($editorState['mappings'])) {
+            return $editorState['mappings'];
+        }
+
+        // Tier 3 — legacy field_mappings column.
+        $legacy = $this->field_mappings ?? [];
+        return is_array($legacy) ? $legacy : [];
+    }
+
+    /**
+     * E-sign reset Commit 5 (Q1) — remove tag-ids from field_mappings
+     * that are no longer referenced anywhere the renderer reads from
+     * (tagged_html, cds_json sections, blade view). Called on save so
+     * the next reload doesn't repopulate deleted blocks from the
+     * orphan metadata.
+     *
+     * Returns the number of entries pruned (for audit logging).
+     */
+    public function pruneOrphanFieldMappings(): int
+    {
+        $current = $this->canonicalFieldMappings();
+        if (empty($current)) {
+            return 0;
+        }
+        $referenced = $this->collectReferencedTagIds();
+        if (empty($referenced)) {
+            // No reliable source of "which tags are still live" — bail
+            // rather than nuking everything by accident.
+            return 0;
+        }
+        $pruned = [];
+        $removed = 0;
+        foreach ($current as $tagId => $mapping) {
+            if (in_array((string) $tagId, $referenced, true)) {
+                $pruned[$tagId] = $mapping;
+            } else {
+                $removed++;
+            }
+        }
+        if ($removed > 0) {
+            // Write the pruned set back to all storage tiers so the
+            // canonical accessor agrees with itself on the next read.
+            $this->field_mappings = $pruned;
+            $editorState = $this->editor_state ?? [];
+            if (is_array($editorState)) {
+                $editorState['mappings'] = $pruned;
+                $this->editor_state = $editorState;
+            }
+            $this->save();
+        }
+        return $removed;
+    }
+
+    /**
+     * Collect tag-ids referenced in any of the live-content sources:
+     *   - editor_state.tagged_html (the builder's saved DOM)
+     *   - cds_json sections' field_placeholder values
+     *   - tagged_html stored on the template root (older schemas)
+     *
+     * Returns an array of tag-id strings.
+     *
+     * @return list<string>
+     */
+    private function collectReferencedTagIds(): array
+    {
+        $sources = [];
+        $editorState = $this->editor_state ?? [];
+        if (is_array($editorState)) {
+            if (!empty($editorState['tagged_html']) && is_string($editorState['tagged_html'])) {
+                $sources[] = $editorState['tagged_html'];
+            }
+            if (!empty($editorState['tags']) && is_array($editorState['tags'])) {
+                foreach ($editorState['tags'] as $tagEntry) {
+                    if (is_array($tagEntry) && !empty($tagEntry['id'])) {
+                        $sources[] = '#' . $tagEntry['id'] . '#';
+                    } elseif (is_string($tagEntry)) {
+                        $sources[] = '#' . $tagEntry . '#';
+                    }
+                }
+            }
+        }
+        $cdsJson = $this->cds_json ?? [];
+        if (is_array($cdsJson)) {
+            $sources[] = json_encode($cdsJson) ?: '';
+        }
+        $blob = implode("\n", $sources);
+        if ($blob === '') {
+            return [];
+        }
+        preg_match_all('/(tag-[A-Za-z0-9_-]+)/', $blob, $matches);
+        return array_values(array_unique($matches[1] ?? []));
     }
 
     public function documentType()
@@ -131,11 +291,24 @@ class Template extends Model
             if ($hasRental && !$hasSales) return false;
         }
 
-        // Layer 2: property source table
+        // Layer 2: explicit category / template_type set by the builder.
+        // Authoritative — covers CDS templates whose signing_parties use the
+        // generic owner_party/acquiring_party tokens (so Layer 1 can't tell)
+        // and whose name carries no sales keyword. Without this a sales CDS
+        // template falls through to the name heuristic and wrongly renders
+        // Lessor. template_type 'cds' is neutral and skipped (no sale/rent
+        // substring), so category decides.
+        foreach ([strtolower((string) ($this->category ?? '')), strtolower((string) ($this->template_type ?? ''))] as $sig) {
+            if ($sig === '') continue;
+            if (str_contains($sig, 'sale') || $sig === 'otp') return true;
+            if (str_contains($sig, 'rent') || str_contains($sig, 'lett') || str_contains($sig, 'lease')) return false;
+        }
+
+        // Layer 3: property source table
         if ($propertySource === 'properties') return true;
         if ($propertySource === 'rental_properties') return false;
 
-        // Layer 3: template name pattern matching (fallback)
+        // Layer 4: template name pattern matching (last-resort fallback)
         $name = strtolower($this->name ?? '');
         return str_contains($name, 'sell') || str_contains($name, 'sale')
             || str_contains($name, 'authority') || str_contains($name, 'otp')
@@ -253,17 +426,60 @@ class Template extends Model
 
     /**
      * Map generic signing party keys to display names based on document context.
+     *
+     * B1 — auto-numbers duplicates while preserving order:
+     *   ['owner_party','owner_party','acquiring_party','agent'] + sales
+     *     → ['Seller 1', 'Seller 2', 'Buyer', 'Agent']
+     *
+     * Singletons remain non-indexed (just "Buyer", not "Buyer 1").
+     * Existing single-recipient callers see no behaviour change.
      */
     public static function mapSigningPartyKeys(array $keys, bool $isSales): array
     {
+        $counts = array_count_values($keys);
+        $running = [];
+        return array_values(array_map(function ($k) use ($counts, &$running, $isSales) {
+            $running[$k] = ($running[$k] ?? 0) + 1;
+            $totalForRole = $counts[$k] ?? 1;
+            return self::roleDisplayLabel($k, $isSales, $running[$k], $totalForRole);
+        }, $keys));
+    }
+
+    /**
+     * Display label for a single role token. When N > 1 instances of the
+     * same role exist on this document, the label is suffixed with the
+     * 1-based instance index ("Seller 2"). Singletons return the base
+     * label only.
+     *
+     * B1 — used by Step 5's chip render (B4) and B2's per-instance block
+     * headers. mapSigningPartyKeys() above delegates to this method.
+     */
+    public static function roleDisplayLabel(
+        string $roleToken,
+        bool $isSales,
+        ?int $instanceIndex = null,
+        int $totalInstancesForRole = 1,
+    ): string {
         $map = $isSales
             ? ['owner_party' => 'Seller', 'acquiring_party' => 'Buyer', 'agent' => 'Agent']
+            // Wizard-side aliases — see ESignWizardController $roleAliases. These
+            // tokens land in signature_requests.party_role today.
             : ['owner_party' => 'Lessor', 'acquiring_party' => 'Lessee', 'agent' => 'Agent'];
+        // Also recognise the wizard's raw tokens (seller / buyer / lessor / lessee /
+        // landlord / tenant) so labels work whether the caller passes the canonical
+        // owner_party/acquiring_party or the wizard's per-document-type token.
+        $aliases = $isSales
+            ? ['seller' => 'Seller', 'buyer' => 'Buyer']
+            : ['lessor' => 'Lessor', 'lessee' => 'Lessee', 'landlord' => 'Lessor', 'tenant' => 'Lessee'];
 
-        return array_values(array_map(
-            fn($k) => $map[$k] ?? ucfirst(str_replace('_', ' ', $k)),
-            $keys
-        ));
+        $base = $map[$roleToken]
+            ?? $aliases[$roleToken]
+            ?? ucfirst(str_replace('_', ' ', $roleToken));
+
+        if ($totalInstancesForRole > 1 && $instanceIndex !== null) {
+            return $base . ' ' . $instanceIndex;
+        }
+        return $base;
     }
 
     public function getPageImagesAttribute(): array
@@ -273,5 +489,54 @@ class Template extends Model
             $urls[] = route('docuperfect.page.image', ['id' => $this->id, 'page' => $n]);
         }
         return $urls;
+    }
+
+    /**
+     * ES-5 — return the list of party-role tokens allowed to edit a given
+     * tag at signing time.
+     *
+     * Reads from `field_mappings[tag_id].editable_by`. Returns an empty
+     * array when the field is NOT editable at signing time (the field is
+     * locked once the agent fills it during prep).
+     *
+     * Role tokens recognised:
+     *   owner_party | acquiring_party | agent | witness | all
+     *
+     * Spec: .ai/specs/esign-v3-complete-spec.md §9
+     */
+    public function getEditableByForField(string $tagId): array
+    {
+        $mappings = $this->field_mappings ?? [];
+        if (!is_array($mappings) || !isset($mappings[$tagId])) {
+            return [];
+        }
+        $editableBy = $mappings[$tagId]['editable_by'] ?? null;
+        if ($editableBy === null) {
+            return [];
+        }
+        if (is_string($editableBy)) {
+            // Legacy single-role string — normalise to array shape.
+            return [$editableBy];
+        }
+        if (is_array($editableBy)) {
+            return array_values(array_filter($editableBy, fn($r) => is_string($r) && $r !== ''));
+        }
+        return [];
+    }
+
+    /**
+     * ES-5 — check whether a specific party role may edit a specific tag
+     * at signing time. 'all' is a wildcard that matches every party.
+     */
+    public function isFieldEditableBy(string $tagId, string $partyRole): bool
+    {
+        $allowed = $this->getEditableByForField($tagId);
+        if (empty($allowed)) {
+            return false;
+        }
+        if (in_array('all', $allowed, true)) {
+            return true;
+        }
+        return in_array($partyRole, $allowed, true);
     }
 }

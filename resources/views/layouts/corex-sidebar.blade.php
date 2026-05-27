@@ -358,7 +358,7 @@
                      F.2: count badge — canvass-pool size (matched_property_id IS NULL).
                      Cached 60s per agency. Mirrors the pendingVerificationCount / faultNewCount
                      precedents elsewhere in this sidebar. --}}
-                @if(\Illuminate\Support\Facades\Route::has('market-intelligence.index'))
+                @if(\Illuminate\Support\Facades\Route::has('market-intelligence.work'))
                 @php
                     $miAgencyId = auth()->user()->effectiveAgencyId() ?? auth()->user()->agency_id ?? null;
                     $miCount = $miAgencyId ? cache()->remember(
@@ -371,22 +371,42 @@
                             ->count(),
                     ) : 0;
                 @endphp
-                <a href="{{ route('market-intelligence.index') }}" class="corex-nav-subitem {{ request()->routeIs('market-intelligence.*') || request()->routeIs('prospecting.*') ? 'active' : '' }}">
+                <a href="{{ route('market-intelligence.work') }}" class="corex-nav-subitem {{ request()->routeIs('market-intelligence.*') || request()->routeIs('prospecting.*') ? 'active' : '' }}">
                     <span>Market intelligence</span>
                     @if($miCount > 0)
                     <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[0.6875rem] font-bold"
                           style="background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 15%, transparent); color:var(--brand-icon, #0ea5e9);">{{ number_format($miCount) }}</span>
                     @endif
                 </a>
+                @permission('mic.upload_reports')
+                @if(\Illuminate\Support\Facades\Route::has('market-intelligence.reports.bulk-import'))
+                <a href="{{ route('market-intelligence.reports.bulk-import') }}"
+                   class="corex-nav-subitem {{ request()->routeIs('market-intelligence.reports.bulk-import*') ? 'active' : '' }}"
+                   style="padding-left: 36px; font-size: 0.78rem;">
+                    <span>Bulk Import Reports</span>
+                </a>
                 @endif
-                @if(\Illuminate\Support\Facades\Route::has('corex.tracked-properties.index'))
-                <a href="{{ route('corex.tracked-properties.index') }}" class="corex-nav-subitem {{ request()->routeIs('corex.tracked-properties.*') ? 'active' : '' }}">Tracked Properties</a>
+                @endpermission
                 @endif
+                {{-- Phase D1 — Tracked Properties folded into the MIC
+                     Opportunities tab. Sidebar entry removed; the legacy
+                     route /corex/tracked-properties now 301-redirects to
+                     /corex/market-intelligence/opportunities. --}}
                 @endpermission
 
                 @permission('access_properties')
                 @if(config('features.properties') && \Illuminate\Support\Facades\Route::has('corex.properties.index'))
                 <a href="{{ route('corex.properties.index') }}" class="corex-nav-subitem {{ request()->routeIs('corex.properties.*') ? 'active' : '' }}">Properties</a>
+                @endif
+                {{-- Phase 3g — Map module. Same permission as Properties; agency-scoped. --}}
+                @if(\Illuminate\Support\Facades\Route::has('corex.map.index'))
+                <a href="{{ route('corex.map.index') }}" class="corex-nav-subitem {{ request()->routeIs('corex.map.*') ? 'active' : '' }}" style="display:flex;align-items:center;gap:6px;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M21 10c0 6-9 13-9 13s-9-7-9-13a9 9 0 0 1 18 0z"/>
+                        <circle cx="12" cy="10" r="3"/>
+                    </svg>
+                    Map
+                </a>
                 @endif
                 @endpermission
 
@@ -411,6 +431,65 @@
                 @permission('access_presentations')
                 @if(config('features.presentations') && \Illuminate\Support\Facades\Route::has('presentations.index'))
                 <a href="{{ route('presentations.index') }}" class="corex-nav-subitem {{ request()->routeIs('presentations.*') ? 'active' : '' }}">Presentations</a>
+                @endif
+                @if(\Illuminate\Support\Facades\Route::has('corex.presentations.analytics.index'))
+                    <a href="{{ route('corex.presentations.analytics.index') }}"
+                       class="corex-nav-subitem {{ request()->routeIs('corex.presentations.analytics.*') ? 'active' : '' }}">
+                        Analytics
+                    </a>
+                @endif
+                @if(\Illuminate\Support\Facades\Route::has('corex.presentations.outcomes.index'))
+                    @php
+                        // Phase 8 — count of presentations >30d old with no outcome (in current user's scope).
+                        $outcomePendingCount = 0;
+                        try {
+                            $user = auth()->user();
+                            $agencyId = $user?->effectiveAgencyId();
+                            if ($agencyId) {
+                                $q = \App\Models\Presentation::where('agency_id', $agencyId)
+                                    ->where('created_at', '<=', now()->subDays(30))
+                                    ->whereDoesntHave('outcome');
+                                if (!in_array((string) $user->role, ['branch_manager','principal','super_admin','admin'], true)) {
+                                    $q->where('created_by_user_id', $user->id);
+                                }
+                                $outcomePendingCount = $q->count();
+                            }
+                        } catch (\Throwable $e) { /* sidebar must never blow up */ }
+                    @endphp
+                    <a href="{{ route('corex.presentations.outcomes.index') }}"
+                       class="corex-nav-subitem {{ request()->routeIs('corex.presentations.outcomes.*') ? 'active' : '' }}"
+                       style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                        <span>Outcomes</span>
+                        @if($outcomePendingCount > 0)
+                            <span style="display:inline-block;min-width:18px;padding:1px 6px;background:#0ea5e9;color:#fff;border-radius:99px;font-size:0.625rem;font-weight:700;text-align:center;line-height:1.4;">
+                                {{ $outcomePendingCount > 99 ? '99+' : $outcomePendingCount }}
+                            </span>
+                        @endif
+                    </a>
+                @endif
+                @if(\Illuminate\Support\Facades\Route::has('corex.presentations.refresh-requests.index'))
+                    @php
+                        // Phase 7 — count of open refresh requests, scoped to the user's effective agency.
+                        $refreshOpenCount = 0;
+                        try {
+                            $agencyId = auth()->user()?->effectiveAgencyId();
+                            if ($agencyId) {
+                                $refreshOpenCount = \App\Models\PresentationRefreshRequest::where('agency_id', $agencyId)
+                                    ->whereIn('status', ['pending', 'acknowledged'])
+                                    ->count();
+                            }
+                        } catch (\Throwable $e) { /* sidebar must never blow up */ }
+                    @endphp
+                    <a href="{{ route('corex.presentations.refresh-requests.index') }}"
+                       class="corex-nav-subitem {{ request()->routeIs('corex.presentations.refresh-requests.*') ? 'active' : '' }}"
+                       style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                        <span>Refresh Requests</span>
+                        @if($refreshOpenCount > 0)
+                            <span style="display:inline-block;min-width:18px;padding:1px 6px;background:#f59e0b;color:#fff;border-radius:99px;font-size:0.625rem;font-weight:700;text-align:center;line-height:1.4;">
+                                {{ $refreshOpenCount > 99 ? '99+' : $refreshOpenCount }}
+                            </span>
+                        @endif
+                    </a>
                 @endif
                 @endpermission
 
@@ -550,6 +629,61 @@
                 @permission('view_deals')
                 <a href="{{ route('admin.deals') }}" class="corex-nav-subitem {{ request()->routeIs('admin.deals*') ? 'active' : '' }}">Deal Register</a>
                 @endpermission
+
+                @if(auth()->user() && in_array((string) auth()->user()->role, ['admin', 'super_admin', 'branch_manager', 'principal'], true) && \Illuminate\Support\Facades\Route::has('corex.compliance.rcr.index'))
+                    @php
+                        // Phase 9d — open RCR submissions for current agency.
+                        $rcrOpenCount = 0; $rcrNextDeadline = null;
+                        try {
+                            $agencyId = auth()->user()?->effectiveAgencyId();
+                            if ($agencyId) {
+                                $open = \App\Models\Compliance\Rcr\RcrSubmission::where('agency_id', $agencyId)
+                                    ->whereIn('status', ['draft', 'in_review', 'approved_for_submission'])
+                                    ->orderBy('submission_deadline')
+                                    ->first();
+                                if ($open) {
+                                    $rcrOpenCount = 1;
+                                    $rcrNextDeadline = (int) round(now()->diffInDays($open->submission_deadline, false));
+                                }
+                            }
+                        } catch (\Throwable $e) { /* sidebar must never blow up */ }
+                    @endphp
+                    <a href="{{ route('corex.compliance.rcr.index') }}"
+                       class="corex-nav-subitem {{ request()->routeIs('corex.compliance.rcr.*') ? 'active' : '' }}"
+                       style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                        <span>RCR · FIC 2026</span>
+                        @if($rcrOpenCount > 0)
+                            <span style="display:inline-block;min-width:18px;padding:1px 6px;background:{{ $rcrNextDeadline !== null && $rcrNextDeadline <= 7 ? '#dc2626' : '#0ea5e9' }};color:#fff;border-radius:99px;font-size:0.625rem;font-weight:700;text-align:center;line-height:1.4;">
+                                {{ $rcrNextDeadline !== null ? ($rcrNextDeadline < 0 ? 'OVERDUE' : $rcrNextDeadline . 'd') : '!' }}
+                            </span>
+                        @endif
+                    </a>
+                @endif
+
+                @if(auth()->user() && in_array((string) auth()->user()->role, ['admin', 'super_admin', 'branch_manager', 'principal'], true) && \Illuminate\Support\Facades\Route::has('corex.admin.deal-link-review.index'))
+                    @php
+                        // Phase 3i — pending deal-link review count.
+                        $dealLinkPendingCount = 0;
+                        try {
+                            $agencyId = auth()->user()?->effectiveAgencyId();
+                            if ($agencyId) {
+                                $dealLinkPendingCount = \App\Models\DealLinkReviewQueue::where('agency_id', $agencyId)
+                                    ->where('match_status', 'pending')
+                                    ->count();
+                            }
+                        } catch (\Throwable $e) { /* sidebar must never blow up */ }
+                    @endphp
+                    <a href="{{ route('corex.admin.deal-link-review.index') }}"
+                       class="corex-nav-subitem {{ request()->routeIs('corex.admin.deal-link-review.*') ? 'active' : '' }}"
+                       style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                        <span>Deal Link Review</span>
+                        @if($dealLinkPendingCount > 0)
+                            <span style="display:inline-block;min-width:18px;padding:1px 6px;background:#dc2626;color:#fff;border-radius:99px;font-size:0.625rem;font-weight:700;text-align:center;line-height:1.4;">
+                                {{ $dealLinkPendingCount > 99 ? '99+' : $dealLinkPendingCount }}
+                            </span>
+                        @endif
+                    </a>
+                @endif
 
                 <div class="corex-nav-sublabel">Setup</div>
                 @permission('edit_worksheet')
@@ -1114,7 +1248,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
             </svg>
-            <span>Market Intelligence</span>
+            <span>Market Intelligence Settings</span>
         </a>
         @endif
 
@@ -1226,6 +1360,16 @@
             <span>API</span>
         </a>
 
+        {{-- AI Usage (MIC Phase B2) --}}
+        @permission('mic.view_ai_costs')
+        <a href="{{ route('admin.ai-usage.index') }}" class="corex-nav-item {{ request()->routeIs('admin.ai-usage.*') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.5l4.5-4.5 4.5 4.5L21 6m0 0v6m0-6h-6" />
+            </svg>
+            <span>AI Usage</span>
+        </a>
+        @endpermission
+
         {{-- Dev Settings --}}
         <a href="{{ route('admin.dev-settings.index') }}" class="corex-nav-item {{ request()->routeIs('admin.dev-settings.*') ? 'active' : '' }}">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -1323,7 +1467,8 @@
                 <a href="{{ route('evaluation.index') }}#tab=town" class="corex-nav-subitem">Town Report</a>
                 <a href="{{ route('evaluation.index') }}#tab=street" class="corex-nav-subitem">Street Report</a>
                 <a href="{{ route('evaluation.index') }}#tab=transfer" class="corex-nav-subitem">Transfer Report</a>
-                <a href="{{ route('evaluation.index') }}#tab=prospecting" class="corex-nav-subitem">Prospecting</a>
+                {{-- Phase D1 — Prospecting evaluation tab removed; the new
+                     MIC Analyse tab is now the canonical surface for that data. --}}
             </div>
         </div>
         @endif

@@ -18,6 +18,7 @@ use App\Models\Property;
 use App\Models\Rental\RentalProperty;
 use App\Services\CandidatePractitionerService;
 use App\Services\Docuperfect\SignatureService;
+use App\Services\Docuperfect\SignatureSurfaceNormalizer;
 
 use App\Models\FicaSubmission;
 use App\Services\WebTemplateDataService;
@@ -537,6 +538,44 @@ class ESignWizardController extends Controller
                     }
                 }
             }
+            // BL-3: rental/letting docs select a rental_properties row, which
+            // has NO contact_property pivot and NO contacts relationship —
+            // only the denormalised landlord_name/landlord_email/landlord_phone
+            // scalars (no tenant data exists on that table). Before this branch
+            // the block above was gated on source==='properties', so letting
+            // e-sign started with zero recipients. Synthesise the landlord
+            // recipient from those scalars, gated by the template's allowed
+            // esign roles, in the same shape as the sales branch. Tenant cannot
+            // be auto-resolved from rental_properties — manual-add covers it.
+            elseif ($propertyId && $propertySource === 'rental_properties') {
+                $rentalProp = RentalProperty::find($propertyId);
+                if ($rentalProp && (!empty($rentalProp->landlord_name) || !empty($rentalProp->landlord_email))) {
+                    $signingParties = $template->signing_parties ?? [];
+                    $defaultOwnerRole = collect($signingParties)->first(fn($r) => $r !== 'agent' && $r !== 'creator')
+                        ?? ($template->isSalesDocument($propertySource) ? 'seller' : 'landlord');
+                    $allowedEsignRoles = $this->buildAllowedEsignRoles($signingParties);
+
+                    // The landlord maps to esign_role 'lessor'. Skip only if the
+                    // template explicitly restricts roles and excludes lessor.
+                    $landlordAllowed = empty($allowedEsignRoles) || in_array('lessor', $allowedEsignRoles, true);
+                    if ($landlordAllowed) {
+                        $name = trim($rentalProp->landlord_name ?? '');
+                        $nameParts = $name !== '' ? preg_split('/\s+/', $name, 2) : ['', ''];
+                        $recipients[] = [
+                            'order'       => count($recipients) + 1,
+                            'role'        => $defaultOwnerRole,
+                            'name'        => $name,
+                            'first_name'  => $nameParts[0] ?? '',
+                            'last_name'   => $nameParts[1] ?? '',
+                            'id_number'   => '',
+                            'email'       => $rentalProp->landlord_email ?? '',
+                            'cell'        => $rentalProp->landlord_phone ?? '',
+                            'address'     => $rentalProp->full_address ?? '',
+                            '_contact_id' => null,
+                        ];
+                    }
+                }
+            }
         }
 
         // Update stepData recipients so autoFillFields can see auto-populated contacts
@@ -648,6 +687,14 @@ class ESignWizardController extends Controller
         // Auto-fill field group display values from recipients
         $allWizardFields = $this->autoFillFieldGroupDisplays($allWizardFields, $stepData);
 
+        // E-sign walk-fix FIX 1 + FIX 2 — expand role-bound fields per
+        // recipient so a 3-seller session renders N inputs (each
+        // pre-filled from THAT specific recipient's contact), not one
+        // concatenated " and "-joined value. Mirrors B2.5/B3's recipient
+        // loop engine on the recipient signing surface — same loop,
+        // same identity convention, same chip labels.
+        $expandedWizardFields = $this->expandWizardFieldsPerRecipient($allWizardFields, $stepData);
+
         $contactTypes = DB::table('contact_types')
             ->where('is_active', true)
             ->orderBy('sort_order')
@@ -662,6 +709,7 @@ class ESignWizardController extends Controller
             'creatorFields'  => $creatorFields,
             'signerFields'   => $signerFields,
             'allWizardFields' => $allWizardFields,
+            'expandedWizardFields' => $expandedWizardFields,
             'pageImages'     => $pageImages,
             'recipients'     => $recipients,
             'stepData'       => $stepData,
@@ -1090,7 +1138,25 @@ class ESignWizardController extends Controller
             $esignRoles = $esignRoleMap[strtolower($role)] ?? null;
             if ($esignRoles) {
                 $typeIds = DB::table('contact_types')->whereIn('esign_role', $esignRoles)->pluck('id');
-                if ($typeIds->isNotEmpty()) {
+                $wantsBuyer  = in_array('buyer', $esignRoles, true);
+                $wantsSeller = in_array('seller', $esignRoles, true);
+
+                if ($wantsBuyer || $wantsSeller) {
+                    // contact_type_id is mostly unpopulated; buyer/seller truth
+                    // lives in is_buyer / contact_property role='owner'. Match
+                    // either the (rare) typed contacts OR the canonical column.
+                    $query->where(function ($w) use ($typeIds, $wantsBuyer, $wantsSeller) {
+                        if ($typeIds->isNotEmpty()) {
+                            $w->orWhereIn('contact_type_id', $typeIds);
+                        }
+                        if ($wantsBuyer) {
+                            $w->orWhere('is_buyer', 1);
+                        }
+                        if ($wantsSeller) {
+                            $w->orWhereHas('properties', fn ($q) => $q->where('contact_property.role', 'owner'));
+                        }
+                    });
+                } elseif ($typeIds->isNotEmpty()) {
                     $query->whereIn('contact_type_id', $typeIds);
                 }
             } else {
@@ -1271,10 +1337,55 @@ class ESignWizardController extends Controller
                 $styles = implode("\n", $styleMatches[0]);
             }
 
+            // Phase 1B.5 — render insertable-block placeholders inline so the
+            // wizard agent sees styled blocks instead of literal `~~~~MARKER~~~~`
+            // text in the right-pane preview. The recipient-signing pipeline
+            // re-renders against the live document instance at signing time;
+            // here we render against a synthetic SignatureTemplate so the
+            // unbound-marker fallback handles older templates too.
+            $previewHtml = $styles . $bodyHtml;
+            $previewSigTemplate = new \App\Models\Docuperfect\SignatureTemplate();
+            $previewSigTemplate->id = 0;
+            $previewSigTemplate->document_id = 0;
+            $previewSigTemplate->setRelation('template', $template);
+            $previewBlocks = $template->insertable_blocks ?? [];
+            $previewHtml = app(\App\Services\Docuperfect\InsertableBlockRenderer::class)
+                ->renderInDocument(
+                    $previewHtml,
+                    $previewSigTemplate,
+                    is_array($previewBlocks) ? $previewBlocks : [],
+                    \App\Services\Docuperfect\InsertableBlockRenderer::CONTEXT_AGENT_PREPARATION,
+                    null
+                );
+
+            // E-sign walk-fix FIX 1 — run the same recipient-loop engine
+            // that fires on the recipient signing surface so the wizard
+            // Step 5 preview shows N seller blocks for an N-seller session
+            // instead of ONE block with all sellers concatenated. We
+            // build a transient Collection of SignatureRequest models
+            // (in-memory only, not persisted — the wizard is still pre-
+            // dispatch) from the flow's step_data recipients so the
+            // expansion service has the same shape it sees at signing
+            // time.
+            if ($flow) {
+                $wizardRecipients = $this->buildTransientSignatureRequestsForPreview(
+                    $flow,
+                    $stepData['recipients']['recipients'] ?? [],
+                );
+                if ($wizardRecipients->isNotEmpty()) {
+                    $previewHtml = app(\App\Services\Docuperfect\RoleBlockExpansionService::class)
+                        ->expandWithLooping(
+                            $template,
+                            $previewHtml,
+                            $wizardRecipients,
+                        );
+                }
+            }
+
             return response()->json([
                 'render_type'   => 'web',
                 'blade_view'    => $template->blade_view,
-                'html'          => $styles . $bodyHtml,
+                'html'          => $previewHtml,
                 'page_count'    => $template->page_count,
                 'fields'        => $template->fields_json ?? [],
                 'wizard_config' => $template->wizard_config,
@@ -1352,8 +1463,12 @@ class ESignWizardController extends Controller
 
         // HARD BLOCK: Sale agreements cannot enter the e-sign pipeline (Alienation of Land Act)
         if ($template->isEsignBlocked()) {
+            $blockMsg = 'Sale agreements and OTPs must be signed with wet ink per the Alienation of Land Act. E-signing is not permitted for this document type.';
+            if ($request->expectsJson()) {
+                return response()->json(['ok' => false, 'error' => $blockMsg], 422);
+            }
             return redirect()->route('docuperfect.esign.step', [$flowId, 6])
-                ->with('error', 'Sale agreements and OTPs must be signed with wet ink per the Alienation of Land Act. E-signing is not permitted for this document type.');
+                ->with('error', $blockMsg);
         }
 
         // This endpoint is exclusively for e-sign delivery mode.
@@ -1457,8 +1572,75 @@ class ESignWizardController extends Controller
                 if (!$tpl || !$tpl->blade_view) continue;
 
                 $tplData = $webTemplateDataService->resolve($tplId, $stepData, $user);
+                $segIsSales = false;
                 if (!empty($tpl->signing_parties)) {
                     $tplData['signing_parties'] = $tpl->signing_parties;
+                    // Parity with the single-doc path (see ~line 1610): the
+                    // signature-block component maps owner_party→Seller/Lessor
+                    // off document_context. The pack loop never set it, so
+                    // EVERY pack template baked "Lessor" even for a sales
+                    // pack. Resolve per template (category/template_type
+                    // aware) so each segment of a mixed pack is correct.
+                    $propSrc = $stepData['property']['_property_source'] ?? null;
+                    $segIsSales = $tpl->isSalesDocument($propSrc);
+                    $tplData['document_context'] = $segIsSales ? 'sales' : 'rental';
+                }
+
+                // Full single-doc parity (mirrors ~1613-1631 & 1651). The
+                // signature-block partial keys data-marker-party off
+                // signing_parties/document_context, but it needs
+                // recipients_by_role + party_names to emit the right number
+                // of signer cells with names, and resolveSignatureNames() to
+                // resolve residual Blade tokens / signed-at inputs. Without
+                // these the pack segments rendered inconsistently with the
+                // standalone template (root of the missing-signable bug).
+                $segPartyNames = [];
+                foreach ($recipients as $r) {
+                    if (($r['role'] ?? '') === 'agent') continue;
+                    $segPartyNames[] = $r['name'] ?? '';
+                }
+                $segPartyNames[] = $user->name;
+                $tplData['party_names'] = $segPartyNames;
+
+                // §20 pack parity (mirror single-doc :1681-1700): key
+                // recipients_by_role by the CONCRETE role the signature
+                // component looks up (seller/buyer or landlord/tenant per
+                // THIS segment's sales context) — NOT the generic
+                // owner_party — so the per-recipient signature loop fires
+                // in the pack exactly as single-doc (two sellers => seller
+                // + seller_2). Raw-role keying made the lookup miss and
+                // collapse N sellers into one cell.
+                $segOwnerCanon = $segIsSales ? 'seller' : 'landlord';
+                $segAcqCanon   = $segIsSales ? 'buyer'  : 'tenant';
+                $segOwnerTerms = ['owner_party', 'owner', 'lessor', 'landlord', 'seller'];
+                $segAcqTerms   = ['acquiring_party', 'lessee', 'tenant', 'buyer', 'purchaser'];
+                $segAgentTerms = ['agent', 'property_practitioner'];
+                $segRecipientsByRole = [];
+                foreach ($recipients as $r) {
+                    $rb = strtolower(preg_replace('/_\d+$/', '', $r['role'] ?? ''));
+                    if (in_array($rb, $segOwnerTerms, true)) {
+                        $rk = $segOwnerCanon;
+                    } elseif (in_array($rb, $segAcqTerms, true)) {
+                        $rk = $segAcqCanon;
+                    } elseif (in_array($rb, $segAgentTerms, true)) {
+                        $rk = 'agent';
+                    } else {
+                        $rk = $rb !== '' ? $rb : 'other';
+                    }
+                    $segRecipientsByRole[$rk][] = $r;
+                }
+                $segRecipientsByRole['agent'] = [['name' => $user->name, 'role' => 'agent', 'email' => $user->email ?? '']];
+                $tplData['recipients_by_role'] = $segRecipientsByRole;
+
+                $segParties = [['role' => 'agent', 'name' => $user->name, 'display' => $user->name]];
+                foreach ($recipients as $r) {
+                    $resolvedRole = $r['role'] ?? '';
+                    if ($resolvedRole === 'owner_party') {
+                        $resolvedRole = $segIsSales ? 'seller' : 'landlord';
+                    } elseif ($resolvedRole === 'acquiring_party') {
+                        $resolvedRole = $segIsSales ? 'buyer' : 'tenant';
+                    }
+                    $segParties[] = ['role' => $resolvedRole, 'name' => $r['name'] ?? '', 'display' => $r['name'] ?? ''];
                 }
 
                 // Render the template and extract styles + body
@@ -1477,10 +1659,57 @@ class ESignWizardController extends Controller
                     ? '<div style="page-break-after:always;"></div>'
                     : '';
 
+                $bodyHtml = $this->resolveSignatureNames($bodyHtml, $tplData, $segParties);
                 $bodyHtml = $this->injectFieldValues($bodyHtml, $tplData);
+
+                // BL-2c: a pack template that yields no signable surface even
+                // after normalisation produces an unsignable document. Fail
+                // loud (surfaced via BL-2a/2b) rather than shipping a doc the
+                // signer can open but never complete. Normalising here also
+                // stores a guaranteed-signable fragment (idempotent — the
+                // signing engine re-normalises at read time anyway).
+                $bodyHtml = SignatureSurfaceNormalizer::normalize($bodyHtml);
+
+                // §20 pack parity (mirror single-doc :1763): run the
+                // SigningSurfaceResolver PER segment — re-key every marker
+                // to a canonical recipient key AND inject a signature
+                // surface for any recipient this segment's (possibly
+                // stale/hand-authored) blade omitted. Runs BEFORE the
+                // no-surface guard so an injected surface counts.
+                // normalizePackMarkerParties (after the loop) remains an
+                // idempotent whole-merge safety re-key.
+                $bodyHtml = app(\App\Services\Docuperfect\SigningSurfaceResolver::class)
+                    ->resolve($bodyHtml, $recipients, $user->name, $segIsSales);
+
+                if ($this->countSignableSurfaces($bodyHtml) === 0) {
+                    throw new \RuntimeException(
+                        "Pack template \"{$tpl->name}\" has no signable signature block "
+                        . "(no [data-marker-party][data-marker-type=\"signature\"] surface). "
+                        . "This document cannot be e-signed — fix the template before sending."
+                    );
+                }
+
                 $mergedHtml .= $styles . $bodyHtml . $pageBreak;
                 $packTemplateData[$tplId] = $tplData;
             }
+
+            // STEP 1 found the signature-block partial keys data-marker-party
+            // off each template's OWN signing_parties/document_context, not
+            // the recipients — so merged segments carry inconsistent owner/
+            // acquiring synonyms (lessor vs seller). The external scan only
+            // makes a surface interactive when its key resolves to the
+            // signer's role, so a lessor-keyed segment is skipped for a
+            // seller signer. Unify EVERY data-marker-party across the whole
+            // merged document to the canonical recipient role keys so every
+            // segment is signable by the actual recipients.
+            $mergedHtml = $this->normalizePackMarkerParties($mergedHtml, $recipients);
+
+            // §20 — stamp each segment's .corex-document-wrapper with an
+            // instance-stable docKey so the client keys disclosure rows
+            // intrinsically per document (disclosure_<docKey>_<n>). One
+            // unique token per wrapper => two of the same template in a
+            // pack get distinct, stable keys; never DOM-position-derived.
+            $mergedHtml = $this->stampDisclosureDocKeys($mergedHtml);
 
             $webTemplateData = [
                 'merged_html'        => $mergedHtml,
@@ -1534,12 +1763,35 @@ class ESignWizardController extends Controller
             $partyNames[] = $user->name;
             $viewData['party_names'] = $partyNames;
 
-            // Build recipients_by_role for signature-line component (inline sigs)
+            // Build recipients_by_role for the signature-line / signature-block
+            // component loop (inline + terminal sigs). The component looks up
+            // the CONCRETE role it derives from signing_parties+document_context
+            // (seller/buyer or landlord/tenant) — NOT the generic owner_party.
+            // Key by that concrete role FIRST so the EXISTING per-recipient
+            // loop fires: two sellers => recipients_by_role['seller'] has 2 =>
+            // loop emits seller + seller_2 (keyed identically to
+            // signature_requests.party_role). Without this the lookup misses
+            // and the loop collapses N sellers into one cell. Sales vs rental
+            // follows the SAME classifier that sets document_context above.
+            $isSalesForKeying = $template->isSalesDocument($propSource);
+            $ownerCanon = $isSalesForKeying ? 'seller' : 'landlord';
+            $acqCanon   = $isSalesForKeying ? 'buyer'  : 'tenant';
+            $ownerTerms = ['owner_party', 'owner', 'lessor', 'landlord', 'seller'];
+            $acqTerms   = ['acquiring_party', 'lessee', 'tenant', 'buyer', 'purchaser'];
+            $agentTerms = ['agent', 'property_practitioner'];
             $recipientsByRole = [];
             foreach ($recipients as $r) {
-                $role = $r['role'] ?? '';
-                $baseRole = preg_replace('/_\d+$/', '', $role);
-                $recipientsByRole[$baseRole][] = $r;
+                $base = strtolower(preg_replace('/_\d+$/', '', $r['role'] ?? ''));
+                if (in_array($base, $ownerTerms, true)) {
+                    $key = $ownerCanon;
+                } elseif (in_array($base, $acqTerms, true)) {
+                    $key = $acqCanon;
+                } elseif (in_array($base, $agentTerms, true)) {
+                    $key = 'agent';
+                } else {
+                    $key = $base !== '' ? $base : 'other';
+                }
+                $recipientsByRole[$key][] = $r;
             }
             // Always include agent from authenticated user — recipients step doesn't have an agent entry
             $recipientsByRole['agent'] = [['name' => $user->name, 'role' => 'agent', 'email' => $user->email ?? '']];
@@ -1592,6 +1844,25 @@ class ESignWizardController extends Controller
                 // appear in the document body, not after signatures.
                 $bodyHtml = $this->insertBeforeSignatureSection($bodyHtml, $clauseHtml);
             }
+
+            // §20 — single signing-surface resolver (APPROVED). The single-doc
+            // path renders the on-disk CDS blade, which is hand-authored and
+            // can be stale relative to the persisted field config (#119: blade
+            // SIG 1 is agent-only though field_mappings holds [Agent,Buyer,
+            // Seller]). Re-keys every marker to a canonical recipient key AND
+            // injects a signature surface for any recipient the stale blade
+            // omitted — recipient-driven, so non-recipient ticks are inert.
+            // Standalone generalisation of normalizePackMarkerParties (pack-
+            // only + re-key only). The pack path is intentionally left on its
+            // existing normaliser for now (retired in a follow-up).
+            $bodyHtml = app(\App\Services\Docuperfect\SigningSurfaceResolver::class)
+                ->resolve($bodyHtml, $recipients, $user->name, $isSalesContext);
+
+            // §20 — stamp the document's .corex-document-wrapper with an
+            // instance-stable docKey (same scheme as the pack path) so a
+            // single doc keys disclosure rows identically to when it is a
+            // pack segment — full position-independence.
+            $bodyHtml = $this->stampDisclosureDocKeys($bodyHtml);
 
             // Store as merged_html so SignatureController uses it directly
             $webTemplateData['merged_html'] = $styles . $bodyHtml;
@@ -1679,27 +1950,30 @@ class ESignWizardController extends Controller
                 if (empty($orderedRecipients)) $orderedRecipients = $recipients;
             }
 
-            // Per V2 spec: each person is a SEPARATE signer in the chain.
-            // Two sellers = two separate parties with unique keys (seller, seller_2).
+            // Recipient Loop Engine B1 — each person is a SEPARATE signer in
+            // the chain. Two sellers = two parties. party_role stays clean
+            // (just 'seller'); role_index distinguishes 1 vs 2. The legacy
+            // suffixed party_key shape ('seller_2') is kept on $recipientPartyKeys
+            // for downstream callers that still expect it — but SignatureService
+            // splits the suffix on insert so the persisted column is always clean.
             $roleCounts = [];
             $recipientPartyKeys = [];
             foreach ($orderedRecipients as $i => $r) {
                 $baseRole = $roleAliases[$r['role'] ?? 'other'] ?? ($r['role'] ?? 'other');
                 if ($baseRole === 'agent') continue;
 
-                // Generate unique party key: seller, seller_2, seller_3, etc.
-                if (!isset($roleCounts[$baseRole])) {
-                    $roleCounts[$baseRole] = 1;
-                    $partyKey = $baseRole;
-                } else {
-                    $roleCounts[$baseRole]++;
-                    $partyKey = $baseRole . '_' . $roleCounts[$baseRole];
-                }
+                $roleCounts[$baseRole] = ($roleCounts[$baseRole] ?? 0) + 1;
+                $roleIndex = $roleCounts[$baseRole];
+                // Legacy suffixed key — kept so 8 callers downstream still get
+                // a unique party_key string. SignatureService::createSigningRequest
+                // splits the suffix back into (party_role, role_index) at insert.
+                $partyKey = $roleIndex === 1 ? $baseRole : $baseRole . '_' . $roleIndex;
 
                 $recipientPartyKeys[$i] = $partyKey;
                 $parties[] = [
                     'role'       => $partyKey,
                     'role_label' => $baseRole,
+                    'role_index' => $roleIndex,  // B1 — explicit index for downstream consumers
                     'name'       => $r['name'] ?? '',
                     'email'      => $r['email'] ?? '',
                     'id_number'  => $r['id_number'] ?? '',
@@ -1754,6 +2028,19 @@ class ESignWizardController extends Controller
                 'sections_json'       => $template->sections,
                 'other_conditions_text' => trim($stepData['fill_review']['other_conditions_text'] ?? '') ?: null,
             ]);
+
+            // Phase 1B.5 — bridge the legacy textarea content into structured
+            // document_conditions rows so the recipient-signing surface (which
+            // reads from those rows, not other_conditions_text) renders them.
+            try {
+                app(\App\Services\Docuperfect\LegacyOtherConditionsBridge::class)
+                    ->syncToStructuredRows($sigTemplate);
+            } catch (\Throwable $e) {
+                \Log::warning('LegacyOtherConditionsBridge sync failed (non-fatal)', [
+                    'sig_template_id' => $sigTemplate->id,
+                    'error'           => $e->getMessage(),
+                ]);
+            }
 
             // 3. Create SignatureRequests — agent first (signing_order=1), then supervisor (if candidate), then recipients
             $signatureService->createSigningRequest(
@@ -1812,17 +2099,55 @@ class ESignWizardController extends Controller
                             ->orderByDesc('id')
                             ->first();
                         if ($existingDraft) {
+                            // Reused FICA submissions (seeder/wet-ink/legacy)
+                            // may carry a NULL token AND a foreign
+                            // requested_by / NULL agency_id — which keeps the
+                            // completed FICA OUT of this agent's compliance
+                            // pipeline (non-CO index filters requested_by;
+                            // AgencyScope is strict on NULL agency_id).
+                            // Backfill the token AND reassign ownership/scope
+                            // to the e-sign agent (parity with
+                            // FicaController::store) so the submitted FICA
+                            // lands in this agent's "Awaiting Agent Review".
+                            if (empty($existingDraft->token)) {
+                                $existingDraft->token = Str::random(64);
+                                $existingDraft->token_expires_at = now()->addDays(14);
+                            }
+                            $existingDraft->requested_by = $user->id;
+                            if (empty($existingDraft->agency_id)) {
+                                $existingDraft->agency_id = $user->effectiveAgencyId()
+                                    ?? Contact::find($contactId)?->agency_id;
+                            }
+                            if (empty($existingDraft->branch_id)) {
+                                $existingDraft->branch_id = $user->effectiveBranchId();
+                            }
+                            $existingDraft->save();
                             $ficaSubId = $existingDraft->id;
                         } else {
-                            $ficaSub = FicaSubmission::create([
-                                'contact_id'       => $contactId,
-                                'agency_id'        => $user->effectiveAgencyId(),
-                                'requested_by'     => $user->id,
-                                'token'            => Str::random(64),
-                                'token_expires_at' => now()->addDays(14),
-                                'status'           => 'draft',
-                            ]);
-                            $ficaSubId = $ficaSub->id;
+                            // Parity with FicaController::store:135-139 —
+                            // resolve agency from the agent, fall back to the
+                            // contact's agency, and NEVER create a
+                            // scope-orphaned (NULL agency_id) submission the
+                            // pipeline query can't see: log loudly and skip.
+                            $ficaAgencyId = $user->effectiveAgencyId()
+                                ?? Contact::find($contactId)?->agency_id;
+                            if (! $ficaAgencyId) {
+                                \Illuminate\Support\Facades\Log::warning(
+                                    'E-sign FICA not created — unresolved agency_id (scope-orphan prevented)',
+                                    ['contact_id' => $contactId, 'user_id' => $user->id]
+                                );
+                            } else {
+                                $ficaSub = FicaSubmission::create([
+                                    'contact_id'       => $contactId,
+                                    'agency_id'        => $ficaAgencyId,
+                                    'branch_id'        => $user->effectiveBranchId(),
+                                    'requested_by'     => $user->id,
+                                    'token'            => Str::random(64),
+                                    'token_expires_at' => now()->addDays(14),
+                                    'status'           => 'draft',
+                                ]);
+                                $ficaSubId = $ficaSub->id;
+                            }
                         }
                     }
                 }
@@ -1938,7 +2263,14 @@ class ESignWizardController extends Controller
 
         // All template types go to setup first — agent reviews markers and can add ad-hoc ones.
         // Web templates show embedded signature elements; PDF templates show overlay markers.
-        return redirect()->route('docuperfect.signatures.setup', ['document' => $result->id]);
+        $setupUrl = route('docuperfect.signatures.setup', ['document' => $result->id]);
+        // The wizard JS submits via fetch (Accept: application/json) so it can
+        // surface failure in the UI instead of a blind native navigation
+        // (audit BL-2b). Direct browser hits still get the redirect.
+        if ($request->expectsJson()) {
+            return response()->json(['ok' => true, 'redirect' => $setupUrl]);
+        }
+        return redirect()->to($setupUrl);
 
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('PREPARE_SIGNING_FAILED', [
@@ -1948,8 +2280,12 @@ class ESignWizardController extends Controller
                 'trace' => $e->getTraceAsString(),
             ]);
 
+            $message = 'Failed to prepare signing: ' . $e->getMessage();
+            if ($request->expectsJson()) {
+                return response()->json(['ok' => false, 'error' => $message], 422);
+            }
             return redirect()->route('docuperfect.esign.create')
-                ->withErrors(['error' => 'Failed to prepare signing: ' . $e->getMessage()]);
+                ->withErrors(['error' => $message]);
         }
     }
 
@@ -2137,6 +2473,142 @@ class ESignWizardController extends Controller
         }
 
         return array_unique($allowed);
+    }
+
+    /**
+     * Count signable surfaces in rendered HTML using the exact selector the
+     * signing engine uses ([data-marker-party][data-marker-type="signature"]
+     * — sign.blade.php / external/sign.blade.php / embedSignaturesIntoHtml).
+     * Used by the BL-2c pack guard. Fail-open (parse error => 0).
+     */
+    private function countSignableSurfaces(string $html): int
+    {
+        if (trim($html) === '') return 0;
+        try {
+            $dom = new \DOMDocument();
+            @$dom->loadHTML(
+                '<?xml encoding="utf-8"?>' . $html,
+                LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NOERROR
+            );
+            $xpath = new \DOMXPath($dom);
+            return $xpath->query('//*[@data-marker-party][@data-marker-type="signature"]')->length;
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Pack signing-role fix. The signature-block partial keys
+     * data-marker-party off each template's own signing_parties +
+     * document_context (Step 1 finding), NOT the recipients. In a merged
+     * pack, segments therefore carry inconsistent owner/acquiring
+     * synonyms (e.g. lessor vs seller). The external signing scan only
+     * makes a surface interactive when its key resolves to the signer's
+     * role, so a lessor-keyed segment is silently skipped for a seller
+     * signer. Normalise EVERY data-marker-party across the whole merged
+     * document to the canonical recipient role keys — family-collapsed,
+     * numeric suffix preserved (seller_2 etc.) — so every segment is
+     * signable by the actual recipients. Fail-open (any error => original).
+     */
+    private function normalizePackMarkerParties(string $mergedHtml, array $recipients): string
+    {
+        if (trim($mergedHtml) === '') {
+            return $mergedHtml;
+        }
+
+        $ownerTerms     = ['owner_party', 'owner', 'lessor', 'landlord', 'seller'];
+        $acquiringTerms = ['acquiring_party', 'lessee', 'tenant', 'buyer', 'purchaser'];
+        $agentTerms     = ['agent', 'property_practitioner'];
+
+        // Canonical owner/acquiring keys from the pack's actual recipients
+        // (mirrors the single-doc owner_party→seller/landlord resolution).
+        $roles = array_map(
+            fn ($r) => strtolower(preg_replace('/_\d+$/', '', $r['role'] ?? '')),
+            $recipients
+        );
+        $isRental = (bool) array_intersect($roles, ['landlord', 'lessor', 'tenant', 'lessee'])
+                 && ! array_intersect($roles, ['seller', 'buyer']);
+        $ownerCanon = $isRental ? 'landlord' : 'seller';
+        $acqCanon   = $isRental ? 'tenant'   : 'buyer';
+
+        try {
+            $dom = new \DOMDocument();
+            @$dom->loadHTML(
+                '<?xml encoding="utf-8"?>' . $mergedHtml,
+                LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NOERROR
+            );
+            $xpath = new \DOMXPath($dom);
+            $changed = false;
+
+            foreach ($xpath->query('//*[@data-marker-party]') as $node) {
+                /** @var \DOMElement $node */
+                $raw = $node->getAttribute('data-marker-party');
+                if ($raw === '') {
+                    continue;
+                }
+                $suffix = preg_match('/_(\d+)$/', $raw, $mm) ? '_' . $mm[1] : '';
+                $base = strtolower(preg_replace('/_\d+$/', '', $raw));
+
+                if (in_array($base, $ownerTerms, true)) {
+                    $new = $ownerCanon . $suffix;
+                } elseif (in_array($base, $acquiringTerms, true)) {
+                    $new = $acqCanon . $suffix;
+                } elseif (in_array($base, $agentTerms, true)) {
+                    $new = 'agent';
+                } else {
+                    continue; // unknown role — leave untouched
+                }
+
+                if ($new !== $raw) {
+                    $node->setAttribute('data-marker-party', $new);
+                    $changed = true;
+                }
+            }
+
+            if (! $changed) {
+                return $mergedHtml;
+            }
+
+            $result = $dom->saveHTML();
+            return trim(preg_replace('/^<\?xml encoding="utf-8"\?>/', '', $result));
+        } catch (\Throwable $e) {
+            \Log::warning('PACK_MARKER_PARTY_NORMALIZE_FAILED', ['error' => $e->getMessage()]);
+            return $mergedHtml;
+        }
+    }
+
+    /**
+     * §20 — stamp every .corex-document-wrapper with a unique,
+     * instance-stable data-disclosure-doc token (alnum, no underscores)
+     * so the signing client derives disclosure keys intrinsically per
+     * document (disclosure_<docKey>_<n>) — never from DOM position,
+     * wrapper order, or a cross-document cursor. Frozen into the persisted
+     * merged_html, so the token is immutable for that document instance;
+     * two of the same template in a pack get distinct, stable tokens.
+     * Idempotent (a wrapper already stamped is left unchanged). Fail-open.
+     */
+    private function stampDisclosureDocKeys(string $html): string
+    {
+        if (trim($html) === '') {
+            return $html;
+        }
+        try {
+            $out = preg_replace_callback(
+                '/<div\b[^>]*\bclass\s*=\s*"[^"]*\bcorex-document-wrapper\b[^"]*"[^>]*>/i',
+                function ($m) {
+                    if (stripos($m[0], 'data-disclosure-doc') !== false) {
+                        return $m[0];
+                    }
+                    $key = \Illuminate\Support\Str::random(10);
+                    return preg_replace('/^<div\b/i', '<div data-disclosure-doc="' . $key . '"', $m[0], 1);
+                },
+                $html
+            );
+            return $out ?? $html;
+        } catch (\Throwable $e) {
+            \Log::warning('STAMP_DISCLOSURE_DOCKEY_FAILED', ['error' => $e->getMessage()]);
+            return $html;
+        }
     }
 
     private function autoFillFields(array $fields, array $stepData): array
@@ -2356,10 +2828,19 @@ class ESignWizardController extends Controller
                 $contacts = $contactsByRole[$contactType] ?? [];
                 if (empty($contacts)) return null;
 
-                // Use first contact only — indexed fields (seller_1_phone etc.)
-                // are resolved separately via WebTemplateDataService
-                $contact = $contacts[0] ?? [];
-                return $this->resolveContactValue($sourceColumn, $contact);
+                // Bug 1: concatenate this column across ALL contacts of the
+                // role (e.g. two sellers' IDs → "3112 and 6789"), the same
+                // ' and ' join field groups use, so plain contact fields
+                // (ID, address, email, phone) stay consistent with the
+                // field-grouped name field. One contact → single value.
+                $parts = [];
+                foreach ($contacts as $c) {
+                    $v = trim((string) $this->resolveContactValue($sourceColumn, $c));
+                    if ($v !== '') {
+                        $parts[] = $v;
+                    }
+                }
+                return implode(' and ', $parts);
 
             case 'agent':
                 if ($sourceColumn === 'name') return $agent->name ?? '';
@@ -3058,10 +3539,22 @@ class ESignWizardController extends Controller
             if (($m['mappingType'] ?? '') === 'manual') {
                 $source = 'manual';
             }
-            $editableBy = $m['filled_by'] ?? $m['editable_by'] ?? 'agent';
-            if (is_array($editableBy)) {
-                $editableBy = $editableBy[0] ?? 'agent';
+            // Fix A — preserve full editable_by array.
+            // Pre-fix this method collapsed the array to its first element so
+            // Step 5 only ever rendered ONE chip per field. The full array is
+            // now preserved as $editableByArray and emitted on the entry as
+            // `editableBy` (the new field the Step 5 chip render iterates).
+            // `assignedTo` keeps the legacy single-value contract (first
+            // element) so the existing 8+ JS call sites in wizard.blade.php
+            // and the field-party SELECT continue to work unchanged.
+            $rawEditableBy = $m['filled_by'] ?? $m['editable_by'] ?? 'agent';
+            $editableByArray = is_array($rawEditableBy)
+                ? array_values(array_filter($rawEditableBy, fn ($v) => is_string($v) && $v !== ''))
+                : (is_string($rawEditableBy) && $rawEditableBy !== '' ? [$rawEditableBy] : []);
+            if (empty($editableByArray)) {
+                $editableByArray = ['agent'];
             }
+            $editableBy = $editableByArray[0];
 
             // Label: derive from named field if this is a group member with no override
             $label = $m['label'] ?? $m['manualLabel'] ?? '';
@@ -3083,7 +3576,8 @@ class ESignWizardController extends Controller
                 'named_field_id'  => $namedFieldId,
                 'type'            => $m['type'] ?? 'placeholder',
                 'tag_type'        => $m['type'] ?? 'input',
-                'assignedTo'      => $editableBy,
+                'assignedTo'      => $editableBy,        // legacy single-value (first of editableBy)
+                'editableBy'      => $editableByArray,   // Fix A — full editable_by array for multi-chip render
                 'source'          => $source,
                 'mapping_type'    => $m['mappingType'] ?? $m['mapping_type'] ?? '',
             ];
@@ -3102,6 +3596,197 @@ class ESignWizardController extends Controller
      *
      * Fully systemic — works for any role (seller, buyer, landlord, tenant, lessor, lessee).
      */
+    /**
+     * E-sign walk-fix FIX 1 + FIX 2 — expand role-bound fields per recipient.
+     *
+     * For each wizard field whose `editableBy` array names a role with
+     * N>1 recipients in this signing session, emit N copies of the field
+     * with unique ids (`{field_id}__r{n}`), instance-index metadata, and
+     * a per-instance value resolved from THAT specific recipient's
+     * contact (not the " and "-joined concatenation produced by the
+     * legacy `autoFillFields` path).
+     *
+     * Each expanded copy carries:
+     *   _instance_index       1-based ordinal within the role
+     *   _total_instances      N (so the chip can render "Seller 2" vs "Seller")
+     *   _recipient_role       wizard role token (seller, buyer, lessor, etc.)
+     *   _recipient_name       signer name for the chip label
+     *   _recipient_index      array index into the role's recipient list
+     *   instance_label        pre-computed display label (e.g. "Seller 2: Steve Jobs")
+     *
+     * Single-recipient roles + creator/agent fields pass through
+     * untouched — single field, single chip, single value, no
+     * suffix on the id.
+     */
+    private function expandWizardFieldsPerRecipient(array $allWizardFields, array $stepData): array
+    {
+        $recipients = $stepData['recipients']['recipients'] ?? [];
+        if (empty($recipients) || empty($allWizardFields)) {
+            return $allWizardFields;
+        }
+
+        // Bucket recipients by canonical role-token for fast lookup. Wizard
+        // emits 'seller' / 'buyer' / 'lessor' / 'tenant' etc.; the
+        // canonical-to-wizard alias chain mirrors the same map used by
+        // RoleBlockExpansionService::CANONICAL_FOR_VIEWER on the
+        // recipient-signing side.
+        $byRole = [];
+        foreach ($recipients as $r) {
+            $role = strtolower(trim((string) ($r['role'] ?? '')));
+            if ($role === '') continue;
+            $byRole[$role] ??= [];
+            $byRole[$role][] = $r;
+        }
+        if (empty($byRole)) {
+            return $allWizardFields;
+        }
+
+        // Batch-load named-field source columns once so the per-instance
+        // value resolution below doesn't hit the DB N times per field.
+        $namedFieldIds = collect($allWizardFields)
+            ->pluck('named_field_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+        $namedFieldMap = [];
+        if (!empty($namedFieldIds)) {
+            $rows = DB::table('docuperfect_named_fields')
+                ->whereIn('id', $namedFieldIds)
+                ->get(['id', 'source_type', 'source_column']);
+            foreach ($rows as $row) {
+                $namedFieldMap[$row->id] = $row;
+            }
+        }
+
+        $expanded = [];
+        foreach ($allWizardFields as $field) {
+            $editableBy = $field['editableBy'] ?? null;
+            if (!is_array($editableBy) || empty($editableBy)) {
+                $expanded[] = $field;
+                continue;
+            }
+
+            // Pick the primary recipient-bearing role from editableBy.
+            // Skip 'agent' — agent fields are single, never per-instance.
+            $primaryRole = null;
+            $recipientList = [];
+            foreach ($editableBy as $token) {
+                $token = strtolower((string) $token);
+                if ($token === 'agent' || $token === 'creator') continue;
+                $wizardRoles = $this->canonicalToWizardRoleAliases($token);
+                foreach ($wizardRoles as $wRole) {
+                    if (!empty($byRole[$wRole])) {
+                        $primaryRole = $wRole;
+                        $recipientList = $byRole[$wRole];
+                        break 2;
+                    }
+                }
+            }
+
+            if ($primaryRole === null || count($recipientList) <= 1) {
+                $expanded[] = $field;
+                continue;
+            }
+
+            $n = count($recipientList);
+            foreach ($recipientList as $idx => $recipient) {
+                $instance = $idx + 1;
+                $copy = $field;
+                $copy['id'] = ($field['id'] ?? 'field') . '__r' . $instance;
+                $copy['_original_id'] = $field['id'] ?? null;
+                $copy['_instance_index'] = $instance;
+                $copy['_total_instances'] = $n;
+                $copy['_recipient_role'] = $primaryRole;
+                $copy['_recipient_name'] = (string) ($recipient['name'] ?? '');
+                $copy['_recipient_index'] = $idx;
+                $copy['instance_label']   = $this->formatInstanceLabel($primaryRole, $instance, $n, $recipient);
+
+                // Resolve a per-instance value rather than the
+                // concatenated form autoFillFields produced. Use the
+                // batch-loaded namedFieldMap to avoid N+1 DB hits.
+                $sourceColumn = $field['source_column'] ?? null;
+                if (!$sourceColumn) {
+                    $namedFieldId = $field['named_field_id'] ?? null;
+                    if ($namedFieldId && isset($namedFieldMap[$namedFieldId])) {
+                        $nf = $namedFieldMap[$namedFieldId];
+                        if ($nf->source_type === 'contact') {
+                            $sourceColumn = $nf->source_column;
+                        }
+                    }
+                }
+                if ($sourceColumn) {
+                    $perInstanceValue = $this->resolveContactValue($sourceColumn, $recipient);
+                    $copy['value'] = is_scalar($perInstanceValue) ? (string) $perInstanceValue : '';
+                }
+
+                $expanded[] = $copy;
+            }
+        }
+        return $expanded;
+    }
+
+    /**
+     * Build a transient `Collection<SignatureRequest>` from the flow's
+     * step_data recipients so the wizard preview can run through
+     * RoleBlockExpansionService without persisting anything. The
+     * SignatureRequest instances are NOT saved — they exist in memory
+     * only so the expansion service has the same shape it sees at
+     * signing time (party_role + role_index + contact_id + signer_name).
+     *
+     * @param  list<array<string, mixed>> $recipients
+     * @return \Illuminate\Support\Collection<int, \App\Models\Docuperfect\SignatureRequest>
+     */
+    private function buildTransientSignatureRequestsForPreview(\App\Models\Docuperfect\Flow $flow, array $recipients): \Illuminate\Support\Collection
+    {
+        $out = collect();
+        $counts = [];
+        foreach ($recipients as $r) {
+            $role = strtolower(trim((string) ($r['role'] ?? '')));
+            if ($role === '') continue;
+            $counts[$role] = ($counts[$role] ?? 0) + 1;
+            $req = new \App\Models\Docuperfect\SignatureRequest();
+            $req->party_role  = $role;
+            $req->role_index  = $counts[$role];
+            $req->signer_name = (string) ($r['name'] ?? '');
+            $req->signer_email = (string) ($r['email'] ?? '');
+            $req->contact_id  = $r['_contact_id'] ?? null;
+            $out->push($req);
+        }
+        return $out;
+    }
+
+    /**
+     * Map a canonical role token (owner_party / acquiring_party / agent)
+     * back to the wizard-side aliases that may carry recipients.
+     *
+     * @return list<string>
+     */
+    private function canonicalToWizardRoleAliases(string $token): array
+    {
+        return match (strtolower($token)) {
+            'owner_party'      => ['seller', 'lessor', 'landlord', 'owner_party'],
+            'acquiring_party'  => ['buyer', 'lessee', 'tenant', 'acquiring_party'],
+            'seller', 'lessor', 'landlord' => [$token],
+            'buyer', 'lessee', 'tenant'    => [$token],
+            'agent'            => ['agent'],
+            'witness'          => ['witness'],
+            default            => [$token],
+        };
+    }
+
+    /**
+     * Build the display label for an expanded field instance — used as
+     * the Step 5 chip / heading: "Seller 2: Steve Jobs", "Lessor 1: Liam".
+     */
+    private function formatInstanceLabel(string $role, int $instance, int $total, array $recipient): string
+    {
+        $base = ucfirst(str_replace('_', ' ', $role));
+        $heading = $total > 1 ? "{$base} {$instance}" : $base;
+        $name = trim((string) ($recipient['name'] ?? ''));
+        return $name === '' ? $heading : "{$heading}: {$name}";
+    }
+
     private function autoFillFieldGroupDisplays(array $allWizardFields, array $stepData): array
     {
         // Build recipients lookup by role (supports multiple contacts per role)
@@ -3256,212 +3941,6 @@ class ESignWizardController extends Controller
     private function fieldsAreSkeletal(array $fields): bool
     {
         return !empty($fields) && empty($fields[0]['id'] ?? null) && empty($fields[0]['field_name'] ?? null);
-    }
-
-    // ──────────────────────────────────────────────
-    // Pack Chaining (Multi-Document Flow)
-    // ──────────────────────────────────────────────
-
-    /**
-     * Initialize a chained pack flow: creates Flow records for each template in the pack.
-     * Called when user selects a pack and starts the wizard.
-     */
-    public function initPackChain(Request $request)
-    {
-        $user = $request->user();
-        $packId = $request->input('pack_id');
-        $packType = $request->input('pack_type', 'web'); // 'web' or 'pdf'
-        $ficaPerParty = $request->boolean('fica_per_party');
-
-        // Load templates from pack
-        if ($packType === 'web') {
-            $pack = \App\Models\Docuperfect\WebPack::with('items.template')->findOrFail($packId);
-            $templates = $pack->items->sortBy('sort_order')
-                ->map(fn($item) => $item->template)
-                ->filter()
-                ->values();
-        } else {
-            $pack = \App\Models\Docuperfect\Pack::with('templates')->findOrFail($packId);
-            $templates = $pack->templates
-                ->filter(fn($t) => $t->is_esign)
-                ->values();
-        }
-
-        if ($templates->isEmpty()) {
-            return response()->json(['error' => 'Pack has no eligible templates.'], 422);
-        }
-
-        // Create the parent flow (first template in the pack)
-        $parentFlow = Flow::create([
-            'type' => 'esign',
-            'template_id' => $templates[0]->id,
-            'user_id' => $user->id,
-            'current_step' => 2,
-            'step_data' => [
-                'template' => ['template_id' => $templates[0]->id],
-                'fields' => $templates[0]->fields_json ?? [],
-                'pack_chain' => true,
-                'pack_chain_templates' => $templates->map(fn($t) => [
-                    'id' => $t->id,
-                    'name' => $t->name,
-                    'party_mode' => $t->party_mode ?? null,
-                ])->toArray(),
-            ],
-            'status' => 'active',
-            'pack_id' => $packId,
-            'pack_type' => $packType,
-            'flow_sequence' => 0,
-            'parent_flow_id' => null,
-            'pack_status' => 'in_progress',
-        ]);
-
-        // Create child flows for remaining templates
-        foreach ($templates->slice(1) as $idx => $tpl) {
-            Flow::create([
-                'type' => 'esign',
-                'template_id' => $tpl->id,
-                'user_id' => $user->id,
-                'current_step' => 5, // Start at Fill & Review (skip property/contact/details)
-                'step_data' => [
-                    'template' => ['template_id' => $tpl->id],
-                    'fields' => $tpl->fields_json ?? [],
-                    'pack_chain' => true,
-                    'carry_forward_from' => $parentFlow->id,
-                ],
-                'status' => 'draft', // Inactive until parent flow reaches this doc
-                'pack_id' => $packId,
-                'pack_type' => $packType,
-                'flow_sequence' => $idx + 1,
-                'parent_flow_id' => $parentFlow->id,
-                'pack_status' => null,
-            ]);
-        }
-
-        return response()->json([
-            'ok' => true,
-            'flow_id' => $parentFlow->id,
-            'template_count' => $templates->count(),
-            'redirect' => route('docuperfect.esign.create') . '?flow_id=' . $parentFlow->id,
-        ]);
-    }
-
-    /**
-     * Advance to the next document in a pack chain after the current one is signed.
-     * Called after agent completes signing on a pack doc.
-     */
-    public function nextPackDocument(Request $request, $flowId)
-    {
-        $user = $request->user();
-        $currentFlow = Flow::where('user_id', $user->id)->findOrFail($flowId);
-
-        if (!$currentFlow->isPackFlow()) {
-            return response()->json(['error' => 'Not a pack flow.'], 422);
-        }
-
-        // Mark current flow as completed
-        $currentFlow->update([
-            'status' => 'completed',
-            'completed_at' => now(),
-        ]);
-
-        // Find the next flow in the pack chain
-        $nextFlow = $currentFlow->nextPackFlow();
-
-        if (!$nextFlow) {
-            // All docs in the pack are done
-            // Update parent flow pack_status
-            $parentId = $currentFlow->parent_flow_id ?? $currentFlow->id;
-            Flow::where('id', $parentId)->update(['pack_status' => 'completed']);
-
-            return response()->json([
-                'ok' => true,
-                'pack_complete' => true,
-                'message' => 'All documents in the pack have been signed.',
-            ]);
-        }
-
-        // Carry forward shared data from the parent flow
-        $sharedData = $currentFlow->getSharedPackData();
-        $nextStepData = $nextFlow->step_data ?? [];
-
-        // Merge carry-forward data into the next flow's step_data
-        $nextStepData['property'] = $sharedData['property'] ?? $nextStepData['property'] ?? [];
-        $nextStepData['recipients'] = $sharedData['recipients'] ?? $nextStepData['recipients'] ?? [];
-        $nextStepData['details'] = $sharedData['details'] ?? $nextStepData['details'] ?? [];
-        $nextStepData['rental_details'] = $sharedData['rental_details'] ?? $nextStepData['rental_details'] ?? [];
-        $nextStepData['carried_forward'] = true;
-
-        $nextFlow->update([
-            'status' => 'active',
-            'step_data' => $nextStepData,
-            'current_step' => 5, // Fill & Review (property/contacts/details pre-filled)
-            'property_id' => $currentFlow->property_id,
-        ]);
-
-        $nextTemplate = $nextFlow->template;
-
-        return response()->json([
-            'ok' => true,
-            'pack_complete' => false,
-            'next_flow_id' => $nextFlow->id,
-            'next_template_name' => $nextTemplate->name ?? 'Next Document',
-            'next_sequence' => $nextFlow->flow_sequence + 1,
-            'total_in_pack' => Flow::where('pack_id', $currentFlow->pack_id)
-                ->where('pack_type', $currentFlow->pack_type)
-                ->count(),
-            'redirect' => route('docuperfect.esign.create') . '?flow_id=' . $nextFlow->id,
-        ]);
-    }
-
-    /**
-     * Get pack chain status (how many docs done, what's next).
-     */
-    public function packStatus(Request $request, $flowId)
-    {
-        $user = $request->user();
-        $flow = Flow::where('user_id', $user->id)->findOrFail($flowId);
-
-        if (!$flow->isPackFlow()) {
-            return response()->json(['is_pack' => false]);
-        }
-
-        $parentId = $flow->parent_flow_id ?? $flow->id;
-        $allFlows = Flow::where(function ($q) use ($parentId, $flow) {
-            $q->where('id', $parentId)
-              ->orWhere('parent_flow_id', $parentId);
-        })
-            ->where('pack_id', $flow->pack_id)
-            ->orderBy('flow_sequence')
-            ->with('template')
-            ->get();
-
-        $docs = $allFlows->map(function ($f) {
-            return [
-                'flow_id' => $f->id,
-                'template_id' => $f->template_id,
-                'template_name' => $f->template->name ?? 'Unknown',
-                'sequence' => $f->flow_sequence,
-                'status' => $f->status,
-                'completed' => $f->status === 'completed',
-            ];
-        });
-
-        $completedCount = $docs->where('completed', true)->count();
-        $nextFlow = $allFlows->firstWhere('status', 'active');
-        if (!$nextFlow) {
-            $nextFlow = $allFlows->firstWhere('status', 'draft');
-        }
-
-        return response()->json([
-            'is_pack' => true,
-            'total' => $docs->count(),
-            'completed' => $completedCount,
-            'documents' => $docs,
-            'current_flow_id' => $flow->id,
-            'next_flow_id' => $nextFlow?->id,
-            'next_template_name' => $nextFlow?->template?->name,
-            'pack_complete' => $completedCount === $docs->count(),
-        ]);
     }
 
     /**
@@ -3951,6 +4430,17 @@ class ESignWizardController extends Controller
                 'sections_json'       => $template->sections,
                 'other_conditions_text' => trim($stepData['fill_review']['other_conditions_text'] ?? '') ?: null,
             ]);
+
+            // Phase 1B.5 — bridge to structured document_conditions rows
+            try {
+                app(\App\Services\Docuperfect\LegacyOtherConditionsBridge::class)
+                    ->syncToStructuredRows($sigTemplate);
+            } catch (\Throwable $e) {
+                \Log::warning('LegacyOtherConditionsBridge sync failed (wet-ink path)', [
+                    'sig_template_id' => $sigTemplate->id,
+                    'error'           => $e->getMessage(),
+                ]);
+            }
 
             // 3. Create SignatureRequests with signing_method = 'wet_ink'
             $agentReq = $signatureService->createSigningRequest(

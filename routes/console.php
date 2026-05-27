@@ -50,6 +50,15 @@ Schedule::command('sales-documents:send-reminders')->dailyAt('09:00');
 // Marketing insights sync — runs daily at 04:00
 Schedule::job(new \App\Jobs\SyncMarketingInsightsJob())->dailyAt('04:00');
 
+// Phase 8 — daily outcome-capture nudges (>30d old presentations with no outcome).
+Schedule::job(new \App\Jobs\PromptOutcomeCaptureJob())->dailyAt('08:30')->withoutOverlapping();
+// Phase 8 — daily auto-lock for outcomes recorded >90d ago.
+Schedule::job(new \App\Jobs\LockOldOutcomesJob())->dailyAt('02:45')->withoutOverlapping();
+// Phase 9a — POPIA 90-day retention for presentation_snapshot_views.
+Schedule::job(new \App\Jobs\PurgeOldSnapshotViewsJob())->dailyAt('03:15')->withoutOverlapping();
+// Phase 9d — RCR deadline reminder cadence (weekly → 3-daily → daily → critical).
+Schedule::job(new \App\Jobs\RcrDeadlineReminderJob())->dailyAt('07:00')->withoutOverlapping();
+
 // Prospecting claim maintenance — runs hourly
 Schedule::command('prospecting:maintain-claims')->hourly();
 
@@ -135,6 +144,51 @@ Schedule::command('corex:leave:send-reminders')->dailyAt('06:00')->onOneServer()
 
 // P24 location tree sync — monthly on the 1st at 02:00
 Schedule::command('p24:sync-locations')->monthlyOn(1, '02:00')->withoutOverlapping();
+
+// ── AI Narrative Cache hygiene (MIC Phase B2) ──
+// Daily: soft-delete expired rows at 03:00 SAST.
+Schedule::job(new \App\Jobs\AI\SweepExpiredNarrativeCacheJob())
+    ->dailyAt('03:00')
+    ->timezone('Africa/Johannesburg')
+    ->onOneServer()
+    ->withoutOverlapping()
+    ->name('ai-cache-sweep');
+
+// Weekly: hard-delete rows soft-deleted > 90 days. Sundays at 03:30 SAST.
+Schedule::job(new \App\Jobs\AI\PurgeOldSoftDeletedCacheJob())
+    ->weeklyOn(0, '03:30')
+    ->timezone('Africa/Johannesburg')
+    ->onOneServer()
+    ->withoutOverlapping()
+    ->name('ai-cache-purge');
+
+// Nightly: warm the "This Week" tile cache so morning agent visits hit cache
+// instead of paying AI cost during peak. 02:30 SAST is before the 03:00 SAST
+// expired-cache sweep so any stale rows are gone before the warm starts.
+Schedule::job(new \App\Jobs\AI\WarmThisWeekTilesJob())
+    ->dailyAt('02:30')
+    ->timezone('Africa/Johannesburg')
+    ->onOneServer()
+    ->withoutOverlapping()
+    ->name('ai-tiles-warm');
+
+// Hourly: flag claims as stale once the agent has gone >48h without
+// feedback. Surfaces on the BM Team Dashboard (Phase G2). Idempotent.
+Schedule::job(new \App\Jobs\Prospecting\FlagStaleClaimsJob())
+    ->hourly()
+    ->timezone('Africa/Johannesburg')
+    ->onOneServer()
+    ->withoutOverlapping()
+    ->name('flag-stale-claims');
+
+// ── Geocoding cache hygiene (Phase 11a B) ──
+// Daily: hard-delete rows past expires_at (90-day success TTL, 7-day failure TTL).
+Schedule::command('geo:cache-purge')
+    ->dailyAt('03:00')
+    ->timezone('Africa/Johannesburg')
+    ->onOneServer()
+    ->withoutOverlapping()
+    ->name('geo-cache-purge');
 
 // Demo reset — wipe [DEMO]-prefixed data and reseed daily at 03:00.
 // Only runs when APP_ENV is local or demo (guarded inside the commands).

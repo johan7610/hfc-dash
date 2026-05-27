@@ -101,7 +101,7 @@
 }
 .ceremony-incomplete {
     border-bottom-color: #ef4444 !important;
-    background: color-mix(in srgb, var(--ds-crimson) 6%, transparent) !important;
+    background: rgba(239,68,68,0.06) !important;
 }
 </style>
 
@@ -118,7 +118,7 @@
         </x-slot>
         <x-slot name="center">
             <h2 class="text-sm font-semibold text-gray-700 truncate">
-                Sign Document â€” {{ $document->name }}
+                Sign Document — {{ $document->name }}
                 <span class="text-gray-400 font-normal">(<span x-text="totalAgent - incompleteCount"></span> / <span x-text="totalAgent"></span>)</span>
             </h2>
         </x-slot>
@@ -152,10 +152,10 @@
     </div>
 
     {{-- Section-by-section acceptance/rejection is for EXTERNAL signers only.
-         The agent created the document â€” they sign, they don't reject their own sections.
+         The agent created the document — they sign, they don't reject their own sections.
          Section navigator and rejection UI live in external/sign.blade.php. --}}
 
-    {{-- Completion overlay â€” prevents Alpine re-render issues --}}
+    {{-- Completion overlay — prevents Alpine re-render issues --}}
     <div x-show="completionDone" x-cloak class="bg-white border border-emerald-200 rounded-md p-8 text-center" style="min-height:300px;">
         <div class="flex flex-col items-center justify-center gap-4 py-12">
             <svg class="w-16 h-16 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -165,7 +165,7 @@
             <p class="text-sm text-gray-500">Your signatures have been saved successfully.</p>
             <div class="flex flex-col items-center gap-3 mt-4">
                 <a href="{{ route('docuperfect.esign.myDocuments') }}"
-                   style="background: #00d4aa; color: #fff; border-radius:6px; padding: 10px 24px; font-size: 14px; font-weight: 600; text-decoration: none; display: inline-block; transition: opacity 0.2s;"
+                   style="background: #00d4aa; color: #fff; border-radius: 3px; padding: 10px 24px; font-size: 14px; font-weight: 600; text-decoration: none; display: inline-block; transition: opacity 0.2s;"
                    onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
                     Back to My Documents
                 </a>
@@ -180,17 +180,17 @@
     <div x-show="!completionDone" class="bg-white border border-gray-200 rounded-md p-4 overflow-hidden flex flex-col" style="min-height:600px;">
 
         @if(!empty($isWebTemplate))
-        {{-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-             WEB TEMPLATE PATH â€” single scrollable document with A4 pages.
+        {{-- ═══════════════════════════════════════════════════════════════
+             WEB TEMPLATE PATH — single scrollable document with A4 pages.
              ONE container, ONE content output. Nothing else.
-             â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• --}}
+             ═══════════════════════════════════════════════════════════════ --}}
         <div class="flex-1 overflow-auto" style="background:#e2e8f0; padding:16px 0; min-width:794px;">
             <link href="/css/corex-document.css" rel="stylesheet">
             <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
             <div x-ref="pageContainer" class="relative" style="width:210mm; max-width:100%; margin:0 auto;">
                 <div x-ref="webDocContent">{!! $webTemplateHtml !!}</div>
 
-                {{-- Floating signature markers â€” same as PDF path but for web templates.
+                {{-- Floating signature markers — same as PDF path but for web templates.
                      Markers come from zones drawn in setup (expanded into DB markers).
                      Positioned with absolute % values relative to the paginated container.
                      Container width locked to 210mm (A4) to match setup coordinate system. --}}
@@ -242,10 +242,10 @@
         </div>
 
         @else
-        {{-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-             PDF TEMPLATE PATH â€” paginated page images with overlay fields
+        {{-- ═══════════════════════════════════════════════════════════════
+             PDF TEMPLATE PATH — paginated page images with overlay fields
              and floating signature markers.
-             â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• --}}
+             ═══════════════════════════════════════════════════════════════ --}}
 
         {{-- Page navigation --}}
         <div class="flex items-center justify-between mb-3 flex-shrink-0">
@@ -279,7 +279,7 @@
                          :class="(field.assignedTo === 'agent') ? '' : 'pointer-events-none'"
                          :style="fieldDisplayStyle(field)">
 
-                        {{-- Agent-assigned field: INTERACTIVE â€” agent fills these during signing --}}
+                        {{-- Agent-assigned field: INTERACTIVE — agent fills these during signing --}}
                         <template x-if="field.assignedTo === 'agent'">
                             <div class="w-full h-full">
                                 {{-- Tick --}}
@@ -313,7 +313,7 @@
                                 {{-- Strikethrough --}}
                                 <template x-if="field.type === 'strikethrough'">
                                     <div class="w-full h-full relative cursor-pointer"
-                                         :style="field.active ? 'background:color-mix(in srgb, var(--ds-crimson) 8%, transparent);border:2px solid rgba(239,68,68,0.4);border-radius:4px;' : 'background:rgba(59,130,246,0.08);border:2px solid rgba(59,130,246,0.5);border-radius:4px;'"
+                                         :style="field.active ? 'background:rgba(239,68,68,0.08);border:2px solid rgba(239,68,68,0.4);border-radius:4px;' : 'background:rgba(59,130,246,0.08);border:2px solid rgba(59,130,246,0.5);border-radius:4px;'"
                                          @click="field.active = !field.active; fieldsDirty = true;">
                                         <template x-if="field.active && (field.strikethroughType || 'horizontal') === 'horizontal'">
                                             <div class="absolute top-1/2 left-0 w-full h-0.5 bg-red-500 -translate-y-1/2"></div>
@@ -508,7 +508,7 @@
         <div class="text-sm text-slate-600">
             <template x-if="incompleteCount > 0">
                 <span>
-                    <span x-text="incompleteCount"></span> field<span x-show="incompleteCount !== 1">s</span> remaining â€”
+                    <span x-text="incompleteCount"></span> field<span x-show="incompleteCount !== 1">s</span> remaining —
                     <button @click="scrollToNextIncomplete()" class="text-blue-600 hover:text-blue-800 underline font-medium">go to next</button>
                 </span>
             </template>
@@ -529,7 +529,7 @@
         </button>
     </div>
 
-    {{-- Floating progress bar â€” shows incomplete count (sigs + ceremony fields) --}}
+    {{-- Floating progress bar — shows incomplete count (sigs + ceremony fields) --}}
     <div x-show="incompleteCount > 0" x-cloak x-transition
          class="fixed bottom-4 left-1/2 transform -translate-x-1/2 shadow-lg rounded-md px-6 py-3 flex items-center gap-3 z-40 border border-gray-700"
          style="background:var(--corex-navy, #0b2a4a);">
@@ -558,7 +558,7 @@
             <div class="px-6 py-4 border-b border-slate-200" style="background:#0b2a4a;">
                 <h3 class="text-white font-semibold text-lg">
                     Enter Text: <span x-text="activeMarker ? (activeMarker.label || markerLabel(activeMarker)) : ''"></span>
-                    <span class="text-white/50 text-sm" x-text="activeMarker ? 'â€” Page ' + activeMarker.page_number : ''"></span>
+                    <span class="text-white/50 text-sm" x-text="activeMarker ? '— Page ' + activeMarker.page_number : ''"></span>
                 </h3>
             </div>
             <div class="p-6 space-y-4">
@@ -651,6 +651,12 @@ function signDocument() {
         // Web template interactive signing state
         webSigElements: [],       // [{el, partyRole, type, index, isMine, signed, sigData}]
         webSignatures: {},         // { 'agent-sig-0': dataUrl, ... }
+        // §19 Part A — disclosure state (shared logic pulled in below).
+        // Agent view is READ-ONLY for the seller's mandatory disclosure
+        // (PPA s70) but must SEE + gate-count it and persist it on submit.
+        webDisclosureAnswers: {},
+        totalDisclosureRows: 0,
+        storedDisclosure: @json($storedDisclosure ?? new \stdClass),
         webSigTotal: 0,
         webSigSigned: 0,
         webCeremonyValues: {},     // { 'agent_location': 'Shelly Beach', 'agent_day': '23', ... }
@@ -688,9 +694,11 @@ function signDocument() {
                     setTimeout(() => {
                         const container = this.$refs.webDocContent;
                         paginateDocument(container, this.signingParties);
+                        this._syncTotalPagesFromPagination(container);
                         // Restore previously signed initials (from other parties)
                         restoreStoredInitials(container, this.storedInitials);
                         this._makeWebElementsInteractive();
+                        this._processAllDisclosures();
                         // Delay to let DOM settle after ceremony fields are created
                         setTimeout(() => this._updateIncompleteCount(), 300);
                     }, 150);
@@ -701,10 +709,19 @@ function signDocument() {
             }
         },
 
+        // §19 Part A — shared disclosure logic (single source; external +
+        // agent both pull this in). The agent is never the disclosure
+        // party, so _disclosureEditable() returns false here → grid is
+        // visible + restored + gate-counted, but READ-ONLY.
+        _currentSignerRole() {
+            return 'agent';
+        },
+        @include('docuperfect.signatures.partials.disclosure-logic')
+
         /**
          * Web template interactive signing: find all [data-marker-party][data-marker-type="signature"]
          * elements in the document HTML and make the agent's elements clickable.
-         * No floating overlays â€” the document elements ARE the signing surface.
+         * No floating overlays — the document elements ARE the signing surface.
          */
         _makeWebElementsInteractive() {
             const container = this.$refs.webDocContent;
@@ -755,7 +772,7 @@ function signDocument() {
                             self._openWebSigCapture(entry);
                         });
                     } else {
-                        // Other party â€” grey out
+                        // Other party — grey out
                         el.classList.add('web-sig-other-party');
                         const nameEl = el.querySelector('.sig-cell-label');
                         const partyLabel = rawParty.replace(/_/g, ' ');
@@ -848,7 +865,7 @@ function signDocument() {
                         self.$nextTick(() => self.initCanvas());
                     });
                 } else {
-                    // Other party â€” grey out
+                    // Other party — grey out
                     el.style.opacity = '0.5';
                     el.style.pointerEvents = 'none';
                     el.style.cursor = 'default';
@@ -907,7 +924,7 @@ function signDocument() {
                     const isMine = baseRole === 'agent';
 
                     if (!isMine) {
-                        // Other party's ceremony fields â€” leave as-is (read-only)
+                        // Other party's ceremony fields — leave as-is (read-only)
                         el.style.opacity = '0.5';
                         return;
                     }
@@ -1110,7 +1127,7 @@ function signDocument() {
                         if (!entry.signed) incomplete++;
                     }
                 });
-                // Ceremony fields â€” ALL count in total, only empty ones are incomplete
+                // Ceremony fields — ALL count in total, only empty ones are incomplete
                 const container = this.$refs.webDocContent;
                 if (container) {
                     container.querySelectorAll('input[data-ceremony-field="true"]').forEach(inp => {
@@ -1122,6 +1139,17 @@ function signDocument() {
                         if (!btn.textContent || !btn.textContent.trim()) incomplete++;
                     });
                 }
+            }
+
+            // §19 Part A — disclosure rows are gate-counted ONLY for the
+            // disclosing owner/seller party. The agent sees the grid
+            // read-only and must NOT be blocked on it (PPA s70 — the
+            // seller is the sole discloser).
+            if (this._signerIsDisclosingParty() && this.totalDisclosureRows > 0) {
+                total += this.totalDisclosureRows;
+                const answered = Object.keys(this.webDisclosureAnswers)
+                    .filter(k => this._isDisclosureAnswerKey(k)).length;
+                incomplete += (this.totalDisclosureRows - answered);
             }
 
             this.totalAgent = total;
@@ -1168,7 +1196,7 @@ function signDocument() {
             this.$nextTick(() => this.initCanvas());
         },
 
-        // â”€â”€ Section signing â”€â”€
+        // ── Section signing ──
         get acceptedSections() {
             return this.sectionStates.filter(s => s === 'accepted').length;
         },
@@ -1224,9 +1252,59 @@ function signDocument() {
             this.sectionRejecting = false;
         },
 
-        // â”€â”€ Navigation â”€â”€
+        // ── Navigation ──
         prevPage() { if (this.currentPage > 1) this.currentPage--; },
         nextPage() { if (this.currentPage < this.totalPages) this.currentPage++; },
+
+        // The server $pageCount is provisional — for a web pack it counts
+        // TEMPLATES, not rendered A4 pages. The real total is only known once
+        // paginateDocument() has built the .corex-a4-page elements. Re-derive
+        // totalPages from the actual paginated DOM (continuous across the
+        // whole merged pack — never per-template) on EVERY pagination so the
+        // counter and prev/next bounds stay correct after re-pagination too.
+        _syncTotalPagesFromPagination(container) {
+            const root = container || this.$refs.webDocContent;
+            if (!root) return;
+            // §19.2 — per-DOCUMENT numbering. A pack is N documents; "Page X
+            // of N" reflects the document the signer is currently viewing
+            // (the .corex-a4-page nearest the viewport top), N = THAT
+            // document's page count (data-doc-total), restarting at 1 per
+            // document. Single docs: all pages share one docTotal → 1..N as
+            // before. Stays live as the signer scrolls through the pack.
+            const recompute = () => {
+                const pages = Array.from(root.querySelectorAll('.corex-a4-page'));
+                if (pages.length === 0) return;
+                let ref = pages[0], best = Infinity;
+                pages.forEach(p => {
+                    const top = p.getBoundingClientRect().top;
+                    const d = top >= -2 ? top : (Math.abs(top) + 1e6);
+                    if (d < best) { best = d; ref = p; }
+                });
+                const docTotal = parseInt(ref.getAttribute('data-doc-total') || '0', 10);
+                const pageIdx = parseInt(ref.getAttribute('data-page-index') || '0', 10);
+                if (docTotal > 0) {
+                    this.totalPages = docTotal;
+                    this.currentPage = Math.min(Math.max(pageIdx + 1, 1), docTotal);
+                } else {
+                    this.totalPages = pages.length;
+                    if (this.currentPage > this.totalPages) this.currentPage = this.totalPages;
+                    if (this.currentPage < 1) this.currentPage = 1;
+                }
+            };
+            recompute();
+            if (!this._cxPageScrollBound) {
+                this._cxPageScrollBound = true;
+                let raf = null;
+                const onScroll = () => {
+                    if (raf) return;
+                    raf = requestAnimationFrame(() => { raf = null; recompute(); });
+                };
+                let sc = root.parentElement;
+                while (sc && sc.scrollHeight <= sc.clientHeight && sc !== document.body) sc = sc.parentElement;
+                (sc || window).addEventListener('scroll', onScroll, { passive: true });
+                window.addEventListener('scroll', onScroll, { passive: true });
+            }
+        },
 
         markersForCurrentPage() {
             return this.markers.filter(m => m.page_number === this.currentPage);
@@ -1319,7 +1397,7 @@ function signDocument() {
             return css;
         },
 
-        // â”€â”€ Marker display â”€â”€
+        // ── Marker display ──
         markerLabel(m) {
             const partyLabel = m.assigned_party.replace('_', ' ');
             const typeLabel = m.type.charAt(0).toUpperCase() + m.type.slice(1);
@@ -1345,11 +1423,11 @@ function signDocument() {
                 }
                 return base + 'border-blue-500 bg-blue-50/80 cursor-pointer hover:bg-blue-100 hover:shadow-md';
             }
-            // Other party â€” greyed out
+            // Other party — greyed out
             return base + 'border-slate-300 bg-slate-100/70 cursor-default';
         },
 
-        // â”€â”€ Marker interaction â”€â”€
+        // ── Marker interaction ──
         handleMarkerClick(marker) {
             if (marker.assigned_party !== 'agent') return;
             if (marker.signed) return;
@@ -1378,7 +1456,7 @@ function signDocument() {
             this.$nextTick(() => this.initCanvas());
         },
 
-        // â”€â”€ Canvas management â”€â”€
+        // ── Canvas management ──
         initCanvas() {
             const canvas = this.$refs.signatureCanvas;
             if (!canvas) return;
@@ -1408,7 +1486,7 @@ function signDocument() {
             }
         },
 
-        // â”€â”€ Typed signature â†’ PNG (4Ã— resolution for crisp compositing) â”€â”€
+        // ── Typed signature → PNG (4× resolution for crisp compositing) ──
         generateTypedSignature(name, isInitial = false) {
             const canvas = this.$refs.typedCanvas;
             if (!canvas) return null;
@@ -1442,7 +1520,7 @@ function signDocument() {
             return canvas.toDataURL('image/png');
         },
 
-        // â”€â”€ Date marker auto-sign (plain text, rendered server-side) â”€â”€
+        // ── Date marker auto-sign (plain text, rendered server-side) ──
         async signDateMarker(marker) {
             const dateStr = this.formatDate(new Date());
             const success = await this.submitSignature(marker, null, 'typed', dateStr);
@@ -1452,7 +1530,7 @@ function signDocument() {
             }
         },
 
-        // â”€â”€ Text marker input (plain text, rendered server-side) â”€â”€
+        // ── Text marker input (plain text, rendered server-side) ──
         async applyTextValue() {
             if (!this.activeMarker || !this.textInputValue.trim()) return;
             this.applying = true;
@@ -1475,7 +1553,7 @@ function signDocument() {
             return yyyy + '/' + mm + '/' + dd;
         },
 
-        // â”€â”€ Apply signature â”€â”€
+        // ── Apply signature ──
         async applySignature() {
             if (!this.activeMarker) return;
             this.applying = true;
@@ -1588,7 +1666,7 @@ function signDocument() {
             this.applying = false;
         },
 
-        // â”€â”€ Submit single signature to server â”€â”€
+        // ── Submit single signature to server ──
         async submitSignature(marker, signatureData, signatureType, textValue = null) {
             try {
                 const url = @json(url('/docuperfect/documents')) + '/{{ $document->id }}/sign/' + marker.id;
@@ -1627,7 +1705,7 @@ function signDocument() {
             }
         },
 
-        // â”€â”€ Apply to all remaining signature markers â”€â”€
+        // ── Apply to all remaining signature markers ──
         async applyToAllSignatureMarkers() {
             this.applyingAll = true;
 
@@ -1714,7 +1792,7 @@ function signDocument() {
             // setter needed for x-text binding from modal partial
         },
 
-        // â”€â”€ Complete signing (with guided navigation if unsigned markers remain) â”€â”€
+        // ── Complete signing (with guided navigation if unsigned markers remain) ──
         async handleComplete() {
             // Web template flow: check all incomplete items (sigs + ceremony fields + markers)
             if (this.isWebTemplate) {
@@ -1728,7 +1806,7 @@ function signDocument() {
                 }
 
                 // If only DB markers were used (no inline HTML signatures), use the
-                // standard signComplete POST â€” marker signatures are already saved per-capture.
+                // standard signComplete POST — marker signatures are already saved per-capture.
                 const hasWebSignatures = Object.keys(this.webSignatures || {}).length > 0;
                 const hasAgentMarkers = this.markers.some(m => m.assigned_party === 'agent');
                 if (!hasWebSignatures && hasAgentMarkers) {
@@ -1778,9 +1856,19 @@ function signDocument() {
                 const payload = {
                     signatures: this.webSignatures,
                     initials: initialsData,
+                    // §19 Part A — persist disclosure answers on the agent's
+                    // submit so the seller's selections are never dropped
+                    // (the agent does not fill them; this just carries them).
+                    disclosure_answers: this.webDisclosureAnswers,
                     party_role: 'agent',
                     ceremony_values: this.webCeremonyValues || {},
                     esign_flow_id: @json($esignFlowId ?? null),
+                    // §19.7 — send the EXACT signed-and-paginated DOM (per-doc
+                    // .corex-a4-page + per-page initial slots, signatures/initials
+                    // already rendered as <img>). The server uses this verbatim
+                    // as merged_html (no server re-pagination) so the PDF/split
+                    // carry per-page initials exactly as the signer saw them.
+                    paginated_html: this.$refs.webDocContent ? this.$refs.webDocContent.innerHTML : null,
                 };
                 try {
                     const resp = await fetch(url, {
@@ -1829,7 +1917,7 @@ function signDocument() {
             if (unsignedMarkers.length > 0) {
                 const first = unsignedMarkers[0];
                 const typeLabel = first.type === 'text' ? 'enter text' : (first.type === 'initial' ? 'initial' : 'sign');
-                alert(`Please ${typeLabel} here â€” ${unsignedMarkers.length} remaining`);
+                alert(`Please ${typeLabel} here — ${unsignedMarkers.length} remaining`);
                 this.navigateToMarker(first);
                 return;
             }
@@ -1861,7 +1949,7 @@ function signDocument() {
             form.submit();
         },
 
-        // â”€â”€ Navigate to next unsigned agent marker â”€â”€
+        // ── Navigate to next unsigned agent marker ──
         goToNextUnsigned() {
             if (this.isWebTemplate) {
                 this.scrollToNextIncomplete();

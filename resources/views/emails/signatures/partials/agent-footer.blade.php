@@ -32,6 +32,9 @@
                             @if(!empty($agentFooter['ffc_number']))
                                 <p style="margin: 0 0 1px; font-size: 12px; color: #555;">FFC: {{ $agentFooter['ffc_number'] }}</p>
                             @endif
+                            @if(!empty($agentFooter['agency_ppra_number']))
+                                <p style="margin: 0 0 1px; font-size: 12px; color: #555;">PPRA: {{ $agentFooter['agency_ppra_number'] }}</p>
+                            @endif
                             @if(!empty($agentFooter['website']))
                                 <p style="margin: 0; font-size: 12px;">
                                     <a href="{{ str_starts_with($agentFooter['website'], 'http') ? $agentFooter['website'] : 'https://' . $agentFooter['website'] }}"
