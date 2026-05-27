@@ -184,6 +184,24 @@ Route::middleware('auth:sanctum')->group(function () {
             ]);
         })->name('v1.logged-user');
 
+        // Mobile app theme preference (light/dark)
+        Route::get('/me/theme', function (Request $request) {
+            return response()->json([
+                'theme' => $request->user()->theme ?? 'dark',
+            ]);
+        })->name('v1.me.theme.show');
+
+        Route::put('/me/theme', function (Request $request) {
+            $data = $request->validate([
+                'theme' => ['required', 'string', 'in:light,dark'],
+            ]);
+            $request->user()->update(['theme' => $data['theme']]);
+            return response()->json([
+                'theme' => $data['theme'],
+                'updated' => true,
+            ]);
+        })->name('v1.me.theme.update');
+
         Route::get('/profile', function (Request $request) {
             $user = $request->user();
             $agency = $user->effectiveAgencyId()
