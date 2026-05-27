@@ -316,6 +316,9 @@ return [
         // ── PDF Suite ──
         ['key' => 'access_pdf_suite',            'label' => 'Access PDF Suite',            'section' => 'pdf-suite',        'type' => 'access',  'module' => 'pdf_suite',        'sort_order' => 1],
 
+        // ── Image Converter ──
+        ['key' => 'access_image_converter',      'label' => 'Access Image Converter',      'section' => 'image-converter',  'type' => 'access',  'module' => 'image_converter',  'sort_order' => 1],
+
         // ── Knowledge Base ──
         ['key' => 'access_knowledge_base',       'label' => 'Access Knowledge Base',       'section' => 'knowledge-base',   'type' => 'access',  'module' => 'knowledge',        'sort_order' => 1],
         ['key' => 'manage_knowledge_base',       'label' => 'Manage Knowledge Base',       'section' => 'knowledge-base',   'type' => 'access',  'module' => 'knowledge',        'sort_order' => 2],
@@ -518,7 +521,7 @@ return [
                 'access_sales_documents',
                 'sales_docs.view', 'sales_docs.create', 'sales_docs.edit',
                 'access_calculators', 'access_ellie', 'access_flow_map',
-                'access_pdf_splitter', 'access_pdf_suite',
+                'access_pdf_splitter', 'access_pdf_suite', 'access_image_converter',
                 'access_deposit_calculator', 'access_deposit_calc_history',
                 'access_prospecting', 'access_evaluation',
                 'access_properties', 'create_properties', 'publish_properties', 'delete_properties',
@@ -589,7 +592,7 @@ return [
                 'access_sales_documents',
                 'sales_docs.view', 'sales_docs.create',
                 'access_calculators', 'access_ellie', 'access_flow_map',
-                'access_pdf_splitter', 'access_pdf_suite',
+                'access_pdf_splitter', 'access_pdf_suite', 'access_image_converter',
                 'access_prospecting', 'access_evaluation',
                 'access_properties', 'create_properties',
                 'properties.view', 'properties.create', 'properties.edit',

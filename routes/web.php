@@ -478,6 +478,7 @@ use App\Http\Controllers\Admin\TargetController;
 use App\Http\Controllers\ToolsController;
 use App\Http\Controllers\Tools\PdfSplitterController;
 use App\Http\Controllers\Tools\PdfSuiteController;
+use App\Http\Controllers\Tools\ImageConverterController;
 use App\Http\Controllers\Tools\FlowMapController;
 
 Route::middleware(['auth'])->group(function () {
@@ -529,6 +530,12 @@ Route::middleware(['auth'])->group(function () {
 
         Route::get('/redact',        [PdfSuiteController::class, 'redact'])->name('redact');
         Route::post('/redact',       [PdfSuiteController::class, 'redactRun'])->name('redact.run');
+    });
+
+    // Image Converter — HEIC / JPG / PNG / WEBP / BMP / TIFF / GIF → PNG / JPG / WEBP
+    Route::middleware('permission:access_image_converter')->prefix('tools/image-converter')->name('tools.image_converter.')->group(function () {
+        Route::get('/',  [ImageConverterController::class, 'index'])->name('index');
+        Route::post('/', [ImageConverterController::class, 'run'])->name('run');
     });
 
     // Splitter Doc Type Admin (legacy routes — kept so PDF Splitter links still work)

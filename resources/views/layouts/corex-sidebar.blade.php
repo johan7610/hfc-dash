@@ -1008,6 +1008,20 @@
         @endif
         @endif
 
+        {{-- Image Converter --}}
+        @permission('access_image_converter')
+        @if(\Illuminate\Support\Facades\Route::has('tools.image_converter.index'))
+        <a href="{{ route('tools.image_converter.index') }}" class="corex-nav-item {{ request()->routeIs('tools.image_converter.*') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <circle cx="9" cy="9" r="2"/>
+                <path d="m21 15-3.1-3.1a2 2 0 0 0-2.81.01L6 21"/>
+            </svg>
+            <span>Image Converter</span>
+        </a>
+        @endif
+        @endpermission
+
         {{-- Document Library --}}
         @permission('access_document_library')
         @if(config('features.document_library_v1'))
