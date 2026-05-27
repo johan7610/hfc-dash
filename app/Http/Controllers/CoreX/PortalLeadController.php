@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\CoreX;
 
+use App\Events\Leads\NewPortalLeadReceived;
 use App\Http\Controllers\Controller;
 use App\Models\PortalLead;
+use App\Models\Property;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -82,6 +84,67 @@ class PortalLeadController extends Controller
                 'view_url'            => route('corex.portal-leads.index', ['highlight' => $l->id]),
             ])->all(),
             'server_time' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Inject a synthetic portal lead targeted at the given agent, then fire
+     * NewPortalLeadReceived so the in-app toast poller and FCM push listener
+     * both run against it. Used by admins to verify the popup + mobile
+     * notification path end-to-end without waiting for a real P24/PP lead.
+     */
+    public function sendTestLead(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'agent_id' => 'required|integer|exists:users,id',
+            'portal'   => 'nullable|in:p24,pp',
+        ]);
+
+        $actor = $request->user();
+        if (! $actor || ! $actor->agency_id) {
+            return response()->json(['ok' => false, 'message' => 'No agency context.'], 422);
+        }
+
+        $agent = User::query()
+            ->where('id', $data['agent_id'])
+            ->where('agency_id', $actor->agency_id)
+            ->first();
+        if (! $agent) {
+            return response()->json(['ok' => false, 'message' => 'Agent not in your agency.'], 422);
+        }
+
+        $listingId = Property::query()
+            ->where('agency_id', $actor->agency_id)
+            ->where('agent_id', $agent->id)
+            ->orderByDesc('id')
+            ->value('id');
+
+        $lead = new PortalLead([
+            'agency_id'                 => $actor->agency_id,
+            'portal'                    => $data['portal'] ?? PortalLead::PORTAL_P24,
+            'lead_type'                 => 'Test',
+            'listing_id'                => $listingId,
+            'listing_portal_ref'        => 'TEST-' . now()->format('His'),
+            'contact_id'                => null,
+            'contact_exists'            => false,
+            'existing_contact_agent_id' => $agent->id,
+            'name'                      => 'TEST LEAD — ' . $agent->name,
+            'email'                     => 'test+lead@corexos.co.za',
+            'phone'                     => '+27 000 000 000',
+            'message'                   => 'This is a test lead sent from the Portal Leads admin to verify the popup + mobile push pipeline.',
+            'is_whatsapp'               => false,
+            'lead_source_raw'           => ['__test' => true, 'sent_by_user_id' => $actor->id],
+            'received_at'               => now(),
+        ]);
+        $lead->agency_id = $actor->agency_id;
+        $lead->save();
+
+        event(new NewPortalLeadReceived($lead));
+
+        return response()->json([
+            'ok'      => true,
+            'message' => "Test lead sent to {$agent->name}. Popup should appear within ~10s; mobile push fires immediately to their registered devices.",
+            'lead_id' => $lead->id,
         ]);
     }
 
