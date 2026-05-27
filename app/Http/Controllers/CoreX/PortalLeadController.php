@@ -101,26 +101,37 @@ class PortalLeadController extends Controller
         ]);
 
         $actor = $request->user();
-        if (! $actor || ! $actor->agency_id) {
-            return response()->json(['ok' => false, 'message' => 'No agency context.'], 422);
+        if (! $actor) {
+            return response()->json(['ok' => false, 'message' => 'Not authenticated.'], 422);
         }
 
-        $agent = User::query()
-            ->where('id', $data['agent_id'])
-            ->where('agency_id', $actor->agency_id)
-            ->first();
-        if (! $agent) {
+        // Owner-role users with no active agency switcher have a NULL agency_id.
+        // Fall back to the target agent's agency so the test still works without
+        // forcing the owner to switch.
+        $agent = User::query()->withoutGlobalScopes()->find($data['agent_id']);
+        if (! $agent || ! $agent->agency_id) {
+            return response()->json(['ok' => false, 'message' => 'Agent not found or has no agency.'], 422);
+        }
+
+        $actorAgencyId = method_exists($actor, 'effectiveAgencyId')
+            ? $actor->effectiveAgencyId()
+            : $actor->agency_id;
+
+        $isOwner = method_exists($actor, 'isOwnerRole') && $actor->isOwnerRole();
+        if (! $isOwner && $actorAgencyId && (int) $agent->agency_id !== (int) $actorAgencyId) {
             return response()->json(['ok' => false, 'message' => 'Agent not in your agency.'], 422);
         }
 
-        $listingId = Property::query()
-            ->where('agency_id', $actor->agency_id)
+        $agencyId = (int) $agent->agency_id;
+
+        $listingId = Property::query()->withoutGlobalScopes()
+            ->where('agency_id', $agencyId)
             ->where('agent_id', $agent->id)
             ->orderByDesc('id')
             ->value('id');
 
         $lead = new PortalLead([
-            'agency_id'                 => $actor->agency_id,
+            'agency_id'                 => $agencyId,
             'portal'                    => $data['portal'] ?? PortalLead::PORTAL_P24,
             'lead_type'                 => 'Test',
             'listing_id'                => $listingId,
@@ -136,7 +147,7 @@ class PortalLeadController extends Controller
             'lead_source_raw'           => ['__test' => true, 'sent_by_user_id' => $actor->id],
             'received_at'               => now(),
         ]);
-        $lead->agency_id = $actor->agency_id;
+        $lead->agency_id = $agencyId;
         $lead->save();
 
         event(new NewPortalLeadReceived($lead));
