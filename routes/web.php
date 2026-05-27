@@ -1873,7 +1873,6 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
             Route::get('/',     [\App\Http\Controllers\CoreX\PortalLeadController::class, 'index'])->name('index');
             Route::get('/poll', [\App\Http\Controllers\CoreX\PortalLeadController::class, 'poll'])->name('poll');
             Route::post('/{portalLead}/mark-notified', [\App\Http\Controllers\CoreX\PortalLeadController::class, 'markNotified'])->name('mark-notified');
-            Route::post('/test',                       [\App\Http\Controllers\CoreX\PortalLeadController::class, 'sendTestLead'])->name('test');
         });
 
     // Contacts

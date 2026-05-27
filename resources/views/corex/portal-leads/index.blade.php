@@ -10,87 +10,8 @@
                 <h1 class="text-xl font-bold tracking-tight text-white leading-tight">Portal Leads</h1>
                 <p class="text-sm" style="color: rgba(255,255,255,0.6);">Buyer enquiries received from Property24 and Private Property.</p>
             </div>
-            <div class="flex items-center gap-4">
-                <div class="text-xs" style="color: rgba(255,255,255,0.7);">
-                    Total: <span class="font-semibold text-white">{{ $leads->total() }}</span>
-                </div>
-
-                <div x-data="{
-                        open: false,
-                        agentId: '',
-                        portal: 'p24',
-                        sending: false,
-                        msg: '',
-                        ok: null,
-                        diag: null,
-                        async send() {
-                            if (!this.agentId) { this.msg = 'Pick an agent first.'; this.ok = false; return; }
-                            this.sending = true; this.msg = ''; this.ok = null;
-                            try {
-                                const res = await fetch(@js(route('corex.portal-leads.test')), {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'Accept': 'application/json',
-                                        'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
-                                    },
-                                    body: JSON.stringify({ agent_id: Number(this.agentId), portal: this.portal }),
-                                });
-                                const data = await res.json();
-                                this.ok = res.ok && data.ok;
-                                this.msg = data.message || (this.ok ? 'Test lead sent.' : 'Failed.');
-                                this.diag = data.diagnostics || null;
-                            } catch (e) {
-                                this.ok = false; this.msg = 'Network error: ' + e.message;
-                            } finally { this.sending = false; }
-                        }
-                    }" class="relative">
-                    <button type="button" @click="open = !open"
-                            class="rounded-md text-xs font-semibold px-3 py-1.5 transition-all duration-300"
-                            style="background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2);">
-                        Send test lead
-                    </button>
-                    <div x-show="open" @click.outside="open = false" x-cloak
-                         class="absolute right-0 mt-2 w-80 rounded-md p-4 z-30 space-y-3"
-                         style="background: var(--surface); border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color: var(--text-secondary);">Send to agent</label>
-                            <select x-model="agentId"
-                                    class="w-full rounded-md text-sm"
-                                    style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
-                                <option value="">— pick an agent —</option>
-                                @foreach($agents as $a)
-                                    <option value="{{ $a->id }}">{{ $a->name }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1" style="color: var(--text-secondary);">Portal</label>
-                            <select x-model="portal"
-                                    class="w-full rounded-md text-sm"
-                                    style="background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);">
-                                <option value="p24">Property24</option>
-                                <option value="pp">Private Property</option>
-                            </select>
-                        </div>
-                        <button type="button" @click="send()" :disabled="sending"
-                                class="w-full rounded-md text-sm font-semibold text-white px-3 py-2 transition-all duration-300 disabled:opacity-60"
-                                style="background: var(--brand-button, #0ea5e9);">
-                            <span x-show="!sending">Send test lead</span>
-                            <span x-show="sending">Sending…</span>
-                        </button>
-                        <p x-show="msg" x-text="msg" :class="ok ? 'text-emerald-600' : 'text-red-600'" class="text-xs"></p>
-                        <div x-show="diag" class="text-[10px] space-y-0.5 rounded p-2" style="background: var(--surface-2); color: var(--text-muted);">
-                            <div>Agent device tokens: <span class="font-mono" x-text="diag?.agent_device_tokens"></span></div>
-                            <div>Agency device tokens: <span class="font-mono" x-text="diag?.agency_device_tokens"></span></div>
-                            <div>FCM class loaded: <span class="font-mono" x-text="diag?.fcm_class_exists ? 'yes' : 'NO'"></span></div>
-                            <div>Firebase Messaging bound: <span class="font-mono" x-text="diag?.fcm_messaging_bound ? 'yes' : 'NO'"></span></div>
-                        </div>
-                        <p class="text-[10px]" style="color: var(--text-muted);">
-                            Fires the same NewPortalLeadReceived event as a real lead — popup polls within ~10s and FCM push goes to the agent's registered devices.
-                        </p>
-                    </div>
-                </div>
+            <div class="text-xs" style="color: rgba(255,255,255,0.7);">
+                Total: <span class="font-semibold text-white">{{ $leads->total() }}</span>
             </div>
         </div>
     </div>

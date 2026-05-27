@@ -2,11 +2,8 @@
 
 namespace App\Http\Controllers\CoreX;
 
-use App\Events\Leads\NewPortalLeadReceived;
 use App\Http\Controllers\Controller;
-use App\Models\DeviceToken;
 use App\Models\PortalLead;
-use App\Models\Property;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -85,139 +82,6 @@ class PortalLeadController extends Controller
                 'view_url'            => route('corex.portal-leads.index', ['highlight' => $l->id]),
             ])->all(),
             'server_time' => now()->toIso8601String(),
-        ]);
-    }
-
-    /**
-     * Inject a synthetic portal lead targeted at the given agent, then fire
-     * NewPortalLeadReceived so the in-app toast poller and FCM push listener
-     * both run against it. Used by admins to verify the popup + mobile
-     * notification path end-to-end without waiting for a real P24/PP lead.
-     */
-    public function sendTestLead(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'agent_id' => 'required|integer|exists:users,id',
-            'portal'   => 'nullable|in:p24,pp',
-        ]);
-
-        $actor = $request->user();
-        if (! $actor) {
-            return response()->json(['ok' => false, 'message' => 'Not authenticated.'], 422);
-        }
-
-        // Owner-role users with no active agency switcher have a NULL agency_id.
-        // Fall back to the target agent's agency so the test still works without
-        // forcing the owner to switch.
-        $agent = User::query()->withoutGlobalScopes()->find($data['agent_id']);
-        if (! $agent || ! $agent->agency_id) {
-            return response()->json(['ok' => false, 'message' => 'Agent not found or has no agency.'], 422);
-        }
-
-        $actorAgencyId = method_exists($actor, 'effectiveAgencyId')
-            ? $actor->effectiveAgencyId()
-            : $actor->agency_id;
-
-        $isOwner = method_exists($actor, 'isOwnerRole') && $actor->isOwnerRole();
-        if (! $isOwner && $actorAgencyId && (int) $agent->agency_id !== (int) $actorAgencyId) {
-            return response()->json(['ok' => false, 'message' => 'Agent not in your agency.'], 422);
-        }
-
-        $agencyId = (int) $agent->agency_id;
-
-        $listingId = Property::query()->withoutGlobalScopes()
-            ->where('agency_id', $agencyId)
-            ->where('agent_id', $agent->id)
-            ->orderByDesc('id')
-            ->value('id');
-
-        $lead = new PortalLead([
-            'agency_id'                 => $agencyId,
-            'portal'                    => $data['portal'] ?? PortalLead::PORTAL_P24,
-            'lead_type'                 => 'Test',
-            'listing_id'                => $listingId,
-            'listing_portal_ref'        => 'TEST-' . now()->format('His'),
-            'contact_id'                => null,
-            'contact_exists'            => false,
-            'existing_contact_agent_id' => $agent->id,
-            'name'                      => 'TEST LEAD — ' . $agent->name,
-            'email'                     => 'test+lead@corexos.co.za',
-            'phone'                     => '+27 000 000 000',
-            'message'                   => 'This is a test lead sent from the Portal Leads admin to verify the popup + mobile push pipeline.',
-            'is_whatsapp'               => false,
-            'lead_source_raw'           => ['__test' => true, 'sent_by_user_id' => $actor->id],
-            'received_at'               => now(),
-        ]);
-        $lead->agency_id = $agencyId;
-        $lead->save();
-
-        // Push diagnostics — gather BEFORE firing the event so we can tell the
-        // user exactly why mobile push will / won't reach them.
-        $agentDeviceCount   = DeviceToken::query()->where('user_id', $agent->id)->count();
-        $agencyDeviceCount  = DeviceToken::query()
-            ->whereIn('user_id', User::query()->withoutGlobalScopes()->where('agency_id', $agencyId)->pluck('id'))
-            ->count();
-        $fcmClassExists     = class_exists(\App\Services\Push\FcmService::class);
-        $fcmMessagingBound  = false;
-        if ($fcmClassExists) {
-            try {
-                app(\Kreait\Firebase\Contract\Messaging::class);
-                $fcmMessagingBound = true;
-            } catch (\Throwable) {
-                $fcmMessagingBound = false;
-            }
-        }
-
-        event(new NewPortalLeadReceived($lead));
-
-        $pushReadiness = ($agentDeviceCount > 0) && $fcmClassExists && $fcmMessagingBound;
-        $pushBlocker = null;
-        if (!$fcmClassExists)      $pushBlocker = 'FcmService class missing — package not installed.';
-        elseif (!$fcmMessagingBound) $pushBlocker = 'Firebase Messaging not configured — check FIREBASE_CREDENTIALS / service provider binding.';
-        elseif ($agentDeviceCount === 0) $pushBlocker = "Agent has 0 device tokens registered. They must log into the mobile app to register a device.";
-
-        // Direct FCM send to the AGENT only, with per-token report.
-        $fcmReport = null;
-        if ($pushReadiness) {
-            try {
-                $tokens = DeviceToken::query()->where('user_id', $agent->id)->pluck('token')->all();
-                $messaging = app(\Kreait\Firebase\Contract\Messaging::class);
-                $message = \Kreait\Firebase\Messaging\CloudMessage::new()
-                    ->withNotification(\Kreait\Firebase\Messaging\Notification::create(
-                        'CoreX test lead',
-                        'Diagnostic push from Portal Leads test button.'
-                    ))
-                    ->withData(['type' => 'portal_lead_test', 'lead_id' => (string) $lead->id]);
-                $report = $messaging->sendMulticast($message, $tokens);
-                $fcmReport = [
-                    'attempted'         => count($tokens),
-                    'successes'         => $report->successes()->count(),
-                    'failures'          => $report->failures()->count(),
-                    'invalid_tokens'    => count($report->invalidTokens()),
-                    'unknown_tokens'    => count($report->unknownTokens()),
-                    'failure_reasons'   => array_values(array_map(
-                        fn ($f) => $f->error()?->getMessage() ?? 'unknown',
-                        $report->failures()->getItems()
-                    )),
-                ];
-            } catch (\Throwable $e) {
-                $fcmReport = ['error' => $e->getMessage()];
-            }
-        }
-
-        return response()->json([
-            'ok'         => true,
-            'lead_id'    => $lead->id,
-            'message'    => $pushReadiness
-                ? "Test lead sent to {$agent->name}. Popup within ~10s. Push fired to {$agentDeviceCount} device(s)."
-                : "Test lead saved (popup will appear within ~10s). Push NOT delivered: {$pushBlocker}",
-            'diagnostics' => [
-                'agent_device_tokens'  => $agentDeviceCount,
-                'agency_device_tokens' => $agencyDeviceCount,
-                'fcm_class_exists'     => $fcmClassExists,
-                'fcm_messaging_bound'  => $fcmMessagingBound,
-                'fcm_report'           => $fcmReport,
-            ],
         ]);
     }
 
