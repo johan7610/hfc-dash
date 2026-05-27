@@ -311,6 +311,15 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::delete('/{match}',             [MobileCoreMatchController::class, 'destroy'])->name('v1.mobile.core-matches.destroy');
         });
 
+        // ── Mobile Portal Leads (P24 + PP unified) ──────────────────
+        // Spec: .ai/specs/portal-leads.md
+        Route::prefix('mobile/portal-leads')->group(function () {
+            Route::get('/',                          [\App\Http\Controllers\Api\V1\MobilePortalLeadController::class, 'index'])->name('v1.mobile.portal-leads.index');
+            Route::get('/dates',                     [\App\Http\Controllers\Api\V1\MobilePortalLeadController::class, 'dates'])->name('v1.mobile.portal-leads.dates');
+            Route::get('/{portalLead}',              [\App\Http\Controllers\Api\V1\MobilePortalLeadController::class, 'show'])->name('v1.mobile.portal-leads.show');
+            Route::post('/{portalLead}/mark-read',   [\App\Http\Controllers\Api\V1\MobilePortalLeadController::class, 'markRead'])->name('v1.mobile.portal-leads.mark-read');
+        });
+
         // ── Command Center ────────────────────────────────────────────
         Route::prefix('command-center')->group(function () {
             Route::get('/dashboard',       [CommandCenterApiController::class, 'dashboard'])->name('v1.command-center.dashboard');
