@@ -1794,6 +1794,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::post('/{property}/restore',     [\App\Http\Controllers\CoreX\PropertyController::class, 'restore'])->name('restore')->withTrashed();
         Route::post('/{property}/duplicate',   [\App\Http\Controllers\CoreX\PropertyController::class, 'duplicate'])->name('duplicate');
         Route::post('/{property}/publish-toggle', [\App\Http\Controllers\CoreX\PropertyController::class, 'publishToggle'])->name('publish-toggle');
+        Route::post('/{property}/upload-images',[\App\Http\Controllers\CoreX\PropertyController::class, 'uploadImages'])->name('upload-images');
         Route::post('/{property}/delete-image',[\App\Http\Controllers\CoreX\PropertyController::class, 'deleteImage'])->name('deleteImage');
         Route::post('/{property}/reorder-images',[\App\Http\Controllers\CoreX\PropertyController::class, 'reorderImages'])->name('reorderImages');
         // Notes

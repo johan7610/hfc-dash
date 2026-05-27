@@ -920,6 +920,47 @@ class PropertyController extends Controller
         return back()->with('success', $msg);
     }
 
+    public function uploadImages(Request $request, Property $property)
+    {
+        $this->authorizeProperty($property);
+
+        $request->validate([
+            'group'           => 'nullable|in:gallery_images,dawn_images,noon_images,dusk_images',
+            'gallery_images'  => 'nullable|array',
+            'gallery_images.*'=> 'image|max:51200',
+            'dawn_images'     => 'nullable|array',
+            'dawn_images.*'   => 'image|max:51200',
+            'noon_images'     => 'nullable|array',
+            'noon_images.*'   => 'image|max:51200',
+            'dusk_images'     => 'nullable|array',
+            'dusk_images.*'   => 'image|max:51200',
+        ]);
+
+        $groups = ['gallery_images', 'dawn_images', 'noon_images', 'dusk_images'];
+        $added  = 0;
+        $updates = [];
+
+        foreach ($groups as $field) {
+            if (!$request->hasFile($field)) {
+                continue;
+            }
+            $existing = $property->{$field . '_json'} ?? [];
+            $new      = $this->storeImages($request, $field, $property->id);
+            if (!empty($new)) {
+                $updates[$field . '_json'] = array_values(array_merge($existing, $new));
+                $added += count($new);
+            }
+        }
+
+        if (!empty($updates)) {
+            $property->update($updates);
+        }
+
+        return back()
+            ->with('success', $added > 0 ? "Uploaded {$added} image(s)." : 'No images uploaded.')
+            ->with('tab', 'gallery');
+    }
+
     public function deleteImage(Request $request, Property $property)
     {
         $this->authorizeProperty($property);
