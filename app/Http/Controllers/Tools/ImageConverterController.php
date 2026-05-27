@@ -45,16 +45,23 @@ class ImageConverterController extends Controller
                 || $this->sniffHeif($inputPath);
 
             // HEIC/HEIF from iPhones contain auxiliary images (depth, HDR gain) which
-            // trip ImageMagick's libheif delegate. Pre-decode with heif-convert to PNG,
-            // then let ImageMagick handle the final format/orientation step.
-            $tmpDecoded = null;
+            // trip ImageMagick's libheif delegate. Decode directly with heif-convert.
+            // For PNG/JPG targets, heif-convert writes the final file — skip the
+            // ImageMagick post-step entirely (saves ~50% per-file time on bulk uploads).
+            $tmpDecoded   = null;
+            $skipMagick   = false;
             if ($isHeif) {
-                $tmpDecoded = $outDir . DIRECTORY_SEPARATOR . 'decoded_' . Str::random(6) . '.png';
-                $heif = new Process([self::heifConvertPath(), $inputPath, $tmpDecoded]);
-                $heif->setTimeout(120);
+                $heifTarget = ($format === 'png' || $format === 'jpg') ? $outPath : ($outDir . DIRECTORY_SEPARATOR . 'decoded_' . Str::random(6) . '.png');
+                $heifArgs   = [self::heifConvertPath()];
+                if ($format === 'jpg') { $heifArgs[] = '-q'; $heifArgs[] = '92'; }
+                $heifArgs[] = $inputPath;
+                $heifArgs[] = $heifTarget;
+
+                $heif = new Process($heifArgs);
+                $heif->setTimeout(60);
                 try { $heif->run(); } catch (\Throwable $e) { /* fall through to error */ }
 
-                if (! $heif->isSuccessful() || ! is_file($tmpDecoded)) {
+                if (! $heif->isSuccessful() || ! is_file($heifTarget)) {
                     $err = trim($heif->getErrorOutput());
                     if ($err === '' || stripos($err, 'not found') !== false || stripos($err, 'not recognized') !== false) {
                         return back()->withErrors([
@@ -63,7 +70,18 @@ class ImageConverterController extends Controller
                     }
                     return back()->withErrors(['images' => 'HEIC decode failed: ' . Str::limit($err, 240)]);
                 }
-                $inputPath = $tmpDecoded;
+
+                if ($format === 'png' || $format === 'jpg') {
+                    $skipMagick = true;
+                } else {
+                    $tmpDecoded = $heifTarget;
+                    $inputPath  = $heifTarget;
+                }
+            }
+
+            if ($skipMagick) {
+                $converted[] = $outPath;
+                continue;
             }
 
             $args = [self::magickPath(), $inputPath, '-auto-orient'];
