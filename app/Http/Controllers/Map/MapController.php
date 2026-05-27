@@ -50,7 +50,7 @@ final class MapController extends Controller
             'east'         => 'required|numeric|between:-180,180',
             'west'         => 'required|numeric|between:-180,180|lte:east',
             'layers'       => 'sometimes|array',
-            'layers.*'     => 'string|in:hfc_listings,sold_comps,active_listings,mic_subjects,scheme_owners',
+            'layers.*'     => 'string|in:hfc_listings,sold_comps,active_listings,mic_subjects,scheme_owners,tracked_properties',
             'viewMode'     => 'sometimes|string|in:agent,seller',
             'dateFrom'     => 'sometimes|nullable|date',
             'dateTo'       => 'sometimes|nullable|date',

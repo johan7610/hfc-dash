@@ -851,6 +851,7 @@ final class MapActivityLogTest extends TestCase
 
         $palId = (int) DB::table('presentation_active_listings')->insertGetId([
             'presentation_id'    => $presentationId,
+            'agency_id'          => $agencyId,
             'list_price_inc'     => 1_500_000,
             'beds'               => 2, 'baths' => 2, 'size_m2' => 75,
             'suburb'             => 'Margate',

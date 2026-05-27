@@ -42,6 +42,25 @@ final class AddressResolverService
 {
     private const NETWORK_TIMEOUT_SEC = 5;
 
+    /**
+     * KZN province bounding box — sent to Google as a viewport-biasing
+     * `bounds=` hint AND used as a strict post-resolution clamp. Any
+     * lat/lng outside this box returns null (transient) rather than
+     * being cached, so a stray out-of-region resolve doesn't poison
+     * future lookups.
+     *
+     * Covers Pongola in the north (-27.0) down past Port Edward to the
+     * EC border (-32.0); coast (28.5) to Drakensberg foothills (33.0).
+     * Caught by the post-resolution clamp post-2026-05-27 backfill:
+     *   - 150 SA centroid pins (~-30.56, 22.94 — Karoo, lng west of 28.5)
+     *   - 15 wrong-city pins (JHB, PTA, CPT, PE, Polokwane, Stellenbosch)
+     *   - 1 NZ outlier (-37.08, 174.95)
+     */
+    private const ZA_KZN_BBOX_SW_LAT = -32.0;
+    private const ZA_KZN_BBOX_SW_LNG = 28.5;
+    private const ZA_KZN_BBOX_NE_LAT = -27.0;
+    private const ZA_KZN_BBOX_NE_LNG = 33.0;
+
     /** Track the last Nominatim call timestamp for the 1 req/sec throttle. */
     private static ?float $nominatimLastCallAt = null;
 
@@ -85,13 +104,12 @@ final class AddressResolverService
             return $this->cacheAndReturn($normalised, $address, $portalResult, $suburbNorm);
         }
 
-        // Track whether ANY external resolver actually ran. The fail-cache
-        // path below should only persist when an external attempt was made
-        // (Google or Nominatim returned no result). If both branches were
-        // skipped (no key, disabled, rate-limit-blocked) the failure must
-        // NOT be cached — otherwise the next caller is short-circuited by
-        // a stale row written under a transient condition.
-        $externalAttempted = false;
+        // Track per-external-source status for the structured log only.
+        // Definitive results (success OR definitive failure like ZERO_RESULTS)
+        // early-return via cacheAndReturn below — they never reach the
+        // fail-cache fallback. Transient nulls (network errors,
+        // OVER_QUERY_LIMIT, bbox-rejection) intentionally do NOT cache
+        // so the next call retries.
         $googleStatus    = 'no_key';
         $nominatimStatus = 'disabled';
 
@@ -101,8 +119,7 @@ final class AddressResolverService
             /** @var GeocodeRateLimiter $limiter */
             $limiter = app(GeocodeRateLimiter::class);
             if ($limiter->canGeocode()) {
-                $externalAttempted = true;
-                $googleStatus      = 'attempted';
+                $googleStatus = 'attempted';
                 $googleResult = $this->callGoogle($normalised, (string) $googleKey);
                 // Record AFTER the call. Definitive failures still consume
                 // quota (Google bills failed-but-attempted). Transient nulls
@@ -111,7 +128,8 @@ final class AddressResolverService
                 if ($googleResult !== null) {
                     return $this->cacheAndReturn($normalised, $address, $googleResult, $suburbNorm);
                 }
-                // null = transient error → don't cache, retry next time.
+                // null = transient (network error / OVER_QUERY_LIMIT /
+                // bbox-rejected) — don't cache, retry next time.
             } else {
                 $googleStatus = 'rate_limited';
                 Log::channel('geocoding')->info('Google skipped — daily cap reached', [
@@ -126,8 +144,7 @@ final class AddressResolverService
             /** @var GeocodeRateLimiter $limiter */
             $limiter = app(GeocodeRateLimiter::class);
             if ($limiter->canGeocode()) {
-                $externalAttempted = true;
-                $nominatimStatus   = 'attempted';
+                $nominatimStatus = 'attempted';
                 $nomResult = $this->callNominatim($normalised);
                 $limiter->recordCall();
                 if ($nomResult !== null) {
@@ -141,22 +158,25 @@ final class AddressResolverService
             }
         }
 
-        // ── 6. Cache as failed — ONLY when an external resolver ran ──────
-        // When no external resolver ran (no key + disabled, both rate-limited,
-        // etc.) we return the failure WITHOUT caching so the next attempt —
-        // once the missing source comes online — re-runs the waterfall
-        // instead of being short-circuited by a stale failure row.
-        $failure = new GeocodingResult(null, null, 'failed', 'cache', null, false, 'no source matched');
-        if (!$externalAttempted) {
-            Log::channel('geocoding')->info('resolver returned failure without caching — no external resolver ran', [
-                'normalised'       => $normalised,
-                'suburb'           => $suburbNorm,
-                'google_status'    => $googleStatus,
-                'nominatim_status' => $nominatimStatus,
-            ]);
-            return $failure;
-        }
-        return $this->cacheAndReturn($normalised, $address, $failure, $suburbNorm);
+        // ── 6. Return failure WITHOUT caching ─────────────────────────────
+        // We reach here only when:
+        //   - both MIC + portal returned null (no match), AND
+        //   - Google was skipped (no key / rate-limited) OR returned
+        //     transient null (network error, OVER_QUERY_LIMIT,
+        //     bbox-rejected), AND
+        //   - Nominatim was skipped or returned transient null.
+        // Definitive successes and definitive failures (ZERO_RESULTS,
+        // no geometry) early-return via cacheAndReturn above — they DO
+        // cache. Everything that reaches this point is non-definitive,
+        // so caching it would poison future calls. Return without
+        // caching so the next call re-runs the waterfall.
+        Log::channel('geocoding')->info('resolver returned failure without caching — no definitive external result', [
+            'normalised'       => $normalised,
+            'suburb'           => $suburbNorm,
+            'google_status'    => $googleStatus,
+            'nominatim_status' => $nominatimStatus,
+        ]);
+        return new GeocodingResult(null, null, 'failed', 'cache', null, false, 'no source matched');
     }
 
     /**
@@ -263,11 +283,22 @@ final class AddressResolverService
         $url = 'https://maps.googleapis.com/maps/api/geocode/json';
         $address = $normalised . ', South Africa';
 
+        // KZN viewport bias — biases Google toward the KZN bbox but does
+        // not strictly constrain results (Google's docs are clear that
+        // bounds is hint-only). The strict post-resolution clamp below
+        // handles the cases where Google ignores the hint.
+        $bounds = sprintf(
+            '%s,%s|%s,%s',
+            self::ZA_KZN_BBOX_SW_LAT, self::ZA_KZN_BBOX_SW_LNG,
+            self::ZA_KZN_BBOX_NE_LAT, self::ZA_KZN_BBOX_NE_LNG,
+        );
+
         try {
             $response = $this->http()->get($url, [
                 'address' => $address,
                 'key'     => $key,
                 'region'  => 'za',
+                'bounds'  => $bounds,
             ]);
         } catch (\Throwable $e) {
             Log::warning('Google geocode network error', ['err' => $e->getMessage(), 'addr' => $normalised]);
@@ -299,11 +330,44 @@ final class AddressResolverService
             return new GeocodingResult(null, null, 'failed', 'google', null, false, 'no geometry');
         }
 
+        // Strict KZN bbox clamp — bounds= is only a hint, so a result
+        // outside the KZN province (SA centroid Karoo fallback, JHB/CPT
+        // mis-resolves, NZ outlier from ambiguous suburb names like
+        // 'Rocklands' / 'Glenmore' / 'Melville') is treated as a
+        // DEFINITIVE failure for this address: cached with the distinct
+        // failure_reason 'google:out_of_bbox' so operators can filter
+        // for it during data quality reviews and so future calls with
+        // the same normalised key short-circuit immediately (no repeat
+        // Google billing for known-bad addresses).
+        $lat = (float) $loc['lat'];
+        $lng = (float) $loc['lng'];
+        if ($lat < self::ZA_KZN_BBOX_SW_LAT || $lat > self::ZA_KZN_BBOX_NE_LAT
+            || $lng < self::ZA_KZN_BBOX_SW_LNG || $lng > self::ZA_KZN_BBOX_NE_LNG) {
+            Log::channel('geocoding')->info('Google result rejected — outside KZN bbox', [
+                'addr'              => $normalised,
+                'resolved_lat'      => $lat,
+                'resolved_lng'      => $lng,
+                'resolved_address'  => $top['formatted_address'] ?? null,
+                'location_type'     => $type,
+            ]);
+            return new GeocodingResult(null, null, 'failed', 'google', null, false, 'google:out_of_bbox');
+        }
+
         $confidence = match ($type) {
             'ROOFTOP', 'RANGE_INTERPOLATED' => 'exact',
             'GEOMETRIC_CENTER'              => 'street',
             default                         => 'suburb',
         };
+
+        // Google's `partial_match` flag means Google had to guess at part
+        // of the address (e.g. fuzzed the street name, dropped a unit
+        // number). Downgrade-only override: a partial match never gives
+        // us building-level confidence even when location_type says
+        // ROOFTOP. Never upgrades — if the underlying type was already
+        // 'suburb' or coarser, leave it alone.
+        if (($top['partial_match'] ?? false) === true && in_array($confidence, ['exact', 'street'], true)) {
+            $confidence = 'suburb';
+        }
 
         $municipality = null;
         foreach (($top['address_components'] ?? []) as $comp) {
@@ -316,8 +380,8 @@ final class AddressResolverService
         }
 
         return new GeocodingResult(
-            latitude:        (float) $loc['lat'],
-            longitude:       (float) $loc['lng'],
+            latitude:        $lat,
+            longitude:       $lng,
             confidence:      $confidence,
             source:          'google',
             municipality:    $municipality,
