@@ -88,8 +88,10 @@ class ImageConverterController extends Controller
 
     private function binaryError()
     {
-        return back()->withErrors([
-            'images' => 'ImageMagick is not installed or not on PATH. Install via `winget install ImageMagick.ImageMagick`, then set IMAGE_CONVERTER_MAGICK_PATH in .env to the full path of magick.exe.',
-        ]);
+        $hint = PHP_OS_FAMILY === 'Windows'
+            ? 'Install via `winget install ImageMagick.ImageMagick` then set IMAGE_CONVERTER_MAGICK_PATH in .env to the full path of magick.exe (e.g. C:\\Program Files\\ImageMagick-7.x.x\\magick.exe) and run `php artisan config:clear`.'
+            : 'Install via `apt install -y imagemagick libmagickcore-6.q16-6-extra`. On IM6 systems set IMAGE_CONVERTER_MAGICK_PATH=/usr/bin/convert in .env and run `php artisan config:clear`.';
+
+        return back()->withErrors(['images' => 'ImageMagick is not installed or not on PATH. ' . $hint]);
     }
 }
