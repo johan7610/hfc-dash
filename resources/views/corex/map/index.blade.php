@@ -39,8 +39,18 @@
                  is otherwise visible). Users without the permission
                  see only the Seller pill; even if they hand-craft a
                  ?viewMode=agent request, the server-side
-                 MapController::resolveViewMode helper enforces Seller. --}}
-            @php($mapCanSeeAgentView = (bool) (auth()->user()?->hasPermission('access_prospecting') ?? false))
+                 MapController::resolveViewMode helper enforces Seller.
+
+                 NOTE: keep the block-form php directive below. The
+                 inline single-line form pairs greedily with the next
+                 closing directive further down the file (Laravel's
+                 storePhpBlocks regex is non-greedy but blind to the
+                 inline form), swallowing the intermediate left-rail
+                 block as raw PHP and producing undefined $mapDefaultScope
+                 / $mapIsOwner / $mapCanSeeAgentView at render time. --}}
+            @php
+                $mapCanSeeAgentView = (bool) (auth()->user()?->hasPermission('access_prospecting') ?? false);
+            @endphp
             <div id="view-mode-toggle" data-can-see-agent="{{ $mapCanSeeAgentView ? '1' : '0' }}" style="display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 2px;">
                 @if($mapCanSeeAgentView)
                     <button data-mode="agent" class="mode-pill" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 500; background: transparent; color: var(--text-secondary); border: 0; border-radius: 4px; cursor: pointer;">Agent View</button>
