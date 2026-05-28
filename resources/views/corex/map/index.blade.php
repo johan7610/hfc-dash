@@ -32,10 +32,20 @@
                 <button data-base="streets" class="base-pill active" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 500; background: var(--brand-button); color: #fff; border: 0; border-radius: 4px; cursor: pointer;">Streets</button>
                 <button data-base="satellite" class="base-pill" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 500; background: transparent; color: var(--text-secondary); border: 0; border-radius: 4px; cursor: pointer;">Satellite</button>
             </div>
-            {{-- View-mode toggle --}}
-            <div id="view-mode-toggle" style="display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 2px;">
-                <button data-mode="agent" class="mode-pill active" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 500; background: var(--brand-button); color: #fff; border: 0; border-radius: 4px; cursor: pointer;">Agent View</button>
-                <button data-mode="seller" class="mode-pill" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 500; background: transparent; color: var(--text-secondary); border: 0; border-radius: 4px; cursor: pointer;">Seller View</button>
+            {{-- View-mode toggle.
+                 POPIA owner-detail gate: the Agent View pill is only
+                 rendered for users holding `access_prospecting` — the
+                 same key that gates the MIC module (where owner PII
+                 is otherwise visible). Users without the permission
+                 see only the Seller pill; even if they hand-craft a
+                 ?viewMode=agent request, the server-side
+                 MapController::resolveViewMode helper enforces Seller. --}}
+            @php($mapCanSeeAgentView = (bool) (auth()->user()?->hasPermission('access_prospecting') ?? false))
+            <div id="view-mode-toggle" data-can-see-agent="{{ $mapCanSeeAgentView ? '1' : '0' }}" style="display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 2px;">
+                @if($mapCanSeeAgentView)
+                    <button data-mode="agent" class="mode-pill" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 500; background: transparent; color: var(--text-secondary); border: 0; border-radius: 4px; cursor: pointer;">Agent View</button>
+                @endif
+                <button data-mode="seller" class="mode-pill active" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 500; background: var(--brand-button); color: #fff; border: 0; border-radius: 4px; cursor: pointer;">Seller View</button>
             </div>
             <button id="reset-bounds-btn" style="padding: 6px 10px; font-size: 0.75rem; font-weight: 500; color: var(--text-secondary); background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; cursor: pointer;">Reset to HFC area</button>
         </div>
@@ -417,7 +427,16 @@ document.addEventListener('DOMContentLoaded', function () {
     const COMPOSITE_BORDER = '#00d4aa'; // teal accent — same as HFC, marks it as workspace UI
 
     // ── State ─────────────────────────────────────────────────────────────
-    let viewMode = localStorage.getItem('corex.map.view_mode') || 'agent';
+    // POPIA owner-detail gate. Default Seller; Agent is opt-in only when
+    // the server-rendered toggle says the user holds access_prospecting.
+    // localStorage cannot escalate — the server-side gate enforces Seller
+    // for unauthorised users regardless of what the client stores.
+    const VIEW_MODE_CAN_AGENT = (document.getElementById('view-mode-toggle')?.dataset.canSeeAgent === '1');
+    let viewMode = (function () {
+        if (!VIEW_MODE_CAN_AGENT) return 'seller';
+        const stored = localStorage.getItem('corex.map.view_mode');
+        return stored === 'agent' ? 'agent' : 'seller';
+    })();
     let baseLayerKey = localStorage.getItem('corex.map.base_layer') || 'streets';
 
     // Phase 3h Step 10 — demo-data toggle. Default comes from a data attr
@@ -2089,6 +2108,11 @@ document.addEventListener('DOMContentLoaded', function () {
         btn.addEventListener('click', () => {
             const target = btn.dataset.mode;
             if (target === viewMode) return;
+            // POPIA gate — block client-side escalation to Agent View
+            // when the user lacks access_prospecting. The server enforces
+            // Seller regardless, but this stops the UI from misleading
+            // the user into thinking PII is available.
+            if (target === 'agent' && !VIEW_MODE_CAN_AGENT) return;
             viewMode = target;
             localStorage.setItem('corex.map.view_mode', target);
             document.getElementById('seller-banner').style.display = target === 'seller' ? 'block' : 'none';
@@ -2543,18 +2567,18 @@ document.addEventListener('DOMContentLoaded', function () {
     // is served from cache (which would otherwise skip syncUrlState).
     map.on('moveend zoomend', syncUrlState);
 
-    // Initial render of seller view from persisted preference.
-    if (viewMode === 'seller') {
-        document.querySelectorAll('#view-mode-toggle .mode-pill').forEach(b => {
-            const active = b.dataset.mode === viewMode;
-            b.style.background = active ? 'var(--brand-button)' : 'transparent';
-            b.style.color = active ? '#fff' : 'var(--text-secondary)';
-        });
-        document.getElementById('seller-banner').style.display = 'block';
-        // A.2.4 — legacy "hide [data-sensitive=1] layer entry in seller view"
-        // line removed. Sectional schemes are visible in Seller View now;
-        // owner identity is redacted server-side in MapPinService.
-    }
+    // Initial render of view-mode pills + Seller banner. Always sync from
+    // the resolved viewMode state (server-default is Seller; the Blade
+    // statically marks the Seller pill .active to match, but a returning
+    // Agent-View user with localStorage preference and the permission
+    // needs the pills flipped to Agent on first paint).
+    document.querySelectorAll('#view-mode-toggle .mode-pill').forEach(b => {
+        const active = b.dataset.mode === viewMode;
+        b.classList.toggle('active', active);
+        b.style.background = active ? 'var(--brand-button)' : 'transparent';
+        b.style.color = active ? '#fff' : 'var(--text-secondary)';
+    });
+    document.getElementById('seller-banner').style.display = (viewMode === 'seller') ? 'block' : 'none';
     if (baseLayerKey === 'satellite') {
         document.querySelectorAll('#base-layer-toggle .base-pill').forEach(b => {
             const active = b.dataset.base === baseLayerKey;
