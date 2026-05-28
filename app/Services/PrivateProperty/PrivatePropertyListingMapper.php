@@ -22,7 +22,8 @@ class PrivatePropertyListingMapper
      */
     public function map(Property $property): array
     {
-        $branchGuid  = config('services.private_property.branch_guid');
+        $cfg         = PrivatePropertyConfig::forProperty($property);
+        $branchGuid  = $cfg['branch_guid'];
         $category    = $this->mapCategory($property->category);
         $mandateType = $this->mapMandateType($property->mandate_type);
         $listingType = $this->mapListingType($property->listing_type ?? $property->mandate_type);
@@ -515,7 +516,7 @@ class PrivatePropertyListingMapper
             'TelWork'               => $user->phone ?? $cellPhone,
             'TelHome'               => '', // PP only recognises TelCell + TelWork
             'Active'                => $active,
-            'BranchId'              => config('services.private_property.branch_guid'),
+            'BranchId'              => PrivatePropertyConfig::for($user->agency ?? null)['branch_guid'],
             'PrivatePropertyAgentId' => '',
             'PrivysealAlias'        => '',
         ];
@@ -548,7 +549,7 @@ class PrivatePropertyListingMapper
         // PP practical limit — too many images causes their transaction to timeout
         $allImages = array_slice($property->allImages(), 0, 20);
         // Use PP_IMAGE_BASE_URL if set (for local dev against sandbox), otherwise APP_URL
-        $override  = config('services.private_property.image_base_url');
+        $override  = PrivatePropertyConfig::forProperty($property)['image_base_url'];
         $baseUrl   = rtrim(!empty($override) ? $override : config('app.url'), '/');
         $urls      = [];
 

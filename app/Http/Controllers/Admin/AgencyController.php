@@ -175,6 +175,14 @@ class AgencyController extends Controller
             'p24_password'    => 'nullable|string|max:191',
             'p24_user_group_id' => 'nullable|string|max:64',
             'p24_enabled'     => 'nullable|boolean',
+            'pp_enabled'       => 'nullable|boolean',
+            'pp_username'      => 'nullable|string|max:191',
+            'pp_password'      => 'nullable|string|max:191',
+            'pp_branch_guid'   => 'nullable|string|max:64',
+            'pp_wsdl'          => 'nullable|string|max:255',
+            'pp_sandbox'       => 'nullable|boolean',
+            'pp_image_base_url' => 'nullable|string|max:255',
+            'pp_webhook_secret' => 'nullable|string|max:255',
             'logo'            => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
             'remove_logo'     => 'nullable|boolean',
         ]);
@@ -185,11 +193,26 @@ class AgencyController extends Controller
         $data['button_color']  = $data['button_color']  ?? '#0ea5e9';
         $data['is_active']       = (bool) ($data['is_active'] ?? false);
         $data['p24_enabled']     = (bool) ($data['p24_enabled'] ?? false);
+        $data['pp_enabled']      = (bool) ($data['pp_enabled'] ?? false);
+        $data['pp_sandbox']      = (bool) ($data['pp_sandbox'] ?? false);
 
         // Don't overwrite stored password with empty string when user leaves the
         // (masked) password field blank — only update p24_password when supplied.
         if (array_key_exists('p24_password', $data) && ($data['p24_password'] === null || $data['p24_password'] === '')) {
             unset($data['p24_password']);
+        }
+        if (array_key_exists('pp_password', $data) && ($data['pp_password'] === null || $data['pp_password'] === '')) {
+            unset($data['pp_password']);
+        }
+        if (array_key_exists('pp_webhook_secret', $data) && ($data['pp_webhook_secret'] === null || $data['pp_webhook_secret'] === '')) {
+            unset($data['pp_webhook_secret']);
+        }
+
+        // Auto-enable PP when both username and an effective password are present
+        // (parity with P24 auto-enable logic above).
+        $effectivePpPassword = $data['pp_password'] ?? $agency->pp_password;
+        if (!empty($data['pp_username']) && !empty($effectivePpPassword)) {
+            $data['pp_enabled'] = true;
         }
 
         // Auto-enable P24 when both username and an effective password are present
@@ -269,6 +292,48 @@ class AgencyController extends Controller
                 : ($result['message'] ?? 'Unknown error'),
             'status'  => $result['status_code'] ?? null,
         ]);
+    }
+
+    /**
+     * Test Private Property SOAP credentials by fetching branch details. JSON.
+     */
+    public function testPpConnection(Agency $agency)
+    {
+        $this->authorizeAgencyScope($agency);
+
+        $cfg = \App\Services\PrivateProperty\PrivatePropertyConfig::for($agency);
+        if (empty($cfg['username']) || empty($cfg['password']) || empty($cfg['branch_guid'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'PP credentials incomplete — need username, password, and branch GUID.',
+            ], 422);
+        }
+
+        try {
+            $client = app(\App\Services\PrivateProperty\PrivatePropertySoapClient::class);
+            $client->forAgency($agency);
+            $result = $client->getBranchDetails();
+
+            if (isset($result['error']) && $result['error'] === true) {
+                $agency->forceFill(['pp_last_sync_error' => $result['message'] ?? 'Unknown SOAP fault'])->save();
+                return response()->json([
+                    'success' => false,
+                    'message' => $result['message'] ?? 'Unknown SOAP fault',
+                ]);
+            }
+
+            $agency->forceFill(['pp_last_sync_error' => null])->save();
+            return response()->json([
+                'success' => true,
+                'message' => 'Connection OK — PP credentials work.',
+            ]);
+        } catch (\Throwable $e) {
+            $agency->forceFill(['pp_last_sync_error' => $e->getMessage()])->save();
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**

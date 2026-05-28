@@ -1682,6 +1682,7 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
         Route::put('/{agency}',      [\App\Http\Controllers\Admin\AgencyController::class, 'update'])->name('update');
         Route::post('/{agency}/p24/test',    [\App\Http\Controllers\Admin\AgencyController::class, 'testP24Connection'])->name('p24.test');
         Route::post('/{agency}/p24/refresh', [\App\Http\Controllers\Admin\AgencyController::class, 'refreshP24Locations'])->name('p24.refresh');
+        Route::post('/{agency}/pp/test',     [\App\Http\Controllers\Admin\AgencyController::class, 'testPpConnection'])->name('pp.test');
     });
 
     // Company Settings (standalone admin page — separate from tabbed settings)

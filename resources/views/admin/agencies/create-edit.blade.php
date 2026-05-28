@@ -384,6 +384,100 @@
             </div>
             @endif
 
+            @if($agency)
+            {{-- ── Private Property credentials ── --}}
+            <div class="text-xs font-bold uppercase tracking-wider pb-1 pt-5" style="color:var(--text-muted); border-bottom:1px solid var(--border);">Private Property — Credentials</div>
+            <p class="text-xs" style="color:var(--text-muted);">Per-agency PP SOAP credentials. Leave blank to fall back to the global <code>.env</code> defaults. Stored encrypted.</p>
+
+            <label class="flex items-center gap-3">
+                <input type="hidden" name="pp_enabled" value="0">
+                <input type="checkbox" name="pp_enabled" value="1"
+                       {{ old('pp_enabled', $agency->pp_enabled ?? false) ? 'checked' : '' }}
+                       class="w-4 h-4 rounded cursor-pointer"
+                       style="accent-color:var(--brand-icon, #0ea5e9);">
+                <span class="text-sm font-medium" style="color:var(--text-primary);">Enable Private Property integration for this agency</span>
+            </label>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Username</label>
+                    <input type="text" name="pp_username" value="{{ old('pp_username', $agency->pp_username) }}"
+                           class="w-full rounded-md px-3 py-2 text-sm font-mono"
+                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                           placeholder="e.g. agency@hfcoastal.co.za" autocomplete="off">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Password</label>
+                    <input type="password" name="pp_password"
+                           class="w-full rounded-md px-3 py-2 text-sm font-mono"
+                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                           placeholder="{{ $agency->pp_password ? '•••••••• (leave blank to keep)' : 'Enter PP password' }}"
+                           autocomplete="new-password">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Branch GUID</label>
+                    <input type="text" name="pp_branch_guid" value="{{ old('pp_branch_guid', $agency->pp_branch_guid) }}"
+                           class="w-full rounded-md px-3 py-2 text-sm font-mono"
+                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                           placeholder="e.g. 6f0a1b2c-3d4e-5f6a-7b8c-9d0e1f2a3b4c">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">WSDL URL</label>
+                    <input type="text" name="pp_wsdl" value="{{ old('pp_wsdl', $agency->pp_wsdl) }}"
+                           class="w-full rounded-md px-3 py-2 text-sm font-mono"
+                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                           placeholder="{{ config('services.private_property.wsdl') }}">
+                </div>
+                <div class="flex items-center pt-5">
+                    <label class="flex items-center gap-3">
+                        <input type="hidden" name="pp_sandbox" value="0">
+                        <input type="checkbox" name="pp_sandbox" value="1"
+                               {{ old('pp_sandbox', $agency->pp_sandbox ?? true) ? 'checked' : '' }}
+                               class="w-4 h-4 rounded cursor-pointer"
+                               style="accent-color:var(--brand-icon, #0ea5e9);">
+                        <span class="text-sm font-medium" style="color:var(--text-primary);">Sandbox mode</span>
+                    </label>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Image Base URL</label>
+                    <input type="text" name="pp_image_base_url" value="{{ old('pp_image_base_url', $agency->pp_image_base_url) }}"
+                           class="w-full rounded-md px-3 py-2 text-sm font-mono"
+                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                           placeholder="optional — overrides APP_URL for image hosts">
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-xs font-medium mb-1" style="color:var(--text-secondary);">Webhook Secret</label>
+                    <input type="password" name="pp_webhook_secret"
+                           class="w-full rounded-md px-3 py-2 text-sm font-mono"
+                           style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);"
+                           placeholder="{{ $agency->pp_webhook_secret ? '•••••••• (leave blank to keep)' : 'HMAC secret registered in PP Admin Portal' }}"
+                           autocomplete="new-password">
+                </div>
+            </div>
+
+            <div class="rounded-md p-4" style="background:var(--surface-2); border:1px solid var(--border);"
+                 x-data="ppActions({ testUrl: '{{ route('agencies.pp.test', $agency) }}', csrf: '{{ csrf_token() }}' })">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="text-xs space-y-1">
+                        @if($agency->pp_last_sync_error)
+                            <div class="break-all" style="color:var(--ds-crimson);"><span class="font-semibold">Last error:</span> {{ Str::limit($agency->pp_last_sync_error, 300) }}</div>
+                        @endif
+                        <template x-if="message">
+                            <div :style="ok ? 'color:var(--ds-green);' : 'color:var(--ds-crimson);'"
+                                 class="font-medium" x-text="message"></div>
+                        </template>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" @click="test()" :disabled="busy"
+                                class="px-3 py-1.5 rounded-md text-xs font-semibold disabled:opacity-60"
+                                style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                            <span x-text="busy ? 'Testing…' : 'Test Connection'"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            @endif
+
             <div class="flex justify-end pt-1">
                 <button type="submit" class="corex-btn-primary">{{ $agency ? 'Update Agency' : 'Create Agency' }}</button>
             </div>
@@ -679,6 +773,24 @@ function p24Actions(cfg) {
             this.busy = true; this.action = 'refresh'; this.message = '';
             const { ok, msg } = await this._post(cfg.refreshUrl);
             this.ok = ok; this.message = msg; this.busy = false; this.action = null;
+        },
+    };
+}
+
+function ppActions(cfg) {
+    return {
+        busy: false, message: '', ok: false,
+        async test() {
+            this.busy = true; this.message = '';
+            const r = await fetch(cfg.testUrl, {
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': cfg.csrf, 'Accept': 'application/json' },
+            });
+            let body = {};
+            try { body = await r.json(); } catch (e) {}
+            this.ok = r.ok && body.success;
+            this.message = body.message || ('HTTP ' + r.status);
+            this.busy = false;
         },
     };
 }
