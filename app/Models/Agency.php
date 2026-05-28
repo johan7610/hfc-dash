@@ -49,6 +49,8 @@ class Agency extends Model
         'icon_color',
         'default_color',
         'button_color',
+        'ai_voice_enabled',
+        'ai_image_recognition_enabled',
         'logo_path',
         'email_disclaimer',
         'popi_url',
@@ -88,6 +90,8 @@ class Agency extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'is_demo' => 'boolean',
+        'ai_voice_enabled' => 'boolean',
+        'ai_image_recognition_enabled' => 'boolean',
         'require_external_access_authorization' => 'boolean',
         'split_branches_enabled' => 'boolean',
         'default_branch_id' => 'integer',

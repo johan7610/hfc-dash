@@ -54,6 +54,8 @@ class AgencyController extends Controller
             'icon_color'       => 'nullable|string|max:20',
             'default_color'    => 'nullable|string|max:20',
             'button_color'     => 'nullable|string|max:20',
+            'ai_voice_enabled'              => 'nullable|boolean',
+            'ai_image_recognition_enabled'  => 'nullable|boolean',
             'is_active'        => 'nullable|boolean',
             'is_demo'          => 'nullable|boolean',
             'trading_name'     => 'nullable|string|max:255',
@@ -86,6 +88,8 @@ class AgencyController extends Controller
         $data['button_color']  = $data['button_color']  ?? '#0ea5e9';
         $data['is_active']     = (bool) ($data['is_active'] ?? true);
         $data['is_demo']       = (bool) ($data['is_demo'] ?? false);
+        $data['ai_voice_enabled']              = (bool) ($data['ai_voice_enabled'] ?? false);
+        $data['ai_image_recognition_enabled']  = (bool) ($data['ai_image_recognition_enabled'] ?? false);
 
         $isDemo = $data['is_demo'];
         $adminPayload = $isDemo ? null : [
@@ -157,6 +161,8 @@ class AgencyController extends Controller
             'icon_color'      => 'nullable|string|max:20',
             'default_color'   => 'nullable|string|max:20',
             'button_color'    => 'nullable|string|max:20',
+            'ai_voice_enabled'              => 'nullable|boolean',
+            'ai_image_recognition_enabled'  => 'nullable|boolean',
             'is_active'       => 'nullable|boolean',
             'trading_name'    => 'nullable|string|max:255',
             'tagline'         => 'nullable|string|max:255',
@@ -193,6 +199,8 @@ class AgencyController extends Controller
         $data['button_color']  = $data['button_color']  ?? '#0ea5e9';
         $data['is_active']       = (bool) ($data['is_active'] ?? false);
         $data['p24_enabled']     = (bool) ($data['p24_enabled'] ?? false);
+        $data['ai_voice_enabled']              = (bool) ($data['ai_voice_enabled'] ?? false);
+        $data['ai_image_recognition_enabled']  = (bool) ($data['ai_image_recognition_enabled'] ?? false);
         $data['pp_enabled']      = (bool) ($data['pp_enabled'] ?? false);
         $data['pp_sandbox']      = (bool) ($data['pp_sandbox'] ?? false);
 

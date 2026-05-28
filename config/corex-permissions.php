@@ -293,6 +293,8 @@ return [
 
         // ── Ellie AI ──
         ['key' => 'access_ellie',                'label' => 'Access Ellie AI',             'section' => 'ellie',            'type' => 'access',  'module' => 'ellie',            'sort_order' => 1],
+        ['key' => 'use_ellie_voice',             'label' => 'Use Ellie Voice Commands',    'section' => 'ellie',            'type' => 'feature', 'module' => 'ellie',            'sort_order' => 2],
+        ['key' => 'use_property_image_ai',       'label' => 'Use AI Image Recognition',    'section' => 'ellie',            'type' => 'feature', 'module' => 'ellie',            'sort_order' => 3],
 
         // ── P24 Market Intelligence ──
         ['key' => 'manage_p24',                  'label' => 'Manage P24 Market Intel',     'section' => 'p24',              'type' => 'access',  'module' => 'p24',              'sort_order' => 1],
@@ -520,7 +522,7 @@ return [
                 'commercial_evals.view', 'commercial_evals.create', 'commercial_evals.edit',
                 'access_sales_documents',
                 'sales_docs.view', 'sales_docs.create', 'sales_docs.edit',
-                'access_calculators', 'access_ellie', 'access_flow_map',
+                'access_calculators', 'access_ellie', 'use_ellie_voice', 'use_property_image_ai', 'access_flow_map',
                 'access_pdf_splitter', 'access_pdf_suite', 'access_image_converter',
                 'access_deposit_calculator', 'access_deposit_calc_history',
                 'access_prospecting', 'access_evaluation',
@@ -591,7 +593,7 @@ return [
                 'commercial_evals.view', 'commercial_evals.create',
                 'access_sales_documents',
                 'sales_docs.view', 'sales_docs.create',
-                'access_calculators', 'access_ellie', 'access_flow_map',
+                'access_calculators', 'access_ellie', 'use_ellie_voice', 'use_property_image_ai', 'access_flow_map',
                 'access_pdf_splitter', 'access_pdf_suite', 'access_image_converter',
                 'access_prospecting', 'access_evaluation',
                 'access_properties', 'create_properties',
@@ -639,7 +641,7 @@ return [
                 'access_filing_register', 'filing.view',
                 'access_commercial_evaluations', 'commercial_evals.view',
                 'access_sales_documents', 'sales_docs.view',
-                'access_calculators', 'access_ellie', 'access_flow_map',
+                'access_calculators', 'access_ellie', 'use_ellie_voice', 'use_property_image_ai', 'access_flow_map',
                 'access_prospecting', 'access_evaluation',
                 'access_properties', 'properties.view',
                 'access_contacts', 'contacts.view',

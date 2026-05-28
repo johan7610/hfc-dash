@@ -258,6 +258,10 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::put('/{property}',  [MobilePropertyController::class, 'update'])->name('v1.mobile.properties.update');
             Route::post('/{property}/images', [MobilePropertyController::class, 'uploadImage'])->name('v1.mobile.properties.images.upload');
 
+            // AI vision suggestions on uploaded property images
+            Route::get('/{property}/ai-suggestions',         [\App\Http\Controllers\Api\PropertyImageAiController::class, 'suggestions'])->name('v1.mobile.properties.ai.suggestions');
+            Route::post('/{property}/features/merge-ai',     [\App\Http\Controllers\Api\PropertyImageAiController::class, 'mergeFeatures'])->name('v1.mobile.properties.ai.features.merge');
+
             Route::get('/{property}/overview', [MobilePropertyController::class, 'overview'])->name('v1.mobile.properties.overview');
 
             Route::get('/{property}/compliance',                 [MobilePropertyController::class, 'compliance'])->name('v1.mobile.properties.compliance');
@@ -274,6 +278,16 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/{property}/spaces', [MobilePropertyController::class, 'spacesShow'])->name('v1.mobile.properties.spaces.show');
             Route::put('/{property}/spaces', [MobilePropertyController::class, 'spacesUpdate'])->name('v1.mobile.properties.spaces.update');
         });
+
+        // ── Mobile Ellie Voice ──────────────────────────────────────
+        Route::prefix('mobile/ellie')->group(function () {
+            Route::post('/voice',                     [\App\Http\Controllers\Api\MobileEllieVoiceController::class, 'process'])->name('v1.mobile.ellie.voice');
+            Route::delete('/voice/events/{event}',    [\App\Http\Controllers\Api\MobileEllieVoiceController::class, 'undoEvent'])->name('v1.mobile.ellie.voice.undo');
+        });
+
+        // ── Mobile feature flags (advanced AI features) ─────────────
+        Route::get('/mobile/features', [\App\Http\Controllers\Api\MobileFeatureFlagController::class, 'index'])
+            ->name('v1.mobile.features');
 
         // ── Mobile Contacts ─────────────────────────────────────────
         Route::prefix('mobile/contacts')->group(function () {
