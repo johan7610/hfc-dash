@@ -613,7 +613,7 @@ class MobilePropertyController extends Controller
         // Queue AI vision analysis (gated by agency flag + user permission)
         $analysisId = null;
         $u = $request->user();
-        if ($u?->agency?->ai_image_recognition_enabled && $u->can('use_property_image_ai')) {
+        if ($u?->agency?->ai_image_recognition_enabled && $u->hasPermission('use_property_image_ai')) {
             $analysis = \App\Models\PropertyImageAnalysis::create([
                 'agency_id'   => $property->agency_id,
                 'property_id' => $property->id,

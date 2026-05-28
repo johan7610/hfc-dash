@@ -153,7 +153,7 @@ class PropertyImageAiController extends Controller
     private function guard(Request $request, Property $property): void
     {
         $user = $request->user();
-        if (! $user || ! $user->can('use_property_image_ai')) {
+        if (! $user || ! $user->hasPermission('use_property_image_ai')) {
             abort(403, 'Permission denied.');
         }
         if (! ($user->agency?->ai_image_recognition_enabled)) {

@@ -30,7 +30,7 @@ class MobileEllieVoiceController extends Controller
     public function process(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (! $user || ! $user->can('use_ellie_voice')) {
+        if (! $user || ! $user->hasPermission('use_ellie_voice')) {
             return response()->json(['error' => 'Permission denied.'], 403);
         }
         if (! ($user->agency?->ai_voice_enabled)) {
@@ -113,7 +113,7 @@ class MobileEllieVoiceController extends Controller
     public function undoEvent(Request $request, int $eventId): JsonResponse
     {
         $user = $request->user();
-        if (! $user || ! $user->can('use_ellie_voice')) {
+        if (! $user || ! $user->hasPermission('use_ellie_voice')) {
             return response()->json(['error' => 'Permission denied.'], 403);
         }
 

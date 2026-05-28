@@ -25,11 +25,11 @@ class MobileFeatureFlagController extends Controller
         return response()->json([
             'ai_voice' => (bool) (
                 $agency?->ai_voice_enabled
-                && $user->can('use_ellie_voice')
+                && $user->hasPermission('use_ellie_voice')
             ),
             'ai_image_recognition' => (bool) (
                 $agency?->ai_image_recognition_enabled
-                && $user->can('use_property_image_ai')
+                && $user->hasPermission('use_property_image_ai')
             ),
             'agency_id' => $agency?->id,
             'user_id'   => $user?->id,
