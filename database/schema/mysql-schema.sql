@@ -5290,7 +5290,7 @@ CREATE TABLE `market_reports` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `agency_id` bigint unsigned NOT NULL,
   `uploaded_by_user_id` bigint unsigned NOT NULL,
-  `report_type_id` smallint unsigned NOT NULL,
+  `report_type_id` smallint unsigned DEFAULT NULL,
   `file_path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Storage path under storage/app/',
   `file_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Original filename as uploaded',
   `file_hash` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'sha256 hex; dedup within agency',
@@ -10812,3 +10812,5 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (779,'2026_05_25_12
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (780,'2026_06_16_121000_add_tp_outreach_columns',227);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (781,'2026_06_16_122000_fix_market_report_cascade_to_preserve_audit',227);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (782,'2026_06_16_122100_seed_mic_restore_reports_permission',227);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (783,'2026_06_16_122200_seed_cma_info_vicinity_sale_type',228);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (784,'2026_06_16_122300_make_market_reports_report_type_id_nullable',229);

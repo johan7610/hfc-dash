@@ -10,6 +10,7 @@ use App\Services\MarketReports\Parsers\CmaInfoMedianSalesAnalysisParser;
 use App\Services\MarketReports\Parsers\CmaInfoPropertyValuationParser;
 use App\Services\MarketReports\Parsers\CmaInfoSchemeOwnersListParser;
 use App\Services\MarketReports\Parsers\CmaInfoSectionalTitleSalesParser;
+use App\Services\MarketReports\Parsers\CmaInfoVicinitySaleParser;
 use App\Services\MarketReports\Parsers\GenericFallbackParser;
 
 /**
@@ -32,6 +33,7 @@ final class MarketReportParserRegistry
         CmaInfoMedianSalesAnalysisParser::class,
         CmaInfoPropertyValuationParser::class,
         CmaInfoSectionalTitleSalesParser::class,
+        CmaInfoVicinitySaleParser::class,
         CmaInfoSchemeOwnersListParser::class,
         // GenericFallbackParser ALWAYS last — its 0.1 floor anchors the
         // tiebreaker so the upload pipeline always gets at least one match.
