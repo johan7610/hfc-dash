@@ -392,7 +392,7 @@ class PrivatePropertySoapClient
     public function getProvinces(int $countryId): array
     {
         return $this->call('GetProvinces', [
-            'CountryID' => $countryId,
+            'CountryId' => $countryId,
             'Token'     => $this->buildToken(),
         ]);
     }
