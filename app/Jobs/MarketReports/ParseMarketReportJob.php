@@ -70,10 +70,24 @@ class ParseMarketReportJob implements ShouldQueue
         }
 
         try {
-            // Resolve parser — prefer the explicit report_type_id if set.
-            $parser = $report->report_type_id
-                ? $registry->resolveByKey((string) ($report->reportType?->key ?? 'other'))
-                : $registry->detect($absolutePath)['parser'];
+            // Resolve parser — prefer the explicit report_type_id if set,
+            // otherwise auto-detect. When detection is used (e.g. on re-parse
+            // after MarketReportController::resetReportForReparse() cleared
+            // the stamp), write the resolved type back to the row so the
+            // index/show views label it correctly instead of "—".
+            if ($report->report_type_id) {
+                $parser = $registry->resolveByKey((string) ($report->reportType?->key ?? 'other'));
+            } else {
+                $parser = $registry->detect($absolutePath)['parser'];
+                $resolvedKey = $parser->getReportTypeKey();
+                $resolvedType = \App\Models\MarketReports\MarketReportType::query()
+                    ->where('key', $resolvedKey)
+                    ->first();
+                if ($resolvedType) {
+                    $report->update(['report_type_id' => $resolvedType->id]);
+                    $report->setRelation('reportType', $resolvedType);
+                }
+            }
 
             $result = $parser->parse($absolutePath, $report);
 

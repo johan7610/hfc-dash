@@ -430,7 +430,15 @@ final class MarketReportController extends Controller
         DB::table('market_data_discrepancies')->where('report_id', $report->id)->delete();
         DB::table('market_report_comp_rows')->where('market_report_id', $report->id)->delete();
         DB::table('market_data_points')->where('report_id', $report->id)->delete();
+        // Clear report_type_id so ParseMarketReportJob takes its detect()
+        // branch (the null-fork) on dispatch — re-parse is "start over",
+        // not "re-run whatever parser was stamped last time". Without this
+        // clear, the 91 reports stuck on type 'other' (because the
+        // vicinity parser was un-registered when they were first
+        // imported) would re-parse as GenericFallback forever. The
+        // initial-import path also clears parser stamps; this matches.
         $report->update([
+            'report_type_id'      => null,
             'parse_status'        => MarketReport::PARSE_PENDING,
             'parse_started_at'    => null,
             'parse_completed_at'  => null,
