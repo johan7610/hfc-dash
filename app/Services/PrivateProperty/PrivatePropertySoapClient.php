@@ -392,31 +392,31 @@ class PrivatePropertySoapClient
     public function getProvinces(int $countryId): array
     {
         return $this->call('GetProvinces', [
-            'CountryId' => $countryId,
+            'CountryID' => $countryId,
             'Token'     => $this->buildToken(),
         ]);
     }
 
     /**
      * Get the list of cities for a province.
-     * WSDL: GetCities { int ProvinceId, SecurityToken Token }
+     * WSDL: GetCities { int ProvinceID, SecurityToken Token }
      */
     public function getCities(int $provinceId): array
     {
         return $this->call('GetCities', [
-            'ProvinceId' => $provinceId,
+            'ProvinceID' => $provinceId,
             'Token'      => $this->buildToken(),
         ]);
     }
 
     /**
      * Get the list of suburbs for a city.
-     * WSDL: GetSuburbs { int CityId, SecurityToken Token }
+     * WSDL: GetSuburbs { int CityID, SecurityToken Token }
      */
     public function getSuburbs(int $cityId): array
     {
         return $this->call('GetSuburbs', [
-            'CityId' => $cityId,
+            'CityID' => $cityId,
             'Token'  => $this->buildToken(),
         ]);
     }
