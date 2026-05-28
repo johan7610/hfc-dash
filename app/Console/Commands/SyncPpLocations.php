@@ -21,6 +21,7 @@ class SyncPpLocations extends Command
     protected $description = 'Pulls the Private Property location tree (countries → provinces → cities → suburbs) into local cache tables.';
 
     private array $progress = [];
+    private bool $loggedCitySample = false;
 
     public function handle(PrivatePropertySoapClient $client): int
     {
@@ -164,6 +165,13 @@ class SyncPpLocations extends Command
         $this->guardSoap($resp, 'GetCities');
         $list = $this->extractList($resp, 'CityModel');
 
+        // Log one full sample so we can confirm PP's actual field shape.
+        if (!empty($list) && empty($this->loggedCitySample)) {
+            \Illuminate\Support\Facades\Log::channel('private_property')
+                ->info('PP GetCities sample row', ['row' => $list[0]]);
+            $this->loggedCitySample = true;
+        }
+
         foreach ($list as $c) {
             $name = $c['Name'] ?? null;
             $cid  = ($c['CityId'] ?? $c['Id'] ?? null);
@@ -178,7 +186,13 @@ class SyncPpLocations extends Command
             $this->progress['current'] = $province->name . ' › ' . $city->name;
             $this->writeProgress();
 
-            $this->syncSuburbs($client, $city);
+            try {
+                $this->syncSuburbs($client, $city);
+            } catch (\Throwable $e) {
+                // Don't kill the whole sync over one city — log and continue.
+                \Illuminate\Support\Facades\Log::channel('private_property')
+                    ->warning("Skipping suburbs for CityID={$city->pp_city_id} ({$city->name}): " . $e->getMessage());
+            }
         }
     }
 
