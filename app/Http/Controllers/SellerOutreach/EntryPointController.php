@@ -145,23 +145,33 @@ final class EntryPointController extends Controller
             // Branch context is mandatory on Contact rows in CoreX schema.
             $branchId = $request->user()->branch_id;
 
-            $contact = $existing ?: Contact::create(array_filter([
-                'agency_id'             => $agencyId,
-                'branch_id'             => $branchId,
-                'first_name'            => $validated['first_name'],
-                // contacts.last_name is NOT NULL in the schema — store an empty
-                // string when the agent skipped it. The spec's S3 dedupe only
-                // needs first_name + phone/email anyway.
-                'last_name'             => $validated['last_name'] ?? '',
-                'phone'                 => $validated['phone'] ?? null,
-                'email'                 => $validated['email'] ?? null,
-                'created_by_user_id'    => $request->user()->id,
-                // A.2.5 — POPIA audit. captured_at + source are only set when
-                // the agent actually filled in the ID; null otherwise.
-                'id_number'             => $idNumber,
-                'id_number_captured_at' => $idNumber ? now() : null,
-                'id_number_source'      => $idNumber ? 'seller_outreach_entry' : null,
-            ], static fn ($v) => $v !== null && $v !== ''));
+            // contacts.last_name + contacts.phone are NOT NULL in the schema —
+            // they must reach Contact::create even when empty, so we merge the
+            // NOT-NULL columns AFTER the array_filter that strips empty values
+            // from the optional ones. Same shape as storeFromTrackedProperty
+            // below. The A.2.5 commit (ea2b0295) introduced the array_filter
+            // wrapper to keep id_number+audit fields out when empty, and in
+            // doing so accidentally stripped last_name='' and phone=null,
+            // causing SQL 1364 on every Pitch Now submit where the agent
+            // skipped last_name or used email-only contact.
+            $contact = $existing ?: Contact::create(array_merge(
+                array_filter([
+                    'agency_id'             => $agencyId,
+                    'branch_id'             => $branchId,
+                    'first_name'            => $validated['first_name'],
+                    'email'                 => $validated['email'] ?? null,
+                    'created_by_user_id'    => $request->user()->id,
+                    // A.2.5 — POPIA audit. captured_at + source are only set when
+                    // the agent actually filled in the ID; null otherwise.
+                    'id_number'             => $idNumber,
+                    'id_number_captured_at' => $idNumber ? now() : null,
+                    'id_number_source'      => $idNumber ? 'seller_outreach_entry' : null,
+                ], static fn ($v) => $v !== null && $v !== ''),
+                [
+                    'last_name' => $validated['last_name'] ?? '',
+                    'phone'     => $validated['phone'] ?? '',
+                ],
+            ));
 
             // If the contact ALREADY existed (deduped) but the agent supplied
             // an ID at this entry point, capture-fill it on the existing row
