@@ -33,7 +33,19 @@ class PrivatePropertyConfig
         ];
 
         if (! $agency) {
-            return $env;
+            // CLI / queue context: no auth user and no explicit agency.
+            // Auto-pick the first enabled PP agency so scheduled jobs
+            // (event feed, activations sync) and artisan commands have a
+            // valid BranchId. Falls through to env if no agency configured.
+            $agency = Agency::query()
+                ->withoutGlobalScope(\App\Models\Scopes\AgencyScope::class)
+                ->where('pp_enabled', true)
+                ->whereNotNull('pp_branch_guid')
+                ->orderBy('id')
+                ->first();
+            if (! $agency) {
+                return $env;
+            }
         }
 
         $pick = function (string $col, $fallback) use ($agency) {
