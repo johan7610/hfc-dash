@@ -159,6 +159,7 @@ class ImporterController extends Controller
             'status'            => 'parsing',
             'listings_csv_path' => $listingsPath,
             'images_csv_path'   => $imagesPath,
+            'mark_compliant_on_confirm' => $request->boolean('mark_compliant_on_confirm'),
         ]);
 
         try {

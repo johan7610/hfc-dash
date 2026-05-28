@@ -10,7 +10,16 @@
       "WebFetch(*)",
       "WebSearch(*)",
       "NotebookEdit(*)",
-      "Task(*)"
+      "Task(*)",
+      "PowerShell(C:\\\\xampp\\\\php\\\\php.exe -l app/Models/P24ImportRun.php)",
+      "PowerShell(C:\\\\xampp\\\\php\\\\php.exe -l app/Http/Controllers/Admin/ImporterController.php)",
+      "PowerShell(C:\\\\xampp\\\\php\\\\php.exe -l app/Jobs/ConfirmP24PropertyRowJob.php)",
+      "PowerShell(C:\\\\xampp\\\\php\\\\php.exe -l app/Http/Controllers/CoreX/ContactImportController.php)",
+      "PowerShell(C:\\\\xampp\\\\php\\\\php.exe -l database/migrations/2026_05_28_140000_add_mark_compliant_on_confirm_to_p24_import_runs.php)",
+      "PowerShell(C:\\\\xampp\\\\php\\\\php.exe artisan migrate --force 2>&1)",
+      "PowerShell(C:\\\\xampp\\\\php\\\\php.exe artisan view:clear 2>&1)",
+      "PowerShell(C:\\\\xampp\\\\php\\\\php.exe artisan route:clear 2>&1)",
+      "PowerShell(C:\\\\xampp\\\\php\\\\php.exe artisan cache:clear 2>&1)"
     ]
   }
 }
