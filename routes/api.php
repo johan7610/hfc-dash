@@ -289,6 +289,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/mobile/features', [\App\Http\Controllers\Api\MobileFeatureFlagController::class, 'index'])
             ->name('v1.mobile.features');
 
+        // ── Mobile calendar (auth-user-only, web-parity filters) ─────
+        Route::get('/mobile/calendar', [\App\Http\Controllers\Api\MobileCalendarController::class, 'index'])
+            ->name('v1.mobile.calendar.index');
+
         // ── Mobile Contacts ─────────────────────────────────────────
         Route::prefix('mobile/contacts')->group(function () {
             Route::get('/',         [MobileContactController::class, 'index'])->name('v1.mobile.contacts.index');
