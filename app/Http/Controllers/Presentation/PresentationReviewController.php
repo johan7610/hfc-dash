@@ -9,6 +9,8 @@ use App\Models\AgentOverride;
 use App\Models\PresentationSoldComp;
 use App\Models\PresentationVersion;
 use App\Models\PropertySettingItem;
+use App\Services\Presentations\AnalysisDataService;
+use App\Services\Presentations\ConditionAdjustmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -102,14 +104,115 @@ final class PresentationReviewController extends Controller
             ];
         })->all();
 
+        // Build 3 — condition picker data. We surface ALL the agency's
+        // active condition levels in the dropdown, plus the current
+        // resolution (override / property / none).
+        $conditionLevels = PropertySettingItem::withoutGlobalScopes()
+            ->where('agency_id', $version->agency_id)
+            ->where('group', PropertySettingItem::GROUP_CONDITION_LEVEL)
+            ->where('active', true)
+            ->orderBy('sort_order')->orderBy('name')
+            ->get(['id', 'name', 'adjustment_pct']);
+
+        $resolver        = app(ConditionAdjustmentService::class);
+        $resolved        = $resolver->resolveLive($version, $presentation);
+        $currentCondId   = $resolved['level']?->id;
+        $currentCondPct  = $resolved['level'] ? (float) $resolved['level']->adjustment_pct : null;
+        $currentCondName = $resolved['level']?->name;
+
+        // Live compile of the CMA bands so the review screen renders the
+        // condition-adjusted Middle in-place (no extra round-trip on
+        // first paint).
+        $analysis    = (new AnalysisDataService())->compile($presentation, $version);
+        $cmaValue    = $analysis['cma_valuation'] ?? [];
+
         return view('presentations.review', [
-            'version'           => $version,
-            'presentation'      => $presentation,
-            'compRows'          => $compRows,
-            'subjectTitleType'  => $subjectTitleType,
-            'isLockedByOther'   => $isLockedByOther,
-            'currentReviewer'   => $currentReviewer,
-            'unavailableLogged' => $unavailableLogged,
+            'version'              => $version,
+            'presentation'         => $presentation,
+            'compRows'             => $compRows,
+            'subjectTitleType'     => $subjectTitleType,
+            'isLockedByOther'      => $isLockedByOther,
+            'currentReviewer'      => $currentReviewer,
+            'unavailableLogged'    => $unavailableLogged,
+            // Build 3 — condition picker + initial valuation.
+            'conditionLevels'      => $conditionLevels,
+            'currentConditionId'   => $currentCondId,
+            'currentConditionPct'  => $currentCondPct,
+            'currentConditionName' => $currentCondName,
+            'currentConditionSrc'  => $resolved['source'],
+            'cmaValuation'         => $cmaValue,
+        ]);
+    }
+
+    /**
+     * Build 3 — agent picks (or changes) the condition on the review
+     * screen. Writes a TYPE_CONDITION_CHANGED override row and returns
+     * the recomputed CMA bands so the JS can update the displayed
+     * valuation without a page reload.
+     */
+    public function setCondition(Request $request, PresentationVersion $version): JsonResponse
+    {
+        $this->authoriseReviewer($request, $version);
+
+        $request->validate([
+            // Null clears the override → falls back to property condition
+            // (or baseline if property has none).
+            'condition_level_id' => 'nullable|integer|exists:property_setting_items,id',
+        ]);
+
+        $previousId = $version->condition_level_id;
+        $newId      = $request->input('condition_level_id') ?: null;
+
+        // Agency isolation: a malicious POST that smuggles a foreign
+        // level id must be rejected. Verify the picked level (if any)
+        // belongs to this version's agency AND is a condition_level.
+        if ($newId !== null) {
+            $level = PropertySettingItem::withoutGlobalScopes()
+                ->where('id', $newId)
+                ->where('agency_id', $version->agency_id)
+                ->where('group', PropertySettingItem::GROUP_CONDITION_LEVEL)
+                ->first();
+            if (!$level) {
+                return response()->json(['error' => 'invalid_condition_level'], 422);
+            }
+        }
+
+        DB::transaction(function () use ($version, $previousId, $newId, $request) {
+            $version->forceFill(['condition_level_id' => $newId])->save();
+
+            AgentOverride::create([
+                'agency_id'               => $version->agency_id,
+                'presentation_version_id' => $version->id,
+                'user_id'                 => $request->user()->id,
+                'override_type'           => AgentOverride::TYPE_CONDITION_CHANGED,
+                'target_id'               => 'condition_level_id',
+                'before_value'            => ['condition_level_id' => $previousId],
+                'after_value'             => ['condition_level_id' => $newId],
+            ]);
+        });
+
+        // Recompute the CMA bands with the new condition and return
+        // them so the JS can patch the valuation strip in-place.
+        $version->refresh();
+        $presentation = $version->presentation()->with('property')->first();
+        $analysis     = (new AnalysisDataService())->compile($presentation, $version);
+        $cma          = $analysis['cma_valuation'] ?? [];
+
+        return response()->json([
+            'ok'        => true,
+            'condition' => [
+                'level_id'   => $newId,
+                'pct'        => $cma['condition_pct'] ?? null,
+                'label'      => $cma['condition_label'] ?? null,
+                'source'     => $cma['condition_source'] ?? 'none',
+                'applied'    => (bool) ($cma['condition_applied'] ?? false),
+            ],
+            'cma'       => [
+                'lower'           => $cma['cma_lower'] ?? null,
+                'middle'          => $cma['cma_middle'] ?? null,
+                'middle_baseline' => $cma['cma_middle_baseline'] ?? null,
+                'upper'           => $cma['cma_upper'] ?? null,
+            ],
         ]);
     }
 
@@ -199,6 +302,16 @@ final class PresentationReviewController extends Controller
                 'public_url' => route('presentations.show', $version->presentation_id),
             ]);
         }
+
+        // Build 3 — snapshot the resolved condition on the version BEFORE
+        // status flips. The snapshot defends the PDF against future
+        // agency-settings drift; without it the agency could edit
+        // adjustment_pct after publish and silently change historic
+        // valuations.
+        $presentation = $version->presentation;
+        $resolver = app(ConditionAdjustmentService::class);
+        $resolved = $resolver->resolveLive($version, $presentation);
+        $resolver->snapshotOnVersion($version, $resolved['level']);
 
         $version->forceFill([
             'review_status' => PresentationVersion::REVIEW_PUBLISHED,

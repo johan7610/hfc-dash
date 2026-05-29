@@ -47,6 +47,18 @@
     .review-pin-cross { outline: 2px dashed var(--ds-amber, #d97706); outline-offset: 2px; border-radius: 4px; }
     .review-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #0b2a4a; color: #fff; padding: 8px 16px; border-radius: 4px; font-size: 12px; opacity: 0; transition: opacity 200ms; pointer-events: none; z-index: 9999; }
     .review-toast.show { opacity: 1; }
+    /* Build 3 — condition picker + valuation strip. */
+    .cond-picker { padding: 5px 10px; font-size: 12.5px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text-primary); min-width: 280px; }
+    .cond-source-tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+    .valuation-cell { padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; }
+    .cell-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); font-weight: 600; margin-bottom: 4px; }
+    .cell-value { font-size: 16px; font-weight: 700; color: #0b2a4a; tabular-nums: tabular-nums; }
+    .cell-adj-flag { display: inline-block; margin-left: 4px; padding: 1px 5px; background: #00d4aa; color: #0b2a4a; border-radius: 2px; font-size: 9px; font-weight: 700; }
+    .cell-adj-flag[hidden] { display: none; }
+    .cma-adj-line { margin-top: 6px; font-size: 11px; color: var(--text-muted); text-align: center; }
+    .cma-adj-line[hidden] { display: none; }
+    .cma-no-cond-banner { margin-top: 8px; padding: 6px 10px; background: color-mix(in srgb, var(--ds-amber, #d97706) 8%, transparent); border: 1px solid color-mix(in srgb, var(--ds-amber, #d97706) 25%, transparent); border-radius: 3px; font-size: 11px; color: var(--ds-amber, #d97706); }
+    .cma-no-cond-banner[hidden] { display: none; }
 </style>
 @endpush
 
@@ -141,7 +153,69 @@
                     @endif
                 </td>
             </tr>
+            {{-- Build 3 — condition picker. Pre-populated from version
+                 override > property > none. Changes POST to setCondition
+                 and the JS patches the valuation strip below in-place. --}}
+            <tr>
+                <td style="padding: 8px 0; color: var(--text-muted); font-weight: 600;">Condition</td>
+                <td style="padding: 8px 0;" colspan="3">
+                    <select id="condition-picker" class="cond-picker">
+                        <option value="">— No condition (baseline only) —</option>
+                        @foreach($conditionLevels as $level)
+                            <option value="{{ $level->id }}"
+                                    data-pct="{{ (float) $level->adjustment_pct }}"
+                                    {{ $currentConditionId === $level->id ? 'selected' : '' }}>
+                                {{ $level->name }}
+                                ({{ $level->adjustment_pct >= 0 ? '+' : '' }}{{ (float) $level->adjustment_pct }}%)
+                            </option>
+                        @endforeach
+                    </select>
+                    <span id="condition-source" class="cond-source-tag" style="margin-left:8px;">
+                        @if($currentConditionSrc === 'version_override')
+                            Set on this presentation
+                        @elseif($currentConditionSrc === 'property_default')
+                            From property record
+                        @else
+                            No condition set
+                        @endif
+                    </span>
+                </td>
+            </tr>
         </table>
+
+        {{-- Build 3 — CMA valuation strip. Updates live when the
+             condition picker changes (id targets for JS). When no
+             condition is set, surfaces a hint to encourage capture. --}}
+        <div class="valuation-strip" style="margin-top:14px;">
+            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px;">
+                <div class="valuation-cell">
+                    <div class="cell-label">Lower</div>
+                    <div id="cma-lower" class="cell-value">{{ ($cmaValuation['cma_lower'] ?? null) ? 'R ' . number_format($cmaValuation['cma_lower'], 0, '.', ' ') : '—' }}</div>
+                </div>
+                <div class="valuation-cell" style="background: color-mix(in srgb, #00d4aa 8%, transparent); border-color: #00d4aa;">
+                    <div class="cell-label">Middle <span id="cma-adjusted-flag" class="cell-adj-flag" {{ ($cmaValuation['condition_applied'] ?? false) ? '' : 'hidden' }}>adjusted</span></div>
+                    <div id="cma-middle" class="cell-value">{{ ($cmaValuation['cma_middle'] ?? null) ? 'R ' . number_format($cmaValuation['cma_middle'], 0, '.', ' ') : '—' }}</div>
+                </div>
+                <div class="valuation-cell">
+                    <div class="cell-label">Upper</div>
+                    <div id="cma-upper" class="cell-value">{{ ($cmaValuation['cma_upper'] ?? null) ? 'R ' . number_format($cmaValuation['cma_upper'], 0, '.', ' ') : '—' }}</div>
+                </div>
+            </div>
+            <div id="cma-adj-line" class="cma-adj-line"
+                 {{ ($cmaValuation['condition_applied'] ?? false) ? '' : 'hidden' }}>
+                <span id="cma-adj-text">
+                    Baseline R {{ number_format($cmaValuation['cma_middle_baseline'] ?? 0, 0, '.', ' ') }}
+                    →
+                    Adjusted R {{ number_format($cmaValuation['cma_middle'] ?? 0, 0, '.', ' ') }}
+                    ({{ ($cmaValuation['condition_pct'] ?? 0) >= 0 ? '+' : '' }}{{ (float)($cmaValuation['condition_pct'] ?? 0) }}%
+                    — {{ $cmaValuation['condition_label'] ?? '' }})
+                </span>
+            </div>
+            <div id="cma-no-condition-banner" class="cma-no-cond-banner"
+                 {{ ($currentConditionId || ($cmaValuation['condition_applied'] ?? false)) ? 'hidden' : '' }}>
+                No condition set — using baseline valuation. Set a condition above to refine.
+            </div>
+        </div>
     </div>
 
     {{-- ─────────── SECTION 2 — Comparable sales ─────────── --}}
@@ -255,6 +329,7 @@
     const TOGGLE_TPL = @json(route('presentations.review.toggle-comp', ['version' => $version->id, 'comp' => '__COMP_ID__']));
     const PUBLISH_URL = @json(route('presentations.review.publish', $version->id));
     const REVERT_URL  = @json(route('presentations.review.revert',  $version->id));
+    const CONDITION_URL = @json(route('presentations.review.condition', $version->id));
 
     const SUBJECT_LAT = {{ (float) ($presentation->latitude ?? -30.84) }};
     const SUBJECT_LNG = {{ (float) ($presentation->longitude ?? 30.39) }};
@@ -448,6 +523,76 @@
         // each change. Just confirm to the user + close (or stay).
         toast('Saved — your overrides are stored.');
     });
+
+    // ── Build 3 — condition picker live recalc ───────────────────────
+    const condEl     = document.getElementById('condition-picker');
+    const condSrcEl  = document.getElementById('condition-source');
+    const middleEl   = document.getElementById('cma-middle');
+    const lowerEl    = document.getElementById('cma-lower');
+    const upperEl    = document.getElementById('cma-upper');
+    const adjFlagEl  = document.getElementById('cma-adjusted-flag');
+    const adjLineEl  = document.getElementById('cma-adj-line');
+    const adjTextEl  = document.getElementById('cma-adj-text');
+    const noCondBan  = document.getElementById('cma-no-condition-banner');
+
+    function fmtZAR(n) {
+        if (n === null || n === undefined) return '—';
+        return 'R ' + Number(n).toLocaleString('en-ZA', { useGrouping: true, maximumFractionDigits: 0 }).replace(/,/g, ' ');
+    }
+    function applyCmaUpdate(data) {
+        if (!data || !data.cma) return;
+        lowerEl.textContent  = fmtZAR(data.cma.lower);
+        middleEl.textContent = fmtZAR(data.cma.middle);
+        upperEl.textContent  = fmtZAR(data.cma.upper);
+
+        const applied = !!(data.condition && data.condition.applied);
+        adjFlagEl.hidden = !applied;
+        adjLineEl.hidden = !applied;
+        if (applied) {
+            const pct = data.condition.pct;
+            const sign = pct >= 0 ? '+' : '';
+            adjTextEl.textContent =
+                'Baseline ' + fmtZAR(data.cma.middle_baseline) +
+                ' → Adjusted ' + fmtZAR(data.cma.middle) +
+                ' (' + sign + pct + '% — ' + (data.condition.label || '') + ')';
+        }
+        noCondBan.hidden = !(data.condition && data.condition.source === 'none');
+
+        // Source tag.
+        if (data.condition) {
+            condSrcEl.textContent = ({
+                version_override: 'Set on this presentation',
+                property_default: 'From property record',
+                none:             'No condition set',
+            })[data.condition.source] || '';
+        }
+    }
+
+    if (condEl) {
+        condEl.addEventListener('change', async () => {
+            const body = new FormData();
+            body.append('_token', csrf);
+            const val = condEl.value;
+            if (val) body.append('condition_level_id', val);
+
+            try {
+                const r = await fetch(CONDITION_URL, {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    body, credentials: 'same-origin',
+                });
+                const d = await r.json();
+                if (d?.ok) {
+                    applyCmaUpdate(d);
+                    toast('Condition updated — bands recalculated.');
+                } else {
+                    toast('Could not save condition — please retry.');
+                }
+            } catch (e) {
+                toast('Network error saving condition.');
+            }
+        });
+    }
 })();
 </script>
 @endsection

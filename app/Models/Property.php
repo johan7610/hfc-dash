@@ -60,6 +60,7 @@ class Property extends Model
         'unit_number',
         'property_type',
         'category',
+        'condition_level_id',
         'mandate_type',
         'listing_type',
         'status',
@@ -250,6 +251,14 @@ class Property extends Model
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    /** Build 3 — the property's recorded condition level (drives CMA
+     *  Middle band adjustment). Nullable: a property without a recorded
+     *  condition gets no adjustment, baseline valuation only. */
+    public function conditionLevel(): BelongsTo
+    {
+        return $this->belongsTo(PropertySettingItem::class, 'condition_level_id');
     }
 
     public function showdays(): \Illuminate\Database\Eloquent\Relations\HasMany

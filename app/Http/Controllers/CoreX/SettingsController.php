@@ -84,10 +84,12 @@ class SettingsController extends Controller
         $data['contactTags']    = ContactTag::orderBy('sort_order')->orderBy('name')->get();
 
         // Feature Settings tab: Properties
-        $data['propCategories']   = PropertySettingItem::group('category')->get();
-        $data['propTypes']        = PropertySettingItem::group('property_type')->get();
-        $data['propStatuses']     = PropertySettingItem::group('property_status')->get();
-        $data['propMandateTypes'] = PropertySettingItem::group('mandate_type')->get();
+        $data['propCategories']     = PropertySettingItem::group('category')->get();
+        $data['propTypes']          = PropertySettingItem::group('property_type')->get();
+        $data['propStatuses']       = PropertySettingItem::group('property_status')->get();
+        $data['propMandateTypes']   = PropertySettingItem::group('mandate_type')->get();
+        // Build 3 — agency-configurable condition levels with adjustment_pct.
+        $data['propConditionLevels'] = PropertySettingItem::group('condition_level')->get();
 
         // Feature Settings tab: Properties — marketing toggle
         $data['marketingEnabled'] = (bool) PerformanceSetting::get('marketing_enabled', 1);
@@ -205,18 +207,26 @@ class SettingsController extends Controller
     public function storePropertySettingItem(Request $request)
     {
         $data = $request->validate([
-            'group'      => 'required|in:category,property_type,property_status,mandate_type',
-            'name'       => 'required|string|max:100',
-            'sort_order' => 'nullable|integer|min:0',
+            'group'          => 'required|in:category,property_type,property_status,mandate_type,condition_level',
+            'name'           => 'required|string|max:100',
+            'sort_order'     => 'nullable|integer|min:0',
             // title_type only meaningful on group='category'; for any other
             // group the value is silently dropped below.
-            'title_type' => 'nullable|in:full_title,sectional_title,vacant_land,other',
+            'title_type'     => 'nullable|in:full_title,sectional_title,vacant_land,other',
+            // Build 3 — adjustment_pct only meaningful on
+            // group='condition_level'. Range -100 exclusive < x <= 200.
+            'adjustment_pct' => 'nullable|numeric|gt:-100|lte:200',
         ]);
         if (empty($data['sort_order'])) {
             $data['sort_order'] = (PropertySettingItem::where('group', $data['group'])->max('sort_order') ?? 0) + 1;
         }
         if ($data['group'] !== 'category') {
             unset($data['title_type']);
+        }
+        if ($data['group'] !== 'condition_level') {
+            unset($data['adjustment_pct']);
+        } elseif (!array_key_exists('adjustment_pct', $data) || $data['adjustment_pct'] === null) {
+            $data['adjustment_pct'] = 0;
         }
         PropertySettingItem::create($data);
         return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('success', 'Item added.');
@@ -225,14 +235,23 @@ class SettingsController extends Controller
     public function updatePropertySettingItem(Request $request, PropertySettingItem $item)
     {
         $data = $request->validate([
-            'name'       => 'required|string|max:100',
-            'sort_order' => 'nullable|integer|min:0',
+            'name'           => 'required|string|max:100',
+            'sort_order'     => 'nullable|integer|min:0',
             // Build 1 — categories carry a title_type discipline; ignored
             // for the other groups.
-            'title_type' => 'nullable|in:full_title,sectional_title,vacant_land,other',
+            'title_type'     => 'nullable|in:full_title,sectional_title,vacant_land,other',
+            // Build 3 — condition_level adjustment.
+            'adjustment_pct' => 'nullable|numeric|gt:-100|lte:200',
         ]);
         if ($item->group !== 'category') {
             unset($data['title_type']);
+        }
+        if ($item->group !== 'condition_level') {
+            unset($data['adjustment_pct']);
+        } elseif ($item->name === PropertySettingItem::CONDITION_BASELINE_NAME) {
+            // The baseline's pct is frozen at 0 by construction — the agency
+            // may rename it but cannot move its multiplier off the baseline.
+            $data['adjustment_pct'] = 0;
         }
         $item->update($data);
         return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('success', 'Item updated.');
@@ -255,7 +274,7 @@ class SettingsController extends Controller
 
     public function batchToggleDefaultItems(Request $request, string $group)
     {
-        $allowed = ['category', 'property_type', 'property_status', 'mandate_type'];
+        $allowed = ['category', 'property_type', 'property_status', 'mandate_type', 'condition_level'];
         if (! in_array($group, $allowed)) {
             return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('error', 'Invalid group.');
         }
@@ -265,7 +284,16 @@ class SettingsController extends Controller
         PropertySettingItem::where('group', $group)
             ->where('is_default', true)
             ->get()
-            ->each(fn($item) => $item->update(['active' => in_array($item->id, $enabledIds)]));
+            ->each(function($item) use ($enabledIds, $group) {
+                // Build 3 — the Average baseline cannot be disabled because
+                // the valuation calc needs it as the "no adjustment" anchor.
+                if ($group === 'condition_level'
+                    && $item->name === PropertySettingItem::CONDITION_BASELINE_NAME) {
+                    $item->update(['active' => true]);
+                    return;
+                }
+                $item->update(['active' => in_array($item->id, $enabledIds)]);
+            });
 
         return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('success', 'Updated successfully.');
     }
@@ -280,6 +308,13 @@ class SettingsController extends Controller
     {
         if ($item->is_default) {
             return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('error', 'Default items cannot be deleted — use the toggle to disable them instead.');
+        }
+        // Build 3 — defensive: even if someone marks Average as non-default,
+        // a baseline-name row cannot be deleted (valuation depends on it).
+        if ($item->group === 'condition_level'
+            && $item->name === PropertySettingItem::CONDITION_BASELINE_NAME) {
+            return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])
+                ->with('error', 'The "Average" baseline condition cannot be deleted — it anchors the valuation calc.');
         }
         $item->delete();
         return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('success', 'Item deleted.');

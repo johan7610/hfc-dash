@@ -23,7 +23,7 @@ class AnalysisDataService
      * @param  Presentation  $presentation
      * @return array  Keyed by section name
      */
-    public function compile(Presentation $presentation): array
+    public function compile(Presentation $presentation, ?\App\Models\PresentationVersion $version = null): array
     {
         $fields         = $presentation->fields->keyBy('field_key');
         $soldComps      = $presentation->soldComps()->with('sourceUpload')->get();
@@ -34,6 +34,12 @@ class AnalysisDataService
         $cmaSelectedRange      = $presentation->cma_selected_range ?? 'middle';
         $vicinitySelectedRange = $presentation->vicinity_selected_range ?? 'middle';
         $excludedIndices       = $presentation->excluded_active_listing_indices ?? [];
+
+        // Build 3 — condition adjustment context. The version (if
+        // supplied) is passed through so compileCmaValuation can resolve
+        // override > property > none. When compile() is called without
+        // a version (e.g. the pre-version analysis tab), baseline only.
+        $conditionContext = $this->resolveConditionContext($presentation, $version);
 
         // Load portal captures for active competition (search captures contain listing data)
         $portalCaptures = PortalCapture::where('presentation_id', $presentation->id)
@@ -57,7 +63,7 @@ class AnalysisDataService
             'subject_property'   => $this->compileSubjectProperty($presentation, $fields, $askingPrice),
             'suburb_overview'    => $suburbOverview,
             'comparable_sales'   => $this->compileComparableSales($soldComps, $presentation->property_address),
-            'cma_valuation'      => $this->compileCmaValuation($fields, $askingPrice, $cmaSelectedRange),
+            'cma_valuation'      => $this->compileCmaValuation($fields, $askingPrice, $cmaSelectedRange, $conditionContext),
             'active_competition' => $activeCompetition,
             'stock_absorption'   => $stockAbsorption,
             'inflow_absorption'  => $inflowAbsorption,
@@ -280,7 +286,47 @@ class AnalysisDataService
 
     // ── 4. CMA VALUATION ─────────────────────────────────────────────────
 
-    private function compileCmaValuation(Collection $fields, ?int $askingPrice, string $cmaSelectedRange = 'middle'): array
+    /**
+     * Build 3 — resolve which condition the valuation should use.
+     *
+     * For PUBLISHED versions we honour the SNAPSHOT (defends historic
+     * PDFs against agency-settings drift). For live editing (review
+     * screen, recalc endpoint) we delegate to ConditionAdjustmentService
+     * which reads version-override > property > none.
+     *
+     * @return array{pct: ?float, label: ?string, source: string}
+     */
+    private function resolveConditionContext(Presentation $presentation, ?\App\Models\PresentationVersion $version): array
+    {
+        if ($version === null) {
+            return ['pct' => null, 'label' => null, 'source' => 'no_version'];
+        }
+
+        // Published versions: honour the frozen snapshot.
+        if ($version->review_status === \App\Models\PresentationVersion::REVIEW_PUBLISHED
+            && $version->condition_adjustment_pct !== null) {
+            return [
+                'pct'    => (float) $version->condition_adjustment_pct,
+                'label'  => $version->condition_label,
+                'source' => 'version_snapshot',
+            ];
+        }
+
+        // Live path (review screen, recalc endpoint).
+        $resolver = app(\App\Services\Presentations\ConditionAdjustmentService::class);
+        $resolved = $resolver->resolveLive($version, $presentation);
+        $level = $resolved['level'];
+        if ($level === null) {
+            return ['pct' => null, 'label' => null, 'source' => 'none'];
+        }
+        return [
+            'pct'    => (float) $level->adjustment_pct,
+            'label'  => $level->name,
+            'source' => $resolved['source'],
+        ];
+    }
+
+    private function compileCmaValuation(Collection $fields, ?int $askingPrice, string $cmaSelectedRange = 'middle', array $conditionContext = []): array
     {
         $lower  = $this->intOrNull($fields->get('cma.lower_range')?->final_value);
         $middle = $this->intOrNull($fields->get('cma.middle_range')?->final_value);
@@ -306,6 +352,27 @@ class AnalysisDataService
             ]);
         }
 
+        // Build 3 — condition multiplier applies AFTER the Build 1
+        // midpoint fallback. Only the Middle band moves (per CMA Info
+        // convention — Lower and Upper stay as bookend extremes). The
+        // context is empty when no version was passed (analysis tab
+        // pre-render) — baseline only.
+        $middleBaseline = $middle;
+        $conditionApplied = false;
+        $conditionPct     = null;
+        $conditionLabel   = null;
+        $conditionSource  = $conditionContext['source'] ?? 'none';
+        if (!empty($conditionContext['pct']) && $middle !== null) {
+            $conditionPct = (float) $conditionContext['pct'];
+            $middle = (int) round($middle * (1 + ($conditionPct / 100)));
+            $conditionApplied = abs($conditionPct) >= 0.005;
+            $conditionLabel = $conditionContext['label'] ?? null;
+        } elseif ($conditionContext['source'] === 'none') {
+            // Not an error — the property and version both have no
+            // recorded condition. Log once per compile for diagnostics.
+            \Illuminate\Support\Facades\Log::info('[PRES-INFO] cma_valuation_baseline_only (no condition resolved)');
+        }
+
         $vicinityLower  = $this->intOrNull($fields->get('vicinity.lower_range')?->final_value);
         $vicinityMiddle = $this->intOrNull($fields->get('vicinity.middle_range')?->final_value);
         $vicinityUpper  = $this->intOrNull($fields->get('vicinity.upper_range')?->final_value);
@@ -325,6 +392,7 @@ class AnalysisDataService
         return [
             'cma_lower'                 => $lower,
             'cma_middle'                => $middle,
+            'cma_middle_baseline'       => $middleBaseline,
             'cma_middle_from_fallback'  => $middleFromFallback,
             'cma_upper'                 => $upper,
             'selected_range'            => $cmaSelectedRange,
@@ -336,6 +404,11 @@ class AnalysisDataService
             'asking_price'              => $askingPrice,
             'asking_vs_cma_pct'         => $askingVsCmaPct,
             'is_overpriced'             => $askingVsCmaPct !== null && $askingVsCmaPct > 10,
+            // Build 3 — condition adjustment surfacing.
+            'condition_applied'         => $conditionApplied,
+            'condition_pct'             => $conditionPct,
+            'condition_label'           => $conditionLabel,
+            'condition_source'          => $conditionSource,
         ];
     }
 

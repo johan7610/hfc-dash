@@ -2199,6 +2199,10 @@ Route::middleware(['auth', 'permission:access_presentations'])->prefix('presenta
     Route::post('/version/{version}/review/comps/{comp}/toggle',
         [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'toggleComp'])
         ->name('review.toggle-comp');
+    // Build 3 — agent picks/clears condition on the review screen.
+    Route::post('/version/{version}/review/condition',
+        [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'setCondition'])
+        ->name('review.condition');
     Route::post('/version/{version}/publish',
         [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'publish'])
         ->name('review.publish');

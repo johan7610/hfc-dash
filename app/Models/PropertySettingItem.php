@@ -11,19 +11,29 @@ class PropertySettingItem extends Model
     use BelongsToAgency, SoftDeletes;
 
     protected $fillable = [
-        'agency_id','group', 'name', 'sort_order', 'is_default', 'active', 'title_type'];
+        'agency_id','group', 'name', 'sort_order', 'is_default', 'active', 'title_type',
+        // Build 3 — only relevant on group='condition_level' rows.
+        'adjustment_pct',
+    ];
 
     protected $casts = [
-        'sort_order' => 'integer',
-        'is_default' => 'boolean',
-        'active'     => 'boolean',
+        'sort_order'     => 'integer',
+        'is_default'     => 'boolean',
+        'active'         => 'boolean',
+        'adjustment_pct' => 'decimal:2',
     ];
 
     // Allowed groups
-    const GROUP_CATEGORY     = 'category';
-    const GROUP_TYPE         = 'property_type';
-    const GROUP_STATUS       = 'property_status';
-    const GROUP_MANDATE_TYPE = 'mandate_type';
+    const GROUP_CATEGORY        = 'category';
+    const GROUP_TYPE            = 'property_type';
+    const GROUP_STATUS          = 'property_status';
+    const GROUP_MANDATE_TYPE    = 'mandate_type';
+    // Build 3 — condition levels with adjustment_pct.
+    const GROUP_CONDITION_LEVEL = 'condition_level';
+
+    /** 'Average' is the baseline (0%) and cannot be deleted. The controller
+     *  enforces this; the UI surfaces it so the agent knows. */
+    public const CONDITION_BASELINE_NAME = 'Average';
 
     // title_type values (only meaningful on group='category' rows).
     // See .ai/specs/presentation-data-lineage.md §3-A — enforced by

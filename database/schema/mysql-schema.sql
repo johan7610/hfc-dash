@@ -6985,6 +6985,9 @@ CREATE TABLE `presentation_versions` (
   `probability_run_id` bigint unsigned DEFAULT NULL,
   `data_snapshot_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `included_comp_ids_json` json DEFAULT NULL,
+  `condition_level_id` bigint unsigned DEFAULT NULL,
+  `condition_adjustment_pct` decimal(5,2) DEFAULT NULL COMMENT 'Snapshot at review/publish — defends historic PDF against later setting drift.',
+  `condition_label` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `hydration_summary_json` json DEFAULT NULL,
   `ai_variant_id` smallint unsigned DEFAULT NULL,
   `ai_summary_text` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
@@ -7008,10 +7011,12 @@ CREATE TABLE `presentation_versions` (
   KEY `presentation_versions_agency_id_idx` (`agency_id`),
   KEY `presentation_versions_reviewer_user_id_foreign` (`reviewer_user_id`),
   KEY `presentation_versions_presentation_id_review_status_index` (`presentation_id`,`review_status`),
+  KEY `pv_condition_level_fk` (`condition_level_id`),
   CONSTRAINT `presentation_versions_agency_id_foreign` FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`id`) ON DELETE CASCADE,
   CONSTRAINT `presentation_versions_ai_variant_id_foreign` FOREIGN KEY (`ai_variant_id`) REFERENCES `presentation_ai_variants` (`id`) ON DELETE SET NULL,
   CONSTRAINT `presentation_versions_presentation_id_foreign` FOREIGN KEY (`presentation_id`) REFERENCES `presentations` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `presentation_versions_reviewer_user_id_foreign` FOREIGN KEY (`reviewer_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+  CONSTRAINT `presentation_versions_reviewer_user_id_foreign` FOREIGN KEY (`reviewer_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `pv_condition_level_fk` FOREIGN KEY (`condition_level_id`) REFERENCES `property_setting_items` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `presentations`;
@@ -7160,6 +7165,7 @@ CREATE TABLE `properties` (
   `floor_number` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `unit_section_block` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `property_type` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'house',
+  `condition_level_id` bigint unsigned DEFAULT NULL COMMENT 'Build 3 — FK to property_setting_items where group=condition_level. Nullable: property may have no recorded condition.',
   `category` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `mandate_type` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `listing_type` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -7247,9 +7253,11 @@ CREATE TABLE `properties` (
   KEY `idx_properties_geo` (`latitude`,`longitude`),
   KEY `idx_properties_is_demo` (`is_demo`),
   KEY `idx_properties_address_key` (`agency_id`,`suburb_normalised`,`street_name_normalised`,`street_number`,`unit_number`),
+  KEY `properties_condition_level_idx` (`condition_level_id`),
   CONSTRAINT `properties_agency_id_foreign` FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`id`) ON DELETE SET NULL,
   CONSTRAINT `properties_agent_id_foreign` FOREIGN KEY (`agent_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `properties_branch_id_foreign` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `properties_condition_level_fk` FOREIGN KEY (`condition_level_id`) REFERENCES `property_setting_items` (`id`) ON DELETE SET NULL,
   CONSTRAINT `properties_p24_city_id_foreign` FOREIGN KEY (`p24_city_id`) REFERENCES `p24_cities` (`id`) ON DELETE SET NULL,
   CONSTRAINT `properties_p24_province_id_foreign` FOREIGN KEY (`p24_province_id`) REFERENCES `p24_provinces` (`id`) ON DELETE SET NULL,
   CONSTRAINT `properties_p24_suburb_id_foreign` FOREIGN KEY (`p24_suburb_id`) REFERENCES `p24_suburbs` (`id`) ON DELETE SET NULL
@@ -7568,6 +7576,7 @@ CREATE TABLE `property_setting_items` (
   `group` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `title_type` enum('full_title','sectional_title','vacant_land','other') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'other' COMMENT 'Comp-selection discipline: houses do not compare to apartments. See .ai/specs/presentation-data-lineage.md §3-A.',
+  `adjustment_pct` decimal(5,2) DEFAULT NULL COMMENT 'Build 3 — % adjustment applied to CMA Middle band when this condition_level is selected. Null for non-condition rows.',
   `sort_order` smallint unsigned NOT NULL DEFAULT '0',
   `is_default` tinyint(1) NOT NULL DEFAULT '0',
   `active` tinyint(1) NOT NULL DEFAULT '1',
@@ -10862,3 +10871,4 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (785,'2026_06_16_12
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (786,'2026_06_16_122500_add_mic_comp_row_id_fk_to_presentation_tables',231);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (787,'2026_06_17_100000_add_title_type_to_property_setting_items',232);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (789,'2026_06_17_110000_add_review_flow_to_presentations',233);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (790,'2026_06_17_120000_add_condition_levels_to_presentations',234);

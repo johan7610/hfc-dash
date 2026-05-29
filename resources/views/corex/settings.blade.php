@@ -1618,7 +1618,10 @@
                     ['key' => 'property_type',   'label' => 'Property Types',    'items' => $propTypes,        'placeholder' => 'e.g. House, Flat, Townhouse'],
                     ['key' => 'property_status', 'label' => 'Property Statuses', 'items' => $propStatuses,     'placeholder' => 'e.g. Active, Draft, Sold'],
                     ['key' => 'mandate_type',    'label' => 'Mandate Types',     'items' => $propMandateTypes, 'placeholder' => 'e.g. Sole, Joint, Open'],
+                    // Build 3 — condition levels with adjustment_pct.
+                    ['key' => 'condition_level', 'label' => 'Condition Levels',  'items' => $propConditionLevels ?? collect(), 'placeholder' => 'e.g. To Renovate, Excellent'],
                 ];
+                $conditionBaselineName = \App\Models\PropertySettingItem::CONDITION_BASELINE_NAME;
                 $reorderUrl  = route('corex.settings.property-items.reorder');
                 $itemBaseUrl = url('corex/settings/property-items');
                 $csrfToken   = csrf_token();
@@ -1703,19 +1706,24 @@
                     // template can render uniformly, then hide the dropdown
                     // when pg.key !== 'category' below.
                     $defsJson = $defaultItems->map(fn($i) => [
-                        'id'         => $i->id,
-                        'name'       => $i->name,
-                        'sort_order' => (int)$i->sort_order,
-                        'active'     => (bool)$i->active,
-                        'title_type' => $i->title_type ?? 'other',
+                        'id'             => $i->id,
+                        'name'           => $i->name,
+                        'sort_order'     => (int)$i->sort_order,
+                        'active'         => (bool)$i->active,
+                        'title_type'     => $i->title_type ?? 'other',
+                        // Build 3 — condition rows carry adjustment_pct;
+                        // for other groups this is null and the UI hides it.
+                        'adjustment_pct' => $i->adjustment_pct !== null ? (float)$i->adjustment_pct : null,
                     ])->toJson();
                     $custsJson = $customItems->map(fn($i) => [
-                        'id'         => $i->id,
-                        'name'       => $i->name,
-                        'sort_order' => (int)$i->sort_order,
-                        'title_type' => $i->title_type ?? 'other',
+                        'id'             => $i->id,
+                        'name'           => $i->name,
+                        'sort_order'     => (int)$i->sort_order,
+                        'title_type'     => $i->title_type ?? 'other',
+                        'adjustment_pct' => $i->adjustment_pct !== null ? (float)$i->adjustment_pct : null,
                     ])->toJson();
-                    $isCategoryGroup = $pg['key'] === 'category';
+                    $isCategoryGroup  = $pg['key'] === 'category';
+                    $isConditionGroup = $pg['key'] === 'condition_level';
                     $titleTypeOptions = \App\Models\PropertySettingItem::TITLE_TYPES;
                 @endphp
 
@@ -1749,7 +1757,12 @@
                     },
                     resetDrag() { this.dragFrom = null; this.dragTarget = null; },
                     editTitleType: 'other',
-                    startEdit(item) { this.editId = item.id; this.editName = item.name; this.editSort = item.sort_order; this.editTitleType = item.title_type || 'other'; },
+                    editAdjustmentPct: 0,
+                    startEdit(item) {
+                        this.editId = item.id; this.editName = item.name; this.editSort = item.sort_order;
+                        this.editTitleType = item.title_type || 'other';
+                        this.editAdjustmentPct = (item.adjustment_pct === null || item.adjustment_pct === undefined) ? 0 : item.adjustment_pct;
+                    },
                     saveDefaults() {
                         const f = document.createElement('form');
                         f.method = 'POST'; f.action = this.batchToggleUrl;
@@ -1792,11 +1805,19 @@
                                 <svg class="w-3.5 h-3.5 ml-auto transition-transform" :class="addOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
                             </button>
                             <div x-show="addOpen" x-cloak class="px-4 pb-4 pt-3" style="background: color-mix(in srgb, var(--brand-icon, #0ea5e9) 3%, transparent); border-top:1px solid var(--border);">
+                                @if($isConditionGroup)
+                                {{-- Build 3 — agency-configurable condition adjustments. --}}
+                                <div class="px-1 pb-3 text-xs" style="color:var(--text-muted);">
+                                    Adjustments compound on the CMA Middle band when an agent selects this condition.
+                                    Defaults mirror industry CMA conventions — adjust to match your market.
+                                    The <strong>{{ $conditionBaselineName }}</strong> baseline is locked at 0% and cannot be deleted.
+                                </div>
+                                @endif
                                 <form method="POST" action="{{ route('corex.settings.property-items.store') }}"
                                       class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                                     @csrf
                                     <input type="hidden" name="group" value="{{ $pg['key'] }}">
-                                    <div class="md:col-span-{{ $isCategoryGroup ? '5' : '7' }}">
+                                    <div class="md:col-span-{{ ($isCategoryGroup || $isConditionGroup) ? '5' : '7' }}">
                                         <label class="block text-xs font-medium mb-1" style="color:var(--text-muted);">Name</label>
                                         <input name="name" required placeholder="{{ $pg['placeholder'] }}"
                                                class="w-full rounded-md px-3 py-2 text-sm"
@@ -1814,6 +1835,14 @@
                                                 <option value="{{ $tt }}" {{ $tt === 'other' ? 'selected' : '' }}>{{ $ttLabel }}</option>
                                             @endforeach
                                         </select>
+                                    </div>
+                                    @endif
+                                    @if($isConditionGroup)
+                                    <div class="md:col-span-3" title="% applied to the CMA Middle band when this condition is selected.">
+                                        <label class="block text-xs font-medium mb-1" style="color:var(--text-muted);">Adjustment %</label>
+                                        <input name="adjustment_pct" type="number" step="0.01" min="-99.99" max="200" required placeholder="e.g. 12.00"
+                                               class="w-full rounded-md px-3 py-2 text-sm"
+                                               style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                     </div>
                                     @endif
                                     <div class="md:col-span-2">
@@ -1872,6 +1901,28 @@
                                         @endforeach
                                     </select>
                                     @endif
+                                    @if($isConditionGroup)
+                                    {{-- Build 3 — inline adjustment_pct numeric input. The Average
+                                         baseline is locked at 0 (controller enforces). --}}
+                                    <span x-show="item.name === '{{ $conditionBaselineName }}'"
+                                          class="text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded flex-shrink-0"
+                                          style="background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 14%, transparent); color: var(--brand-icon, #0ea5e9);">
+                                        Baseline
+                                    </span>
+                                    <input type="number" step="0.01" min="-99.99" max="200"
+                                           :value="item.adjustment_pct"
+                                           :disabled="item.name === '{{ $conditionBaselineName }}'"
+                                           @change="
+                                                item.adjustment_pct = parseFloat($event.target.value);
+                                                fetch(itemBaseUrl + '/' + item.id, {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-TOKEN': csrf },
+                                                    body: '_method=PUT&name=' + encodeURIComponent(item.name) + '&sort_order=' + item.sort_order + '&adjustment_pct=' + item.adjustment_pct,
+                                                });"
+                                           class="w-20 text-xs rounded px-2 py-1 flex-shrink-0 tabular-nums text-right"
+                                           style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                    <span class="text-xs flex-shrink-0" style="color:var(--text-muted);">%</span>
+                                    @endif
                                     <span class="text-[10px] uppercase tracking-wide font-semibold" style="color:var(--text-muted);">Default</span>
                                 </div>
                             </div>
@@ -1906,6 +1957,13 @@
                                           x-text="({{ \Illuminate\Support\Js::from(\App\Models\PropertySettingItem::TITLE_TYPES) }})[item.title_type] || item.title_type"
                                           style="background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent); color: var(--brand-icon, #0ea5e9);"></span>
                                     @endif
+                                    @if($isConditionGroup)
+                                    <span class="text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded tabular-nums"
+                                          x-text="(item.adjustment_pct >= 0 ? '+' : '') + item.adjustment_pct + '%'"
+                                          :style="item.adjustment_pct >= 0
+                                                ? 'background:color-mix(in srgb, var(--ds-emerald, #10b981) 12%, transparent); color: var(--ds-emerald, #10b981);'
+                                                : 'background:color-mix(in srgb, var(--ds-amber, #d97706) 12%, transparent); color: var(--ds-amber, #d97706);'"></span>
+                                    @endif
                                     <span class="text-xs tabular-nums" x-text="'#' + (idx+1)" style="color:var(--text-muted);"></span>
                                     <button type="button" @click="startEdit(item)"
                                             class="text-xs font-semibold" style="color: var(--brand-icon, #0ea5e9);"
@@ -1925,7 +1983,7 @@
                                           class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                                         <input type="hidden" name="_token" :value="csrf">
                                         <input type="hidden" name="_method" value="PUT">
-                                        <div class="md:col-span-{{ $isCategoryGroup ? '5' : '7' }}">
+                                        <div class="md:col-span-{{ ($isCategoryGroup || $isConditionGroup) ? '5' : '7' }}">
                                             <input name="name" :value="editName" required
                                                    class="w-full rounded-md px-3 py-2 text-sm"
                                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
@@ -1941,6 +1999,15 @@
                                                     <option value="{{ $tt }}">{{ $ttLabel }}</option>
                                                 @endforeach
                                             </select>
+                                        </div>
+                                        @endif
+                                        @if($isConditionGroup)
+                                        <div class="md:col-span-3">
+                                            <input name="adjustment_pct" type="number" step="0.01" min="-99.99" max="200" required
+                                                   :value="editAdjustmentPct"
+                                                   @input="editAdjustmentPct = parseFloat($event.target.value)"
+                                                   class="w-full rounded-md px-3 py-2 text-sm tabular-nums text-right"
+                                                   style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
                                         @endif
                                         <div class="md:col-span-2">

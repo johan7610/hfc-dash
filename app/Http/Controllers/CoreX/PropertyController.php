@@ -201,10 +201,12 @@ class PropertyController extends Controller
         $property->load(['agent', 'branch', 'notes.user', 'files.user', 'contacts.type']);
 
         $settingItems = [
-            'categories'   => PropertySettingItem::group('category')->get(),
-            'types'        => PropertySettingItem::group('property_type')->where('active', true)->get(),
-            'statuses'     => PropertySettingItem::group('property_status')->get(),
-            'mandateTypes' => PropertySettingItem::group('mandate_type')->get(),
+            'categories'      => PropertySettingItem::group('category')->get(),
+            'types'           => PropertySettingItem::group('property_type')->where('active', true)->get(),
+            'statuses'        => PropertySettingItem::group('property_status')->get(),
+            'mandateTypes'    => PropertySettingItem::group('mandate_type')->get(),
+            // Build 3 — condition levels drive CMA Middle band adjustment.
+            'conditionLevels' => PropertySettingItem::group('condition_level')->where('active', true)->get(),
         ];
 
         $branches = Branch::orderBy('name')->get();
@@ -369,10 +371,12 @@ class PropertyController extends Controller
         }
 
         $settingItems = [
-            'categories'   => PropertySettingItem::group('category')->get(),
-            'types'        => PropertySettingItem::group('property_type')->where('active', true)->get(),
-            'statuses'     => PropertySettingItem::group('property_status')->get(),
-            'mandateTypes' => PropertySettingItem::group('mandate_type')->get(),
+            'categories'      => PropertySettingItem::group('category')->get(),
+            'types'           => PropertySettingItem::group('property_type')->where('active', true)->get(),
+            'statuses'        => PropertySettingItem::group('property_status')->get(),
+            'mandateTypes'    => PropertySettingItem::group('mandate_type')->get(),
+            // Build 3 — condition levels drive CMA Middle band adjustment.
+            'conditionLevels' => PropertySettingItem::group('condition_level')->where('active', true)->get(),
         ];
         $branches  = Branch::orderBy('name')->get();
         $agents    = $this->agentList();
@@ -421,6 +425,10 @@ class PropertyController extends Controller
             'erf_size_m2'      => 'nullable|integer|min:0',
             'property_type'    => 'nullable|string|max:50',
             'category'         => 'nullable|string|max:100',
+            // Build 3 — agency-isolated FK to property_setting_items
+            // (group='condition_level'). The DB FK enforces id existence
+            // + nullOnDelete; the controller need only validate type.
+            'condition_level_id' => 'nullable|integer|exists:property_setting_items,id',
             'mandate_type'     => 'nullable|string|max:50',
             'listing_type'     => 'nullable|string|in:sale,rental',
             'status'           => 'nullable|string|max:100',
@@ -688,6 +696,10 @@ class PropertyController extends Controller
             'erf_size_m2'      => 'nullable|integer|min:0',
             'property_type'    => 'nullable|string|max:50',
             'category'         => 'nullable|string|max:100',
+            // Build 3 — agency-isolated FK to property_setting_items
+            // (group='condition_level'). The DB FK enforces id existence
+            // + nullOnDelete; the controller need only validate type.
+            'condition_level_id' => 'nullable|integer|exists:property_setting_items,id',
             'mandate_type'     => 'nullable|string|max:50',
             'listing_type'     => 'nullable|string|in:sale,rental',
             'status'           => 'nullable|string|max:100',

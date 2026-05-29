@@ -164,8 +164,18 @@
             @endif
             @if($cmaMid)
             <div class="kpi">
-                <div class="label">CMA middle</div>
+                <div class="label">CMA middle{!! !empty($cma['condition_applied']) ? ' <span style="color:#00b594;font-weight:600;">(adjusted)</span>' : '' !!}</div>
                 <div class="value">R {{ number_format((int) $cmaMid, 0, '.', ' ') }}</div>
+                @if(!empty($cma['condition_applied']))
+                    {{-- Build 3 — defensibility footer on the public/seller view.
+                         The seller sees the headline is condition-adjusted, not
+                         opaque. Mirrors the PDF footnote. --}}
+                    <div style="font-size:0.6875rem;color:var(--text-muted);margin-top:4px;line-height:1.4;">
+                        Reflects {{ $cma['condition_label'] ?? '' }} condition
+                        ({{ ((float)$cma['condition_pct'] >= 0 ? '+' : '') . (float)$cma['condition_pct'] }}%).
+                        Baseline: R {{ number_format((int) ($cma['cma_middle_baseline'] ?? 0), 0, '.', ' ') }}.
+                    </div>
+                @endif
             </div>
             @endif
             @if($cmaLower && $cmaUpper)

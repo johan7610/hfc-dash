@@ -1712,6 +1712,49 @@
                                     @endforeach
                                 </select>
                             </div>
+                            {{-- Build 3 — condition level drives CMA Middle band adjustment.
+                                 Optional: a property without a recorded condition gets the
+                                 baseline valuation (no adjustment). The agent can also
+                                 override per-presentation on the review screen. --}}
+                            @php
+                                $condLevels = $settingItems['conditionLevels'] ?? collect();
+                                // Stale-condition graceful fallback: if the property's stored
+                                // condition_level_id is no longer in the active list (agency
+                                // disabled or deleted it), surface it with strikethrough so
+                                // the agent knows to re-pick.
+                                $storedCondId = (int) old('condition_level_id', $property->condition_level_id ?? 0);
+                                $staleCond = null;
+                                if ($storedCondId && !$condLevels->contains('id', $storedCondId)) {
+                                    $staleCond = \App\Models\PropertySettingItem::withoutGlobalScopes()
+                                        ->where('id', $storedCondId)->first();
+                                }
+                            @endphp
+                            <div>
+                                <label class="prop-label">Condition
+                                    <span class="text-[10px] font-medium ml-1" style="color:var(--text-muted);">(optional)</span>
+                                </label>
+                                <select name="condition_level_id" class="prop-select prop-field-enum">
+                                    <option value="">— No condition recorded —</option>
+                                    @foreach($condLevels as $level)
+                                        <option value="{{ $level->id }}" {{ $storedCondId === (int)$level->id ? 'selected' : '' }}>
+                                            {{ $level->name }} ({{ $level->adjustment_pct >= 0 ? '+' : '' }}{{ (float) $level->adjustment_pct }}%)
+                                        </option>
+                                    @endforeach
+                                    @if($staleCond)
+                                        {{-- Robustness #7 — agency deleted/disabled the condition.
+                                             Keep the row selectable but visually flag it; agent
+                                             must re-pick from the active list to save. --}}
+                                        <option value="{{ $staleCond->id }}" selected style="text-decoration: line-through; color:#d97706;">
+                                            {{ $staleCond->name }} (disabled — please re-select)
+                                        </option>
+                                    @endif
+                                </select>
+                                @if($staleCond)
+                                    <p class="mt-1 text-xs" style="color:var(--ds-amber, #d97706);">
+                                        The stored condition is no longer available — please pick a current one.
+                                    </p>
+                                @endif
+                            </div>
                             <div>
                                 <label class="prop-label">Listing Type</label>
                                 @if($isNew)

@@ -79,8 +79,16 @@ class PresentationPdfService
             }
         }
 
-        // Compile analysis data from AnalysisDataService (real extracted data)
-        $data = (new AnalysisDataService())->compile($presentation);
+        // Compile analysis data from AnalysisDataService (real extracted data).
+        // Build 3 — pass the LATEST PUBLISHED version so the condition snapshot
+        // travels with the PDF. If there's no published version yet (rare; the
+        // public/show flow uses the same path before publish), the live
+        // resolution falls back to property condition.
+        $latestPublished = $presentation->versions()
+            ->where('review_status', \App\Models\PresentationVersion::REVIEW_PUBLISHED)
+            ->orderByDesc('published_at')
+            ->first();
+        $data = (new AnalysisDataService())->compile($presentation, $latestPublished);
 
         $subject     = $data['subject_property']   ?? [];
         $suburb      = $data['suburb_overview']     ?? [];
@@ -815,7 +823,17 @@ a:hover { text-decoration: underline; }
     <div class="metric-card highlight">
         <div class="label">CMA Evaluation (<?= $esc(ucfirst($cma['selected_range'] ?? 'middle')) ?>)</div>
         <div class="value"><?= $zar($cma['selected_value'] ?? $cmaMiddle) ?></div>
-        <div class="sub">Independent market assessment</div>
+        <?php if (!empty($cma['condition_applied'])): ?>
+            <?php // Build 3 — defensibility footer. The seller sees that the
+                 // headline number is condition-adjusted, not opaque. ?>
+            <div class="sub">
+                Reflects <?= $esc((string) ($cma['condition_label'] ?? '')) ?> condition
+                (<?= ((float)$cma['condition_pct'] >= 0 ? '+' : '') . (float) $cma['condition_pct'] ?>%).
+                Baseline: <?= $zar($cma['cma_middle_baseline'] ?? null) ?>.
+            </div>
+        <?php else: ?>
+            <div class="sub">Independent market assessment</div>
+        <?php endif ?>
     </div>
 </div>
 <?php endif ?>
