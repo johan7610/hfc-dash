@@ -117,7 +117,7 @@ class PresentationPdfService
         $address     = $esc($subject['address'] ?? $presentation->property_address ?? '');
         $suburbName  = $esc($subject['suburb'] ?? $presentation->suburb ?? '');
         $sellerName  = $esc($presentation->seller_name ?? '');
-        $propType    = $esc(ucfirst($presentation->property_type ?? ''));
+        $propType    = $esc(\Illuminate\Support\Str::humanType($presentation->property_type ?? ''));
         $isSectional = ($data['is_sectional'] ?? false)
             || stripos($presentation->property_type ?? '', 'sectional') !== false;
         $sizeLabel   = $isSectional ? 'Unit m²' : 'Erf m²';
@@ -628,6 +628,96 @@ a:hover { text-decoration: underline; }
         </div>
     </div>
     <div style="position:absolute;bottom:40px;left:0;right:0;text-align:center;font-size:9px;color:#888;">Registered with the PPRA</div>
+</div>
+
+<?php // ══════════════════════════════════════════════════════════════════════
+      // PAGE 1b — SUBJECT FACTS CARD (Build 1 / BUG-5)
+      // Data path: AnalysisDataService::compileSubjectProperty produces the
+      // dict consumed below. Card is positioned BEFORE the PAGE 2 page-break
+      // so it sits on page 1 immediately after the cover hero.
+      // POPIA: owner is intentionally omitted at the model level — this
+      // builder does not include any owner-PII surface today; if a future
+      // version introduces an owner facet it must replicate the §95c05b09
+      // map-side gate (server-side suppress, never CSS hide).
+      // ══════════════════════════════════════════════════════════════════════ ?>
+<div style="margin-top:18px;padding:18px;border:1px solid #0b2a4a;border-radius:3px;background:#f8fafc;page-break-inside:avoid;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div style="width:4px;height:18px;background:#00d4aa;"></div>
+        <h3 style="margin:0;font-size:13px;font-weight:700;color:#0b2a4a;letter-spacing:0.04em;text-transform:uppercase;">Subject Property — At a Glance</h3>
+    </div>
+    <?php
+        $_facts = [];
+        $_addLine = function (string $label, $value) use (&$_facts) {
+            if ($value === null || $value === '' || $value === '—') return;
+            $_facts[] = ['label' => $label, 'value' => $value];
+        };
+
+        // Address — full line, separate from suburb.
+        $_addLine('Address',         $subject['address']         ?? null);
+        $_addLine('Suburb',          $subject['suburb']          ?? null);
+        $_addLine('Erf number',      $subject['erf']             ?? null);
+
+        // Extent / type / category — humanType'd display.
+        if (!empty($subject['extent_m2'])) {
+            $_addLine('Extent', number_format((int) $subject['extent_m2']) . ' m²');
+        }
+        if (!empty($subject['property_type'])) {
+            $_addLine('Type', \Illuminate\Support\Str::humanType($subject['property_type']));
+        }
+        if (!empty($presentation->property?->category)) {
+            $_addLine('Category', $presentation->property->category);
+        }
+
+        // GPS (only render when both lat and lng are present).
+        if (!empty($subject['gps'])) {
+            $_addLine('GPS', $subject['gps']);
+        }
+
+        // Municipal valuation + year.
+        if (!empty($subject['municipal_value'])) {
+            $munLabel = 'Municipal valuation';
+            $_munText = 'R ' . number_format((int) $subject['municipal_value'], 0, '.', ' ');
+            if (!empty($subject['municipal_year'])) {
+                $_munText .= ' (' . $subject['municipal_year'] . ')';
+            }
+            $_addLine($munLabel, $_munText);
+        }
+
+        // Last sale (purchase_date + purchase_price together when both present).
+        if (!empty($subject['purchase_date']) && !empty($subject['purchase_price'])) {
+            $_addLine('Last sale',
+                'R ' . number_format((int) $subject['purchase_price'], 0, '.', ' ')
+                . ' (' . $subject['purchase_date'] . ')');
+        } elseif (!empty($subject['purchase_price'])) {
+            $_addLine('Last sale', 'R ' . number_format((int) $subject['purchase_price'], 0, '.', ' '));
+        }
+
+        // Title deed (if the property carries one) and mandate / listing type.
+        if (!empty($presentation->property?->deed_number)) {
+            $_addLine('Title deed', $presentation->property->deed_number);
+        }
+        if (!empty($presentation->property?->listing_type)) {
+            $_addLine('Sale type', \Illuminate\Support\Str::humanType($presentation->property->listing_type));
+        }
+    ?>
+    <?php if (empty($_facts)): ?>
+        <p style="margin:0;font-size:11px;color:#64748b;">Source property record carries no enriched fact data yet. Populate the property record to surface this card.</p>
+    <?php else: ?>
+        <table style="width:100%;border-collapse:collapse;font-size:11.5px;color:#0f172a;">
+            <?php $_n = count($_facts); foreach (array_chunk($_facts, 2) as $_row): ?>
+                <tr>
+                    <?php foreach ($_row as $_f): ?>
+                        <td style="padding:5px 12px 5px 0;width:18%;color:#64748b;font-weight:600;vertical-align:top;white-space:nowrap;"><?= $esc($_f['label']) ?></td>
+                        <td style="padding:5px 24px 5px 0;width:32%;color:#0f172a;vertical-align:top;"><?= $esc($_f['value']) ?></td>
+                    <?php endforeach ?>
+                    <?php if (count($_row) === 1): ?>
+                        <td style="padding:5px 12px 5px 0;width:18%;"></td>
+                        <td style="padding:5px 24px 5px 0;width:32%;"></td>
+                    <?php endif ?>
+                </tr>
+            <?php endforeach ?>
+        </table>
+    <?php endif ?>
 </div>
 
 <?php // ══════════════════════════════════════════════════════════════════════

@@ -1698,14 +1698,25 @@
                     $totalCount      = $pg['items']->count();
                     $batchToggleUrl  = route('corex.settings.property-items.batch-toggle', $pg['key']);
 
+                    // Build 1 — title_type only meaningful on category rows; we
+                    // still serialise the field for every group so the Alpine
+                    // template can render uniformly, then hide the dropdown
+                    // when pg.key !== 'category' below.
                     $defsJson = $defaultItems->map(fn($i) => [
-                        'id' => $i->id, 'name' => $i->name,
-                        'sort_order' => (int)$i->sort_order, 'active' => (bool)$i->active,
+                        'id'         => $i->id,
+                        'name'       => $i->name,
+                        'sort_order' => (int)$i->sort_order,
+                        'active'     => (bool)$i->active,
+                        'title_type' => $i->title_type ?? 'other',
                     ])->toJson();
                     $custsJson = $customItems->map(fn($i) => [
-                        'id' => $i->id, 'name' => $i->name,
+                        'id'         => $i->id,
+                        'name'       => $i->name,
                         'sort_order' => (int)$i->sort_order,
+                        'title_type' => $i->title_type ?? 'other',
                     ])->toJson();
+                    $isCategoryGroup = $pg['key'] === 'category';
+                    $titleTypeOptions = \App\Models\PropertySettingItem::TITLE_TYPES;
                 @endphp
 
                 <div x-data="{
@@ -1737,7 +1748,8 @@
                         });
                     },
                     resetDrag() { this.dragFrom = null; this.dragTarget = null; },
-                    startEdit(item) { this.editId = item.id; this.editName = item.name; this.editSort = item.sort_order; },
+                    editTitleType: 'other',
+                    startEdit(item) { this.editId = item.id; this.editName = item.name; this.editSort = item.sort_order; this.editTitleType = item.title_type || 'other'; },
                     saveDefaults() {
                         const f = document.createElement('form');
                         f.method = 'POST'; f.action = this.batchToggleUrl;
@@ -1784,13 +1796,27 @@
                                       class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                                     @csrf
                                     <input type="hidden" name="group" value="{{ $pg['key'] }}">
-                                    <div class="md:col-span-7">
+                                    <div class="md:col-span-{{ $isCategoryGroup ? '5' : '7' }}">
                                         <label class="block text-xs font-medium mb-1" style="color:var(--text-muted);">Name</label>
                                         <input name="name" required placeholder="{{ $pg['placeholder'] }}"
                                                class="w-full rounded-md px-3 py-2 text-sm"
                                                style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                     </div>
-                                    <div class="md:col-span-3">
+                                    @if($isCategoryGroup)
+                                    {{-- Build 1 — title_type discipline. See
+                                         .ai/specs/presentation-data-lineage.md §3-A. --}}
+                                    <div class="md:col-span-3" title="Drives comp-selection — houses won't be compared to apartments.">
+                                        <label class="block text-xs font-medium mb-1" style="color:var(--text-muted);">Title Type</label>
+                                        <select name="title_type"
+                                                class="w-full rounded-md px-3 py-2 text-sm"
+                                                style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                            @foreach($titleTypeOptions as $tt => $ttLabel)
+                                                <option value="{{ $tt }}" {{ $tt === 'other' ? 'selected' : '' }}>{{ $ttLabel }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    @endif
+                                    <div class="md:col-span-2">
                                         <label class="block text-xs font-medium mb-1" style="color:var(--text-muted);">Sort Order</label>
                                         <input name="sort_order" type="number" step="1" min="0" placeholder="0"
                                                class="w-full rounded-md px-3 py-2 text-sm"
@@ -1828,6 +1854,24 @@
                                               :style="item.active ? 'transform:translateX(16px)' : 'transform:translateX(0)'"></span>
                                     </label>
                                     <span class="flex-1 text-sm font-medium" x-text="item.name" style="color:var(--text-primary);"></span>
+                                    @if($isCategoryGroup)
+                                    {{-- Build 1 — inline title_type select. Persists on change via
+                                         a small fetch PATCH. Reload is via the next page render. --}}
+                                    <select :value="item.title_type"
+                                            @change="
+                                                item.title_type = $event.target.value;
+                                                fetch(itemBaseUrl + '/' + item.id, {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-TOKEN': csrf },
+                                                    body: '_method=PUT&name=' + encodeURIComponent(item.name) + '&sort_order=' + item.sort_order + '&title_type=' + item.title_type,
+                                                });"
+                                            class="text-xs rounded px-2 py-1 flex-shrink-0"
+                                            style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-primary);">
+                                        @foreach($titleTypeOptions as $tt => $ttLabel)
+                                            <option value="{{ $tt }}">{{ $ttLabel }}</option>
+                                        @endforeach
+                                    </select>
+                                    @endif
                                     <span class="text-[10px] uppercase tracking-wide font-semibold" style="color:var(--text-muted);">Default</span>
                                 </div>
                             </div>
@@ -1857,6 +1901,11 @@
                                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><circle cx="7" cy="4" r="1.5"/><circle cx="13" cy="4" r="1.5"/><circle cx="7" cy="10" r="1.5"/><circle cx="13" cy="10" r="1.5"/><circle cx="7" cy="16" r="1.5"/><circle cx="13" cy="16" r="1.5"/></svg>
                                     </span>
                                     <span class="flex-1 text-sm font-medium" x-text="item.name" style="color:var(--text-primary);"></span>
+                                    @if($isCategoryGroup)
+                                    <span class="text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded"
+                                          x-text="({{ \Illuminate\Support\Js::from(\App\Models\PropertySettingItem::TITLE_TYPES) }})[item.title_type] || item.title_type"
+                                          style="background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 12%, transparent); color: var(--brand-icon, #0ea5e9);"></span>
+                                    @endif
                                     <span class="text-xs tabular-nums" x-text="'#' + (idx+1)" style="color:var(--text-muted);"></span>
                                     <button type="button" @click="startEdit(item)"
                                             class="text-xs font-semibold" style="color: var(--brand-icon, #0ea5e9);"
@@ -1876,12 +1925,25 @@
                                           class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                                         <input type="hidden" name="_token" :value="csrf">
                                         <input type="hidden" name="_method" value="PUT">
-                                        <div class="md:col-span-7">
+                                        <div class="md:col-span-{{ $isCategoryGroup ? '5' : '7' }}">
                                             <input name="name" :value="editName" required
                                                    class="w-full rounded-md px-3 py-2 text-sm"
                                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
                                         </div>
+                                        @if($isCategoryGroup)
                                         <div class="md:col-span-3">
+                                            <select name="title_type"
+                                                    x-init="$el.value = editTitleType"
+                                                    @change="editTitleType = $event.target.value"
+                                                    class="w-full rounded-md px-3 py-2 text-sm"
+                                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">
+                                                @foreach($titleTypeOptions as $tt => $ttLabel)
+                                                    <option value="{{ $tt }}">{{ $ttLabel }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+                                        @endif
+                                        <div class="md:col-span-2">
                                             <input name="sort_order" type="number" step="1" min="0" :value="editSort"
                                                    class="w-full rounded-md px-3 py-2 text-sm"
                                                    style="background:var(--surface); border:1px solid var(--border); color:var(--text-primary);">

@@ -59,6 +59,11 @@
 
             {{-- Property details row --}}
             @php
+                // Build 1 — Str::humanType is the single source for
+                // property-type display. The legacy $propTypeLabels map
+                // is retained as a fine-grained override (e.g. "land" →
+                // "Vacant Land" rather than "Land") but falls through to
+                // humanType for unknown values.
                 $propTypeLabels = [
                     'house' => 'House', 'townhouse' => 'Townhouse', 'apartment' => 'Apartment/Flat',
                     'duplex' => 'Duplex', 'vacant_land' => 'Vacant Land', 'farm' => 'Farm',
@@ -66,7 +71,7 @@
                 ];
                 $propDetails = array_filter([
                     $presentation->suburb,
-                    $presentation->property_type ? ($propTypeLabels[$presentation->property_type] ?? ucfirst($presentation->property_type)) : null,
+                    $presentation->property_type ? ($propTypeLabels[$presentation->property_type] ?? \Illuminate\Support\Str::humanType($presentation->property_type)) : null,
                     $presentation->bedrooms ? $presentation->bedrooms . ' bed' : null,
                     $presentation->bathrooms ? $presentation->bathrooms . ' bath' : null,
                     $presentation->garages_parking ? $presentation->garages_parking . ' garage' : null,

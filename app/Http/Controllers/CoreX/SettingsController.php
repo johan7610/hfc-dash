@@ -208,9 +208,15 @@ class SettingsController extends Controller
             'group'      => 'required|in:category,property_type,property_status,mandate_type',
             'name'       => 'required|string|max:100',
             'sort_order' => 'nullable|integer|min:0',
+            // title_type only meaningful on group='category'; for any other
+            // group the value is silently dropped below.
+            'title_type' => 'nullable|in:full_title,sectional_title,vacant_land,other',
         ]);
         if (empty($data['sort_order'])) {
             $data['sort_order'] = (PropertySettingItem::where('group', $data['group'])->max('sort_order') ?? 0) + 1;
+        }
+        if ($data['group'] !== 'category') {
+            unset($data['title_type']);
         }
         PropertySettingItem::create($data);
         return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('success', 'Item added.');
@@ -221,7 +227,13 @@ class SettingsController extends Controller
         $data = $request->validate([
             'name'       => 'required|string|max:100',
             'sort_order' => 'nullable|integer|min:0',
+            // Build 1 — categories carry a title_type discipline; ignored
+            // for the other groups.
+            'title_type' => 'nullable|in:full_title,sectional_title,vacant_land,other',
         ]);
+        if ($item->group !== 'category') {
+            unset($data['title_type']);
+        }
         $item->update($data);
         return redirect()->route('corex.settings', ['tab' => 'feature', 'fsec' => 'properties'])->with('success', 'Item updated.');
     }

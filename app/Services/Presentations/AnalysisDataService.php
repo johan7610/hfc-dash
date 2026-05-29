@@ -78,11 +78,27 @@ class AnalysisDataService
 
     private function compileSubjectProperty(Presentation $p, Collection $fields, ?int $askingPrice): array
     {
+        // Build 1 — BUG-2 / BUG-8 fallback chain for extent_m2:
+        //   1. extracted CMA field         subject.extent_m2
+        //   2. presentation row snapshot   presentations.erf_size_m2
+        //   3. live source property        properties.erf_size_m2
+        //   4. presentation row snapshot   presentations.floor_area_m2  (sectional usually)
+        // Any nulls fall through; only the first non-null wins.
+        $extent = $this->intOrNull($fields->get('subject.extent_m2')?->final_value)
+               ?? $this->intOrNull($p->erf_size_m2 ?? null)
+               ?? $this->intOrNull($p->property?->erf_size_m2 ?? null)
+               ?? $this->intOrNull($p->floor_area_m2 ?? null);
+        if ($extent === null) {
+            \Illuminate\Support\Facades\Log::info('[PRES-WARN] subject extent_m2 unresolved at every fallback', [
+                'presentation_id' => $p->id,
+            ]);
+        }
+
         return [
             'address'        => $fields->get('subject.address')?->final_value ?? $p->property_address,
             'suburb'         => $fields->get('subject.suburb')?->final_value ?? $p->suburb,
             'erf'            => $fields->get('subject.erf')?->final_value,
-            'extent_m2'      => $this->intOrNull($fields->get('subject.extent_m2')?->final_value),
+            'extent_m2'      => $extent,
             'gps'            => $fields->get('subject.gps')?->final_value,
             'purchase_date'  => $fields->get('subject.purchase_date')?->final_value,
             'purchase_price' => $this->intOrNull($fields->get('subject.purchase_price')?->final_value),
@@ -270,6 +286,26 @@ class AnalysisDataService
         $middle = $this->intOrNull($fields->get('cma.middle_range')?->final_value);
         $upper  = $this->intOrNull($fields->get('cma.upper_range')?->final_value);
 
+        // Build 1 — BUG-1 fallback. When the CMA source PDF used a label
+        // the regex at DocumentExtractor::parseCma:121 didn't match
+        // ("Mid Range" / "Median Range" / line break inside the label),
+        // middle ends up null while lower + upper extract fine. Synthesise
+        // a midpoint at RENDER time rather than fixing the regex (we can't
+        // re-extract historic PDFs) AND rather than persisting the value
+        // (the extracted band is the source of truth; the midpoint is a
+        // display-time courtesy). Logged so we can see how often this
+        // path fires across the agency's presentations.
+        $middleFromFallback = false;
+        if ($middle === null && $lower !== null && $upper !== null && $upper >= $lower) {
+            $middle = (int) round(($lower + $upper) / 2);
+            $middleFromFallback = true;
+            \Illuminate\Support\Facades\Log::info('[PRES-INFO] cma_middle_fallback used (lower+upper)/2', [
+                'lower'  => $lower,
+                'upper'  => $upper,
+                'middle' => $middle,
+            ]);
+        }
+
         $vicinityLower  = $this->intOrNull($fields->get('vicinity.lower_range')?->final_value);
         $vicinityMiddle = $this->intOrNull($fields->get('vicinity.middle_range')?->final_value);
         $vicinityUpper  = $this->intOrNull($fields->get('vicinity.upper_range')?->final_value);
@@ -287,18 +323,19 @@ class AnalysisDataService
         }
 
         return [
-            'cma_lower'          => $lower,
-            'cma_middle'         => $middle,
-            'cma_upper'          => $upper,
-            'selected_range'     => $cmaSelectedRange,
-            'selected_value'     => $selectedValue,
-            'vicinity_lower'     => $vicinityLower,
-            'vicinity_middle'    => $vicinityMiddle,
-            'vicinity_upper'     => $vicinityUpper,
-            'vicinity_ppm2'      => $vicinityPpm2,
-            'asking_price'       => $askingPrice,
-            'asking_vs_cma_pct'  => $askingVsCmaPct,
-            'is_overpriced'      => $askingVsCmaPct !== null && $askingVsCmaPct > 10,
+            'cma_lower'                 => $lower,
+            'cma_middle'                => $middle,
+            'cma_middle_from_fallback'  => $middleFromFallback,
+            'cma_upper'                 => $upper,
+            'selected_range'            => $cmaSelectedRange,
+            'selected_value'            => $selectedValue,
+            'vicinity_lower'            => $vicinityLower,
+            'vicinity_middle'           => $vicinityMiddle,
+            'vicinity_upper'            => $vicinityUpper,
+            'vicinity_ppm2'             => $vicinityPpm2,
+            'asking_price'              => $askingPrice,
+            'asking_vs_cma_pct'         => $askingVsCmaPct,
+            'is_overpriced'             => $askingVsCmaPct !== null && $askingVsCmaPct > 10,
         ];
     }
 
@@ -572,10 +609,19 @@ class AnalysisDataService
             return ['asking_price_set' => false, 'comparisons' => []];
         }
 
+        // Build 1 — share the BUG-1 middle-band fallback with key insights
+        // (asking-vs-CMA comparison would otherwise lose the comparison when
+        // the source PDF didn't carry a middle label).
+        $cmaLower  = $this->intOrNull($fields->get('cma.lower_range')?->final_value);
+        $cmaUpper  = $this->intOrNull($fields->get('cma.upper_range')?->final_value);
+        $cmaMiddle = $this->intOrNull($fields->get('cma.middle_range')?->final_value);
+        if ($cmaMiddle === null && $cmaLower !== null && $cmaUpper !== null && $cmaUpper >= $cmaLower) {
+            $cmaMiddle = (int) round(($cmaLower + $cmaUpper) / 2);
+        }
         $cmaValue = match($cmaSelectedRange) {
-            'lower' => $this->intOrNull($fields->get('cma.lower_range')?->final_value),
-            'upper' => $this->intOrNull($fields->get('cma.upper_range')?->final_value),
-            default => $this->intOrNull($fields->get('cma.middle_range')?->final_value),
+            'lower' => $cmaLower,
+            'upper' => $cmaUpper,
+            default => $cmaMiddle,
         };
 
         $vicinityValue = match($vicinitySelectedRange) {

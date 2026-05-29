@@ -12,6 +12,7 @@ use App\Models\PresentationActiveListing;
 use App\Models\PresentationField;
 use App\Models\PresentationSoldComp;
 use App\Models\Property;
+use App\Models\PropertySettingItem;
 use App\Support\MarketAnalytics\HaversineDistance;
 use App\Support\MarketAnalytics\OutlierGuard;
 use Carbon\Carbon;
@@ -162,7 +163,7 @@ final class MicSnapshotHydrator
      *   suburb_norm: string, suburb_like: string,
      *   subject_lat: ?float, subject_lng: ?float,
      *   subject_addr_needle: ?string,
-     *   property_type_kind: string,
+     *   title_type: ?string,
      *   date_from: string, date_to: string,
      *   source_reports: array<int>,
      * }
@@ -220,6 +221,13 @@ final class MicSnapshotHydrator
                 ->all();
         }
 
+        // Build 1 — title_type discipline. The subject's category (the name
+        // stored on the property record) maps to a PropertySettingItem row
+        // whose title_type drives comp-selection. Houses (full_title) must
+        // not compare against apartments (sectional_title) or vacant land.
+        // Spec: .ai/specs/presentation-data-lineage.md §3-A.
+        $titleType = $this->resolveSubjectTitleType($presentation, $agencyId);
+
         return [
             'scope'                => $scope,
             'radius_m'             => $radius,
@@ -228,11 +236,89 @@ final class MicSnapshotHydrator
             'suburb_like'          => $suburbLike,
             'subject_lat'          => $lat,
             'subject_lng'          => $lng,
-            'property_type_kind'   => $this->classifyType((string) $presentation->property_type),
+            // Build 1 — replaced the dead property_type_kind that was
+            // computed but never reached the comp query. title_type is the
+            // real discipline drive.
+            'title_type'           => $titleType,
             'date_from'            => $dateFrom,
             'date_to'              => $dateTo,
             'source_reports'       => $subjectReportIds,
         ];
+    }
+
+    /**
+     * Resolve the subject's title_type from its PropertySettingItem
+     * (matched by agency + group=category + name = property.category).
+     * Returns null when:
+     *   - the property has no `category` value;
+     *   - or the category name doesn't match any agency setting;
+     *   - or the matching row exists but title_type is null.
+     * A null return means "skip the comp filter and log a warning" — the
+     * comp query is left wide open rather than emitting an empty set.
+     */
+    private function resolveSubjectTitleType(Presentation $presentation, int $agencyId): ?string
+    {
+        $categoryName = $presentation->property?->category ?? null;
+        if (!is_string($categoryName) || trim($categoryName) === '') {
+            \Illuminate\Support\Facades\Log::info('[PRES-WARN] subject category missing — comp title_type filter SKIPPED', [
+                'presentation_id' => $presentation->id,
+                'property_id'     => $presentation->property?->id,
+            ]);
+            return null;
+        }
+
+        $row = PropertySettingItem::withoutGlobalScopes()
+            ->where('agency_id', $agencyId)
+            ->where('group', PropertySettingItem::GROUP_CATEGORY)
+            ->whereNull('deleted_at')
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($categoryName))])
+            ->first(['id', 'name', 'title_type']);
+
+        if (!$row) {
+            // Fall back to the system defaults (no agency_id) — covers
+            // agencies that haven't customised the category list yet.
+            $row = PropertySettingItem::withoutGlobalScopes()
+                ->whereNull('agency_id')
+                ->where('group', PropertySettingItem::GROUP_CATEGORY)
+                ->whereNull('deleted_at')
+                ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($categoryName))])
+                ->first(['id', 'name', 'title_type']);
+        }
+
+        if (!$row || empty($row->title_type)) {
+            \Illuminate\Support\Facades\Log::info('[PRES-WARN] subject category has no title_type — comp filter SKIPPED', [
+                'presentation_id' => $presentation->id,
+                'category'        => $categoryName,
+            ]);
+            return null;
+        }
+
+        return $row->title_type;
+    }
+
+    /**
+     * Classify a comp's free-text property_type into a title_type bucket.
+     * Used by the comp-selection filter — comps whose classified
+     * title_type doesn't match the subject's are dropped.
+     *
+     * Sectional title language: sectional, apartment, flat, unit,
+     *   townhouse, duplex.
+     * Vacant land: vacant_land, plot, stand, erf, vacant.
+     * Everything else: full_title.
+     */
+    private function classifyCompTitleType(?string $compType): string
+    {
+        $t = strtolower((string) $compType);
+        if ($t === '') return PropertySettingItem::TITLE_OTHER;
+        if (str_contains($t, 'sectional') || str_contains($t, 'apartment') || str_contains($t, 'flat')
+            || str_contains($t, 'unit') || str_contains($t, 'townhouse') || str_contains($t, 'duplex')) {
+            return PropertySettingItem::TITLE_SECTIONAL;
+        }
+        if (str_contains($t, 'vacant') || str_contains($t, 'plot') || str_contains($t, 'stand')
+            || str_contains($t, 'erf')) {
+            return PropertySettingItem::TITLE_VACANT;
+        }
+        return PropertySettingItem::TITLE_FULL;
     }
 
     /**
@@ -267,17 +353,12 @@ final class MicSnapshotHydrator
         return array_values(array_unique($needles));
     }
 
-    /**
-     * Bucket the presentation's property_type into "sectional" vs "full".
-     * Sectional → match by scheme + section; full → match by address+date.
-     */
-    private function classifyType(string $type): string
-    {
-        $t = strtolower($type);
-        if ($t === '') return 'unknown';
-        if (str_contains($t, 'sectional') || str_contains($t, 'apartment') || str_contains($t, 'unit') || str_contains($t, 'townhouse') || str_contains($t, 'duplex') || str_contains($t, 'flat')) return 'sectional';
-        return 'full';
-    }
+    // Build 1 — classifyType(string) RETIRED. It returned 'sectional' /
+    // 'full' / 'unknown' but was never consumed downstream (the only
+    // caller stored the result in $cfg['property_type_kind'] which never
+    // reached the comp WHERE clause). classifyCompTitleType() above is
+    // the replacement and IS consumed by the row filter — verified by
+    // tests M81–M84.
 
     // ── Row collection + filtering ──────────────────────────────────────────
 
@@ -337,7 +418,26 @@ final class MicSnapshotHydrator
         $radius           = max(1, $cfg['radius_m']);
         $scope            = $cfg['scope'];
 
-        return $rows->filter(function ($row) use ($subjectReportIds, $suburbNorm, $lat, $lng, $radius, $scope) {
+        $titleType = $cfg['title_type'] ?? null;
+
+        return $rows->filter(function ($row) use ($subjectReportIds, $suburbNorm, $lat, $lng, $radius, $scope, $titleType) {
+            // Build 1 — title_type discipline. When the subject's category
+            // resolves to a title_type, drop comps whose property_type
+            // classifies into a different title_type. A null title_type
+            // (subject category missing or unconfigured) skips the filter
+            // — already logged upstream as [PRES-WARN]. Same-subject reports
+            // are exempt because they were already vetted by the analyst.
+            if ($titleType !== null) {
+                $subjectReportHit = !empty($subjectReportIds)
+                    && in_array((int) $row->market_report_id, $subjectReportIds, true);
+                if (!$subjectReportHit) {
+                    $compTitleType = $this->classifyCompTitleType($row->property_type ?? null);
+                    if ($compTitleType !== $titleType) {
+                        return false;
+                    }
+                }
+            }
+
             // Branch 1: same-subject — every comp from a market report that
             // analysed this exact property is in scope by definition.
             if (!empty($subjectReportIds) && in_array((int) $row->market_report_id, $subjectReportIds, true)) {

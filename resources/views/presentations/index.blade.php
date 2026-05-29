@@ -101,7 +101,7 @@
                                     @if($pres->suburb || $pres->property_type)
                                         <span style="color: var(--text-secondary);">{{ $pres->suburb ?? '—' }}</span>
                                         @if($pres->property_type)
-                                            <span style="color: var(--text-muted);"> · {{ ucfirst($pres->property_type) }}</span>
+                                            <span style="color: var(--text-muted);"> · {{ \Illuminate\Support\Str::humanType($pres->property_type) }}</span>
                                         @endif
                                     @else
                                         <span style="color: var(--text-muted);">—</span>

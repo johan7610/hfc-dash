@@ -61,7 +61,7 @@
             </div>
             <div>
                 <span class="text-xs" style="color: var(--text-muted);">Property Type</span>
-                <p class="font-medium" style="color: var(--text-primary);">{{ ucfirst($subject['property_type'] ?? '—') }}</p>
+                <p class="font-medium" style="color: var(--text-primary);">{{ \Illuminate\Support\Str::humanType($subject['property_type'] ?? null) }}</p>
             </div>
             <div>
                 <span class="text-xs" style="color: var(--text-muted);">Bedrooms</span>

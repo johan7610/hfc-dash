@@ -84,6 +84,16 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Build 1 — Str::humanType. Single source for property-type display
+        // ("vacant_land" → "Vacant Land"). Used by every presentation view
+        // (cover, summary table, composite list headers) so we never drift
+        // back into the BUG-4 ucfirst-with-underscore display.
+        \Illuminate\Support\Str::macro('humanType', function (?string $type): string {
+            $t = trim((string) ($type ?? ''));
+            if ($t === '') return '—';
+            return \Illuminate\Support\Str::headline(str_replace(['_', '-'], ' ', $t));
+        });
+
         Agency::observe(AgencyObserver::class);
         CalendarEventFeedback::observe(CalendarEventFeedbackObserver::class);
         Contact::observe(ContactObserver::class);

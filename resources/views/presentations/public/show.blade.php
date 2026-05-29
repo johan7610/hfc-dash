@@ -195,7 +195,7 @@
         <table>
             <tr><th>Address</th><td>{{ $propertyAddress }}</td></tr>
             <tr><th>Suburb</th><td>{{ $suburb }}</td></tr>
-            @if($presentation->property_type)<tr><th>Type</th><td>{{ ucfirst($presentation->property_type) }}</td></tr>@endif
+            @if($presentation->property_type)<tr><th>Type</th><td>{{ \Illuminate\Support\Str::humanType($presentation->property_type) }}</td></tr>@endif
             @if($presentation->bedrooms)<tr><th>Bedrooms</th><td>{{ $presentation->bedrooms }}</td></tr>@endif
             @if($presentation->bathrooms)<tr><th>Bathrooms</th><td>{{ $presentation->bathrooms }}</td></tr>@endif
             @if($presentation->floor_area_m2)<tr><th>Floor area</th><td>{{ $presentation->floor_area_m2 }} m²</td></tr>@endif

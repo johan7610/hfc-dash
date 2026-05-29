@@ -115,7 +115,7 @@
         {{-- Context fields (read-only, from presentation record) --}}
         <div class="mt-4 pt-3 border-t grid grid-cols-2 gap-x-8 gap-y-1 text-xs md:grid-cols-4" style="color: var(--text-secondary);">
             <div>Suburb: <span class="font-medium" style="color: var(--text-primary);">{{ $presentation->suburb ?? '—' }}</span></div>
-            <div>Type: <span class="font-medium" style="color: var(--text-primary);">{{ ucfirst($presentation->property_type ?? '—') }}</span></div>
+            <div>Type: <span class="font-medium" style="color: var(--text-primary);">{{ \Illuminate\Support\Str::humanType($presentation->property_type) }}</span></div>
             <div>Bedrooms: <span class="font-medium" style="color: var(--text-primary);">{{ $presentation->bedrooms ?? '—' }}</span></div>
             <div>Floor area: <span class="font-medium" style="color: var(--text-primary);">{{ $presentation->floor_area_m2 ? $presentation->floor_area_m2 . ' m²' : '—' }}</span></div>
         </div>
