@@ -584,6 +584,30 @@ CREATE TABLE `agent_mentors` (
   CONSTRAINT `agent_mentors_mentor_user_id_foreign` FOREIGN KEY (`mentor_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `agent_overrides`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `agent_overrides` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `agency_id` bigint unsigned NOT NULL,
+  `presentation_version_id` bigint unsigned NOT NULL,
+  `user_id` bigint unsigned NOT NULL,
+  `override_type` enum('comp_excluded','comp_included','category_added','category_removed','condition_changed','section_toggled','field_edited','review_takeover','comp_unavailable') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `target_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `before_value` json DEFAULT NULL,
+  `after_value` json NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `agent_overrides_user_id_foreign` (`user_id`),
+  KEY `idx_av_version_type` (`presentation_version_id`,`override_type`),
+  KEY `idx_av_agency_created` (`agency_id`,`created_at`),
+  CONSTRAINT `agent_overrides_agency_id_foreign` FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `agent_overrides_presentation_version_id_foreign` FOREIGN KEY (`presentation_version_id`) REFERENCES `presentation_versions` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `agent_overrides_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `agent_scorecards`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -6953,10 +6977,14 @@ CREATE TABLE `presentation_versions` (
   `presentation_id` bigint unsigned NOT NULL,
   `agency_id` bigint unsigned NOT NULL,
   `compiled_by` bigint unsigned DEFAULT NULL,
+  `reviewer_user_id` bigint unsigned DEFAULT NULL,
+  `reviewer_locked_at` timestamp NULL DEFAULT NULL,
   `blueprint_version` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'v1',
+  `review_status` enum('draft','awaiting_review','published','archived') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'draft',
   `analytics_run_id` bigint unsigned DEFAULT NULL,
   `probability_run_id` bigint unsigned DEFAULT NULL,
   `data_snapshot_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `included_comp_ids_json` json DEFAULT NULL,
   `hydration_summary_json` json DEFAULT NULL,
   `ai_variant_id` smallint unsigned DEFAULT NULL,
   `ai_summary_text` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
@@ -6968,6 +6996,9 @@ CREATE TABLE `presentation_versions` (
   `ai_summary_prompt_hash` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `ai_summary_input_facts_json` json DEFAULT NULL,
   `compiled_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `awaiting_review_at` timestamp NULL DEFAULT NULL,
+  `published_at` timestamp NULL DEFAULT NULL,
+  `archived_at` timestamp NULL DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   `deleted_at` timestamp NULL DEFAULT NULL,
@@ -6975,9 +7006,12 @@ CREATE TABLE `presentation_versions` (
   KEY `presentation_versions_presentation_id_compiled_at_index` (`presentation_id`,`compiled_at`),
   KEY `presentation_versions_ai_variant_id_foreign` (`ai_variant_id`),
   KEY `presentation_versions_agency_id_idx` (`agency_id`),
+  KEY `presentation_versions_reviewer_user_id_foreign` (`reviewer_user_id`),
+  KEY `presentation_versions_presentation_id_review_status_index` (`presentation_id`,`review_status`),
   CONSTRAINT `presentation_versions_agency_id_foreign` FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`id`) ON DELETE CASCADE,
   CONSTRAINT `presentation_versions_ai_variant_id_foreign` FOREIGN KEY (`ai_variant_id`) REFERENCES `presentation_ai_variants` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `presentation_versions_presentation_id_foreign` FOREIGN KEY (`presentation_id`) REFERENCES `presentations` (`id`) ON DELETE CASCADE
+  CONSTRAINT `presentation_versions_presentation_id_foreign` FOREIGN KEY (`presentation_id`) REFERENCES `presentations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `presentation_versions_reviewer_user_id_foreign` FOREIGN KEY (`reviewer_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `presentations`;
@@ -7533,6 +7567,7 @@ CREATE TABLE `property_setting_items` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `group` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `title_type` enum('full_title','sectional_title','vacant_land','other') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'other' COMMENT 'Comp-selection discipline: houses do not compare to apartments. See .ai/specs/presentation-data-lineage.md §3-A.',
   `sort_order` smallint unsigned NOT NULL DEFAULT '0',
   `is_default` tinyint(1) NOT NULL DEFAULT '0',
   `active` tinyint(1) NOT NULL DEFAULT '1',
@@ -10825,3 +10860,5 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (783,'2026_06_16_12
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (784,'2026_06_16_122300_make_market_reports_report_type_id_nullable',229);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (785,'2026_06_16_122400_add_normalised_address_columns_to_properties',230);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (786,'2026_06_16_122500_add_mic_comp_row_id_fk_to_presentation_tables',231);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (787,'2026_06_17_100000_add_title_type_to_property_setting_items',232);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (789,'2026_06_17_110000_add_review_flow_to_presentations',233);

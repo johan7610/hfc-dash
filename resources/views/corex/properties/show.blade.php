@@ -429,8 +429,22 @@
                                         this.generating = false;
                                         return;
                                     }
-                                    if (data?.redirect_url) {
-                                        window.location.href = data.redirect_url;
+                                    // Build 2 — open the review screen in a NEW TAB so the
+                                    // agent never loses their place on the property page.
+                                    // Falls back to redirect_url for any pre-Build-2 payload.
+                                    const reviewUrl = data?.review_url || data?.redirect_url;
+                                    if (reviewUrl) {
+                                        const win = window.open(reviewUrl, '_blank', 'noopener');
+                                        if (!win) {
+                                            // Popup blocked — fall back to same-tab nav so the
+                                            // flow doesn't dead-end. Agent can re-enable popups.
+                                            window.location.href = reviewUrl;
+                                        } else {
+                                            // Close the modal and let the agent stay on the
+                                            // property page. The review tab is theirs to drive.
+                                            this.modalOpen = false;
+                                            this.generating = false;
+                                        }
                                     } else {
                                         window.location.reload();
                                     }

@@ -231,6 +231,14 @@ class PresentationGeneratorService
                     'link_suggestions'      => $this->linkSuggestions->suggestFor($presentation),
                 ],
             );
+
+            // Build 2 — stamp the new per-version review lifecycle. Every
+            // fresh generate enters 'awaiting_review' and the agent goes
+            // through the review screen before the version is 'published'.
+            // The Controller redirects the agent to the review URL, not
+            // straight to the public/show. See Build 2 prompt §B.
+            $version->review_status      = \App\Models\PresentationVersion::REVIEW_AWAITING;
+            $version->awaiting_review_at = now();
             $version->save();
 
             // ── 6. Fire event ──────────────────────────────────────────────

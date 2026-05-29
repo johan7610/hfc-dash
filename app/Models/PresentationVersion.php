@@ -30,6 +30,14 @@ class PresentationVersion extends Model
         'ai_summary_model',
         'ai_summary_prompt_hash',
         'ai_summary_input_facts_json',
+        // Build 2 — per-version review lifecycle.
+        'review_status',
+        'reviewer_user_id',
+        'reviewer_locked_at',
+        'awaiting_review_at',
+        'published_at',
+        'archived_at',
+        'included_comp_ids_json',
     ];
 
     protected $casts = [
@@ -39,7 +47,41 @@ class PresentationVersion extends Model
         'ai_summary_generated_at'     => 'datetime',
         'ai_summary_edited_at'        => 'datetime',
         'ai_summary_input_facts_json' => 'array',
+        // Build 2 — review-flow timestamps.
+        'reviewer_locked_at'          => 'datetime',
+        'awaiting_review_at'          => 'datetime',
+        'published_at'                => 'datetime',
+        'archived_at'                 => 'datetime',
+        'included_comp_ids_json'      => 'array',
     ];
+
+    // Build 2 — review_status states.
+    public const REVIEW_DRAFT           = 'draft';
+    public const REVIEW_AWAITING        = 'awaiting_review';
+    public const REVIEW_PUBLISHED       = 'published';
+    public const REVIEW_ARCHIVED        = 'archived';
+
+    /** Concurrent-reviewer window (minutes). A second agent opening the
+     *  version within this window sees the "currently being reviewed by X"
+     *  banner. After the window expires the lock is considered stale. */
+    public const REVIEWER_LOCK_MINUTES = 10;
+
+    public function reviewerUser()
+    {
+        return $this->belongsTo(\App\Models\User::class, 'reviewer_user_id');
+    }
+
+    public function agentOverrides()
+    {
+        return $this->hasMany(AgentOverride::class, 'presentation_version_id');
+    }
+
+    public function isReviewerLockActive(): bool
+    {
+        if (!$this->reviewer_user_id || !$this->reviewer_locked_at) return false;
+        return $this->reviewer_locked_at
+            ->gt(now()->subMinutes(self::REVIEWER_LOCK_MINUTES));
+    }
 
     public function aiVariant()
     {

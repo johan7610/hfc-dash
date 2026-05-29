@@ -2189,6 +2189,25 @@ Route::middleware(['auth', 'permission:access_presentations'])->prefix('presenta
     Route::get('/{presentation}/edit',         [\App\Http\Controllers\Presentation\PresentationController::class, 'edit'])     ->name('edit');
     Route::patch('/{presentation}',            [\App\Http\Controllers\Presentation\PresentationController::class, 'update'])   ->name('update');
     Route::get('/{presentation}/analysis',     [\App\Http\Controllers\Presentation\PresentationController::class, 'analysis']) ->name('analysis');
+
+    // Build 2 — review flow (per-version). Routes accept the version id
+    // (not the presentation id) so each render has its own review URL.
+    // Lookup uses presentation_versions; soft-deleted versions 404.
+    Route::get('/version/{version}/review',
+        [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'show'])
+        ->name('review.show');
+    Route::post('/version/{version}/review/comps/{comp}/toggle',
+        [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'toggleComp'])
+        ->name('review.toggle-comp');
+    Route::post('/version/{version}/publish',
+        [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'publish'])
+        ->name('review.publish');
+    Route::post('/version/{version}/revert',
+        [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'revert'])
+        ->name('review.revert');
+    Route::post('/version/{version}/review/takeover',
+        [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'takeover'])
+        ->name('review.takeover');
     // Phase 3g V2 Part D — embedded spatial view JSON for the analysis screen.
     Route::get('/{presentation}/spatial-pins', [\App\Http\Controllers\Map\MapController::class, 'presentationPins'])->name('spatial-pins');
 

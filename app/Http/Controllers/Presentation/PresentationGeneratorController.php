@@ -82,19 +82,28 @@ class PresentationGeneratorController extends Controller
 
         $elapsedMs = (int) round((microtime(true) - $startedAt) * 1000);
 
+        // Build 2 — version now lands on the review screen first, not the
+        // public/show. The button on the property page opens the
+        // returned review_url in a NEW TAB so the property page never
+        // navigates away. Spec: presentation-data-lineage.md §3-B.
+        $reviewUrl = route('presentations.review.show', $version->id);
         $payload = [
             'presentation_id'     => $version->presentation_id,
             'version_id'          => $version->id,
             'generation_time_ms'  => $elapsedMs,
-            'redirect_url'        => route('presentations.show', $version->presentation_id),
+            'review_url'          => $reviewUrl,
+            // Backwards-compat alias — older client code still reads
+            // redirect_url. New code should prefer review_url.
+            'redirect_url'        => $reviewUrl,
+            'review_status'       => $version->review_status,
         ];
 
         if ($request->expectsJson() || $request->ajax() || $request->wantsJson()) {
             return response()->json($payload, 201);
         }
 
-        return redirect()->route('presentations.show', $version->presentation_id)
-            ->with('success', 'Presentation generated in ' . $elapsedMs . ' ms.');
+        return redirect()->route('presentations.review.show', $version->id)
+            ->with('success', 'Presentation ready for review (' . $elapsedMs . ' ms).');
     }
 
     private function reject(Request $request, string $message, int $status): JsonResponse|RedirectResponse
