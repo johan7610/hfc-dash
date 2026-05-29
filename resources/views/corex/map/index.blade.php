@@ -39,8 +39,18 @@
                  is otherwise visible). Users without the permission
                  see only the Seller pill; even if they hand-craft a
                  ?viewMode=agent request, the server-side
-                 MapController::resolveViewMode helper enforces Seller. --}}
-            @php($mapCanSeeAgentView = (bool) (auth()->user()?->hasPermission('access_prospecting') ?? false))
+                 MapController::resolveViewMode helper enforces Seller.
+
+                 NOTE: keep the block-form php directive below. The
+                 inline single-line form pairs greedily with the next
+                 closing directive further down the file (Laravel's
+                 storePhpBlocks regex is non-greedy but blind to the
+                 inline form), swallowing the intermediate left-rail
+                 block as raw PHP and producing undefined $mapDefaultScope
+                 / $mapIsOwner / $mapCanSeeAgentView at render time. --}}
+            @php
+                $mapCanSeeAgentView = (bool) (auth()->user()?->hasPermission('access_prospecting') ?? false);
+            @endphp
             <div id="view-mode-toggle" data-can-see-agent="{{ $mapCanSeeAgentView ? '1' : '0' }}" style="display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 2px;">
                 @if($mapCanSeeAgentView)
                     <button data-mode="agent" class="mode-pill" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 500; background: transparent; color: var(--text-secondary); border: 0; border-radius: 4px; cursor: pointer;">Agent View</button>
@@ -1289,6 +1299,10 @@ document.addEventListener('DOMContentLoaded', function () {
             wrap.remove();
 
             // 2) Now fire the actual prospect_launched + redirect.
+            //    Same explicit-error contract as handleActionClick — when
+            //    the server can't resolve the prospecting_listing we
+            //    surface the failure instead of silently sending the
+            //    agent to MIC opportunities.
             try {
                 const resp = await fetch(MAP_ACTIVITY_URL, {
                     method:  'POST',
@@ -1298,10 +1312,19 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
                 if (resp.ok) {
                     const body = await resp.json();
-                    const url = body.redirect_url || MIC_OPPORTUNITIES_URL;
-                    window.location.href = url;
+                    if (body.error === 'pitch_unavailable') {
+                        toastInfo(body.error_message || 'Could not start a pitch for this record.');
+                        return;
+                    }
+                    if (body.redirect_url) {
+                        window.location.href = body.redirect_url;
+                        return;
+                    }
                 }
-            } catch (err) { /* if launch fails the override audit is still recorded */ }
+                toastInfo('Could not start a pitch right now. Please try again.');
+            } catch (err) {
+                toastInfo('Network error starting the pitch. Please try again.');
+            }
         });
 
         setTimeout(() => ta.focus(), 50);
@@ -1871,6 +1894,14 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (act.awaitServerRedirect) {
             e.preventDefault();
+            // Pre-open the new tab SYNCHRONOUSLY while we still have the
+            // user gesture — Chrome/Firefox/Safari block window.open() that
+            // fires after an await boundary. We assign the real URL once
+            // the server response lands. If the server returns no URL
+            // (pitch_unavailable from MapActivityController) we close the
+            // placeholder and surface an explicit error. Same-tab branch
+            // (act.newTab=false) doesn't need pre-opening.
+            const popup = act.newTab ? window.open('about:blank', '_blank', 'noopener') : null;
             try {
                 const resp = await fetch(MAP_ACTIVITY_URL, {
                     method:      'POST',
@@ -1884,17 +1915,30 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
                 if (resp.ok) {
                     const body = await resp.json();
-                    const url = body.redirect_url || act.destUrl;
+                    // Server may explicitly flag pitch_unavailable when the
+                    // record can't be resolved (soft-deleted, cross-agency,
+                    // unsupported record_id shape). Honour it — do NOT fall
+                    // back to MIC, that's the bug we're removing.
+                    if (body.error === 'pitch_unavailable') {
+                        if (popup) popup.close();
+                        toastInfo(body.error_message || 'Could not start a pitch for this record.');
+                        return;
+                    }
+                    const url = body.redirect_url;
                     if (url) {
-                        if (act.newTab) window.open(url, '_blank', 'noopener');
-                        else window.location.href = url;
+                        if (popup) popup.location.href = url;
+                        else        window.location.href = url;
                         return;
                     }
                 }
-            } catch (err) { /* fall through to destUrl fallback */ }
-            if (act.destUrl) {
-                if (act.newTab) window.open(act.destUrl, '_blank', 'noopener');
-                else window.location.href = act.destUrl;
+                // Non-2xx, or 200 with neither redirect_url nor error —
+                // treat as a transient hiccup. Close the popup, tell the
+                // agent, do not bounce to MIC.
+                if (popup) popup.close();
+                toastInfo('Could not start a pitch right now. Please try again.');
+            } catch (err) {
+                if (popup) popup.close();
+                toastInfo('Network error starting the pitch. Please try again.');
             }
             return;
         }

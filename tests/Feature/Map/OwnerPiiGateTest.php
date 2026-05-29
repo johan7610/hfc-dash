@@ -163,6 +163,77 @@ final class OwnerPiiGateTest extends TestCase
         );
     }
 
+    // ── /corex/map index Blade — must render for both authorised
+    //    and unauthorised users (post-fix for the @php(...) regex collision
+    //    bug that left $mapDefaultScope / $mapIsOwner / $mapCanSeeAgentView
+    //    undefined at render time).
+
+    /** GET /corex/map returns 200 for a user with access_prospecting
+     *  (Agent View available; both @php blocks execute and the
+     *  $mapDefaultScope / $mapCanSeeAgentView variables resolve). */
+    public function test_map_index_renders_for_user_with_access_prospecting(): void
+    {
+        [$agencyId] = $this->makeAgencies();
+        $user = $this->makeUserInAgency($agencyId);  // unseeded perms → all granted
+        $this->assertTrue($user->hasPermission('access_prospecting'));
+
+        $resp = $this->actingAs($user)->get('/corex/map');
+
+        $resp->assertOk();
+        $html = $resp->getContent();
+        $this->assertStringContainsString('id="scope-pills"', $html,
+            'left-rail scope pills must render (proves the inner @php block ran)');
+        $this->assertStringContainsString('data-default="my"', $html,
+            '$mapDefaultScope resolved to "my" for a non-owner authorised agent');
+        $this->assertStringContainsString('data-can-see-agent="1"', $html,
+            '$mapCanSeeAgentView resolved to true for the authorised user');
+    }
+
+    /** GET /corex/map returns 200 for a user WITHOUT access_prospecting
+     *  (Seller-only; the page must still render — variables resolve to
+     *  default-safe values). */
+    public function test_map_index_renders_for_user_without_access_prospecting(): void
+    {
+        [$agencyId] = $this->makeAgencies();
+        // Seed role_permissions so PermissionService stops the
+        // "unseeded → grant all" fallthrough. Grant access_properties
+        // (the route gate) but NOT access_prospecting.
+        $roleName = 'pii-blocked-' . Str::random(6);
+        DB::table('roles')->insertOrIgnore([
+            'name' => $roleName, 'label' => 'PII Blocked', 'is_owner' => false,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        foreach (['access_properties', 'view_dashboard'] as $key) {
+            DB::table('nexus_permissions')->insertOrIgnore([
+                'key' => $key, 'label' => ucfirst(str_replace('_', ' ', $key)),
+                'section' => 'misc', 'type' => 'access', 'module' => 'misc',
+                'sort_order' => 1, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+            DB::table('role_permissions')->insert([
+                'role' => $roleName, 'permission_key' => $key, 'scope' => null,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+        \App\Services\PermissionService::clearCache();
+
+        $user = User::factory()->create([
+            'agency_id' => $agencyId, 'branch_id' => $agencyId, 'role' => $roleName,
+        ]);
+        $this->assertTrue($user->hasPermission('access_properties'),
+            'route gate must let the user through');
+        $this->assertFalse($user->hasPermission('access_prospecting'),
+            'the unauthorised path is what we want to exercise');
+
+        $resp = $this->actingAs($user)->get('/corex/map');
+
+        $resp->assertOk();
+        $html = $resp->getContent();
+        $this->assertStringContainsString('id="scope-pills"', $html);
+        $this->assertStringContainsString('data-default="my"', $html);
+        $this->assertStringContainsString('data-can-see-agent="0"', $html,
+            '$mapCanSeeAgentView resolved to false for the unauthorised user — Seller pill only');
+    }
+
     /** Pin with no owner data renders in either mode without 500. */
     public function test_bounds_payload_handles_empty_owner_in_both_modes(): void
     {
