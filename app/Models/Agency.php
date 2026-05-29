@@ -156,6 +156,33 @@ class Agency extends Model
     public const AI_BUDGET_STATUS_CAPPED   = 'capped';
 
     /**
+     * Short initials derived from the agency name — first letter of each
+     * word, uppercased, capped at 3 characters.
+     *
+     *   "Home Finders Coastal" → "HFC"
+     *   "Smith Realty"         → "SR"
+     *   "Acme"                 → "A"
+     *
+     * Used as the second tier of the map H-pin fallback chain
+     * (agency logo → initials → generic house glyph). Pure string
+     * derivation; no DB read.
+     */
+    public function getInitialsAttribute(): string
+    {
+        $name = trim((string) ($this->name ?? ''));
+        if ($name === '') return '';
+        $parts = preg_split('/\s+/', $name) ?: [];
+        $letters = '';
+        foreach ($parts as $part) {
+            $first = mb_substr($part, 0, 1);
+            if ($first === '') continue;
+            $letters .= mb_strtoupper($first);
+            if (mb_strlen($letters) >= 3) break;
+        }
+        return $letters;
+    }
+
+    /**
      * Sum of cost_zar in ai_narrative_cache attributed to this agency
      * for the given month (default = current month).
      */

@@ -15,14 +15,19 @@
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 {{-- Phase 3g V2 — heatmap overlay. --}}
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
-{{-- Selected-pin halo. Lives outside the inline body styles so it survives
-     the Leaflet marker DOM reset on every fetchPins() — Leaflet writes
-     marker.options.icon's className verbatim onto the .leaflet-marker-icon
-     element, so the rule targets that class directly. The ring is layered
-     OUTSIDE the existing 2px white border via box-shadow so it doesn't
-     resize the icon and clash with iconAnchor. z-index lifts the selected
-     pin above its neighbours so the halo is never clipped by overlap. --}}
+{{-- Map visual identity — selected-pin halo + shape-class radius overrides.
+     Lives outside the inline body styles so it survives the Leaflet marker
+     DOM reset on every fetchPins() — Leaflet writes marker.options.icon's
+     className verbatim onto the .leaflet-marker-icon element, so the rule
+     targets that class directly. The ring is layered OUTSIDE the existing
+     2px white border via box-shadow so it doesn't resize the icon and
+     clash with iconAnchor. z-index lifts the selected pin above its
+     neighbours so the halo is never clipped by overlap. --}}
 <style>
+    .corex-pin {
+        background: transparent !important;
+        border: 0 !important;
+    }
     .corex-pin.corex-pin--selected {
         box-shadow:
             0 0 0 3px #00d4aa,
@@ -31,11 +36,34 @@
         z-index: 1000 !important;
         border-radius: 50%;
     }
-    /* Rectangular variants (scheme + composite) drop the 50% radius so the
-       halo follows the icon's actual shape. */
+    /* Per-shape halo radius — keeps the box-shadow ring shaped to the
+       silhouette of each bucket's pin. */
+    .corex-pin-circle.corex-pin--selected   { border-radius: 50%; }
+    .corex-pin-square.corex-pin--selected   { border-radius: 3px; }
+    .corex-pin-diamond.corex-pin--selected  { border-radius: 4px; }
+    .corex-pin-hexagon.corex-pin--selected  { border-radius: 6px; }
+    .corex-pin-triangle.corex-pin--selected { border-radius: 4px; }
+    .corex-pin-house.corex-pin--selected    { border-radius: 4px 4px 50% 50%; }
+    /* Scheme + composite legacy variants kept for any cached payload that
+       still emits the older display_as. */
     .corex-pin.corex-pin-scheme.corex-pin--selected,
     .corex-pin.corex-pin-composite.corex-pin--selected {
         border-radius: 7px;
+    }
+    /* Cluster icon container — clear out the Leaflet.MarkerCluster default
+       background/borders so our themed divIcon owns the look. */
+    .corex-cluster {
+        background: transparent !important;
+        border: 0 !important;
+    }
+    /* Scheme + price labels at Z >= 16. Pointer-events:none so clicks pass
+       through to the underlying pin (interactive:false on the marker is
+       belt-and-braces). */
+    .corex-scheme-label,
+    .corex-price-label {
+        background: transparent !important;
+        border: 0 !important;
+        pointer-events: none;
     }
 </style>
 @endpush
@@ -432,6 +460,14 @@ document.addEventListener('DOMContentLoaded', function () {
     // Phase B Fix 2+3 — T-pin "WhatsApp / Pitch" entry point (mirrors fromProspecting).
     const TP_OUTREACH_TPL        = @json(route('seller-outreach.entry.from-tracked-property', ['trackedProperty' => '__ID__']));
 
+    // Multi-tenant agency context for the H pin's logo render — spec §4 of
+    // map-visual-identity-spec.md. Resolved server-side from the viewing
+    // user's effectiveAgency; the H pin renders the VIEWER's brand on its
+    // own stock, never a hard-coded letter or hard-coded HFC.
+    const AGENCY_LOGO_URL  = @json($agency?->logo_path ? asset('storage/' . $agency->logo_path) : null);
+    const AGENCY_INITIALS  = @json($agency?->initials ?? '');
+    const AGENCY_NAME      = @json($agency?->name ?? 'Agency');
+
     // Single-record category visuals — composite pins use the neutral scheme below.
     const LAYER_COLOURS = {
         hfc_listings: '#00d4aa',
@@ -456,8 +492,386 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Composite pin palette — neutral slate so it reads as "multiple sources here"
     // and never collides with any single-category colour.
-    const COMPOSITE_BG     = '#334155'; // slate-700
-    const COMPOSITE_BORDER = '#00d4aa'; // teal accent — same as HFC, marks it as workspace UI
+    // RETAINED for any legacy code path; new visual identity drives composites
+    // via primary-shape + corner-dot badges (spec §2).
+    const COMPOSITE_BG     = '#334155';
+    const COMPOSITE_BORDER = '#00d4aa';
+
+    // ════════════════════════════════════════════════════════════════════
+    // VISUAL IDENTITY MODULE
+    // Spec: .ai/specs/map-visual-identity-spec.md (Johan-ruled).
+    // Single source of truth for pin shape + palette + glyph + cluster theme.
+    // Client-side only — server payload shape unchanged.
+    // ════════════════════════════════════════════════════════════════════
+
+    // Category → bucket. Drives cluster theming, badge dot colour, and the
+    // shape lookup in PIN_STYLES.
+    const BUCKET_OF = {
+        hfc_listings:       'COMPANY',
+        active_listings:    'PORTAL',
+        tracked_properties: 'TRACKED',
+        sold_comps:         'CMA',
+        mic_subjects:       'CMA',
+        scheme_owners:      'CMA',
+    };
+
+    // Per-pin visual spec. pinKey is bucket-derived ('H'/'P'/'T'/'M'/'O') for
+    // single-shape buckets; S splits by source_class into S_market / S_own.
+    const PIN_STYLES = {
+        H:        { shape: 'house',    size: [24, 28], fill: '#0b2a4a', stroke: '#ffffff', strokeWidth: 2 },
+        P:        { shape: 'diamond',  size: [22, 22], fill: '#f59e0b', stroke: '#ffffff', strokeWidth: 2, glyph: 'P', glyphFill: '#0b2a4a' },
+        T:        { shape: 'hexagon',  size: [22, 22], fill: '#00d4aa', stroke: '#0b2a4a', strokeWidth: 2 },
+        M:        { shape: 'square',   size: [18, 18], fill: '#475569', stroke: 'rgba(255,255,255,0.45)', strokeWidth: 1, glyph: 'M', glyphFill: '#ffffff' },
+        O:        { shape: 'triangle', size: [24, 22], fill: '#7c3aed', stroke: '#ffffff', strokeWidth: 2, glyph: 'O', glyphFill: '#ffffff' },
+        S_market: { shape: 'circle',   size: [22, 22], fill: '#3b82f6', stroke: '#ffffff', strokeWidth: 2, glyph: 'S', glyphFill: '#ffffff', sold: 'market' },
+        S_own:    { shape: 'circle',   size: [22, 22], fill: '#0b2a4a', stroke: '#00d4aa', strokeWidth: 3, glyph: 'S', glyphFill: '#ffffff', sold: 'own' },
+    };
+
+    // Bucket → cluster palette (spec §5).
+    const CLUSTER_THEMES = {
+        COMPANY: { fill: '#0b2a4a', ring: '#ffffff',            text: '#ffffff' },
+        PORTAL:  { fill: '#f59e0b', ring: '#ffffff',            text: '#0b2a4a' },
+        TRACKED: { fill: '#00d4aa', ring: '#0b2a4a',            text: '#0b2a4a' },
+        CMA:     { fill: '#475569', ring: 'rgba(255,255,255,0.6)', text: '#ffffff' },
+        MIXED:   { fill: '#0b2a4a', ring: '#00d4aa',            text: '#00d4aa' },
+    };
+
+    // Composite-badge priority — TRACKED always wins top-right; the rest
+    // fill remaining slots in this order. Max 3 badges; overflow rolls
+    // into a "+N" pill on the top-left.
+    const BADGE_PRIORITY = ['T', 'P', 'S', 'M', 'O'];
+
+    function pinKeyForRecord(rec) {
+        if (!rec) return null;
+        if (rec.category === 'sold_comps') {
+            // Robustness: missing source_class defaults to 'market' (the
+            // safe interpretation — never claim "ours" without evidence).
+            return (rec.source_class === 'own') ? 'S_own' : 'S_market';
+        }
+        return ({ hfc_listings: 'H', active_listings: 'P', mic_subjects: 'M',
+                  scheme_owners: 'O', tracked_properties: 'T' })[rec.category] || null;
+    }
+
+    function bucketForRecord(rec) {
+        return rec ? (BUCKET_OF[rec.category] || 'CMA') : 'CMA';
+    }
+
+    function bucketForLocation(loc) {
+        if (loc.display_as === 'scheme') return 'CMA';
+        return bucketForRecord((loc.records || [])[0]);
+    }
+
+    // ── SVG shape generators ────────────────────────────────────────────
+    // Each returns an inline SVG sized to its style.size box. Drop-shadow
+    // filter is applied via wrapper so it lifts off the map tiles without
+    // adding a second DOM layer.
+
+    function svgWrap(size, body) {
+        const w = size[0], h = size[1];
+        return '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h
+            + '" viewBox="0 0 ' + w + ' ' + h
+            + '" style="display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45));">'
+            + body + '</svg>';
+    }
+
+    function shapeSvg(style) {
+        const w = style.size[0], h = style.size[1];
+        const fill = style.fill, stroke = style.stroke, sw = style.strokeWidth || 2;
+        let body = '';
+        switch (style.shape) {
+            case 'circle': {
+                const r = (Math.min(w, h) - sw) / 2;
+                body = '<circle cx="' + (w/2) + '" cy="' + (h/2) + '" r="' + r
+                    + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + sw + '"/>';
+                break;
+            }
+            case 'square': {
+                body = '<rect x="' + (sw/2) + '" y="' + (sw/2)
+                    + '" width="' + (w - sw) + '" height="' + (h - sw)
+                    + '" rx="2" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + sw + '"/>';
+                break;
+            }
+            case 'diamond': {
+                const cx = w/2, cy = h/2;
+                const r  = (Math.min(w, h) - sw) / 2;
+                body = '<polygon points="' + cx + ',' + (cy - r) + ' ' + (cx + r) + ',' + cy
+                    + ' ' + cx + ',' + (cy + r) + ' ' + (cx - r) + ',' + cy
+                    + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + sw + '" stroke-linejoin="miter"/>';
+                break;
+            }
+            case 'hexagon': {
+                const cx = w/2, cy = h/2;
+                const r  = Math.min(w, h) / 2 - sw / 2;
+                const pts = [];
+                for (let i = 0; i < 6; i++) {
+                    const a = (Math.PI / 3) * i - Math.PI / 2;
+                    pts.push((cx + r * Math.cos(a)).toFixed(2) + ',' + (cy + r * Math.sin(a)).toFixed(2));
+                }
+                body = '<polygon points="' + pts.join(' ')
+                    + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + sw + '" stroke-linejoin="miter"/>';
+                break;
+            }
+            case 'triangle': {
+                // Pointy-top isoceles, sized to fit the bbox.
+                const cx = w/2;
+                body = '<polygon points="' + cx + ',' + sw + ' ' + (w - sw) + ',' + (h - sw)
+                    + ' ' + sw + ',' + (h - sw)
+                    + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + sw + '" stroke-linejoin="round"/>';
+                break;
+            }
+            case 'house': {
+                // House-pin: rounded rectangle body with a roof triangle on top.
+                // Designed at 24×28: roof apex at y=1, eaves at y=5, body
+                // 22w × 21h centred, base flat (the pin's bottom edge).
+                const roof = 'M ' + (w/2) + ' 1 L ' + (w - 1) + ' 5 L 1 5 Z';
+                const bod  = '<rect x="1" y="5" width="' + (w - 2) + '" height="' + (h - 6)
+                    + '" rx="3" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + sw + '"/>';
+                body = '<path d="' + roof + '" fill="' + fill + '" stroke="' + stroke
+                    + '" stroke-width="' + sw + '" stroke-linejoin="round"/>' + bod;
+                break;
+            }
+        }
+        return svgWrap(style.size, body);
+    }
+
+    function glyphLayer(style) {
+        if (!style.glyph) return '';
+        const yShift = style.shape === 'triangle' ? 2 : 0;
+        return '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;'
+            + 'font-family:Plus Jakarta Sans,sans-serif;font-size:11px;font-weight:700;color:'
+            + (style.glyphFill || '#ffffff') + ';pointer-events:none;transform:translateY('
+            + yShift + 'px);">' + style.glyph + '</div>';
+    }
+
+    function soldSlashLayer(style) {
+        if (!style.sold) return '';
+        const w = style.size[0], h = style.size[1];
+        const slashColour = style.sold === 'own' ? '#00d4aa' : '#ffffff';
+        const slashSvg = '<line x1="' + (w * 0.22) + '" y1="' + (h * 0.78)
+            + '" x2="' + (w * 0.78) + '" y2="' + (h * 0.22)
+            + '" stroke="' + slashColour + '" stroke-width="1.5" stroke-linecap="round" opacity="0.95"/>';
+        return '<div style="position:absolute;inset:0;pointer-events:none;">' + svgWrap(style.size, slashSvg) + '</div>';
+    }
+
+    // ── H pin inner: agency logo → initials → outline house (spec §4) ───
+
+    function housePinInner() {
+        if (AGENCY_LOGO_URL) {
+            return '<img src="' + escapeAttr(AGENCY_LOGO_URL) + '" alt="' + escapeAttr(AGENCY_NAME) + '" '
+                + 'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';" '
+                + 'style="position:absolute;left:4px;top:9px;width:16px;height:16px;border-radius:50%;'
+                + 'object-fit:cover;background:#ffffff;"/>'
+                + houseInitialsFallback(true);
+        }
+        if (AGENCY_INITIALS) return houseInitialsFallback(false);
+        return houseOutlineFallback();
+    }
+
+    function houseInitialsFallback(hiddenByDefault) {
+        const fs = AGENCY_INITIALS && AGENCY_INITIALS.length >= 3 ? 7 : 9;
+        const display = hiddenByDefault ? 'none' : 'flex';
+        return '<div style="position:absolute;left:4px;top:9px;width:16px;height:16px;display:' + display + ';'
+            + 'align-items:center;justify-content:center;border-radius:50%;background:rgba(255,255,255,0.18);'
+            + 'color:#ffffff;font-family:Plus Jakarta Sans,sans-serif;font-size:' + fs + 'px;font-weight:700;'
+            + 'letter-spacing:-0.5px;">' + escapeHtml(AGENCY_INITIALS || '') + '</div>';
+    }
+
+    function houseOutlineFallback() {
+        return '<svg style="position:absolute;left:5px;top:10px;" width="14" height="14" viewBox="0 0 24 24" '
+            + 'fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+            + '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'
+            + '<polyline points="9 22 9 12 15 12 15 22"/></svg>';
+    }
+
+    // ── Composite badges (spec §9) ──────────────────────────────────────
+    // Returns the badge-dot HTML overlay for one location. Caller already
+    // confirmed the location is composite (record_count > 1).
+
+    function badgeDotColour(k) {
+        return ({ T: '#00d4aa', P: '#f59e0b', S: '#3b82f6', M: '#475569', O: '#7c3aed' })[k] || '#94a3b8';
+    }
+
+    function badgeDot(slot, colour) {
+        const positions = {
+            'top-right':    'top:-4px;right:-4px;',
+            'bottom-right': 'bottom:-4px;right:-4px;',
+            'bottom-left':  'bottom:-4px;left:-4px;',
+        };
+        return '<span style="position:absolute;' + (positions[slot] || '')
+            + 'width:8px;height:8px;border-radius:50%;background:' + colour
+            + ';border:1.5px solid #ffffff;box-shadow:0 1px 1px rgba(0,0,0,.45);"></span>';
+    }
+
+    function compositeBadges(loc) {
+        const records = loc.records || [];
+        const primary = records[0] || {};
+        const primaryKey = pinKeyForRecord(primary);
+
+        // Distinct slot keys (collapse S_market + S_own → 'S') present
+        // beyond the primary.
+        const seen = new Set();
+        records.slice(1).forEach(rec => {
+            const k = pinKeyForRecord(rec);
+            if (!k) return;
+            const slotKey = k.charAt(0);
+            if (slotKey === (primaryKey || '').charAt(0)) return;
+            seen.add(slotKey);
+        });
+
+        // Tracked spine override — if the grouper flagged has_tracked_record
+        // and the primary isn't already T, the T badge is mandatory.
+        if (loc.has_tracked_record && primaryKey !== 'T') seen.add('T');
+        if (seen.size === 0) return '';
+
+        const ordered = BADGE_PRIORITY.filter(k => seen.has(k));
+        const positioned = [];
+        if (seen.has('T')) {
+            positioned.push(['T', 'top-right']);
+            ordered.filter(k => k !== 'T')
+                .slice(0, 2)
+                .forEach((k, i) => positioned.push([k, ['bottom-right', 'bottom-left'][i]]));
+        } else {
+            ordered.slice(0, 3).forEach((k, i) => {
+                positioned.push([k, ['top-right', 'bottom-right', 'bottom-left'][i]]);
+            });
+        }
+
+        const overflow = Math.max(0, ordered.length - positioned.length);
+        let html = positioned.map(([k, slot]) => badgeDot(slot, badgeDotColour(k))).join('');
+        if (overflow > 0) {
+            html += '<span style="position:absolute;top:-6px;left:-8px;background:#0b2a4a;color:#ffffff;'
+                + 'font-family:Plus Jakarta Sans,sans-serif;font-size:9px;font-weight:700;border-radius:10px;'
+                + 'padding:1px 4px;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.4);white-space:nowrap;'
+                + 'border:1px solid #ffffff;">+' + overflow + '</span>';
+        }
+        return html;
+    }
+
+    function countBadge(count, accent) {
+        return '<span style="position:absolute;top:-6px;right:-8px;background:#ffffff;color:#0f172a;'
+            + 'font-family:Plus Jakarta Sans,sans-serif;font-size:10px;font-weight:700;border-radius:10px;'
+            + 'padding:1px 5px;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.4);white-space:nowrap;'
+            + 'border:1px solid ' + accent + ';">' + count + '</span>';
+    }
+
+    // ── Themed cluster icon (spec §5) ───────────────────────────────────
+
+    function clusterIcon(cluster) {
+        const counts = { COMPANY: 0, PORTAL: 0, CMA: 0, TRACKED: 0 };
+        let total = 0;
+        cluster.getAllChildMarkers().forEach(m => {
+            const b = (m.options && m.options.bucket) || 'CMA';
+            counts[b] = (counts[b] || 0) + 1;
+            total++;
+        });
+        const sorted = Object.entries(counts).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+        let dominant = sorted.length ? sorted[0][0] : 'CMA';
+        // MIXED when the runner-up is within 20% of the leader.
+        if (sorted.length > 1 && sorted[1][1] > 0
+            && (sorted[0][1] - sorted[1][1]) / sorted[0][1] < 0.2) {
+            dominant = 'MIXED';
+        }
+        const theme = CLUSTER_THEMES[dominant] || CLUSTER_THEMES.CMA;
+        const size  = total < 10 ? 36 : (total < 100 ? 44 : 52);
+        const fs    = total < 10 ? 12 : (total < 100 ? 13 : 14);
+        const rw    = dominant === 'MIXED' ? 3 : 2;
+
+        const html = '<div style="display:flex;align-items:center;justify-content:center;'
+            + 'width:' + size + 'px;height:' + size + 'px;border-radius:50%;'
+            + 'background:' + theme.fill + ';color:' + theme.text + ';'
+            + 'border:' + rw + 'px solid ' + theme.ring + ';'
+            + 'font-family:Plus Jakarta Sans,sans-serif;font-size:' + fs + 'px;font-weight:700;'
+            + 'box-shadow:0 1px 4px rgba(0,0,0,.5);">' + total + '</div>';
+        return L.divIcon({
+            html,
+            className: 'corex-cluster corex-cluster-' + dominant.toLowerCase(),
+            iconSize: [size, size],
+        });
+    }
+
+    // ── Scheme + price labels at Z ≥ N₂ (spec §3) ───────────────────────
+
+    const LABEL_ZOOM_THRESHOLD = 16;
+    let   schemeLabelLayer = L.layerGroup();
+    let   priceLabelLayer  = L.layerGroup();
+
+    function buildLabelIcon(html, offsetYPercent) {
+        // iconSize=[0,0] + transform places the label freely above/below the
+        // marker without taking up Leaflet-managed layout space. Anchor at
+        // the latlng centre, then translate by content size.
+        return L.divIcon({
+            html: '<div style="position:absolute;left:0;top:0;transform:translate(-50%,'
+                + offsetYPercent + ');">' + html + '</div>',
+            className: '',
+            iconSize:   [0, 0],
+            iconAnchor: [0, 0],
+        });
+    }
+
+    function schemeLabelHtml(name, count) {
+        return '<span style="display:inline-block;background:#0b2a4a;color:#ffffff;padding:3px 7px;'
+            + 'border-radius:3px;font-family:Plus Jakarta Sans,sans-serif;font-size:11px;font-weight:600;'
+            + 'white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.45);border:1px solid rgba(255,255,255,0.1);">'
+            + escapeHtml(name) + ' (' + count + ')</span>';
+    }
+
+    function priceLabelHtml(prefix, value) {
+        return '<span style="display:inline-block;background:rgba(15,23,42,0.88);color:#ffffff;padding:1px 5px;'
+            + 'border-radius:2px;font-family:Plus Jakarta Sans,sans-serif;font-size:10px;font-weight:600;'
+            + 'white-space:nowrap;border:1px solid rgba(255,255,255,0.1);">' + prefix + value + '</span>';
+    }
+
+    function formatPriceShort(v) {
+        if (!v) return '';
+        if (v >= 1000000) return (v / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+        if (v >= 1000)    return (v / 1000).toFixed(0) + 'k';
+        return String(v);
+    }
+
+    function formatPriceLong(v) {
+        if (!v) return '';
+        return (Math.round(v)).toLocaleString('en-ZA');
+    }
+
+    function rebuildLabelLayers(payload) {
+        schemeLabelLayer.clearLayers();
+        priceLabelLayer.clearLayers();
+        if (!payload || !Array.isArray(payload.locations)) return;
+
+        payload.locations.forEach(loc => {
+            if (loc.display_as === 'scheme' && loc.scheme_name) {
+                const label = schemeLabelHtml(loc.scheme_name, loc.record_count);
+                const icon  = buildLabelIcon(label, '-160%');
+                schemeLabelLayer.addLayer(L.marker([loc.latitude, loc.longitude],
+                    { icon, interactive: false, keyboard: false }));
+                return;
+            }
+            const r = (loc.records || [])[0];
+            if (!r) return;
+            if (r.category === 'hfc_listings' && r.price) {
+                priceLabelLayer.addLayer(L.marker([loc.latitude, loc.longitude], {
+                    icon: buildLabelIcon(priceLabelHtml('R ', formatPriceLong(r.price)), '60%'),
+                    interactive: false, keyboard: false,
+                }));
+            } else if (r.category === 'sold_comps' && r.price) {
+                priceLabelLayer.addLayer(L.marker([loc.latitude, loc.longitude], {
+                    icon: buildLabelIcon(priceLabelHtml('Sold R ', formatPriceShort(r.price)), '60%'),
+                    interactive: false, keyboard: false,
+                }));
+            }
+        });
+
+        applyLabelZoomVisibility();
+    }
+
+    function applyLabelZoomVisibility() {
+        if (!map) return;
+        const show = map.getZoom() >= LABEL_ZOOM_THRESHOLD;
+        if (show && !map.hasLayer(schemeLabelLayer)) map.addLayer(schemeLabelLayer);
+        else if (!show && map.hasLayer(schemeLabelLayer)) map.removeLayer(schemeLabelLayer);
+        if (show && !map.hasLayer(priceLabelLayer))  map.addLayer(priceLabelLayer);
+        else if (!show && map.hasLayer(priceLabelLayer))  map.removeLayer(priceLabelLayer);
+    }
 
     // ── State ─────────────────────────────────────────────────────────────
     // POPIA owner-detail gate. Default Seller; Agent is opt-in only when
@@ -776,12 +1190,18 @@ document.addEventListener('DOMContentLoaded', function () {
     // would defeat the whole grouping (a sectional title scheme has dozens
     // of units sharing one street address).
     cluster = L.markerClusterGroup({
-        disableClusteringAtZoom: 14,
+        // Visual identity spec §3 — N₁ = 13: pins un-cluster one zoom
+        // earlier than before so the agent has shape-language to read.
+        disableClusteringAtZoom: 13,
         maxClusterRadius: 40,
         chunkedLoading: true,
         spiderfyOnMaxZoom: false,
         showCoverageOnHover: false,
         zoomToBoundsOnClick: true,
+        // Spec §5 — clusters are themed per dominant bucket of their
+        // children. The default orange MarkerCluster CSS still loads
+        // (the link tag stays) but our className wins specificity.
+        iconCreateFunction: clusterIcon,
     });
     cluster.addTo(map);
 
@@ -804,56 +1224,43 @@ document.addEventListener('DOMContentLoaded', function () {
                 ? ((loc.records || []).every(r => r.category === 'scheme_owners') ? 'scheme' : 'composite')
                 : 'single');
 
+        // Scheme pin — O triangle with unit-count badge.
         if (display === 'scheme') {
-            const count = loc.record_count;
-            // Purple matches LAYER_COLOURS.scheme_owners but used as the
-            // dominant background — reads as "this is a sectional scheme",
-            // not a generic composite.
-            const html =
-                '<div style="position:relative;width:28px;height:24px;">'
-                +   '<div style="display:flex;align-items:center;justify-content:center;width:28px;height:24px;background:#5b21b6;color:#fff;border:2px solid #ffffff;border-radius:5px;font-size:11px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.4);">'
-                +     'SS'
-                +   '</div>'
-                +   '<span style="position:absolute;top:-6px;right:-8px;background:#ffffff;color:#0f172a;font-size:10px;font-weight:700;border-radius:10px;padding:1px 5px;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.35);white-space:nowrap;border:1px solid #5b21b6;">'
-                +     count
-                +   '</span>'
+            const style = PIN_STYLES.O;
+            const html = '<div style="position:relative;width:' + style.size[0] + 'px;height:' + style.size[1] + 'px;">'
+                + shapeSvg(style)
+                + glyphLayer(style)
+                + countBadge(loc.record_count, style.fill)
                 + '</div>';
             return L.divIcon({
                 html,
-                className: 'corex-pin corex-pin-scheme' + selectedClass,
-                iconSize:   [28, 24],
-                iconAnchor: [14, 12],
+                className: 'corex-pin corex-pin-triangle' + selectedClass,
+                iconSize:   style.size,
+                iconAnchor: [style.size[0] / 2, style.size[1] / 2],
             });
         }
 
-        if (display === 'composite') {
-            const count = loc.record_count;
-            const html =
-                '<div style="position:relative;width:24px;height:24px;">'
-                +   '<div style="display:flex;align-items:center;justify-content:center;width:24px;height:24px;background:'
-                +     COMPOSITE_BG + ';color:#fff;border:2px solid ' + COMPOSITE_BORDER + ';border-radius:6px;font-size:9px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.4);">'
-                +     '<span style="font-size:10px;letter-spacing:0.5px;">+</span>'
-                +   '</div>'
-                +   '<span style="position:absolute;top:-6px;right:-8px;background:#ffffff;color:#0f172a;font-size:10px;font-weight:700;border-radius:10px;padding:1px 5px;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.35);white-space:nowrap;border:1px solid ' + COMPOSITE_BORDER + ';">'
-                +     count
-                +   '</span>'
-                + '</div>';
-            return L.divIcon({
-                html,
-                className: 'corex-pin corex-pin-composite' + selectedClass,
-                iconSize: [24, 24],
-                iconAnchor: [12, 12],
-            });
-        }
+        // Composite or single. Primary record drives the shape; composite
+        // adds corner-dot badges for the other buckets present (spec §2/§9).
+        const primary = (loc.records || [])[0] || {};
+        const pinKey  = pinKeyForRecord(primary);
+        const style   = PIN_STYLES[pinKey] || PIN_STYLES.M;
 
-        // Single record — colour by its category.
-        const rec = loc.records[0] || {};
-        const colour = LAYER_COLOURS[rec.category] || '#64748b';
-        const letter = LAYER_LETTERS[rec.category] || '?';
-        const html = '<div style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;background:'
-            + colour + ';color:#fff;border:2px solid #ffffff;border-radius:50%;font-size:11px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.4);">'
-            + letter + '</div>';
-        return L.divIcon({ html: html, className: 'corex-pin' + selectedClass, iconSize: [22, 22], iconAnchor: [11, 11] });
+        const inner   = (pinKey === 'H') ? housePinInner() : glyphLayer(style);
+        const sold    = soldSlashLayer(style);
+        const badges  = (display === 'composite') ? compositeBadges(loc) : '';
+        const count   = (display === 'composite') ? countBadge(loc.record_count, style.fill) : '';
+
+        const html = '<div style="position:relative;width:' + style.size[0] + 'px;height:' + style.size[1] + 'px;">'
+            + shapeSvg(style) + inner + sold + badges + count
+            + '</div>';
+
+        return L.divIcon({
+            html,
+            className: 'corex-pin corex-pin-' + style.shape + selectedClass,
+            iconSize:   style.size,
+            iconAnchor: [style.size[0] / 2, style.size[1] / 2],
+        });
     }
 
     /**
@@ -1451,7 +1858,12 @@ document.addEventListener('DOMContentLoaded', function () {
             total += loc.record_count;
             if (!showPins) return;
 
-            const m = L.marker([loc.latitude, loc.longitude], { icon: locationIcon(loc, loc.location_key === selectedLocationKey) });
+            const m = L.marker([loc.latitude, loc.longitude], {
+                icon:   locationIcon(loc, loc.location_key === selectedLocationKey),
+                // Stamp the bucket so the themed cluster iconCreateFunction
+                // can tally child markers per bucket without re-deriving.
+                bucket: bucketForLocation(loc),
+            });
             markerByLocationKey.set(loc.location_key, m);
             // A.2.6 — hover_summary is built server-side per location with a
             // 5-priority cascade. The client just renders it. Fallback path
@@ -1499,6 +1911,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
         renderHeatmap(showHeat ? heatPoints : []);
         document.getElementById('heat-legend').style.display = showHeat ? 'block' : 'none';
+
+        // Spec §3 — scheme + price labels at Z ≥ 16. Rebuild from the
+        // filtered locations so toggling layers also refreshes labels.
+        rebuildLabelLayers(filtered);
     }
 
     function renderHeatmap(points) {
@@ -2709,6 +3125,10 @@ document.addEventListener('DOMContentLoaded', function () {
     // Phase B Fix 1a — sync URL on every move/zoom even when the fetch
     // is served from cache (which would otherwise skip syncUrlState).
     map.on('moveend zoomend', syncUrlState);
+    // Spec §3 — toggle the scheme + price label layers as the agent
+    // crosses the N₂ = 16 threshold, with no flicker (we keep the marker
+    // layers populated; only their attachment to the map flips).
+    map.on('zoomend', applyLabelZoomVisibility);
 
     // Initial render of view-mode pills + Seller banner. Always sync from
     // the resolved viewMode state (server-default is Seller; the Blade
