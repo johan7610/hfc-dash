@@ -415,6 +415,86 @@ final class MapActivityLogTest extends TestCase
         $this->assertSame('pitch_unavailable', $body['error']);
     }
 
+    /** M80 — P-pin click on a listing whose address collides with ANOTHER
+     *  agent's active draft must NOT silently redirect to the MIC
+     *  Opportunities tab. The 2adf9698 fix removed the silent MIC
+     *  fallback in MapActivityController when resolveProspectingListingId
+     *  returned null, but EntryPointController::resolveCollisionForListing
+     *  (added in bc22bfcf) STILL redirects to MIC on other_draft
+     *  collisions. The user couldn't see the difference: from the popup
+     *  tab's perspective, "Prospect Now → MIC" happened either way.
+     *  This test pins the post-fix contract: the activity-log endpoint
+     *  pre-checks the collision and returns pitch_blocked_other_draft +
+     *  redirect_url=null, so the client surfaces the warning toast
+     *  instead of bouncing the popup through entry-point → MIC. */
+    public function test_m80_p_pin_other_draft_collision_returns_pitch_blocked_not_mic_redirect(): void
+    {
+        [$agencyId, $userId] = $this->seedAgencyUserProperty();
+        $otherUser = User::factory()->create([
+            'agency_id' => $agencyId, 'branch_id' => $agencyId, 'role' => 'agent',
+        ]);
+
+        // Seed an OTHER agent's active draft at the same GPS as the
+        // prospecting_listing the agent is about to Prospect Now on.
+        $draftPropertyId = (int) DB::table('properties')->insertGetId([
+            'external_id'   => 'TEST-' . Str::random(8),
+            'title'         => 'Other agent draft',
+            'address'       => '12 Test Lane, Margate',
+            'suburb'        => 'Margate',
+            'latitude'      => -30.86,
+            'longitude'     => 30.37,
+            'price'         => 1_200_000,
+            'property_type' => 'house',
+            'status'        => 'draft',
+            'is_demo'       => false,
+            'agency_id'     => $agencyId,
+            'branch_id'     => $agencyId,
+            'agent_id'      => $otherUser->id,
+            'created_at'    => now(),
+            'updated_at'    => now(),
+        ]);
+        DB::table('tracked_properties')->insert([
+            'agency_id'                => $agencyId,
+            'external_id'              => 'TP-' . Str::random(8),
+            'street_number'            => '12',
+            'street_name'              => 'Test Lane',
+            'suburb'                   => 'Margate',
+            'latitude'                 => -30.86,
+            'longitude'                => 30.37,
+            'promoted_to_property_id'  => $draftPropertyId,
+            'promoted_at'              => now(),
+            'status'                   => 'promoted',
+            'created_at'               => now(),
+            'updated_at'               => now(),
+        ]);
+
+        $listingId = $this->insertProspectingListing($agencyId, $userId);
+
+        $resp = $this->actingAs(User::find($userId))->postJson(route('corex.map.activity.log'), [
+            'action'       => 'prospect_launched',
+            'category'     => 'active_listings',
+            'record_id'    => (string) $listingId,
+            'location_key' => 'sha256:m80',
+            'source'       => 'single_detail',
+            'address'      => '12 Test Lane, Margate',
+            'latitude'     => -30.86,
+            'longitude'    => 30.37,
+            'suburb'       => 'Margate',
+        ])->assertOk();
+
+        $body = $resp->json();
+        $this->assertNull($body['redirect_url'],
+            'other_draft collision must NOT carry a redirect_url — the popup must not navigate');
+        $this->assertSame('pitch_blocked_other_draft', $body['error']);
+        $this->assertNotEmpty($body['error_message']);
+        $this->assertStringContainsString('draft', mb_strtolower($body['error_message']));
+        // Defence-in-depth: the response must not leak the MIC URL
+        // ANYWHERE — the precise regression we're protecting against.
+        $encoded = json_encode($body);
+        $this->assertStringNotContainsStringIgnoringCase('opportunities', $encoded);
+        $this->assertStringNotContainsStringIgnoringCase('market-intelligence', $encoded);
+    }
+
     /** M24 — user-facing "valuation" was removed from active CoreX views.
      *
      * Strips ALL of these (which are protected per spec):

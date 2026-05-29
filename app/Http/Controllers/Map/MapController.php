@@ -38,9 +38,23 @@ final class MapController extends Controller
 {
     public function __construct(private readonly MapPinService $svc = new MapPinService()) {}
 
-    public function index(): \Illuminate\View\View
+    public function index(\Illuminate\Http\Request $request): \Illuminate\View\View
     {
-        return view('corex.map.index');
+        // The H pin renders the viewing agency's logo (multi-tenant —
+        // every agency sees its own brand on its own stock). For
+        // System Owners viewing under a different agency context, the
+        // effectiveAgency reflects the session-selected agency, so the
+        // pin updates immediately when they switch.
+        $user   = $request->user();
+        $agency = $user
+            ? \App\Models\Agency::query()
+                ->withoutGlobalScopes()
+                ->find($user->effectiveAgencyId())
+            : null;
+
+        return view('corex.map.index', [
+            'agency' => $agency,
+        ]);
     }
 
     public function pins(Request $request): JsonResponse

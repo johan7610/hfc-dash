@@ -14,6 +14,7 @@ use App\Events\Map\MapProspectLaunched;
 use App\Events\Map\MapProspectOverride;
 use App\Events\Map\MapWhatsAppLaunched;
 use App\Http\Controllers\Controller;
+use App\Services\Map\MapProspectStatusService;
 use App\Models\Contact;
 use App\Models\MarketReports\MarketReport;
 use App\Models\MarketReports\SchemeOwner;
@@ -366,12 +367,31 @@ final class MapActivityController extends Controller
 
         $extras['tracked_property_id']    = (int) $tp->id;
         $extras['prospecting_listing_id'] = $plId;
-        if ($plId !== null) {
-            $extras['redirect_url'] = route('seller-outreach.entry.from-prospecting', ['prospectingListingId' => $plId]);
-        } else {
+
+        if ($plId === null) {
             $extras['redirect_url'] = null;
             $extras['error']        = 'pitch_unavailable';
             $extras['error_message'] = "Couldn't start a pitch for this record — it may have been removed or belongs to another agency. Refresh the map and try again.";
+        } else {
+            // Mirror EntryPointController::resolveCollisionForListing
+            // at THIS layer so the JS sees the collision and shows a
+            // toast — instead of opening the entry-point form in a new
+            // tab and letting THAT redirect silently to MIC (which is
+            // how the user reported "Prospect Now → MIC" even after
+            // 2adf9698's silent-MIC fix). For 'held' / 'own_draft' we
+            // route the popup straight to the property record; for
+            // 'other_draft' the popup closes and an explanatory toast
+            // tells the agent to use the override flow.
+            $collision = $this->preCheckProspectCollision($plId, $agencyId, $userId, $tp->id);
+
+            if ($collision !== null) {
+                $extras['redirect_url']  = $collision['redirect_url'];
+                $extras['error']         = $collision['error'];
+                $extras['error_message'] = $collision['error_message'];
+                $extras['collision']     = $collision['collision'] ?? null;
+            } else {
+                $extras['redirect_url'] = route('seller-outreach.entry.from-prospecting', ['prospectingListingId' => $plId]);
+            }
         }
 
         return new MapProspectLaunched(
@@ -392,6 +412,96 @@ final class MapActivityController extends Controller
      * portal_ref carries the layer-prefixed source ref ("mrcr:N" / "pal:N")
      * so the same map record always maps to the same listing.
      */
+    /**
+     * Run the same collision check EntryPointController::resolveCollisionForListing
+     * runs server-side AFTER navigation. We run it BEFORE returning a
+     * redirect_url so the client can show a toast (other_draft) or open
+     * the property directly (held / own_draft) without bouncing the
+     * popup through the entry-point's HTML render.
+     *
+     * Returns null when the listing is available / previously_*. Returns
+     * a {redirect_url, error, error_message, collision} dict when the
+     * client should be diverted.
+     */
+    private function preCheckProspectCollision(int $plId, int $agencyId, int $userId, int $trackedPropertyId): ?array
+    {
+        $listing = \DB::table('prospecting_listings')
+            ->where('id', $plId)
+            ->where('agency_id', $agencyId)
+            ->whereNull('deleted_at')
+            ->first(['id', 'address', 'suburb', 'tracked_property_id']);
+        if (!$listing) return null;
+
+        // Prefer the prospecting_listings.tracked_property_id link; fall
+        // back to the TrackedProperty we just resolved via matchOrCreate
+        // (covers freshly-captured listings whose tracked_property_id
+        // hasn't been backfilled yet — without this, GPS-based collision
+        // detection silently no-ops and an other_draft collision wouldn't
+        // be caught.)
+        $tpIdForGps = $listing->tracked_property_id ?? $trackedPropertyId;
+        $lat = null; $lng = null;
+        if ($tpIdForGps) {
+            $tpRow = \DB::table('tracked_properties')
+                ->where('id', $tpIdForGps)
+                ->where('agency_id', $agencyId)
+                ->first(['latitude', 'longitude']);
+            if ($tpRow) {
+                $lat = $tpRow->latitude !== null ? (float) $tpRow->latitude : null;
+                $lng = $tpRow->longitude !== null ? (float) $tpRow->longitude : null;
+            }
+        }
+
+        try {
+            $status = app(MapProspectStatusService::class)->resolve([
+                'address'   => $listing->address ?? null,
+                'latitude'  => $lat,
+                'longitude' => $lng,
+                'suburb'    => $listing->suburb ?? null,
+            ], $agencyId, $userId);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('preCheckProspectCollision resolve failed', [
+                'err'        => $e->getMessage(),
+                'listing_id' => $plId,
+            ]);
+            return null; // fail open — let the entry-point handle its own collision check
+        }
+
+        $propertyId = $status['property_id'] ?? null;
+
+        switch ($status['status'] ?? 'available') {
+            case 'held':
+                return [
+                    'redirect_url'  => $propertyId ? route('corex.properties.show', ['property' => $propertyId]) : null,
+                    'error'         => 'pitch_blocked_held',
+                    'error_message' => "Already on HFC's books — opened the property record instead.",
+                    'collision'     => $status,
+                ];
+            case 'own_draft':
+                $days = (int) ($status['days_in_state'] ?? 0);
+                return [
+                    'redirect_url'  => $propertyId ? route('corex.properties.show', ['property' => $propertyId]) : null,
+                    'error'         => 'pitch_blocked_own_draft',
+                    'error_message' => "You already have a draft on this property ({$days}d) — continuing your draft.",
+                    'collision'     => $status,
+                ];
+            case 'other_draft':
+                $agent = $status['agent_name'] ?? 'another agent';
+                $days  = (int) ($status['days_in_state'] ?? 0);
+                $state = $status['state_label'] ?? 'draft';
+                return [
+                    'redirect_url'  => null,
+                    'error'         => 'pitch_blocked_other_draft',
+                    'error_message' => "{$agent} has a draft on this property ({$days}d in {$state}). Coordinate with them, or use the map's override flow to take over — Prospect Now is blocked while their draft is active.",
+                    'collision'     => $status,
+                ];
+            case 'available':
+            case 'previously_sold':
+            case 'previously_held':
+            default:
+                return null;
+        }
+    }
+
     private function resolveProspectingListingId(array $data, int $agencyId, int $userId, int $trackedPropertyId): ?int
     {
         $recordId = (string) ($data['record_id'] ?? '');
