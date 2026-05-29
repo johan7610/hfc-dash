@@ -14,8 +14,11 @@
     $holding  = $analysisData['holding_cost'];
     $insights = $analysisData['key_insights'];
     $counts   = $analysisData['data_counts'];
-    $isSectional = ($analysisData['is_sectional'] ?? false)
-                || stripos($presentation->property_type ?? '', 'sectional') !== false;
+    // Build 7 — sectional check reads title_type (keystone single
+    // source of truth). The compile()'s is_sectional flag also reads
+    // title_type now, so the two sources are consistent.
+    $isSectional = ($presentation->property?->title_type === 'sectional_title')
+                || ($analysisData['is_sectional'] ?? false);
     $sizeLabel   = $isSectional ? 'Unit m²' : 'Erf m²';
 @endphp
 

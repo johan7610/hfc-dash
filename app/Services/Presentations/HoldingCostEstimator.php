@@ -56,7 +56,12 @@ final class HoldingCostEstimator
         }
 
         $millions   = $askingPrice / 1_000_000;
-        $isSection  = $this->isSectional((string) $presentation->property_type);
+        // Build 7 — sectional check reads title_type (keystone single
+        // source of truth). The legacy stripos-on-property_type path
+        // failed for normalised 'other' values; keystone column never
+        // does. Property null fallback covers the rare ad-hoc
+        // Presentation without a property_id.
+        $isSection  = ($presentation->property?->title_type ?? null) === 'sectional_title';
         $floorM2    = $presentation->floor_area_m2 ? (int) $presentation->floor_area_m2 : null;
 
         $ratesRate    = (int) ($agency?->presentations_default_rates_per_million_zar         ?? 800);

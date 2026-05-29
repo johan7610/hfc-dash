@@ -130,7 +130,15 @@
                 <td style="padding: 5px 0;">{{ \Illuminate\Support\Str::humanType($presentation->property_type) }}</td>
                 <td style="padding: 5px 0; color: var(--text-muted); font-weight: 600;">Category</td>
                 <td style="padding: 5px 0;">
-                    {{ $presentation->property?->category ?? '— (no category set — comp filter skipped)' }}
+                    @php
+                        // Build 7 — render the agency's configured label
+                        // (proper-case) instead of the raw lowercase column.
+                        $catLabel = $presentation->property?->category
+                            ? app(\App\Services\TitleTypeClassifier::class)
+                                ->displayCategoryLabel((int) $version->agency_id, $presentation->property->category)
+                            : null;
+                    @endphp
+                    {{ $catLabel ?? '— (no category set — comp filter skipped)' }}
                     @if($subjectTitleType)
                         <span class="tt-badge {{ $subjectTitleType }}" style="margin-left:6px;">
                             {{ \App\Models\PropertySettingItem::TITLE_TYPES[$subjectTitleType] ?? $subjectTitleType }}
@@ -141,9 +149,20 @@
             <tr>
                 <td style="padding: 5px 0; color: var(--text-muted); font-weight: 600;">Bedrooms</td>
                 <td style="padding: 5px 0;">{{ $presentation->bedrooms ?? '—' }}</td>
-                <td style="padding: 5px 0; color: var(--text-muted); font-weight: 600;">Erf size</td>
+                @php
+                    // Build 7 — switch the size row by title_type (keystone
+                    // single source of truth). Sectional → "Floor area" +
+                    // floor_area_m2. Full title + vacant land → "Erf size"
+                    // + erf_size_m2.
+                    $subjectIsSectional = ($presentation->property?->title_type ?? null) === 'sectional_title';
+                    $sizeLabel = $subjectIsSectional ? 'Floor area' : 'Erf size';
+                    $sizeValue = $subjectIsSectional
+                        ? $presentation->floor_area_m2
+                        : $presentation->erf_size_m2;
+                @endphp
+                <td style="padding: 5px 0; color: var(--text-muted); font-weight: 600;">{{ $sizeLabel }}</td>
                 <td style="padding: 5px 0;">
-                    {{ $presentation->erf_size_m2 ? number_format($presentation->erf_size_m2) . ' m²' : '—' }}
+                    {{ $sizeValue ? number_format($sizeValue) . ' m²' : '—' }}
                 </td>
             </tr>
             <tr>

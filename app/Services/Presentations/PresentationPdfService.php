@@ -135,12 +135,24 @@ class PresentationPdfService
         $suburbName  = $esc($subject['suburb'] ?? $presentation->suburb ?? '');
         $sellerName  = $esc($presentation->seller_name ?? '');
         $propType    = $esc(\Illuminate\Support\Str::humanType($presentation->property_type ?? ''));
-        $isSectional = ($data['is_sectional'] ?? false)
-            || stripos($presentation->property_type ?? '', 'sectional') !== false;
+        // Build 7 — sectional check reads title_type (keystone single
+        // source of truth). The compile()'s is_sectional flag also now
+        // reads title_type, so the two sources are consistent.
+        $isSectional = ($presentation->property?->title_type === 'sectional_title')
+            || ($data['is_sectional'] ?? false);
         $sizeLabel   = $isSectional ? 'Unit m²' : 'Erf m²';
         $bedrooms    = $presentation->bedrooms;
         $bathrooms   = null; // not on model currently
-        $erfSize     = $subject['extent_m2'] ?? $presentation->floor_area_m2;
+        // Build 7 — sectional subjects don't have an erf size, they have
+        // a floor area. Read the right column per title_type so the
+        // "Subject Property Context" table is honest.
+        if ($isSectional) {
+            $erfSize     = $presentation->floor_area_m2 ?? $subject['extent_m2'] ?? null;
+            $sizeRowLbl  = 'Floor Area';
+        } else {
+            $erfSize     = $subject['extent_m2'] ?? $presentation->erf_size_m2;
+            $sizeRowLbl  = 'Erf Extent';
+        }
         $askingPrice = $subject['asking_price'] ?? $presentation->asking_price_inc;
 
         // CMA values
@@ -682,7 +694,12 @@ a:hover { text-decoration: underline; }
             $_addLine('Type', \Illuminate\Support\Str::humanType($subject['property_type']));
         }
         if (!empty($presentation->property?->category)) {
-            $_addLine('Category', $presentation->property->category);
+            // Build 7 — render the agency's configured label (proper-
+            // case) instead of the raw lowercase column.
+            $_categoryLabel = app(\App\Services\TitleTypeClassifier::class)
+                ->displayCategoryLabel((int) $presentation->agency_id, $presentation->property->category)
+                ?? $presentation->property->category;
+            $_addLine('Category', $_categoryLabel);
         }
 
         // GPS (only render when both lat and lng are present).
@@ -986,7 +1003,7 @@ a:hover { text-decoration: underline; }
     <thead><tr><th>Detail</th><th class="num">Value</th></tr></thead>
     <tbody>
         <?php if ($subject['erf']): ?><tr><td>Erf Number</td><td class="num"><?= $esc($subject['erf']) ?></td></tr><?php endif ?>
-        <?php if ($erfSize): ?><tr><td><?= $isSectional ? 'Unit Size' : 'Erf Extent' ?></td><td class="num"><?= number_format((int) $erfSize) ?> m²</td></tr><?php endif ?>
+        <?php if ($erfSize): ?><tr><td><?= $esc($sizeRowLbl) ?></td><td class="num"><?= number_format((int) $erfSize) ?> m²</td></tr><?php endif ?>
         <?php if ($subject['purchase_date']): ?><tr><td>Purchase Date</td><td class="num"><?= $esc($subject['purchase_date']) ?></td></tr><?php endif ?>
         <?php if ($subject['purchase_price']): ?><tr><td>Purchase Price</td><td class="num"><?= $zar($subject['purchase_price']) ?></td></tr><?php endif ?>
         <?php if ($subject['indexed_value']): ?><tr><td>Indexed Value</td><td class="num"><?= $zar($subject['indexed_value']) ?></td></tr><?php endif ?>

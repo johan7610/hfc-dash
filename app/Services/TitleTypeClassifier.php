@@ -95,6 +95,42 @@ final class TitleTypeClassifier
     }
 
     /**
+     * Build 7 — return the agency's configured display label for a
+     * raw category string. The raw `properties.category` column tends
+     * to be lowercase ("residential"); the agency's
+     * property_setting_items row name is proper-case ("Residential").
+     * Match case-insensitively + return the agency's casing. Falls
+     * back to Str::title() on the raw input when no matching agency
+     * row exists. Returns null when input itself is blank.
+     */
+    public function displayCategoryLabel(int $agencyId, ?string $rawCategoryName): ?string
+    {
+        if (!is_string($rawCategoryName) || trim($rawCategoryName) === '') {
+            return null;
+        }
+
+        $row = PropertySettingItem::withoutGlobalScopes()
+            ->where('agency_id', $agencyId)
+            ->where('group', PropertySettingItem::GROUP_CATEGORY)
+            ->whereNull('deleted_at')
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($rawCategoryName))])
+            ->first(['name']);
+
+        if (!$row) {
+            $row = PropertySettingItem::withoutGlobalScopes()
+                ->whereNull('agency_id')
+                ->where('group', PropertySettingItem::GROUP_CATEGORY)
+                ->whereNull('deleted_at')
+                ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($rawCategoryName))])
+                ->first(['name']);
+        }
+
+        return $row && !empty($row->name)
+            ? (string) $row->name
+            : \Illuminate\Support\Str::title(trim($rawCategoryName));
+    }
+
+    /**
      * Resolve a property's title_type using property_type first, falling
      * back to category-driven mapping when property_type is blank.
      *

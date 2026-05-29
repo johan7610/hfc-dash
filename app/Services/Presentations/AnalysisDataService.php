@@ -55,9 +55,12 @@ class AnalysisDataService
         // P24 alert email inflow analysis
         $inflowAbsorption = (new AbsorptionInflowService())->compute($presentation, $stockAbsorption);
 
-        // Detect sectional title from extracted fields or presentation property_type
-        $isSectional = ($fields->get('vicinity.property_type')?->final_value === 'sectional')
-            || stripos($presentation->property_type ?? '', 'sectional') !== false;
+        // Build 7 — sectional check reads title_type (keystone single
+        // source of truth). Vicinity-field hint stays as a fallback
+        // for legacy presentations whose property row pre-dates the
+        // keystone backfill — the saved hint is still honest there.
+        $isSectional = ($presentation->property?->title_type === 'sectional_title')
+            || ($fields->get('vicinity.property_type')?->final_value === 'sectional');
 
         return [
             'subject_property'   => $this->compileSubjectProperty($presentation, $fields, $askingPrice),

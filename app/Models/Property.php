@@ -341,7 +341,20 @@ class Property extends Model
 
     /**
      * Build the best human-readable address from available fields.
-     * Priority: street_number + street_name > address > title (last resort).
+     * Priority: structured parts (unit_number, complex_name, street_*)
+     *           ↳ legacy `address` column only when NO structured parts
+     *             produced anything
+     *           ↳ title as last resort.
+     *
+     * Build 7 fix — the legacy `address` column on many older rows is a
+     * stale pre-concatenation of complex_name + unit_number (e.g.
+     * property 909: address="Brock Manor, 17", complex_name="Brock Manor",
+     * unit_number="17"). The pre-fix elseif chain appended the legacy
+     * `address` whenever street_* was missing, re-adding content the
+     * structured branch already supplied. The new chain only falls
+     * through to `address` when NO structured part landed in $parts.
+     * Adjacent-duplicate guard at the bottom is belt-and-braces for any
+     * other overlap pattern (case-insensitive, trimmed).
      */
     public function buildDisplayAddress(): string
     {
@@ -354,12 +367,20 @@ class Property extends Model
             $parts[] = $this->complex_name;
         }
 
-        // Prefer street_number + street_name over legacy address field
+        $usedStructuredStreet = false;
         if (!empty($this->street_number) && !empty($this->street_name)) {
             $parts[] = $this->street_number . ' ' . $this->street_name;
+            $usedStructuredStreet = true;
         } elseif (!empty($this->street_name)) {
             $parts[] = $this->street_name;
-        } elseif (!empty($this->address)) {
+            $usedStructuredStreet = true;
+        }
+
+        // Legacy `address` fallback fires ONLY when nothing structural
+        // landed in $parts. Unit/complex/street are all considered
+        // structural — once any one of them populated $parts, the
+        // legacy column would just re-add overlapping content.
+        if (empty($parts) && !empty($this->address)) {
             $parts[] = $this->address;
         }
 
@@ -375,7 +396,20 @@ class Property extends Model
             return $this->title ?? 'Unknown Property';
         }
 
-        return implode(', ', $parts);
+        // Belt-and-braces — collapse adjacent duplicates after trimming
+        // + case-folding. Guards against any future pattern that lands
+        // two equivalent parts side-by-side.
+        $cleaned = [];
+        foreach ($parts as $piece) {
+            $piece = trim((string) $piece);
+            if ($piece === '') continue;
+            if (!empty($cleaned) && mb_strtolower(end($cleaned)) === mb_strtolower($piece)) {
+                continue;
+            }
+            $cleaned[] = $piece;
+        }
+
+        return implode(', ', $cleaned);
     }
 
     // ── Scopes ──

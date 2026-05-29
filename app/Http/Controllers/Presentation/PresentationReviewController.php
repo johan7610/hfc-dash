@@ -94,6 +94,13 @@ final class PresentationReviewController extends Controller
             // Preserve Build 1 strict-drop semantic on blank comp type.
             $compTitleType = $classifier->fromPropertyType($c->property_type)
                 ?? \App\Services\TitleTypeClassifier::TITLE_OTHER;
+            // Build 7 — mirror MicSnapshotHydrator's same-subject-report
+            // exemption to the review-screen cross-flag. Comps from the
+            // subject's own analyst-vetted market report are flagged
+            // `subject_match_used` in raw_row_json by encodeRaw (L472)
+            // at hydration time. Trust the analyst's grouping and do not
+            // visually mark them as cross-type.
+            $subjectMatchUsed = (bool) ($raw['subject_match_used'] ?? false);
             return [
                 'id'              => $c->id,
                 'address'         => $raw['address'] ?? '—',
@@ -107,7 +114,9 @@ final class PresentationReviewController extends Controller
                 'lng'             => $raw['longitude'] ?? null,
                 'title_type'      => $compTitleType,
                 'is_included'     => in_array($c->id, $includedIds, true),
-                'is_cross_type'   => $subjectTitleType !== null && $subjectTitleType !== $compTitleType,
+                'is_cross_type'   => !$subjectMatchUsed
+                    && $subjectTitleType !== null
+                    && $subjectTitleType !== $compTitleType,
             ];
         })->all();
 

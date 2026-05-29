@@ -422,10 +422,21 @@ class UploadExtractionService
             }
             $this->persistSoldComps($rows, $presentationId, $upload->id, $parserTag);
 
-            // Set property_type on presentation when sectional detected (if not already set)
+            // Set property_type on presentation when sectional detected (if not already set).
+            // Build 7 — "is already sectional?" check now reads title_type
+            // (keystone single source of truth). The pre-keystone path
+            // used `in_array($presentation->property_type, [...])` against
+            // values the normaliseTypeForPresentation enum doesn't even
+            // produce — was racy. Title_type on the property is now the
+            // source. Note: this branch still WRITES presentations.
+            // property_type='sectional' (a value outside the normaliser
+            // vocabulary). That write path predates the keystone and is
+            // a separate fix-up; keystone keeps title_type honest
+            // regardless.
             if ($isSectional) {
                 $presentation = Presentation::find($presentationId);
-                if ($presentation && !in_array($presentation->property_type, ['sectional', 'apartment', 'unit'])) {
+                $propertyIsSectional = $presentation?->property?->title_type === 'sectional_title';
+                if ($presentation && !$propertyIsSectional) {
                     $presentation->update(['property_type' => 'sectional']);
                 }
             }
