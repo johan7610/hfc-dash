@@ -90,6 +90,15 @@ class PresentationPdfService
             ->first();
         $data = (new AnalysisDataService())->compile($presentation, $latestPublished);
 
+        // Build 4 — section toggles. Each PAGE block is wrapped with
+        // a $sectionEnabled('key') guard below; floor sections always
+        // return true so the report never renders without a cover or
+        // subject facts. Reading off the version (not a fresh lookup)
+        // is intentional — published versions honour their snapshot.
+        $sectionEnabled = function (string $key) use ($version): bool {
+            return $version->isSectionEnabled($key);
+        };
+
         $subject     = $data['subject_property']   ?? [];
         $suburb      = $data['suburb_overview']     ?? [];
         $comps       = $data['comparable_sales']    ?? [];
@@ -897,8 +906,9 @@ a:hover { text-decoration: underline; }
 <?php endif ?>
 
 <?php // ══════════════════════════════════════════════════════════════════════
-      // PAGE 3 — MARKET OVERVIEW
+      // PAGE 3 — MARKET OVERVIEW  (Build 4 toggleable)
       // ══════════════════════════════════════════════════════════════════════ ?>
+<?php if ($sectionEnabled('market_overview')): ?>
 <div class="page-break"></div>
 <div class="section-header">
     <span class="section-number">2</span>
@@ -987,9 +997,12 @@ a:hover { text-decoration: underline; }
 </div>
 <?php endif ?>
 
+<?php endif // /market_overview ?>
+
 <?php // ══════════════════════════════════════════════════════════════════════
-      // PAGE 4 — RECENT SALES NEAR YOUR PROPERTY
+      // PAGE 4 — RECENT SALES NEAR YOUR PROPERTY  (Build 4 toggleable)
       // ══════════════════════════════════════════════════════════════════════ ?>
+<?php if ($sectionEnabled('recent_sales')): ?>
 <div class="page-break"></div>
 <div class="section-header">
     <span class="section-number">3</span>
@@ -1127,9 +1140,12 @@ a:hover { text-decoration: underline; }
 <?php else: ?>
 <div class="callout callout-info">No vicinity sales data available for this property.</div>
 <?php endif ?>
+<?php endif // /recent_sales ?>
 
 <?php // Phase 3g V2 Part D4/D5 — Spatial View SVG. Only renders when the
-      // subject property has resolved GPS + at least one comp with GPS. ?>
+      // subject property has resolved GPS + at least one comp with GPS.
+      // Build 4 — also gated by section toggle. ?>
+<?php if ($sectionEnabled('spatial_view')): ?>
 <?php
     $_propertyForMap = $presentation->property_id ? \App\Models\Property::withoutGlobalScopes()->find($presentation->property_id) : null;
     $_subjLat = $_propertyForMap?->latitude;
@@ -1225,9 +1241,12 @@ a:hover { text-decoration: underline; }
 </div>
 <?php endif ?>
 
+<?php endif // /spatial_view ?>
+
 <?php // ══════════════════════════════════════════════════════════════════════
-      // PAGE 5 — COMPARATIVE MARKET ANALYSIS
+      // PAGE 5 — COMPARATIVE MARKET ANALYSIS  (Build 4 toggleable as cma_analysis)
       // ══════════════════════════════════════════════════════════════════════ ?>
+<?php if ($sectionEnabled('cma_analysis')): ?>
 <div class="page-break"></div>
 <div class="section-header">
     <span class="section-number">4</span>
@@ -1364,9 +1383,12 @@ a:hover { text-decoration: underline; }
 </div>
 <?php endif ?>
 
+<?php endif // /cma_analysis ?>
+
 <?php // ══════════════════════════════════════════════════════════════════════
-      // PAGE 6 — ACTIVE COMPETITION
+      // PAGE 6 — ACTIVE COMPETITION  (Build 4 toggleable)
       // ══════════════════════════════════════════════════════════════════════ ?>
+<?php if ($sectionEnabled('active_competition')): ?>
 <div class="page-break"></div>
 <div class="section-header">
     <span class="section-number">5</span>
@@ -1511,9 +1533,12 @@ a:hover { text-decoration: underline; }
 </div>
 <?php endif ?>
 
+<?php endif // /active_competition ?>
+
 <?php // ══════════════════════════════════════════════════════════════════════
-      // PAGE 7 — NEW LISTING INFLOW & ABSORPTION
+      // PAGE 7 — NEW LISTING INFLOW & ABSORPTION  (Build 4 toggleable)
       // ══════════════════════════════════════════════════════════════════════ ?>
+<?php if ($sectionEnabled('inflow_absorption')): ?>
 <?php if (!empty($inflow['has_data'])): ?>
 <div class="page-break"></div>
 <div class="section-header">
@@ -1673,7 +1698,18 @@ a:hover { text-decoration: underline; }
 <p style="font-size:8.5px;color:var(--text-light);margin-top:10px;">
     Source: P24 alert email imports (<?= number_format($inflow['total_p24_listings'] ?? 0) ?> total listings in database)
 </p>
-<?php endif // end inflow section ?>
+<?php else: ?>
+<div class="page-break"></div>
+<div class="section-header">
+    <span class="section-number">6</span>
+    <h2>New Listing Inflow &amp; Absorption</h2>
+</div>
+<div class="callout callout-info">
+    No P24 alert data available for this suburb in the selected period.
+    The inflow story will populate once alerts arrive.
+</div>
+<?php endif // end inflow has_data ?>
+<?php endif // /inflow_absorption ?>
 
 <?php // ══════════════════════════════════════════════════════════════════════
       // PAGE 7.5 — PROPCON LISTING PERFORMANCE INSIGHTS
@@ -1806,8 +1842,9 @@ a:hover { text-decoration: underline; }
 ?>
 
 <?php // ══════════════════════════════════════════════════════════════════════
-      // PAGE 8 — HOLDING COST ANALYSIS
+      // PAGE 8 — HOLDING COST ANALYSIS  (Build 4 toggleable)
       // ══════════════════════════════════════════════════════════════════════ ?>
+<?php if ($sectionEnabled('holding_cost')): ?>
 <div class="page-break"></div>
 <div class="section-header">
     <span class="section-number"><?= $sectionAfterInflow ?></span>
@@ -1890,9 +1927,13 @@ a:hover { text-decoration: underline; }
 </div>
 <?php endif ?>
 
+<?php endif // /holding_cost ?>
+
 <?php // ══════════════════════════════════════════════════════════════════════
-      // PAGE 9 — PRICING STRATEGY & RECOMMENDATION
+      // PAGE 9 — PRICING STRATEGY & RECOMMENDATION  (Build 4 toggleable;
+      // dependency-gated to cma_analysis at the compiler + review layers)
       // ══════════════════════════════════════════════════════════════════════ ?>
+<?php if ($sectionEnabled('pricing_strategy')): ?>
 <div class="page-break"></div>
 <div class="section-header">
     <span class="section-number"><?= $sectionAfterInflow + 1 ?></span>
@@ -2002,6 +2043,7 @@ a:hover { text-decoration: underline; }
 </table>
 </div>
 <?php endif ?>
+<?php endif // /pricing_strategy ?>
 
 <?php // ══════════════════════════════════════════════════════════════════════
       // PAGE 10 — PRICING SCENARIOS (conditional — only if simulator saved with include_in_pdf)

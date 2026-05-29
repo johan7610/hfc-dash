@@ -373,6 +373,40 @@ class SettingsController extends Controller
             ->with('success', 'Presentation coverage thresholds saved.');
     }
 
+    /**
+     * Build 4 — agency-default toggles for which sections render in the
+     * full report by default. Per-presentation overrides happen on the
+     * review screen via PresentationReviewController::toggleSection.
+     */
+    public function updatePresentationSections(Request $request)
+    {
+        $user = auth()->user();
+        abort_unless($user, 403);
+
+        $agencyId = $user->effectiveAgencyId();
+        $agency   = $agencyId ? Agency::find($agencyId) : null;
+        abort_unless($agency, 404, 'No agency in scope.');
+
+        $update = [];
+        foreach (\App\Models\PresentationVersion::SECTIONS_CATALOGUE as $key => $_label) {
+            $col = 'presentations_default_show_' . $key;
+            // Floor sections coerce to true regardless of POST payload —
+            // they're rendered always, settings just surfaces them
+            // visually so agents see the full report shape.
+            if (in_array($key, \App\Models\PresentationVersion::SECTION_FLOOR, true)) {
+                $update[$col] = true;
+            } else {
+                $update[$col] = $request->boolean($col);
+            }
+        }
+
+        $agency->update($update);
+
+        return redirect()
+            ->route('corex.settings', ['s' => 'feature-presentations'])
+            ->with('success', 'Default presentation sections saved.');
+    }
+
     public function updateMatchesEnabled(Request $request)
     {
         $enabled = $request->boolean('matches_enabled');

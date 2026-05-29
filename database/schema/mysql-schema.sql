@@ -187,6 +187,15 @@ CREATE TABLE `agencies` (
   `presentations_coverage_moderate_threshold` smallint unsigned NOT NULL DEFAULT '3',
   `presentations_coverage_thin_threshold` smallint unsigned NOT NULL DEFAULT '1',
   `presentations_default_period_months` smallint unsigned NOT NULL DEFAULT '12',
+  `presentations_default_show_executive_summary` tinyint(1) NOT NULL DEFAULT '1',
+  `presentations_default_show_market_overview` tinyint(1) NOT NULL DEFAULT '1',
+  `presentations_default_show_recent_sales` tinyint(1) NOT NULL DEFAULT '1',
+  `presentations_default_show_spatial_view` tinyint(1) NOT NULL DEFAULT '1',
+  `presentations_default_show_cma_analysis` tinyint(1) NOT NULL DEFAULT '1',
+  `presentations_default_show_active_competition` tinyint(1) NOT NULL DEFAULT '1',
+  `presentations_default_show_inflow_absorption` tinyint(1) NOT NULL DEFAULT '1',
+  `presentations_default_show_holding_cost` tinyint(1) NOT NULL DEFAULT '1',
+  `presentations_default_show_pricing_strategy` tinyint(1) NOT NULL DEFAULT '1',
   `presentations_default_comp_scope` enum('radius_all','suburb_only') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'radius_all',
   `presentations_default_radius_m` smallint unsigned NOT NULL DEFAULT '1000',
   `presentations_default_rates_per_million_zar` int unsigned NOT NULL DEFAULT '800' COMMENT 'Monthly municipal rates per R1M of property value.',
@@ -6988,6 +6997,7 @@ CREATE TABLE `presentation_versions` (
   `condition_level_id` bigint unsigned DEFAULT NULL,
   `condition_adjustment_pct` decimal(5,2) DEFAULT NULL COMMENT 'Snapshot at review/publish — defends historic PDF against later setting drift.',
   `condition_label` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `enabled_sections_json` json DEFAULT NULL COMMENT 'Build 4 — per-version snapshot of which report sections render. Null means "use agency defaults at compile time".',
   `hydration_summary_json` json DEFAULT NULL,
   `ai_variant_id` smallint unsigned DEFAULT NULL,
   `ai_summary_text` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
@@ -10872,3 +10882,4 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (786,'2026_06_16_12
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (787,'2026_06_17_100000_add_title_type_to_property_setting_items',232);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (789,'2026_06_17_110000_add_review_flow_to_presentations',233);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (790,'2026_06_17_120000_add_condition_levels_to_presentations',234);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (791,'2026_06_17_130000_add_section_toggles_to_presentations',235);

@@ -126,6 +126,16 @@ final class PresentationReviewController extends Controller
         $analysis    = (new AnalysisDataService())->compile($presentation, $version);
         $cmaValue    = $analysis['cma_valuation'] ?? [];
 
+        // Build 4 — section toggle state for Section 3 of the review.
+        $sectionsCatalogue = PresentationVersion::SECTIONS_CATALOGUE;
+        $sectionFloor      = PresentationVersion::SECTION_FLOOR;
+        $sectionDeps       = PresentationVersion::SECTION_DEPENDENCIES;
+        $sectionSnapshot   = [];
+        foreach ($sectionsCatalogue as $sKey => $_label) {
+            $sectionSnapshot[$sKey] = $version->isSectionEnabled($sKey);
+        }
+        $pageEstimate = $version->estimatedPageCount();
+
         return view('presentations.review', [
             'version'              => $version,
             'presentation'         => $presentation,
@@ -141,6 +151,100 @@ final class PresentationReviewController extends Controller
             'currentConditionName' => $currentCondName,
             'currentConditionSrc'  => $resolved['source'],
             'cmaValuation'         => $cmaValue,
+            // Build 4 — section toggles.
+            'sectionsCatalogue'    => $sectionsCatalogue,
+            'sectionFloor'         => $sectionFloor,
+            'sectionDeps'          => $sectionDeps,
+            'sectionSnapshot'      => $sectionSnapshot,
+            'pageEstimate'         => $pageEstimate,
+        ]);
+    }
+
+    /**
+     * Build 4 — toggle a report section on/off, enforcing dependencies.
+     *
+     * Behaviour:
+     *   - applySectionToggle() on the version mutates enabled_sections_json
+     *     and returns any cascaded sections (Pricing Strategy follows CMA).
+     *   - Floor sections coerce to ON regardless of POST payload.
+     *   - Every flip (triggering + cascaded) writes an agent_overrides
+     *     row so the audit log captures both.
+     *   - Idempotent: a no-op POST writes no override.
+     *
+     * Returns the updated section map + cascaded diff + new estimated
+     * page count so the JS can update the checkboxes, the "Estimated
+     * pages" hint, and surface a toast for any forced cascade.
+     */
+    public function toggleSection(Request $request, PresentationVersion $version): JsonResponse
+    {
+        $this->authoriseReviewer($request, $version);
+
+        $request->validate([
+            'section_key' => 'required|string|in:' . implode(',', array_keys(PresentationVersion::SECTIONS_CATALOGUE)),
+            'enabled'     => 'required|boolean',
+        ]);
+
+        $key      = (string) $request->input('section_key');
+        $enabled  = $request->boolean('enabled');
+
+        // Floor sections silently coerce — UI shows them locked, but a
+        // crafted POST that tries to flip them off lands here and we
+        // refuse to record the spurious change.
+        if (in_array($key, PresentationVersion::SECTION_FLOOR, true) && !$enabled) {
+            return response()->json([
+                'ok'           => true,
+                'no_op'        => true,
+                'reason'       => 'floor_section',
+                'snapshot'     => $version->enabled_sections_json ?? [],
+                'cascaded'     => [],
+                'page_estimate'=> $version->estimatedPageCount(),
+            ]);
+        }
+
+        $prevValue = $version->isSectionEnabled($key);
+        if ($prevValue === $enabled) {
+            return response()->json([
+                'ok'            => true,
+                'no_op'         => true,
+                'snapshot'      => $version->enabled_sections_json ?? [],
+                'cascaded'      => [],
+                'page_estimate' => $version->estimatedPageCount(),
+            ]);
+        }
+
+        $result = DB::transaction(function () use ($version, $key, $enabled, $prevValue, $request) {
+            $applied = $version->applySectionToggle($key, $enabled);
+
+            // Log the triggering toggle itself.
+            AgentOverride::create([
+                'agency_id'               => $version->agency_id,
+                'presentation_version_id' => $version->id,
+                'user_id'                 => $request->user()->id,
+                'override_type'           => AgentOverride::TYPE_SECTION_TOGGLED,
+                'target_id'               => $key,
+                'before_value'            => ['enabled' => $prevValue],
+                'after_value'             => ['enabled' => $enabled, 'triggered_by' => 'agent'],
+            ]);
+            // Log each cascade so the audit captures the implicit flip.
+            foreach ($applied['cascaded'] as $cascadeKey => $cascadeValue) {
+                AgentOverride::create([
+                    'agency_id'               => $version->agency_id,
+                    'presentation_version_id' => $version->id,
+                    'user_id'                 => $request->user()->id,
+                    'override_type'           => AgentOverride::TYPE_SECTION_TOGGLED,
+                    'target_id'               => $cascadeKey,
+                    'before_value'            => ['enabled' => !$cascadeValue],
+                    'after_value'             => ['enabled' => $cascadeValue, 'triggered_by' => 'cascade', 'cause' => $key],
+                ]);
+            }
+            return $applied;
+        });
+
+        return response()->json([
+            'ok'            => true,
+            'snapshot'      => $result['snapshot'],
+            'cascaded'      => $result['cascaded'],
+            'page_estimate' => $version->fresh()->estimatedPageCount(),
         ]);
     }
 

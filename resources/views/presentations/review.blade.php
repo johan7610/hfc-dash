@@ -59,6 +59,15 @@
     .cma-adj-line[hidden] { display: none; }
     .cma-no-cond-banner { margin-top: 8px; padding: 6px 10px; background: color-mix(in srgb, var(--ds-amber, #d97706) 8%, transparent); border: 1px solid color-mix(in srgb, var(--ds-amber, #d97706) 25%, transparent); border-radius: 3px; font-size: 11px; color: var(--ds-amber, #d97706); }
     .cma-no-cond-banner[hidden] { display: none; }
+    /* Build 4 — section toggles. */
+    .section-toggle-row { display:flex; align-items:flex-start; gap:8px; padding:8px 10px; background:var(--surface-2); border:1px solid var(--border); border-radius:4px; }
+    .section-toggle-row input[type="checkbox"] { margin-top:2px; accent-color:#00d4aa; width:16px; height:16px; }
+    .section-name { font-size:12px; font-weight:600; color:var(--text-primary); }
+    .section-floor-chip { display:inline-block; margin-left:6px; padding:1px 6px; background:color-mix(in srgb, #00d4aa 18%, transparent); color:#0b2a4a; border-radius:2px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; }
+    .section-dep-chip { display:inline-block; margin-left:6px; padding:1px 6px; background:color-mix(in srgb, var(--ds-amber, #d97706) 14%, transparent); color:var(--ds-amber, #d97706); border-radius:2px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; }
+    .page-estimate-line { padding:8px 10px; background:var(--surface-2); border:1px solid var(--border); border-radius:4px; font-size:12px; color:var(--text-muted); }
+    .page-estimate-line strong { color:#0b2a4a; }
+    .page-estimate-sub { font-size:11px; color:var(--text-muted); margin-left:6px; }
 </style>
 @endpush
 
@@ -300,21 +309,67 @@
     </div>
 
     {{-- ─────────── SECTION 3 — Generate ─────────── --}}
-    <div class="review-card" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-        <button id="btn-publish" type="button"
-                style="background:#00d4aa;color:#0b2a4a;border:1px solid #00d4aa;padding:10px 20px;font-size:13px;font-weight:700;border-radius:4px;cursor:pointer;">
-            Generate Presentation
-        </button>
-        <button id="btn-save" type="button"
-                style="background:transparent;color:#00d4aa;border:1px solid #00d4aa;padding:10px 16px;font-size:13px;font-weight:600;border-radius:4px;cursor:pointer;">
-            Save &amp; continue later
-        </button>
-        <span style="margin-left:auto;">
-            <button id="btn-revert" type="button"
-                    style="background:transparent;color:var(--text-muted);border:0;padding:10px 16px;font-size:12px;text-decoration:underline;cursor:pointer;">
-                Discard &amp; return to property
+    <div class="review-card">
+        <div class="review-section-header">
+            <div class="review-section-tag"></div>
+            <h2 class="review-section-title">3 · What's in Your Presentation</h2>
+        </div>
+
+        {{-- Build 4 — section toggles. Floor sections are locked-on with
+             a Lock chip. Dependencies surface as small "requires X" tags.
+             Live page estimate updates on every toggle. --}}
+        <div id="section-toggles" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:8px; margin-bottom:14px;">
+            @foreach($sectionsCatalogue as $sKey => $sLabel)
+                @php
+                    $isFloor = in_array($sKey, $sectionFloor, true);
+                    $isOn    = (bool) ($sectionSnapshot[$sKey] ?? true);
+                    $deps    = $sectionDeps[$sKey] ?? [];
+                @endphp
+                <label class="section-toggle-row" data-section-key="{{ $sKey }}"
+                       style="{{ $isFloor ? 'opacity:0.8;' : 'cursor:pointer;' }}">
+                    <input type="checkbox" class="section-toggle"
+                           data-section-key="{{ $sKey }}"
+                           {{ $isOn ? 'checked' : '' }}
+                           {{ $isFloor ? 'disabled' : '' }}>
+                    <div style="flex:1; min-width:0;">
+                        <div class="section-name">
+                            {{ $sLabel }}
+                            @if($isFloor)
+                                <span class="section-floor-chip">Always shown</span>
+                            @endif
+                            @foreach($deps as $depKey)
+                                <span class="section-dep-chip" data-dep-of="{{ $sKey }}" data-needs="{{ $depKey }}">
+                                    needs {{ $sectionsCatalogue[$depKey] ?? $depKey }}
+                                </span>
+                            @endforeach
+                        </div>
+                    </div>
+                </label>
+            @endforeach
+        </div>
+
+        <div class="page-estimate-line">
+            Estimated final page count:
+            <strong id="page-estimate-value">~{{ $pageEstimate }} pages</strong>
+            <span class="page-estimate-sub">(cover + facts always included; layout may flex by a page either way).</span>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
+            <button id="btn-publish" type="button"
+                    style="background:#00d4aa;color:#0b2a4a;border:1px solid #00d4aa;padding:10px 20px;font-size:13px;font-weight:700;border-radius:4px;cursor:pointer;">
+                Generate Presentation
             </button>
-        </span>
+            <button id="btn-save" type="button"
+                    style="background:transparent;color:#00d4aa;border:1px solid #00d4aa;padding:10px 16px;font-size:13px;font-weight:600;border-radius:4px;cursor:pointer;">
+                Save &amp; continue later
+            </button>
+            <span style="margin-left:auto;">
+                <button id="btn-revert" type="button"
+                        style="background:transparent;color:var(--text-muted);border:0;padding:10px 16px;font-size:12px;text-decoration:underline;cursor:pointer;">
+                    Discard &amp; return to property
+                </button>
+            </span>
+        </div>
     </div>
 
     <div id="review-toast" class="review-toast"></div>
@@ -330,6 +385,8 @@
     const PUBLISH_URL = @json(route('presentations.review.publish', $version->id));
     const REVERT_URL  = @json(route('presentations.review.revert',  $version->id));
     const CONDITION_URL = @json(route('presentations.review.condition', $version->id));
+    const SECTION_URL   = @json(route('presentations.review.sections',  $version->id));
+    const SECTION_LABELS = @json($sectionsCatalogue);
 
     const SUBJECT_LAT = {{ (float) ($presentation->latitude ?? -30.84) }};
     const SUBJECT_LNG = {{ (float) ($presentation->longitude ?? 30.39) }};
@@ -567,6 +624,57 @@
             })[data.condition.source] || '';
         }
     }
+
+    // ── Build 4 — section toggles ────────────────────────────────────
+    const pageEstimateEl = document.getElementById('page-estimate-value');
+    document.querySelectorAll('.section-toggle').forEach(cb => {
+        cb.addEventListener('change', async () => {
+            const key  = cb.dataset.sectionKey;
+            const next = cb.checked;
+            const row  = cb.closest('.section-toggle-row');
+
+            // Optimistic UI — flip immediately; rollback on failure.
+            const rollback = () => { cb.checked = !next; };
+
+            const body = new FormData();
+            body.append('_token', csrf);
+            body.append('section_key', key);
+            body.append('enabled', next ? '1' : '0');
+
+            try {
+                const r = await fetch(SECTION_URL, {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    body, credentials: 'same-origin',
+                });
+                const d = await r.json();
+                if (!d?.ok) { rollback(); toast('Could not save section toggle.'); return; }
+
+                // Update sibling checkboxes for cascaded keys.
+                if (d.cascaded && Object.keys(d.cascaded).length > 0) {
+                    Object.entries(d.cascaded).forEach(([cKey, cVal]) => {
+                        const cb2 = document.querySelector('.section-toggle[data-section-key="' + cKey + '"]');
+                        if (cb2) cb2.checked = !!cVal;
+                    });
+                    // Toast explaining the cascade — e.g. enabling Pricing
+                    // Strategy auto-enabled CMA.
+                    const labels = Object.entries(d.cascaded)
+                        .map(([k, v]) => (v ? 'enabled ' : 'disabled ') + (SECTION_LABELS[k] || k))
+                        .join('; ');
+                    toast('Auto-' + labels + ' (dependency).');
+                } else {
+                    toast(next ? 'Section enabled.' : 'Section disabled.');
+                }
+
+                if (pageEstimateEl && d.page_estimate) {
+                    pageEstimateEl.textContent = '~' + d.page_estimate + ' pages';
+                }
+            } catch (e) {
+                rollback();
+                toast('Network error saving section toggle.');
+            }
+        });
+    });
 
     if (condEl) {
         condEl.addEventListener('change', async () => {

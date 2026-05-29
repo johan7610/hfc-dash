@@ -106,6 +106,16 @@ class Agency extends Model
         'teaser_default_show_market_position',
         'teaser_default_show_asking_range',
         'teaser_default_show_holding_cost_summary',
+        // Build 4 — full report section toggle defaults.
+        'presentations_default_show_executive_summary',
+        'presentations_default_show_market_overview',
+        'presentations_default_show_recent_sales',
+        'presentations_default_show_spatial_view',
+        'presentations_default_show_cma_analysis',
+        'presentations_default_show_active_competition',
+        'presentations_default_show_inflow_absorption',
+        'presentations_default_show_holding_cost',
+        'presentations_default_show_pricing_strategy',
     ];
 
     protected $casts = [
@@ -148,7 +158,38 @@ class Agency extends Model
         'teaser_default_show_market_position'                => 'boolean',
         'teaser_default_show_asking_range'                   => 'boolean',
         'teaser_default_show_holding_cost_summary'           => 'boolean',
+        // Build 4 — full report section toggle defaults.
+        'presentations_default_show_executive_summary'  => 'boolean',
+        'presentations_default_show_market_overview'    => 'boolean',
+        'presentations_default_show_recent_sales'       => 'boolean',
+        'presentations_default_show_spatial_view'       => 'boolean',
+        'presentations_default_show_cma_analysis'       => 'boolean',
+        'presentations_default_show_active_competition' => 'boolean',
+        'presentations_default_show_inflow_absorption'  => 'boolean',
+        'presentations_default_show_holding_cost'       => 'boolean',
+        'presentations_default_show_pricing_strategy'   => 'boolean',
     ];
+
+    /**
+     * Build 4 — return the per-section default toggle map keyed by section
+     * key (matching PresentationVersion::SECTIONS_CATALOGUE). Used by the
+     * compiler to seed enabled_sections_json on freshly compiled versions.
+     *
+     * @return array<string, bool>
+     */
+    public function sectionDefaults(): array
+    {
+        $map = [];
+        foreach (\App\Models\PresentationVersion::SECTIONS_CATALOGUE as $key => $_label) {
+            $col = 'presentations_default_show_' . $key;
+            $map[$key] = (bool) ($this->{$col} ?? true);
+        }
+        // Floor is force-on regardless of agency setting.
+        foreach (\App\Models\PresentationVersion::SECTION_FLOOR as $floor) {
+            $map[$floor] = true;
+        }
+        return $map;
+    }
 
     public const AI_BUDGET_STATUS_HEALTHY  = 'healthy';
     public const AI_BUDGET_STATUS_WARNING  = 'warning';

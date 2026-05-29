@@ -1619,6 +1619,8 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
     Route::post('/settings/marketing-enabled', [CoreXSettingsController::class, 'updateMarketingEnabled'])->middleware('permission:access_settings')->name('corex.settings.marketing-enabled');
     Route::post('/settings/syndication-portals', [CoreXSettingsController::class, 'updateSyndicationPortals'])->middleware('permission:access_settings')->name('corex.settings.syndication-portals');
     Route::post('/settings/presentations', [CoreXSettingsController::class, 'updatePresentations'])->middleware('permission:access_settings')->name('corex.settings.presentations.update');
+    // Build 4 — agency default toggles for which report sections render.
+    Route::post('/settings/presentations/sections', [CoreXSettingsController::class, 'updatePresentationSections'])->middleware('permission:access_settings')->name('corex.settings.presentations.sections.update');
     Route::post('/settings/matches-enabled', [CoreXSettingsController::class, 'updateMatchesEnabled'])->middleware('permission:access_settings')->name('corex.settings.matches-enabled');
     Route::post('/settings/matches-wa-message', [CoreXSettingsController::class, 'updateMatchesWaMessage'])->middleware('permission:access_settings')->name('corex.settings.matches-wa-message');
     Route::post('/settings/matches-show-on-properties', [CoreXSettingsController::class, 'updateMatchesShowOnProperties'])->middleware('permission:access_settings')->name('corex.settings.matches-show-on-properties');
@@ -2203,6 +2205,10 @@ Route::middleware(['auth', 'permission:access_presentations'])->prefix('presenta
     Route::post('/version/{version}/review/condition',
         [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'setCondition'])
         ->name('review.condition');
+    // Build 4 — toggle a report section on/off with dependency cascade.
+    Route::post('/version/{version}/review/sections',
+        [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'toggleSection'])
+        ->name('review.sections');
     Route::post('/version/{version}/publish',
         [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'publish'])
         ->name('review.publish');

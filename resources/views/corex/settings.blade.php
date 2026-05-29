@@ -2149,6 +2149,89 @@
                     <p class="text-xs" style="color:var(--text-muted);">No agency context — cannot edit thresholds.</p>
                     @endif
                 </div>
+
+                {{-- Build 4 — agency defaults for which report sections render.
+                     Per-presentation overrides happen on the review screen. --}}
+                @if($presAgency)
+                @php
+                    $sectionsCatalogue = \App\Models\PresentationVersion::SECTIONS_CATALOGUE;
+                    $sectionFloor      = \App\Models\PresentationVersion::SECTION_FLOOR;
+                    $sectionDeps       = \App\Models\PresentationVersion::SECTION_DEPENDENCIES;
+                    $sectionDescriptions = [
+                        'executive_summary'  => 'High-level summary of asking price vs CMA and key insights. Recommended to always include.',
+                        'market_overview'    => 'Suburb-level market trends, median pricing and absorption.',
+                        'recent_sales'       => 'Comparable sales table with per-row distance, size and price.',
+                        'spatial_view'       => 'Inline map showing the subject and comparable pins.',
+                        'cma_analysis'       => 'Lower / Middle / Upper valuation bands with condition adjustment.',
+                        'active_competition' => 'Live listings competing for the same buyer pool.',
+                        'inflow_absorption'  => 'New listings from P24 alerts and stock absorption rate.',
+                        'holding_cost'       => 'Monthly cost of staying on market — rates, bond, levies, opportunity cost.',
+                        'pricing_strategy'   => 'Recommended price band and overpricing analysis. Requires CMA Analysis.',
+                    ];
+                @endphp
+                <div class="p-4 rounded-md" style="background:var(--surface-2); border:1px solid var(--border);">
+                    <div class="mb-3">
+                        <div class="text-sm font-semibold" style="color:var(--text-primary);">Presentation Sections</div>
+                        <div class="text-xs mt-0.5" style="color:var(--text-secondary);">
+                            Which sections are pre-ticked when an agent opens the review screen.
+                            Agents can override per-presentation. Sections marked "always" form the report's floor and render every time.
+                        </div>
+                    </div>
+
+                    <form method="POST" action="{{ route('corex.settings.presentations.sections.update') }}" class="space-y-2">
+                        @csrf
+                        @foreach($sectionsCatalogue as $sectionKey => $sectionLabel)
+                            @php
+                                $col       = 'presentations_default_show_' . $sectionKey;
+                                $isFloor   = in_array($sectionKey, $sectionFloor, true);
+                                $isOn      = $isFloor ? true : (bool) ($presAgency->{$col} ?? true);
+                                $depsList  = [];
+                                foreach ($sectionDeps[$sectionKey] ?? [] as $depKey) {
+                                    $depsList[] = $sectionsCatalogue[$depKey] ?? $depKey;
+                                }
+                            @endphp
+                            <div class="flex items-start justify-between gap-4 px-3 py-2 rounded-md"
+                                 style="background:var(--surface); border:1px solid var(--border);">
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-sm font-medium" style="color:var(--text-primary);">
+                                        {{ $sectionLabel }}
+                                        @if($isFloor)
+                                            <span class="ml-1 text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded"
+                                                  style="background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 14%, transparent); color: var(--brand-icon, #0ea5e9);">
+                                                Always shown
+                                            </span>
+                                        @endif
+                                        @if(!empty($depsList))
+                                            <span class="ml-1 text-[10px] uppercase tracking-wide font-semibold" style="color:var(--text-muted);">
+                                                requires {{ implode(', ', $depsList) }}
+                                            </span>
+                                        @endif
+                                    </div>
+                                    <div class="text-[11px] mt-0.5" style="color:var(--text-muted);">
+                                        {{ $sectionDescriptions[$sectionKey] ?? '' }}
+                                    </div>
+                                </div>
+                                <label class="relative cursor-pointer flex-shrink-0" style="width:44px; height:24px; display:block;">
+                                    @if($isFloor)
+                                        <input type="hidden" name="{{ $col }}" value="1">
+                                        <input type="checkbox" checked disabled class="sr-only">
+                                    @else
+                                        <input type="hidden" name="{{ $col }}" value="0">
+                                        <input type="checkbox" name="{{ $col }}" value="1" {{ $isOn ? 'checked' : '' }} class="sr-only">
+                                    @endif
+                                    <span class="block w-full h-full rounded-full transition-colors duration-200"
+                                          style="background:{{ $isOn ? 'var(--brand-button, #0ea5e9)' : 'var(--border-hover)' }};{{ $isFloor ? 'opacity:0.6;' : '' }}"></span>
+                                    <span class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-200"
+                                          style="transform:translateX({{ $isOn ? '20px' : '0' }});"></span>
+                                </label>
+                            </div>
+                        @endforeach
+                        <div class="pt-2">
+                            <button type="submit" class="prop-action-btn prop-action-btn-brand">Save Section Defaults</button>
+                        </div>
+                    </form>
+                </div>
+                @endif
             </div>{{-- /presentations --}}
 
             {{-- MATCHES section --}}

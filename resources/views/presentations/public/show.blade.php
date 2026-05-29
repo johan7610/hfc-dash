@@ -214,8 +214,12 @@
     </section>
 
     @if(!$isTeaser)
+        {{-- Build 4 — section toggles. If no version (legacy share), default ON. --}}
+        @php
+            $secOn = fn(string $k) => !$version || $version->isSectionEnabled($k);
+        @endphp
         {{-- ── Section 3 — Recent Sales ──────────────────────────────────── --}}
-        @if(!empty($vicinityRows))
+        @if($secOn('recent_sales') && !empty($vicinityRows))
         <section class="block" data-section-id="recent-sales">
             <h2>3 · Recent Sales in the Vicinity</h2>
             <table>
@@ -243,7 +247,7 @@
         @endif
 
         {{-- ── Section 4 — Active Competition ────────────────────────────── --}}
-        @if($activeCount > 0 && !empty($active['rows']))
+        @if($secOn('active_competition') && $activeCount > 0 && !empty($active['rows']))
         <section class="block" data-section-id="active-competition">
             <h2>4 · Active Competition</h2>
             <table>
@@ -261,8 +265,8 @@
         </section>
         @endif
 
-        {{-- ── Section 5 — Stock Absorption ──────────────────────────────── --}}
-        @if(!empty($stock['has_data']))
+        {{-- ── Section 5 — Stock Absorption (toggle: inflow_absorption) ──── --}}
+        @if($secOn('inflow_absorption') && !empty($stock['has_data']))
         <section class="block" data-section-id="absorption">
             <h2>5 · Stock Absorption</h2>
             <div class="kpi-grid">

@@ -98,14 +98,61 @@ class PresentationCompilerService
             ])->values()->all(),
         ];
 
+        // Build 4 — seed enabled_sections_json from the agency's defaults.
+        // This makes the version's section list explicit at compile time,
+        // so the review screen + PDF render from a single source of truth.
+        // Dependencies are enforced — if the agency defaulted Pricing
+        // Strategy ON but CMA OFF, the cascade pulls Pricing Strategy
+        // back to OFF with a [PRES-WARN] log.
+        $agency = $presentation->agency_id
+            ? \App\Models\Agency::find($presentation->agency_id)
+            : null;
+        $enabledSections = $agency
+            ? $agency->sectionDefaults()
+            : array_fill_keys(array_keys(PresentationVersion::SECTIONS_CATALOGUE), true);
+        $enabledSections = $this->enforceSectionDependencies($enabledSections, $presentation->id);
+
         return PresentationVersion::create([
-            'presentation_id'    => $presentation->id,
-            'compiled_by'        => $compiledBy,
-            'blueprint_version'  => PresentationBlueprintService::CURRENT_VERSION,
-            'analytics_run_id'   => $analyticsRunId,
-            'probability_run_id' => $probabilityRunId,
-            'data_snapshot_json' => json_encode($snapshot, JSON_THROW_ON_ERROR),
-            'compiled_at'        => now(),
+            'presentation_id'       => $presentation->id,
+            'compiled_by'           => $compiledBy,
+            'blueprint_version'     => PresentationBlueprintService::CURRENT_VERSION,
+            'analytics_run_id'      => $analyticsRunId,
+            'probability_run_id'    => $probabilityRunId,
+            'data_snapshot_json'    => json_encode($snapshot, JSON_THROW_ON_ERROR),
+            'compiled_at'           => now(),
+            'enabled_sections_json' => $enabledSections,
         ]);
+    }
+
+    /**
+     * Build 4 — cascade OFF for dependent sections when their
+     * dependency is OFF. Logs every cascade so we can audit how often
+     * agency defaults are internally inconsistent.
+     *
+     * @param  array<string, bool>  $sections
+     * @param  int                  $presentationId  for log context
+     * @return array<string, bool>
+     */
+    private function enforceSectionDependencies(array $sections, int $presentationId): array
+    {
+        foreach (PresentationVersion::SECTION_DEPENDENCIES as $dependent => $deps) {
+            if (!($sections[$dependent] ?? true)) continue;
+            foreach ($deps as $dep) {
+                if (!($sections[$dep] ?? true)) {
+                    \Illuminate\Support\Facades\Log::warning('[PRES-WARN] section dependency cascade — disabling dependent', [
+                        'presentation_id' => $presentationId,
+                        'dependent'       => $dependent,
+                        'missing'         => $dep,
+                    ]);
+                    $sections[$dependent] = false;
+                    break;
+                }
+            }
+        }
+        // Floor sections coerce to true.
+        foreach (PresentationVersion::SECTION_FLOOR as $floor) {
+            $sections[$floor] = true;
+        }
+        return $sections;
     }
 }
