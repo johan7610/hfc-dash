@@ -379,7 +379,7 @@ class PropertyController extends Controller
             'conditionLevels' => PropertySettingItem::group('condition_level')->where('active', true)->get(),
         ];
         $branches  = Branch::orderBy('name')->get();
-        $agents    = $this->agentList();
+        $agents    = $this->agentList($property);
         $activeTab = 'info';
 
         return view('corex.properties.show', compact('property', 'settingItems', 'branches', 'agents', 'activeTab', 'preLinkedContact'));
@@ -471,13 +471,13 @@ class PropertyController extends Controller
             'pp_hide_unit_number'   => 'nullable|boolean',
             'publish'          => 'nullable|boolean',
             'dawn_images'               => 'nullable|array',
-            'dawn_images.*'             => 'image|max:5120',
+            'dawn_images.*'             => 'image|max:51200',
             'noon_images'               => 'nullable|array',
-            'noon_images.*'             => 'image|max:5120',
+            'noon_images.*'             => 'image|max:51200',
             'dusk_images'               => 'nullable|array',
-            'dusk_images.*'             => 'image|max:5120',
+            'dusk_images.*'             => 'image|max:51200',
             'gallery_images'            => 'nullable|array',
-            'gallery_images.*'          => 'image|max:5120',
+            'gallery_images.*'          => 'image|max:51200',
             // Create-form extras
             'initial_note'              => 'nullable|string|max:5000',
             'drive_files'               => 'nullable|array',
@@ -742,13 +742,13 @@ class PropertyController extends Controller
             'pp_hide_unit_number'   => 'nullable|boolean',
             'publish'          => 'nullable|boolean',
             'dawn_images'      => 'nullable|array',
-            'dawn_images.*'    => 'image|max:5120',
+            'dawn_images.*'    => 'image|max:51200',
             'noon_images'      => 'nullable|array',
-            'noon_images.*'    => 'image|max:5120',
+            'noon_images.*'    => 'image|max:51200',
             'dusk_images'      => 'nullable|array',
-            'dusk_images.*'    => 'image|max:5120',
+            'dusk_images.*'    => 'image|max:51200',
             'gallery_images'   => 'nullable|array',
-            'gallery_images.*' => 'image|max:5120',
+            'gallery_images.*' => 'image|max:51200',
         ]);
 
         // Agent images for portal syndication
@@ -930,6 +930,47 @@ class PropertyController extends Controller
         $property->save();
 
         return back()->with('success', $msg);
+    }
+
+    public function uploadImages(Request $request, Property $property)
+    {
+        $this->authorizeProperty($property);
+
+        $request->validate([
+            'group'           => 'nullable|in:gallery_images,dawn_images,noon_images,dusk_images',
+            'gallery_images'  => 'nullable|array',
+            'gallery_images.*'=> 'image|max:51200',
+            'dawn_images'     => 'nullable|array',
+            'dawn_images.*'   => 'image|max:51200',
+            'noon_images'     => 'nullable|array',
+            'noon_images.*'   => 'image|max:51200',
+            'dusk_images'     => 'nullable|array',
+            'dusk_images.*'   => 'image|max:51200',
+        ]);
+
+        $groups = ['gallery_images', 'dawn_images', 'noon_images', 'dusk_images'];
+        $added  = 0;
+        $updates = [];
+
+        foreach ($groups as $field) {
+            if (!$request->hasFile($field)) {
+                continue;
+            }
+            $existing = $property->{$field . '_json'} ?? [];
+            $new      = $this->storeImages($request, $field, $property->id);
+            if (!empty($new)) {
+                $updates[$field . '_json'] = array_values(array_merge($existing, $new));
+                $added += count($new);
+            }
+        }
+
+        if (!empty($updates)) {
+            $property->update($updates);
+        }
+
+        return back()
+            ->with('success', $added > 0 ? "Uploaded {$added} image(s)." : 'No images uploaded.')
+            ->with('tab', 'gallery');
     }
 
     public function deleteImage(Request $request, Property $property)
@@ -1120,29 +1161,96 @@ class PropertyController extends Controller
         $urls = [];
         if ($request->hasFile($field)) {
             foreach ($request->file($field) as $file) {
-                $path   = $file->store("properties/{$propertyId}", 'public');
+                $path = $file->store("properties/{$propertyId}", 'public');
+                $this->downscaleStoredImage($path, 2560, 85);
                 $urls[] = Storage::url($path);
             }
         }
         return $urls;
     }
 
-    private function agentList(): \Illuminate\Support\Collection
+    /**
+     * Resize a stored image down to a sensible web size (max dimension on
+     * longest edge, JPEG re-encoded at given quality). Keeps file paths /
+     * extensions intact. Uses GD so no extra dependency is needed.
+     * Original file is overwritten in place. Failures are swallowed so the
+     * upload still succeeds — the source file simply isn't resized.
+     */
+    private function downscaleStoredImage(string $relativePath, int $maxEdge = 2560, int $quality = 85): void
+    {
+        if (!function_exists('imagecreatefromstring')) {
+            return;
+        }
+
+        $disk = Storage::disk('public');
+        if (!$disk->exists($relativePath)) {
+            return;
+        }
+
+        $absolute = $disk->path($relativePath);
+
+        $info = @getimagesize($absolute);
+        if (!$info) {
+            return;
+        }
+        [$width, $height] = $info;
+        $maxSide = max($width, $height);
+
+        if ($maxSide <= $maxEdge && $info[2] === IMAGETYPE_JPEG) {
+            return;
+        }
+
+        $bytes = @file_get_contents($absolute);
+        if ($bytes === false) {
+            return;
+        }
+        $src = @imagecreatefromstring($bytes);
+        unset($bytes);
+        if (!$src) {
+            return;
+        }
+
+        if ($maxSide > $maxEdge) {
+            $scale     = $maxEdge / $maxSide;
+            $newWidth  = max(1, (int) round($width * $scale));
+            $newHeight = max(1, (int) round($height * $scale));
+            $dst       = imagecreatetruecolor($newWidth, $newHeight);
+            imagecopyresampled($dst, $src, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+            imagedestroy($src);
+            $src = $dst;
+        }
+
+        @imagejpeg($src, $absolute, $quality);
+        imagedestroy($src);
+    }
+
+    private function agentList(?Property $property = null): \Illuminate\Support\Collection
     {
         /** @var User $user */
         $user = auth()->user();
         $scope = PermissionService::getDataScope($user, 'properties');
 
-        $query = User::agencyMembers()->orderBy('name')->where('is_active', 1);
+        $assignedIds = array_filter([
+            $property?->agent_id,
+            $property?->pp_second_agent_id,
+        ]);
 
-        if ($scope === 'branch') {
-            $branchId = $user->effectiveBranchId();
-            if ($branchId) {
-                $query->where('branch_id', $branchId);
+        $query = User::agencyMembers()->orderBy('name')->where(function ($q) use ($scope, $user, $assignedIds) {
+            $q->where('is_active', 1);
+
+            if ($scope === 'branch') {
+                $branchId = $user->effectiveBranchId();
+                if ($branchId) {
+                    $q->where('branch_id', $branchId);
+                }
+            } elseif ($scope !== 'all') {
+                $q->where('id', $user->id);
             }
-        } elseif ($scope !== 'all') {
-            $query->where('id', $user->id);
-        }
+
+            if (!empty($assignedIds)) {
+                $q->orWhereIn('id', $assignedIds);
+            }
+        });
 
         return $query->get(['id', 'name', 'email']);
     }

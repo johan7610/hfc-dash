@@ -8,6 +8,10 @@
 
         <title>{{ config('app.name', 'Laravel') }}</title>
 
+        <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('images/favicon.png') }}?v=4">
+        <link rel="icon" type="image/x-icon" href="{{ asset('favicon.ico') }}?v=4">
+        <link rel="shortcut icon" href="{{ asset('favicon.ico') }}?v=4">
+
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,9 +20,11 @@
         <!-- Theme init: apply dark class before paint to prevent flash -->
         <script>
             (function(){
+                var authed = {{ auth()->check() ? 'true' : 'false' }};
                 var dbTheme = '{{ auth()->check() ? (auth()->user()->theme ?? 'dark') : 'dark' }}';
-                var stored = localStorage.getItem('corex-theme');
-                var theme = stored || dbTheme;
+                // When authenticated, the user's DB record is authoritative — never let a
+                // previous user's localStorage value bleed into this session.
+                var theme = authed ? dbTheme : (localStorage.getItem('corex-theme') || dbTheme);
                 if(theme === 'dark'){
                     document.documentElement.classList.add('dark');
                 }

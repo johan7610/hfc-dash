@@ -4,6 +4,7 @@ namespace App\Http\Controllers\CoreX;
 
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
+use App\Models\FicaSubmission;
 use App\Models\ContactNote;
 use App\Models\ContactSource;
 use App\Models\ContactTag;
@@ -114,6 +115,8 @@ class ContactImportController extends Controller
         $request->validate([
             'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:25600'],
         ]);
+
+        $markFicaApproved = $request->boolean('mark_fica_approved');
 
         $file     = $request->file('file');
         $fullPath = $file->getRealPath();
@@ -256,6 +259,26 @@ class ContactImportController extends Controller
                 if (!empty($tagIds)) {
                     $contact->tags()->attach($tagIds);
                     $pendingTagEvents[] = [$contact, $tagIds];
+                }
+
+                // Go-live migration: stamp an approved FICA submission so the
+                // contact appears FICA-compliant immediately. Pre-existing
+                // contacts brought over from a prior CRM are treated as
+                // already-verified for go-live.
+                if ($markFicaApproved && $contact->agency_id) {
+                    FicaSubmission::create([
+                        'contact_id'          => $contact->id,
+                        'agency_id'           => $contact->agency_id,
+                        'requested_by'        => $agentId,
+                        'token'               => bin2hex(random_bytes(32)),
+                        'token_expires_at'    => now()->addYear(),
+                        'entity_type'         => 'natural',
+                        'status'              => 'approved',
+                        'verification_method' => ['source' => 'go_live_migration'],
+                        'verified_by'         => auth()->id() ?: $agentId,
+                        'verified_at'         => now(),
+                        'reviewer_notes'      => 'Auto-approved via contact Excel import (agency go-live migration).',
+                    ]);
                 }
 
                 $created++;
