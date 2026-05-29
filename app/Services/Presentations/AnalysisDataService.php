@@ -62,11 +62,24 @@ class AnalysisDataService
         $isSectional = ($presentation->property?->title_type === 'sectional_title')
             || ($fields->get('vicinity.property_type')?->final_value === 'sectional');
 
+        // Build 8a — CoreX's independent CMA compute engine. Operates on
+        // the same in-pool soldComps collection (whereNull('deleted_at')
+        // is enforced by the model's SoftDeletes scope; version-level
+        // included_comp_ids_json whitelist is honoured in the review
+        // controller's compRows path — here we run against all loaded
+        // comps to match the snapshot the version would render with).
+        // INTERNAL ONLY this build: payload-only, no render layer reads
+        // it. Frozen into snapshot_payload via Build 5.
+        $cmaComputed = (new CmaComputeService())->compute(
+            $presentation, $soldComps, $isSectional, $conditionContext,
+        );
+
         return [
             'subject_property'   => $this->compileSubjectProperty($presentation, $fields, $askingPrice),
             'suburb_overview'    => $suburbOverview,
             'comparable_sales'   => $this->compileComparableSales($soldComps, $presentation->property_address),
             'cma_valuation'      => $this->compileCmaValuation($fields, $askingPrice, $cmaSelectedRange, $conditionContext),
+            'cma_computed'       => $cmaComputed,
             'active_competition' => $activeCompetition,
             'stock_absorption'   => $stockAbsorption,
             'inflow_absorption'  => $inflowAbsorption,
