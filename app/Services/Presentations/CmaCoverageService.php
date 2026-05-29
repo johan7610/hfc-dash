@@ -6,6 +6,7 @@ use App\Models\Agency;
 use App\Models\Property;
 use App\Models\Prospecting\TrackedProperty;
 use App\Support\MarketAnalytics\HaversineDistance;
+use App\Support\Presentations\CompFingerprint;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -80,7 +81,7 @@ class CmaCoverageService
         $thresholds = $this->thresholdsForAgency($agencyId);
         $window     = $periodMonths ?? $thresholds['period_months'];
 
-        $compCount = $this->countComps($suburb, $window, $thresholds['scope'], $thresholds['radius_m'], $subjectLat, $subjectLng, $subjectIsDemo);
+        $compCount = $this->countComps($suburb, $window, $thresholds['scope'], $thresholds['radius_m'], $subjectLat, $subjectLng, $subjectIsDemo, $agencyId);
 
         $state = match (true) {
             $compCount === 0                       => self::STATE_NONE,
@@ -116,9 +117,14 @@ class CmaCoverageService
      *   2. `market_report_comp_rows` (MIC shared pool — CMA Info imports)
      *   3. `presentation_sold_comps` (legacy per-presentation manual uploads)
      *
-     * Deduped by fingerprint:
-     *   sectional → strtoupper(scheme_name)|section_number|sale_date|sale_price
-     *   full      → strtolower(address)|sale_date|sale_price
+     * Build 8d — deduped by a SOURCE-AGNOSTIC fingerprint via
+     * App\Support\Presentations\CompFingerprint, so the same sale present
+     * in more than one source counts ONCE (was 3× under the old prefixed
+     * scheme). Same helper is used by MicSnapshotHydrator for CMA-wins
+     * precedence when injecting deals into the engine pool.
+     *
+     * Build 8d — adds the deals.agency_id = subject filter that was
+     * missing pre-8d (multi-tenancy gap).
      *
      * Protected so tests / coverage tools can stub.
      */
@@ -130,6 +136,7 @@ class CmaCoverageService
         ?float $subjectLat,
         ?float $subjectLng,
         bool $subjectIsDemo = false,
+        int $agencyId = 0,
     ): int {
         if ($suburb === '') {
             return 0;
@@ -144,7 +151,8 @@ class CmaCoverageService
         // 1. Deals — prefer FK suburb match (Phase 3i), fall back to legacy
         //    LOWER(property_address) LIKE for unlinked deals.
         // Phase 3h Step 9 — demo/real isolation.
-        $dealRows = DB::table('deals')
+        // Build 8d — agency_id filter (was missing — multi-tenancy gap).
+        $dealsQuery = DB::table('deals')
             ->leftJoin('properties', 'properties.id', '=', 'deals.property_id')
             ->whereNotNull('deals.registration_date')
             ->where(function ($q) {
@@ -158,8 +166,12 @@ class CmaCoverageService
                       $qq->whereNull('deals.property_id')
                          ->whereRaw('LOWER(deals.property_address) LIKE ?', [$like]);
                   });
-            })
-            ->select(['deals.property_address', 'deals.registration_date', 'deals.property_value'])
+            });
+        if ($agencyId > 0) {
+            $dealsQuery->where('deals.agency_id', $agencyId);
+        }
+        $dealRows = $dealsQuery
+            ->select(['deals.property_address', 'deals.registration_date', 'deals.property_value', 'deals.sale_price'])
             ->get();
         foreach ($dealRows as $r) {
             $fingerprints[$this->fingerprintDeal($r)] = true;
@@ -193,7 +205,7 @@ class CmaCoverageService
             ->where(function ($q) use ($like) {
                 $q->whereNull('suburb')->orWhereRaw('LOWER(suburb) LIKE ?', [$like]);
             })
-            ->select(['suburb', 'sold_date', 'sold_price_inc'])
+            ->select(['suburb', 'sold_date', 'sold_price_inc', 'raw_row_json'])
             ->get();
         foreach ($psRows as $r) {
             $fingerprints[$this->fingerprintPs($r)] = true;
@@ -225,23 +237,61 @@ class CmaCoverageService
         return $needle === '' || str_contains(mb_strtolower($rowSuburb), $needle);
     }
 
+    /**
+     * Build 8d — fingerprints now source-agnostic via CompFingerprint.
+     * The latent badge double-count between CMA and deal sources for the
+     * same sale is fixed: identical sale ⇒ identical key ⇒ counted once.
+     *
+     * Deal uses sale_price (Phase 3i canonical bigint) when present and
+     * falls back to property_value (the legacy decimal mirror). MIC keeps
+     * its scheme/section sectional branch via the helper.
+     * Legacy presentation_sold_comps still keys on address/date/price —
+     * the suburb-only legacy key from pre-8d is replaced by an address-
+     * keyed one (raw_row_json carries the address); when address is
+     * missing it falls back to suburb so the keying behaviour for legacy
+     * rows stays stable.
+     */
     private function fingerprintDeal(object $r): string
     {
-        return 'D|' . mb_strtolower(trim((string) ($r->property_address ?? ''))) . '|' . (string) $r->registration_date . '|' . (int) ($r->property_value ?? 0);
+        $price = isset($r->sale_price) && $r->sale_price !== null
+            ? (int) $r->sale_price
+            : (int) ($r->property_value ?? 0);
+        return CompFingerprint::sourceAgnosticKey(
+            address: (string) ($r->property_address ?? ''),
+            schemeName: null,
+            sectionNumber: null,
+            saleDate: (string) ($r->registration_date ?? ''),
+            salePrice: $price,
+        );
     }
 
     private function fingerprintMic(object $r): string
     {
-        if (!empty($r->scheme_name) && !empty($r->section_number)) {
-            return 'M|' . strtoupper((string) $r->scheme_name) . '|S' . (string) $r->section_number . '|' . (string) $r->sale_date . '|' . (int) ($r->sale_price ?? 0);
-        }
-        $addr = $r->address ?? '';
-        return 'M|' . mb_strtolower(trim((string) $addr)) . '|' . (string) $r->sale_date . '|' . (int) ($r->sale_price ?? 0);
+        return CompFingerprint::sourceAgnosticKey(
+            address: (string) ($r->address ?? ''),
+            schemeName: $r->scheme_name ?? null,
+            sectionNumber: $r->section_number ?? null,
+            saleDate: (string) ($r->sale_date ?? ''),
+            salePrice: (int) ($r->sale_price ?? 0),
+        );
     }
 
     private function fingerprintPs(object $r): string
     {
-        return 'P|' . mb_strtolower((string) ($r->suburb ?? '')) . '|' . (string) $r->sold_date . '|' . (int) ($r->sold_price_inc ?? 0);
+        $address = null;
+        if (!empty($r->raw_row_json)) {
+            $decoded = json_decode((string) $r->raw_row_json, true);
+            if (is_array($decoded)) {
+                $address = $decoded['address'] ?? null;
+            }
+        }
+        return CompFingerprint::sourceAgnosticKey(
+            address: $address !== null ? (string) $address : (string) ($r->suburb ?? ''),
+            schemeName: null,
+            sectionNumber: null,
+            saleDate: (string) ($r->sold_date ?? ''),
+            salePrice: (int) ($r->sold_price_inc ?? 0),
+        );
     }
 
     /**

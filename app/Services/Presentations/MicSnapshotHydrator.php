@@ -15,6 +15,7 @@ use App\Models\Property;
 use App\Models\PropertySettingItem;
 use App\Support\MarketAnalytics\HaversineDistance;
 use App\Support\MarketAnalytics\OutlierGuard;
+use App\Support\Presentations\CompFingerprint;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -47,7 +48,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class MicSnapshotHydrator
 {
-    public const SOURCE_TAG = 'mic_snapshot_v1';
+    public const SOURCE_TAG       = 'mic_snapshot_v1';
+    public const SOURCE_TAG_DEAL  = 'deal_register_v1';
 
     /**
      * @return array{
@@ -59,15 +61,18 @@ final class MicSnapshotHydrator
      *   scope_used: string,
      *   radius_m: int,
      *   period_months: int,
+     *   n_deals_added: int,
+     *   n_deals_dedup_skipped: int,
      * }
      */
     public function hydrateForPresentation(Presentation $presentation): array
     {
         $cfg = $this->resolveConfig($presentation);
 
-        // Wipe previous MIC rows for this presentation. Manual evidence stays.
+        // Wipe previous MIC + deal-source rows for this presentation.
+        // Manual evidence (any other parser_version) stays untouched.
         PresentationSoldComp::where('presentation_id', $presentation->id)
-            ->where('parser_version', self::SOURCE_TAG)
+            ->whereIn('parser_version', [self::SOURCE_TAG, self::SOURCE_TAG_DEAL])
             ->delete();
         PresentationActiveListing::where('presentation_id', $presentation->id)
             ->where('parser_version', self::SOURCE_TAG)
@@ -89,6 +94,7 @@ final class MicSnapshotHydrator
             }
             try {
                 PresentationSoldComp::create([
+                    'agency_id'       => $presentation->agency_id,
                     'presentation_id' => $presentation->id,
                     'sold_date'       => $row->sale_date,
                     'sold_price_inc'  => $salePrice,
@@ -103,6 +109,18 @@ final class MicSnapshotHydrator
                 // Skip; don't break the rest.
             }
         }
+
+        // ── Deal-register comps (Build 8d) ────────────────────────────────
+        //
+        // Feed registered deals (HFC's own closed transactions) into the
+        // engine pool with EQUAL WEIGHT to CMA-sourced comps. CMA-wins
+        // precedence on dedup: a deal whose source-agnostic fingerprint
+        // matches a just-materialised MIC row is dropped. A deal NOT in
+        // CMA data is a full equal comp.
+        //
+        // Selection criteria mirror CmaCoverageService::countComps's deals
+        // query exactly so the badge count and engine pool agree.
+        [$dealsAdded, $dealsDeduped] = $this->collectAndInsertDealComps($presentation, $cfg);
 
         // ── Active listings ────────────────────────────────────────────────
         $listingRows = $this->collectMatchedRows(
@@ -152,7 +170,182 @@ final class MicSnapshotHydrator
             'scope_used'                 => $cfg['scope'],
             'radius_m'                   => $cfg['radius_m'],
             'period_months'              => $cfg['period_months'],
+            'n_deals_added'              => $dealsAdded,
+            'n_deals_dedup_skipped'      => $dealsDeduped,
         ];
+    }
+
+    // ── Deal-register comps (Build 8d) ──────────────────────────────────
+
+    /**
+     * Query the deals table for closed transactions in the subject
+     * suburb + date window, then materialise each one into
+     * presentation_sold_comps unless a just-materialised MIC row already
+     * carries the same source-agnostic fingerprint (CMA-wins precedence).
+     *
+     * Selection criteria mirror CmaCoverageService::countComps L147-163
+     * 1:1 (registration_date NOT NULL, accepted_status != 'D', is_demo
+     * matches subject, registration_date in date window, suburb match
+     * with unlinked-address fallback). Adds agency_id filter.
+     *
+     * Deal rows widen the select to pull joined property attributes:
+     * suburb, property_type, size_m2, erf_size_m2, title_type.
+     *
+     * Trust posture: raw_row_json carries `trusted_internal_source: true`
+     * so any title_type filter downstream exempts these the same way it
+     * exempts analyst-vetted same-subject CMA comps (collectMatchedRows
+     * subjectReportHit path).
+     *
+     * @return array{0:int, 1:int}  [deals_added, deals_dedup_skipped]
+     */
+    private function collectAndInsertDealComps(Presentation $presentation, array $cfg): array
+    {
+        $agencyId = (int) $presentation->agency_id;
+        $suburb   = (string) ($presentation->suburb ?? '');
+        if ($agencyId <= 0 || trim($suburb) === '') {
+            return [0, 0];
+        }
+
+        $subjectIsDemo = (bool) ($presentation->property?->is_demo ?? false);
+        $like          = '%' . mb_strtolower(trim($suburb)) . '%';
+        $suburbNorm    = mb_strtolower(trim($suburb));
+
+        // Pre-load fingerprints for the just-materialised MIC rows on
+        // this presentation. CMA precedence: a deal that matches one of
+        // these is skipped.
+        $micFingerprints = [];
+        $existing = PresentationSoldComp::where('presentation_id', $presentation->id)
+            ->where('parser_version', self::SOURCE_TAG)
+            ->get(['sold_date', 'sold_price_inc', 'raw_row_json']);
+        foreach ($existing as $row) {
+            $decoded = is_string($row->raw_row_json) ? json_decode($row->raw_row_json, true) : [];
+            $address = is_array($decoded) ? ($decoded['address'] ?? null) : null;
+            $scheme  = is_array($decoded) ? ($decoded['scheme_name'] ?? null) : null;
+            $section = is_array($decoded) ? ($decoded['section_number'] ?? null) : null;
+            $dateStr = $row->sold_date instanceof \DateTimeInterface
+                ? $row->sold_date->format('Y-m-d')
+                : (string) $row->sold_date;
+            $key = CompFingerprint::sourceAgnosticKey(
+                address: $address !== null ? (string) $address : null,
+                schemeName: $scheme !== null ? (string) $scheme : null,
+                sectionNumber: $section !== null ? (string) $section : null,
+                saleDate: $dateStr,
+                salePrice: (int) $row->sold_price_inc,
+            );
+            $micFingerprints[$key] = true;
+        }
+
+        $dealRows = DB::table('deals')
+            ->leftJoin('properties', 'properties.id', '=', 'deals.property_id')
+            ->where('deals.agency_id', $agencyId)
+            ->whereNotNull('deals.registration_date')
+            ->where(function ($q) {
+                $q->whereNull('deals.accepted_status')->orWhere('deals.accepted_status', '!=', 'D');
+            })
+            ->where('deals.is_demo', $subjectIsDemo)
+            ->whereBetween('deals.registration_date', [$cfg['date_from'], $cfg['date_to']])
+            ->where(function ($q) use ($like, $suburbNorm) {
+                $q->whereRaw('LOWER(properties.suburb) = ?', [$suburbNorm])
+                  ->orWhere(function ($qq) use ($like) {
+                      $qq->whereNull('deals.property_id')
+                         ->whereRaw('LOWER(deals.property_address) LIKE ?', [$like]);
+                  });
+            })
+            ->select([
+                'deals.id              as deal_id',
+                'deals.property_id     as deal_property_id',
+                'deals.property_address',
+                'deals.registration_date',
+                'deals.sale_date',
+                'deals.sale_price',
+                'deals.property_value',
+                'deals.is_demo         as deal_is_demo',
+                'properties.suburb     as prop_suburb',
+                'properties.property_type as prop_property_type',
+                'properties.size_m2    as prop_size_m2',
+                'properties.erf_size_m2 as prop_erf_size_m2',
+                'properties.title_type as prop_title_type',
+                'properties.latitude   as prop_lat',
+                'properties.longitude  as prop_lng',
+            ])
+            ->get();
+
+        $added = 0;
+        $skipped = 0;
+        foreach ($dealRows as $r) {
+            // Price: prefer canonical bigint sale_price, fall back to
+            // property_value (legacy decimal mirror). OutlierGuard for
+            // floor/ceiling sanity — same gate as MIC comps.
+            $rawPrice = $r->sale_price ?? $r->property_value;
+            $salePrice = OutlierGuard::price($rawPrice);
+            if ($salePrice === null) {
+                continue; // out-of-band — drop quietly, same posture as MIC
+            }
+
+            $saleDate = (string) ($r->registration_date ?? $r->sale_date ?? '');
+
+            $fingerprint = CompFingerprint::sourceAgnosticKey(
+                address: (string) ($r->property_address ?? ''),
+                schemeName: null,
+                sectionNumber: null,
+                saleDate: $saleDate,
+                salePrice: $salePrice,
+            );
+            if (isset($micFingerprints[$fingerprint])) {
+                $skipped++;
+                continue; // CMA-wins precedence
+            }
+
+            $titleType   = $r->prop_title_type !== null && $r->prop_title_type !== ''
+                ? (string) $r->prop_title_type
+                : null;
+            $isSectional = $titleType === \App\Services\TitleTypeClassifier::TITLE_SECTIONAL;
+
+            $sizeM2 = $isSectional
+                ? OutlierGuard::extentM2($r->prop_size_m2)
+                : OutlierGuard::extentM2($r->prop_erf_size_m2);
+
+            $suburbValue = $r->prop_suburb
+                ?: $this->resolveSuburb((object) [
+                    'suburb_normalised' => null,
+                ], $presentation);
+
+            $raw = [
+                'source'                  => 'deal_register',
+                'deal_id'                 => (int) $r->deal_id,
+                'address'                 => (string) ($r->property_address ?? ''),
+                'suburb'                  => (string) ($suburbValue ?? ''),
+                'sale_date'               => $saleDate,
+                'sale_price'              => $salePrice,
+                'source_property_id'      => $r->deal_property_id !== null ? (int) $r->deal_property_id : null,
+                'property_type'           => $r->prop_property_type !== null ? (string) $r->prop_property_type : null,
+                'size_m2'                 => $sizeM2,
+                'title_type'              => $titleType,
+                'latitude'                => $r->prop_lat,
+                'longitude'               => $r->prop_lng,
+                'trusted_internal_source' => true,
+                'subject_match_used'      => false,
+            ];
+
+            try {
+                PresentationSoldComp::create([
+                    'agency_id'       => $agencyId,
+                    'presentation_id' => $presentation->id,
+                    'sold_date'       => $saleDate,
+                    'sold_price_inc'  => $salePrice,
+                    'suburb'          => $suburbValue,
+                    'property_type'   => $r->prop_property_type,
+                    'size_m2'         => $sizeM2,
+                    'raw_row_json'    => json_encode($raw, JSON_THROW_ON_ERROR),
+                    'parser_version'  => self::SOURCE_TAG_DEAL,
+                ]);
+                $added++;
+            } catch (\Throwable) {
+                // Skip; don't break the rest.
+            }
+        }
+
+        return [$added, $skipped];
     }
 
     // ── Config resolution ───────────────────────────────────────────────────
@@ -365,7 +558,23 @@ final class MicSnapshotHydrator
             if ($titleType !== null) {
                 $subjectReportHit = !empty($subjectReportIds)
                     && in_array((int) $row->market_report_id, $subjectReportIds, true);
-                if (!$subjectReportHit) {
+
+                // Build 8d — trusted-internal-source exemption. Deal-
+                // sourced rows (HFC's own registered transactions) get
+                // the same trust posture as analyst-vetted same-subject
+                // comps, so they aren't dropped on NULL property_type.
+                // Today deals bypass this filter entirely (they skip
+                // collectMatchedRows and write directly to
+                // PresentationSoldComp); the exemption is defensive
+                // against future refactors that unify the filter over
+                // a merged pool.
+                $trustedInternal = false;
+                if (isset($row->raw_row_json) && is_string($row->raw_row_json) && $row->raw_row_json !== '') {
+                    $decoded = json_decode($row->raw_row_json, true);
+                    $trustedInternal = is_array($decoded) && !empty($decoded['trusted_internal_source']);
+                }
+
+                if (!$subjectReportHit && !$trustedInternal) {
                     // Preserve Build 1's strict-drop semantic: a comp
                     // with no usable property_type was classified as
                     // TITLE_OTHER and dropped (OTHER never matches the
