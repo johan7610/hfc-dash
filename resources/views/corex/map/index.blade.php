@@ -2998,13 +2998,31 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
                 if (resp.ok) {
                     const body = await resp.json();
-                    // Server may explicitly flag pitch_unavailable when the
-                    // record can't be resolved (soft-deleted, cross-agency,
-                    // unsupported record_id shape). Honour it — do NOT fall
-                    // back to MIC, that's the bug we're removing.
-                    if (body.error === 'pitch_unavailable') {
-                        if (popup) popup.close();
+                    // Server may explicitly flag any error condition
+                    // (pitch_unavailable for soft-deleted / cross-agency /
+                    // unsupported record_id; pitch_blocked_other_draft for
+                    // another agent's active draft on this address;
+                    // pitch_blocked_held / pitch_blocked_own_draft when
+                    // the listing matches an existing HFC property — those
+                    // two carry a redirect_url pointing at the property
+                    // record). Honour ALL of them — do NOT fall back to
+                    // MIC, do NOT silently navigate without surfacing the
+                    // error_message. The post-fix-up #3 regression of
+                    // "Prospect Now → MIC" was the entry-point's collision
+                    // redirect kicking in AFTER the popup navigated; we
+                    // now surface that collision HERE so the popup either
+                    // closes (other_draft) or lands directly on the
+                    // property (held / own_draft).
+                    if (body.error) {
                         toastInfo(body.error_message || 'Could not start a pitch for this record.');
+                        if (body.redirect_url && act.newTab && popup) {
+                            popup.location.href = body.redirect_url;
+                            try { popup.opener = null; } catch (_) { /* cross-origin harmless */ }
+                        } else if (body.redirect_url && !act.newTab) {
+                            window.location.href = body.redirect_url;
+                        } else if (popup) {
+                            popup.close();
+                        }
                         return;
                     }
                     const url = body.redirect_url;
