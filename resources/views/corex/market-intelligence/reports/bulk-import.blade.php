@@ -2,8 +2,9 @@
      Drag-drop up to 20 PDFs; per-file dropdown override; one POST per file
      so the UI shows real-time row updates and isolates failures.
 
-     DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md (Plus Jakarta Sans, dark
-     navy + teal palette, 2–3px border radius, no emojis). --}}
+     DESIGN SYSTEM COMPLIANCE: UI_DESIGN_SYSTEM.md v 2026-04-20
+     (Figtree font, brand-navy header + token palette, rounded-md radius,
+     pill status badges, no emojis). --}}
 @extends('layouts.corex-app')
 
 @push('head')
@@ -26,9 +27,10 @@
         padding: 2px 8px;
         font-size: 0.6875rem;
         font-weight: 600;
-        border-radius: 3px;
+        border-radius: 9999px;
         text-transform: uppercase;
         letter-spacing: 0.03em;
+        white-space: nowrap;
     }
     .bi-badge-pending  { background: color-mix(in srgb, var(--text-muted) 18%, transparent); color: var(--text-muted); }
     .bi-badge-uploading{ background: color-mix(in srgb, var(--brand-button) 18%, transparent); color: var(--brand-button); }
@@ -45,7 +47,7 @@
 @endpush
 
 @section('corex-content')
-<div style="max-width: 1100px; margin: 0 auto; padding: 0 20px;"
+<div style="max-width: 1640px; margin: 0 auto; padding: 0 20px;"
      x-data="bulkImportPage({
         storeUrl: '{{ route('market-intelligence.reports.bulk-import.store') }}',
         showUrlBase: '{{ url('corex/market-intelligence/reports') }}',
@@ -57,15 +59,22 @@
 
     @include('corex.market-intelligence.partials.tabs')
 
-    <nav style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 12px;">
-        <a href="{{ route('market-intelligence.reports.index') }}"
-           style="color: var(--brand-button); text-decoration: none;">← All reports</a>
-    </nav>
-
-    <h1 style="font-size: 1.25rem; font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">Bulk Import Market Reports</h1>
-    <p style="font-size: 0.8125rem; color: var(--text-muted); margin: 0 0 16px 0;">
-        Drag-drop up to 20 PDFs. Each file is auto-detected, with per-file override.
-    </p>
+    {{-- Page header (Pattern A — branded). Matches contacts / core-matches.
+         UI_DESIGN_SYSTEM.md §2.4. --}}
+    <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a); margin-bottom: 16px;">
+        <nav class="mb-3" style="font-size: 0.75rem;">
+            <a href="{{ route('market-intelligence.reports.index') }}"
+               style="color: rgba(255,255,255,0.7); text-decoration: none;">← All reports</a>
+        </nav>
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <h1 class="text-xl font-bold text-white leading-tight">Bulk Import Market Reports</h1>
+                <p class="text-sm text-white/60" style="margin: 4px 0 0 0;">
+                    Drag-drop up to 20 PDFs. Each file is auto-detected, with per-file override.
+                </p>
+            </div>
+        </div>
+    </div>
 
     {{-- Drop zone --}}
     <div class="bi-dropzone"
@@ -97,7 +106,7 @@
                 background: color-mix(in srgb, var(--ds-crimson, #dc2626) 10%, transparent);
                 color: var(--ds-crimson, #dc2626);
                 border: 1px solid color-mix(in srgb, var(--ds-crimson, #dc2626) 30%, transparent);
-                border-radius: 4px;">
+                border-radius: 6px;">
         <ul style="margin: 0; padding-left: 18px;">
             <template x-for="(w, idx) in warnings" :key="idx">
                 <li x-text="w"></li>
@@ -134,7 +143,7 @@
                                     :disabled="f.status === 'uploading' || f.status === 'success' || f.status === 'duplicate'"
                                     style="width: 100%; padding: 4px 6px; font-size: 0.8125rem;
                                            background: var(--surface-2); color: var(--text-primary);
-                                           border: 1px solid var(--border); border-radius: 3px;">
+                                           border: 1px solid var(--border); border-radius: 6px;">
                                 <option value="">Auto-detect (recommended)</option>
                                 @foreach($reportTypes as $type)
                                     <option value="{{ $type->id }}">{{ $type->display_name }}</option>
@@ -173,14 +182,10 @@
             </div>
             <div style="display: flex; gap: 8px;">
                 <button type="button" @click="clearAll()" :disabled="isSubmitting"
-                        style="padding: 8px 14px; font-size: 0.8125rem; font-weight: 500;
-                               color: var(--text-secondary); background: var(--surface-2);
-                               border: 1px solid var(--border); border-radius: 4px; cursor: pointer;"
+                        class="corex-btn-outline"
                         :style="isSubmitting ? 'opacity:0.6;cursor:not-allowed;' : ''">Clear</button>
                 <button type="button" @click="submit()" :disabled="isSubmitting || allDone"
-                        style="padding: 8px 16px; font-size: 0.8125rem; font-weight: 600;
-                               background: var(--brand-button); color: #fff;
-                               border: none; border-radius: 4px; cursor: pointer;"
+                        class="corex-btn-primary"
                         :style="(isSubmitting || allDone) ? 'opacity:0.6;cursor:not-allowed;' : ''">
                     <span x-show="!isSubmitting" x-text="allDone ? 'All processed' : `Import all (${pendingCount})`"></span>
                     <span x-show="isSubmitting" x-cloak>Importing…</span>
@@ -197,10 +202,7 @@
         <div style="font-size: 0.875rem; color: var(--text-primary);">
             <span x-text="`${summary.success} imported, ${summary.duplicate} duplicates, ${summary.failed} failed.`"></span>
         </div>
-        <a :href="indexUrl"
-           style="padding: 6px 12px; font-size: 0.75rem; font-weight: 500;
-                  background: var(--brand-button); color: #fff;
-                  border-radius: 4px; text-decoration: none;">View all reports</a>
+        <a :href="indexUrl" class="corex-btn-primary">View all reports</a>
     </div>
 </div>
 

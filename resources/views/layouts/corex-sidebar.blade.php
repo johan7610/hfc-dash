@@ -127,6 +127,7 @@
         }
     } elseif (request()->routeIs(
         'prospecting.*',
+        'market-intelligence.*',
         'corex.properties.*',
         'admin.p24.*',
         'corex.contacts.*',
@@ -381,8 +382,7 @@
                 @permission('mic.upload_reports')
                 @if(\Illuminate\Support\Facades\Route::has('market-intelligence.reports.bulk-import'))
                 <a href="{{ route('market-intelligence.reports.bulk-import') }}"
-                   class="corex-nav-subitem {{ request()->routeIs('market-intelligence.reports.bulk-import*') ? 'active' : '' }}"
-                   style="padding-left: 36px; font-size: 0.78rem;">
+                   class="corex-nav-subitem {{ request()->routeIs('market-intelligence.reports.bulk-import*') ? 'active' : '' }}">
                     <span>Bulk Import Reports</span>
                 </a>
                 @endif
@@ -392,8 +392,7 @@
                      so they surface here for Chrome-capture promotion. --}}
                 @if(\Illuminate\Support\Facades\Route::has('market-intelligence.portal-alerts'))
                 <a href="{{ route('market-intelligence.portal-alerts') }}"
-                   class="corex-nav-subitem {{ request()->routeIs('market-intelligence.portal-alerts') ? 'active' : '' }}"
-                   style="padding-left: 36px; font-size: 0.78rem;">
+                   class="corex-nav-subitem {{ request()->routeIs('market-intelligence.portal-alerts') ? 'active' : '' }}">
                     <span>Portal alerts (awaiting address)</span>
                 </a>
                 @endif
