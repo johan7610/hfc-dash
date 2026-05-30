@@ -57,24 +57,18 @@
         maxBytes: 20480 * 1024,
      })">
 
-    @include('corex.market-intelligence.partials.tabs')
-
-    {{-- Page header (Pattern A — branded). Matches contacts / core-matches.
-         UI_DESIGN_SYSTEM.md §2.4. --}}
-    <div class="rounded-md px-6 py-5" style="background: var(--brand-default, #0b2a4a); margin-bottom: 16px;">
-        <nav class="mb-3" style="font-size: 0.75rem;">
+    {{-- Branded header → tabs → content (matches all MIC pages). --}}
+    <x-mic-page-header
+        title="Importer"
+        subtitle="Bulk import market reports — drag-drop up to 20 PDFs, auto-detected with per-file override.">
+        <x-slot:actions>
             <a href="{{ route('market-intelligence.reports.index') }}"
-               style="color: rgba(255,255,255,0.7); text-decoration: none;">← All reports</a>
-        </nav>
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div>
-                <h1 class="text-xl font-bold text-white leading-tight">Bulk Import Market Reports</h1>
-                <p class="text-sm text-white/60" style="margin: 4px 0 0 0;">
-                    Drag-drop up to 20 PDFs. Each file is auto-detected, with per-file override.
-                </p>
-            </div>
-        </div>
-    </div>
+               class="corex-btn-outline text-sm"
+               style="color:#fff; border-color:rgba(255,255,255,0.25); background:rgba(255,255,255,0.08);">All reports</a>
+        </x-slot:actions>
+    </x-mic-page-header>
+
+    @include('corex.market-intelligence.partials.tabs')
 
     {{-- Drop zone --}}
     <div class="bi-dropzone"

@@ -129,10 +129,12 @@
         'prospecting.*',
         'market-intelligence.*',
         'corex.properties.*',
+        'corex.map.*',
         'admin.p24.*',
         'corex.contacts.*',
         'corex.core-matches.*',
         'presentations.*',
+        'corex.presentations.*',
         'commercial-evaluations.*'
     )) {
         $activeGroup = 'real-estate';
@@ -379,23 +381,12 @@
                           style="background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 15%, transparent); color:var(--brand-icon, #0ea5e9);">{{ number_format($miCount) }}</span>
                     @endif
                 </a>
-                @permission('mic.upload_reports')
-                @if(\Illuminate\Support\Facades\Route::has('market-intelligence.reports.bulk-import'))
-                <a href="{{ route('market-intelligence.reports.bulk-import') }}"
-                   class="corex-nav-subitem {{ request()->routeIs('market-intelligence.reports.bulk-import*') ? 'active' : '' }}">
-                    <span>Bulk Import Reports</span>
-                </a>
-                @endif
-                @endpermission
-                {{-- Q4/D1 — Portal alerts awaiting address. P24 email alerts
-                     can't appear on the map (no street address in the source),
-                     so they surface here for Chrome-capture promotion. --}}
-                @if(\Illuminate\Support\Facades\Route::has('market-intelligence.portal-alerts'))
-                <a href="{{ route('market-intelligence.portal-alerts') }}"
-                   class="corex-nav-subitem {{ request()->routeIs('market-intelligence.portal-alerts') ? 'active' : '' }}">
-                    <span>Portal alerts (awaiting address)</span>
-                </a>
-                @endif
+                {{-- Bulk Import Reports moved into the Market Intelligence tab bar
+                     as the "Importer" tab (see partials/tabs.blade.php). No
+                     separate sidebar entry. --}}
+                {{-- Q4/D1 — Portal alerts awaiting address moved into the Market
+                     Intelligence tab bar as the "Portal Alerts" tab (see
+                     partials/tabs.blade.php). No separate sidebar entry. --}}
                 @endif
                 {{-- Phase D1 — Tracked Properties folded into the MIC
                      Opportunities tab. Sidebar entry removed; the legacy
@@ -409,13 +400,7 @@
                 @endif
                 {{-- Phase 3g — Map module. Same permission as Properties; agency-scoped. --}}
                 @if(\Illuminate\Support\Facades\Route::has('corex.map.index'))
-                <a href="{{ route('corex.map.index') }}" class="corex-nav-subitem {{ request()->routeIs('corex.map.*') ? 'active' : '' }}" style="display:flex;align-items:center;gap:6px;">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M21 10c0 6-9 13-9 13s-9-7-9-13a9 9 0 0 1 18 0z"/>
-                        <circle cx="12" cy="10" r="3"/>
-                    </svg>
-                    Map
-                </a>
+                <a href="{{ route('corex.map.index') }}" class="corex-nav-subitem {{ request()->routeIs('corex.map.*') ? 'active' : '' }}">Map</a>
                 @endif
                 @endpermission
 
@@ -466,13 +451,11 @@
                         } catch (\Throwable $e) { /* sidebar must never blow up */ }
                     @endphp
                     <a href="{{ route('corex.presentations.outcomes.index') }}"
-                       class="corex-nav-subitem {{ request()->routeIs('corex.presentations.outcomes.*') ? 'active' : '' }}"
-                       style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                       class="corex-nav-subitem {{ request()->routeIs('corex.presentations.outcomes.*') ? 'active' : '' }}">
                         <span>Outcomes</span>
                         @if($outcomePendingCount > 0)
-                            <span style="display:inline-block;min-width:18px;padding:1px 6px;background:#0ea5e9;color:#fff;border-radius:99px;font-size:0.625rem;font-weight:700;text-align:center;line-height:1.4;">
-                                {{ $outcomePendingCount > 99 ? '99+' : $outcomePendingCount }}
-                            </span>
+                            <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[0.6875rem] font-bold"
+                                  style="background:color-mix(in srgb, var(--brand-icon, #0ea5e9) 15%, transparent); color:var(--brand-icon, #0ea5e9);">{{ $outcomePendingCount > 99 ? '99+' : $outcomePendingCount }}</span>
                         @endif
                     </a>
                 @endif
@@ -490,13 +473,11 @@
                         } catch (\Throwable $e) { /* sidebar must never blow up */ }
                     @endphp
                     <a href="{{ route('corex.presentations.refresh-requests.index') }}"
-                       class="corex-nav-subitem {{ request()->routeIs('corex.presentations.refresh-requests.*') ? 'active' : '' }}"
-                       style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                       class="corex-nav-subitem {{ request()->routeIs('corex.presentations.refresh-requests.*') ? 'active' : '' }}">
                         <span>Refresh Requests</span>
                         @if($refreshOpenCount > 0)
-                            <span style="display:inline-block;min-width:18px;padding:1px 6px;background:#f59e0b;color:#fff;border-radius:99px;font-size:0.625rem;font-weight:700;text-align:center;line-height:1.4;">
-                                {{ $refreshOpenCount > 99 ? '99+' : $refreshOpenCount }}
-                            </span>
+                            <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[0.6875rem] font-bold"
+                                  style="background:color-mix(in srgb, var(--ds-amber, #f59e0b) 15%, transparent); color:var(--ds-amber, #f59e0b);">{{ $refreshOpenCount > 99 ? '99+' : $refreshOpenCount }}</span>
                         @endif
                     </a>
                 @endif
