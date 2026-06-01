@@ -68,38 +68,19 @@ final class CompetitorStockMatchService
      */
     public function findCompetitors(Property $subject, ?int $overrideMinScore = null): Collection
     {
-        if (!$subject->agency_id || !$subject->price || !$subject->suburb) {
+        $criteria = $this->buildCriteria($subject);
+        if ($criteria === null) {
+            // Subject can't be processed (missing agency_id/price/suburb,
+            // or title_type can't be classified — e.g. commercial subject).
             return collect();
         }
 
         $agency      = Agency::find($subject->agency_id);
-        $bedsTol     = (int) ($agency?->competitor_stock_default_beds_tolerance      ?? 1);
-        $pricePct    = (int) ($agency?->competitor_stock_default_price_tolerance_pct ?? 20);
         $threshold   = $overrideMinScore ?? (int) ($agency?->competitor_stock_min_score ?? 50);
         $minSameType = (int) ($agency?->competitor_stock_min_same_type ?? 5);
 
-        // ── LEVEL 1 — HARD GATE ────────────────────────────────────────
-        // Freehold (full_title + vacant_land) vs Sectional Scheme
-        // (sectional_title). A subject NEVER crosses this boundary. The
-        // gate runs in TWO layers: SQL whereIn for performance, then
-        // strict PHP classification per candidate row as belt-and-braces
-        // (mirrors MicSnapshotHydrator::collectMatchedRows L595-608).
-        $subjectFamily = $this->resolveSubjectFamily($subject);
-        if ($subjectFamily === null) {
-            // Subject's title_type can't be classified (e.g. commercial,
-            // industrial, or completely missing). No residential pool to
-            // pull from. Better to return empty than to mismatch.
-            return collect();
-        }
-        $familyTypes = $this->familyPropertyTypeStrings($subject, $subjectFamily);
-
-        // Subject's normalised type kind drives Level-2 ranking
-        // (Apartment / Townhouse / House / Farm / Vacant — finer than
-        // the FH/SS Level-1 bucket).
-        $subjectKind = $this->normalizeTypeKind($subject->property_type);
-
-        $synthMatch = $this->buildSyntheticMatch($subject, $bedsTol, $pricePct, $familyTypes);
-        $candidates = $this->loadCandidates($subject, $pricePct, $familyTypes);
+        $synthMatch = $this->buildSyntheticMatch($criteria);
+        $candidates = $this->loadCandidates($criteria);
         if ($candidates->isEmpty()) {
             return collect();
         }
@@ -107,89 +88,19 @@ final class CompetitorStockMatchService
         $hfcStockMap = $this->loadHfcStockMap((int) $subject->agency_id);
         $scorer      = app(PropertyMatchScoringService::class);
 
-        return $candidates->map(function (object $listing) use ($scorer, $synthMatch, $hfcStockMap, $subjectFamily, $subjectKind) {
+        $subjectFamily = $criteria['family'];
+        $subjectKind   = $criteria['subject_kind'];
+
+        return $candidates->map(function (object $listing) use ($scorer, $synthMatch, $hfcStockMap, $criteria) {
             // PHP belt-and-braces: drop any candidate whose property_type
             // classifies outside the subject's Level-1 family. Catches
             // rows the SQL family-whereIn missed (new portal strings, mis-
             // cased values) — strict TITLE_OTHER drop semantics.
             $candidateFamily = $this->candidateFamilyFor($listing);
-            if ($candidateFamily !== $subjectFamily) {
+            if ($candidateFamily !== $criteria['family']) {
                 return null;
             }
-
-            $result = $scorer->scoreProspectingCapture($synthMatch, $listing);
-
-            // LEVEL 2 — preference bonus for exact subject-kind match.
-            // Scorer already gives 10/10 type points to anything in the
-            // family set (synth match's propertyTypeList = familyTypes).
-            // The Level-2 bonus lifts exact-kind matches above same-
-            // family-other-kind so apartments rank above townhouses for
-            // an apartment subject. Capped at 100 total.
-            $candidateKind = $this->normalizeTypeKind($listing->property_type ?? null);
-            $isExactKind = $subjectKind !== null && $candidateKind === $subjectKind;
-            if ($isExactKind) {
-                $result['score'] = min(100, (int) $result['score'] + 5);
-                $result['tier']  = $this->retier((int) $result['score']);
-            }
-
-            $stock  = $hfcStockMap[$this->stockKey($listing)] ?? null;
-
-            // Rich-card additions — thumbnail served via the existing
-            // corex.market.thumbnail route for the review screen, plus
-            // the absolute local-file path so DomPDF renders without
-            // a remote fetch.
-            $thumbPath = $listing->thumbnail_path ?? null;
-            $thumbUrl  = null;
-            $thumbAbs  = null;
-            if ($thumbPath) {
-                try {
-                    $thumbUrl = route('corex.market.thumbnail', ['listing' => $listing->id]);
-                } catch (\Throwable) {
-                    $thumbUrl = null;
-                }
-                try {
-                    $candidate = Storage::disk('local')->path($thumbPath);
-                    if (is_file($candidate)) $thumbAbs = $candidate;
-                } catch (\Throwable) {
-                    $thumbAbs = null;
-                }
-            }
-
-            return [
-                'listing_id'       => (int) $listing->id,
-                'address'          => $listing->address ?? null,
-                'suburb'           => $listing->suburb ?? null,
-                'property_type'    => $listing->property_type ?? null,
-                'bedrooms'         => $listing->beds ?? null,
-                'bathrooms'        => isset($listing->bathrooms) ? (int) $listing->bathrooms : null,
-                'garages'          => isset($listing->garages) ? (int) $listing->garages : null,
-                'property_size_m2' => isset($listing->property_size_m2) && $listing->property_size_m2 !== null
-                    ? (float) $listing->property_size_m2 : null,
-                'erf_size_m2'      => isset($listing->erf_size_m2) && $listing->erf_size_m2 !== null
-                    ? (float) $listing->erf_size_m2 : null,
-                'price'            => (int) $listing->price,
-                'portal_url'       => $listing->portal_url ?? null,
-                'portal_ref'       => $listing->portal_ref ?? null,
-                'agent_name'       => $listing->agent_name ?? null,
-                'agency_name'      => $listing->agency_name ?? null,
-                'thumbnail_path'   => $thumbPath,
-                'thumbnail_url'    => $thumbUrl,
-                'thumbnail_abs_path' => $thumbAbs,
-                'first_seen_at'    => $listing->first_seen_at ?? null,
-                'score'            => (int) $result['score'],
-                'tier'             => (string) $result['tier'],
-                'breakdown'        => $result['breakdown'] ?? [],
-                // Level-2 metadata — 'exact' = same kind as subject
-                // (apartment-vs-apartment); 'family' = same Level-1
-                // family but different kind (apartment-vs-townhouse).
-                // Drives the step-up fallback below + surfaces on the
-                // review card so the agent sees WHY each row qualified.
-                'level2_match'     => $isExactKind ? 'exact' : 'family',
-                'is_hfc_owned'     => $stock !== null,
-                'days_on_market'   => $stock ? $this->intOrNull($stock->days_on_market) : null,
-                'views'            => $stock ? $this->extractPayloadInt($stock, ['Views', 'views', 'Portal Views', 'portal views', 'PortalViews']) : null,
-                'matches'          => $stock ? $this->extractPayloadInt($stock, ['Matches', 'matches', 'Buyer Matches', 'buyer matches', 'BuyerMatches']) : null,
-            ];
+            return $this->scoreAndMapRow($listing, $scorer, $synthMatch, $hfcStockMap, $criteria);
         })
         ->filter(fn (?array $row) => $row !== null && $row['score'] >= $threshold)
         ->values()
@@ -218,12 +129,232 @@ final class CompetitorStockMatchService
     }
 
     /**
-     * Build an unsaved ContactMatch from the subject's profile. The
-     * Core Matches scorer reads attributes + p24SuburbIdList() +
-     * propertyTypeList(); a freshly-instantiated ContactMatch with
-     * the right attribute values exposes both methods unchanged
-     * (they read $this->p24_suburb_ids and $this->property_types via
-     * the array casts).
+     * Build the unified CRITERIA struct for a subject — the single
+     * source of truth that both findCompetitors and the manual-picker
+     * modal consume. Returns null when the subject can't be processed
+     * (missing agency_id/price/suburb, or family can't be resolved).
+     *
+     * Centralising the criteria here means the modal opens pre-populated
+     * to the EXACT filter values the auto-picker used. No drift between
+     * "what was scored" and "what the modal showed".
+     *
+     * @return ?array{
+     *   agency_id:int, subject:Property,
+     *   suburb:string, suburb_core:string,
+     *   property_type:?string, subject_kind:?string,
+     *   family:string, family_types:string[],
+     *   beds:?int, beds_min:?int, beds_max:?int,
+     *   price:int, price_min:int, price_max:int,
+     *   beds_tol:int, price_pct:int,
+     * }
+     */
+    public function buildCriteria(Property $subject): ?array
+    {
+        if (!$subject->agency_id || !$subject->price || !$subject->suburb) {
+            return null;
+        }
+
+        $family = $this->resolveSubjectFamily($subject);
+        if ($family === null) {
+            return null;
+        }
+
+        $agency   = Agency::find($subject->agency_id);
+        $bedsTol  = (int) ($agency?->competitor_stock_default_beds_tolerance      ?? 1);
+        $pricePct = (int) ($agency?->competitor_stock_default_price_tolerance_pct ?? 20);
+
+        $price    = (int) $subject->price;
+        $priceMin = (int) round($price * (1 - $pricePct / 100));
+        $priceMax = (int) round($price * (1 + $pricePct / 100));
+
+        $bedsMin = null;
+        $bedsMax = null;
+        if ($subject->beds !== null) {
+            $bedsMin = max(0, (int) $subject->beds - $bedsTol);
+            $bedsMax = (int) $subject->beds + $bedsTol;
+        }
+
+        return [
+            'agency_id'     => (int) $subject->agency_id,
+            'subject'       => $subject,
+            'suburb'        => (string) $subject->suburb,
+            'suburb_core'   => SuburbMatcher::normaliseSuburbToken((string) $subject->suburb),
+            'property_type' => $subject->property_type ? (string) $subject->property_type : null,
+            'subject_kind'  => $this->normalizeTypeKind($subject->property_type),
+            'family'        => $family,
+            'family_types'  => $this->familyPropertyTypeStrings($subject, $family),
+            'beds'          => $subject->beds !== null ? (int) $subject->beds : null,
+            'beds_min'      => $bedsMin,
+            'beds_max'      => $bedsMax,
+            'price'         => $price,
+            'price_min'     => $priceMin,
+            'price_max'     => $priceMax,
+            'beds_tol'      => $bedsTol,
+            'price_pct'     => $pricePct,
+        ];
+    }
+
+    /**
+     * Manual-picker search — the modal's backend. Same Level-1 hard gate
+     * as loadCandidates (whereIn family_types + whereNotIn commercial/
+     * industrial), but accepts agent-loosened filters on top (wider
+     * price band, different suburb, looser beds, free-text search).
+     * Scores every result via the same scoreProspectingCapture pipeline
+     * so the modal can sort by score DESC and the cards render with the
+     * same shape the review screen uses.
+     *
+     * The Level-1 family gate is NEVER loosened — even if the agent
+     * submits a tampered request, the SQL whereIn + PHP belt-and-braces
+     * keep cross-family stock out.
+     *
+     * User filters accepted (all optional):
+     *   suburb        string  — exact suburb match (loose LIKE on the
+     *                           normalised token, like the auto-picker)
+     *   property_type string  — restrict to one specific family member
+     *                           (e.g. "Apartment" only, no Townhouses)
+     *   price_min     int     — agent-set floor
+     *   price_max     int     — agent-set ceiling
+     *   beds_min      int     — agent-set min beds
+     *   beds_max      int     — agent-set max beds
+     *   search        string  — LIKE on address/agent_name/agency_name
+     *   limit         int     — cap result set (default 200; modal pages)
+     *
+     * @return Collection<int, array>
+     */
+    public function searchForManualPicker(Property $subject, array $userFilters = []): Collection
+    {
+        $criteria = $this->buildCriteria($subject);
+        if ($criteria === null) {
+            return collect();
+        }
+
+        // Agent-loosened filters override the auto-picker defaults but
+        // never the family gate. Build a "customised criteria" for the
+        // candidate query.
+        $custom = $criteria;
+        foreach (['suburb', 'price_min', 'price_max', 'beds_min', 'beds_max'] as $k) {
+            if (array_key_exists($k, $userFilters) && $userFilters[$k] !== null && $userFilters[$k] !== '') {
+                $custom[$k] = $k === 'suburb' ? (string) $userFilters[$k] : (int) $userFilters[$k];
+            }
+        }
+        // Suburb override → recompute the core token used by the LIKE.
+        if (($userFilters['suburb'] ?? null) !== null && $userFilters['suburb'] !== '') {
+            $custom['suburb_core'] = SuburbMatcher::normaliseSuburbToken((string) $userFilters['suburb']);
+        }
+        // Property-type filter — restrict to one family member only.
+        // Validated against the family set so a tampered value can't
+        // smuggle in a cross-family type.
+        $pickedType = $userFilters['property_type'] ?? null;
+        if ($pickedType !== null && $pickedType !== '' && in_array((string) $pickedType, $custom['family_types'], true)) {
+            $custom['picked_property_type'] = (string) $pickedType;
+        }
+        $custom['search_q'] = isset($userFilters['search']) ? trim((string) $userFilters['search']) : '';
+        $custom['limit']    = max(1, min(500, (int) ($userFilters['limit'] ?? 200)));
+
+        $candidates = $this->loadCandidates($custom);
+        if ($candidates->isEmpty()) {
+            return collect();
+        }
+
+        $synthMatch  = $this->buildSyntheticMatch($criteria);  // base (unloosened) synth — scoring rules stay anchored to subject
+        $hfcStockMap = $this->loadHfcStockMap((int) $subject->agency_id);
+        $scorer      = app(PropertyMatchScoringService::class);
+
+        return $candidates->map(function (object $listing) use ($scorer, $synthMatch, $hfcStockMap, $criteria) {
+            $candidateFamily = $this->candidateFamilyFor($listing);
+            if ($candidateFamily !== $criteria['family']) {
+                return null;
+            }
+            return $this->scoreAndMapRow($listing, $scorer, $synthMatch, $hfcStockMap, $criteria);
+        })
+        ->filter()
+        ->sortByDesc('score')
+        ->values();
+    }
+
+    /**
+     * Score one prospecting_listings row + its in-memory proxy object
+     * against an arbitrary subject, returning the same row shape used by
+     * findCompetitors / searchForManualPicker / compileCompetitorStock.
+     * Public so AnalysisDataService can score whitelist-only rows that
+     * weren't in the auto-pool (decision B — agent-added rows beyond
+     * the default price/suburb band).
+     */
+    public function scoreSingleListing(Property $subject, object $listing): ?array
+    {
+        $criteria = $this->buildCriteria($subject);
+        if ($criteria === null) return null;
+
+        $candidateFamily = $this->candidateFamilyFor($listing);
+        if ($candidateFamily !== $criteria['family']) return null;
+
+        $synthMatch  = $this->buildSyntheticMatch($criteria);
+        $hfcStockMap = $this->loadHfcStockMap((int) $subject->agency_id);
+        $scorer      = app(PropertyMatchScoringService::class);
+
+        return $this->scoreAndMapRow($listing, $scorer, $synthMatch, $hfcStockMap, $criteria);
+    }
+
+    /**
+     * Bulk score by listing IDs. Used by compileCompetitorStock to
+     * resolve the UNION of (auto-pool) + (whitelist-only IDs that fall
+     * OUTSIDE the auto-pool's default suburb / price / beds band).
+     *
+     * Returns scored rows for IDs that exist + pass the Level-1 family
+     * gate. Cross-family or unknown IDs are silently dropped — defensive
+     * against a stale whitelist row whose underlying prospecting_listing
+     * was later reclassified or deleted.
+     *
+     * @param  int[]  $listingIds
+     * @return Collection<int, array>
+     */
+    public function scoreListingsByIds(Property $subject, array $listingIds): Collection
+    {
+        $listingIds = array_values(array_unique(array_map('intval', $listingIds)));
+        if (empty($listingIds)) return collect();
+
+        $criteria = $this->buildCriteria($subject);
+        if ($criteria === null) return collect();
+
+        $rows = DB::table('prospecting_listings')
+            ->where('agency_id', $subject->agency_id)
+            ->whereIn('id', $listingIds)
+            ->whereNull('deleted_at')
+            ->whereNotIn(DB::raw('LOWER(property_type)'), ['commercial', 'industrial'])
+            ->select([
+                'id', 'address', 'suburb', 'price', 'bedrooms', 'bathrooms', 'garages',
+                'property_size_m2', 'erf_size_m2', 'property_type',
+                'portal_url', 'portal_source', 'portal_ref',
+                'agent_name', 'agency_name', 'thumbnail_path',
+                'first_seen_at', 'last_seen_at',
+            ])
+            ->get()
+            ->map(fn ($row) => $this->adaptCandidateRow($row));
+
+        if ($rows->isEmpty()) return collect();
+
+        $synthMatch  = $this->buildSyntheticMatch($criteria);
+        $hfcStockMap = $this->loadHfcStockMap((int) $subject->agency_id);
+        $scorer      = app(PropertyMatchScoringService::class);
+
+        return $rows->map(function (object $listing) use ($scorer, $synthMatch, $hfcStockMap, $criteria) {
+            $candidateFamily = $this->candidateFamilyFor($listing);
+            if ($candidateFamily !== $criteria['family']) {
+                return null;
+            }
+            return $this->scoreAndMapRow($listing, $scorer, $synthMatch, $hfcStockMap, $criteria);
+        })
+        ->filter()
+        ->values();
+    }
+
+    /**
+     * Build an unsaved ContactMatch from the criteria struct. The Core
+     * Matches scorer reads attributes + p24SuburbIdList() +
+     * propertyTypeList(); a freshly-instantiated ContactMatch with the
+     * right attribute values exposes both methods unchanged (they read
+     * $this->p24_suburb_ids and $this->property_types via the array
+     * casts).
      *
      * `propertyTypeList` is set to the SET of same-family property_type
      * strings (NOT just the subject's literal value). This fixes the
@@ -237,22 +368,20 @@ final class CompetitorStockMatchService
      * No must-haves or deal-breakers — scoring is soft for the
      * competitor view (we're identifying "near competitors", not
      * filtering for a buyer's hard rules).
-     *
-     * @param  string[]  $familyTypes  set of property_type strings in the
-     *                                 subject's Level-1 family.
      */
-    private function buildSyntheticMatch(Property $subject, int $bedsTol, int $pricePct, array $familyTypes): ContactMatch
+    private function buildSyntheticMatch(array $criteria): ContactMatch
     {
-        $price = (int) $subject->price;
-        $match = new ContactMatch();
-        $match->agency_id = $subject->agency_id;
-        $match->status    = ContactMatch::STATUS_ACTIVE;
-        $match->price_min = (int) round($price * (1 - $pricePct / 100));
-        $match->price_max = (int) round($price * (1 + $pricePct / 100));
+        $subject = $criteria['subject'];
 
-        if ($subject->beds !== null) {
-            $match->beds_min     = max(0, (int) $subject->beds - $bedsTol);
-            $match->bedrooms_max = (int) $subject->beds + $bedsTol;
+        $match = new ContactMatch();
+        $match->agency_id = $criteria['agency_id'];
+        $match->status    = ContactMatch::STATUS_ACTIVE;
+        $match->price_min = $criteria['price_min'];
+        $match->price_max = $criteria['price_max'];
+
+        if ($criteria['beds_min'] !== null) {
+            $match->beds_min     = $criteria['beds_min'];
+            $match->bedrooms_max = $criteria['beds_max'];
         }
         if ($subject->p24_suburb_id) {
             $match->p24_suburb_ids = [(int) $subject->p24_suburb_id];
@@ -261,13 +390,13 @@ final class CompetitorStockMatchService
         // Preferred types = Level-1 family set. Includes the subject's
         // own property_type string so a literal-match candidate
         // (subject=House → candidate=House) still satisfies in_array.
-        $preferred = $familyTypes;
-        if (!empty($subject->property_type) && !in_array($subject->property_type, $preferred, true)) {
-            $preferred[] = (string) $subject->property_type;
+        $preferred = $criteria['family_types'];
+        if ($criteria['property_type'] !== null && !in_array($criteria['property_type'], $preferred, true)) {
+            $preferred[] = $criteria['property_type'];
         }
         if (!empty($preferred)) {
             $match->property_types = array_values($preferred);
-            $match->property_type  = (string) ($subject->property_type ?? $preferred[0]);
+            $match->property_type  = $criteria['property_type'] ?? $preferred[0];
         }
         // Soft scoring — leave must_have_features + deal_breakers empty.
         $match->must_have_features = [];
@@ -405,6 +534,92 @@ final class CompetitorStockMatchService
     }
 
     /**
+     * Per-row scoring + mapping. Extracted from findCompetitors so
+     * searchForManualPicker and scoreSingleListing (decision B —
+     * whitelist-only IDs scored as a union) share the same shape.
+     * Caller has already enforced the family gate.
+     *
+     * @return array  row shape consumed by the review screen +
+     *                CoreXBuildListingCard helper.
+     */
+    private function scoreAndMapRow(
+        object $listing,
+        PropertyMatchScoringService $scorer,
+        ContactMatch $synthMatch,
+        array $hfcStockMap,
+        array $criteria,
+    ): array {
+        $result = $scorer->scoreProspectingCapture($synthMatch, $listing);
+
+        // LEVEL 2 — preference bonus for exact subject-kind match.
+        // Scorer already gives 10/10 type points to anything in the
+        // family set (synth match's propertyTypeList = familyTypes).
+        // The Level-2 bonus lifts exact-kind matches above same-
+        // family-other-kind so apartments rank above townhouses for
+        // an apartment subject. Capped at 100 total.
+        $candidateKind = $this->normalizeTypeKind($listing->property_type ?? null);
+        $isExactKind = $criteria['subject_kind'] !== null && $candidateKind === $criteria['subject_kind'];
+        if ($isExactKind) {
+            $result['score'] = min(100, (int) $result['score'] + 5);
+            $result['tier']  = $this->retier((int) $result['score']);
+        }
+
+        $stock = $hfcStockMap[$this->stockKey($listing)] ?? null;
+
+        // Rich-card additions — thumbnail served via the existing
+        // corex.market.thumbnail route for the review screen, plus
+        // the absolute local-file path so DomPDF renders without
+        // a remote fetch.
+        $thumbPath = $listing->thumbnail_path ?? null;
+        $thumbUrl  = null;
+        $thumbAbs  = null;
+        if ($thumbPath) {
+            try {
+                $thumbUrl = route('corex.market.thumbnail', ['listing' => $listing->id]);
+            } catch (\Throwable) {
+                $thumbUrl = null;
+            }
+            try {
+                $candidate = Storage::disk('local')->path($thumbPath);
+                if (is_file($candidate)) $thumbAbs = $candidate;
+            } catch (\Throwable) {
+                $thumbAbs = null;
+            }
+        }
+
+        return [
+            'listing_id'       => (int) $listing->id,
+            'address'          => $listing->address ?? null,
+            'suburb'           => $listing->suburb ?? null,
+            'property_type'    => $listing->property_type ?? null,
+            'bedrooms'         => $listing->beds ?? null,
+            'bathrooms'        => isset($listing->bathrooms) ? (int) $listing->bathrooms : null,
+            'garages'          => isset($listing->garages) ? (int) $listing->garages : null,
+            'property_size_m2' => isset($listing->property_size_m2) && $listing->property_size_m2 !== null
+                ? (float) $listing->property_size_m2 : null,
+            'erf_size_m2'      => isset($listing->erf_size_m2) && $listing->erf_size_m2 !== null
+                ? (float) $listing->erf_size_m2 : null,
+            'price'            => (int) $listing->price,
+            'portal_url'       => $listing->portal_url ?? null,
+            'portal_ref'       => $listing->portal_ref ?? null,
+            'agent_name'       => $listing->agent_name ?? null,
+            'agency_name'      => $listing->agency_name ?? null,
+            'thumbnail_path'   => $thumbPath,
+            'thumbnail_url'    => $thumbUrl,
+            'thumbnail_abs_path' => $thumbAbs,
+            'first_seen_at'    => $listing->first_seen_at ?? null,
+            'score'            => (int) $result['score'],
+            'tier'             => (string) $result['tier'],
+            'breakdown'        => $result['breakdown'] ?? [],
+            'level2_match'     => $isExactKind ? 'exact' : 'family',
+            'is_hfc_owned'     => $stock !== null,
+            'days_on_market'   => $stock ? $this->intOrNull($stock->days_on_market) : null,
+            'views'            => $stock ? $this->extractPayloadInt($stock, ['Views', 'views', 'Portal Views', 'portal views', 'PortalViews']) : null,
+            'matches'          => $stock ? $this->extractPayloadInt($stock, ['Matches', 'matches', 'Buyer Matches', 'buyer matches', 'BuyerMatches']) : null,
+        ];
+    }
+
+    /**
      * Pull prospecting_listings candidates within the price band and
      * loose suburb match. Beds tolerance + the full scoring run as
      * the PHP-side narrow; SQL is conservative-but-broad so the
@@ -420,37 +635,68 @@ final class CompetitorStockMatchService
      * @param  string[]  $familyTypes  Level-1 family property_type strings.
      * @return \Illuminate\Support\Collection<int, object>
      */
-    private function loadCandidates(Property $subject, int $pricePct, array $familyTypes): \Illuminate\Support\Collection
+    private function loadCandidates(array $criteria): \Illuminate\Support\Collection
     {
-        $price    = (int) $subject->price;
-        $priceMin = (int) round($price * (1 - $pricePct / 100));
-        $priceMax = (int) round($price * (1 + $pricePct / 100));
-
-        // Suburb pre-filter — broad LIKE on the SuburbMatcher core
-        // token. Mirrors the comp-pool fix so "Uvongo Beach" subject
-        // catches "Uvongo" prospecting rows. PHP-side scoreArea
-        // narrows the final match.
-        $subjectCore = SuburbMatcher::normaliseSuburbToken((string) $subject->suburb);
-        $coreLike    = $subjectCore !== '' ? '%' . $subjectCore . '%' : '%';
+        $coreLike = $criteria['suburb_core'] !== '' ? '%' . $criteria['suburb_core'] . '%' : '%';
 
         $query = DB::table('prospecting_listings')
-            ->where('agency_id', $subject->agency_id)
+            ->where('agency_id', $criteria['agency_id'])
             ->where('is_active', 1)
             ->whereNull('deleted_at')
-            ->whereBetween('price', [$priceMin, $priceMax])
+            ->whereBetween('price', [$criteria['price_min'], $criteria['price_max']])
             ->whereRaw('LOWER(suburb) LIKE ?', [$coreLike]);
 
-        // LEVEL 1 — SQL HARD GATE. familyTypes is computed dynamically
+        // LEVEL 1 — SQL HARD GATE. family_types is computed dynamically
         // from the live distinct values; subjects ALWAYS get at least
         // their own property_type in the list (see familyPropertyTypeStrings).
-        if (!empty($familyTypes)) {
-            $query->whereIn('property_type', $familyTypes);
+        // This is the architectural invariant — never crossed, never
+        // loosened, even when the modal widens other filters.
+        if (!empty($criteria['family_types'])) {
+            $query->whereIn('property_type', $criteria['family_types']);
         }
 
         // Hard-exclude non-residential stock so a residential subject
         // can NEVER match Commercial/Industrial. SQL safety net; the
-        // PHP gate in findCompetitors handles other edge cases.
+        // PHP gate in findCompetitors / searchForManualPicker is the
+        // belt-and-braces.
         $query->whereNotIn(DB::raw('LOWER(property_type)'), ['commercial', 'industrial']);
+
+        // Beds clamp — only apply when the criteria says so. The auto-
+        // picker leaves beds_min/max null when the subject has no beds
+        // (vacant land); the modal can also send loose beds bounds.
+        if (isset($criteria['beds_min']) && $criteria['beds_min'] !== null) {
+            $query->where(function ($q) use ($criteria) {
+                $q->whereNull('bedrooms')->orWhere('bedrooms', '>=', $criteria['beds_min']);
+            });
+        }
+        if (isset($criteria['beds_max']) && $criteria['beds_max'] !== null) {
+            $query->where(function ($q) use ($criteria) {
+                $q->whereNull('bedrooms')->orWhere('bedrooms', '<=', $criteria['beds_max']);
+            });
+        }
+
+        // Manual-picker single-type filter: agent restricts to one
+        // family member (e.g. "Apartment" only inside the sectional
+        // family). Validated upstream against family_types so a tampered
+        // value can't cross-class.
+        if (!empty($criteria['picked_property_type'])) {
+            $query->where('property_type', $criteria['picked_property_type']);
+        }
+
+        // Manual-picker free-text search (LIKE on address / agent / agency).
+        if (!empty($criteria['search_q'])) {
+            $needle = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $criteria['search_q']) . '%';
+            $query->where(function ($q) use ($needle) {
+                $q->where('address', 'like', $needle)
+                  ->orWhere('agent_name', 'like', $needle)
+                  ->orWhere('agency_name', 'like', $needle)
+                  ->orWhere('suburb', 'like', $needle);
+            });
+        }
+
+        if (!empty($criteria['limit'])) {
+            $query->limit($criteria['limit']);
+        }
 
         $rows = $query
             ->select([
@@ -465,35 +711,43 @@ final class CompetitorStockMatchService
         // Adapt each row to the loose shape scoreProspectingCapture
         // expects (price / suburb / property_type / beds; everything
         // else passes through for the card).
-        return $rows->map(function ($row) {
-            $obj = (object) [
-                'id'               => (int) $row->id,
-                'price'            => (int) $row->price,
-                'suburb'           => $row->suburb,
-                'property_type'    => $row->property_type,
-                'beds'             => $row->bedrooms !== null ? (int) $row->bedrooms : null,
-                'bedrooms'         => $row->bedrooms !== null ? (int) $row->bedrooms : null,
-                'bathrooms'        => $row->bathrooms !== null ? (int) $row->bathrooms : null,
-                'garages'          => $row->garages   !== null ? (int) $row->garages   : null,
-                'property_size_m2' => $row->property_size_m2,
-                'erf_size_m2'      => $row->erf_size_m2,
-                'address'          => $row->address,
-                'portal_url'       => $row->portal_url,
-                'portal_source'    => $row->portal_source,
-                'portal_ref'       => $row->portal_ref,
-                'agent_name'       => $row->agent_name,
-                'agency_name'      => $row->agency_name,
-                'thumbnail_path'   => $row->thumbnail_path,
-                'first_seen_at'    => $row->first_seen_at,
-                'last_seen_at'     => $row->last_seen_at,
-                'features_json'    => null,
-                // The wrapper sets `p24_suburb_id` to null — scorer falls
-                // through to its no-signal default for the area branch
-                // when missing on the candidate. Acceptable; we still
-                // get price/beds/type signal.
-            ];
-            return $obj;
-        });
+        return $rows->map(fn ($row) => $this->adaptCandidateRow($row));
+    }
+
+    /**
+     * Convert a stdClass row from DB::table('prospecting_listings') into
+     * the in-memory shape the scorer (via wrapCaptureAsProperty) + the
+     * card mapper expect. Centralised so loadCandidates AND
+     * scoreListingsByIds produce identical objects.
+     */
+    private function adaptCandidateRow(object $row): object
+    {
+        return (object) [
+            'id'               => (int) $row->id,
+            'price'            => (int) $row->price,
+            'suburb'           => $row->suburb,
+            'property_type'    => $row->property_type,
+            'beds'             => $row->bedrooms !== null ? (int) $row->bedrooms : null,
+            'bedrooms'         => $row->bedrooms !== null ? (int) $row->bedrooms : null,
+            'bathrooms'        => $row->bathrooms !== null ? (int) $row->bathrooms : null,
+            'garages'          => $row->garages   !== null ? (int) $row->garages   : null,
+            'property_size_m2' => $row->property_size_m2,
+            'erf_size_m2'      => $row->erf_size_m2,
+            'address'          => $row->address,
+            'portal_url'       => $row->portal_url,
+            'portal_source'    => $row->portal_source,
+            'portal_ref'       => $row->portal_ref,
+            'agent_name'       => $row->agent_name,
+            'agency_name'      => $row->agency_name,
+            'thumbnail_path'   => $row->thumbnail_path,
+            'first_seen_at'    => $row->first_seen_at,
+            'last_seen_at'     => $row->last_seen_at,
+            'features_json'    => null,
+            // The wrapper sets `p24_suburb_id` to null — scorer falls
+            // through to its no-signal default for the area branch
+            // when missing on the candidate. Acceptable; we still
+            // get price/beds/type signal.
+        ];
     }
 
     /**

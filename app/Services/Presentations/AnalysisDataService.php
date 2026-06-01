@@ -748,28 +748,82 @@ class AnalysisDataService
     {
         $property = $presentation->property;
         if (!$property) {
-            return ['matches' => [], 'included_ids' => null, 'visible' => []];
+            return ['matches' => [], 'included_ids' => null, 'visible' => [], 'display_cap' => null];
         }
 
         $service = app(CompetitorStockMatchService::class);
         $matches = $service->findCompetitors($property)->all();
 
+        $agency     = $presentation->agency_id ? \App\Models\Agency::find($presentation->agency_id) : null;
+        $displayCap = (int) ($agency?->competitor_stock_default_display_count ?? 10);
+
         $whitelist = $version?->included_competitor_ids_json;
+
         if ($whitelist === null) {
-            // No tick state yet — every scored match is visible by default.
-            $visible = $matches;
+            // No tick state yet — default visible set is the TOP N auto-
+            // picks by score DESC. matches is already sorted, so just
+            // slice. The remainder live in the modal until the agent
+            // explicitly ticks them in.
+            $visible = $displayCap > 0
+                ? array_slice($matches, 0, $displayCap)
+                : $matches;
         } else {
+            // Decision B — visible = UNION of (rows in matches whose IDs
+            // are on the whitelist) + (whitelisted IDs that fall OUTSIDE
+            // the auto-pool, scored separately).
+            //
+            // The second branch covers the case where the agent widened
+            // the modal filters to add a row beyond the default price /
+            // suburb / beds tolerance — without this, that row would
+            // silently drop from the PDF because matches ∩ whitelist
+            // wouldn't contain it.
+            //
+            // The Level-1 family gate is enforced INSIDE scoreListingsByIds
+            // (cross-family IDs are dropped), so the union can never leak
+            // a House into a sectional subject's visible set.
             $whitelistSet = array_flip(array_map('intval', $whitelist));
-            $visible = array_values(array_filter(
+            $autoPoolIncluded = array_values(array_filter(
                 $matches,
                 fn (array $m) => isset($whitelistSet[(int) $m['listing_id']]),
             ));
+
+            $autoPoolIds = array_flip(array_map(
+                fn (array $m) => (int) $m['listing_id'],
+                $matches,
+            ));
+            $extraIds = array_values(array_filter(
+                $whitelist,
+                fn ($id) => !isset($autoPoolIds[(int) $id]),
+            ));
+
+            $extras = $extraIds !== []
+                ? $service->scoreListingsByIds($property, $extraIds)->all()
+                : [];
+
+            // Merge + dedupe by listing_id (shouldn't collide given the
+            // disjoint construction, but defence in depth) + sort by
+            // score DESC. min_score threshold is INTENTIONALLY skipped
+            // for whitelist rows — the agent's deliberate tick overrides
+            // the auto-threshold (a low-scoring deliberate pick still
+            // publishes).
+            $combined = array_merge($autoPoolIncluded, $extras);
+            $seen = [];
+            $deduped = [];
+            foreach ($combined as $row) {
+                $id = (int) $row['listing_id'];
+                if (isset($seen[$id])) continue;
+                $seen[$id] = true;
+                $deduped[] = $row;
+            }
+            usort($deduped, fn ($a, $b) => (int) $b['score'] <=> (int) $a['score']);
+            $visible = $deduped;
         }
 
         return [
             'matches'      => $matches,
             'included_ids' => $whitelist,
             'visible'      => $visible,
+            'display_cap'  => $displayCap > 0 ? $displayCap : null,
         ];
     }
 

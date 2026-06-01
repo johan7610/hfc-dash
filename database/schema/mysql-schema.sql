@@ -214,6 +214,7 @@ CREATE TABLE `agencies` (
   `competitor_stock_default_price_tolerance_pct` tinyint unsigned NOT NULL DEFAULT '20' COMMENT 'Competitor Stock — ± percent price band for synthetic match (e.g. 20 = ±20%).',
   `competitor_stock_min_score` tinyint unsigned NOT NULL DEFAULT '50' COMMENT 'Competitor Stock — minimum match score (Core Matches 0-100) to include in section. 50 = Approximate tier floor.',
   `competitor_stock_min_same_type` tinyint unsigned NOT NULL DEFAULT '5' COMMENT 'Competitor Stock — minimum exact-property-type matches before stepping up to same-family-other-type. Level 1 (FH/SS) is never crossed.',
+  `competitor_stock_default_display_count` tinyint unsigned NOT NULL DEFAULT '10' COMMENT 'Competitor Stock — top-N display cap on the review screen + auto-tick floor. Rest live in the manual-picker modal.',
   `presentations_default_comp_scope` enum('radius_all','suburb_only') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'radius_all',
   `presentations_default_radius_m` smallint unsigned NOT NULL DEFAULT '1000',
   `presentations_default_rates_per_million_zar` int unsigned NOT NULL DEFAULT '800' COMMENT 'Monthly municipal rates per R1M of property value.',
@@ -11073,3 +11074,4 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (807,'2026_06_19_14
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (808,'2026_06_19_140100_add_freehold_holding_defaults_to_agencies',240);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (809,'2026_06_19_140200_add_freehold_monthly_to_presentations',240);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (810,'2026_06_01_201014_add_competitor_stock_min_same_type_to_agencies',241);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (811,'2026_06_01_204407_add_competitor_stock_default_display_count_to_agencies',242);

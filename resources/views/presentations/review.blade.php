@@ -357,43 +357,70 @@
 
     {{-- ─────────── SECTION 2b — Active Competition (scored stock) ─────────── --}}
     @php
+        // VISIBLE = what renders on the section (top-N auto-pick when no
+        // override, or the agent's whitelist when overridden — already
+        // includes whitelist-only extras outside the auto-pool per
+        // decision B). MATCHES is the full auto-pool, used for the modal
+        // bootstrap + the "of N scored" summary in the header.
+        $competitorVisible  = $competitorStock['visible']      ?? [];
         $competitorMatches  = $competitorStock['matches']      ?? [];
-        $competitorIncluded = $competitorStock['included_ids'] ?? null;
-        $includedSet        = $competitorIncluded === null
-            ? null
-            : array_flip(array_map('intval', $competitorIncluded));
-        $isCompetitorIncluded = function ($listingId) use ($includedSet) {
-            if ($includedSet === null) return true;
-            return isset($includedSet[(int) $listingId]);
-        };
-        // Annotate each match with the resolved included-state so the JS
-        // doesn't have to recompute the whitelist semantics — same shape
-        // CoreXBuildListingCard consumes.
-        $competitorMatchesForJs = array_map(function ($m) use ($isCompetitorIncluded) {
-            $m['is_included'] = $isCompetitorIncluded($m['listing_id']);
+        $competitorDisplayCap = $competitorStock['display_cap'] ?? null;
+        // Annotate each visible row with is_included=true (visible IS the
+        // included set, by definition — either auto-top-N or whitelist).
+        $competitorVisibleForJs = array_map(function ($m) {
+            $m['is_included'] = true;
             return $m;
-        }, $competitorMatches);
+        }, $competitorVisible);
+        $totalScored   = count($competitorMatches);
+        $visibleCount  = count($competitorVisible);
     @endphp
-    @if(count($competitorMatches) > 0)
+    @if($totalScored > 0)
     {{-- Shared listing-card builder. Defines window.CoreXBuildListingCard. --}}
     @include('partials._listing-card-helper')
 
-    <div class="review-card">
-        <div class="review-section-header">
-            <div class="review-section-tag" style="background:#7c3aed;"></div>
-            <h2 class="review-section-title">2b · Active Competition — {{ count($competitorMatches) }} scored</h2>
+    <div class="review-card"
+         x-data="competitorPicker({
+             searchUrl:     '{{ route('presentations.review.competitor-picker', $version->id) }}',
+             dataUrl:       '{{ route('presentations.review.competitor-data',  $version->id) }}',
+             toggleTpl:     '{{ route('presentations.review.toggle-competitor', ['version' => $version->id, 'listingId' => '__LISTING_ID__']) }}',
+             csrf:          '{{ csrf_token() }}',
+             displayCap:    {{ (int) ($competitorDisplayCap ?? 10) }},
+         })">
+        <div class="review-section-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <div class="review-section-tag" style="background:#7c3aed;"></div>
+                <h2 class="review-section-title" style="margin:0;">
+                    2b · Active Competition —
+                    <span id="competitor-count-summary">
+                        showing top {{ $visibleCount }} of {{ $totalScored }} scored
+                    </span>
+                </h2>
+            </div>
+            {{-- Manual-picker CTA. Opens the modal pre-populated to the
+                 auto-picker's criteria (suburb / family / property_type /
+                 price band). Agent can widen filters; the Level-1 family
+                 gate stays enforced on the backend. --}}
+            <button type="button"
+                    @click="openModal()"
+                    class="prop-action-btn prop-action-btn-neutral"
+                    style="font-size:11px;font-weight:600;padding:6px 12px;"
+                    title="Browse all sectional/freehold stock in the family and tick which to include in the seller PDF.">
+                Attach other properties
+            </button>
         </div>
         <p style="margin:0 0 12px 0;font-size:11px;color:var(--text-muted);">
             Active stock the seller competes against (P24 + PP alert imports), scored against
-            this subject by the Core Matches engine. Tick to include in the seller PDF;
-            unticked cards stay on this review screen but drop from the published version.
+            this subject. Top {{ $competitorDisplayCap ?? 10 }} auto-included; the rest live in the
+            picker. Tick to include in the seller PDF; unticked cards drop from the published version.
         </p>
         <div id="competitor-stock-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;"></div>
+
+        @include('presentations._competitor-picker-modal')
     </div>
 
     <script>
     (function () {
-        var COMPETITOR_MATCHES = @json($competitorMatchesForJs);
+        var COMPETITOR_VISIBLE = @json($competitorVisibleForJs);
         var listEl = document.getElementById('competitor-stock-list');
         if (!listEl || !window.CoreXBuildListingCard) return;
 
@@ -408,7 +435,10 @@
             }
         }
 
-        function buildCompetitorCard(m) {
+        // Exposed on window so the manual-picker modal's close handler
+        // can re-render the list from a refreshed competitor-data
+        // payload (same card mapper, no DOM logic duplicated).
+        window.buildCompetitorCard = function (m) {
             var badges = [tierBadge(m.tier)];
             if (m.is_hfc_owned) {
                 badges.push({ label: 'HFC', fg: '#10b981', bg: '#ecfdf5' });
@@ -443,14 +473,25 @@
                 actions_html: includeToggle,
             });
 
-            // Wrap so we can dim on untick + carry the listing id.
-            var wrapper = '<div class="competitor-card' + (m.is_included ? '' : ' excluded')
+            return '<div class="competitor-card' + (m.is_included ? '' : ' excluded')
                 + '" data-listing-id="' + m.listing_id + '"'
                 + (m.is_included ? '' : ' style="opacity:0.45;"') + '>' + html + '</div>';
-            return wrapper;
-        }
+        };
 
-        listEl.innerHTML = COMPETITOR_MATCHES.map(buildCompetitorCard).join('');
+        // Renderer also on window — called on initial paint AND by the
+        // modal-close path (fetches /review/competitor-data then calls
+        // this with the fresh visible[] array).
+        window.renderCompetitorStockList = function (visibleRows, summaryText) {
+            var el = document.getElementById('competitor-stock-list');
+            if (!el) return;
+            el.innerHTML = (visibleRows || []).map(window.buildCompetitorCard).join('');
+            if (summaryText) {
+                var summaryEl = document.getElementById('competitor-count-summary');
+                if (summaryEl) summaryEl.textContent = summaryText;
+            }
+        };
+
+        window.renderCompetitorStockList(COMPETITOR_VISIBLE);
     })();
     </script>
     @endif

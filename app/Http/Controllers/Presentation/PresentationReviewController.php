@@ -459,27 +459,60 @@ final class PresentationReviewController extends Controller
         ]);
 
         // Listing must exist in the same agency.
-        $listingExists = DB::table('prospecting_listings')
+        $listingRow = DB::table('prospecting_listings')
             ->where('id', $listingId)
             ->where('agency_id', $version->agency_id)
             ->whereNull('deleted_at')
-            ->exists();
-        if (!$listingExists) {
+            ->first(['id', 'property_type']);
+        if (!$listingRow) {
             return response()->json(['error' => 'listing_not_in_agency'], 422);
         }
 
-        // Default whitelist = all scored competitors. When the agent
-        // starts ticking, we materialise the whitelist from the
-        // currently-scored set on first touch.
+        // LEVEL 1 HARD GATE on the toggle path itself — even if the
+        // modal accidentally surfaces a cross-family row (it shouldn't,
+        // but defence in depth), reject the toggle here. Without this
+        // check a tampered request could whitelist a House for a
+        // sectional subject and the union path in
+        // compileCompetitorStock would happily score it as 'family
+        // mismatch → dropped', but the audit row would still land.
+        $presentation = $version->presentation()->with('property')->first();
+        $subjectProperty = $presentation?->property;
+        if ($subjectProperty) {
+            $service = app(CompetitorStockMatchService::class);
+            $criteria = $service->buildCriteria($subjectProperty);
+            if ($criteria !== null) {
+                $candidateKind = app(\App\Services\TitleTypeClassifier::class)
+                    ->fromPropertyType((string) $listingRow->property_type);
+                $candidateFamily = match ($candidateKind) {
+                    \App\Services\TitleTypeClassifier::TITLE_SECTIONAL => 'sectional',
+                    \App\Services\TitleTypeClassifier::TITLE_FULL      => 'freehold',
+                    \App\Services\TitleTypeClassifier::TITLE_VACANT    => 'freehold',
+                    default                                            => null,
+                };
+                if ($candidateFamily !== $criteria['family']) {
+                    return response()->json([
+                        'error'           => 'cross_family_pick_blocked',
+                        'subject_family'  => $criteria['family'],
+                        'candidate_family'=> $candidateFamily,
+                        'message'         => 'Cross-family picks are not allowed (sectional ↔ freehold boundary).',
+                    ], 422);
+                }
+            }
+        }
+
+        // Default whitelist = TOP N auto-picks by score. When the agent
+        // first ticks anything, we materialise the whitelist from the
+        // top N of the scored set so the visible cards on screen are
+        // preserved (the agent's tick removes one row, not all the
+        // others). The N is the agency display cap setting.
         $current = $version->included_competitor_ids_json;
         if ($current === null) {
-            // First-touch — seed from the scored set so the existing
-            // visible cards are preserved (the agent's tick removes
-            // one row, not all the others).
-            $presentation = $version->presentation()->with('property')->first();
-            if ($presentation && $presentation->property) {
+            if ($subjectProperty) {
                 $scored = app(CompetitorStockMatchService::class)
-                    ->findCompetitors($presentation->property);
+                    ->findCompetitors($subjectProperty);
+                $agency = $version->agency_id ? \App\Models\Agency::find($version->agency_id) : null;
+                $cap = (int) ($agency?->competitor_stock_default_display_count ?? 10);
+                $scored = $cap > 0 ? $scored->take($cap) : $scored;
                 $current = $scored->pluck('listing_id')->map(fn ($v) => (int) $v)->all();
             } else {
                 $current = [];
@@ -528,6 +561,89 @@ final class PresentationReviewController extends Controller
             'override_id'  => AgentOverride::where('presentation_version_id', $version->id)
                                   ->where('target_id', 'competitor:' . $listingId)
                                   ->latest('id')->value('id'),
+        ]);
+    }
+
+    /**
+     * GET — return the freshly-computed competitor_stock payload so the
+     * review screen can re-render its Active Competition section in
+     * place after the manual-picker modal closes. Same shape
+     * AnalysisDataService::compileCompetitorStock produces (matches /
+     * included_ids / visible / display_cap).
+     */
+    public function competitorData(Request $request, PresentationVersion $version): JsonResponse
+    {
+        $this->authoriseReviewer($request, $version);
+        $presentation = $version->presentation()->with(['property', 'fields'])->first();
+        if (!$presentation) {
+            return response()->json(['error' => 'presentation_not_found'], 404);
+        }
+
+        $analysis = (new AnalysisDataService())->compile($presentation, $version);
+        return response()->json($analysis['competitor_stock'] ?? [
+            'matches'      => [],
+            'included_ids' => null,
+            'visible'      => [],
+            'display_cap'  => null,
+        ]);
+    }
+
+    /**
+     * GET — manual-picker modal search endpoint. Accepts agent-loosened
+     * filters via query string, returns scored rows from
+     * searchForManualPicker (same shape the review screen uses).
+     * Also returns the bootstrap criteria (so the modal can populate
+     * its filter inputs to the auto-picker defaults on first open).
+     */
+    public function competitorPickerSearch(Request $request, PresentationVersion $version): JsonResponse
+    {
+        $this->authoriseReviewer($request, $version);
+        $presentation = $version->presentation()->with('property')->first();
+        if (!$presentation || !$presentation->property) {
+            return response()->json(['error' => 'no_subject_property'], 422);
+        }
+
+        $service = app(CompetitorStockMatchService::class);
+        $subject = $presentation->property;
+
+        $criteria = $service->buildCriteria($subject);
+        if ($criteria === null) {
+            return response()->json([
+                'error'    => 'subject_not_pickable',
+                'message'  => 'Subject has no price/suburb or is not residential — manual picker unavailable.',
+            ], 422);
+        }
+
+        // Strip the Property/object-typed entries before exposing the
+        // criteria to the frontend (XHR JSON, not domain payload).
+        $criteriaPublic = $criteria;
+        unset($criteriaPublic['subject']);
+
+        $userFilters = $request->validate([
+            'suburb'        => 'sometimes|nullable|string|max:120',
+            'property_type' => 'sometimes|nullable|string|max:120',
+            'price_min'     => 'sometimes|nullable|integer|min:0|max:9999999999',
+            'price_max'     => 'sometimes|nullable|integer|min:0|max:9999999999',
+            'beds_min'      => 'sometimes|nullable|integer|min:0|max:99',
+            'beds_max'      => 'sometimes|nullable|integer|min:0|max:99',
+            'search'        => 'sometimes|nullable|string|max:120',
+            'limit'         => 'sometimes|nullable|integer|min:1|max:500',
+        ]);
+
+        $rows = $service->searchForManualPicker($subject, $userFilters);
+
+        // Annotate each row with the current included-state so the modal
+        // can render the tick checkbox correctly.
+        $whitelist = $version->included_competitor_ids_json ?? [];
+        $whitelistSet = array_flip(array_map('intval', $whitelist));
+        $annotated = $rows->map(function (array $row) use ($whitelistSet) {
+            $row['is_included'] = isset($whitelistSet[(int) $row['listing_id']]);
+            return $row;
+        })->values()->all();
+
+        return response()->json([
+            'criteria' => $criteriaPublic,
+            'results'  => $annotated,
         ]);
     }
 

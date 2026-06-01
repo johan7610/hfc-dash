@@ -2234,6 +2234,19 @@ Route::middleware(['auth', 'permission:access_presentations'])->prefix('presenta
         [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'toggleCompetitor'])
         ->where('listingId', '[0-9]+')
         ->name('review.toggle-competitor');
+    // Competitor Stock — GET refreshed payload (matches/included_ids/visible/display_cap)
+    // so the review screen can re-render the Active Competition section in place after the
+    // manual-picker modal closes. No full page reload.
+    Route::get('/version/{version}/review/competitor-data',
+        [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'competitorData'])
+        ->name('review.competitor-data');
+    // Competitor Stock — manual-picker modal search. Agent-loosened filters
+    // (suburb / property_type / price / beds / free-text); Level-1 family gate
+    // stays ENFORCED inside searchForManualPicker. Returns scored rows + the
+    // bootstrap criteria for filter pre-population.
+    Route::get('/version/{version}/review/competitor-picker',
+        [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'competitorPickerSearch'])
+        ->name('review.competitor-picker');
     // Holding Cost — per-component inline override (Section 6).
     Route::post('/version/{version}/review/holding-cost-component',
         [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'setHoldingCostComponent'])

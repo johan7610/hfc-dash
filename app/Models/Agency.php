@@ -147,6 +147,7 @@ class Agency extends Model
         'competitor_stock_default_price_tolerance_pct',
         'competitor_stock_min_score',
         'competitor_stock_min_same_type',
+        'competitor_stock_default_display_count',
         // Holding Cost — freehold component Tier-2 defaults.
         'presentations_default_garden_zar',
         'presentations_default_pool_zar',
@@ -218,6 +219,7 @@ class Agency extends Model
         'competitor_stock_default_price_tolerance_pct' => 'integer',
         'competitor_stock_min_score'                   => 'integer',
         'competitor_stock_min_same_type'               => 'integer',
+        'competitor_stock_default_display_count'       => 'integer',
         // Holding Cost — freehold component Tier-2 defaults.
         'presentations_default_garden_zar'   => 'integer',
         'presentations_default_pool_zar'     => 'integer',

@@ -358,6 +358,197 @@ final class CompetitorStockMatchTest extends TestCase
         $this->assertContains($vl, $ids, 'Vacant land must surface when exact-kind is below floor (step-up)');
     }
 
+    // ── buildCriteria + searchForManualPicker (decision B) ────────────
+
+    public function test_build_criteria_returns_struct_for_sectional_subject(): void
+    {
+        [$subject, $agencyId] = $this->seedSubject(
+            price: 1_200_000, beds: 2, suburb: 'Uvongo', type: 'Sectional Title',
+        );
+        $svc = new CompetitorStockMatchService();
+        $c = $svc->buildCriteria($subject);
+
+        $this->assertIsArray($c);
+        $this->assertSame((int) $agencyId, $c['agency_id']);
+        $this->assertSame('sectional', $c['family']);
+        $this->assertSame('apartment', $c['subject_kind']);
+        $this->assertSame(1_200_000, $c['price']);
+        $this->assertSame(2, $c['beds']);
+        $this->assertSame(1, $c['beds_min']);  // beds_tol default 1
+        $this->assertSame(3, $c['beds_max']);
+        // family_types always includes subject's own type literal.
+        $this->assertContains('Sectional Title', $c['family_types']);
+    }
+
+    public function test_build_criteria_returns_null_for_subject_missing_data(): void
+    {
+        [$subject] = $this->seedSubject(price: 0, beds: 3, suburb: 'Uvongo', type: 'House');
+        $svc = new CompetitorStockMatchService();
+        $this->assertNull($svc->buildCriteria($subject), 'price=0 should yield null criteria');
+    }
+
+    public function test_manual_picker_respects_family_gate_even_when_filters_widen(): void
+    {
+        [$subject, $agencyId] = $this->seedSubject(
+            price: 1_200_000, beds: 2, suburb: 'Uvongo', type: 'Sectional Title',
+        );
+
+        // Stock pool: 1 sectional in-band, 1 sectional way out of band (price + suburb),
+        // 1 house out of band, 1 commercial.
+        $sec1 = $this->seedListing($agencyId, suburb: 'Uvongo',     price: 1_200_000, beds: 2, type: 'Apartment');
+        $sec2 = $this->seedListing($agencyId, suburb: 'Margate',    price: 3_500_000, beds: 4, type: 'Apartment');
+        $hse  = $this->seedListing($agencyId, suburb: 'Margate',    price: 3_500_000, beds: 4, type: 'House');
+        $com  = $this->seedListing($agencyId, suburb: 'Margate',    price: 3_500_000, beds: null, type: 'Commercial');
+
+        $svc = new CompetitorStockMatchService();
+        // Agent widens price + drops bed clamp + new suburb in modal.
+        $rows = $svc->searchForManualPicker($subject, [
+            'suburb'    => 'Margate',
+            'price_min' => 2_000_000,
+            'price_max' => 5_000_000,
+            'beds_min'  => 0,
+            'beds_max'  => 10,
+        ]);
+        $ids = $rows->pluck('listing_id')->all();
+
+        $this->assertContains($sec2, $ids, 'Sectional way out of band should surface when filters widened');
+        $this->assertNotContains($hse, $ids, 'House must NEVER reach a sectional subject (family gate)');
+        $this->assertNotContains($com, $ids, 'Commercial must NEVER reach a residential subject');
+    }
+
+    public function test_manual_picker_property_type_filter_validated_against_family(): void
+    {
+        [$subject, $agencyId] = $this->seedSubject(
+            price: 1_200_000, beds: 2, suburb: 'Uvongo', type: 'Sectional Title',
+        );
+        $apt = $this->seedListing($agencyId, suburb: 'Uvongo', price: 1_200_000, beds: 2, type: 'Apartment');
+        $th  = $this->seedListing($agencyId, suburb: 'Uvongo', price: 1_200_000, beds: 2, type: 'Townhouse');
+
+        $svc = new CompetitorStockMatchService();
+        // Apartment-only filter — Townhouse drops even though it's same family.
+        $rows = $svc->searchForManualPicker($subject, ['property_type' => 'Apartment']);
+        $ids = $rows->pluck('listing_id')->all();
+        $this->assertContains($apt, $ids);
+        $this->assertNotContains($th, $ids);
+
+        // Tampered cross-family filter ("House") MUST be ignored —
+        // family gate still applies, House drops, and the unfiltered
+        // family set (Apartment + Townhouse) surfaces.
+        $rows = $svc->searchForManualPicker($subject, ['property_type' => 'House']);
+        $ids = $rows->pluck('listing_id')->all();
+        $this->assertContains($apt, $ids);
+        $this->assertContains($th,  $ids);
+    }
+
+    // ── Decision B: visible UNION of auto-pool + whitelist extras ─────
+
+    public function test_visible_includes_whitelist_only_id_outside_auto_pool(): void
+    {
+        // Subject + 2 listings: one in-band (auto-pool), one WAY out of
+        // band (sectional, but price > +20% so not in auto-pool).
+        [$subject, $agencyId] = $this->seedSubject(
+            price: 1_200_000, beds: 2, suburb: 'Uvongo', type: 'Sectional Title',
+        );
+        $inBandId  = $this->seedListing($agencyId, suburb: 'Uvongo', price: 1_200_000, beds: 2, type: 'Apartment');
+        $outOfBand = $this->seedListing($agencyId, suburb: 'Uvongo', price: 4_500_000, beds: 2, type: 'Apartment');
+
+        $presentation = $this->seedPresentation($subject);
+        $version = $this->seedVersion($presentation);
+        // Whitelist contains the OUT-OF-BAND row only (agent added via modal).
+        $version->forceFill(['included_competitor_ids_json' => [$outOfBand]])->save();
+
+        $analysis = (new AnalysisDataService())->compile($presentation->fresh(), $version);
+        $cs = $analysis['competitor_stock'];
+
+        // matches = auto-pool only.
+        $this->assertContains($inBandId, array_column($cs['matches'], 'listing_id'));
+        $this->assertNotContains($outOfBand, array_column($cs['matches'], 'listing_id'));
+
+        // visible = UNION; the out-of-band row appears because it's on
+        // the whitelist (decision B — agent's deliberate pick wins).
+        $visibleIds = array_column($cs['visible'], 'listing_id');
+        $this->assertContains($outOfBand, $visibleIds,
+            'Whitelist-only out-of-band ID must surface in visible (decision B)');
+        $this->assertNotContains($inBandId, $visibleIds,
+            'In-band auto-pool row NOT on whitelist must NOT be visible');
+    }
+
+    public function test_visible_default_is_top_n_when_whitelist_null(): void
+    {
+        [$subject, $agencyId] = $this->seedSubject(
+            price: 1_200_000, beds: 2, suburb: 'Uvongo', type: 'Sectional Title',
+        );
+
+        // Set top-N cap to 3 + seed 5 sectional listings.
+        Agency::find($agencyId)->update(['competitor_stock_default_display_count' => 3]);
+        for ($i = 0; $i < 5; $i++) {
+            $this->seedListing($agencyId, suburb: 'Uvongo', price: 1_200_000 + $i * 5_000, beds: 2, type: 'Apartment');
+        }
+
+        $presentation = $this->seedPresentation($subject);
+        $version = $this->seedVersion($presentation);
+        // Whitelist NOT set — default visible should be top 3.
+
+        $analysis = (new AnalysisDataService())->compile($presentation->fresh(), $version);
+        $cs = $analysis['competitor_stock'];
+        $this->assertCount(5, $cs['matches'], 'matches includes the full auto-pool');
+        $this->assertCount(3, $cs['visible'], 'visible capped to top N (3)');
+        $this->assertSame(3, $cs['display_cap']);
+    }
+
+    // ── First-touch toggle seeds top N (not all) ──────────────────────
+
+    public function test_first_touch_toggle_seeds_whitelist_with_top_n_not_all(): void
+    {
+        [$subject, $agencyId] = $this->seedSubject(
+            price: 1_200_000, beds: 2, suburb: 'Uvongo', type: 'Sectional Title',
+        );
+
+        Agency::find($agencyId)->update(['competitor_stock_default_display_count' => 2]);
+        $a = $this->seedListing($agencyId, suburb: 'Uvongo', price: 1_200_000, beds: 2, type: 'Apartment');
+        $b = $this->seedListing($agencyId, suburb: 'Uvongo', price: 1_210_000, beds: 2, type: 'Apartment');
+        $c = $this->seedListing($agencyId, suburb: 'Uvongo', price: 1_220_000, beds: 2, type: 'Apartment');
+        $d = $this->seedListing($agencyId, suburb: 'Uvongo', price: 1_230_000, beds: 2, type: 'Apartment');
+
+        $presentation = $this->seedPresentation($subject);
+        $version = $this->seedVersion($presentation);
+        $admin = User::factory()->create(['agency_id' => $agencyId, 'role' => 'super_admin']);
+        $this->actingAs($admin);
+
+        // First touch — untick whatever's id=$a. Should seed whitelist
+        // with top N (=2) first, then remove $a, leaving exactly 1.
+        $response = $this->postJson(
+            route('presentations.review.toggle-competitor', ['version' => $version->id, 'listingId' => $a]),
+            ['included' => false],
+        );
+        $response->assertOk();
+        $version->refresh();
+        $this->assertSame(1, count($version->included_competitor_ids_json),
+            'After untick of first auto-pick, top-2 seed minus one = 1 entry');
+    }
+
+    public function test_toggle_competitor_rejects_cross_family_pick(): void
+    {
+        [$subject, $agencyId] = $this->seedSubject(
+            price: 1_200_000, beds: 2, suburb: 'Uvongo', type: 'Sectional Title',
+        );
+        // Seed a HOUSE in the same agency. A tampered toggle attempting
+        // to add it to a sectional subject's whitelist must be rejected.
+        $houseId = $this->seedListing($agencyId, suburb: 'Uvongo', price: 1_200_000, beds: 2, type: 'House');
+
+        $presentation = $this->seedPresentation($subject);
+        $version = $this->seedVersion($presentation);
+        $admin = User::factory()->create(['agency_id' => $agencyId, 'role' => 'super_admin']);
+        $this->actingAs($admin);
+
+        $response = $this->postJson(
+            route('presentations.review.toggle-competitor', ['version' => $version->id, 'listingId' => $houseId]),
+            ['included' => true],
+        );
+        $response->assertStatus(422);
+        $response->assertJsonPath('error', 'cross_family_pick_blocked');
+    }
+
     // ── helpers ────────────────────────────────────────────────────────
 
     /** @return array{0:Property, 1:int} */
