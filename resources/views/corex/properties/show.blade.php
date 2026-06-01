@@ -319,8 +319,26 @@
                                 </div>
 
                                 <p class="text-[11px] mt-1" style="color:var(--text-muted);" x-show="modalError" x-text="modalError"></p>
+
+                                {{-- Popup-blocked fallback: the browser blocked the new tab.
+                                     We deliberately do NOT navigate the current window (the
+                                     prior implementation did, which caused the double-load
+                                     bug). The agent clicks this anchor to open the
+                                     presentation in a new tab themselves, or re-enables
+                                     popups and clicks Generate again. --}}
+                                <div x-show="popupBlockedUrl" x-cloak class="mt-3 rounded-md px-3 py-2 text-xs"
+                                     style="background:color-mix(in srgb, var(--ds-amber) 12%, transparent); border:1px solid color-mix(in srgb, var(--ds-amber) 35%, transparent); color:var(--text-primary);">
+                                    <div class="font-semibold mb-1">Popup blocked by browser</div>
+                                    <a :href="popupBlockedUrl" target="_blank" rel="noopener noreferrer"
+                                       class="underline font-semibold"
+                                       style="color:var(--brand);"
+                                       @click="modalOpen = false; popupBlockedUrl = null;">
+                                        Click to open the presentation in a new tab
+                                    </a>
+                                </div>
+
                                 <div class="mt-4 flex items-center justify-end gap-2">
-                                    <button type="button" @click="modalOpen = false"
+                                    <button type="button" @click="modalOpen = false; popupBlockedUrl = null;"
                                             class="px-3 py-1.5 text-sm font-medium rounded-md"
                                             style="background:var(--surface-2); border:1px solid var(--border); color:var(--text-secondary);">
                                         Cancel
@@ -349,6 +367,12 @@
                             generating: false,
                             compScope: 'radius_all',   // Phase 3b — initialised from coverage response
                             compRadiusM: 1000,
+                            // When the browser blocks the new-tab popup, the
+                            // genuine block is detected (window.open returned
+                            // null) and this URL surfaces an inline click-
+                            // through anchor inside the modal. The CURRENT
+                            // window is NEVER navigated by the handler.
+                            popupBlockedUrl: null,
 
                             get badgeStyle() {
                                 const state = this.coverage?.state;
@@ -393,6 +417,7 @@
                                 this.suggestedPrice = config.listedPrice || null;
                                 this.askingPrice = this.suggestedPrice;
                                 this.modalError = null;
+                                this.popupBlockedUrl = null;
                                 this.modalOpen = true;
                             },
                             submitFromModal() {
@@ -429,24 +454,42 @@
                                         this.generating = false;
                                         return;
                                     }
-                                    // Build 2 — open the review screen in a NEW TAB so the
-                                    // agent never loses their place on the property page.
-                                    // Falls back to redirect_url for any pre-Build-2 payload.
+                                    // Open the review screen in a NEW TAB so the agent
+                                    // never loses their place on the property page.
+                                    //
+                                    // Why no `'noopener'` in the features arg: per the HTML
+                                    // spec, `window.open(url, '_blank', 'noopener')` returns
+                                    // null even on SUCCESS, which made the `if (!win)`
+                                    // popup-block check fire every time and navigate the
+                                    // CURRENT window via window.location.href — the
+                                    // double-load bug. We keep the noopener security
+                                    // property by best-effort clearing `win.opener = null`
+                                    // after the open. Modern browsers also imply noopener
+                                    // for `target=_blank` cross-origin opens by default.
                                     const reviewUrl = data?.review_url || data?.redirect_url;
-                                    if (reviewUrl) {
-                                        const win = window.open(reviewUrl, '_blank', 'noopener');
-                                        if (!win) {
-                                            // Popup blocked — fall back to same-tab nav so the
-                                            // flow doesn't dead-end. Agent can re-enable popups.
-                                            window.location.href = reviewUrl;
-                                        } else {
-                                            // Close the modal and let the agent stay on the
-                                            // property page. The review tab is theirs to drive.
-                                            this.modalOpen = false;
-                                            this.generating = false;
-                                        }
+                                    if (!reviewUrl) {
+                                        this.modalError = 'Generation succeeded but no review URL returned.';
+                                        this.generating = false;
+                                        return;
+                                    }
+                                    const win = window.open(reviewUrl, '_blank');
+                                    if (win) {
+                                        try { win.opener = null; } catch (e) { /* best effort */ }
+                                        // Happy path — agent stays on the property; review
+                                        // tab is theirs to drive. Close the modal.
+                                        this.modalOpen = false;
+                                        this.popupBlockedUrl = null;
+                                        this.generating = false;
                                     } else {
-                                        window.location.reload();
+                                        // Genuine popup block — show an inline click-through
+                                        // link inside the modal. Do NOT hijack the current
+                                        // window (the previous fallback did, which combined
+                                        // with the always-null return made every click a
+                                        // double-load). Agent re-enables popups or clicks
+                                        // the inline link.
+                                        this.popupBlockedUrl = reviewUrl;
+                                        this.modalError = null;
+                                        this.generating = false;
                                     }
                                 } catch (e) {
                                     this.modalError = 'Generation failed: ' + e.message;

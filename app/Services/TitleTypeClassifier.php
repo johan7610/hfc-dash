@@ -56,7 +56,12 @@ final class TitleTypeClassifier
             return self::TITLE_SECTIONAL;
         }
         if (str_contains($t, 'vacant') || str_contains($t, 'plot') || str_contains($t, 'stand')
-            || str_contains($t, 'erf')) {
+            || str_contains($t, 'erf') || $t === 'land') {
+            // Bare "Land" — appeared in prospecting_listings as 2 rows that
+            // were silently classified as full_title by the keyword default.
+            // It's vacant land in every observed portal context. Equality
+            // (not str_contains) so we don't swallow "Vacant Land" or any
+            // other phrase that already matched above.
             return self::TITLE_VACANT;
         }
         return self::TITLE_FULL;

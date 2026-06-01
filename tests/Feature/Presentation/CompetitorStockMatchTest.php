@@ -60,13 +60,22 @@ final class CompetitorStockMatchTest extends TestCase
     {
         [$subject, $agencyId] = $this->seedSubject(price: 2_000_000, beds: 3, suburb: 'Uvongo', type: 'House');
 
-        // Off-type listing that scores below the perfect tier.
-        $this->seedListing($agencyId, suburb: 'Uvongo', price: 2_000_000, beds: 3, type: 'Apartment');
+        // Same-FAMILY (freehold) non-exact-kind candidate — Vacant Land
+        // alongside a House subject. Level-1 gate passes (both freehold);
+        // Level-2 misses (different kind so no +5 bonus); score lands in
+        // the 85-92 range, perfect for a 50-vs-95 threshold split.
+        $this->seedListing($agencyId, suburb: 'Uvongo', price: 1_950_000, beds: null, type: 'Vacant land');
 
-        // Loose threshold (50) — should include the off-type listing.
-        Agency::find($agencyId)->update(['competitor_stock_min_score' => 50]);
+        // Loose threshold (50) — should include the listing.
+        Agency::find($agencyId)->update([
+            'competitor_stock_min_score' => 50,
+            // Step-up disabled so the family fallback always shows the
+            // non-exact-kind row (otherwise the floor=5 default would
+            // suppress it when exact-kind count is 0).
+            'competitor_stock_min_same_type' => 0,
+        ]);
         $loose = (new CompetitorStockMatchService())->findCompetitors($subject)->all();
-        $this->assertNotEmpty($loose, 'min_score=50 should keep the off-type listing');
+        $this->assertNotEmpty($loose, 'min_score=50 should keep the in-family listing');
 
         // Strict threshold (95) — same listing should now drop out.
         Agency::find($agencyId)->update(['competitor_stock_min_score' => 95]);
@@ -209,6 +218,146 @@ final class CompetitorStockMatchTest extends TestCase
         $this->assertNull($matches[0]['views']);
     }
 
+    // ── Level-1 hard gate (FH/SS family) ──────────────────────────────
+
+    public function test_sectional_subject_drops_freehold_candidates(): void
+    {
+        // Sectional Title apartment subject.
+        [$subject, $agencyId] = $this->seedSubject(
+            price: 1_200_000, beds: 2, suburb: 'Uvongo', type: 'Sectional Title',
+        );
+
+        $sectionalId = $this->seedListing($agencyId, suburb: 'Uvongo', price: 1_200_000, beds: 2, type: 'Apartment');
+        $townhouseId = $this->seedListing($agencyId, suburb: 'Uvongo', price: 1_200_000, beds: 2, type: 'Townhouse');
+        $houseId     = $this->seedListing($agencyId, suburb: 'Uvongo', price: 1_200_000, beds: 2, type: 'House');
+        $landId      = $this->seedListing($agencyId, suburb: 'Uvongo', price: 1_200_000, beds: null, type: 'Vacant land');
+
+        // Step-up off so we see the full pre-step-up result set.
+        Agency::find($agencyId)->update(['competitor_stock_min_same_type' => 0]);
+
+        $matches = (new CompetitorStockMatchService())->findCompetitors($subject)->all();
+        $ids = array_column($matches, 'listing_id');
+
+        $this->assertContains($sectionalId, $ids, 'Apartment must qualify for a sectional subject');
+        $this->assertContains($townhouseId, $ids, 'Townhouse must qualify for a sectional subject (same family)');
+        $this->assertNotContains($houseId, $ids, 'House (freehold) must NEVER reach a sectional subject');
+        $this->assertNotContains($landId,  $ids, 'Vacant land (freehold) must NEVER reach a sectional subject');
+    }
+
+    public function test_freehold_subject_drops_sectional_candidates(): void
+    {
+        // Full-title house subject.
+        [$subject, $agencyId] = $this->seedSubject(
+            price: 2_000_000, beds: 3, suburb: 'Uvongo', type: 'House',
+        );
+
+        $houseId     = $this->seedListing($agencyId, suburb: 'Uvongo', price: 2_000_000, beds: 3, type: 'House');
+        $landId      = $this->seedListing($agencyId, suburb: 'Uvongo', price: 1_900_000, beds: null, type: 'Vacant land');
+        $apartmentId = $this->seedListing($agencyId, suburb: 'Uvongo', price: 2_000_000, beds: 3, type: 'Apartment');
+        $townhouseId = $this->seedListing($agencyId, suburb: 'Uvongo', price: 2_000_000, beds: 3, type: 'Townhouse');
+
+        Agency::find($agencyId)->update(['competitor_stock_min_same_type' => 0]);
+
+        $matches = (new CompetitorStockMatchService())->findCompetitors($subject)->all();
+        $ids = array_column($matches, 'listing_id');
+
+        $this->assertContains($houseId, $ids, 'House must qualify for a freehold subject');
+        $this->assertContains($landId,  $ids, 'Vacant land must qualify for a freehold subject (same family)');
+        $this->assertNotContains($apartmentId, $ids, 'Apartment (sectional) must NEVER reach a freehold subject');
+        $this->assertNotContains($townhouseId, $ids, 'Townhouse (sectional) must NEVER reach a freehold subject');
+    }
+
+    public function test_commercial_and_industrial_excluded_for_residential_subjects(): void
+    {
+        [$subject, $agencyId] = $this->seedSubject(price: 2_000_000, beds: 3, suburb: 'Uvongo', type: 'House');
+
+        $okId        = $this->seedListing($agencyId, suburb: 'Uvongo', price: 2_000_000, beds: 3, type: 'House');
+        $commercId   = $this->seedListing($agencyId, suburb: 'Uvongo', price: 2_000_000, beds: null, type: 'Commercial');
+        $industrialId = $this->seedListing($agencyId, suburb: 'Uvongo', price: 2_000_000, beds: null, type: 'Industrial');
+
+        $matches = (new CompetitorStockMatchService())->findCompetitors($subject)->all();
+        $ids = array_column($matches, 'listing_id');
+
+        $this->assertContains($okId, $ids);
+        $this->assertNotContains($commercId,   $ids, 'Commercial must be excluded from residential matching');
+        $this->assertNotContains($industrialId,$ids, 'Industrial must be excluded from residential matching');
+    }
+
+    // ── Level-2 preference (exact kind > same-family-other-kind) ──────
+
+    public function test_apartment_subject_ranks_apartments_above_townhouses(): void
+    {
+        [$subject, $agencyId] = $this->seedSubject(
+            price: 1_200_000, beds: 2, suburb: 'Uvongo', type: 'Sectional Title',
+        );
+
+        // Both candidates are same Level-1 family (sectional). Apartment
+        // is exact-kind for a "Sectional Title" subject (normaliseTypeKind
+        // maps both "Sectional Title" and "Apartment" to 'apartment').
+        // Townhouse is same-family-different-kind.
+        $aptId  = $this->seedListing($agencyId, suburb: 'Uvongo', price: 1_200_000, beds: 2, type: 'Apartment');
+        $thId   = $this->seedListing($agencyId, suburb: 'Uvongo', price: 1_200_000, beds: 2, type: 'Townhouse');
+
+        // Step-up off so both show. The +5 exact-kind bonus must push
+        // apartment above townhouse in the score sort.
+        Agency::find($agencyId)->update(['competitor_stock_min_same_type' => 0]);
+
+        $matches = (new CompetitorStockMatchService())->findCompetitors($subject)->values()->all();
+        $this->assertCount(2, $matches);
+
+        // First row by score-DESC sort = apartment. Second = townhouse.
+        $this->assertSame($aptId, $matches[0]['listing_id'], 'Apartment must rank above townhouse for apartment subject');
+        $this->assertSame('exact', $matches[0]['level2_match']);
+        $this->assertSame($thId,  $matches[1]['listing_id']);
+        $this->assertSame('family', $matches[1]['level2_match']);
+        $this->assertGreaterThan($matches[1]['score'], $matches[0]['score'],
+            'Apartment score must exceed townhouse score (Level-2 +5 bonus)');
+    }
+
+    // ── Step-up fallback ──────────────────────────────────────────────
+
+    public function test_step_up_suppresses_other_kinds_when_exact_count_meets_floor(): void
+    {
+        [$subject, $agencyId] = $this->seedSubject(
+            price: 2_000_000, beds: 3, suburb: 'Uvongo', type: 'House',
+        );
+
+        // Floor = 2. Seed 2 exact-kind (House) + 1 same-family other-kind
+        // (Vacant land). With floor met, step-up suppresses non-exact.
+        Agency::find($agencyId)->update(['competitor_stock_min_same_type' => 2]);
+
+        $h1 = $this->seedListing($agencyId, suburb: 'Uvongo', price: 2_000_000, beds: 3, type: 'House');
+        $h2 = $this->seedListing($agencyId, suburb: 'Uvongo', price: 2_050_000, beds: 3, type: 'House');
+        $vl = $this->seedListing($agencyId, suburb: 'Uvongo', price: 2_000_000, beds: null, type: 'Vacant land');
+
+        $matches = (new CompetitorStockMatchService())->findCompetitors($subject)->all();
+        $ids = array_column($matches, 'listing_id');
+
+        $this->assertContains($h1, $ids);
+        $this->assertContains($h2, $ids);
+        $this->assertNotContains($vl, $ids, 'Vacant land must be suppressed when exact-kind floor is met');
+    }
+
+    public function test_step_up_widens_to_family_when_exact_count_below_floor(): void
+    {
+        [$subject, $agencyId] = $this->seedSubject(
+            price: 2_000_000, beds: 3, suburb: 'Uvongo', type: 'House',
+        );
+
+        // Floor = 5. Only 1 House + 1 Vacant land available. Exact-kind
+        // count (1) < floor (5) → widen to include same-family other kind.
+        Agency::find($agencyId)->update(['competitor_stock_min_same_type' => 5]);
+
+        $h1 = $this->seedListing($agencyId, suburb: 'Uvongo', price: 2_000_000, beds: 3, type: 'House');
+        $vl = $this->seedListing($agencyId, suburb: 'Uvongo', price: 2_000_000, beds: null, type: 'Vacant land');
+
+        $matches = (new CompetitorStockMatchService())->findCompetitors($subject)->all();
+        $ids = array_column($matches, 'listing_id');
+
+        $this->assertContains($h1, $ids);
+        $this->assertContains($vl, $ids, 'Vacant land must surface when exact-kind is below floor (step-up)');
+    }
+
     // ── helpers ────────────────────────────────────────────────────────
 
     /** @return array{0:Property, 1:int} */
@@ -243,7 +392,7 @@ final class CompetitorStockMatchTest extends TestCase
         return [$property, $agencyId];
     }
 
-    private function seedListing(int $agencyId, string $suburb, int $price, int $beds, string $type, ?string $portalRef = null): int
+    private function seedListing(int $agencyId, string $suburb, int $price, ?int $beds, string $type, ?string $portalRef = null): int
     {
         return (int) DB::table('prospecting_listings')->insertGetId([
             'agency_id'         => $agencyId,
@@ -251,12 +400,12 @@ final class CompetitorStockMatchTest extends TestCase
             'portal_source'     => 'p24',
             'portal_ref'        => $portalRef ?? ('P24-' . Str::random(8)),
             'portal_url'        => 'https://www.property24.com/' . Str::random(10),
-            'address'           => $beds . 'BR ' . $type . ', ' . $suburb,
+            'address'           => ($beds ?? 0) . 'BR ' . $type . ', ' . $suburb,
             'suburb'            => $suburb,
             'price'             => $price,
             'bedrooms'          => $beds,
-            'bathrooms'         => 2,
-            'property_size_m2'  => 150,
+            'bathrooms'         => $beds !== null ? 2 : null,
+            'property_size_m2'  => $beds !== null ? 150 : null,
             'erf_size_m2'       => 500,
             'property_type'     => $type,
             'first_seen_at'     => now(),
