@@ -775,23 +775,62 @@ class AnalysisDataService
 
     private function compileHoldingCost(Presentation $p): array
     {
-        $breakdown = [
-            'Bond payment'    => (float) ($p->monthly_bond ?? 0),
-            'Rates'           => (float) ($p->monthly_rates ?? 0),
-            'Levies'          => (float) ($p->monthly_levies ?? 0),
-            'Insurance'       => (float) ($p->monthly_insurance ?? 0),
-            'Utilities'       => (float) ($p->monthly_utilities ?? 0),
-            'Opportunity cost' => (float) ($p->monthly_opportunity_cost ?? 0),
+        // Title-type-branched component set — only render the components
+        // that apply to this property's title type (sectional gets levy
+        // + utilities; freehold gets garden/pool/security; both get
+        // rates/insurance/opp). HoldingCostEstimator's componentsFor()
+        // is the single source of truth — re-use the same branching
+        // here so the breakdown lines mirror the components that get
+        // resolved and overridden.
+        $titleType = $p->property?->title_type ?? null;
+        $estimator = app(HoldingCostEstimator::class);
+        $components = $estimator->componentsFor($titleType);
+
+        // Map component key → display label + presentation column.
+        $componentMap = [
+            'rates'            => ['label' => 'Rates',           'col' => 'monthly_rates'],
+            'levy'             => ['label' => 'Levies',          'col' => 'monthly_levies'],
+            'insurance'        => ['label' => 'Insurance',       'col' => 'monthly_insurance'],
+            'utilities'        => ['label' => 'Utilities',       'col' => 'monthly_utilities'],
+            'garden'           => ['label' => 'Garden service',  'col' => 'monthly_garden'],
+            'pool'             => ['label' => 'Pool service',    'col' => 'monthly_pool'],
+            'security'         => ['label' => 'Security',        'col' => 'monthly_security'],
+            'bond'             => ['label' => 'Bond payment',    'col' => 'monthly_bond'],
+            'opportunity_cost' => ['label' => 'Opportunity cost','col' => 'monthly_opportunity_cost'],
         ];
+
+        // Bond is independent of title type — always show.
+        $components = array_values(array_unique(array_merge(['bond'], $components)));
+
+        $breakdown   = [];
+        $components_meta = [];
+        foreach ($components as $component) {
+            if (!isset($componentMap[$component])) continue;
+            $label = $componentMap[$component]['label'];
+            $col   = $componentMap[$component]['col'];
+            $value = (float) ($p->{$col} ?? 0);
+            $breakdown[$label] = $value;
+            $components_meta[] = [
+                'component' => $component,
+                'label'     => $label,
+                'column'    => $col,
+                'value'     => $value,
+            ];
+        }
 
         $monthly = array_sum($breakdown);
 
         return [
-            'breakdown'      => $breakdown,
-            'monthly_total'  => $monthly,
-            'projected_3m'   => $monthly * 3,
-            'projected_6m'   => $monthly * 6,
-            'projected_12m'  => $monthly * 12,
+            'breakdown'       => $breakdown,
+            'monthly_total'   => $monthly,
+            'projected_3m'    => $monthly * 3,
+            'projected_6m'    => $monthly * 6,
+            'projected_12m'   => $monthly * 12,
+            // Per-component metadata for the inline-edit UI — each row
+            // exposes its component key, column name, and current value
+            // so the JS knows what to POST on override.
+            'components'      => $components_meta,
+            'title_type'      => $titleType,
         ];
     }
 

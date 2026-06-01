@@ -782,26 +782,49 @@
     </div>
     @endif
 
-    {{-- ── 6. HOLDING COST IMPACT ───────────────────────────────────────── --}}
-    @if($holding['monthly_total'] > 0)
-    <div class="ds-status-card mb-4" style="border-left-color: var(--ds-cyan);">
+    {{-- ── 6. HOLDING COST IMPACT — inline-edit per component ─────────── --}}
+    @php
+        // Build the inline-edit URL once (rendered inside the version
+        // context via the route). When $version isn't present (e.g.
+        // pre-version analysis tab) the URL renders empty and the
+        // edit-on-click degrades to a read-only display.
+        $hcUrl = isset($version) && $version
+            ? route('presentations.review.holding-cost-component', ['version' => $version->id])
+            : null;
+        $hcCsrf = csrf_token();
+        $hcComponents = $holding['components'] ?? [];
+    @endphp
+    @if(!empty($hcComponents))
+    <div class="ds-status-card mb-4" style="border-left-color: var(--ds-cyan);" id="holding-cost-card"
+         @if($hcUrl) data-url="{{ $hcUrl }}" data-csrf="{{ $hcCsrf }}" @endif>
         <h3 class="ds-section-header">6. Holding Cost Impact</h3>
+        @if($hcUrl)
+            <p class="text-xs mb-3 italic" style="color: var(--text-muted);">
+                Tap any value to edit. Your numbers help CoreX predict holding costs for similar properties in future presentations.
+            </p>
+        @endif
         <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
             {{-- Monthly breakdown --}}
             <div>
                 <p class="text-xs mb-2 font-medium" style="color: var(--text-muted);">Monthly Breakdown</p>
-                <div class="space-y-1">
-                    @foreach($holding['breakdown'] as $label => $amount)
-                        @if($amount > 0)
-                        <div class="flex justify-between text-sm">
-                            <span style="color: var(--text-secondary);">{{ $label }}</span>
-                            <span class="font-medium" style="color: var(--text-primary);">R {{ number_format($amount) }}</span>
+                <div class="space-y-1" id="hc-breakdown-list">
+                    @foreach($hcComponents as $cmp)
+                        <div class="hc-row flex justify-between text-sm items-center" data-component="{{ $cmp['component'] }}" data-column="{{ $cmp['column'] }}">
+                            <span style="color: var(--text-secondary);">{{ $cmp['label'] }}</span>
+                            @if($hcUrl)
+                                <span class="hc-value-cell" style="display:inline-flex;align-items:center;gap:6px;">
+                                    <span class="hc-value font-medium" style="color: var(--text-primary); cursor:pointer; padding:2px 6px; border-radius:4px;" title="Click to edit">
+                                        R <span class="hc-value-amount">{{ number_format($cmp['value']) }}</span>
+                                    </span>
+                                </span>
+                            @else
+                                <span class="font-medium" style="color: var(--text-primary);">R {{ number_format($cmp['value']) }}</span>
+                            @endif
                         </div>
-                        @endif
                     @endforeach
                     <div class="flex justify-between text-sm pt-2 border-t font-bold" style="border-color: var(--border);">
                         <span style="color: var(--text-primary);">Monthly Total</span>
-                        <span style="color: var(--text-primary);">R {{ number_format($holding['monthly_total']) }}</span>
+                        <span style="color: var(--text-primary);">R <span id="hc-monthly-total">{{ number_format($holding['monthly_total']) }}</span></span>
                     </div>
                 </div>
             </div>
@@ -812,23 +835,122 @@
                 <div class="space-y-2">
                     <div class="flex justify-between items-center bg-amber-50 rounded-md px-4 py-3">
                         <span class="text-sm text-amber-700">3 months</span>
-                        <span class="font-bold text-amber-800">R {{ number_format($holding['projected_3m']) }}</span>
+                        <span class="font-bold text-amber-800">R <span id="hc-proj-3m">{{ number_format($holding['projected_3m']) }}</span></span>
                     </div>
                     <div class="flex justify-between items-center bg-orange-50 rounded-md px-4 py-3">
                         <span class="text-sm text-orange-700">6 months</span>
-                        <span class="font-bold text-orange-800">R {{ number_format($holding['projected_6m']) }}</span>
+                        <span class="font-bold text-orange-800">R <span id="hc-proj-6m">{{ number_format($holding['projected_6m']) }}</span></span>
                     </div>
                     <div class="flex justify-between items-center bg-red-50 rounded-md px-4 py-3">
                         <span class="text-sm text-red-700">12 months</span>
-                        <span class="font-bold text-red-800">R {{ number_format($holding['projected_12m']) }}</span>
+                        <span class="font-bold text-red-800">R <span id="hc-proj-12m">{{ number_format($holding['projected_12m']) }}</span></span>
                     </div>
                 </div>
                 <p class="mt-3 text-xs text-red-600 font-medium text-center">
-                    Every month at current asking price costs R {{ number_format($holding['monthly_total']) }}
+                    Every month at current asking price costs R <span id="hc-monthly-total-2">{{ number_format($holding['monthly_total']) }}</span>
                 </p>
             </div>
         </div>
     </div>
+
+    @if($hcUrl)
+    {{-- Inline edit-on-click handler. Self-contained — works wherever
+         the partial is included as long as a `data-url` is present. --}}
+    <script>
+    (function () {
+        var card = document.getElementById('holding-cost-card');
+        if (!card || !card.dataset.url) return;
+        var url = card.dataset.url;
+        var csrf = card.dataset.csrf;
+
+        function fmt(n) {
+            if (n === null || n === undefined) return '—';
+            return Number(n).toLocaleString('en-ZA', { maximumFractionDigits: 0 });
+        }
+
+        function applyHoldingCostUpdate(holding) {
+            if (!holding) return;
+            if (typeof holding.monthly_total !== 'undefined') {
+                var v = fmt(holding.monthly_total);
+                document.getElementById('hc-monthly-total').textContent = v;
+                var sec = document.getElementById('hc-monthly-total-2');
+                if (sec) sec.textContent = v;
+            }
+            if (typeof holding.projected_3m  !== 'undefined') document.getElementById('hc-proj-3m').textContent  = fmt(holding.projected_3m);
+            if (typeof holding.projected_6m  !== 'undefined') document.getElementById('hc-proj-6m').textContent  = fmt(holding.projected_6m);
+            if (typeof holding.projected_12m !== 'undefined') document.getElementById('hc-proj-12m').textContent = fmt(holding.projected_12m);
+            if (Array.isArray(holding.components)) {
+                holding.components.forEach(function (c) {
+                    var row = card.querySelector('.hc-row[data-component="' + c.component + '"]');
+                    if (!row) return;
+                    var amt = row.querySelector('.hc-value-amount');
+                    if (amt) amt.textContent = fmt(c.value);
+                });
+            }
+        }
+
+        card.querySelectorAll('.hc-row .hc-value').forEach(function (valEl) {
+            valEl.addEventListener('click', function () {
+                if (valEl.dataset.editing === '1') return;
+                valEl.dataset.editing = '1';
+
+                var row = valEl.closest('.hc-row');
+                var component = row.dataset.component;
+                var amtEl = valEl.querySelector('.hc-value-amount');
+                var current = parseInt(String(amtEl.textContent).replace(/[^\d]/g, ''), 10) || 0;
+
+                var input = document.createElement('input');
+                input.type = 'number'; input.min = '0'; input.step = '1';
+                input.value = String(current);
+                input.style.width = '90px';
+                input.style.padding = '2px 6px';
+                input.style.border = '1px solid var(--border)';
+                input.style.borderRadius = '4px';
+                input.style.fontSize = '13px';
+                input.style.textAlign = 'right';
+
+                var cell = valEl.parentElement;
+                valEl.style.display = 'none';
+                cell.insertBefore(input, valEl);
+                input.focus();
+                input.select();
+
+                function commit() {
+                    var nextVal = parseInt(input.value, 10);
+                    if (isNaN(nextVal) || nextVal < 0) nextVal = 0;
+                    input.disabled = true;
+                    var body = new FormData();
+                    body.append('_token', csrf);
+                    body.append('component', component);
+                    body.append('monthly_value_zar', String(nextVal));
+                    fetch(url, {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                        body: body, credentials: 'same-origin',
+                    }).then(function (r) { return r.json(); }).then(function (d) {
+                        if (d && d.ok) {
+                            amtEl.textContent = fmt(d.value);
+                            applyHoldingCostUpdate(d.holding_cost);
+                        }
+                        cleanup();
+                    }).catch(function () { cleanup(); });
+                }
+                function cancel() { cleanup(); }
+                function cleanup() {
+                    if (input.parentElement) input.parentElement.removeChild(input);
+                    valEl.style.display = '';
+                    delete valEl.dataset.editing;
+                }
+                input.addEventListener('blur',  commit);
+                input.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter')  { e.preventDefault(); commit(); }
+                    if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+                });
+            });
+        });
+    })();
+    </script>
+    @endif
     @endif
 
     {{-- ── 7. KEY INSIGHTS ──────────────────────────────────────────────── --}}

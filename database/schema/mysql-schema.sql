@@ -220,6 +220,9 @@ CREATE TABLE `agencies` (
   `presentations_default_insurance_per_million_zar` smallint unsigned NOT NULL DEFAULT '200' COMMENT 'Monthly building insurance per R1M of property value.',
   `presentations_default_utilities_zar` smallint unsigned NOT NULL DEFAULT '1200' COMMENT 'Flat monthly utilities estimate.',
   `presentations_default_opportunity_cost_pct` decimal(5,2) NOT NULL DEFAULT '8.00' COMMENT 'Annual % return on net equity; divided by 12 for monthly opportunity cost.',
+  `presentations_default_garden_zar` smallint unsigned NOT NULL DEFAULT '800' COMMENT 'Freehold garden service — Tier 2 default monthly Rands.',
+  `presentations_default_pool_zar` smallint unsigned NOT NULL DEFAULT '600' COMMENT 'Freehold pool service — Tier 2 default monthly Rands.',
+  `presentations_default_security_zar` smallint unsigned NOT NULL DEFAULT '1500' COMMENT 'Freehold security/estate fees — Tier 2 default monthly Rands.',
   `snapshot_link_default_expiry_days` smallint unsigned NOT NULL DEFAULT '21' COMMENT 'Default expiry window for /p/{token} share links.',
   `snapshot_link_ip_masking` tinyint(1) NOT NULL DEFAULT '1' COMMENT 'When true, store IPs masked to /24 (POPIA-respectful). Opt-out only when fraud investigation requires it.',
   `presentation_staleness_days` smallint unsigned NOT NULL DEFAULT '21' COMMENT 'Days after issue before public viewer shows the data-may-be-dated banner. Range 7-90 enforced in app layer.',
@@ -4609,6 +4612,56 @@ CREATE TABLE `geocoding_runs` (
   KEY `geocoding_runs_batch_id_index` (`batch_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `holding_cost_data_points`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `holding_cost_data_points` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `agency_id` bigint unsigned NOT NULL,
+  `presentation_version_id` bigint unsigned DEFAULT NULL,
+  `property_id` bigint unsigned DEFAULT NULL,
+  `tracked_property_id` bigint unsigned DEFAULT NULL,
+  `component` enum('rates','levy','insurance','utilities','garden','pool','security','bond','opportunity_cost') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `monthly_value_zar` bigint unsigned NOT NULL,
+  `scheme_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `suburb_normalised` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `municipality` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `property_type` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `title_type` enum('full_title','sectional_title','vacant_land','other') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `property_value_band` varchar(16) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `source` enum('agent_override','cma_import','manual_capture','property_record') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `source_ref` varchar(200) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'e.g. property_id, market_report_id, presentation_id',
+  `entered_by_user_id` bigint unsigned DEFAULT NULL,
+  `is_excluded` tinyint(1) NOT NULL DEFAULT '0',
+  `excluded_by_user_id` bigint unsigned DEFAULT NULL,
+  `excluded_at` timestamp NULL DEFAULT NULL,
+  `exclusion_reason` varchar(200) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `holding_cost_data_points_presentation_version_id_foreign` (`presentation_version_id`),
+  KEY `holding_cost_data_points_entered_by_user_id_foreign` (`entered_by_user_id`),
+  KEY `holding_cost_data_points_excluded_by_user_id_foreign` (`excluded_by_user_id`),
+  KEY `idx_hcdp_levy_lookup` (`agency_id`,`component`,`scheme_name`),
+  KEY `idx_hcdp_suburb_type_lookup` (`agency_id`,`component`,`suburb_normalised`,`property_type`),
+  KEY `idx_hcdp_muni_lookup` (`agency_id`,`component`,`municipality`),
+  KEY `idx_hcdp_override_lookup` (`agency_id`,`presentation_version_id`,`component`,`source`),
+  KEY `holding_cost_data_points_property_id_index` (`property_id`),
+  KEY `holding_cost_data_points_tracked_property_id_index` (`tracked_property_id`),
+  KEY `holding_cost_data_points_component_index` (`component`),
+  KEY `holding_cost_data_points_scheme_name_index` (`scheme_name`),
+  KEY `holding_cost_data_points_suburb_normalised_index` (`suburb_normalised`),
+  KEY `holding_cost_data_points_municipality_index` (`municipality`),
+  KEY `holding_cost_data_points_property_value_band_index` (`property_value_band`),
+  KEY `holding_cost_data_points_source_index` (`source`),
+  KEY `holding_cost_data_points_is_excluded_index` (`is_excluded`),
+  CONSTRAINT `holding_cost_data_points_agency_id_foreign` FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `holding_cost_data_points_entered_by_user_id_foreign` FOREIGN KEY (`entered_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `holding_cost_data_points_excluded_by_user_id_foreign` FOREIGN KEY (`excluded_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `holding_cost_data_points_presentation_version_id_foreign` FOREIGN KEY (`presentation_version_id`) REFERENCES `presentation_versions` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `impersonation_logs`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -7137,6 +7190,9 @@ CREATE TABLE `presentations` (
   `monthly_levies` decimal(12,2) DEFAULT NULL,
   `monthly_insurance` decimal(12,2) DEFAULT NULL,
   `monthly_utilities` decimal(12,2) DEFAULT NULL,
+  `monthly_garden` decimal(12,2) DEFAULT NULL,
+  `monthly_pool` decimal(12,2) DEFAULT NULL,
+  `monthly_security` decimal(12,2) DEFAULT NULL,
   `monthly_opportunity_cost` decimal(12,2) DEFAULT NULL,
   `cma_selected_range` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'middle',
   `vicinity_selected_range` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'middle',
@@ -11012,3 +11068,6 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (803,'2026_05_28_18
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (804,'2026_05_29_100000_add_open_hours_and_push_master_to_dashboard_settings',239);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (805,'2026_06_19_120000_add_competitor_stock_settings_to_agencies',239);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (806,'2026_06_19_120100_add_included_competitor_ids_to_presentation_versions',239);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (807,'2026_06_19_140000_create_holding_cost_data_points_table',240);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (808,'2026_06_19_140100_add_freehold_holding_defaults_to_agencies',240);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (809,'2026_06_19_140200_add_freehold_monthly_to_presentations',240);

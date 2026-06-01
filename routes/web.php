@@ -2231,6 +2231,10 @@ Route::middleware(['auth', 'permission:access_presentations'])->prefix('presenta
         [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'toggleCompetitor'])
         ->where('listingId', '[0-9]+')
         ->name('review.toggle-competitor');
+    // Holding Cost — per-component inline override (Section 6).
+    Route::post('/version/{version}/review/holding-cost-component',
+        [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'setHoldingCostComponent'])
+        ->name('review.holding-cost-component');
     // Build 3 — agent picks/clears condition on the review screen.
     Route::post('/version/{version}/review/condition',
         [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'setCondition'])

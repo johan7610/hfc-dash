@@ -7,6 +7,9 @@ namespace App\Http\Controllers\Presentation;
 use App\Http\Controllers\Controller;
 use App\Models\AgentOverride;
 use App\Services\Presentations\CompetitorStockMatchService;
+use App\Models\HoldingCostDataPoint;
+use App\Services\Presentations\HoldingCostEstimator;
+use App\Support\Presentations\SuburbMatcher;
 use App\Models\PresentationSoldComp;
 use App\Models\PresentationVersion;
 use App\Models\PropertySettingItem;
@@ -525,6 +528,112 @@ final class PresentationReviewController extends Controller
             'override_id'  => AgentOverride::where('presentation_version_id', $version->id)
                                   ->where('target_id', 'competitor:' . $listingId)
                                   ->latest('id')->value('id'),
+        ]);
+    }
+
+    /**
+     * Holding-cost component override. Writes to THREE places in one
+     * transaction:
+     *   1. presentations.monthly_<component>     — the persisted breakdown
+     *   2. holding_cost_data_points (source=agent_override) — grows
+     *                                              the learned-average dataset
+     *   3. agent_overrides (TYPE_FIELD_EDITED)   — audit trail
+     *
+     * Returns the recomputed holding-cost breakdown so the JS can
+     * live-patch the totals + 3/6/12-month projections in place.
+     */
+    public function setHoldingCostComponent(Request $request, PresentationVersion $version): JsonResponse
+    {
+        $this->authoriseReviewer($request, $version);
+
+        $validComponents = [
+            HoldingCostDataPoint::COMPONENT_RATES,
+            HoldingCostDataPoint::COMPONENT_LEVY,
+            HoldingCostDataPoint::COMPONENT_INSURANCE,
+            HoldingCostDataPoint::COMPONENT_UTILITIES,
+            HoldingCostDataPoint::COMPONENT_GARDEN,
+            HoldingCostDataPoint::COMPONENT_POOL,
+            HoldingCostDataPoint::COMPONENT_SECURITY,
+            HoldingCostDataPoint::COMPONENT_BOND,
+            HoldingCostDataPoint::COMPONENT_OPPORTUNITY_COST,
+        ];
+
+        $data = $request->validate([
+            'component'         => 'required|string|in:' . implode(',', $validComponents),
+            'monthly_value_zar' => 'required|numeric|min:0|max:9999999999',
+        ]);
+
+        $estimator = app(HoldingCostEstimator::class);
+        $column    = $estimator->columnFor($data['component']);
+        if ($column === null) {
+            return response()->json(['error' => 'no_persisted_column_for_component'], 422);
+        }
+
+        $presentation = $version->presentation()->with(['property', 'fields'])->first();
+        if (!$presentation) {
+            return response()->json(['error' => 'presentation_not_found'], 404);
+        }
+
+        $previousValue = $presentation->{$column};
+        $newValue      = (int) round((float) $data['monthly_value_zar']);
+
+        // Build the context once so the data-point captures all the
+        // averaging keys for future Tier 1 lookups.
+        $property = $presentation->property;
+        $asking   = $presentation->asking_price_inc !== null ? (int) $presentation->asking_price_inc : 0;
+        $context  = $estimator->buildContext($presentation, $property, $asking);
+
+        DB::transaction(function () use (
+            $version, $presentation, $property, $column, $newValue, $previousValue,
+            $data, $context, $request, $estimator
+        ) {
+            // 1. Persist on the presentation column.
+            $presentation->{$column} = $newValue;
+            $presentation->save();
+
+            // 2. Capture as a learning data point. Even when the
+            //    value equals what tiering would have produced, store
+            //    it — the agency exclude-grid is the future tightening
+            //    lever, not pre-filtering here.
+            HoldingCostDataPoint::create([
+                'agency_id'               => $version->agency_id,
+                'presentation_version_id' => $version->id,
+                'property_id'             => $property?->id,
+                'component'               => $data['component'],
+                'monthly_value_zar'       => $newValue,
+                'scheme_name'             => $context['scheme_name'],
+                'suburb_normalised'       => $context['suburb_normalised'],
+                'municipality'            => $context['municipality'],
+                'property_type'           => $context['property_type'],
+                'title_type'              => $context['title_type'],
+                'property_value_band'     => $context['property_value_band'],
+                'source'                  => HoldingCostDataPoint::SOURCE_AGENT_OVERRIDE,
+                'source_ref'              => 'presentation_version:' . $version->id . ':' . $column,
+                'entered_by_user_id'      => $request->user()->id,
+            ]);
+
+            // 3. Audit row.
+            AgentOverride::create([
+                'agency_id'               => $version->agency_id,
+                'presentation_version_id' => $version->id,
+                'user_id'                 => $request->user()->id,
+                'override_type'           => AgentOverride::TYPE_FIELD_EDITED,
+                'target_id'               => 'holding_cost:' . $data['component'],
+                'before_value'            => [$column => $previousValue],
+                'after_value'             => [$column => $newValue],
+            ]);
+        });
+
+        // Recompute the holding-cost block + return for live patch.
+        $analysis = (new AnalysisDataService())->compile($presentation->fresh(['property', 'fields']), $version);
+        $holding  = $analysis['holding_cost'] ?? [];
+
+        return response()->json([
+            'ok'           => true,
+            'component'    => $data['component'],
+            'column'       => $column,
+            'value'        => $newValue,
+            'holding_cost' => $holding,
         ]);
     }
 
