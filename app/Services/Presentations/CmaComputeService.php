@@ -238,10 +238,13 @@ final class CmaComputeService
             return $comps;
         }
         usort($rm2List, fn($a, $b) => bccomp($a, $b, self::SCALE));
-        $n   = count($rm2List);
-        $q1  = $rm2List[(int) floor($n * 0.25)];
-        $med = $rm2List[(int) floor($n * 0.5)];
-        $q3  = $rm2List[(int) floor($n * 0.75)];
+        // Type-7 percentiles for Q1/median/Q3 — same fix as the
+        // tile-driving poolStats. On even-length R/m² pools the
+        // pre-fix nearest-rank indexer produced a fence anchored on
+        // the wrong values, drifting the IQR cleaning decision.
+        $q1  = $this->percentile($rm2List, 0.25);
+        $med = $this->percentile($rm2List, 0.5);
+        $q3  = $this->percentile($rm2List, 0.75);
         $iqr = bcsub($q3, $q1, self::SCALE);
         // Per locked spec: fence = median − multiplier × IQR.
         // Median anchor is more aggressive than Q1 anchor — catches
@@ -295,11 +298,63 @@ final class CmaComputeService
             'n_total'     => $n,
             'n_with_size' => $nWithSize,
             'min'         => $this->toInt($sortedPricesAsc[0]),
-            'p25'         => $this->toInt($sortedPricesAsc[(int) floor($n * 0.25)]),
-            'median'      => $this->toInt($sortedPricesAsc[(int) floor($n * 0.5)]),
-            'p75'         => $this->toInt($sortedPricesAsc[(int) floor($n * 0.75)]),
+            'p25'         => $this->toInt($this->percentile($sortedPricesAsc, 0.25)),
+            'median'      => $this->toInt($this->percentile($sortedPricesAsc, 0.5)),
+            'p75'         => $this->toInt($this->percentile($sortedPricesAsc, 0.75)),
             'max'         => $this->toInt($sortedPricesAsc[$n - 1]),
         ];
+    }
+
+    /**
+     * Type-7 linear-interpolation percentile (NumPy / R / Excel default).
+     *
+     *   idx = (n - 1) * p     (0-based)
+     *   integer idx → return $sorted[idx]
+     *   fractional idx → bcmath linear interpolate between
+     *                    $sorted[floor(idx)] and $sorted[ceil(idx)]
+     *
+     * Replaces the pre-fix nearest-rank `$sorted[floor(n*p)]` pattern
+     * which grabbed the upper-middle element on even-count pools at
+     * p=0.5 (producing the wrong median for n in {2,4,6,...}). Same
+     * pattern duplicated at four call sites — all routed through this
+     * helper to fix the class structurally. For p=0.5 on even n,
+     * Type-7 reduces exactly to "average of the two middle elements"
+     * — the textbook even-count median.
+     *
+     * bcmath ONLY for the new arithmetic (per CLAUDE.md money-math
+     * non-negotiable). Caller guards empty pools — helper assumes
+     * count ≥ 1.
+     *
+     * @param  list<string> $sortedAsc  bcmath-numeric strings, ascending
+     * @param  float        $p          0.0–1.0
+     * @return string                   bcmath at self::SCALE
+     */
+    private function percentile(array $sortedAsc, float $p): string
+    {
+        $n = count($sortedAsc);
+        if ($n === 1) {
+            return (string) $sortedAsc[0];
+        }
+
+        $idx     = ($n - 1) * $p;
+        $lowerIx = (int) floor($idx);
+        $upperIx = (int) ceil($idx);
+
+        if ($lowerIx === $upperIx) {
+            return (string) $sortedAsc[$lowerIx];
+        }
+
+        $lower = (string) $sortedAsc[$lowerIx];
+        $upper = (string) $sortedAsc[$upperIx];
+        $diff  = bcsub($upper, $lower, self::SCALE);
+
+        // Fraction is bounded to (0, 1) here — floor/ceil bracket idx.
+        // number_format pins the bcmath string at fixed precision so
+        // locale settings can't slip a comma into the decimal mark.
+        $fracStr = number_format($idx - $lowerIx, 6, '.', '');
+        $delta   = bcmul($diff, $fracStr, self::SCALE);
+
+        return bcadd($lower, $delta, self::SCALE);
     }
 
     // ── method_median ───────────────────────────────────────────────────
@@ -313,7 +368,12 @@ final class CmaComputeService
         if ($n === 0) {
             return $this->emptyMethodResult($conditionPct);
         }
-        $raw = $sortedPricesAsc[(int) floor($n * 0.5)];
+        // Type-7 median via percentile helper — for even n this averages
+        // the two middle elements in bcmath (textbook even-count
+        // median). Pre-fix the nearest-rank `floor(n*0.5)` indexer
+        // grabbed the upper of the two middles, producing wrong values
+        // for every even-length pool.
+        $raw = $this->percentile($sortedPricesAsc, 0.5);
         return $this->methodResult($raw, $conditionPct, $n);
     }
 
@@ -366,7 +426,10 @@ final class CmaComputeService
         // SORT_STRING ('100.00' < '99.00'). Use a usort callback wrapping
         // bccomp for correctness.
         usort($rm2s, fn($a, $b) => bccomp($a, $b, self::SCALE));
-        $rm2Median = $rm2s[(int) floor(count($rm2s) * 0.5)];
+        // Type-7 median (same fix as methodMedian) — even-count pools
+        // now average the two middle R/m² values instead of grabbing
+        // the upper-middle.
+        $rm2Median = $this->percentile($rm2s, 0.5);
         $raw       = bcmul($rm2Median, (string) $subjectExtent, 0);
 
         return [
