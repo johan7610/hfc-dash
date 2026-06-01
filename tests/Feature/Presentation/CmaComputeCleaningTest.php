@@ -153,10 +153,19 @@ final class CmaComputeCleaningTest extends TestCase
         $this->assertSame(2, $ps['excluded_by_outlier']);
         $this->assertNull($ps['cleaning_fallback']);
 
-        // Preclean median = sorted[7] of [60k, 80k, 600k…1M] (14 items, idx 7) = 720k.
-        // Cleaned median = sorted[6] of legit (12 items, idx 6) = 750k.
-        $this->assertSame(720_000, $out['method_median']['preclean']['raw']);
-        $this->assertSame(750_000, $out['method_median']['raw']);
+        // Textbook even-count median (Type-7 percentile fix):
+        //   Preclean n=14 sorted [60k, 80k, 600k, 620k, 650k, 680k, 700k,
+        //     720k, 750k, 780k, 800k, 850k, 900k, 1M]. idx_0based =
+        //     13×0.5 = 6.5 → (sorted[6] + sorted[7]) / 2 = (700k + 720k)/2
+        //     = 710_000.
+        //   Cleaned n=12 sorted [600k, 620k, 650k, 680k, 700k, 720k, 750k,
+        //     780k, 800k, 850k, 900k, 1M]. idx_0based = 11×0.5 = 5.5 →
+        //     (sorted[5] + sorted[6]) / 2 = (720k + 750k)/2 = 735_000.
+        // (Pre-fix the buggy floor(n*0.5) nearest-rank returned the upper
+        // middle: sorted[7]=720k and sorted[6]=750k respectively — those
+        // are the assertions this test used to pin.)
+        $this->assertSame(710_000, $out['method_median']['preclean']['raw']);
+        $this->assertSame(735_000, $out['method_median']['raw']);
     }
 
     public function test_iqr_keeps_pres_5_style_legitimate_low_comps(): void

@@ -207,6 +207,117 @@ final class CmaComputeServiceTest extends TestCase
         $this->assertSame(1_200_000, $out['method_median']['condition_adjusted']);
     }
 
+    // ── Percentile indexing fix (Type-7 — fixes even-count median bug) ──
+
+    /**
+     * Staging-reported bug: median picked the upper-middle element on
+     * even-count pools. These tests pin the EXACT user-reported values
+     * with +3% condition applied — regression anchor against ever
+     * reverting to nearest-rank floor() indexing.
+     */
+    public function test_percentile_even_count_two_comps_median_matches_textbook_with_condition(): void
+    {
+        [$presentation, $agencyId] = $this->seedAgencyPropertyPresentation(extentM2: 100);
+        // 2 comps as reported: R 960k and R 745k.
+        $this->seedComp($presentation->id, $agencyId, 745_000, 100);
+        $this->seedComp($presentation->id, $agencyId, 960_000, 100);
+
+        $svc = new CmaComputeService();
+        $out = $svc->compute(
+            $presentation->fresh(['property', 'soldComps']),
+            $presentation->fresh('soldComps')->soldComps,
+            isSectional: false,
+            conditionContext: ['pct' => 3.0, 'label' => 'Good', 'source' => 'version_override'],
+        );
+        // Textbook even median: (745k + 960k) / 2 = 852_500. +3% = 878_075.
+        $this->assertSame(852_500, $out['method_median']['raw']);
+        $this->assertSame(878_075, $out['method_median']['condition_adjusted']);
+    }
+
+    public function test_percentile_even_count_four_comps_median_matches_textbook_with_condition(): void
+    {
+        [$presentation, $agencyId] = $this->seedAgencyPropertyPresentation(extentM2: 100);
+        // 4 comps as reported: R 700k, R 745k, R 960k, R 1_880k.
+        $this->seedComp($presentation->id, $agencyId, 700_000,   100);
+        $this->seedComp($presentation->id, $agencyId, 745_000,   100);
+        $this->seedComp($presentation->id, $agencyId, 960_000,   100);
+        $this->seedComp($presentation->id, $agencyId, 1_880_000, 100);
+
+        $svc = new CmaComputeService();
+        $out = $svc->compute(
+            $presentation->fresh(['property', 'soldComps']),
+            $presentation->fresh('soldComps')->soldComps,
+            isSectional: false,
+            conditionContext: ['pct' => 3.0, 'label' => 'Good', 'source' => 'version_override'],
+        );
+        // Sorted: [700, 745, 960, 1880]; median = (745k + 960k)/2 = 852_500.
+        // Same condition-adjusted value as 2-comp case above (different
+        // input, identical textbook median → identical tile).
+        $this->assertSame(852_500, $out['method_median']['raw']);
+        $this->assertSame(878_075, $out['method_median']['condition_adjusted']);
+    }
+
+    public function test_percentile_odd_count_one_comp_median_unchanged(): void
+    {
+        [$presentation, $agencyId] = $this->seedAgencyPropertyPresentation(extentM2: 100);
+        $this->seedComp($presentation->id, $agencyId, 960_000, 100);
+
+        $svc = new CmaComputeService();
+        $out = $svc->compute(
+            $presentation->fresh(['property', 'soldComps']),
+            $presentation->fresh('soldComps')->soldComps,
+            isSectional: false,
+            conditionContext: ['pct' => 3.0, 'label' => 'Good', 'source' => 'version_override'],
+        );
+        // n=1: single element. +3% → 988_800.
+        $this->assertSame(960_000, $out['method_median']['raw']);
+        $this->assertSame(988_800, $out['method_median']['condition_adjusted']);
+    }
+
+    public function test_percentile_odd_count_three_comps_median_unchanged(): void
+    {
+        [$presentation, $agencyId] = $this->seedAgencyPropertyPresentation(extentM2: 100);
+        $this->seedComp($presentation->id, $agencyId, 700_000, 100);
+        $this->seedComp($presentation->id, $agencyId, 745_000, 100);
+        $this->seedComp($presentation->id, $agencyId, 960_000, 100);
+
+        $svc = new CmaComputeService();
+        $out = $svc->compute(
+            $presentation->fresh(['property', 'soldComps']),
+            $presentation->fresh('soldComps')->soldComps,
+            isSectional: false,
+            conditionContext: ['pct' => 3.0, 'label' => 'Good', 'source' => 'version_override'],
+        );
+        // Odd n=3, true middle = 745_000. +3% = 767_350.
+        $this->assertSame(745_000, $out['method_median']['raw']);
+        $this->assertSame(767_350, $out['method_median']['condition_adjusted']);
+    }
+
+    public function test_percentile_type7_p25_and_p75_for_four_comp_pool(): void
+    {
+        [$presentation, $agencyId] = $this->seedAgencyPropertyPresentation(extentM2: 100);
+        $this->seedComp($presentation->id, $agencyId, 700_000,   100);
+        $this->seedComp($presentation->id, $agencyId, 745_000,   100);
+        $this->seedComp($presentation->id, $agencyId, 960_000,   100);
+        $this->seedComp($presentation->id, $agencyId, 1_880_000, 100);
+
+        $svc = new CmaComputeService();
+        $out = $svc->compute(
+            $presentation->fresh(['property', 'soldComps']),
+            $presentation->fresh('soldComps')->soldComps,
+            isSectional: false,
+            conditionContext: [],
+        );
+        $ps = $out['pool_stats'];
+        // Type-7 percentile for n=4:
+        //   p25  = (4-1)*0.25 = 0.75 → 700k + 0.75*(745k-700k) = 733_750
+        //   p50  = (4-1)*0.50 = 1.5  → (745k+960k)/2 = 852_500
+        //   p75  = (4-1)*0.75 = 2.25 → 960k + 0.25*(1880k-960k) = 1_190_000
+        $this->assertSame(733_750,   $ps['p25']);
+        $this->assertSame(852_500,   $ps['median']);
+        $this->assertSame(1_190_000, $ps['p75']);
+    }
+
     // ── Subject extent picker — title_type-aware ─────────────────────
 
     public function test_extent_picker_sectional_uses_size_m2(): void

@@ -142,6 +142,10 @@ class Agency extends Model
         // Build 8b — CmaComputeService cleaning controls (recency + IQR).
         'cma_compute_recency_months',
         'cma_compute_iqr_multiplier',
+        // Competitor Stock — agency-configurable scorer thresholds.
+        'competitor_stock_default_beds_tolerance',
+        'competitor_stock_default_price_tolerance_pct',
+        'competitor_stock_min_score',
     ];
 
     protected $casts = [
@@ -204,6 +208,10 @@ class Agency extends Model
         // Build 8b — CmaComputeService cleaning controls.
         'cma_compute_recency_months' => 'integer',
         'cma_compute_iqr_multiplier' => 'decimal:2',
+        // Competitor Stock — agency-configurable scorer thresholds.
+        'competitor_stock_default_beds_tolerance'      => 'integer',
+        'competitor_stock_default_price_tolerance_pct' => 'integer',
+        'competitor_stock_min_score'                   => 'integer',
     ];
 
     /**

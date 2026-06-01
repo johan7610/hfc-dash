@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Presentation;
 
 use App\Http\Controllers\Controller;
 use App\Models\AgentOverride;
+use App\Services\Presentations\CompetitorStockMatchService;
 use App\Models\PresentationSoldComp;
 use App\Models\PresentationVersion;
 use App\Models\PropertySettingItem;
@@ -139,8 +140,9 @@ final class PresentationReviewController extends Controller
         // Live compile of the CMA bands so the review screen renders the
         // condition-adjusted Middle in-place (no extra round-trip on
         // first paint).
-        $analysis    = (new AnalysisDataService())->compile($presentation, $version);
-        $cmaValue    = $analysis['cma_valuation'] ?? [];
+        $analysis        = (new AnalysisDataService())->compile($presentation, $version);
+        $cmaValue        = $analysis['cma_valuation']    ?? [];
+        $competitorStock = $analysis['competitor_stock'] ?? ['matches' => [], 'included_ids' => null, 'visible' => []];
 
         // Build 4 — section toggle state for Section 3 of the review.
         $sectionsCatalogue = PresentationVersion::SECTIONS_CATALOGUE;
@@ -167,6 +169,8 @@ final class PresentationReviewController extends Controller
             'currentConditionName' => $currentCondName,
             'currentConditionSrc'  => $resolved['source'],
             'cmaValuation'         => $cmaValue,
+            // Competitor Stock — scored Active Competition cards.
+            'competitorStock'      => $competitorStock,
             // Build 4 — section toggles.
             'sectionsCatalogue'    => $sectionsCatalogue,
             'sectionFloor'         => $sectionFloor,
@@ -332,6 +336,7 @@ final class PresentationReviewController extends Controller
                 'middle'          => $cma['cma_middle'] ?? null,
                 'middle_baseline' => $cma['cma_middle_baseline'] ?? null,
                 'upper'           => $cma['cma_upper'] ?? null,
+                'pool_n'          => $cma['compute_pool_n'] ?? 0,
             ],
         ]);
     }
@@ -396,12 +401,129 @@ final class PresentationReviewController extends Controller
             ]);
         });
 
+        // Tick-wire build — recompute the CMA bands against the new
+        // included-comp set so the JS can patch the valuation tiles
+        // in place. Mirrors the response shape setCondition returns
+        // (L321-336) so review.blade.php's applyCmaUpdate helper
+        // works for both triggers.
+        $version->refresh();
+        $presentation = $version->presentation()->with('property')->first();
+        $analysis     = (new AnalysisDataService())->compile($presentation, $version);
+        $cma          = $analysis['cma_valuation'] ?? [];
+
         return response()->json([
             'ok'           => true,
             'comp_id'      => $comp->id,
             'is_included'  => $wantIncluded,
             'override_id'  => AgentOverride::where('presentation_version_id', $version->id)
                                   ->where('target_id', (string) $comp->id)
+                                  ->latest('id')->value('id'),
+            'condition'    => [
+                'level_id'   => $version->condition_level_id,
+                'pct'        => $cma['condition_pct']    ?? null,
+                'label'      => $cma['condition_label']  ?? null,
+                'source'     => $cma['condition_source'] ?? 'none',
+                'applied'    => (bool) ($cma['condition_applied'] ?? false),
+            ],
+            'cma'          => [
+                'lower'           => $cma['cma_lower']           ?? null,
+                'middle'          => $cma['cma_middle']          ?? null,
+                'middle_baseline' => $cma['cma_middle_baseline'] ?? null,
+                'upper'           => $cma['cma_upper']           ?? null,
+                'pool_n'          => $cma['compute_pool_n']      ?? 0,
+            ],
+        ]);
+    }
+
+    /**
+     * Toggle a competitor listing's included flag on the Active
+     * Competition section. Mirrors toggleComp's contract — persists
+     * to presentation_versions.included_competitor_ids_json, writes
+     * an agent_overrides row, returns JSON with the listing's new
+     * is_included state for optimistic UI patch.
+     *
+     * The listing is identified by its prospecting_listings.id —
+     * passed as a route param (no Eloquent binding because we just
+     * need the id). Validates the listing is in the same agency as
+     * the version.
+     */
+    public function toggleCompetitor(Request $request, PresentationVersion $version, int $listingId): JsonResponse
+    {
+        $this->authoriseReviewer($request, $version);
+
+        $request->validate([
+            'included' => 'required|boolean',
+        ]);
+
+        // Listing must exist in the same agency.
+        $listingExists = DB::table('prospecting_listings')
+            ->where('id', $listingId)
+            ->where('agency_id', $version->agency_id)
+            ->whereNull('deleted_at')
+            ->exists();
+        if (!$listingExists) {
+            return response()->json(['error' => 'listing_not_in_agency'], 422);
+        }
+
+        // Default whitelist = all scored competitors. When the agent
+        // starts ticking, we materialise the whitelist from the
+        // currently-scored set on first touch.
+        $current = $version->included_competitor_ids_json;
+        if ($current === null) {
+            // First-touch — seed from the scored set so the existing
+            // visible cards are preserved (the agent's tick removes
+            // one row, not all the others).
+            $presentation = $version->presentation()->with('property')->first();
+            if ($presentation && $presentation->property) {
+                $scored = app(CompetitorStockMatchService::class)
+                    ->findCompetitors($presentation->property);
+                $current = $scored->pluck('listing_id')->map(fn ($v) => (int) $v)->all();
+            } else {
+                $current = [];
+            }
+        }
+        $current = array_values(array_unique(array_map('intval', $current)));
+
+        $wantIncluded = (bool) $request->boolean('included');
+        $wasIncluded  = in_array($listingId, $current, true);
+
+        if ($wantIncluded === $wasIncluded) {
+            return response()->json([
+                'ok'           => true,
+                'listing_id'   => $listingId,
+                'is_included'  => $wasIncluded,
+                'no_op'        => true,
+            ]);
+        }
+
+        if ($wantIncluded) {
+            $current[] = $listingId;
+        } else {
+            $current = array_values(array_diff($current, [$listingId]));
+        }
+
+        DB::transaction(function () use ($version, $current, $listingId, $request, $wantIncluded, $wasIncluded) {
+            $version->forceFill(['included_competitor_ids_json' => $current])->save();
+
+            AgentOverride::create([
+                'agency_id'               => $version->agency_id,
+                'presentation_version_id' => $version->id,
+                'user_id'                 => $request->user()->id,
+                'override_type'           => $wantIncluded
+                    ? AgentOverride::TYPE_COMP_INCLUDED
+                    : AgentOverride::TYPE_COMP_EXCLUDED,
+                'target_id'               => 'competitor:' . $listingId,
+                'before_value'            => ['is_included' => $wasIncluded],
+                'after_value'             => ['is_included' => $wantIncluded],
+            ]);
+        });
+
+        return response()->json([
+            'ok'           => true,
+            'listing_id'   => $listingId,
+            'is_included'  => $wantIncluded,
+            'override_id'  => AgentOverride::where('presentation_version_id', $version->id)
+                                  ->where('target_id', 'competitor:' . $listingId)
                                   ->latest('id')->value('id'),
         ]);
     }

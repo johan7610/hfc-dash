@@ -4,6 +4,7 @@ namespace App\Services\Presentations;
 
 use App\Models\Presentation;
 use App\Models\PresentationVersion;
+use App\Support\Presentations\CompLabel;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -1199,7 +1200,11 @@ a:hover { text-decoration: underline; }
             $_svgComps[] = [
                 'lat'       => (float) $_lat,
                 'lng'       => (float) $_lng,
-                'title'     => $_raw['address'] ?? null,
+                // Never-blank label — same chain as the review screen
+                // / PDF table render. Sectional comps without street
+                // address resolve to "Scheme, Section N" instead of
+                // empty tooltips.
+                'title'     => CompLabel::build($_raw, $_sc->suburb ?? null, $_sc->id ?? null),
                 'layer'     => 'sold_comps',
                 'price'     => $_sc->sold_price_inc ? (int) $_sc->sold_price_inc : null,
                 'sale_date' => $_sc->sold_date ? $_sc->sold_date->toDateString() : null,
@@ -1235,7 +1240,7 @@ a:hover { text-decoration: underline; }
             $_svgComps[] = [
                 'lat'       => (float) $_lat,
                 'lng'       => (float) $_lng,
-                'title'     => $_raw['address'] ?? null,
+                'title'     => CompLabel::build($_raw, $_al->suburb ?? null, $_al->id ?? null),
                 'layer'     => 'active_listings',
                 'price'     => $_al->list_price_inc ? (int) $_al->list_price_inc : null,
                 'sale_date' => null,
@@ -1549,6 +1554,80 @@ a:hover { text-decoration: underline; }
 <?php endforeach ?>
 </div>
 <?php endif ?>
+
+<?php
+// ── Competitor Stock — scored Active Competition, Core Matches engine.
+//    Renders ONLY the ticked competitors (included_competitor_ids_json
+//    on the version, or all when null = first paint). Each card shows
+//    match % + tier + per-card link to the source portal (P24/PP).
+//    HFC-owned stock gets a DOM/views badge from the PropCon join.
+$competitorStock = $data['competitor_stock'] ?? ['visible' => []];
+$visibleCompetitors = $competitorStock['visible'] ?? [];
+if (!empty($visibleCompetitors)):
+?>
+<h3 style="margin-top:18px;margin-bottom:8px;">Scored Competitor Stock (<?= count($visibleCompetitors) ?>)</h3>
+<p style="margin:0 0 10px 0;font-size:11px;color:#64748b;">
+    Active listings the property competes against, scored by Core Matches.
+    Match % reflects proximity by price, suburb, type, and bedrooms.
+</p>
+<table style="width:100%;border-collapse:collapse;font-size:11px;">
+    <thead>
+        <tr style="background:#f1f5f9;color:#475569;text-transform:uppercase;letter-spacing:0.04em;font-size:10px;">
+            <th style="text-align:left;padding:6px 8px;">Listing</th>
+            <th style="text-align:right;padding:6px 8px;">Price</th>
+            <th style="text-align:center;padding:6px 8px;">Beds / Baths</th>
+            <th style="text-align:right;padding:6px 8px;">Size</th>
+            <th style="text-align:right;padding:6px 8px;">Match %</th>
+        </tr>
+    </thead>
+    <tbody>
+    <?php foreach ($visibleCompetitors as $c):
+        $tierBg = match ($c['tier'] ?? '') {
+            'perfect'     => '#ecfdf5',
+            'strong'      => '#eff6ff',
+            'approximate' => '#fefce8',
+            default       => '#f8fafc',
+        };
+        $tierColor = match ($c['tier'] ?? '') {
+            'perfect'     => '#10b981',
+            'strong'      => '#0ea5e9',
+            'approximate' => '#a16207',
+            default       => '#475569',
+        };
+    ?>
+        <tr style="border-top:1px solid #e2e8f0;">
+            <td style="padding:6px 8px;">
+                <?= $esc($c['address'] ?? 'Listing #' . $c['listing_id']) ?>
+                <?php if (!empty($c['agency_name'])): ?>
+                    <span style="color:#94a3b8;font-size:10px;">· <?= $esc($c['agency_name']) ?></span>
+                <?php endif ?>
+                <?php if (!empty($c['is_hfc_owned'])): ?>
+                    <span style="color:#10b981;font-weight:600;font-size:9px;">HFC</span>
+                    <?php if (isset($c['days_on_market']) && $c['days_on_market'] !== null): ?>
+                        <span style="color:#94a3b8;font-size:10px;">· <?= (int) $c['days_on_market'] ?>d</span>
+                    <?php endif ?>
+                    <?php if (isset($c['views']) && $c['views'] !== null): ?>
+                        <span style="color:#94a3b8;font-size:10px;">· <?= number_format((int) $c['views']) ?> views</span>
+                    <?php endif ?>
+                <?php endif ?>
+            </td>
+            <td style="padding:6px 8px;text-align:right;"><?= $zar($c['price'] ?? null) ?></td>
+            <td style="padding:6px 8px;text-align:center;">
+                <?= $c['bedrooms'] !== null ? (int) $c['bedrooms'] : '—' ?> / <?= $c['bathrooms'] !== null ? (int) $c['bathrooms'] : '—' ?>
+            </td>
+            <td style="padding:6px 8px;text-align:right;">
+                <?= !empty($c['property_size_m2']) ? (int) $c['property_size_m2'] . 'm²' : '—' ?>
+            </td>
+            <td style="padding:6px 8px;text-align:right;">
+                <span style="background:<?= $tierBg ?>;color:<?= $tierColor ?>;padding:2px 6px;border-radius:8px;font-weight:600;font-size:10px;">
+                    <?= (int) ($c['score'] ?? 0) ?>%
+                </span>
+            </td>
+        </tr>
+    <?php endforeach ?>
+    </tbody>
+</table>
+<?php endif; ?>
 
 <?php endif // /active_competition ?>
 
