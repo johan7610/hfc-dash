@@ -2226,6 +2226,11 @@ Route::middleware(['auth', 'permission:access_presentations'])->prefix('presenta
     Route::post('/version/{version}/review/comps/{comp}/toggle',
         [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'toggleComp'])
         ->name('review.toggle-comp');
+    // Competitor Stock — toggle a scored prospecting_listings competitor on/off.
+    Route::post('/version/{version}/review/competitors/{listingId}/toggle',
+        [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'toggleCompetitor'])
+        ->where('listingId', '[0-9]+')
+        ->name('review.toggle-competitor');
     // Build 3 — agent picks/clears condition on the review screen.
     Route::post('/version/{version}/review/condition',
         [\App\Http\Controllers\Presentation\PresentationReviewController::class, 'setCondition'])

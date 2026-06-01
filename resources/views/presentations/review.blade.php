@@ -355,6 +355,88 @@
         </div>
     </div>
 
+    {{-- ─────────── SECTION 2b — Active Competition (scored stock) ─────────── --}}
+    @php
+        $competitorMatches  = $competitorStock['matches']      ?? [];
+        $competitorIncluded = $competitorStock['included_ids'] ?? null;
+        $includedSet        = $competitorIncluded === null
+            ? null
+            : array_flip(array_map('intval', $competitorIncluded));
+        $isCompetitorIncluded = function ($listingId) use ($includedSet) {
+            if ($includedSet === null) return true;
+            return isset($includedSet[(int) $listingId]);
+        };
+        $tierLabel = fn ($t) => match ($t) {
+            'perfect'     => ['Perfect',     '#10b981', '#ecfdf5'],
+            'strong'      => ['Strong',      '#0ea5e9', '#eff6ff'],
+            'approximate' => ['Approximate', '#a16207', '#fefce8'],
+            default       => [ucfirst((string) $t), '#475569', 'var(--surface-2)'],
+        };
+    @endphp
+    @if(count($competitorMatches) > 0)
+    <div class="review-card">
+        <div class="review-section-header">
+            <div class="review-section-tag" style="background:#7c3aed;"></div>
+            <h2 class="review-section-title">2b · Active Competition — {{ count($competitorMatches) }} scored</h2>
+        </div>
+        <p style="margin:0 0 12px 0;font-size:11px;color:var(--text-muted);">
+            Active stock the seller competes against (P24 + PP alert imports), scored against
+            this subject by the Core Matches engine. Tick to include in the seller PDF;
+            unticked cards stay on this review screen but drop from the published version.
+        </p>
+        <div id="competitor-stock-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px;">
+            @foreach($competitorMatches as $m)
+                @php
+                    [$tLabel, $tColor, $tBg] = $tierLabel($m['tier']);
+                    $included = $isCompetitorIncluded($m['listing_id']);
+                    $rPerM2 = ($m['property_size_m2'] && $m['price'])
+                        ? (int) round($m['price'] / max(1, $m['property_size_m2']))
+                        : null;
+                @endphp
+                <div class="competitor-card{{ $included ? '' : ' excluded' }}"
+                     data-listing-id="{{ $m['listing_id'] }}"
+                     style="border:1px solid var(--border);border-radius:6px;padding:10px;background:var(--surface);position:relative;{{ $included ? '' : 'opacity:0.45;' }}">
+                    {{-- Line 1: label · price · match% · tier --}}
+                    <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:6px;">
+                        <div style="flex:1;min-width:0;">
+                            @if($m['portal_url'])
+                                <a href="{{ $m['portal_url'] }}" target="_blank" rel="noopener"
+                                   style="font-weight:600;font-size:12px;color:var(--text-primary);text-decoration:none;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                                   title="{{ $m['address'] }} ({{ $m['agency_name'] ?? 'Unknown agency' }})">
+                                    {{ $m['address'] ?? 'Listing #' . $m['listing_id'] }}
+                                </a>
+                            @else
+                                <span style="font-weight:600;font-size:12px;color:var(--text-primary);">{{ $m['address'] ?? 'Listing #' . $m['listing_id'] }}</span>
+                            @endif
+                            <span style="font-size:11px;color:var(--text-muted);">R {{ number_format($m['price'], 0, '.', ' ') }}</span>
+                        </div>
+                        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;">
+                            <span style="font-weight:700;font-size:13px;color:{{ $tColor }};">{{ $m['score'] }}%</span>
+                            <span style="font-size:9px;padding:1px 6px;border-radius:8px;color:{{ $tColor }};background:{{ $tBg }};font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">{{ $tLabel }}</span>
+                        </div>
+                    </div>
+                    {{-- Line 2: beds · baths · size · R/m² · DOM/views for HFC --}}
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--text-secondary);align-items:center;">
+                        @if($m['bedrooms'] !== null)<span>🛏 {{ $m['bedrooms'] }}</span>@endif
+                        @if($m['bathrooms'] !== null)<span>🛁 {{ $m['bathrooms'] }}</span>@endif
+                        @if($m['property_size_m2'])<span>{{ (int) $m['property_size_m2'] }}m²</span>@endif
+                        @if($rPerM2)<span>R {{ number_format($rPerM2, 0, '.', ' ') }}/m²</span>@endif
+                        @if($m['is_hfc_owned'])
+                            <span style="margin-left:auto;font-weight:600;color:#10b981;font-size:10px;">HFC</span>
+                            @if($m['days_on_market'] !== null)<span style="font-size:10px;">· {{ $m['days_on_market'] }}d on market</span>@endif
+                            @if($m['views'] !== null)<span style="font-size:10px;">· {{ number_format($m['views']) }} views</span>@endif
+                        @endif
+                        <label style="margin-left:auto;display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:10px;color:var(--text-muted);">
+                            <input type="checkbox" class="competitor-toggle" data-listing-id="{{ $m['listing_id'] }}" {{ $included ? 'checked' : '' }}>
+                            Include
+                        </label>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    </div>
+    @endif
+
     {{-- ─────────── SECTION 3 — Generate ─────────── --}}
     <div class="review-card">
         <div class="review-section-header">
@@ -429,6 +511,7 @@
     const csrf = document.querySelector('meta[name=csrf-token]')?.content || '';
     const VERSION_ID = {{ $version->id }};
     const TOGGLE_TPL = @json(route('presentations.review.toggle-comp', ['version' => $version->id, 'comp' => '__COMP_ID__']));
+    const COMPETITOR_TOGGLE_TPL = @json(route('presentations.review.toggle-competitor', ['version' => $version->id, 'listingId' => '__LISTING_ID__']));
     const PUBLISH_URL = @json(route('presentations.review.publish', $version->id));
     const REVERT_URL  = @json(route('presentations.review.revert',  $version->id));
     const CONDITION_URL = @json(route('presentations.review.condition', $version->id));
@@ -589,6 +672,46 @@
             toggleTimer = setTimeout(() => {
                 Array.from(pendingToggles.keys()).forEach(flushToggle);
             }, 300);
+        });
+    });
+
+    // ── Competitor Stock toggle (mirrors comp toggle pattern) ──────────
+    document.querySelectorAll('.competitor-toggle').forEach(cb => {
+        cb.addEventListener('change', () => {
+            const listingId = parseInt(cb.dataset.listingId, 10);
+            const card = cb.closest('.competitor-card');
+            const next = cb.checked;
+
+            // Optimistic dim/undim.
+            if (card) {
+                card.style.opacity = next ? '' : '0.45';
+                card.classList.toggle('excluded', !next);
+            }
+
+            const url = COMPETITOR_TOGGLE_TPL.replace('__LISTING_ID__', String(listingId));
+            const body = new FormData();
+            body.append('_token', csrf);
+            body.append('included', next ? '1' : '0');
+
+            fetch(url, {
+                method: 'POST',
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body, credentials: 'same-origin',
+            }).then(r => r.json()).then(d => {
+                if (!d?.ok) {
+                    // Rollback.
+                    cb.checked = !next;
+                    if (card) {
+                        card.style.opacity = (!next) ? '' : '0.45';
+                        card.classList.toggle('excluded', next);
+                    }
+                    toast('Could not save competitor toggle — please retry');
+                }
+            }).catch(() => {
+                cb.checked = !next;
+                if (card) card.style.opacity = (!next) ? '' : '0.45';
+                toast('Network error saving competitor toggle');
+            });
         });
     });
 

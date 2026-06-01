@@ -38,6 +38,12 @@ class PresentationVersion extends Model
         'published_at',
         'archived_at',
         'included_comp_ids_json',
+        // Competitor Stock — parallel whitelist for the Active Competition
+        // section. Mirrors included_comp_ids_json semantics:
+        //   null → all scored competitors visible
+        //   []   → all unticked, section empty
+        //   [ids] → only the listed prospecting_listing IDs render.
+        'included_competitor_ids_json',
         // Build 3 — condition snapshot.
         'condition_level_id',
         'condition_adjustment_pct',
@@ -62,6 +68,7 @@ class PresentationVersion extends Model
         'published_at'                => 'datetime',
         'archived_at'                 => 'datetime',
         'included_comp_ids_json'      => 'array',
+        'included_competitor_ids_json' => 'array',
         'enabled_sections_json'       => 'array',
         // Build 5.
         'snapshot_payload'            => 'array',

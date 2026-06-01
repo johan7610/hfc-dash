@@ -4,6 +4,7 @@ namespace App\Services\Presentations;
 
 use App\Models\PortalCapture;
 use App\Models\Presentation;
+use App\Models\PresentationVersion;
 use App\Services\Presentations\Analytics\AbsorptionInflowService;
 use App\Support\MarketAnalytics\OutlierGuard;
 use App\Support\Presentations\CompLabel;
@@ -95,6 +96,7 @@ class AnalysisDataService
             'comparable_sales'   => $this->compileComparableSales($soldComps, $presentation->property_address),
             'cma_valuation'      => $this->compileCmaValuation($fields, $askingPrice, $cmaSelectedRange, $conditionContext, $cmaComputed),
             'cma_computed'       => $cmaComputed,
+            'competitor_stock'   => $this->compileCompetitorStock($presentation, $version),
             'active_competition' => $activeCompetition,
             'stock_absorption'   => $stockAbsorption,
             'inflow_absorption'  => $inflowAbsorption,
@@ -729,6 +731,47 @@ class AnalysisDataService
     }
 
     // ── 6. HOLDING COST ──────────────────────────────────────────────────
+
+    /**
+     * Competitor Stock — scored Active Competition section. Reuses
+     * Core Matches' PropertyMatchScoringService via a thin
+     * synthetic-ContactMatch adapter (see CompetitorStockMatchService).
+     *
+     * Returns:
+     *   matches            full scored set ≥ agency min_score
+     *   included_ids       the version's whitelist (null = all, [] = empty)
+     *   visible            matches filtered to the whitelist (what the
+     *                      seller-PDF renders); review screen shows ALL
+     *                      with ticked-state per row.
+     */
+    private function compileCompetitorStock(Presentation $presentation, ?PresentationVersion $version): array
+    {
+        $property = $presentation->property;
+        if (!$property) {
+            return ['matches' => [], 'included_ids' => null, 'visible' => []];
+        }
+
+        $service = app(CompetitorStockMatchService::class);
+        $matches = $service->findCompetitors($property)->all();
+
+        $whitelist = $version?->included_competitor_ids_json;
+        if ($whitelist === null) {
+            // No tick state yet — every scored match is visible by default.
+            $visible = $matches;
+        } else {
+            $whitelistSet = array_flip(array_map('intval', $whitelist));
+            $visible = array_values(array_filter(
+                $matches,
+                fn (array $m) => isset($whitelistSet[(int) $m['listing_id']]),
+            ));
+        }
+
+        return [
+            'matches'      => $matches,
+            'included_ids' => $whitelist,
+            'visible'      => $visible,
+        ];
+    }
 
     private function compileHoldingCost(Presentation $p): array
     {

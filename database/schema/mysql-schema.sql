@@ -160,11 +160,22 @@ CREATE TABLE `agencies` (
   `p24_enabled` tinyint(1) NOT NULL DEFAULT '0',
   `p24_locations_synced_at` timestamp NULL DEFAULT NULL,
   `p24_last_sync_error` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `pp_enabled` tinyint(1) NOT NULL DEFAULT '0',
+  `pp_username` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `pp_password` text COLLATE utf8mb4_unicode_ci,
+  `pp_branch_guid` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `pp_wsdl` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `pp_sandbox` tinyint(1) NOT NULL DEFAULT '1',
+  `pp_image_base_url` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `pp_webhook_secret` text COLLATE utf8mb4_unicode_ci,
+  `pp_last_sync_error` text COLLATE utf8mb4_unicode_ci,
   `slug` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `sidebar_color` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '#0ea5e9',
   `icon_color` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '#0ea5e9',
   `default_color` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '#0b2a4a',
   `button_color` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '#0ea5e9',
+  `ai_voice_enabled` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Allow agents at this agency to use Ellie voice commands (advanced feature)',
+  `ai_image_recognition_enabled` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Allow agents at this agency to use AI property image recognition (advanced feature, mobile-only)',
   `logo_path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `email_disclaimer` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `popi_url` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -199,6 +210,9 @@ CREATE TABLE `agencies` (
   `presentations_freshness_days` smallint unsigned NOT NULL DEFAULT '90' COMMENT 'Build 5 — public view shows a "request revised analysis" CTA when the snapshot is older than this many days.',
   `cma_compute_recency_months` smallint unsigned DEFAULT '36' COMMENT 'Build 8b — recency window (months) for CmaComputeService input pool. Decoupled from presentations_default_period_months which drives the hydrator + coverage badge. Null falls back to service constant.',
   `cma_compute_iqr_multiplier` decimal(4,2) DEFAULT '1.50' COMMENT 'Build 8b — IQR multiplier for R/m² lower-bound outlier fence (median − multiplier × IQR). 1.5 is Tukey standard. Null falls back to service constant.',
+  `competitor_stock_default_beds_tolerance` tinyint unsigned NOT NULL DEFAULT '1' COMMENT 'Competitor Stock — ± beds window for synthetic ContactMatch (Core Matches scorer).',
+  `competitor_stock_default_price_tolerance_pct` tinyint unsigned NOT NULL DEFAULT '20' COMMENT 'Competitor Stock — ± percent price band for synthetic match (e.g. 20 = ±20%).',
+  `competitor_stock_min_score` tinyint unsigned NOT NULL DEFAULT '50' COMMENT 'Competitor Stock — minimum match score (Core Matches 0-100) to include in section. 50 = Approximate tier floor.',
   `presentations_default_comp_scope` enum('radius_all','suburb_only') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'radius_all',
   `presentations_default_radius_m` smallint unsigned NOT NULL DEFAULT '1000',
   `presentations_default_rates_per_million_zar` int unsigned NOT NULL DEFAULT '800' COMMENT 'Monthly municipal rates per R1M of property value.',
@@ -232,6 +246,8 @@ CREATE TABLE `agencies` (
   `whistleblow_approver_user_ids` json DEFAULT NULL,
   `whistleblow_compliance_officer_email` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `whistleblow_tier_recipients` json DEFAULT NULL,
+  `pp_locations_synced_at` timestamp NULL DEFAULT NULL,
+  `pp_locations_last_error` text COLLATE utf8mb4_unicode_ci,
   PRIMARY KEY (`id`),
   UNIQUE KEY `agencies_slug_unique` (`slug`),
   UNIQUE KEY `agencies_privacy_policy_token_unique` (`privacy_policy_token`),
@@ -369,6 +385,11 @@ CREATE TABLE `agency_dashboard_settings` (
   `working_hours_end` time NOT NULL DEFAULT '17:00:00',
   `notify_in_app` tinyint(1) NOT NULL DEFAULT '1',
   `notify_email` tinyint(1) NOT NULL DEFAULT '1',
+  `notify_push` tinyint(1) NOT NULL DEFAULT '1',
+  `open_hours_enabled` tinyint(1) NOT NULL DEFAULT '0',
+  `open_hours_start` time NOT NULL DEFAULT '07:00:00',
+  `open_hours_end` time NOT NULL DEFAULT '21:00:00',
+  `min_minutes_between_same` smallint unsigned NOT NULL DEFAULT '360',
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -1464,6 +1485,9 @@ CREATE TABLE `calendar_events` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint unsigned DEFAULT NULL,
   `created_by_id` bigint unsigned DEFAULT NULL,
+  `created_by_ai` tinyint(1) NOT NULL DEFAULT '0',
+  `ai_source` varchar(32) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'ellie_voice, ellie_chat, future sources',
+  `ai_transcript` text COLLATE utf8mb4_unicode_ci COMMENT 'Raw voice transcript or AI input for audit',
   `event_type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'deal, lease, compliance, document, prospecting, portal, property, manual',
   `category` varchar(80) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Sub-type: bond_deadline, lease_expiry, ffc_expiry, viewing, etc.',
   `title` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -1508,6 +1532,7 @@ CREATE TABLE `calendar_events` (
   KEY `calendar_events_category_index` (`category`),
   KEY `calendar_events_event_date_index` (`event_date`),
   KEY `calendar_events_status_index` (`status`),
+  KEY `calendar_events_created_by_ai_index` (`created_by_ai`),
   CONSTRAINT `calendar_events_agency_id_foreign` FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`id`) ON DELETE SET NULL,
   CONSTRAINT `calendar_events_branch_id_foreign` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL,
   CONSTRAINT `calendar_events_contact_id_foreign` FOREIGN KEY (`contact_id`) REFERENCES `contacts` (`id`) ON DELETE SET NULL,
@@ -5663,6 +5688,7 @@ CREATE TABLE `p24_import_runs` (
   `user_id` bigint unsigned DEFAULT NULL,
   `agency_id` bigint unsigned DEFAULT NULL,
   `kind` enum('agents','listings_images') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `mark_compliant_on_confirm` tinyint(1) NOT NULL DEFAULT '0',
   `status` enum('parsing','pending_confirm','importing','completed','failed','cancelled') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'parsing',
   `agents_csv_path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `listings_csv_path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -6321,6 +6347,22 @@ CREATE TABLE `portal_listings` (
   CONSTRAINT `portal_listings_tracked_property_id_foreign` FOREIGN KEY (`tracked_property_id`) REFERENCES `tracked_properties` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `pp_cities`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `pp_cities` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `pp_city_id` bigint unsigned NOT NULL,
+  `pp_province_id` bigint unsigned NOT NULL,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `pp_cities_pp_city_id_unique` (`pp_city_id`),
+  KEY `pp_cities_pp_province_id_name_index` (`pp_province_id`,`name`),
+  CONSTRAINT `pp_cities_pp_province_id_foreign` FOREIGN KEY (`pp_province_id`) REFERENCES `pp_provinces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `pp_event_feed_settings`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -6331,6 +6373,39 @@ CREATE TABLE `pp_event_feed_settings` (
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `pp_event_feed_settings_key_unique` (`key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `pp_provinces`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `pp_provinces` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `pp_province_id` bigint unsigned NOT NULL,
+  `pp_province_enum` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `pp_provinces_pp_province_id_unique` (`pp_province_id`),
+  KEY `pp_provinces_name_index` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `pp_suburbs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `pp_suburbs` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `pp_suburb_id` bigint unsigned NOT NULL,
+  `pp_city_id` bigint unsigned NOT NULL,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `normalised_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `pp_suburbs_pp_suburb_id_unique` (`pp_suburb_id`),
+  KEY `pp_suburbs_pp_city_id_name_index` (`pp_city_id`,`name`),
+  KEY `pp_suburbs_normalised_name_index` (`normalised_name`),
+  CONSTRAINT `pp_suburbs_pp_city_id_foreign` FOREIGN KEY (`pp_city_id`) REFERENCES `pp_cities` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `presentation_active_listings`;
@@ -6997,6 +7072,7 @@ CREATE TABLE `presentation_versions` (
   `probability_run_id` bigint unsigned DEFAULT NULL,
   `data_snapshot_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `included_comp_ids_json` json DEFAULT NULL,
+  `included_competitor_ids_json` json DEFAULT NULL,
   `condition_level_id` bigint unsigned DEFAULT NULL,
   `condition_adjustment_pct` decimal(5,2) DEFAULT NULL COMMENT 'Snapshot at review/publish — defends historic PDF against later setting drift.',
   `condition_label` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -7194,6 +7270,7 @@ CREATE TABLE `properties` (
   `gallery_categories_json` json DEFAULT NULL,
   `gallery_custom_tags` json DEFAULT NULL,
   `features_json` json DEFAULT NULL,
+  `features_json_meta` json DEFAULT NULL COMMENT 'Per-feature audit: {pool:{source:ai|manual,confidence:0.92,confirmed_by_user_id:5,confirmed_at:...}}',
   `pet_friendly` tinyint(1) DEFAULT NULL,
   `spaces_json` json DEFAULT NULL,
   `agent_id` bigint unsigned NOT NULL,
@@ -7401,6 +7478,32 @@ CREATE TABLE `property_health_scores` (
   KEY `property_health_scores_agency_id_idx` (`agency_id`),
   CONSTRAINT `property_health_scores_agency_id_foreign` FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`id`) ON DELETE CASCADE,
   CONSTRAINT `property_health_scores_property_id_foreign` FOREIGN KEY (`property_id`) REFERENCES `properties` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `property_image_analyses`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `property_image_analyses` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `agency_id` bigint unsigned NOT NULL,
+  `property_id` bigint unsigned NOT NULL,
+  `image_path` varchar(512) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Path relative to storage (matches values in properties.gallery_images_json etc.)',
+  `status` enum('queued','processing','complete','failed') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'queued',
+  `detected_features` json DEFAULT NULL COMMENT '[{token, confidence}]',
+  `detected_spaces` json DEFAULT NULL COMMENT '[{token, confidence}]',
+  `raw_response` json DEFAULT NULL COMMENT 'Full Claude vision response for debug',
+  `cost_usd` decimal(8,5) DEFAULT NULL,
+  `error` text COLLATE utf8mb4_unicode_ci,
+  `processed_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `property_image_analyses_property_id_foreign` (`property_id`),
+  KEY `property_image_analyses_agency_id_property_id_index` (`agency_id`,`property_id`),
+  KEY `property_image_analyses_status_index` (`status`),
+  KEY `property_image_analyses_image_path_index` (`image_path`),
+  CONSTRAINT `property_image_analyses_agency_id_foreign` FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `property_image_analyses_property_id_foreign` FOREIGN KEY (`property_id`) REFERENCES `properties` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `property_marketing_activities`;
@@ -9704,6 +9807,11 @@ CREATE TABLE `user_dashboard_settings` (
   `working_hours_end` time NOT NULL DEFAULT '17:00:00',
   `notify_in_app` tinyint(1) NOT NULL DEFAULT '1',
   `notify_email` tinyint(1) NOT NULL DEFAULT '1',
+  `notify_push` tinyint(1) NOT NULL DEFAULT '1',
+  `open_hours_enabled` tinyint(1) NOT NULL DEFAULT '0',
+  `open_hours_start` time NOT NULL DEFAULT '07:00:00',
+  `open_hours_end` time NOT NULL DEFAULT '21:00:00',
+  `min_minutes_between_same` smallint unsigned NOT NULL DEFAULT '360',
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -10893,3 +11001,14 @@ INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (791,'2026_06_17_13
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (792,'2026_06_17_140000_add_snapshot_payload_to_presentations',236);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (793,'2026_06_17_150000_add_title_type_to_properties',237);
 INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (795,'2026_06_17_160000_add_cma_compute_settings_to_agencies',238);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (796,'2026_05_28_100001_create_pp_locations_tables',239);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (797,'2026_05_28_100002_add_pp_locations_sync_to_agencies',239);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (798,'2026_05_28_120000_add_pp_syndication_columns_to_agencies',239);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (799,'2026_05_28_140000_add_mark_compliant_on_confirm_to_p24_import_runs',239);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (800,'2026_05_28_180001_add_ai_attribution_to_calendar_events',239);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (801,'2026_05_28_180002_add_features_json_meta_to_properties',239);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (802,'2026_05_28_180003_create_property_image_analyses_table',239);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (803,'2026_05_28_180004_add_ai_feature_flags_to_agencies',239);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (804,'2026_05_29_100000_add_open_hours_and_push_master_to_dashboard_settings',239);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (805,'2026_06_19_120000_add_competitor_stock_settings_to_agencies',239);
+INSERT INTO `migrations` (`id`, `migration`, `batch`) VALUES (806,'2026_06_19_120100_add_included_competitor_ids_to_presentation_versions',239);
