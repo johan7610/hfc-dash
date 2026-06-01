@@ -6,6 +6,7 @@ use App\Models\PortalCapture;
 use App\Models\Presentation;
 use App\Services\Presentations\Analytics\AbsorptionInflowService;
 use App\Support\MarketAnalytics\OutlierGuard;
+use App\Support\Presentations\CompLabel;
 use Illuminate\Support\Collection;
 
 /**
@@ -167,7 +168,16 @@ class AnalysisDataService
             $source = $raw['source'] ?? 'unknown';
             $sizeM2 = $comp->size_m2 ?: ($raw['extent_m2'] ?? null);
 
-            $rowAddress = $raw['address'] ?? null;
+            // Build a never-blank display label so sectional comps with
+            // scheme+section but no street address still identify on the
+            // review screen / PDF table / map tooltip. Single source of
+            // truth via CompLabel — same logic used by the PDF map
+            // tooltip loop. Subject-exclusion still uses the raw address
+            // (matches the existing comparison), so labels like
+            // "Seeskulp, Section 8" never accidentally suppress comps
+            // when the subject is "4 Tucker Avenue".
+            $rowAddress    = $raw['address'] ?? null;
+            $displayLabel  = CompLabel::build($raw, $comp->suburb, $comp->id ?? null);
 
             // Exclude subject property from comps
             if ($normalSubject && $rowAddress && str_contains(strtolower(trim($rowAddress)), $normalSubject)) {
@@ -175,7 +185,7 @@ class AnalysisDataService
             }
 
             $row = [
-                'address'      => $rowAddress,
+                'address'      => $displayLabel,
                 'distance_m'   => $raw['distance_m'] ?? null,
                 'erf_no'       => $raw['erf_no'] ?? null,
                 'extent_m2'    => $sizeM2 ? (int) $sizeM2 : null,
@@ -464,8 +474,13 @@ class AnalysisDataService
 
             if ($key) $seenKeys[$key] = true;
 
+            // Same never-blank label discipline as sold comps — sectional
+            // listings with scheme+section but no street address render
+            // as "Scheme, Section N" instead of "—".
+            $displayLabel = CompLabel::build($raw, $al->suburb ?? null, $al->id ?? null);
+
             $rows[] = [
-                'address'        => $address,
+                'address'        => $displayLabel,
                 'property_type'  => $raw['property_type'] ?? $al->property_type,
                 'beds'           => $al->beds ?: ($raw['beds'] ?? null),
                 'baths'          => $al->baths ?: ($raw['baths'] ?? null),

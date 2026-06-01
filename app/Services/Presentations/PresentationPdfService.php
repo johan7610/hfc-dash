@@ -4,6 +4,7 @@ namespace App\Services\Presentations;
 
 use App\Models\Presentation;
 use App\Models\PresentationVersion;
+use App\Support\Presentations\CompLabel;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -1199,7 +1200,11 @@ a:hover { text-decoration: underline; }
             $_svgComps[] = [
                 'lat'       => (float) $_lat,
                 'lng'       => (float) $_lng,
-                'title'     => $_raw['address'] ?? null,
+                // Never-blank label — same chain as the review screen
+                // / PDF table render. Sectional comps without street
+                // address resolve to "Scheme, Section N" instead of
+                // empty tooltips.
+                'title'     => CompLabel::build($_raw, $_sc->suburb ?? null, $_sc->id ?? null),
                 'layer'     => 'sold_comps',
                 'price'     => $_sc->sold_price_inc ? (int) $_sc->sold_price_inc : null,
                 'sale_date' => $_sc->sold_date ? $_sc->sold_date->toDateString() : null,
@@ -1235,7 +1240,7 @@ a:hover { text-decoration: underline; }
             $_svgComps[] = [
                 'lat'       => (float) $_lat,
                 'lng'       => (float) $_lng,
-                'title'     => $_raw['address'] ?? null,
+                'title'     => CompLabel::build($_raw, $_al->suburb ?? null, $_al->id ?? null),
                 'layer'     => 'active_listings',
                 'price'     => $_al->list_price_inc ? (int) $_al->list_price_inc : null,
                 'sale_date' => null,
