@@ -25,10 +25,10 @@
         initialDocs: @js($sgDocs->map(fn ($d) => $d->toArray())->all()),
         searchUrl: @json(route('corex.properties.sg.search', $property)),
         saveAllUrl: @json(route('corex.properties.sg.save-all', $property)),
-        defaults: @js($sgBuild['defaults']),
-        missing: @js($sgBuild['missing']),
-        hasErf: @js($hasErf),
-        hasSearched: @js($hasSearched),
+        defaults: @js($sgBuild['defaults'] ?? new \stdClass()),
+        missing: @js($sgBuild['missing'] ?? []),
+        hasErf: @js($hasErf ?? false),
+        hasSearched: @js($hasSearched ?? false),
         lastSearchedAt: @json($property->sg_last_searched_at?->diffForHumans()),
      })">
 
