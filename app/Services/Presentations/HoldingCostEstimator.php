@@ -102,13 +102,21 @@ final class HoldingCostEstimator
         $skipped = [];
 
         foreach ($components as $component) {
-            // Skip when an agent value already exists on the column —
-            // never clobber explicit input (matches pre-fix behaviour
-            // for the 5 existing components; consistent for the 3 new).
             $col = $this->columnFor($component);
             $current = $col ? $presentation->{$col} : null;
-            if ($current !== null && $current !== '' && (float) $current !== 0.0) {
-                $skipped[$component] = 'agent value present';
+            $hasCurrent = $current !== null && $current !== '' && (float) $current !== 0.0;
+
+            // Skip ONLY when the stored value is a deliberate agent
+            // override — a stale auto-fill is NOT an override and must
+            // not block Tier 0. The signal is durable: each override
+            // writes a holding_cost_data_points row with
+            // source=agent_override tied to a version of this
+            // presentation (see PresentationReviewController). Without
+            // that audit trail, a non-null monthly_* column is
+            // auto-fill from a prior estimator pass and re-resolution
+            // is the correct behaviour.
+            if ($hasCurrent && $this->agentOverrideExists($presentation, $component)) {
+                $skipped[$component] = 'agent override present';
                 continue;
             }
 
@@ -116,7 +124,14 @@ final class HoldingCostEstimator
             if ($component === HoldingCostDataPoint::COMPONENT_OPPORTUNITY_COST) {
                 $value = $this->calculateOpportunityCost($askingPrice, $agency);
                 if ($value === null) {
-                    $skipped[$component] = 'no opportunity cost rate';
+                    // Keep any non-zero current value rather than blanking
+                    // — better than wiping a Tier 2 fallback that was
+                    // resolved in an earlier pass.
+                    if ($hasCurrent) {
+                        $skipped[$component] = 'no opportunity cost rate, kept existing';
+                    } else {
+                        $skipped[$component] = 'no opportunity cost rate';
+                    }
                     continue;
                 }
                 $presentation->{$col} = $value;
@@ -124,10 +139,20 @@ final class HoldingCostEstimator
                 continue;
             }
 
-            // Tier 0 → Tier 1 → Tier 2 resolution.
+            // Tier 0 → Tier 1 → Tier 2 resolution. Tier 0 (the
+            // property's captured value) WINS over any stale stored
+            // value — captured > learned-average > agency-default.
             $resolved = $this->resolveComponent($component, $context, $agency);
             if ($resolved === null) {
-                $skipped[$component] = 'no value at any tier';
+                // No tier value. Don't blank a stored value the agent
+                // might still be relying on visually (e.g. a Tier 2
+                // default that's no longer reachable because the
+                // agency setting changed). Surface it in `skipped`.
+                if ($hasCurrent) {
+                    $skipped[$component] = 'no tier value, kept existing';
+                } else {
+                    $skipped[$component] = 'no value at any tier';
+                }
                 continue;
             }
             $presentation->{$col} = $resolved['value'];
@@ -202,10 +227,17 @@ final class HoldingCostEstimator
         switch ($component) {
             case HoldingCostDataPoint::COMPONENT_LEVY:
                 $v = $property->levy ?? null;
-                // properties.special_levy is additive — fold in when present.
+                // properties.special_levy is additive — fold in when
+                // present. bcadd per the money-math convention; precision
+                // risk is nil at these magnitudes but consistency with
+                // the rest of the estimator matters more.
                 if ($v !== null) {
-                    $special = (int) ($property->special_levy ?? 0);
-                    return (int) $v + $special;
+                    $sum = bcadd(
+                        (string) (int) $v,
+                        (string) (int) ($property->special_levy ?? 0),
+                        self::SCALE,
+                    );
+                    return (int) $sum;
                 }
                 return null;
 
@@ -477,6 +509,33 @@ final class HoldingCostEstimator
             ->value('complex_name');
         if ($tracked) return (string) $tracked;
         return null;
+    }
+
+    /**
+     * Detect a DELIBERATE agent override for (presentation, component).
+     * Distinguishes a real agent edit from a stale auto-fill so Tier 0
+     * (captured property values) can overwrite the latter without
+     * clobbering the former.
+     *
+     * The signal: a holding_cost_data_points row with
+     * source=agent_override tied to ANY version of this presentation.
+     * The override endpoint
+     * (PresentationReviewController::setHoldingCostComponent) creates
+     * exactly one such row per agent edit — that's the durable audit
+     * trail. No row → no override → re-resolution allowed.
+     */
+    private function agentOverrideExists(Presentation $presentation, string $component): bool
+    {
+        $versionIds = $presentation->versions()->pluck('id')->all();
+        if (empty($versionIds)) return false;
+
+        return HoldingCostDataPoint::query()
+            ->withoutGlobalScopes()
+            ->whereIn('presentation_version_id', $versionIds)
+            ->where('component', $component)
+            ->where('source', HoldingCostDataPoint::SOURCE_AGENT_OVERRIDE)
+            ->whereNull('deleted_at')
+            ->exists();
     }
 
     private function cmaMiddleFromFields(Presentation $presentation): ?int

@@ -83,6 +83,19 @@ class PresentationGeneratorService
             if ($presentation) {
                 // Re-hydrate light fields only; preserve agent-edited columns
                 // like cma_selected_range, exclusions, simulator config.
+                //
+                // monthly_rates / monthly_levies are deliberately NOT carried
+                // forward here. The pre-Tier-fix estimator wrote stale values
+                // (the floor_area_m2 × R/m² levy bug; per-million rates default)
+                // that the old `?? $hydrated` guard then froze in place across
+                // every regenerate. HoldingCostEstimator (called below at
+                // step 3.6) now owns the policy: Tier 0 (property's captured
+                // levy / rates_taxes / special_levy) wins over any stale
+                // stored value when no holding_cost_data_points agent-override
+                // row exists for the component. A real override is preserved
+                // by the same gate — see HoldingCostEstimator::agentOverrideExists.
+                // monthly_bond keeps the only-when-null guard because there is
+                // no Tier-0 source for it.
                 $presentation->fill([
                     'title'              => $hydrated['title'],
                     'property_address'   => $hydrated['property_address'],
@@ -95,8 +108,6 @@ class PresentationGeneratorService
                     'floor_area_m2'      => $hydrated['floor_area_m2'],
                     'asking_price_inc'   => $hydrated['asking_price_inc'] ?? $presentation->asking_price_inc,
                     'monthly_bond'       => $presentation->monthly_bond ?? $hydrated['monthly_bond'],
-                    'monthly_rates'      => $presentation->monthly_rates ?? $hydrated['monthly_rates'],
-                    'monthly_levies'     => $presentation->monthly_levies ?? $hydrated['monthly_levies'],
                     'status'             => 'draft',
                 ]);
                 $presentation->save();

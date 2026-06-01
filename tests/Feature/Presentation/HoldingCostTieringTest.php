@@ -349,4 +349,96 @@ final class HoldingCostTieringTest extends TestCase
             'compiled_at'        => now(),
         ]);
     }
+
+    // ── Stale-vs-override Tier 0 wins regression ─────────────────────
+    //
+    // The "frozen R30,000 levy" bug: pre-Tier-fix estimator wrote a
+    // R/m² levy into presentations.monthly_levies. After the Tier fix
+    // shipped, the stale value sat on the row forever — the gate
+    // (then: `if (current !== null) skip`) treated it as an agent
+    // override and never re-resolved from Tier 0. Captured property
+    // values (property.levy / rates_taxes) must overwrite stale
+    // auto-fill; a real agent override must survive Tier 0.
+
+    public function test_tier0_overwrites_stale_monthly_levies_when_no_override(): void
+    {
+        [$pres, $agencyId, $prop] = $this->seedSectionalSubject(levy: 959);
+
+        // Simulate the pre-fix bug: stale R30,000 frozen on the
+        // presentation column, no agent_override audit row.
+        $pres->monthly_levies = 30000;
+        $pres->saveQuietly();
+        $this->assertSame(30000.0, (float) $pres->fresh()->monthly_levies);
+
+        $estimator = app(HoldingCostEstimator::class);
+        $result = $estimator->estimateAndPersist($pres->fresh(['property']));
+
+        // Tier 0 must have run + overwritten the stale value.
+        $this->assertArrayHasKey('levy', $result['wrote']);
+        $this->assertSame('tier0', $result['wrote']['levy']['tier']);
+        $this->assertSame(959, $result['wrote']['levy']['value']);
+        $this->assertSame(959.0, (float) $pres->fresh()->monthly_levies);
+    }
+
+    public function test_tier0_overwrites_stale_monthly_rates_when_no_override(): void
+    {
+        [$pres, $agencyId] = $this->seedFreeholdSubject(rates: 848);
+
+        // Stale Tier 2 value frozen from a prior pass.
+        $pres->monthly_rates = 960;
+        $pres->saveQuietly();
+
+        $estimator = app(HoldingCostEstimator::class);
+        $result = $estimator->estimateAndPersist($pres->fresh(['property']));
+
+        $this->assertArrayHasKey('rates', $result['wrote']);
+        $this->assertSame('tier0', $result['wrote']['rates']['tier']);
+        $this->assertSame(848, $result['wrote']['rates']['value']);
+        $this->assertSame(848.0, (float) $pres->fresh()->monthly_rates);
+    }
+
+    public function test_genuine_agent_override_survives_tier0(): void
+    {
+        // Property carries captured levy (would give Tier 0 = 959) BUT
+        // the agent has explicitly overridden to 1_200. The override
+        // must not be clobbered on re-estimate.
+        [$pres, $agencyId, $prop] = $this->seedSectionalSubject(levy: 959);
+        $version = $this->seedVersion($pres);
+
+        // Agent override audit row + persisted column value.
+        $pres->monthly_levies = 1_200;
+        $pres->saveQuietly();
+        HoldingCostDataPoint::create([
+            'agency_id'               => $agencyId,
+            'presentation_version_id' => $version->id,
+            'property_id'             => $prop->id,
+            'component'               => 'levy',
+            'monthly_value_zar'       => 1_200,
+            'source'                  => HoldingCostDataPoint::SOURCE_AGENT_OVERRIDE,
+            'source_ref'              => 'presentation_version:' . $version->id . ':monthly_levies',
+        ]);
+
+        $estimator = app(HoldingCostEstimator::class);
+        $result = $estimator->estimateAndPersist($pres->fresh(['property']));
+
+        // Override must be respected — `skipped` records it; the column
+        // keeps 1_200 not Tier 0's 959.
+        $this->assertArrayHasKey('levy', $result['skipped']);
+        $this->assertSame('agent override present', $result['skipped']['levy']);
+        $this->assertSame(1200.0, (float) $pres->fresh()->monthly_levies);
+    }
+
+    public function test_tier0_levy_with_special_levy_uses_bcmath_sum(): void
+    {
+        // Pin: levy + special_levy added via bcadd. At these magnitudes
+        // it's the same answer as plain int addition; the test exists to
+        // catch a future refactor that drops bcmath inadvertently.
+        [$pres, $agencyId, $prop] = $this->seedSectionalSubject(levy: 959);
+        $prop->update(['special_levy' => 41]);
+
+        $estimator = app(HoldingCostEstimator::class);
+        $result = $estimator->resolveOne('levy', $pres);
+        $this->assertSame('tier0', $result['tier']);
+        $this->assertSame(1_000, $result['value']);
+    }
 }
