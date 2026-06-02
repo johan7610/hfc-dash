@@ -553,6 +553,25 @@ td.num, th.num { text-align: right; }
 .callout-danger { background: var(--danger-bg); border-color: var(--danger); color: #991b1b; }
 .callout-success { background: var(--success-bg); border-color: var(--success); color: #065f46; }
 
+/* ── SECTION INTRO (Build 8 — seller-first interpretive callouts) ───── */
+/* Sits directly under each section header. Calm, plain-language voice
+   that tells the seller WHAT they're looking at and WHY it matters.
+   page-break-inside:avoid + the existing .section-header
+   page-break-after:avoid means the header + intro travel as one. */
+.section-intro {
+    padding: 14px 18px;
+    margin: 0 0 16px 0;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--brand);
+    border-radius: 4px;
+    font-size: 11.5px;
+    line-height: 1.65;
+    color: var(--text);
+    page-break-inside: avoid;
+}
+.section-intro strong { color: var(--brand); font-weight: 700; }
+
 /* ── COVER PAGE ──────────────────────────────────────────────────────── */
 .cover {
     display: flex;
@@ -1084,10 +1103,13 @@ a:hover { text-decoration: underline; }
     <h2>Market Overview — <?= $suburbName ?></h2>
 </div>
 
-<p style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">
-    <?= $suburbName ?> recorded <strong><?= (int) $suburbSales ?> residential sales</strong> in <?= $esc((string) $suburbYear) ?>
-    at a median price of <strong><?= $zar($suburbMedian) ?></strong>.
-</p>
+<div class="section-intro avoid-break">
+    This is the broader picture for <strong><?= $suburbName ?></strong> — how many homes sold
+    recently and at what prices. It sets the backdrop: a market with steady sales and
+    rising prices gives you more room; a slower one calls for sharper positioning. Your
+    property's specific value comes from the comparable sales on the next pages, but this
+    is the climate it's selling into.
+</div>
 
 <div class="avoid-break">
 <h3 style="margin-bottom:8px;">Suburb Price Summary (<?= $esc((string) $suburbYear) ?>)</h3>
@@ -1215,9 +1237,14 @@ a:hover { text-decoration: underline; }
 ?>
 
 <?php if (!empty($topSales)): ?>
-<p style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">
-    The <?= count($topSales) ?> most recent sales within the vicinity of your property,
-    sorted by date (most recent first).
+<div class="section-intro avoid-break">
+    These are the actual homes near you that have sold — real transactions, not asking
+    prices. They're the single most reliable guide to what a buyer will pay for a property
+    like yours, because they show what buyers have <strong>already paid</strong>. The closer
+    a sale is in size, location and timing, the more it tells us about your value.
+</div>
+<p style="font-size:10px;color:var(--text-muted);margin:0 0 10px 0;">
+    The <?= count($topSales) ?> most recent sales within the vicinity of your property, sorted by date (most recent first).
 </p>
 
 <table>
@@ -1583,6 +1610,13 @@ a:hover { text-decoration: underline; }
     <h2>Comparative Market Analysis</h2>
 </div>
 
+<div class="section-intro avoid-break">
+    Bringing the sales together, this is where your property's <strong>value range</strong>
+    comes from. The spread shows the realistic band — most homes like yours sold within it.
+    Pricing inside this range puts you where buyers are actively transacting; pricing above
+    it asks buyers to pay more than the market has recently supported.
+</div>
+
 <?php if ($cmaLower || $cmaMiddle || $cmaUpper): ?>
 <h3 style="margin-bottom:10px;color:var(--brand);">CMA Valuation Range</h3>
 
@@ -1776,10 +1810,14 @@ a:hover { text-decoration: underline; }
     <h2>Active Competition</h2>
 </div>
 
-<p style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">
-    These are the properties buyers are comparing yours against.
-    There <?= $totalActiveStock === 1 ? 'is' : 'are' ?> currently <strong><?= $totalActiveStock ?> active listing<?= $totalActiveStock !== 1 ? 's' : '' ?></strong> in the area<?php if ($totalActiveStock > $activeCount && $activeCount > 0): ?> (<?= $activeCount ?> with detailed price data)<?php endif ?>.
-    <?php if ($avgAskPrice): ?>Average asking price: <strong><?= $zar($avgAskPrice) ?></strong>.<?php endif ?>
+<div class="section-intro avoid-break">
+    These are the homes a buyer will see alongside yours, right now, today. A buyer
+    comparing options will weigh your price, size and condition against these. Where you
+    sit in this set directly shapes how quickly you attract serious interest — being the
+    <strong>best-value option</strong> in the group is what moves a property.
+</div>
+<p style="font-size:10.5px;color:var(--text-muted);margin:0 0 12px 0;">
+    There <?= $totalActiveStock === 1 ? 'is' : 'are' ?> currently <strong><?= $totalActiveStock ?> active listing<?= $totalActiveStock !== 1 ? 's' : '' ?></strong> in the area<?php if ($totalActiveStock > $activeCount && $activeCount > 0): ?> (<?= $activeCount ?> with detailed price data)<?php endif ?>.<?php if ($avgAskPrice): ?> Average asking price: <strong><?= $zar($avgAskPrice) ?></strong>.<?php endif ?>
 </p>
 
 <?php if (!empty($activeRows)): ?>
@@ -2031,10 +2069,12 @@ for ($rowStart = 0; $rowStart < $visibleCount; $rowStart += $columns):
     <h2>New Listing Inflow &amp; Absorption</h2>
 </div>
 
-<p style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">
-    New competing listings entering the market directly impact your selling probability.
-    This analysis uses P24 alert data to measure the rate of new stock inflow.
-</p>
+<div class="section-intro avoid-break">
+    This shows how fast new competing homes are coming to market versus how fast they're
+    selling. When more arrive than sell, buyers gain choice and time — which works against
+    an overpriced listing. <strong>Pricing right early</strong>, before more stock arrives,
+    protects your position.
+</div>
 
 <?php // Period cards: 7d / 30d / 90d ?>
 <div class="metric-grid">
@@ -2328,10 +2368,14 @@ for ($rowStart = 0; $rowStart < $visibleCount; $rowStart += $columns):
     <h2>Holding Cost Analysis</h2>
 </div>
 
-<p style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">
-    Every month on the market at the current asking price costs
-    <strong style="color:var(--danger)"><?= $zarFloat($monthlyTotal) ?></strong>.
-</p>
+<div class="section-intro avoid-break">
+    Every month your home is on the market carries a real, ongoing cost — bond, rates,
+    levies, and the opportunity cost of capital tied up. At
+    <strong><?= $zarFloat($monthlyTotal) ?>/month</strong>, that's
+    <strong><?= $zarFloat($projected12m) ?></strong> over a year. This is why a realistic
+    price that sells in weeks often nets you <strong>more</strong> than a higher price
+    that sits for months.
+</div>
 
 <?php if ($monthlyTotal > 0): ?>
 <div class="two-col">
@@ -2414,6 +2458,13 @@ for ($rowStart = 0; $rowStart < $visibleCount; $rowStart += $columns):
 <div class="section-header">
     <span class="section-number"><?= $sectionAfterInflow + 1 ?></span>
     <h2>Pricing Strategy &amp; Recommendation</h2>
+</div>
+
+<div class="section-intro avoid-break">
+    This brings everything together into a recommendation. The range reflects what the
+    evidence supports — recent sales, the valuation band, current competition, and the
+    cost of waiting. The <strong>final decision is yours</strong>; our role is to make
+    sure it's an informed one.
 </div>
 
 <?php if ($cmaMiddle && $cmaUpper): ?>
