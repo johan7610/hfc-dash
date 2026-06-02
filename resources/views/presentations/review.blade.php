@@ -32,7 +32,19 @@
     .review-section-tag { width: 4px; height: 18px; background: #00d4aa; }
     .review-section-title { margin: 0; font-size: 13px; font-weight: 700; color: #0b2a4a; letter-spacing: 0.04em; text-transform: uppercase; }
     .review-warn-banner { padding: 10px 12px; background: color-mix(in srgb, var(--ds-amber, #d97706) 12%, transparent); border: 1px solid color-mix(in srgb, var(--ds-amber, #d97706) 30%, transparent); border-radius: 4px; color: var(--ds-amber, #d97706); font-size: 12px; margin-bottom: 12px; }
-    .comp-row { display: grid; grid-template-columns: 28px 1fr 90px 100px 110px 70px 90px 28px; gap: 8px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--border); font-size: 12px; }
+    .comp-row { display: grid; grid-template-columns: 28px minmax(120px, 1fr) 90px 100px 110px 70px 90px 28px; gap: 8px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--border); font-size: 12px; }
+    /* Comp table + map side-by-side layout. Pre-fix the wrapper used
+       minmax(0,1fr) on the left column, which let the table's fixed-
+       width Type / R/m² / Title cells slide UNDER the map at narrower
+       viewports while the Address 1fr collapsed to zero. The min here
+       is the comp-row's natural floor: 28 + 120 (address floor) + 90
+       + 100 + 110 + 70 + 90 + 28 = 636 fixed + 56 gap = 692px → 700
+       with a small cushion. Below the breakpoint we stack vertically
+       so the layout degrades gracefully on small laptops. */
+    .review-comps-layout { display: grid; grid-template-columns: minmax(700px, 1fr) minmax(360px, 560px); gap: 16px; }
+    @media (max-width: 1199px) {
+        .review-comps-layout { grid-template-columns: 1fr; }
+    }
     .comp-row.excluded { opacity: 0.45; }
     .comp-row.cross-type { background: color-mix(in srgb, var(--ds-amber, #d97706) 6%, transparent); }
     .comp-row input[type="checkbox"] { accent-color: #00d4aa; width: 16px; height: 16px; cursor: pointer; }
@@ -281,7 +293,7 @@
             <h2 class="review-section-title">2 · Comparable Sales — {{ count($compRows) }} found</h2>
         </div>
 
-        <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 560px); gap: 16px;">
+        <div class="review-comps-layout">
             <div>
                 {{-- Comp table --}}
                 <div style="margin-bottom: 8px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted);">
