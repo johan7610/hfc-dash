@@ -15,6 +15,7 @@ use App\Models\PresentationVersion;
 use App\Models\PropertySettingItem;
 use App\Services\Presentations\AnalysisDataService;
 use App\Services\Presentations\ConditionAdjustmentService;
+use App\Support\Presentations\CompLabel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -107,7 +108,13 @@ final class PresentationReviewController extends Controller
             $subjectMatchUsed = (bool) ($raw['subject_match_used'] ?? false);
             return [
                 'id'              => $c->id,
-                'address'         => $raw['address'] ?? '—',
+                // Route through CompLabel — same never-blank 5-step
+                // fallback the PDF and analysis tab use. Sectional comps
+                // with scheme_name + section_number (and no street
+                // address) used to render as "—" here while displaying
+                // correctly elsewhere; this collapses the three consumers
+                // onto one source of truth.
+                'address'         => CompLabel::build($raw, $c->suburb ?? null, $c->id ?? null),
                 'sale_date'       => optional($c->sold_date)->format('Y-m-d'),
                 'sold_price_inc'  => $c->sold_price_inc,
                 'property_type'   => $c->property_type,

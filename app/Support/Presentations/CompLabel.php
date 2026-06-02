@@ -29,9 +29,16 @@ namespace App\Support\Presentations;
  *   - section_no      (doc_extract_v1 family)
  * Both are checked.
  *
- * Used by AnalysisDataService (review screen + PDF tables — single
- * call inside compileData()) and by PresentationPdfService's map-
- * tooltip loop (one call per row at the SVG marker title site).
+ * Call sites (single source of truth — all three must produce the
+ * same label for the same comp):
+ *   - AnalysisDataService::compileComparableSales (analysis tab +
+ *     the PDF's Comparable Sales table)
+ *   - PresentationPdfService spatial-view marker tooltips (per-row
+ *     call at the SVG marker title site)
+ *   - PresentationReviewController::show — the review-screen comp
+ *     table (added after the parity gap that left sectional comps
+ *     with no street address rendering blank on the review screen
+ *     while populating correctly on the PDF + analysis tab).
  */
 final class CompLabel
 {
