@@ -90,11 +90,19 @@ class AnalysisDataService
             $presentation, $inPoolComps, $isSectional, $conditionContext,
         );
 
+        // Build 8 — extract cma_valuation to a variable so the Price
+        // Position table (built inside compileKeyInsights) can read the
+        // SAME computed + condition-scaled lower/middle/upper the tiles
+        // render. Pre-fix compileKeyInsights re-read the raw
+        // cma.middle_range field directly, which produced a different
+        // "vs CMA Evaluation (middle)" benchmark from the tile value.
+        $cmaValuation = $this->compileCmaValuation($fields, $askingPrice, $cmaSelectedRange, $conditionContext, $cmaComputed);
+
         return [
             'subject_property'   => $this->compileSubjectProperty($presentation, $fields, $askingPrice),
             'suburb_overview'    => $suburbOverview,
             'comparable_sales'   => $this->compileComparableSales($soldComps, $presentation->property_address),
-            'cma_valuation'      => $this->compileCmaValuation($fields, $askingPrice, $cmaSelectedRange, $conditionContext, $cmaComputed),
+            'cma_valuation'      => $cmaValuation,
             'cma_computed'       => $cmaComputed,
             'competitor_stock'   => $this->compileCompetitorStock($presentation, $version),
             'active_competition' => $activeCompetition,
@@ -103,7 +111,7 @@ class AnalysisDataService
             'price_position'     => $this->compilePricePosition($activeCompetition, $askingPrice),
             'price_brackets'     => $this->compilePriceBrackets($activeCompetition, $askingPrice),
             'holding_cost'       => $this->compileHoldingCost($presentation),
-            'key_insights'       => $this->compileKeyInsights($fields, $askingPrice, $cmaSelectedRange, $vicinitySelectedRange),
+            'key_insights'       => $this->compileKeyInsights($fields, $askingPrice, $cmaSelectedRange, $vicinitySelectedRange, $cmaValuation),
             'is_sectional'       => $isSectional,
             'data_counts'        => [
                 'fields'          => $fields->count(),
@@ -401,10 +409,31 @@ class AnalysisDataService
         $poolStats     = $cmaComputed['pool_stats']     ?? [];
         $methodMedian  = $cmaComputed['method_median']  ?? [];
 
-        $lower          = $this->intOrNull($poolStats['p25']    ?? null);
-        $upper          = $this->intOrNull($poolStats['p75']    ?? null);
+        $lowerBaseline  = $this->intOrNull($poolStats['p25']    ?? null);
+        $upperBaseline  = $this->intOrNull($poolStats['p75']    ?? null);
         $middleBaseline = $this->intOrNull($methodMedian['raw'] ?? null);
-        $middle         = $this->intOrNull($methodMedian['condition_adjusted'] ?? null) ?? $middleBaseline;
+
+        // Build 8 — scale the WHOLE band by the condition factor, not just
+        // the median. Pre-fix only the median was scaled (inside
+        // CmaComputeService::methodResult), so at +20% the Uvongo PDF
+        // produced Middle R864k > Upper R747,500 — broken ordering, and
+        // the recommended-band "R864k — R747,500" pair read backwards.
+        // ConditionAdjustmentService::applyToBand reuses the same bcmath
+        // factor CmaComputeService applies to the median (round(base *
+        // (1 + pct/100))) so all three tiles stay on the same scale.
+        // No-op when pct is null / ~0 — baseline values pass through.
+        $bandPct      = isset($conditionContext['pct']) && is_numeric($conditionContext['pct'])
+            ? (float) $conditionContext['pct']
+            : null;
+        $bandScaled   = app(\App\Services\Presentations\ConditionAdjustmentService::class)
+            ->applyToBand($lowerBaseline, $middleBaseline, $upperBaseline, $bandPct);
+        $lower        = $bandScaled['lower_adjusted'];
+        $upper        = $bandScaled['upper_adjusted'];
+        // Middle still flows through method_median.condition_adjusted so
+        // the existing thin-pool / clean-pool fallbacks in
+        // CmaComputeService stay authoritative; applyToBand's middle
+        // output is a sanity check (must equal method_median.condition_adjusted).
+        $middle       = $this->intOrNull($methodMedian['condition_adjusted'] ?? null) ?? $middleBaseline;
 
         // middle_from_fallback no longer applies to the tile values —
         // CmaComputeService handles thin-pool fallback via Build 8b's
@@ -907,20 +936,36 @@ class AnalysisDataService
 
     // ── 7. KEY INSIGHTS ──────────────────────────────────────────────────
 
-    private function compileKeyInsights(Collection $fields, ?int $askingPrice, string $cmaSelectedRange = 'middle', string $vicinitySelectedRange = 'middle'): array
+    private function compileKeyInsights(Collection $fields, ?int $askingPrice, string $cmaSelectedRange = 'middle', string $vicinitySelectedRange = 'middle', array $cmaValuation = []): array
     {
         if (!$askingPrice) {
             return ['asking_price_set' => false, 'comparisons' => []];
         }
 
-        // Build 1 — share the BUG-1 middle-band fallback with key insights
-        // (asking-vs-CMA comparison would otherwise lose the comparison when
-        // the source PDF didn't carry a middle label).
-        $cmaLower  = $this->intOrNull($fields->get('cma.lower_range')?->final_value);
-        $cmaUpper  = $this->intOrNull($fields->get('cma.upper_range')?->final_value);
-        $cmaMiddle = $this->intOrNull($fields->get('cma.middle_range')?->final_value);
-        if ($cmaMiddle === null && $cmaLower !== null && $cmaUpper !== null && $cmaUpper >= $cmaLower) {
-            $cmaMiddle = (int) round(($cmaLower + $cmaUpper) / 2);
+        // Build 8 — single source of truth. Read the CMA band from the
+        // already-computed cma_valuation block (CoreX-computed +
+        // condition-scaled) so the Price Position "vs CMA Evaluation"
+        // benchmark uses the SAME middle the tiles render. Pre-fix this
+        // method re-read cma.middle_range field directly — that's the
+        // raw value parsed from the source CMA Info PDF, never touched
+        // by the compute pipeline or the condition multiplier. The
+        // resulting R715k benchmark contradicted the R864k tile.
+        //
+        // Fall back to the field reads ONLY for very old / un-compiled
+        // versions where cma_valuation is empty (e.g. legacy tests
+        // that bypassed compile()). New code paths always pass it in.
+        $cmaLower  = $cmaValuation['cma_lower']  ?? null;
+        $cmaUpper  = $cmaValuation['cma_upper']  ?? null;
+        $cmaMiddle = $cmaValuation['cma_middle'] ?? null;
+        if ($cmaLower === null && $cmaUpper === null && $cmaMiddle === null) {
+            // Legacy fallback — same as the original compileKeyInsights
+            // contract for callers that didn't compile a cma_valuation.
+            $cmaLower  = $this->intOrNull($fields->get('cma.lower_range')?->final_value);
+            $cmaUpper  = $this->intOrNull($fields->get('cma.upper_range')?->final_value);
+            $cmaMiddle = $this->intOrNull($fields->get('cma.middle_range')?->final_value);
+            if ($cmaMiddle === null && $cmaLower !== null && $cmaUpper !== null && $cmaUpper >= $cmaLower) {
+                $cmaMiddle = (int) round(($cmaLower + $cmaUpper) / 2);
+            }
         }
         $cmaValue = match($cmaSelectedRange) {
             'lower' => $cmaLower,

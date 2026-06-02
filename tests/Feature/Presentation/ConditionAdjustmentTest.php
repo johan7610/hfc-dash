@@ -136,11 +136,11 @@ final class ConditionAdjustmentTest extends TestCase
 
     // ── 4 — AnalysisDataService applies adjustment ────────────────────
 
-    public function test_analysis_data_applies_property_condition_to_middle_band(): void
+    public function test_analysis_data_applies_property_condition_to_whole_band(): void
     {
         [$agencyId, $user] = $this->seedAgencyAndUser();
         $veryGood = PropertySettingItem::withoutGlobalScopes()
-            ->where('agency_id', $agencyId)->where('name', 'Very Good')->first();
+            ->where('agency_id', $agencyId)->where('name', 'Very Good')->first(); // +12%
 
         $property = $this->createProperty($agencyId, $user->id, [
             'price'              => 1_830_000,
@@ -148,7 +148,20 @@ final class ConditionAdjustmentTest extends TestCase
         ]);
 
         $version = $this->seedPresentationWithVersion($agencyId, $user->id, $property);
-        $this->seedCmaFields($version->presentation_id, $agencyId, 1_500_000, 1_830_000, 2_160_000);
+        // asking_price drives the key_insights comparisons (without it
+        // compileKeyInsights returns no rows). Set 1_900_000 so the
+        // "vs CMA Evaluation (middle)" benchmark renders.
+        $version->presentation()->update(['asking_price_inc' => 1_900_000]);
+        // Build 8 — Phase B reads tile lower/middle/upper from the
+        // compute pool's p25/median/p75, not from the legacy
+        // cma.*_range fields. Seed 5 sorted comp prices so the type-7
+        // percentile lands exactly: sorted[1]=p25, sorted[2]=median,
+        // sorted[3]=p75. Recent sold_dates keep them inside the
+        // default 36-month recency window; IQR fences (q1=1.5M,
+        // q3=2.16M, mult 1.5) accept the full set.
+        $this->seedSoldCompsForPercentiles($version->presentation_id, $agencyId, [
+            1_500_000, 1_500_000, 1_830_000, 2_160_000, 2_160_000,
+        ]);
 
         $analysis = (new AnalysisDataService())->compile(
             $version->presentation()->with('property')->first(),
@@ -156,16 +169,32 @@ final class ConditionAdjustmentTest extends TestCase
         );
         $cma = $analysis['cma_valuation'];
 
-        // Build 1 lower/upper bookends untouched.
-        $this->assertSame(1_500_000, $cma['cma_lower']);
-        $this->assertSame(2_160_000, $cma['cma_upper']);
-        // Build 3 — Middle adjusted +12% from 1_830_000 = 2_049_600.
-        $this->assertSame(2_049_600, $cma['cma_middle']);
+        // Build 8 — condition factor (×1.12) applies to ALL THREE band
+        // values so the ordered invariant lower < middle < upper holds.
+        // Pre-fix Phase B applied the factor only to the median; on a
+        // band like (R1.5M, R1.83M, R2.16M) with +20% that produced
+        // Middle R2.196M > Upper R2.160M — broken ordering, broken
+        // recommended-band pair.
+        $this->assertSame(1_680_000, $cma['cma_lower']);   // 1_500_000 * 1.12
+        $this->assertSame(2_049_600, $cma['cma_middle']);  // 1_830_000 * 1.12
+        $this->assertSame(2_419_200, $cma['cma_upper']);   // 2_160_000 * 1.12
+        // Ordering invariant — the whole point of the fix.
+        $this->assertLessThan($cma['cma_middle'], $cma['cma_lower']);
+        $this->assertLessThan($cma['cma_upper'],  $cma['cma_middle']);
+        // Baseline metadata still surfaces the un-scaled median.
         $this->assertSame(1_830_000, $cma['cma_middle_baseline']);
         $this->assertTrue($cma['condition_applied']);
         $this->assertEqualsWithDelta(12.0, $cma['condition_pct'], 0.01);
         $this->assertSame('Very Good', $cma['condition_label']);
         $this->assertSame('property_default', $cma['condition_source']);
+
+        // Build 8 — Price Position "vs CMA Evaluation (middle)" must
+        // read the SAME middle the tiles render. Pre-fix it read
+        // cma.middle_range field directly (a different value entirely).
+        $cmaComparison = collect($analysis['key_insights']['comparisons'])
+            ->firstWhere('label', 'vs CMA Evaluation (middle)');
+        $this->assertNotNull($cmaComparison);
+        $this->assertSame(2_049_600, $cmaComparison['benchmark']);
     }
 
     public function test_baseline_applies_when_no_condition_set(): void
@@ -433,6 +462,33 @@ final class ConditionAdjustmentTest extends TestCase
                 'presentation_id' => $presentationId,
                 'field_key'       => $key,
                 'final_value'     => (string) $value,
+            ]);
+        }
+    }
+
+    /**
+     * Build 8 — seed PresentationSoldComp rows so the CMA compute
+     * pool produces deterministic percentiles. Prices are sorted in
+     * place; with N=5 the type-7 percentile formula maps:
+     *   p25 → sorted[1], median → sorted[2], p75 → sorted[3].
+     * All comps get a recent sold_date so the default 36-month
+     * recency cut in CmaComputeService accepts the full set.
+     */
+    private function seedSoldCompsForPercentiles(int $presentationId, int $agencyId, array $prices): void
+    {
+        sort($prices);
+        foreach ($prices as $i => $price) {
+            \App\Models\PresentationSoldComp::create([
+                'agency_id'       => $agencyId,
+                'presentation_id' => $presentationId,
+                'sold_date'       => now()->subMonths(1)->subDays($i)->toDateString(),
+                'sold_price_inc'  => $price,
+                'suburb'          => 'Testville',
+                'property_type'   => 'house',
+                'beds'            => 3,
+                'size_m2'         => 150,
+                'raw_row_json'    => json_encode(['address' => 'Test ' . ($i + 1)]),
+                'parser_version'  => 'test',
             ]);
         }
     }
