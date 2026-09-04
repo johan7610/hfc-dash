@@ -168,11 +168,18 @@ class RentalApplicationController extends Controller
             ->deleteFileAfterSend(true);
     }
 
+    /**
+     * A token must be unique ACROSS every agency, not just the acting user's
+     * own — two different agencies' applications must never collide. Uses the
+     * model's own sanctioned cross-tenant escape hatch (BelongsToAgency::
+     * queryWithoutAgencyScope()), never a raw withoutGlobalScope() call in
+     * request code (CLAUDE.md Non-negotiable #7).
+     */
     private function generateToken(): string
     {
         do {
             $token = Str::random(64);
-        } while (RentalApplication::withoutGlobalScope(\App\Models\Scopes\AgencyScope::class)->where('token', $token)->exists());
+        } while (RentalApplication::queryWithoutAgencyScope()->where('token', $token)->exists());
 
         return $token;
     }

@@ -51,7 +51,11 @@ class RentalApplicationDocumentRequirement extends Model
      */
     public static function checklistFor(int $agencyId, string $employmentType): Collection
     {
-        $saved = static::withoutGlobalScope(\App\Models\Scopes\AgencyScope::class)
+        // No withoutGlobalScope needed (CLAUDE.md Non-negotiable #7 forbids it
+        // in request code): every caller passes the ACTING user's own
+        // effective agency, which AgencyScope already resolves them to —
+        // this is a normal, correctly-scoped read, not a cross-tenant one.
+        $saved = static::query()
             ->where('agency_id', $agencyId)
             ->where('employment_type', $employmentType)
             ->orderBy('sort_order')

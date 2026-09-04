@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\RentalApplication;
 use App\Models\RentalApplicationSignature;
-use App\Models\Scopes\AgencyScope;
 use App\Services\RentalApplications\RentalApplicationPdfService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -19,9 +18,16 @@ use Illuminate\View\View;
  */
 class RentalApplicationSigningController extends Controller
 {
+    /**
+     * A public, unauthenticated route has no agency context to scope to at
+     * all — the token itself IS the identity here. Uses the model's own
+     * sanctioned cross-tenant escape hatch (BelongsToAgency::
+     * queryWithoutAgencyScope()), never a raw withoutGlobalScope() call in
+     * request code (CLAUDE.md Non-negotiable #7).
+     */
     private function findByToken(string $token): RentalApplication
     {
-        return RentalApplication::withoutGlobalScope(AgencyScope::class)
+        return RentalApplication::queryWithoutAgencyScope()
             ->where('token', $token)
             ->with(['contact', 'property', 'signatures', 'agency', 'branch'])
             ->firstOrFail();
