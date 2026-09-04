@@ -2564,6 +2564,13 @@
                         <a href="{{ route('rental.active-leases') }}" class="corex-nav-subitem {{ request()->routeIs('rental.active-leases') ? 'active' : '' }}">Active Leases</a>
                         <a href="{{ route('rental.expired-leases') }}" class="corex-nav-subitem {{ request()->routeIs('rental.expired-leases') ? 'active' : '' }}">Expired Leases</a>
                         @endpermission
+                        {{-- AT-392 — Rental Applications (Phase 1) --}}
+                        @permission('rental_applications.view')
+                        <a href="{{ route('corex.rental-applications.index') }}" class="corex-nav-subitem {{ request()->routeIs('corex.rental-applications.index') || request()->routeIs('corex.rental-applications.create') || request()->routeIs('corex.rental-applications.show') ? 'active' : '' }}">Rental Applications</a>
+                        @endpermission
+                        @permission('rental_applications.view_returned')
+                        <a href="{{ route('corex.rental-applications.returned') }}" class="corex-nav-subitem {{ request()->routeIs('corex.rental-applications.returned') ? 'active' : '' }}">Returned Applications</a>
+                        @endpermission
                     </div>
                 </div>
                 @endfeature
