@@ -1,0 +1,186 @@
+# Spec: Rental Applications (AT-392)
+
+**Status:** Phase 1 approved by Johan 2026-09-04. This spec covers Phase 1 only.
+**Ticket:** AT-392 — Rental Applications lane.
+
+---
+
+## Why
+
+The Rental Application (V8) document was being sent through the full e-sign
+wizard, which structurally requires the agent to be a signing party
+(`ESignWizardController` auto-injects and locks an `agent` recipient row —
+see AT-332 investigation). For a tenant intake form this is overkill: the
+agent never needs to sign a rental application, and the wizard's multi-step
+flow (property → recipients → details → fill & review → signing setup →
+prepare-signing) is far more machinery than "pick a contact, send a form."
+
+Phase 1 replaces that path with a dedicated page for this one document type.
+
+---
+
+## Phase 1 scope — what this build includes
+
+1. **Dedicated page**, not the e-sign wizard. Contact **required**, property
+   **optional**. Every field **optional** — nothing blocks send. Prefill
+   from the contact wherever a field maps to a real `contacts` column.
+2. **Fields** (from Rental Application V8):
+   - Property address
+   - Personal: full name, ID number, marital status, spouse name, spouse ID,
+     citizenship, current residential address, email, cell, work
+   - Emergency contact: name, cell, work
+   - Current landlord: name, tel, current rental amount, from, to
+   - Employment: employer, position, employer address, employer tel,
+     monthly salary
+   - Lease requirement: occupation date, rental terms, special conditions,
+     adults, children
+3. **Agent does not sign.** The applicant signs twice in one sitting: the
+   truth-of-information declaration, and the Tenant Profile Network (TPN)
+   credit-check consent.
+4. **One send, two return routes**, applicant's choice:
+   - (a) Download the PDF, complete by hand, scan, return — with an upload
+     link so the scanned/completed copy and supporting documents come back
+     into CoreX rather than an inbox.
+   - (b) Tokenised link — complete online, sign both blocks, upload
+     supporting documents, data lands directly against the contact.
+   - (b) is modelled on the existing `/sign/{token}` mechanism
+     (`SignatureRequest`/`SigningController` pattern) — reused, not
+     reinvented: same token generation shape (`Str::random(64)`, uniqueness
+     loop), same 14-day expiry convention, same "blocked/expired" no-identity
+     -leak handling shape.
+5. **Supporting documents.** Reuses the existing e-sign recipient
+   supporting-document upload path's contract (allowlist
+   `pdf,jpg,jpeg,png,doc,docx`, 15MB/file, max 10 files/request — see
+   `SigningController::uploadSupportingDocuments()`). Required-document list
+   is agency-configurable, defaulting to the V8 checklist per employment
+   type (permanently employed / business owner — personal account /
+   business owner — business account). **Nothing is enforced** — missing
+   documents show as outstanding on the Returned Applications screen; they
+   never block submission.
+6. **Returned Applications** — its own menu item for the rental team.
+   Status values: `sent`, `in_progress`, `returned`, `under_assessment`,
+   `approved`, `declined`, `withdrawn`.
+7. **Branding.** No literals. The live template (`template-97.blade.php`)
+   hardcodes `letting@hfcoastal.co.za` (`:58`) and `039 315 0857` (`:77`).
+   The new build reads agency email/phone/website via the same `$d()`
+   accessor pattern already used in
+   `docuperfect/web-templates/components/company-header.blade.php`
+   (`agencies.email`, `agencies.phone` / `phone_secondary`,
+   `agencies.website_url`).
+8. **Navigation** (standing rule — every page ships with its nav entry the
+   same day): Rentals → Rental Applications. Rentals → Returned
+   Applications. Settings → Rental Applications.
+9. **Soft deletes only** (`SoftDeletes`), **agency-scoped**
+   (`BelongsToAgency` + global `AgencyScope`) — no exceptions.
+
+## Explicitly OUT of Phase 1 (later phases, per Johan)
+
+- Assessment split-screen with agency-configurable affordability calculator
+  and approval routing.
+- Applicant highlighting and OCR keyword marking on returned documents.
+
+---
+
+## Pillars
+
+- **Contact** — required. The application is filed against a contact; the
+  contact's own fields (name, ID number, email, phone, address) prefill the
+  form and the PDF's Document ↔ Contact link (`document_contacts` /
+  `documents.agency_id`) is how it appears on the contact record.
+- **Property** — optional. When set, links via `documents.property_id` /
+  `document_properties`, same convention as every other filed document.
+- **Deal** — not required for Phase 1 (a rental application precedes any
+  deal; nothing here creates or requires a `deals` row).
+- **Agent** — the creating/sending user; recorded, never a signer.
+
+---
+
+## Data model
+
+### `rental_applications`
+
+One row per sent application. `agency_id` (BelongsToAgency), `branch_id`,
+`contact_id` (NOT NULL — the one required link), `property_id` (nullable),
+`created_by_user_id`, `status` (enum, see §6 above, default `sent`),
+`token`, `token_expires_at`, `delivery_mode` (`download` | `online`,
+nullable until the applicant picks one), plus one nullable column per V8
+field listed in §2. `submitted_at`, soft deletes.
+
+**Every V8 field column is nullable.** Per BUILD_STANDARD §2 (the
+input-space rule), an empty optional field must never reach the DB and
+error — nullable columns are the DB-layer half of that guarantee.
+
+### `rental_application_signatures`
+
+Two rows per completed application (`kind`: `declaration` | `tpn_consent`),
+each with the captured signature image path, signed-at timestamp, and the
+IP/user-agent of the signer — mirrors the audit shape already used for
+e-sign (`SignatureAuditLog`), scoped down to what a two-signature intake
+form needs.
+
+### `rental_application_document_requirements`
+
+Agency-configurable checklist. `agency_id`, `employment_type` (enum:
+`permanently_employed`, `business_owner_personal_account`,
+`business_owner_business_account`), `document_type_id` (FK to the existing,
+shared `document_types` table — no parallel type system), `sort_order`.
+**No agency row present ⇒ the V8 defaults apply in memory** (Rule 17-safe
+pattern: never persists a hardcoded default, just returns it when nothing
+is configured), so an agency that never opens the settings screen still
+gets the correct, working default checklist.
+
+### Documents
+
+Supporting documents and the returned/scanned copy file through the
+**existing, shared `documents` table** (`source_type = 'rental_application'`,
+`source_id = rental_applications.id`, `agency_id` stamped from the
+application) — never a parallel documents table. Contact/property linkage
+uses the same pivots (`document_contacts`, `document_properties`) every
+other filed document uses.
+
+---
+
+## Routes (Phase 1)
+
+| Purpose | Route |
+|---|---|
+| List / create | `GET/POST corex/rental-applications` |
+| Show / edit (pre-send) | `GET corex/rental-applications/{rentalApplication}` |
+| Send | `POST corex/rental-applications/{rentalApplication}/send` |
+| Returned Applications inbox | `GET corex/rental-applications/returned` |
+| Settings — document checklist | `GET/POST corex/settings/rental-applications` |
+| Public token entry | `GET rental-application/{token}` |
+| Public submit | `POST rental-application/{token}/submit` |
+| Public supporting-doc upload | `POST rental-application/{token}/documents` |
+| PDF download (agent side, any time) | `GET corex/rental-applications/{rentalApplication}/pdf` |
+
+---
+
+## Permissions
+
+- `rental_applications.view` / `rental_applications.create` /
+  `rental_applications.send` — the intake page and list.
+- `rental_applications.view_returned` — the Returned Applications inbox
+  (rental team).
+- `rental_applications.manage_settings` — the document-checklist settings
+  screen.
+
+---
+
+## Acceptance criteria (Phase 1)
+
+- An agent can open Rental Applications, pick a contact (required),
+  optionally a property, leave every other field blank, and send — no
+  validation error.
+- The applicant can either download a correctly-branded PDF (agency's own
+  email/phone/website, not HFC literals) or open a tokenised link.
+- On the tokenised link, the applicant can fill any subset of fields,
+  capture both signatures (declaration + TPN consent), upload supporting
+  documents, and submit in one sitting.
+- The submission is visible on the contact record and in Returned
+  Applications with the correct status.
+- Missing checklist documents are shown as outstanding, never block
+  submission.
+- Deleting an application soft-deletes it; nothing is hard-deleted.
+- A second agency's data is never visible to this agency, in the list, the
+  inbox, or the settings screen.
