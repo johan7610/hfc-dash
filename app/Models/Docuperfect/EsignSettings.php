@@ -24,6 +24,7 @@ class EsignSettings extends Model
         'finalization_stuck_threshold_minutes',
         'require_identity_before_send',
         'strict_reauthorisation_binding',
+        'whatsapp_resend_enabled',
     ];
 
     protected $casts = [
@@ -31,6 +32,7 @@ class EsignSettings extends Model
         'finalization_stuck_threshold_minutes' => 'integer',
         'require_identity_before_send' => 'boolean',
         'strict_reauthorisation_binding' => 'boolean',
+        'whatsapp_resend_enabled' => 'boolean',
     ];
 
     /**
@@ -47,6 +49,7 @@ class EsignSettings extends Model
                 'finalization_stuck_threshold_minutes' => 15,
                 'require_identity_before_send' => true,
                 'strict_reauthorisation_binding' => true,
+                'whatsapp_resend_enabled' => true,
             ]);
         }
 
@@ -57,6 +60,7 @@ class EsignSettings extends Model
                 'finalization_stuck_threshold_minutes' => 15,
                 'require_identity_before_send' => true,
                 'strict_reauthorisation_binding' => true,
+                'whatsapp_resend_enabled' => true,
             ]
         );
     }
@@ -99,5 +103,16 @@ class EsignSettings extends Model
     public function strictReauthorisationBinding(): bool
     {
         return $this->exists ? (bool) $this->strict_reauthorisation_binding : true;
+    }
+
+    /**
+     * AT-385/AT-332 — WhatsApp is a secondary, agent-clicked resend method
+     * (Johan: email stays primary, nothing routes through WhatsApp). Default
+     * true for an agency that has never saved this screen — no env fallback
+     * needed, this setting never existed as an env flag.
+     */
+    public function whatsappResendEnabled(): bool
+    {
+        return $this->exists ? (bool) $this->whatsapp_resend_enabled : true;
     }
 }
