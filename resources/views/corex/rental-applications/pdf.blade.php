@@ -23,7 +23,7 @@
 </span></div>
 
 <div class="corex-h2">Personal Details</div>
-<div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">Address of property: <span class="corex-field-value">{{ $application->property->full_address ?? $application->property_address_override ?? '' }}</span></span></div>
+<div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">Address of property: <span class="corex-field-value">{{ $application->property?->buildDisplayAddress() ?? $application->property_address_override ?? '' }}</span></span></div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">Full name and Surname: <span class="corex-field-value">{{ $application->full_name }}</span></span></div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">I.D Number: <span class="corex-field-value">{{ $application->id_number }}</span> &nbsp; Marital Status: <span class="corex-field-value">{{ $application->marital_status }}</span></span></div>
 <div class="corex-clause corex-clause-indent-1"><span class="corex-clause-text">Spouse Full Name: <span class="corex-field-value">{{ $application->spouse_name }}</span></span></div>

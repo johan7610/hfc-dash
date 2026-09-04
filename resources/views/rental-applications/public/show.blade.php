@@ -39,7 +39,7 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div class="sm:col-span-2">
                         <label class="block text-xs text-slate-500 mb-1">Property applying for</label>
-                        <input type="text" value="{{ $application->property->full_address ?? $application->property_address_override ?? '' }}" disabled
+                        <input type="text" value="{{ $application->property?->buildDisplayAddress() ?? $application->property_address_override ?? '' }}" disabled
                                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
                     </div>
                     <x-rental-application-field name="full_name" label="Full name and surname" :value="$application->full_name" />

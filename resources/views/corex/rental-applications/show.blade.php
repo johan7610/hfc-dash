@@ -19,7 +19,7 @@
                 <p class="text-xs" style="color: var(--text-muted);">
                     <span class="ds-badge ds-badge-info">{{ str_replace('_', ' ', $rentalApplication->status) }}</span>
                     @if($rentalApplication->property)
-                        &middot; {{ $rentalApplication->property->full_address }}
+                        &middot; {{ $rentalApplication->property?->buildDisplayAddress() }}
                     @endif
                 </p>
             </div>

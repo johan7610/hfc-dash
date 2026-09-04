@@ -34,7 +34,7 @@
                 @forelse($applications as $application)
                 <tr style="border-bottom: 1px solid var(--border);">
                     <td class="px-4 py-2">{{ $application->contact->full_name ?? '—' }}</td>
-                    <td class="px-4 py-2">{{ $application->property->full_address ?? $application->property_address_override ?? '—' }}</td>
+                    <td class="px-4 py-2">{{ $application->property?->buildDisplayAddress() ?? $application->property_address_override ?? '—' }}</td>
                     <td class="px-4 py-2"><span class="ds-badge ds-badge-info">{{ str_replace('_', ' ', $application->status) }}</span></td>
                     <td class="px-4 py-2">{{ $application->isFullySigned() ? '✓ Both signed' : 'Incomplete' }}</td>
                     <td class="px-4 py-2">{{ optional($application->submitted_at)->format('d M Y') ?? '—' }}</td>
