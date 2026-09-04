@@ -96,7 +96,6 @@ class RentalApplicationController extends Controller
                 'created_by_user_id' => $request->user()->id,
                 'status' => 'sent',
             ],
-            $this->fieldInputs($request),
         ));
 
         return redirect()
@@ -113,13 +112,16 @@ class RentalApplicationController extends Controller
 
     public function update(Request $request, RentalApplication $rentalApplication)
     {
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge(RentalApplication::fieldValidationRules(), [
             'property_id' => ['nullable', 'integer', 'exists:properties,id'],
-        ]);
+        ]));
+
+        $fields = collect($validated)->except(['property_id'])->all();
+        $fields = array_map(fn ($v) => $v === '' ? null : $v, $fields);
 
         $rentalApplication->update(array_merge(
             ['property_id' => $validated['property_id'] ?? $rentalApplication->property_id],
-            $this->fieldInputs($request),
+            $fields,
         ));
 
         return redirect()
@@ -194,30 +196,4 @@ class RentalApplicationController extends Controller
         ];
     }
 
-    private function fieldInputs(Request $request): array
-    {
-        $fields = [
-            'property_address_override', 'full_name', 'id_number', 'marital_status',
-            'spouse_name', 'spouse_id', 'citizenship', 'current_residential_address',
-            'email', 'cell', 'work_number',
-            'emergency_contact_name', 'emergency_contact_cell', 'emergency_contact_work',
-            'current_landlord_name', 'current_landlord_tel', 'current_rental_amount',
-            'current_rental_from', 'current_rental_to',
-            'employer_name', 'employer_position', 'employer_address', 'employer_tel',
-            'monthly_salary', 'employment_type',
-            'occupation_date', 'rental_terms', 'special_conditions', 'adults', 'children',
-        ];
-
-        $input = [];
-        foreach ($fields as $field) {
-            // Every field optional — a field simply absent from the request
-            // (not touched on this save) leaves the existing/blank value alone.
-            if ($request->has($field)) {
-                $value = $request->input($field);
-                $input[$field] = $value === '' ? null : $value;
-            }
-        }
-
-        return $input;
-    }
 }

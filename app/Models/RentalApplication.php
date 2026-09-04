@@ -28,6 +28,50 @@ class RentalApplication extends Model
         'permanently_employed', 'business_owner_personal_account', 'business_owner_business_account',
     ];
 
+    /**
+     * ONE set of format rules for the V8 field list — shared by the agent-side
+     * update (RentalApplicationController) and the public submit
+     * (RentalApplicationSigningController), so the two never drift (BUILD_STANDARD
+     * §6). Every field is `nullable` — nothing here may block a save — but a
+     * MALFORMED value is rejected rather than allowed through to crash a
+     * date/decimal cast at save() time (BUILD_STANDARD §2/§4).
+     */
+    public static function fieldValidationRules(): array
+    {
+        return [
+            'property_address_override' => ['nullable', 'string', 'max:500'],
+            'full_name' => ['nullable', 'string', 'max:255'],
+            'id_number' => ['nullable', 'string', 'max:50'],
+            'marital_status' => ['nullable', 'string', 'max:100'],
+            'spouse_name' => ['nullable', 'string', 'max:255'],
+            'spouse_id' => ['nullable', 'string', 'max:50'],
+            'citizenship' => ['nullable', 'string', 'max:100'],
+            'current_residential_address' => ['nullable', 'string', 'max:2000'],
+            'email' => ['nullable', 'string', 'email', 'max:255'],
+            'cell' => ['nullable', 'string', 'max:50'],
+            'work_number' => ['nullable', 'string', 'max:50'],
+            'emergency_contact_name' => ['nullable', 'string', 'max:255'],
+            'emergency_contact_cell' => ['nullable', 'string', 'max:50'],
+            'emergency_contact_work' => ['nullable', 'string', 'max:50'],
+            'current_landlord_name' => ['nullable', 'string', 'max:255'],
+            'current_landlord_tel' => ['nullable', 'string', 'max:50'],
+            'current_rental_amount' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
+            'current_rental_from' => ['nullable', 'date'],
+            'current_rental_to' => ['nullable', 'date'],
+            'employer_name' => ['nullable', 'string', 'max:255'],
+            'employer_position' => ['nullable', 'string', 'max:255'],
+            'employer_address' => ['nullable', 'string', 'max:2000'],
+            'employer_tel' => ['nullable', 'string', 'max:50'],
+            'monthly_salary' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
+            'employment_type' => ['nullable', 'in:' . implode(',', self::EMPLOYMENT_TYPES)],
+            'occupation_date' => ['nullable', 'date'],
+            'rental_terms' => ['nullable', 'string', 'max:255'],
+            'special_conditions' => ['nullable', 'string', 'max:2000'],
+            'adults' => ['nullable', 'integer', 'min:0', 'max:50'],
+            'children' => ['nullable', 'integer', 'min:0', 'max:50'],
+        ];
+    }
+
     protected $fillable = [
         'agency_id', 'branch_id', 'contact_id', 'property_id', 'created_by_user_id',
         'status', 'delivery_mode', 'token', 'token_expires_at', 'submitted_at',

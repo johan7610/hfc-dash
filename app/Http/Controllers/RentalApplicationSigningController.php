@@ -60,22 +60,17 @@ class RentalApplicationSigningController extends Controller
             return redirect()->route('rental-applications.public.show', $token);
         }
 
-        $validated = $request->validate([
+        // BUILD_STANDARD §2 — every field is optional (nullable passes on
+        // empty/absent), but a MALFORMED value must be rejected with a clear
+        // message, never allowed through to crash the date/decimal cast on
+        // save(). This is a public, unauthenticated endpoint — validation
+        // here is the only thing standing between a tampered field and a 500.
+        $validated = $request->validate(array_merge(RentalApplication::fieldValidationRules(), [
             'declaration_signature' => ['required', 'string'],
             'tpn_consent_signature' => ['required', 'string'],
-        ]);
+        ]));
 
-        $fields = $request->only([
-            'property_address_override', 'full_name', 'id_number', 'marital_status',
-            'spouse_name', 'spouse_id', 'citizenship', 'current_residential_address',
-            'email', 'cell', 'work_number',
-            'emergency_contact_name', 'emergency_contact_cell', 'emergency_contact_work',
-            'current_landlord_name', 'current_landlord_tel', 'current_rental_amount',
-            'current_rental_from', 'current_rental_to',
-            'employer_name', 'employer_position', 'employer_address', 'employer_tel',
-            'monthly_salary', 'employment_type',
-            'occupation_date', 'rental_terms', 'special_conditions', 'adults', 'children',
-        ]);
+        $fields = collect($validated)->except(['declaration_signature', 'tpn_consent_signature'])->all();
         // Optional-and-empty must never error (BUILD_STANDARD §2) — a blank
         // string is stored as NULL, never coerced into breaking a date/decimal cast.
         $fields = array_map(fn ($v) => $v === '' ? null : $v, $fields);
