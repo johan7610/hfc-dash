@@ -865,3 +865,125 @@ visibly confusing if left there. Application 16 is a different agency
 (7) and does not interfere with agency 1's view. None of this is mine to
 clean up (cc4's own test data, and the standing no-hard-deletes rule
 means it needs an explicit soft-delete decision, not a unilateral one).
+
+**Resolved 2026-09-07:** all 5 fixture applications/documents archived
+(soft delete — `deleted_at` set, files untouched on disk), 4 of the 5
+`qa-audit-*` users archived (agency-1 accounts, visible in `/admin/users`
+and any agent picker); the agency-7 outsider account left active since
+it's invisible to Johan's own agency-scoped views and useful for
+re-running the scoping audit later. Verified clean by rendering both
+`corex/rental-applications` and `corex/rental-applications/returned`
+through the full kernel as user 22 (johan@hfcoastal.co.za) — zero
+occurrences of the fixture names in either. Genuine data counts confirmed
+unchanged before/after (cross-checked by exact archive timestamp, since a
+scope mistake on the first count attempt briefly double-counted
+already-trashed rows from other lanes' historical test data).
+
+---
+
+## Post-submission document lock (Johan, 2026-09-07 — 3rd pass)
+
+**The rule, verbatim:** "submitted docs are submitted. they can add, but
+not replace or remove." Concretely:
+- **Before submission:** the applicant has full document CRUD — add,
+  replace, remove (archive, never hard delete).
+- **After submission** (`RentalApplication::isSubmitted()`, i.e.
+  `submitted_at !== null`): **add only.** Replace and remove are locked,
+  application-wide, for every document on the application — including one
+  added after submission. What was submitted stays exactly as submitted.
+
+**Reasoning (evidentiary, not a UX preference):** once an agent has
+received an application, the applicant must not be able to quietly swap a
+payslip or pull a document the agent has already seen — that would let an
+applicant retroactively alter what was actually reviewed. But the
+applicant must still be able to send more: an agent asking "can you also
+send your bank statements" is a normal, expected request and must not
+require reopening or resetting anything.
+
+**This is a correctness rule, not a setting.** No agency toggle, no
+threshold, no configurable window — enforced identically for every
+agency. Per Johan: "do not make it agency-configurable."
+
+### Enforcement — server-side, not blade-only
+
+`RentalApplicationSigningController::assertDocumentsNotLocked()` is the
+single choke point both `removeDocument()` and `replaceDocument()` call,
+right after `scopedDocument()` establishes the document genuinely belongs
+to this application (so the check order is: expired token → document
+exists and belongs here → submission lock). `viewDocument()` and
+`uploadDocuments()` are deliberately NOT gated by this check — viewing and
+adding remain available regardless of submission state (only token expiry
+gates those two).
+
+The check reads `RentalApplication::isSubmitted()` — a single-field
+`submitted_at !== null` check — rather than re-deriving "is this
+submitted" from the status enum at each call site. One source of truth,
+so a later refactor that moves or renames a status value can't silently
+un-lock this without also breaking `isSubmitted()`'s own callers.
+
+**Proven with real requests, not asserted**
+(`tests/Feature/RentalApplications/RentalApplicationDocumentLockTest.php`):
+before submission, upload → replace → remove all succeed via the real
+public routes (replace confirmed atomic: old doc archived, new doc
+created; remove confirmed archived, not hard-deleted — row still present
+via `assertDatabaseHas`). After submission: a replace POST against the
+original document redirects back with a flash error and leaves the
+original completely untouched (`deleted_at` still null, document count
+unchanged — not even a new document was filed); a remove POST against the
+same document is refused the same way, row still present with
+`deleted_at` still null; an add POST still succeeds, taking the document
+count to 2 and the new document's `created_at` provably later than
+`submitted_at`. A dedicated test asserts the locked remove is a full
+no-op at the database level (`assertDatabaseHas` with `deleted_at: null`),
+not merely "still recoverable via `withTrashed()`."
+
+### UI — the applicant sees why, not just a disabled control
+
+Per Johan: "a greyed-out button with no explanation is a support call."
+`_document-list.blade.php` (shared by `show.blade.php` and
+`already-submitted.blade.php`) checks `$application->isSubmitted()`: once
+true, each document's Replace/Remove controls are replaced with a plain
+"Submitted — locked" label, and a line beneath the list reads "The
+documents above were submitted with your application and can't be
+changed. Need to send something else? Add it below — your agent will see
+it as a new document." The upload form itself is never hidden or altered
+— add keeps working exactly as before.
+
+### Agent-side visibility of late additions — agreed with cc3, not built by cc4
+
+Requirement: "Anything added AFTER submission must be visibly
+distinguishable to the agent — timestamp it and surface that on the
+agent's view." This is cc3's file (`corex/rental-applications/show.blade.php`),
+not cc4's — no schema change needed, no new column: a document is "late"
+whenever `$document->created_at->gt($rentalApplication->submitted_at)`,
+both fields already available wherever `$rentalApplication->documents` is
+loaded.
+
+**Agreed with cc3, 2026-09-07:** confirmed — `created_at > submitted_at`
+is the "late" signal, no schema change. cc3 will add a small badge next
+to any matching document in `show.blade.php` (their `returned.blade.php`
+doesn't currently list individual documents, only a signed/incomplete
+summary, so the badge is expected to live in `show.blade.php` only). cc3
+is implementing this after a separate, already-in-flight, Johan-approved
+task (a platform-wide `SyncPermissions` fix) lands. This lane's own tests
+assert on the `created_at`/`submitted_at` ordering directly rather than
+on cc3's eventual badge wording, so nothing here depends on that follow-up
+landing first.
+
+**End-to-end proof, real requests against live QA1** (application id 20,
+token generated fresh, not a synthetic fixture): pre-submission — added
+`original.pdf` (doc 2284), replaced it with `replacement.pdf` (doc 2285,
+old doc's `deleted_at` set, file untouched on disk), removed it (doc
+2285's `deleted_at` set) — all three actions HTTP 200/302 with their
+success flash. Re-added `original2.pdf` (doc 2286), submitted both
+signatures (`status` → `returned`, `submitted_at` set). Post-submission:
+a REPLACE attempt against doc 2286 redirected back with the lock message
+and left doc 2286 completely untouched (`deleted_at` still null, document
+count still 1 — no sneaky replacement was even filed); a REMOVE attempt
+against the same document was refused identically, doc 2286 still
+untouched; an ADD of `bankstatement.pdf` (doc 2287) succeeded (HTTP 200,
+"was uploaded"), confirmed `doc 2287.created_at` (09:44:37) is after
+`submitted_at` (09:42:38) — the exact comparison cc3's badge will use.
+The rendered `already-submitted.blade.php` page shows "Submitted —
+locked" against the original document, zero occurrences of "Replace" or
+"Remove", and the explanatory line beneath the list.
