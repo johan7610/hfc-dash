@@ -640,6 +640,13 @@
             // an "Agent" badge naming who actually holds it, so the searching agent
             // knows to go to that colleague instead of creating a duplicate.
             $isRestricted = in_array($contact->id, $restrictedContactIds ?? [], true);
+            // AT-394 — even when the viewer CAN fully open it (an admin/owner's 'all' scope,
+            // or a BM's own branch), a search hit belonging to someone else still gets the
+            // "Agent" tag — purely informational, so it's obvious at a glance whose record
+            // this is. Only shown on a search result (not the default "my contacts" browse),
+            // since every row there is already known to be the viewer's own.
+            $contactOwnerId = $contact->agent_id ?? $contact->created_by_user_id;
+            $isOtherAgent   = request()->filled('search') && $contactOwnerId && (int) $contactOwnerId !== (int) auth()->id();
         @endphp
         <div class="px-5 py-4 transition-all duration-300" style="border-bottom:1px solid var(--border);"
              onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
@@ -662,10 +669,10 @@
                                style="color:var(--text-primary);"
                                onmouseover="this.style.color='var(--brand-icon,#0ea5e9)'" onmouseout="this.style.color='var(--text-primary)'">{{ $contact->full_name }}</a>
                             @endif
-                            @if($isRestricted)
+                            @if($isRestricted || $isOtherAgent)
                             <span class="text-xs px-2 py-0.5 rounded-md font-medium whitespace-nowrap"
                                   style="background:color-mix(in srgb, var(--ds-amber) 12%, transparent); color:var(--ds-amber); border:1px solid color-mix(in srgb, var(--ds-amber) 30%, transparent);"
-                                  title="Found elsewhere in the agency — not in your own contacts">
+                                  title="{{ $isRestricted ? 'Found elsewhere in the agency — not in your own contacts' : 'This contact belongs to a different agent' }}">
                                 Agent: {{ $contact->agent->name ?? $contact->createdBy->name ?? 'Unassigned' }}
                             </span>
                             @elseif($contact->type)
