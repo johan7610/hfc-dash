@@ -22,13 +22,20 @@
         <div class="p-3 rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm mb-4">{{ session('error') }}</div>
     @endif
 
-    @if($application->status === 'returned' && $application->submitted_at)
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 text-center">
-            <p class="text-slate-700">Thank you — your application was submitted on
-                {{ $application->submitted_at->format('d M Y \a\t H:i') }}.</p>
-            <p class="text-sm text-slate-500 mt-2">You can still upload additional supporting documents below.</p>
+    {{--
+        AT-392, Johan 2026-09-07 — the controller's own show() already routes
+        ANY 'returned'-or-later status to the separate already-submitted.blade.php
+        view before this template ever renders (see
+        RentalApplicationSigningController::show()). A status check here was
+        dead code — this template is never reached in that state — removed
+        rather than left as misleading, unreachable duplication.
+    --}}
+    @if($errors->any())
+        <div class="p-3 rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm mb-4">
+            Please check the highlighted field{{ $errors->count() > 1 ? 's' : '' }} below.
         </div>
-    @else
+    @endif
+
     <form method="POST" action="{{ route('rental-applications.public.submit', $application->token) }}"
           x-data="rentalApplicationForm()" @submit="beforeSubmit">
         @csrf
@@ -53,7 +60,8 @@
                     <x-rental-application-field name="work_number" label="Work number" :value="$application->work_number" />
                     <div class="sm:col-span-2">
                         <label class="block text-xs text-slate-500 mb-1">Current residential address</label>
-                        <textarea name="current_residential_address" rows="2" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">{{ $application->current_residential_address }}</textarea>
+                        <textarea name="current_residential_address" rows="2" class="w-full rounded-lg border px-3 py-2 text-sm {{ $errors->has('current_residential_address') ? 'border-red-400' : 'border-slate-300' }}">{{ old('current_residential_address', $application->current_residential_address) }}</textarea>
+                        @error('current_residential_address') <p class="text-xs text-red-600 mt-1">{{ $message }}</p> @enderror
                     </div>
                 </div>
             </section>
@@ -84,12 +92,14 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div class="sm:col-span-2">
                         <label class="block text-xs text-slate-500 mb-1">Employment type</label>
-                        <select name="employment_type" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                        @php $employmentType = old('employment_type', $application->employment_type) @endphp
+                        <select name="employment_type" class="w-full rounded-lg border px-3 py-2 text-sm {{ $errors->has('employment_type') ? 'border-red-400' : 'border-slate-300' }}">
                             <option value="">— Select —</option>
-                            <option value="permanently_employed" @selected($application->employment_type === 'permanently_employed')>Permanently employed</option>
-                            <option value="business_owner_personal_account" @selected($application->employment_type === 'business_owner_personal_account')>Business owner — personal account</option>
-                            <option value="business_owner_business_account" @selected($application->employment_type === 'business_owner_business_account')>Business owner — business account</option>
+                            <option value="permanently_employed" @selected($employmentType === 'permanently_employed')>Permanently employed</option>
+                            <option value="business_owner_personal_account" @selected($employmentType === 'business_owner_personal_account')>Business owner — personal account</option>
+                            <option value="business_owner_business_account" @selected($employmentType === 'business_owner_business_account')>Business owner — business account</option>
                         </select>
+                        @error('employment_type') <p class="text-xs text-red-600 mt-1">{{ $message }}</p> @enderror
                     </div>
                     <x-rental-application-field name="employer_name" label="Employer" :value="$application->employer_name" />
                     <x-rental-application-field name="employer_position" label="Position" :value="$application->employer_position" />
@@ -97,7 +107,8 @@
                     <x-rental-application-field name="monthly_salary" label="Monthly salary (R)" type="number" :value="$application->monthly_salary" />
                     <div class="sm:col-span-2">
                         <label class="block text-xs text-slate-500 mb-1">Employer address</label>
-                        <textarea name="employer_address" rows="2" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">{{ $application->employer_address }}</textarea>
+                        <textarea name="employer_address" rows="2" class="w-full rounded-lg border px-3 py-2 text-sm {{ $errors->has('employer_address') ? 'border-red-400' : 'border-slate-300' }}">{{ old('employer_address', $application->employer_address) }}</textarea>
+                        @error('employer_address') <p class="text-xs text-red-600 mt-1">{{ $message }}</p> @enderror
                     </div>
                 </div>
             </section>
@@ -111,7 +122,8 @@
                     <x-rental-application-field name="children" label="Children" type="number" :value="$application->children" />
                     <div class="sm:col-span-2">
                         <label class="block text-xs text-slate-500 mb-1">Special conditions</label>
-                        <textarea name="special_conditions" rows="2" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">{{ $application->special_conditions }}</textarea>
+                        <textarea name="special_conditions" rows="2" class="w-full rounded-lg border px-3 py-2 text-sm {{ $errors->has('special_conditions') ? 'border-red-400' : 'border-slate-300' }}">{{ old('special_conditions', $application->special_conditions) }}</textarea>
+                        @error('special_conditions') <p class="text-xs text-red-600 mt-1">{{ $message }}</p> @enderror
                     </div>
                 </div>
             </section>
@@ -135,7 +147,23 @@
             <input type="hidden" name="declaration_signature" x-ref="declaration_signature_input">
             <input type="hidden" name="tpn_consent_signature" x-ref="tpn_consent_signature_input">
 
-            <button type="submit" class="w-full rounded-lg bg-[#0b2a4a] text-white font-semibold py-3 text-sm"
+            {{--
+                AT-392, Johan 2026-09-07 — "no submit application button".
+                Root cause: this button used the raw Tailwind arbitrary-value
+                class bg-[#0b2a4a], which only exists in the compiled CSS if
+                a build ran AFTER this class appeared in a scanned file. The
+                last build on this box predates this file by ~2 weeks, so the
+                class compiled to nothing — the button was genuinely present,
+                correctly sized, Alpine-hydrated, zero console errors (proven
+                with a real headless-browser render), but rendered as white
+                text on an unstyled background: invisible, not absent.
+                Fixed with an inline style using the SAME var()-with-fallback
+                pattern UI_DESIGN_SYSTEM.md already requires elsewhere
+                (var(--brand-default, #0b2a4a)) — this can never depend on a
+                Tailwind rebuild, so it can't regress the same way again.
+            --}}
+            <button type="submit" class="w-full rounded-lg text-white font-semibold py-3 text-sm"
+                    style="background: var(--brand-default, #0b2a4a);"
                     :disabled="submitting">
                 <span x-show="!submitting">Submit Application</span>
                 <span x-show="submitting" x-cloak>Submitting…</span>
@@ -143,7 +171,6 @@
             <p class="text-xs text-red-600" x-show="error" x-text="error" x-cloak></p>
         </div>
     </form>
-    @endif
 
     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mt-4">
         <h2 class="font-semibold text-slate-700 mb-2">Supporting Documents</h2>
@@ -156,6 +183,22 @@
             @endforeach
         </ul>
         @endif
+
+        {{--
+            AT-392, Johan 2026-09-07 — a rejected upload (wrong file type,
+            too large, too many files) previously redirected back with the
+            validation error sitting unread in $errors — neither the main
+            form's error banner (a different set of field keys) nor anything
+            here ever displayed it, so a rejected upload looked identical to
+            a silently-ignored click. Confirmed this exact silent failure
+            with a real HTTP test before adding this.
+        --}}
+        @error('supporting_files')
+            <p class="text-xs text-red-600 mb-2">{{ $message }}</p>
+        @enderror
+        @error('supporting_files.*')
+            <p class="text-xs text-red-600 mb-2">{{ $message }}</p>
+        @enderror
 
         <form method="POST" action="{{ route('rental-applications.public.documents', $application->token) }}" enctype="multipart/form-data">
             @csrf

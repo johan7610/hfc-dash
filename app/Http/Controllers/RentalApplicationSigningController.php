@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\RentalApplication;
 use App\Models\RentalApplicationSignature;
+use App\Services\RentalApplications\RentalApplicationNotifier;
 use App\Services\RentalApplications\RentalApplicationPdfService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
@@ -29,7 +31,7 @@ class RentalApplicationSigningController extends Controller
     {
         return RentalApplication::queryWithoutAgencyScope()
             ->where('token', $token)
-            ->with(['contact', 'property', 'signatures', 'agency', 'branch'])
+            ->with(['contact', 'property', 'signatures', 'agency', 'branch', 'documents'])
             ->firstOrFail();
     }
 
@@ -81,14 +83,27 @@ class RentalApplicationSigningController extends Controller
         // string is stored as NULL, never coerced into breaking a date/decimal cast.
         $fields = array_map(fn ($v) => $v === '' ? null : $v, $fields);
 
-        $application->fill($fields);
-        $application->delivery_mode = 'online';
-        $application->status = 'returned';
-        $application->submitted_at = now();
-        $application->save();
+        // Standing rule — transactions roll back clean: the record save and
+        // both signature captures must land together or not at all. Without
+        // this, a failure storing the SECOND signature (e.g. a disk write
+        // error) would leave status='returned' with only one signature
+        // saved — an inconsistent state with no way back to "still open."
+        DB::transaction(function () use ($application, $fields, $validated, $request) {
+            $application->fill($fields);
+            $application->delivery_mode = 'online';
+            $application->status = 'returned';
+            $application->submitted_at = now();
+            $application->save();
 
-        $this->storeSignature($application, 'declaration', $validated['declaration_signature'], $request);
-        $this->storeSignature($application, 'tpn_consent', $validated['tpn_consent_signature'], $request);
+            $this->storeSignature($application, 'declaration', $validated['declaration_signature'], $request);
+            $this->storeSignature($application, 'tpn_consent', $validated['tpn_consent_signature'], $request);
+        });
+
+        // Outside the transaction, deliberately: a notification failure must
+        // never roll back the applicant's already-committed submission
+        // (Johan, 2026-09-07 — "the agent must be notified", but the
+        // applicant's data landing is the more important guarantee of the two).
+        app(RentalApplicationNotifier::class)->notifyAgentOfReturn($application->fresh());
 
         return redirect()->route('rental-applications.public.show', $token)
             ->with('success', 'Thank you — your application has been submitted.');
