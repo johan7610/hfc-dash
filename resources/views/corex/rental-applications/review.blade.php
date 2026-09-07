@@ -75,7 +75,6 @@
                     <span class="text-xs font-semibold hidden sm:inline" style="color: var(--text-secondary);" x-show="!loading">
                         <span x-text="markCount()"></span> mark<span x-show="markCount() !== 1">s</span>
                     </span>
-                    <span class="text-xs" x-show="justSaved" x-cloak style="color: var(--ds-emerald, #059669);">&check; Saved</span>
                     <button type="button" class="corex-btn-primary text-xs" x-show="!loading && !loadError"
                             :disabled="applying" x-text="applying ? 'Saving…' : 'Save'" @click="applyHighlights()"></button>
                     <button type="button" class="corex-btn-outline text-xs" @click="closeHighlighter()">Done</button>
@@ -83,6 +82,22 @@
             </template>
         </x-slot>
     </x-sticky-action-bar>
+
+    {{-- Save confirmation, 2026-09-08 — Johan: "if I edit / highlight anything on
+         the pdf will it automatically save?" It did not autosave, and answering
+         that ambiguity is the fix: highlighting/notes are EXPLICIT-save only,
+         same as the viewing-pack redaction tool (command-center/viewing-packs/
+         show.blade.php's redactionTool() has no autosave either — "Apply
+         redaction" is the only way a box is ever persisted). This toast is
+         OUTSIDE the "document open" template on purpose — the old badge lived
+         inside x-if="activeDocId !== null" and got hidden the same instant
+         Done closed the panel, so a save-then-close never actually showed
+         anything. Page-level, so it survives the panel closing. --}}
+    <div x-show="justSaved" x-cloak x-transition
+         class="fixed z-40 rounded-md px-3 py-2 text-xs font-medium flex items-center gap-1.5"
+         style="top: 72px; right: 20px; background: var(--ds-emerald, #059669); color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+        &check; Marks saved — the next person to open this document sees them.
+    </div>
 
     {{-- Layout, 2026-09-07 — Johan rejected the original 50/50 grid ("makes the
          document unreadable, defeats the purpose"). CoreX already solves "dominant
@@ -320,8 +335,15 @@
              see the in-place-annotation note above the layout <style> block. --}}
         <div class="rental-review-aside rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
             <h2 class="text-sm font-semibold mb-1" style="color: var(--text-primary);">Affordability Assessment</h2>
+            {{-- 2026-09-08 — Johan: "right hand panel? is that filled in from
+                 where?" It wasn't filled in from anywhere — every field below
+                 is blank until an agent types into it, and nothing here is
+                 ever pre-populated from the application. Saying so plainly,
+                 on screen, is the fix (not just in a code comment he'll never
+                 see). --}}
             <p class="text-xs mb-4" style="color: var(--text-muted);">
-                Your own notes — nothing here is sent to the applicant or shown anywhere else. Saved automatically as you type.
+                You type these — nothing here is pre-filled from the application, and nothing here is
+                sent to the applicant or shown anywhere else. Saved automatically as you type.
             </p>
 
             <div class="space-y-3">
@@ -369,12 +391,19 @@
             <div class="rounded-md p-3 mt-4" style="background: var(--ds-slate-soft, #f1f5f9); border: 1px solid var(--border);">
                 <p class="text-[11px] font-semibold uppercase tracking-wide mb-2" style="color: var(--text-muted);">Suggested check — not a rule</p>
                 <template x-if="result.label === 'incomplete'">
-                    <p class="text-sm" style="color: var(--text-muted);">Enter income and check the rent on the application to see a suggestion here.</p>
+                    <p class="text-sm" style="color: var(--text-muted);">Enter income above, and make sure "Current rental amount" is filled in on the application itself, to see a suggestion here.</p>
                 </template>
+                {{-- 2026-09-08 — Johan: "right hand panel? is that filled in
+                     from where?" This calculation's RENT figure was never
+                     shown — an agent could see a suggestion without knowing
+                     what rent it was measured against. Naming the source
+                     (the applicant's own self-reported current rent, from
+                     the application form) here, not just in a tooltip. --}}
                 <template x-if="result.label !== 'incomplete'">
                     <div class="text-sm space-y-1">
-                        <p>Total income: <strong x-text="formatR(result.total_income)"></strong></p>
-                        <p>Rent required (income &times; <span x-text="result.multiplier"></span>): <strong x-text="formatR(result.required_income)"></strong></p>
+                        <p>Total income (your entries above): <strong x-text="formatR(result.total_income)"></strong></p>
+                        <p>Rent (applicant's self-reported current rent, from the application): <strong x-text="formatR(result.rent)"></strong></p>
+                        <p>Income needed at &times; <span x-text="result.multiplier"></span>: <strong x-text="formatR(result.required_income)"></strong></p>
                         <p class="mt-2">
                             <span class="ds-badge" :class="result.meets_threshold ? 'ds-badge-success' : 'ds-badge-warning'"
                                   x-text="result.meets_threshold ? 'Income appears to cover the rent — worth a closer look either way' : 'Income may not cover the rent — worth a closer look'"></span>
@@ -427,6 +456,19 @@
 <script>
 function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initialMarkedUpDocIds, requestMoreInfoUrl, submitForApprovalUrl }) {
     return {
+        // 2026-09-08 — Johan: "clicking back to application shows a changes
+        // may be lost popup but there's no save button visible anywhere." No
+        // beforeunload guard existed at all, so that warning (wherever it
+        // came from) was never paired with a real, reachable way to act on
+        // it. This is the real pairing: the SAME native browser warning,
+        // wired to the highlighter's own `dirty` flag, with the sticky
+        // header's Save button (see (g) above) visible the entire time the
+        // warning could possibly fire — never one without the other.
+        init() {
+            window.addEventListener('beforeunload', (e) => {
+                if (this.dirty) { e.preventDefault(); e.returnValue = ''; }
+            });
+        },
         // ── Affordability assessment (unchanged) ──────────────────────────
         fields: initial,
         markedUpDocIds: initialMarkedUpDocIds || [],
@@ -567,11 +609,19 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
         redoStack: [],
 
         async openHighlighter(detail) {
-            // Switching documents (or the same one) while unsaved marks exist —
-            // never silently lose them (standing rule). Auto-save first, same
-            // philosophy as the assessment panel's own autosave.
+            // Switching documents while unsaved marks exist — 2026-09-08: this
+            // USED to auto-save silently here, which is exactly the ambiguity
+            // Johan flagged ("will it automatically save?" — he could not
+            // tell). Explicit-save only now, matching the viewing-pack
+            // redaction tool: ask, in words, rather than act silently. Never
+            // lose the marks either way — declining just keeps the agent on
+            // the current document with their marks intact.
             if (this.activeDocId !== null && this.activeDocId !== detail.documentId && this.dirty) {
+                if (! confirm('You have unsaved highlights or notes on this document. Save them before switching?')) {
+                    return;
+                }
                 await this.applyHighlights();
+                if (this.applyError) return; // save failed — stay put, don't lose the marks by switching away
             }
             if (this.activeDocId === detail.documentId) {
                 this.activeDocId = null; // toggle closed
@@ -638,7 +688,16 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
             this.loading = false;
         },
         async closeHighlighter() {
-            if (this.dirty) await this.applyHighlights();
+            // Same explicit-confirm rule as openHighlighter() above — "Done"
+            // must never silently save-or-discard without the agent knowing
+            // which happened.
+            if (this.dirty) {
+                if (! confirm('You have unsaved highlights or notes on this document. Save them before closing?')) {
+                    return;
+                }
+                await this.applyHighlights();
+                if (this.applyError) return; // save failed — stay open so nothing is lost
+            }
             this.activeDocId = null;
         },
         colorCss(key) {

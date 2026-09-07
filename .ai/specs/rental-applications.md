@@ -2232,3 +2232,408 @@ why and attaches nothing, the detail page shows both an applicant
 document ("from applicant") and an agent-added one ("added by Johan
 Reichel") side by side, the upload widget itself renders, and a
 cross-agency attempt is blocked with a 404.
+
+## Round 7 — four defects from independent testing (cc5)
+
+cc5 walked the whole flow as a real user and found four real defects,
+alongside confirming a lot of earlier work genuinely holds up
+(double-submit blocking, the post-submission document lock, assessment
+autosave, cross-agency scoping, send-without-email refused
+server-side). All four below fixed, each proven via real HTTP: a real
+local server (`php artisan serve`), a real login (`POST /login` with a
+scraped CSRF token and a real session cookie), then the actual feature
+routes with their own scraped CSRF tokens — never `Route::
+dispatchToRoute()` or any other kernel-bypassing shortcut, and never
+verified from rendered markup alone without an independent direct
+database read. This distinction is not academic: cc6 reported
+highlighting working the same night when it was completely broken,
+because that check exercised a path a real browser never uses.
+
+### RA-01 — a draft application's public link was already fully fillable
+
+`RentalApplicationSigningController::show()` generated the token at
+creation (an earlier round's own fix, so a link exists to share even
+before Send) — which is exactly what made a never-sent application's
+form reachable and fillable, with nothing telling the applicant the
+agent hadn't actually sent it yet.
+
+**Decision: show the same "not ready" page the expired-token case
+already uses, with a `not_sent`-specific message, rather than a bare
+404.** A 404 would be less honest — the link is real and will work the
+moment the agent sends it — and reusing the one existing "can't fill
+this in right now" page (`unavailable.blade.php`, now branching on
+`$reason`) keeps one consistent unavailable experience instead of
+inventing a second.
+
+Guarded in all five places a draft application's token could otherwise
+be interacted with: `show()`, `submit()`, `uploadDocuments()`,
+`removeDocument()`, `replaceDocument()` — a crafted direct POST bypassing
+the UI is refused exactly the same as using the page normally.
+
+**Proven live:** GET on a draft's token → "isn't ready yet", no form
+fields, no Submit button. A direct POST to `/submit` with a real,
+valid CSRF token still saves nothing (confirmed via `withoutGlobalScopes()
+->find()` reading the row directly — `status` stayed `draft`, `full_name`
+and `submitted_at` stayed `NULL`). A real, authenticated `POST .../send`
+flips it to `sent` — the SAME token then serves the real fillable form.
+
+### RA-02 — numeric fields rejected comma-formatted South African money
+
+`RentalApplication::fieldValidationRules()`'s numeric fields
+(`current_rental_amount`, `monthly_salary`, `adults`, `children`) were
+validated raw — "15,000" or "R 8,500.50" failed as "must be a number"
+with no explanation, even though input was correctly preserved.
+
+Fixed the class: `RentalApplication::NUMERIC_FIELDS` (all four) +
+`RentalApplication::sanitizeNumericInput()` strips a leading `R`
+currency prefix, thousand-separator commas, and stray spaces before
+validation ever runs. Called via `$request->merge(...)` in both
+`RentalApplicationController::update()` and
+`RentalApplicationSigningController::submit()` — the one shared
+validation ruleset, sanitized identically on both forms. A genuinely
+invalid value (`"not money at all"`) is still rejected after sanitizing.
+
+**Proven live:** real `PUT`/`POST` with `monthly_salary=15,000`,
+`current_rental_amount=R 8,500.50` / `R6 200` / `22,750` — every case
+read back from the database afterward as the correct clean decimal
+(`15000.00`, `8500.50`, `6200.00`, `22750.00`), on both the public
+submit form and the agent edit form.
+
+### RA-03 — a document added after submission looked identical to one submitted originally
+
+`show.blade.php`'s document list showed no distinction at all. Johan's
+own requirement, agreed with cc3 using `created_at >= submitted_at` —
+confirmed still missing.
+
+Added a badge + timestamp to the existing document list, both for the
+initial server-rendered list and for documents added live through the
+async upload widget (Round 6) — anything added right now on an
+already-submitted application is, by definition, after submission.
+**Coordinated with cc6** so the review screen gets the identical
+treatment (same badge text, same condition) rather than two different
+ones — see the Round 6 section above for the handoff.
+
+Hit and fixed a real Blade compile bug while building this: an
+`@php ... @endphp` block nested directly inside a `@foreach` failed to
+compile as a directive at all (the literal text `@php` survived into
+the compiled output, and `@endphp` compiled to a bare `?>` that closed
+the loop's PHP block early, corrupting everything after it into a real
+`ParseError`) — caught by actually rendering the page in a test, not by
+`php -l`. Fixed by inlining the boolean condition directly into the
+`@if(...)`, removing the intermediate `@php` block entirely rather than
+chasing why the nesting failed.
+
+**Proven live:** real agent upload onto a returned application via the
+JSON endpoint, confirmed via direct DB read that the new document's
+`created_at` is `>=` the application's `submitted_at`, THEN confirmed
+the real rendered page shows both "added by {agent}" and the "Added
+after submission" badge with a timestamp matching the DB exactly.
+
+### RA-05 — two tabs, second save silently blanked the first tab's genuine save
+
+`RentalApplicationController::update()` was plain last-write-wins, like
+every multi-agent-editable module in CoreX (checked before building
+anything — Deals, Contacts, Properties, Compliance controllers all have
+the same gap; none of them are being touched here, out of scope).
+
+**No existing "hidden updated_at, compare on submit" mechanism exists
+anywhere in this codebase.** The closest analogue —
+`Property::galleryFingerprint()` + `PropertyController::reorderImages()`
+— hard-blocks on a content-hash mismatch (409, no merge) rather than
+warning-then-saving. Modeled on that same hard-block shape, using
+`updated_at` directly (simpler than a field hash, and correctly means
+"changed since I opened this" for a plain Blade form): a hidden
+`expected_updated_at` seeded from `old('expected_updated_at',
+$rentalApplication->updated_at->timestamp)` when the page loads,
+compared against the record's actual current `updated_at` before any
+write happens in `update()`. On mismatch, the save is refused outright
+— `back()->withInput()->with('error', ...)` — never silently merged,
+never saved-with-a-toast. `old()` preserves everything the blocked tab
+typed, so reloading and redoing the edit costs nothing.
+
+The check only fires when `expected_updated_at` is present and
+non-empty, so it's opt-in at the transport level — no existing caller
+of `update()` needed to change, and no new required field broke
+anything already relying on this route.
+
+**Precision note surfaced while proving this:** `updated_at` is
+second-precision (a plain `timestamps()` column) — a genuine two-tab
+race always has real human reaction time between two saves, but a fast
+automated check (test or curl script) can execute both requests inside
+the same wall-clock second, which would falsely show no conflict. The
+regression test uses `Carbon::setTestNow()` to force real separation;
+the live proof used an actual 2-second `sleep`. This is not a
+production gap — it reflects how the mechanism is genuinely meant to
+work.
+
+**Proven live:** real two-tab simulation — two real page loads capturing
+the same `expected_updated_at`, a real 2-second pause, Tab 1's real PUT
+succeeds, Tab 2's real PUT (same stale value) is refused with the exact
+warning message, and Tab 2's typed value is still shown on the
+redisplayed page for retry. Confirmed via direct DB read: Tab 1's save
+(`Saved By Real Tab One`) survived; Tab 2's attempted overwrite never
+landed.
+
+**Regression tests**, added across three existing files:
+`RentalApplicationAsyncUploadTest.php` (RA-01, 4 tests),
+`RentalApplicationInputPreservationTest.php` (RA-02, 3 tests),
+`RentalApplicationAgentControllerTest.php` (RA-02 agent side is covered
+by the input-preservation file; RA-03, 2 tests; RA-05, 3 tests, one
+using `Carbon::setTestNow()` with a `tearDown()` backstop so a failed
+assertion never leaks fake time into a later test). Full
+`tests/Feature/RentalApplications/` suite: 73 passed, 402 assertions,
+zero regressions.
+## Round 7 (Johan) — the index screen becomes real CRUD: search, sort, own/branch/agency, archive
+
+Johan, after testing: "off the bat - list of rental applications piling
+up, yet no way to remove / mark as sent / nothing here?" — and his
+permanent standard, stated as applying to every module from now on, not
+per-request: "we always need proper crud? search / sort / own / branch /
+agency levels. that should be the design standard. not me asking for it
+once we get to that stage. so get that going as well that we design and
+build correctly from the word go."
+
+**What was already there (Round 3, cc4) before this round started:**
+search (contact name/email + property + #id), a status filter, date
+range, sort-by-click on contact/property/status/date (no visual
+indicator of which column/direction was active), archive
+(`destroy()`/soft delete) and restore, an "Archived" toggle, pagination.
+No own/branch/agency scope filter existed at all — `scopeVisibleTo()`
+only ever applied the user's permission CEILING, with no narrower,
+user-selectable view.
+
+**Built this round, on top of that:**
+- **Own/branch/agency scope TOGGLE** — `RentalApplication::clampScope()`
+  + `scopeVisibleTo($query, $user, ?string $requestedScope = null)`,
+  copied verbatim from the established CoreX pattern for exactly this
+  (`App\Models\DealV2\DealV2::clampScope()`/`scopeVisibleTo()` — found
+  first, per Johan's "find the existing implementation... do not invent
+  a new one"; the buyer-pipeline board's own "own/branch/agency toggle"
+  — `App\Services\CommandCenter\BuyerPipelineScope` — was checked too but
+  its own controller trusts the raw `?scope=` URL value with no
+  server-side clamp, relying entirely on a separate, unverified upstream
+  restriction; DealV2's pattern is the one that is actually
+  self-contained and provably safe, so that is the one reused).
+  Defaults to **'own'** always (never the ceiling) per Johan's explicit
+  "default to the narrowest scope" instruction. A requested scope wider
+  than the user's actual permitted ceiling is silently clamped down, the
+  same behaviour DealV2 already has. UI: a segmented Own/Branch/Agency
+  link toggle, options above the user's ceiling not rendered at all
+  (`$canSeeBranch`/`$canSeeAgency` in `RentalApplicationController::index()`)
+  — but the clamp in the model is the real boundary, not the hidden
+  button.
+- **Sort** widened to include Agent (`created_by_user_id` → `users.name`)
+  and Last updated (`updated_at`), alongside the existing
+  contact/property/status/created. Column headers now show a ▲/▼
+  indicator for whichever column/direction is actually driving the
+  current order (including the implicit default sort with no `?sort=` in
+  the URL at all).
+- **Search** widened to also match the rental application's OWN captured
+  `full_name`/`email`/`id_number` directly (previously only the LINKED
+  Contact's name/email were searched — an application whose captured
+  data has since diverged from its Contact, or that somehow has none,
+  was invisible to search). No `passport_number` or unit-number column
+  exists on `rental_applications` (checked the migration) — reported,
+  not invented; `id_number` is the only identity field this schema
+  actually carries.
+- **Per-page control** (10/25/50/100, clamped server-side to that range
+  regardless of what a manually-crafted `per_page` value claims).
+- **Empty state** now names the actual reason (no results for this
+  search vs. genuinely nothing in this scope) and, when the user is
+  entitled to a wider scope, says so by name.
+
+**A real, pre-existing bug found and fixed while proving sort actually
+works over real HTTP (not by reading the blade):**
+`RentalApplication::scopeVisibleTo()`'s branch/own clauses used
+unqualified column names (`branch_id`, `created_by_user_id`). The moment
+that query is combined with a LEFT JOIN to `contacts`, `users`, or
+`properties` — which sorting by Applicant, Agent, or Property already
+does — MySQL throws `SQLSTATE[23000]: ... Column 'branch_id' ... is
+ambiguous`, because all three of those tables carry their own columns of
+the same name. This was **already broken** for sort-by-Applicant and
+sort-by-Property before this round touched the file (a branch-scoped or
+own-scoped user clicking either header 500'd); this round's own new
+sort-by-Agent hit the identical class immediately. Fixed by qualifying
+every column reference in `scopeVisibleTo()` and
+`applySearchSortAndDateRange()` (search, status filter, date range, sort
+map) with the `rental_applications.` table prefix. Applied identically
+to `returned()`'s own `whereIn('status', ...)`, since that screen shares
+the same private helper and the same sort-by-Applicant/Property links in
+its own view (`returned.blade.php`) and would otherwise still 500 on the
+exact same query shape.
+
+**Not touched, per explicit boundary:** `RentalApplicationController`'s
+`store()`/`update()` methods and the public applicant form (cc4's
+RA-01/RA-02/RA-05 work, in flight); the review screen, highlight
+service, and authoriser flow (cc6's).
+
+**Proven over real HTTP on QA1** (a local dev server bound to a free
+port against the real `corex_qa1` database, not in-process tests, not by
+reading the blade), logged in via real `POST /login` for a real session
+cookie, as three purpose-built test fixtures (`CC3 Proof BM Branch1` —
+branch_manager, branch 1; `CC3 Proof Agent Branch1` — agent, branch 1;
+`CC3 Proof Agent Branch2` — agent, branch 2 — plus one rental application
+each, both archived again at the end of verification, soft-deleted, not
+hard-deleted, recoverable, same as any other archived row):
+- Search: a unique string in the rental application's OWN `full_name`
+  found it; the SAME string scoped to the wrong branch did not leak
+  across the branch boundary; searching by `id_number` directly found
+  the row.
+- Sort: captured the actual first row before/after toggling direction,
+  for Applicant, Created, Agent, and Updated — each pair showed a
+  genuinely different row, proving the order actually changed (not just
+  that the request succeeded).
+- Scope enforcement: the branch_manager fixture, whose real permission
+  ceiling is 'branch', was served ONLY branch-1 rows even when the URL
+  was edited to `?scope=agency` — branch-2's application never appeared.
+  The agent fixture, whose real ceiling is 'own', was served ONLY their
+  own row even when the URL was edited to `?scope=branch` or
+  `?scope=agency` — the response never contained another branch-1
+  agent's own applications (checked by name, count = 0) despite those
+  genuinely existing in the same branch.
+- Archive/restore: archived over real HTTP (a real 302 redirect, not an
+  in-process call), confirmed absent from the default list, confirmed
+  present under "Show archived", confirmed **in the database directly**
+  via `withTrashed()` that the row still exists with a real `deleted_at`
+  timestamp (not gone, not hard-deleted) and is correctly invisible to a
+  normal query; restored over real HTTP, confirmed visible again with
+  `deleted_at` back to `NULL`.
+
+**Test fixtures left in the database, not real people, agency 1
+(matching the existing precedent of e.g. `CC5 Proof Agent`):**
+`cc3-proof-bm1@example.test`, `cc3-proof-agent1@example.test`,
+`cc3-proof-agent2@example.test` (users, one per branch/role tested), two
+Contact rows, and two RentalApplication rows (both left archived at the
+end of this round's verification — recoverable, not deleted).
+
+---
+
+## Review screen — re-verification against a fresh nine-point list, autosave/warning fix (Johan, 2026-09-08)
+
+Johan gave nine points on the review screen, several of them near-verbatim
+repeats of items already fixed and documented above in "In-place
+annotation, stroke marks, notes, and speed" and "Six usability fixes from
+Johan's first real test." Rather than assume either that they were already
+fixed or that they needed rebuilding, each was independently RE-VERIFIED
+against the current code over real HTTP (login, CSRF, curl, direct DB
+reads) before touching anything — the same standard this file already
+holds itself to elsewhere (see BUILD_STANDARD.md §5a, written earlier the
+same night from this exact module's RA-06 defect).
+
+**(a) "left page panel should not load as default" — already fixed,
+re-confirmed live, not touched again.** The rendered page's own `x-data`
+init shows `activeDocId: null` and there is no `x-init` anywhere that
+opens a document automatically — fetched the real page over HTTP and
+grepped the actual response for both, rather than trusting the Blade
+source alone. This was the modal-vs-inline defect fixed in "In-place
+annotation..." above (item 5); still fixed.
+
+**(b) "set the default to highlighter with a bright yellow colour" —
+already fixed, re-confirmed live.** Same real-HTTP fetch shows
+`activeTool: 'highlight'` and `activeColor: 'yellow'` (`#ffeb3b`) on load.
+
+**(d) "left and right panels should scroll independently" — already
+fixed, re-confirmed against the pattern source.** `.rental-review-main`
+and `.rental-review-aside` use the same `max-height: calc(100vh - 88px)` +
+`overflow-y: auto` + (on the aside) `position: sticky` + `align-self:
+stretch` mechanism as `docuperfect/signatures/review.blade.php`'s
+`.review-aside`/`#agentAmendPanel` — checked that file's actual CSS
+side-by-side (`align-self: stretch` there is called out as LOAD-BEARING;
+matched here) rather than assuming the earlier port was faithful.
+
+**(g) "highlighter buttons at top not in a header, save button off
+screen" — already fixed, re-confirmed live.** The tool picker, colour
+picker, undo/redo, mark count, and Save button all render inside
+`<x-sticky-action-bar>`'s right slot (`resources/views/components/
+sticky-action-bar.blade.php`, `class="sticky top-0 z-50 ..."`) — the same
+shared component `rental-applications/show.blade.php` already uses for
+its own identical fix. Confirmed the component's own CSS is genuinely
+`position: sticky` (not just "looks sticky"), and that it sits OUTSIDE
+`.rental-review-main`'s own internal scroll container, so it never
+scrolls away while paging through a long document.
+
+**(h) "we don't have the write something, or insert a note bit" —
+already fixed, re-confirmed with a real save.** Notes were added in
+"In-place annotation..." above (item 4). Re-verified over real HTTP
+rather than trusting that entry: POSTed a note-only mark
+(`{type:'note', x, y, text, color}`) to document 2974's highlight
+endpoint, got a real 200 (`mark_count:1`), reloaded via the highlight-data
+endpoint and got the exact same text back. Cleared afterward.
+
+**(c) "if I edit / highlight anything on the pdf will it automatically
+save?" — genuinely still ambiguous, now fixed.** Not covered by the
+modal-vs-inline fix above — a different, narrower defect. The tool used a
+HYBRID: an explicit Save button, but ALSO a silent auto-save when
+switching documents or clicking "Done" while marks were unsaved
+(`if (this.dirty) await this.applyHighlights()`, no confirmation shown to
+the agent). Worse, the one save-confirmation badge that existed
+(`justSaved`) lived inside the SAME `x-if="activeDocId !== null"` template
+as the rest of the toolbar — so a save-then-close hid the confirmation in
+the same tick it fired, meaning the silent path never even proved itself
+had happened. Fixed to match the viewing-pack redaction tool's own
+answer to this exact question (`command-center/viewing-packs/
+show.blade.php`'s `redactionTool()` has no autosave at all — "Apply
+redaction" is the only way a box is ever persisted): highlighting/notes
+are EXPLICIT-save only now. Switching documents or clicking "Done" while
+dirty shows a real `confirm()` — "Save them before switching/closing?" —
+never a silent act either way; declining leaves the agent on the same
+document with their marks intact (never discarded, never guessed-saved).
+The save confirmation itself moved OUTSIDE the open-document template
+into a page-level toast so it survives the panel closing.
+
+**(e) "clicking back to application shows a changes may be lost popup but
+theres no save button visible anywhere" — fixed by pairing, not by
+removing the warning.** No `beforeunload` handler existed anywhere in
+this file (grepped the whole rental-applications view tree — zero
+matches), unlike several other CoreX screens that already have this
+exact pattern (`role-manager.blade.php`, `properties/show.blade.php`,
+`agent/assistants/matrix.blade.php`, `compliance/policy/edit.blade.php`,
+`docuperfect-editor.js` — all use `if (dirty) { e.preventDefault();
+e.returnValue = ''; }`). Added the same pattern here, wired to the
+highlighter's own `dirty` flag via an `init()` hook Alpine calls
+automatically. The pairing Johan asked for is now real: the warning can
+only ever fire while `dirty` is true, and the sticky header's Save button
+(item (g), already fixed) is visible the entire time a document is open
+for marking — so a warning is never shown without a reachable way to act
+on it.
+
+**(f) "right hand panel? is that filled in from where?" — already
+investigated and answered in "Six usability fixes..." item 6 above
+(100% agent-typed, verified against a real user's real DB row), but that
+answer lived only in this spec file, never on the screen itself. Fixed
+by putting it on screen**, in plain language, in two places: the aside's
+own intro copy now reads "You type these — nothing here is pre-filled
+from the application," and the Suggested-check block now names its rent
+figure explicitly ("Rent (applicant's self-reported current rent, from
+the application)") instead of showing a number with no stated source.
+**Answer for Johan, plainly:** the Affordability panel is 100% the
+agent's own typing — nothing on it is ever pulled in automatically. The
+one number it calculates FROM elsewhere is the "rent" used in the
+suggested check, which comes from the applicant's own self-reported
+current rental amount on their application form (not the property being
+applied for — there is no separate "asking rent" field captured yet).
+
+**(i) "larger docs loads slow" — re-measured, not re-guessed; unchanged
+from the prior round's own finding, still Johan's call, nothing shipped.**
+This is the SAME item already measured and documented in "In-place
+annotation..." above — re-ran it fresh rather than trusting the old
+number. Cleared document 2974's rasterization cache directly and timed a
+genuinely cold real-HTTP fetch of its highlight-data endpoint (17 pages):
+**9,226ms**, matching the prior round's 9,129ms almost exactly (no
+regression, no silent improvement since). Root cause, unchanged: Poppler
+`pdftoppm` rasterization at 150 DPI, ~500ms/page, paid ONCE per document
+version and cached after — but the FIRST time any agent opens ANY
+document is exactly the common case (a freshly-submitted application's
+documents have never been opened by anyone yet), so the cache does not
+help the case Johan is actually hitting when he tests. The two
+previously-flagged, not-yet-decided options stand unchanged: lower the
+render DPI (cuts render time roughly with pixel count, at a real
+on-screen sharpness cost) or return page 1 immediately and rasterize the
+rest in the background (improves perceived speed on a first-ever open
+without reducing total server work). Not built this round — reporting
+the cause and the fresh number, per instruction, before touching
+anything.
+
+**Files touched this round:** `resources/views/corex/rental-applications/
+review.blade.php` only — (c)/(e)/(f) above. (a)/(b)/(d)/(g)/(h) required
+no code change, only re-verification; (i) is report-only.
