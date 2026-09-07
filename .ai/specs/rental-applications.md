@@ -1570,3 +1570,74 @@ passed, 339 assertions, zero regressions.
   `RentalApplicationCrudStandardTest`.
 - **Status setting with an audit trail**: unchanged from Round 4, note
   field bug above is the only thing that needed fixing.
+
+## Round 6 (Johan) — agent-added documents
+
+Johan: "agent should in any case be able to add docs as client can be in
+the office so agent scans docs to themselves, or even receive via
+whatsapp etc." The applicant's token-based upload path already existed;
+the agent had no way to attach anything themselves.
+
+**Not a second document path** — same `Document` model, same storage
+convention (`rental-applications/{id}/documents`), same allowlist
+(pdf/jpg/jpeg/png/doc/docx, 15MB, up to 10 files), same soft-delete rule.
+Just a second, authenticated entry point onto the one path.
+
+**Who added it** — `documents.uploaded_by` and `Document::uploader()`
+already existed; the applicant's own public/token upload never sets it
+(no authenticated user in that context), so it was already the natural
+"who added this" signal with zero new columns needed. The agent upload
+sets it to `auth()->id()`. Screens show "from applicant" (null) vs.
+"added by {name}" (set).
+
+**Built:**
+- `RentalApplicationController::uploadDocument()` —
+  `POST /corex/rental-applications/{rentalApplication}/documents`, route
+  `corex.rental-applications.documents.upload`. Scoped via the existing
+  `guardRentalApplication()` guard, gated on `rental_applications.create`
+  (same permission every other action on this screen already uses).
+  Responds JSON on success/failure, matching the applicant-side contract.
+- **`show.blade.php`** (my own detail page) — attribution line added to
+  the existing document list, plus a self-contained async upload widget
+  (its own nested `x-data`, own `<script>`) below it. Deliberately NOT a
+  `window.location.reload()` on success: this page's big edit form has
+  its own unsaved-edit (`dirty`) tracking from an earlier round, and a
+  reload would violate today's input-loss rule for whoever has unsaved
+  edits at the moment they attach a file. Uses plain DOM insertion
+  (`appendToList()`) into the existing list instead — no reload, ever,
+  on this page.
+- **`review.blade.php`** (cc6's split-screen review page) — NOT edited
+  directly (coordinated: cc6 owns that file, is mid-build on the RO/CO
+  authoriser flow on the same Alpine component). Handed cc6 the exact
+  markup/JS for a self-contained upload widget there too, plus the
+  one-line attribution addition to their existing document loop. That
+  screen's document list is server-rendered (not reactive), and its
+  existing autosave (`saveAssessment()` on blur/change) means nothing
+  should be unsaved when a file is attached — so a plain page reload on
+  success was the agreed approach there, unlike `show.blade.php`.
+  cc6 to apply when their in-flight edit reaches a safe point.
+
+**Scoping:** `Document::create()` auto-stamps `agency_id` from the
+authenticated acting user via its own `BelongsToAgency` trait — no
+`withoutAgencyStamping()` needed here (that escape hatch is only for the
+public, unauthenticated applicant path). Cross-agency upload attempt
+confirmed blocked (404, via `guardRentalApplication()` + route-model
+binding's own agency scope) with a real request.
+
+**No hard deletes:** agent-added documents are ordinary `Document` rows
+— already soft-deletable via the existing mechanism, nothing new needed.
+
+**Regression tests**, added to `RentalApplicationAgentControllerTest.php`:
+`test_agent_can_upload_a_document_and_it_is_attributed_to_them`,
+`test_a_rejected_agent_upload_reports_why_and_never_attaches`,
+`test_agent_upload_respects_agency_scoping`,
+`test_the_detail_page_distinguishes_applicant_documents_from_agent_added_ones`,
+`test_agent_added_documents_are_never_hard_deleted`. Full file re-run:
+34 passed, 174 assertions.
+
+**Proven live** with real requests against real data: agent upload
+attributed correctly (`uploaded_by` set), a rejected file type reports
+why and attaches nothing, the detail page shows both an applicant
+document ("from applicant") and an agent-added one ("added by Johan
+Reichel") side by side, the upload widget itself renders, and a
+cross-agency attempt is blocked with a 404.

@@ -2810,6 +2810,8 @@ Route::middleware(['auth', 'verified'])->prefix('corex')->group(function () {
             ->middleware('permission:rental_applications.create')->name('corex.rental-applications.send');
         Route::get('/{rentalApplication}/pdf', [\App\Http\Controllers\CoreX\RentalApplicationController::class, 'pdf'])->name('corex.rental-applications.pdf');
         Route::get('/{rentalApplication}/documents/{document}', [\App\Http\Controllers\CoreX\RentalApplicationController::class, 'downloadDocument'])->name('corex.rental-applications.documents.download');
+        Route::post('/{rentalApplication}/documents', [\App\Http\Controllers\CoreX\RentalApplicationController::class, 'uploadDocument'])
+            ->middleware('permission:rental_applications.create')->name('corex.rental-applications.documents.upload');
         Route::delete('/{rentalApplication}', [\App\Http\Controllers\CoreX\RentalApplicationController::class, 'destroy'])
             ->middleware('permission:rental_applications.create')->name('corex.rental-applications.destroy');
         Route::post('/{rentalApplication}/restore', [\App\Http\Controllers\CoreX\RentalApplicationController::class, 'restore'])

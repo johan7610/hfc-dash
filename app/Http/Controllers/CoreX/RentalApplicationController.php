@@ -212,7 +212,7 @@ class RentalApplicationController extends Controller
     public function show(Request $request, RentalApplication $rentalApplication): View
     {
         $this->guardRentalApplication($rentalApplication);
-        $rentalApplication->load(['contact', 'property', 'signatures', 'documents.documentType', 'statusHistory.changedBy']);
+        $rentalApplication->load(['contact', 'property', 'signatures', 'documents.documentType', 'documents.uploader', 'statusHistory.changedBy']);
 
         return view('corex.rental-applications.show', compact('rentalApplication'));
     }
@@ -443,6 +443,74 @@ class RentalApplicationController extends Controller
         );
 
         return $document->downloadResponse();
+    }
+
+    /**
+     * AT-392 — Johan: "agent should in any case be able to add docs as
+     * client can be in the office so agent scans docs to themselves, or
+     * even receive via whatsapp etc." The applicant's own upload path is
+     * NOT reused directly (that's token-based, unauthenticated, public) —
+     * but the exact same Document model, storage convention, allowlist,
+     * and soft-delete rule are, so this is not a second document path,
+     * just a second AUTHENTICATED entry point onto the one path.
+     *
+     * `uploaded_by` (already an existing column/relation on Document,
+     * `uploader()`) is the ONLY thing that needs setting here — the
+     * applicant's own upload never sets it (no authenticated user in that
+     * public context), so it's already the natural "who added this"
+     * signal with no new column needed. Screens distinguish "From
+     * applicant" (uploaded_by null) from "Added by {agent}" (uploaded_by
+     * set) purely by checking whether it's null.
+     *
+     * Agency/branch scoping: Document::create() auto-stamps agency_id from
+     * the authenticated acting user via its own BelongsToAgency trait (no
+     * withoutAgencyStamping() needed here — that escape hatch is only for
+     * the public, unauthenticated upload path).
+     */
+    public function uploadDocument(Request $request, RentalApplication $rentalApplication)
+    {
+        $this->guardRentalApplication($rentalApplication);
+
+        $request->validate([
+            'supporting_files' => ['required', 'array', 'min:1', 'max:10'],
+            'supporting_files.*' => ['file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:15360'],
+        ]);
+
+        $filedDocuments = [];
+        foreach ($request->file('supporting_files') as $file) {
+            $path = $file->store("rental-applications/{$rentalApplication->id}/documents", 'local');
+
+            $document = Document::create([
+                'original_name' => $file->getClientOriginalName(),
+                'storage_path' => $path,
+                'disk' => 'local',
+                'mime_type' => $file->getClientMimeType(),
+                'size' => $file->getSize(),
+                'source_type' => 'rental_application',
+                'source_id' => $rentalApplication->id,
+                'branch_id' => $rentalApplication->branch_id,
+                'uploaded_by' => $request->user()->id,
+            ]);
+
+            $document->contacts()->syncWithoutDetaching([$rentalApplication->contact_id]);
+            if ($rentalApplication->property_id) {
+                $document->properties()->syncWithoutDetaching([$rentalApplication->property_id]);
+            }
+
+            $filedDocuments[] = $document;
+        }
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'documents' => collect($filedDocuments)->map(fn ($d) => [
+                    'id' => $d->id,
+                    'name' => $d->original_name,
+                    'view_url' => route('corex.rental-applications.documents.download', [$rentalApplication, $d]),
+                ]),
+            ]);
+        }
+
+        return back()->with('success', count($filedDocuments) === 1 ? 'Document added.' : count($filedDocuments) . ' documents added.');
     }
 
     /**
