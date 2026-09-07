@@ -171,7 +171,12 @@
                             @php $document = $row['document']; @endphp
                             <div class="rounded-md border" style="border-color: var(--border);">
                                 <div class="flex items-center justify-between px-3 py-2 text-xs">
-                                    <span>{{ $document->original_name }}</span>
+                                    <span>{{ $document->original_name }}
+                                        {{-- Agent-added-documents, 2026-09-08 — cc4's backend
+                                             (RentalApplicationController::uploadDocument()), markup
+                                             handed to me since I own this file. --}}
+                                        <span style="color: var(--text-muted); font-size: 11px;">— {{ $document->uploaded_by ? 'added by ' . ($document->uploader->name ?? 'an agent') : 'from applicant' }}</span>
+                                    </span>
                                     <span class="flex items-center gap-2">
                                         <span class="ds-badge ds-badge-success" x-show="markedUpDocIds.includes({{ $document->id }})" x-cloak title="This document has saved marks — visible to anyone who opens it next.">Marked up</span>
                                         @if($row['inline_viewable'])
@@ -284,6 +289,29 @@
                         @endforeach
                     </div>
                 @endif
+
+                {{-- Agent-added-documents, 2026-09-08 — Johan: "agent should
+                     in any case be able to add docs as client can be in the
+                     office so agent scans docs to themselves, or even
+                     receive via whatsapp etc." Backend built by cc4
+                     (RentalApplicationController::uploadDocument(), same
+                     allowlist/scoping the applicant path already uses).
+                     Widget itself handed to me since I own this file —
+                     own nested x-data, zero shared state with the root
+                     rentalReview() component. Reloads on success (server-
+                     rendered $documents list, not x-for) — safe here since
+                     the assessment panel autosaves on blur, so nothing is
+                     ever sitting unsaved when an agent clicks away to pick
+                     a file. --}}
+                <div class="mt-3 pt-3" style="border-top: 1px solid var(--border);" x-data="agentDocumentUploadReview()">
+                    <template x-for="u in uploading" :key="u.tempId">
+                        <p class="text-xs mb-1" :class="u.error ? 'text-red-600' : ''" style="color: var(--text-muted);" x-text="u.error ? (u.name + ': ' + u.error) : ('Uploading ' + u.name + '…')"></p>
+                    </template>
+                    <label class="text-xs font-medium cursor-pointer" style="color: var(--brand-icon, #2563eb);">
+                        + Add document
+                        <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" class="hidden" @change="onFilesSelected($event.target.files); $event.target.value = ''">
+                    </label>
+                </div>
             </div>
         </div>
 
@@ -790,6 +818,37 @@ function rentalReview({ saveUrl, initial, initialResult, initialSavedAt, initial
 
 function formatTime(iso) {
     return new Date(iso).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Agent-added-documents, 2026-09-08 — cc4's widget, handed to me for this
+// file. Own component, zero shared state with rentalReview().
+function agentDocumentUploadReview() {
+    return {
+        uploading: [],
+        csrfToken() { return document.querySelector('meta[name="csrf-token"]').content; },
+        async uploadFile(file) {
+            const tempId = 'u' + Date.now() + Math.random();
+            this.uploading.push({ tempId, name: file.name, error: null });
+            const formData = new FormData();
+            formData.append('supporting_files[]', file);
+            try {
+                const res = await fetch('{{ route('corex.rental-applications.documents.upload', $rentalApplication) }}', {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken() },
+                    body: formData,
+                });
+                const data = await res.json().catch(() => ({}));
+                const item = this.uploading.find(u => u.tempId === tempId);
+                if (!res.ok) { item.error = (data.errors && Object.values(data.errors)[0]?.[0]) || data.message || 'Upload failed.'; return; }
+                this.uploading = this.uploading.filter(u => u.tempId !== tempId);
+                window.location.reload();
+            } catch (e) {
+                const item = this.uploading.find(u => u.tempId === tempId);
+                if (item) item.error = 'Network error — please try again.';
+            }
+        },
+        async onFilesSelected(fileList) { await Promise.all(Array.from(fileList).map(file => this.uploadFile(file))); },
+    };
 }
 </script>
 @endsection
