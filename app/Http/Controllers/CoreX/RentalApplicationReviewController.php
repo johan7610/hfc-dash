@@ -140,14 +140,17 @@ class RentalApplicationReviewController extends Controller
         $this->guardRentalApplication($rentalApplication);
         $this->guardDocumentBelongsToApplication($rentalApplication, $document);
 
+        // Structural validation only — a mark is one of two shapes (a
+        // highlight stroke's points array, or a note's x/y/text), and
+        // RentalApplicationDocumentHighlightService::normalizeForStorage()
+        // already defensively filters/coerces every field per type before
+        // anything reaches the marks_json column (documented there: never
+        // trust the raw payload verbatim). Re-litigating the same per-type
+        // shape here would just duplicate that gate, not add a real one.
         $validated = $request->validate([
             'marks' => ['nullable', 'array'],
             'marks.*' => ['array'],
-            'marks.*.*.x' => ['required', 'numeric'],
-            'marks.*.*.y' => ['required', 'numeric'],
-            'marks.*.*.w' => ['required', 'numeric', 'min:0'],
-            'marks.*.*.h' => ['required', 'numeric', 'min:0'],
-            'marks.*.*.color' => ['nullable', 'string', 'in:' . implode(',', array_keys(RentalApplicationDocumentHighlightService::COLORS))],
+            'marks.*.*' => ['array'],
         ]);
 
         try {
