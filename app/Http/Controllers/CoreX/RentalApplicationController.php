@@ -7,10 +7,12 @@ use App\Models\Contact;
 use App\Models\Document;
 use App\Models\Property;
 use App\Models\RentalApplication;
+use App\Models\RentalApplicationStatusHistory;
 use App\Services\RentalApplications\RentalApplicationMailer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 /**
@@ -197,7 +199,7 @@ class RentalApplicationController extends Controller
     public function show(Request $request, RentalApplication $rentalApplication): View
     {
         $this->guardRentalApplication($rentalApplication);
-        $rentalApplication->load(['contact', 'property', 'signatures', 'documents.documentType']);
+        $rentalApplication->load(['contact', 'property', 'signatures', 'documents.documentType', 'statusHistory.changedBy']);
 
         return view('corex.rental-applications.show', compact('rentalApplication'));
     }
@@ -255,6 +257,54 @@ class RentalApplicationController extends Controller
             eventType: 'contact_updated',
             summary: 'Email filled in from a rental application (contact had none on file).',
         );
+    }
+
+    /**
+     * AT-392 — Johan, QA1: "on returned applications theres statuses at the
+     * top, but theres no way to mark application status to what it is?"
+     * Only the agent's own judgement calls are settable by hand
+     * (RentalApplication::AGENT_SETTABLE_STATUSES) — draft/sent/in_progress/
+     * returned are system-recorded facts and stay off this endpoint's
+     * allow-list entirely, so there is no way to fake them even with a
+     * crafted request. Only reachable once the application has actually
+     * been returned (POST_RETURN_STATUSES) — assessing something the
+     * applicant hasn't submitted yet makes no sense. Every change is
+     * recorded via RentalApplicationStatusHistory::record() — who, when,
+     * from what to what — inside the same transaction as the status write.
+     */
+    public function updateStatus(Request $request, RentalApplication $rentalApplication)
+    {
+        $this->guardRentalApplication($rentalApplication);
+
+        $validated = $request->validate([
+            'status' => ['required', Rule::in(RentalApplication::AGENT_SETTABLE_STATUSES)],
+            'note' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        if (! in_array($rentalApplication->status, RentalApplication::POST_RETURN_STATUSES, true)) {
+            return back()->with('error', "This application hasn't been submitted yet — there's nothing to assess.");
+        }
+
+        $from = $rentalApplication->status;
+        $to = $validated['status'];
+
+        if ($from === $to) {
+            return back()->with('success', 'Status unchanged.');
+        }
+
+        DB::transaction(function () use ($rentalApplication, $from, $to, $validated) {
+            $rentalApplication->update(['status' => $to]);
+
+            RentalApplicationStatusHistory::record(
+                $rentalApplication,
+                $from,
+                $to,
+                auth()->user(),
+                $validated['note'] ?? null,
+            );
+        });
+
+        return back()->with('success', 'Status updated to ' . str_replace('_', ' ', $to) . '.');
     }
 
     /**

@@ -92,6 +92,52 @@
     </div>
     @endif
 
+    {{--
+        Johan, QA1 — "on returned applications theres statuses at the top,
+        but theres no way to mark application status to what it is?" Only
+        shown once the application has actually been returned — assessing
+        something the applicant hasn't submitted yet makes no sense.
+        draft/sent/in_progress/returned stay off this control entirely
+        (system-recorded facts, see RentalApplication::AGENT_SETTABLE_STATUSES)
+        — only the agent's own judgement calls are settable here.
+    --}}
+    @permission('rental_applications.create')
+    @if(in_array($rentalApplication->status, \App\Models\RentalApplication::POST_RETURN_STATUSES, true))
+    <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
+        <h2 class="text-sm font-semibold mb-3" style="color: var(--text-primary);">Application Status</h2>
+        <form method="POST" action="{{ route('corex.rental-applications.update-status', $rentalApplication) }}" class="flex flex-wrap items-end gap-3">
+            @csrf
+            <div>
+                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Set status to</label>
+                <select name="status" class="rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">
+                    <option value="returned" disabled @selected($rentalApplication->status === 'returned')>Returned (awaiting review)</option>
+                    @foreach(\App\Models\RentalApplication::AGENT_SETTABLE_STATUSES as $s)
+                        <option value="{{ $s }}" @selected($rentalApplication->status === $s)>{{ str_replace('_', ' ', ucfirst($s)) }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Note (optional)</label>
+                <input type="text" name="note" maxlength="1000" placeholder="Reason for this decision..." class="w-full rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">
+            </div>
+            <button type="submit" class="corex-btn-primary text-xs">Update Status</button>
+        </form>
+
+        @if($rentalApplication->statusHistory->isNotEmpty())
+        <div class="mt-4 pt-3 text-xs space-y-1" style="border-top: 1px solid var(--border); color: var(--text-muted);">
+            @foreach($rentalApplication->statusHistory as $entry)
+                <div>
+                    {{ optional($entry->from_status)  ? str_replace('_', ' ', $entry->from_status) . ' → ' : '' }}{{ str_replace('_', ' ', $entry->to_status) }}
+                    — {{ $entry->changedBy?->name ?? 'System' }}, {{ $entry->created_at->format('d M Y H:i') }}
+                    @if($entry->note) — "{{ $entry->note }}" @endif
+                </div>
+            @endforeach
+        </div>
+        @endif
+    </div>
+    @endif
+    @endpermission
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div class="rounded-md p-4" style="background: var(--surface); border: 1px solid var(--border);">
             <h2 class="text-sm font-semibold mb-3" style="color: var(--text-primary);">Signatures</h2>
