@@ -1,8 +1,9 @@
 # AT-395 — Staging promotion handover
 
-Prepared 2026-09-07, QA1 only. Nothing here has been pushed to Staging. Every line below was
-verified directly against git and the running QA1 checkout at the time of writing — nothing is
-from memory.
+Prepared 2026-09-07, QA1 only. Updated same day after a third fix round (outgoing/SMTP fields
+were missing from 2 of the 4 mailbox-configuration surfaces). Nothing here has been pushed to
+Staging. Every line below was verified directly against git and the running QA1 checkout at the
+time of writing — nothing is from memory.
 
 ---
 
@@ -10,15 +11,18 @@ from memory.
 
 **Branch:** `at395-hotfix-2026-09-07`
 **Pushed to origin:** yes, confirmed — `origin/at395-hotfix-2026-09-07` == local branch tip
-(`b4f3bb76d9cd7ff373118a865da0edf46a5ede6e`).
+(`cb8b23158af1aabbdda2497b42cccca4fb5414af`).
 
-AT-395 is exactly **3 commits**, in order:
+AT-395 is exactly **4 commits** (a 5th, docs-only, is the earlier version of this handover — see
+note below), in order:
 
 | # | Hash | One-line message |
 |---|------|-------------------|
 | 1 | `75cf670efbcd4be82b56e76edcf8ca21b7f52571` | feat(communications): AT-395 Phase A — send e-sign mail through the agency's own mailbox |
 | 2 | `7cc7b33deb9ea9473ac8ec6da4f1c7da634f6103` | fix(esign): AT-395 real-send failures — missing To header + false-Sent audit/UI gaps |
 | 3 | `b4f3bb76d9cd7ff373118a865da0edf46a5ede6e` | fix(esign): AT-395 second sweep — false-Sent bug class across the full advance chain |
+| 4 | `f619230b951576ffe649985c1609984839bffd54` | docs(esign): AT-395 Staging promotion handover (earlier version of this file) |
+| 5 | `cb8b23158af1aabbdda2497b42cccca4fb5414af` | fix(esign): AT-395 third sweep — outgoing SMTP fields missing from 2 of 4 mailbox surfaces |
 
 **Uncommitted state:** nothing AT-395-related is uncommitted in the shared `/corex-qa1` checkout.
 The checkout currently has other lanes' unrelated uncommitted/untracked files (reconstructed
@@ -27,24 +31,25 @@ two `render_step3_*.mjs` scratch scripts, and pre-existing drift in `.ai/*.md`/`
 of these touch any AT-395 file and none were created by this work.
 
 **Cut from:** QA1 at commit `fa4a5ef79` (merge of `fix/esign-whatsapp-click-dead-2026-09-07`).
-Commits 2 and 3 were then added directly, and the branch pointer was fast-forwarded to track
-QA1's tip after each commit so the running QA1 site always had the fix live.
+Commits 2–5 were then added directly, with the branch pointer fast-forwarded to track QA1's tip
+after each commit so the running QA1 site always had the fix live.
 
-**Rebasing needed?** Not against QA1 — the branch is a clean linear descendant, currently sitting
-2 commits behind QA1's live tip (QA1 has since taken on more unrelated work from other lanes; see
-§3). **Against Staging, yes, sequencing matters** — see the critical note below.
+**Rebasing needed?** Not against QA1 — the branch currently equals QA1's exact tip (`cb8b23158`,
+confirmed identical, no divergence). **Against Staging, yes, sequencing matters** — see the
+critical note below.
 
 **⚠️ This branch is NOT an isolated AT-395 diff.** Because QA1 has been a single shared trunk all
 night, `at395-hotfix-2026-09-07` descends from — and therefore *contains* — everything already
-merged into QA1 before 14:41 today, which is **77 commits**, not 3. That includes the WhatsApp
+merged into QA1 before 14:41 today, which is **77+ commits**, not 5. That includes the WhatsApp
 click-fix, the e-sign identity/reauth work, the e-sign identity-binding work, and a large amount of
 `rental-applications` (AT-392) work. Verified: `git merge-base --is-ancestor 79a54fcf5
 origin/Staging` → **NO**, and same for `eee164534` → **NO**. Neither the identity/reauth merge nor
 the identity-binding merge is on `origin/Staging` yet. **If this branch is merged into Staging
-as-is, all 77 commits land, not just the 3 AT-395 ones.** If the other chat wants AT-395 in
-isolation, they should cherry-pick exactly `75cf670ef 7cc7b33de b4f3bb76d` onto Staging in that
-order, not merge the branch wholesale. Given the brief says "promotion for ALL of tonight's work,"
-this may be intended — flagging it so it's a decision, not a surprise.
+as-is, all of that lands, not just the 5 AT-395 ones.** If the other chat wants AT-395 in
+isolation, they should cherry-pick exactly `75cf670ef 7cc7b33de b4f3bb76d cb8b23158` onto Staging
+in that order (commit 4 is this doc, optional to carry — it changes nothing runtime), not merge
+the branch wholesale. Given the brief says "promotion for ALL of tonight's work," this may be
+intended — flagging it so it's a decision, not a surprise.
 
 ---
 
@@ -94,8 +99,9 @@ none touch `communication_mailboxes` or `agencies`. No filename-timestamp collis
 
 ## 3. Files touched — full list
 
-Authoritative list, built from `git show --name-status` on each of the 3 commits individually
-(not a diff against Staging, which would pull in the other 74 unrelated commits described in §1).
+Authoritative list, built from `git show --name-status` on each of the 4 code commits
+individually (not a diff against Staging, which would pull in the other unrelated commits
+described in §1; the 5th commit is this doc only).
 
 **Events (new):**
 - `app/Events/Communications/OutgoingMailFellBackToSharedMailer.php`
@@ -117,6 +123,8 @@ Authoritative list, built from `git show --name-status` on each of the 3 commits
 - `app/Http/Controllers/Docuperfect/ESignWizardController.php`
 - `app/Http/Controllers/Docuperfect/SignatureController.php`
 - `app/Http/Controllers/Settings/EmailSetupController.php`
+- `app/Http/Controllers/MyPortal/CommunicationCaptureController.php` (added in commit 5 — the
+  self-service surface never had outgoing-field support at all until this round)
 
 **Mail:**
 - `app/Mail/Signatures/BaseSignatureMail.php`
@@ -131,8 +139,13 @@ Authoritative list, built from `git show --name-status` on each of the 3 commits
 - `config/corex-permissions.php` (adds one new permission key, `communication_mailboxes.view` —
   see §5 for whether anything else needs to happen for it to take effect)
 
+**Also (commit 5):**
+- `routes/web.php` — added `settings.email-setup.test-connection`'s response now flashes a mailbox
+  id too, plus the new `my-portal.comm-capture.test-connection` route.
+
 **Migration:**
 - `database/migrations/2026_09_07_134131_add_outgoing_smtp_fields_to_communication_mailboxes_table.php`
+  (unchanged since commit 1 — commit 5 added no new migration, only used the existing columns)
 
 **Views:**
 - `resources/views/compliance/communication-archive/mailboxes/form.blade.php`
@@ -147,21 +160,34 @@ Authoritative list, built from `git show --name-status` on each of the 3 commits
 - `resources/views/docuperfect/signatures/review.blade.php`
 - `resources/views/docuperfect/templates/edit.blade.php`
 - `resources/views/sales-documents/upload.blade.php`
+- `resources/views/settings/email-setup/_mailbox-fields.blade.php` (commit 5 — outgoing/SMTP
+  fields added; shared by 3 of the 4 surfaces, see §5)
+- `resources/views/settings/email-setup/_user-mailbox.blade.php` (commit 5 — Test Connection
+  button + result panel added)
+- `resources/views/my-portal/communication-capture/index.blade.php` (commit 5 — wired to pass the
+  new Test Connection route name)
 
 **Tests:**
 - `tests/Feature/Communications/OutgoingMailPerMailboxTest.php` (new, then extended twice — 9
-  tests total)
+  tests total, unchanged by commit 5, re-run clean)
+- `tests/Feature/Communications/EmailSetupTest.php` (commit 5 — 6 new tests added to the
+  pre-existing AT-37 test file, 12 total, all passing)
 
 **Spec:**
-- `.ai/specs/at395-outgoing-mail-per-mailbox-smtp.md` (new, then extended twice)
+- `.ai/specs/at395-outgoing-mail-per-mailbox-smtp.md` (new, then extended three times — §15.6
+  covers commit 5's fix in full)
 
 ### Overlap with WhatsApp work
 
-**None.** Checked the WhatsApp merge commits landing on QA1 tonight
+**One shared file, low risk.** Checked the WhatsApp merge commits landing on QA1 tonight
 (`fix/esign-whatsapp-click-dead-2026-09-07`, `fix/esign-whatsapp-followup-2026-09-07`,
-`feature/esign-whatsapp-send`). Their files: `.ai/specs/esign-v3-complete-spec.md` and
-`resources/views/docuperfect/signatures/partials/_whatsapp-resend-button.blade.php`. Neither
-appears anywhere in the AT-395 file list above. No shared file, no risk.
+`feature/esign-whatsapp-send`). Their files: `.ai/specs/esign-v3-complete-spec.md`,
+`resources/views/docuperfect/signatures/partials/_whatsapp-resend-button.blade.php`, and —
+found while re-checking for commit 5 — `routes/web.php` (`a0280e415`, "AT-385/AT-332 — WhatsApp
+resend for signing links," +2 lines). AT-395 commit 5 also adds lines to `routes/web.php` (two new
+route registrations). Both changes are pure line additions in a large, route-per-line file — the
+kind of change git merges cleanly without a real conflict — but naming it here since `routes/web.php`
+is a common collision point on any multi-branch night.
 
 ### Overlap with the identity/ID-gate work — real, named collision
 
@@ -215,6 +241,13 @@ attempt — it adds no new path around the gate and removes none of the existing
 chat's own re-check of the gate being unconditional after landing should find it byte-identical
 to before AT-395, since no AT-395 diff touches that file or that settings model at all.
 
+**Re-checked after commit 5** (the mailbox-surface-parity fix): that round touched only
+`EmailSetupController.php`, `MyPortal\CommunicationCaptureController.php`, `routes/web.php`,
+`config/agency-onboarding-copy.php`, and 3 blade views under `settings/email-setup/` and
+`my-portal/communication-capture/` — none of which are anywhere near the e-sign signing/identity
+code. `git show --stat` on commit 5 confirms zero mention of `EsignSettings` or
+`ESignWizardController`. This answer holds unchanged.
+
 ---
 
 ## 5. Manual configuration required on Staging after the merge
@@ -231,34 +264,45 @@ this is the designed no-mailbox fallback, not a bug, but it means AT-395's actua
 
 **Exactly what to enter, and where — verified against the actual form fields, not assumed:**
 
-Only **one** of the two mailbox-management screens actually renders the outgoing/SMTP fields —
-confirmed by grepping both view directories. Use:
+As of commit 5, all **four** surfaces that write `communication_mailboxes` render the same
+outgoing/SMTP fields and support the same Test Connection action — confirmed by grep across every
+view directory and a passing test for each surface (`EmailSetupTest.php`). Configure from
+whichever is most convenient for who's doing it:
 
 - **Compliance → Communications → "Email Mailboxes (import)"** (`compliance.comm-mailboxes.*`,
-  requires the `manage_communication_mailboxes` permission). Edit an existing mailbox row (or
-  create one) and fill in, exactly as named in the form:
-  - Checkbox `outgoing_enabled` — turn outgoing sending ON for this mailbox.
-  - Checkbox `use_imap_credentials_for_smtp` — checked by default; if the mailbox's existing IMAP
-    credentials are also valid for SMTP (usually true for a normal mailbox account), leave it
-    checked and the SMTP host/port/username/password fields below can stay blank. Uncheck only if
-    SMTP needs different credentials/host than IMAP.
-  - If unchecked: `smtp_host`, `smtp_port` (defaults 587), `smtp_encryption` (tls/ssl/none,
-    defaults tls), `smtp_username`, `smtp_password` (write-only, stored encrypted).
-  - `smtp_from_name` — optional, defaults to the mailbox's user's name if left blank.
-  - Use the **Test Connection** button on this same screen after saving — it exercises both the
-    SMTP send leg and the IMAP Sent-folder-append leg independently and reports each separately.
+  requires `manage_communication_mailboxes`) — the original, agency-wide admin list. Edit an
+  existing mailbox row (or create one).
+- **Settings → Email → "Email Capture Setup"** (`settings.email-setup.*`, same permission,
+  per-user grouped view) — same fields, added in commit 5. Also reached from **Admin → Users →
+  edit an agent → "Communication Capture"** (shares the identical partial, no separate work
+  needed there).
+- **My Portal → Communication Capture** (`my-portal.comm-capture.*`, gated by
+  `access_communication` — an ordinary agent's own self-service page, no admin permission
+  required) — an agent can now configure outgoing mail for their own mailbox directly, added in
+  commit 5. Ownership-enforced: an agent can only ever touch their own row.
+- **Agency Onboarding Setup Wizard** (first-run only) — asks for the same fields, plus an optional
+  IMAP host (commit 5 fix; see below).
 
-  **Note the gap found while preparing this handover:** the *other* mailbox screen — **Settings →
-  Email → "Email Capture Setup"** (`settings.email-setup.*`, the self-service per-user page) —
-  has full backend support for these same fields in `EmailSetupController.php` (validation,
-  store/update logic, Test Connection), but its Blade views
-  (`resources/views/settings/email-setup/index.blade.php` and `_user-mailbox.blade.php`) render
-  **no outgoing/SMTP form fields at all** — confirmed by grep, zero hits for "outgoing" or "smtp"
-  in either file. An agent using that self-service page cannot currently turn on outgoing sending
-  for their own mailbox through the UI; only the admin-facing Communications screen exposes it.
-  This is a pre-existing gap in the AT-395 build (not something this handover's hotfix rounds
-  touched), noted here so nobody spends time hunting for a control that isn't rendered on that
-  particular page.
+On any of the first three, fill in exactly as named in the form:
+- Checkbox `outgoing_enabled` — turn outgoing sending ON for this mailbox.
+- Checkbox `use_imap_credentials_for_smtp` — checked by default; if the mailbox's existing IMAP
+  credentials are also valid for SMTP (usually true for a normal mailbox account), leave it
+  checked and the SMTP host/port/username/password fields below can stay blank. Uncheck only if
+  SMTP needs different credentials/host than IMAP.
+- If unchecked: `smtp_host`, `smtp_port` (defaults 587), `smtp_encryption` (tls/ssl/none,
+  defaults tls), `smtp_username`, `smtp_password` (write-only, stored encrypted).
+- `smtp_from_name` — optional, defaults to the mailbox's user's name if left blank.
+- Use the **Test Connection** button on the same screen after saving — it exercises both the SMTP
+  send leg and the IMAP Sent-folder-append leg independently and reports each separately, on all
+  three of these surfaces now (My Portal and Settings gained it in commit 5).
+
+**The onboarding wizard fix (commit 5):** the wizard step previously only asked for the outgoing
+(SMTP) server and silently reused that same value for the mailbox's IMAP host too — wrong for any
+provider where incoming and outgoing mail use different hostnames (e.g. Gmail). It now asks for an
+optional "Incoming mail server (IMAP host)" field, defaulting to the SMTP host above when left
+blank. If Staging onboarding was already run through this step before commit 5 landed, any mailbox
+it created should be spot-checked — `communication_mailboxes.imap_host` may have been set from the
+SMTP host when it should differ.
 
 **Mail config differences — QA1 vs Staging:**
 
@@ -310,7 +354,11 @@ DB-seeded — no `permissions:sync`-type command was found in this codebase for 
    Staging rather than assuming it carries over).
 6. Test **Resend** from My E-Sign Documents against both a healthy and a broken mailbox — confirm
    each shows the correct outcome.
-7. Only after 1–6 pass: check an agent with **no** mailbox configured still sends via the
+7. Repeat steps 2–3 configuring the SAME mailbox from a **different** surface than the first pass —
+   e.g. configure via Settings → Email Setup if step 2 used the Compliance screen, or via My Portal
+   as the agent themselves. Confirm the result is identical regardless of which screen was used
+   (this is the exact parity commit 5 fixed — worth proving fresh on Staging, not assumed).
+8. Only after 1–7 pass: check an agent with **no** mailbox configured still sends via the
    pre-existing shared mailer exactly as before (the no-mailbox fallback must be unaffected).
 
 ---
@@ -319,9 +367,12 @@ DB-seeded — no `permissions:sync`-type command was found in this codebase for 
 
 - **Phase B (OAuth-based mailbox auth) is not built.** Only static SMTP host/port/username/password
   is supported in Phase A. This was always out of scope for AT-395 Phase A — not a regression.
-- **The self-service "Email Capture Setup" page cannot configure outgoing settings** (§5) — the
-  backend supports it, the view does not render the fields. Pre-existing gap in the original
-  build, not touched by either hotfix round.
+- **`EmailSetupController::update()` and `MyPortal\CommunicationCaptureController` have no
+  explicit cross-agency ownership assertion beyond the route's permission gate** (the agency
+  surface's own `store()` calls `assertSameAgency()`; its `update()` doesn't; the self-service
+  surface's `update()` does call `assertOwn()`). Found while building commit 5, reported rather
+  than fixed — pre-existing from the original AT-33/AT-37 build, not introduced or touched by any
+  AT-395 work, and out of this round's scope per the standing anti-drift rule.
 - **One narrow instance of the false-Sent bug class was found but deliberately left unfixed,
   and reported rather than rushed:** `SignatureService::submitInspection()` (the wet-ink *physical*
   document inspection/decision flow, distinct from the digital invitation flow that was the actual
@@ -335,7 +386,8 @@ DB-seeded — no `permissions:sync`-type command was found in this codebase for 
   records (SPF/DKIM are configured at the domain/DNS level, not per-environment code), so it
   should hold on Staging too provided Staging sends through the same real mailbox/domain, but this
   has not been independently re-tested on Staging and should be per §6 step 4.
-- **All 9 regression tests pass** (`tests/Feature/Communications/OutgoingMailPerMailboxTest.php`),
-  but per CLAUDE.md Rule 13 the full suite was never run this session (single most relevant file
-  only, per standing instruction) — the other chat's own promotion checks should decide whether a
-  broader suite run is warranted before Staging goes live with this.
+- **All 21 regression tests pass** (9 in `OutgoingMailPerMailboxTest.php`, 12 in
+  `EmailSetupTest.php`, the latter including 6 new tests added in commit 5), but per CLAUDE.md
+  Rule 13 the full suite was never run this session (single most relevant file only, per standing
+  instruction) — the other chat's own promotion checks should decide whether a broader suite run
+  is warranted before Staging goes live with this.
