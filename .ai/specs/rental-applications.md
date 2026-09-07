@@ -643,154 +643,347 @@ list, detail view, PDF, and document download, never by hiding a link:**
   agency's admin gets a real 404 on both `show` and `pdf` by direct URL
   (route-model-binding never resolves a cross-agency id at all, before
   any scope check runs).
-- **Known gap, not fixed here (deploy/ops, out of this lane's scope):**
-  `corex:sync-permissions --merge-defaults` has so far only granted the 4
-  `rental_applications.*` permission keys to the `admin` role (per cc2's
-  2026-09-07 QA1 fix, see "Deploy requirements" above) — no
-  `rental_applications.view` *scope* row exists for any other role on
-  real QA1 data, so a genuine front-line `agent` account cannot open this
-  feature at all yet (403 at the permission-middleware layer, before
-  `scopeVisibleTo()` is ever reached). The scoping mechanism itself is
-  correct and tested against the `agent`/`branch_manager` roles' own
-  built-in fallback defaults (`PermissionService`'s AT-265 unseeded-grants
-  posture) — what's missing is deciding and granting which roles besides
-  `admin` should hold `rental_applications.*` at all, and at what scope.
-  That is a product/permissions decision for Johan, not a code defect.
+### Role defaults (Johan, 2026-09-07 — resolves the gap this section used to describe)
+
+**Previously a real gap, now fixed on QA1:** `corex:sync-permissions
+--merge-defaults` had only ever granted the 4 `rental_applications.*` keys
+to the `admin` role (cc2's 2026-09-07 fix only covered admin) — a genuine
+front-line agent account could not open this feature at all. Johan: "he
+moved this feature into the normal agency-visible menu precisely because
+agents are the people who will use it. A rental application that only an
+admin can open is not a working feature."
+
+`config/corex-permissions.php`'s `role_defaults` now grants, matching the
+house pattern (sanity-checked against `documents.view`/`documents.create`
+and `rentals.view`/`rentals.create`, which use the identical shared-key-
+across-roles approach — breadth is enforced by scope, not by giving each
+role a differently-named key):
+
+| Key | admin | branch_manager | agent |
+|---|---|---|---|
+| `rental_applications.view` | ✓ (via all-minus-exclude) | ✓ | ✓ |
+| `rental_applications.create` | ✓ | ✓ | ✓ |
+| `rental_applications.view_returned` | ✓ | ✓ | ✓ |
+| `rental_applications.manage_settings` | ✓ | — | — |
+
+`manage_settings` is deliberately admin-only, matching the house pattern
+for `manage_*`/`*.configure`-shaped keys elsewhere (`manage_finance_definitions`,
+`compliance.whistleblow.configure`, `outreach_templates.manage`) — narrower
+than the `view`/`create` tier. `admin` needed no explicit `role_defaults`
+edit at all: it already gets every permission via the all-minus-exclude
+pattern, which is why cc2's original sync granted it automatically.
+
+**Deployed to QA1 on 2026-09-07** via `corex:sync-permissions --merge-defaults`
+(role_permissions backed up first to `/root/db-backups/` — safe, additive,
+existing customisations untouched). Before: 55,040 total rows, 172
+`rental_applications.*` rows (admin only, 43 agencies). After: 55,280 total
+rows, 412 `rental_applications.*` rows — exactly 240 new rows
+(`branch_manager` +3 keys × 40 agencies, `agent` +3 keys × 40 agencies),
+verified by direct query that **every single new row's key starts with
+`rental_applications.`** — nothing outside this module was touched by this
+run. `rental_applications.view`'s `scope` column resolved correctly per
+`scope_defaults` (admin→`all`, branch_manager→`branch`, agent→`own`); the
+other three keys correctly carry no scope (they gate route access only,
+`getDataScope()` only ever reads the `.view` key regardless of which
+action-permission unlocked the route).
+
+**Re-verified with real QA1 accounts, not synthetic test users, after the
+grant** (Retha Kelly `agent`/branch 1, Shawn Du Bois `agent`/branch 1,
+Jenny Joubert `agent`/branch 2, Falan Du Bois `branch_manager`/branch 1,
+Sandra Mante `admin`/agency 90) — actual HTTP status codes:
+
+| Actor | Target | Route | Status |
+|---|---|---|---|
+| Agent (own) | Own application | index/show/pdf/document-download | 200 |
+| Agent (own) | Same-branch colleague's application | show/pdf/document-download | **403** |
+| Agent (own) | Different-branch agent's application | show/document-download | **403** |
+| Branch manager (branch) | Own-branch application (either agent) | index (sees both)/show | 200 |
+| Branch manager (branch) | Different-branch application | show/pdf | **403** |
+| Different-agency admin | Any application in this agency | show/pdf/document-download | **404** |
+
+The 403 vs 404 split is intentional, not inconsistent: same-agency-wrong-scope
+is a real 403 (the record exists, this user just isn't permitted); a
+different agency's admin gets 404 because `BelongsToAgency`'s global scope
+never resolves the row for route-model-binding at all, before any
+finer-grained scope check runs — the same behaviour already proven for the
+`admin`-only case earlier in this section, now reconfirmed with the newly-
+granted roles.
+
+### Required post-deploy step — do not skip
+
+**`php artisan corex:sync-permissions --merge-defaults` is a REQUIRED step
+on every environment this feature is deployed to** (QA1, Staging, live) —
+it has already been missed once on QA1 today (cc2's fix only covered
+`admin`; this entry's own fix was needed to cover `branch_manager`/`agent`
+too). A `git pull` deploy never runs this automatically. Add it to this
+feature's deploy checklist alongside `deploy:sync-reference-data`
+(CLAUDE.md Non-negotiable #12, BUILD_STANDARD §8) — both exist for the
+same reason: seeder/config-owned data that a plain `migrate` does not
+carry across environments.
+
+### Why cc4 found DB rows the config's git history didn't yet explain
+
+cc4's audit (2026-09-07, correct and independently verified) found that
+`role_permissions` on QA1 already held the `agent`/`branch_manager` grants,
+while `/corex-qa1`'s own checked-out `config/corex-permissions.php` still
+had no `role_defaults` entry for them. **The grants were never written
+into the database by hand** — the sequence was: this fix's config change
+was committed and pushed to `feature/rental-applications`, then
+`corex:sync-permissions --merge-defaults` was run from an isolated
+worktree that HAD that commit (both worktree and `/corex-qa1` share the
+same `corex_qa1` database, but each has its OWN git checkout and
+filesystem) — at that point `/corex-qa1`'s own checkout had not yet merged
+`feature/rental-applications` (its last merge predated this fix), so its
+copy of the config still looked stale even though the actual grants and
+the actual committed config already agreed with each other. Confirmed via
+`git merge-base --is-ancestor` that the fix commit was genuinely not yet
+an ancestor of QA1's `HEAD` at the time. This is a deploy-*sequencing* gap
+(config commit pushed, not yet merged into the environment's own branch),
+not a bypassed-config gap — but it looks identical to one from the
+outside, which is exactly why the stronger clean-state proof below exists
+rather than trusting the DB state alone.
+
+### Proof from a genuinely clean state — not a re-run against pre-existing rows
+
+`tests/Feature/RentalApplications/RentalApplicationPermissionDefaultsTest.php`
+proves the actual claim Johan needed proven: starting from a `role_permissions`
+table with **zero** rows (RefreshDatabase — a real transaction-backed test
+database, never run against real data), calling
+`Artisan::call('corex:sync-permissions', ['--merge-defaults' => true])`
+with no other setup produces exactly: `admin` holds all 4 keys (via
+all-minus-exclude — `manage_settings` included), `branch_manager`/`agent`
+hold the 3 non-settings keys, `rental_applications.view`'s `scope` column
+resolves per `scope_defaults` (`all`/`branch`/`own`), the other three keys
+carry no scope, and a second run inserts nothing new (idempotent). The
+config alone — no manual database step — reproduces the correct grant set.
+This is what makes the feature safe on a fresh agency, a QA1 reset,
+Staging, or live: whoever runs the standard post-deploy sync gets these
+grants back every time, from nothing.
+
+**Found and reported, not fixed (platform-wide, out of this lane's scope):**
+proving this exposed a real, pre-existing limitation in
+`SyncPermissions::mergeRoleDefaults()` itself, unrelated to Rental
+Applications specifically. It resolves template roles via
+`Role::all(['name','is_owner','agency_id'])` wrapped in a `try`/`catch`
+that only falls back to a synthetic template-role list when `Role::all()`
+*throws* (e.g. the table doesn't exist) — but on a genuinely fresh `roles`
+table that exists with zero rows (the real state until Role Manager or a
+seeder creates rows; no seeder currently populates it), `Role::all()`
+returns an empty Collection without throwing, the fallback never fires,
+and `--merge-defaults` silently grants **nothing, for every module**, not
+just this one. The test above works around this by seeding the same
+minimal template `Role` rows a real onboarded environment already has
+(super_admin/admin/branch_manager/agent/viewer/office_admin,
+`agency_id=null`) — a genuinely fresh *grants* table, not a genuinely
+fresh *roles* table, which is the realistic scenario. Fixing
+`SyncPermissions.php`'s empty-vs-throwing distinction is a
+permissions-system-wide concern affecting every module that uses
+`role_defaults`, not a Rental Applications defect — flagged to the
+coordinator, not touched here.
 
 ---
 
-## Temporary Rentals-panel visibility (Johan, 2026-09-07 — QA1 only)
+## Document-visibility bug (Johan, live on QA1, 2026-09-07)
 
-> **PARKED, 2026-09-07 — leave exactly as is.** Johan has seen the
-> unhidden panel and said: *"old rental menu back. for now just park it.
-> we will work through it."* **Parked means untouched and still
-> reachable, not reverted.** Do NOT re-hide it, do NOT remove it, do NOT
-> touch any of its 5 screens, do NOT revoke or change any permission.
-> Current state:
-> - The panel is unhidden on QA1 (commit `9a1dedde3`) exactly as
->   described below, and remains so.
-> - **No permission grants were made.** Checked before granting anything:
->   user 22 already held all 3 required checks (`view_rentals`,
->   `access_rental_signatures`, `hasFeature('rentals')`) — nothing needed
->   to change. `role_permissions` was backed up anyway per instruction
->   (`/root/db-backups/qa1-role_permissions-20260907-083432.sql`), as a
->   precaution, not because anything was written to it.
-> - The one-step reversal is documented in full below and inline in the
->   blade file's own comment at the unhidden block. It has NOT been
->   applied, and should not be, until Johan has walked through the panel
->   and decided what stays.
-> - Johan will return to this later to decide what stays and what goes —
->   nobody should "tidy" this away, merge it with the new AT-392 section,
->   or rename anything, in the meantime.
+Johan: "on testing rental applications the uploaded doc do not pull back
+with the rental application." Traced the full chain on real QA1 data
+before changing anything, per instruction:
 
-Johan's words, verbatim: *"On the rental menu - put it back for me on qa1.
-then let me click through it. but I know already the whole esign is
-redundant. we trashed it when we built the esign part and unless code are
-shared we dont need it at all as we will only use the esign going
-forward. the rest once I can see it we can look at what we are keeping
-and what not."*
+1. **Application identified:** id=13 (agency 1, contact 16193, status
+   `in_progress`, real 64-char token) — the most recent genuine activity on
+   QA1 at the time, with a real ~1.3MB PDF uploaded. Ruled out ids 14–16 as
+   another lane's audit fixtures (literally named "HACKED BY adminW" /
+   "Audit App owned by AgentX") and ids 1–2 as having zero active documents
+   (consumed by earlier test activity, not a bug).
+2. **File on disk:** clean — exact size match, correct `www-data:www-data`
+   ownership, correct permissions. The historical root-owned-file footgun
+   does not apply here.
+3. **Database row:** clean — `documents` row exists, `deleted_at` is NULL.
+4. **Linkage:** clean — `source_type`/`source_id`/`agency_id`/`branch_id`
+   all match the parent application exactly; the join executes and returns
+   the row.
+5. **Agent view query:** `show()`'s `documents()` relationship carries no
+   extra filter beyond `source_type` — the own/branch/agency scoping work
+   never touched it.
+6. **Rendered and looked** (not grepped): dispatched a real authenticated
+   request as user 22 to `show(13)`, from both an isolated worktree AND
+   directly from `/corex-qa1`'s own live codebase — the document rendered
+   correctly both times. **Not reproducible on this specific application,
+   right now.**
 
-This is a **visibility change for evaluation only** — not a decision to
-keep anything. The pre-existing "Rentals" drill-down (Rentals / Dashboard
-/ Electronic Signatures / Active Leases / Expired Leases), previously
-nested inside the sidebar's owner-only `$isOwner`-gated "Hidden" section
-(see "Known, deliberate, pending reconciliation" above), was extracted out
-to its own top-level group so a normal agency admin can reach it. Every
-individual `@permission` gate on its 5 links is completely unchanged;
-only its position in the sidebar and its wrapper CSS classes (promoted
-from subgroup to top-level styling to match the new depth) moved.
+**Root cause, found by reading the code, not by guessing:**
+`RentalApplicationSigningController::uploadDocuments()` only ever advances
+status `sent → in_progress` (it never reaches `returned`, which requires
+the full sign-both-declarations `submit()`). But
+`RentalApplicationController::returned()`'s status filter was
+`['returned','under_assessment','approved','declined','withdrawn']` —
+**`in_progress` was excluded**. An applicant who uploaded a real,
+correctly-filed document without finishing the signature flow was
+invisible on the one screen named for reviewing incoming applicant
+activity — not because the document was broken, but because the
+*application* never surfaced there in that state.
 
-**Prior state (for the one-step reversal):**
-- The whole block (from `{{-- Rentals — nested drill-down --}}` through its
-  `@endpermission`) sat directly before `{{-- Evaluation — nested
-  drill-down --}}`, inside the `<div>` opened by `push('hidden')`.
-- Its button/panel classes were `corex-nav-subitem corex-nav-group-toggle
-  corex-nav-subgroup-toggle` (no icon).
-- `$navGroupParents` (near the top of the file) included `'rentals' =>
-  'hidden'`.
-- **To reverse:** move the block back to that exact spot, restore those
-  classes, and put `'rentals' => 'hidden'` back in `$navGroupParents`. The
-  live sidebar file's own inline comment at the unhidden block's new
-  location repeats these exact steps.
+**Why cc2's QA sweep passed while Johan's real use failed:** cc2 almost
+certainly tested the linear happy path — full submit, both signatures,
+*then* a document present, which lands in `returned` and always displayed
+correctly. Real usage doesn't queue up that neatly: Johan uploading a
+document without necessarily finishing signatures first is exactly the
+ordering the happy-path QA sweep never exercised. The lesson generalised:
+a scripted QA pass that only walks the linear/complete path is not
+equivalent to proving what a real, non-linear user does — the gap here
+was in test *coverage of ordering*, not in the document-handling code
+itself, which was correct throughout.
 
-**Permissions — none were actually missing.** Checked before granting
-anything: user 22 (johan@hfcoastal.co.za, admin, agency 1) already held
-`view_rentals`, `access_rental_signatures`, and `hasFeature('rentals')` —
-all three required checks were already true. Backed up `role_permissions`
-to `/root/db-backups/qa1-role_permissions-20260907-083432.sql` (5.4MB,
-verified valid) before confirming this, per instruction, even though no
-grant turned out to be necessary.
+**Fix:** `returned()` now includes `in_progress` in its status filter
+(`app/Http/Controllers/CoreX/RentalApplicationController.php`); the status
+tab bar in `returned.blade.php` gained a matching "In progress" tab.
+`in_progress` deliberately still shows on `index()` too — left there
+rather than removed, so nothing an agent currently relies on seeing there
+disappears as a side effect of this fix.
 
-**Verified working for a normal agency admin, not just the system-owner
-account used in earlier rounds.** Dispatched real authenticated requests
-(full kernel, not route:list) to all 5 routes as user 22:
+**Proven end to end, not in isolation**
+(`tests/Feature/RentalApplications/RentalApplicationDocumentVisibilityTest.php`):
+a real multipart file uploaded through the actual public
+`uploadDocuments()` route (black-box — cc4's endpoint, never edited),
+confirmed to leave status at `in_progress`; the application then appears
+on both Returned Applications and the main index; `show()` displays the
+document; the document downloads correctly. Scoping re-confirmed on this
+exact fixture afterward: a same-agency unrelated agent gets 403 on the
+download, a different-branch agent gets 403 on both the download and the
+PDF, a different agency gets 404 on both (route-model-binding never
+resolves it), and the owning agent still succeeds.
 
-| Route | Status | Response length | Error markers in body |
-|---|---|---|---|
-| `rentals.index` (`/rentals`) | 200 | 315,749 bytes | none |
-| `rental.dashboard` (`/rental`) | 200 | 187,893 bytes | none |
-| `rental.signatures` (`/rental/signatures`) | 200 | 547,388 bytes | none |
-| `rental.active-leases` (`/rental/active-leases`) | 200 | 191,722 bytes | none |
-| `rental.expired-leases` (`/rental/expired-leases`) | 200 | 183,781 bytes | none |
+**cc4's leftover audit fixtures — reported, not touched (no hard
+deletes):** `qa-audit-{agentx,agenty,bmz,adminw,outsiderv}@test.local`
+users, rental applications 14/15/16, documents 2281/2282. Applications 14
+and 15 are `agency_id=1` (Johan's real agency) with status `sent` and
+full names "Audit App owned by AgentX (branch1)" / "HACKED BY adminW" —
+**these DO currently appear on the real agency-1 index screen** (any
+`admin`/`all`-scope viewer, including Johan's own account, would see them
+mixed in with real applications) — not a data-corruption risk, but
+visibly confusing if left there. Application 16 is a different agency
+(7) and does not interfere with agency 1's view. None of this is mine to
+clean up (cc4's own test data, and the standing no-hard-deletes rule
+means it needs an explicit soft-delete decision, not a unilateral one).
 
-Also scanned every response body for embedded error text (a caught
-exception can still return HTTP 200 with an error view) — clean on all 5.
-Confirmed `storage/logs/laravel.log` gained zero new lines during the
-entire test run. None of these will 500 for Johan.
+**Resolved 2026-09-07:** all 5 fixture applications/documents archived
+(soft delete — `deleted_at` set, files untouched on disk), 4 of the 5
+`qa-audit-*` users archived (agency-1 accounts, visible in `/admin/users`
+and any agent picker); the agency-7 outsider account left active since
+it's invisible to Johan's own agency-scoped views and useful for
+re-running the scoping audit later. Verified clean by rendering both
+`corex/rental-applications` and `corex/rental-applications/returned`
+through the full kernel as user 22 (johan@hfcoastal.co.za) — zero
+occurrences of the fixture names in either. Genuine data counts confirmed
+unchanged before/after (cross-checked by exact archive timestamp, since a
+scope mistake on the first count attempt briefly double-counted
+already-trashed rows from other lanes' historical test data).
 
-**What a normal admin now sees, overall — reported plainly, not tidied:**
-two separate "Rentals" toggles, back to back, in the same part of the
-sidebar. The first (this build's new section) expands to "Rental
-Applications" / "Returned Applications." The second (this unhidden panel)
-expands to a panel also titled "Rentals," containing a link also labelled
-"Rentals," plus Dashboard / Electronic Signatures / Active Leases /
-Expired Leases. Deliberately placed adjacent rather than apart, so Johan
-can see and compare both directly. This is the same naming collision
-already flagged, now visible to more than just a system-owner account —
-nothing renamed or merged to resolve it.
+---
 
-### Code-sharing investigation — "Electronic Signatures" vs. current DocuPerfect e-sign
+## Post-submission document lock (Johan, 2026-09-07 — 3rd pass)
 
-Read-only, per instruction. Answer: **the "Electronic Signatures" screen
-(and the Dashboard screen, which draws from the same query) are not a
-separate system — they are a filtered view over the exact same tables and
-service class the current e-sign module uses.** Removing them later would
-NOT be a clean excision.
+**The rule, verbatim:** "submitted docs are submitted. they can add, but
+not replace or remove." Concretely:
+- **Before submission:** the applicant has full document CRUD — add,
+  replace, remove (archive, never hard delete).
+- **After submission** (`RentalApplication::isSubmitted()`, i.e.
+  `submitted_at !== null`): **add only.** Replace and remove are locked,
+  application-wide, for every document on the application — including one
+  added after submission. What was submitted stays exactly as submitted.
 
-**Shared, confirmed by reading the actual code:**
-- `Rental\RentalDivisionController` (`dashboard()` and `signatures()`)
-  both call `App\Services\Docuperfect\SignatureService::getRentalDashboardData()`
-  — the SAME `SignatureService` class DocuPerfect's own e-sign wizard
-  uses for template creation, marker/zone placement, and document-hash
-  verification (`createTemplate()`, `saveMarkers()`, `expandZone()`, etc.
-  all live in this one class).
-- `getRentalDashboardData()` queries `App\Models\Docuperfect\Document`
-  directly (filtering `document_type = 'rental_upload_send'` or
-  `template.template_type = 'rental'`) and
-  `App\Models\Docuperfect\SignatureTemplate` directly
-  (`whereIn('document_id', $documentIds)`) — the exact central tables
-  every other e-sign document in CoreX uses, distinguished only by a
-  type/template-type value, not a separate table.
-- `App\Models\Docuperfect\LeaseRecord` (`lease_records` table) has **hard
-  foreign-key constraints**, not just a runtime query relationship:
-  `document_id` → `docuperfect_documents.id` (`cascadeOnDelete()`) and
-  `signature_template_id` → `signature_templates.id`
-  (`cascadeOnDelete()`) — confirmed directly in
-  `database/migrations/2026_02_26_600007_create_lease_records_table.php`.
-  A `lease_records` row cannot exist without a matching row in both
-  central e-sign tables, and deleting either cascades the lease record
-  away with it.
+**Reasoning (evidentiary, not a UX preference):** once an agent has
+received an application, the applicant must not be able to quietly swap a
+payslip or pull a document the agent has already seen — that would let an
+applicant retroactively alter what was actually reviewed. But the
+applicant must still be able to send more: an agent asking "can you also
+send your bank statements" is a normal, expected request and must not
+require reopening or resetting anything.
 
-**Genuinely separate, not shared:** `App\Models\Rental\RentalProperty`
-and `App\Models\Rental\RentalDocumentType` — rental-specific tables with
-no FK or query relationship into `documents`/`signature_templates`. The
-top-level `Rentals`/`rentals.index` screen (`App\Models\Rental` +
-`RentalsController`) also has zero references to
-`Docuperfect`/`SignatureTemplate` anywhere in its model or controller.
+**This is a correctness rule, not a setting.** No agency toggle, no
+threshold, no configurable window — enforced identically for every
+agency. Per Johan: "do not make it agency-configurable."
 
-**Net:** "Active Leases" and "Expired Leases" (via `LeaseRecord`) and
-"Electronic Signatures"/"Dashboard" (via `SignatureService` +
-`Document`/`SignatureTemplate`) all sit on top of the same e-sign
-infrastructure the DocuPerfect module owns. Only the plain "Rentals" list
-screen and its underlying `Rental`/`RentalProperty`/`RentalDocumentType`
-models are self-contained. Not acted on — reported only, per instruction.
+### Enforcement — server-side, not blade-only
+
+`RentalApplicationSigningController::assertDocumentsNotLocked()` is the
+single choke point both `removeDocument()` and `replaceDocument()` call,
+right after `scopedDocument()` establishes the document genuinely belongs
+to this application (so the check order is: expired token → document
+exists and belongs here → submission lock). `viewDocument()` and
+`uploadDocuments()` are deliberately NOT gated by this check — viewing and
+adding remain available regardless of submission state (only token expiry
+gates those two).
+
+The check reads `RentalApplication::isSubmitted()` — a single-field
+`submitted_at !== null` check — rather than re-deriving "is this
+submitted" from the status enum at each call site. One source of truth,
+so a later refactor that moves or renames a status value can't silently
+un-lock this without also breaking `isSubmitted()`'s own callers.
+
+**Proven with real requests, not asserted**
+(`tests/Feature/RentalApplications/RentalApplicationDocumentLockTest.php`):
+before submission, upload → replace → remove all succeed via the real
+public routes (replace confirmed atomic: old doc archived, new doc
+created; remove confirmed archived, not hard-deleted — row still present
+via `assertDatabaseHas`). After submission: a replace POST against the
+original document redirects back with a flash error and leaves the
+original completely untouched (`deleted_at` still null, document count
+unchanged — not even a new document was filed); a remove POST against the
+same document is refused the same way, row still present with
+`deleted_at` still null; an add POST still succeeds, taking the document
+count to 2 and the new document's `created_at` provably later than
+`submitted_at`. A dedicated test asserts the locked remove is a full
+no-op at the database level (`assertDatabaseHas` with `deleted_at: null`),
+not merely "still recoverable via `withTrashed()`."
+
+### UI — the applicant sees why, not just a disabled control
+
+Per Johan: "a greyed-out button with no explanation is a support call."
+`_document-list.blade.php` (shared by `show.blade.php` and
+`already-submitted.blade.php`) checks `$application->isSubmitted()`: once
+true, each document's Replace/Remove controls are replaced with a plain
+"Submitted — locked" label, and a line beneath the list reads "The
+documents above were submitted with your application and can't be
+changed. Need to send something else? Add it below — your agent will see
+it as a new document." The upload form itself is never hidden or altered
+— add keeps working exactly as before.
+
+### Agent-side visibility of late additions — agreed with cc3, not built by cc4
+
+Requirement: "Anything added AFTER submission must be visibly
+distinguishable to the agent — timestamp it and surface that on the
+agent's view." This is cc3's file (`corex/rental-applications/show.blade.php`),
+not cc4's — no schema change needed, no new column: a document is "late"
+whenever `$document->created_at->gt($rentalApplication->submitted_at)`,
+both fields already available wherever `$rentalApplication->documents` is
+loaded.
+
+**Agreed with cc3, 2026-09-07:** confirmed — `created_at > submitted_at`
+is the "late" signal, no schema change. cc3 will add a small badge next
+to any matching document in `show.blade.php` (their `returned.blade.php`
+doesn't currently list individual documents, only a signed/incomplete
+summary, so the badge is expected to live in `show.blade.php` only). cc3
+is implementing this after a separate, already-in-flight, Johan-approved
+task (a platform-wide `SyncPermissions` fix) lands. This lane's own tests
+assert on the `created_at`/`submitted_at` ordering directly rather than
+on cc3's eventual badge wording, so nothing here depends on that follow-up
+landing first.
+
+**End-to-end proof, real requests against live QA1** (application id 20,
+token generated fresh, not a synthetic fixture): pre-submission — added
+`original.pdf` (doc 2284), replaced it with `replacement.pdf` (doc 2285,
+old doc's `deleted_at` set, file untouched on disk), removed it (doc
+2285's `deleted_at` set) — all three actions HTTP 200/302 with their
+success flash. Re-added `original2.pdf` (doc 2286), submitted both
+signatures (`status` → `returned`, `submitted_at` set). Post-submission:
+a REPLACE attempt against doc 2286 redirected back with the lock message
+and left doc 2286 completely untouched (`deleted_at` still null, document
+count still 1 — no sneaky replacement was even filed); a REMOVE attempt
+against the same document was refused identically, doc 2286 still
+untouched; an ADD of `bankstatement.pdf` (doc 2287) succeeded (HTTP 200,
+"was uploaded"), confirmed `doc 2287.created_at` (09:44:37) is after
+`submitted_at` (09:42:38) — the exact comparison cc3's badge will use.
+The rendered `already-submitted.blade.php` page shows "Submitted —
+locked" against the original document, zero occurrences of "Replace" or
+"Remove", and the explanatory line beneath the list.

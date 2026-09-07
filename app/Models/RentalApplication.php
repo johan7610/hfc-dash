@@ -149,6 +149,21 @@ class RentalApplication extends Model
     }
 
     /**
+     * Johan, 2026-09-07 — "submitted docs are submitted. they can add, but
+     * not replace or remove." This is the single source of truth for "has
+     * this application already been submitted" — every submitted-lock check
+     * (document replace/remove, the UI copy explaining why) reads through
+     * here so the rule can't drift between call sites in a later refactor.
+     * `submitted_at` is set exactly once, in submit()'s transaction, and
+     * never cleared — equivalent to (and simpler than) re-checking the
+     * status enum's "returned or later" set used elsewhere in this flow.
+     */
+    public function isSubmitted(): bool
+    {
+        return $this->submitted_at !== null;
+    }
+
+    /**
      * Johan, 2026-09-07 — "we always need proper crud... search / sort /
      * own / branch / agency levels. that should be the design standard...
      * from the word go." Own/branch/agency visibility, enforced at the

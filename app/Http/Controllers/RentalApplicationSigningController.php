@@ -216,6 +216,26 @@ class RentalApplicationSigningController extends Controller
     }
 
     /**
+     * Johan, 2026-09-07 — "submitted docs are submitted. they can add, but
+     * not replace or remove." Evidentiary rule: once an agent has received
+     * the application, the applicant must not be able to quietly swap or
+     * pull a document the agent has already seen. This is a correctness
+     * rule, not a setting — no agency toggle, no threshold, checked the
+     * same way for every agency. Shared by removeDocument() and
+     * replaceDocument() so the two can never drift out of sync with each
+     * other or with RentalApplication::isSubmitted().
+     */
+    private function assertDocumentsNotLocked(RentalApplication $application, string $token)
+    {
+        if (! $application->isSubmitted()) {
+            return null;
+        }
+
+        return redirect()->route('rental-applications.public.show', $token)
+            ->with('error', 'The documents you submitted with your application are locked and can\'t be changed. You can still add more below.');
+    }
+
+    /**
      * Archive only — Document already uses SoftDeletes, so delete() here is
      * never destructive (CLAUDE.md Non-negotiable #1: no hard deletes,
      * anywhere, no exceptions). The file itself is left on disk; only the
@@ -232,6 +252,10 @@ class RentalApplicationSigningController extends Controller
         }
 
         $doc = $this->scopedDocument($application, $document);
+
+        if ($locked = $this->assertDocumentsNotLocked($application, $token)) {
+            return $locked;
+        }
 
         $doc->delete();
 
@@ -254,6 +278,10 @@ class RentalApplicationSigningController extends Controller
         }
 
         $oldDoc = $this->scopedDocument($application, $document);
+
+        if ($locked = $this->assertDocumentsNotLocked($application, $token)) {
+            return $locked;
+        }
 
         $validated = $request->validate([
             'replacement_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:15360'],
