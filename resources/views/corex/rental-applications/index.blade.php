@@ -33,6 +33,15 @@
                    class="rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border); min-width: 260px;">
         </div>
         <div>
+            <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Status</label>
+            <select name="status" class="rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">
+                <option value="">All</option>
+                @foreach(['draft', 'sent', 'in_progress'] as $statusOption)
+                    <option value="{{ $statusOption }}" @selected(request('status') === $statusOption)>{{ str_replace('_', ' ', ucfirst($statusOption)) }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div>
             <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Sent from</label>
             <input type="date" name="date_from" value="{{ request('date_from') }}" class="rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">
         </div>
@@ -41,7 +50,7 @@
             <input type="date" name="date_to" value="{{ request('date_to') }}" class="rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">
         </div>
         <button type="submit" class="corex-btn-outline text-xs">Filter</button>
-        @if(request()->hasAny(['q', 'date_from', 'date_to']))
+        @if(request()->hasAny(['q', 'status', 'date_from', 'date_to']))
             <a href="{{ route('corex.rental-applications.index') }}" class="corex-btn-outline text-xs">Clear</a>
         @endif
         <a href="{{ route('corex.rental-applications.index', array_merge(request()->except('page'), ['archived' => request()->boolean('archived') ? null : 1])) }}"
@@ -66,15 +75,29 @@
                 <tr style="border-bottom: 1px solid var(--border);">
                     <td class="px-4 py-2">{{ $application->contact->full_name ?? '—' }}</td>
                     <td class="px-4 py-2">{{ $application->property?->buildDisplayAddress() ?? $application->property_address_override ?? '—' }}</td>
-                    <td class="px-4 py-2"><span class="ds-badge ds-badge-info">{{ str_replace('_', ' ', $application->status) }}</span></td>
+                    <td class="px-4 py-2"><span class="ds-badge {{ $application->status === 'draft' ? 'ds-badge-muted' : 'ds-badge-info' }}">{{ str_replace('_', ' ', $application->status) }}</span></td>
                     <td class="px-4 py-2">{{ $application->created_at->format('d M Y') }}</td>
-                    <td class="px-4 py-2 text-right">
+                    <td class="px-4 py-2 text-right whitespace-nowrap">
                         <a href="{{ route('corex.rental-applications.show', $application) }}" class="corex-btn-outline text-xs">Open</a>
+                        @permission('rental_applications.create')
+                            @if($application->recipientEmail())
+                                <form method="POST" action="{{ route('corex.rental-applications.send', $application) }}" class="inline">
+                                    @csrf
+                                    <button type="submit" class="corex-btn-outline text-xs">{{ $application->status === 'draft' ? 'Send' : 'Resend' }}</button>
+                                </form>
+                            @endif
+                            <form method="POST" action="{{ route('corex.rental-applications.destroy', $application) }}"
+                                  onsubmit="return confirm('Archive this rental application? It can be restored later.');" class="inline">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="corex-btn-outline text-xs" style="color: var(--ds-red, #dc2626);">Archive</button>
+                            </form>
+                        @endpermission
                     </td>
                 </tr>
                 @empty
                 <tr><td colspan="5" class="px-4 py-8 text-center text-sm" style="color: var(--text-muted);">
-                    @if(request()->hasAny(['q', 'date_from', 'date_to']))
+                    @if(request()->hasAny(['q', 'status', 'date_from', 'date_to']))
                         No rental applications match this search.
                     @else
                         No rental applications yet.

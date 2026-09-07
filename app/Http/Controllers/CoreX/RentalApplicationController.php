@@ -9,6 +9,7 @@ use App\Models\Property;
 use App\Models\RentalApplication;
 use App\Services\RentalApplications\RentalApplicationMailer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
@@ -45,6 +46,10 @@ class RentalApplicationController extends Controller
                     ->orWhereHas('property', fn ($p) => $p->where('address', 'like', "%{$q}%")
                         ->orWhere('title', 'like', "%{$q}%"));
             });
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->string('status'));
         }
 
         if ($request->filled('date_from')) {
@@ -112,10 +117,8 @@ class RentalApplicationController extends Controller
             ->with(['contact', 'property', 'signatures'])
             ->whereIn('status', ['in_progress', 'returned', 'under_assessment', 'approved', 'declined', 'withdrawn']);
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->string('status'));
-        }
-
+        // Status filtering is centralised in applySearchSortAndDateRange()
+        // now that index() needs it too — removed the duplicate here.
         $this->applySearchSortAndDateRange($query, $request, 'submitted_at', 'submitted_at');
 
         $applications = $query->paginate(25)->withQueryString();
@@ -210,14 +213,48 @@ class RentalApplicationController extends Controller
         $fields = collect($validated)->except(['property_id'])->all();
         $fields = array_map(fn ($v) => $v === '' ? null : $v, $fields);
 
-        $rentalApplication->update(array_merge(
-            ['property_id' => $validated['property_id'] ?? $rentalApplication->property_id],
-            $fields,
-        ));
+        DB::transaction(function () use ($rentalApplication, $validated, $fields) {
+            $rentalApplication->update(array_merge(
+                ['property_id' => $validated['property_id'] ?? $rentalApplication->property_id],
+                $fields,
+            ));
+
+            $this->backfillContactEmail($rentalApplication);
+        });
 
         return redirect()
             ->route('corex.rental-applications.show', $rentalApplication)
             ->with('success', 'Saved.');
+    }
+
+    /**
+     * Johan, QA1 — "once we have an email for a contact we update the
+     * contact." Fill-only, never overwrite: if the contact already has a
+     * DIFFERENT email on file, that's real CRM data an agent entered
+     * deliberately elsewhere — a document-edit screen must never silently
+     * rewrite it. Only fires when the contact's own email is genuinely
+     * empty. Uses Contact::auditedQuietUpdate() (the sanctioned "meaningful
+     * quiet write" path, AT-321-C) so this shows up in the contact's own
+     * audit trail rather than looking like it appeared from nowhere.
+     * Agency scoping: $rentalApplication->contact is already resolved
+     * through the model relationship, which is itself agency-scoped via
+     * Contact's global AgencyScope — this can never reach a contact
+     * outside the application's own agency.
+     */
+    private function backfillContactEmail(RentalApplication $rentalApplication): void
+    {
+        $email = $rentalApplication->email;
+        $contact = $rentalApplication->contact;
+
+        if (! $email || ! $contact || $contact->email) {
+            return;
+        }
+
+        $contact->auditedQuietUpdate(
+            ['email' => $email],
+            eventType: 'contact_updated',
+            summary: 'Email filled in from a rental application (contact had none on file).',
+        );
     }
 
     /**

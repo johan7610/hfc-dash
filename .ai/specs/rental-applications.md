@@ -1236,3 +1236,146 @@ classes exist in the built bundle.
 `test_send_is_refused_server_side_without_a_saved_email`,
 `test_full_send_flow_only_marks_sent_after_mail_actually_leaves`,
 `test_resending_an_in_progress_application_does_not_regress_its_status`.
+
+---
+
+## Round 3 (Johan, QA1) — list CRUD, contact email backfill, async document upload
+
+Three more real defects, one folded mid-turn into another.
+
+### Bug 1 — the list had no row actions
+
+**Gap vs BUILD_STANDARD §1b, checked item by item:** search ✓ (contact
+name/email/property/#id), sort ✓ (every listed column, default
+`created_at desc`), pagination ✓, empty state ✓ (distinguishes "no
+results for this filter" from "nothing yet"), archived tab ✓ (already
+existed) — but **no status filter at all**, and **the only row action was
+"Open."** No archive, no resend, from the list itself.
+
+**Fixed:**
+- Status filter added to `index()` (mirrors the one `returned()` already
+  had — that duplicate is now removed, centralised in
+  `applySearchSortAndDateRange()`), dropdown scoped to the statuses that
+  actually appear on this screen (`draft`, `sent`, `in_progress` — the
+  rest live on Returned Applications).
+- Row actions added: **Open** (unchanged), **Send/Resend** (only shown
+  when `recipientEmail()` is set — matches the header's own
+  disabled-with-reason logic; omitted rather than shown-disabled on a
+  cramped list row, since opening the record already explains why), and
+  **Archive** (soft delete, confirm dialog, same `destroy()` route the
+  header already used). Restore already existed in the archived sub-table.
+- Status badge on the list now distinguishes `draft` (muted) from
+  everything else, matching the same fix already made on the detail page.
+
+**Deliberately NOT added — a manual "mark as sent" status override.**
+Johan asked me to decide and say so if a status should only ever be
+system-set. `sent` was JUST fixed (Round 2) to mean "mail genuinely went
+out" — a hand-settable override would directly reintroduce the exact
+"status lies" defect that fix closed. Sending (via the Send/Resend row
+action) is the correct way to move an application forward; there is no
+legitimate hand-set path for this particular field.
+
+### Bug 2 — email should flow back to the contact
+
+Johan: "once we have an email for a contact we update the contact." Rule
+implemented exactly as stated — **fill-only, never overwrite**:
+`RentalApplicationController::backfillContactEmail()`, called from
+`update()` inside the same transaction as the application save. If the
+contact's own `email` is empty, it's filled from whatever the agent just
+saved on the application. If the contact already has a DIFFERENT email,
+it is left completely untouched — a document-edit screen must never
+silently rewrite real CRM data.
+
+Uses `Contact::auditedQuietUpdate()` (the existing sanctioned "meaningful
+quiet write" path, AT-321-C) rather than a raw `save()`, so the backfill
+shows up in the contact's own audit trail instead of looking like it
+appeared from nowhere.
+
+**Agency scoping:** `$rentalApplication->contact` is resolved through the
+model relationship, itself scoped by `Contact`'s global `AgencyScope` —
+there is no code path by which this can reach a contact outside the
+application's own agency. Proven with a real cross-agency test fixture,
+not just asserted.
+
+**Scope note, not decided unilaterally:** this only fires from the
+AGENT-side edit screen (`update()`), matching Johan's literal words ("on
+application agent enters email address and saves"). The public
+APPLICANT's own submit — which can also set `rental_applications.email`
+— does NOT currently backfill the contact. Flagging this rather than
+silently extending or silently leaving it: if the same rule should apply
+there too, that's a one-line addition once confirmed.
+
+### Bug 3 (folded into the mid-turn instruction below) — see "async document management"
+
+### Mid-turn escalation — the applicant form also loses typed input on upload
+
+Johan, mid-turn: "I complete all the information, get to the bottom,
+attach a file, click upload and the screen refreshes, and all my typed
+info is gone." Same root cause as Bug 3, worse consequence: the public
+form has no separate save step at all, so a synchronous upload's page
+reload discarded everything typed anywhere on the form, not just the
+documents.
+
+**Ruling: make document upload fully asynchronous — no page reload at
+all — rather than patching around the synchronous version.** Confirmed
+feasible before building anything (an existing async fetch+FormData+
+Alpine upload pattern already exists in this codebase — `fica/form.blade.php`
+— so this is consistent with established convention, not something
+foreign being introduced).
+
+**Built:**
+- `RentalApplicationSigningController::uploadDocuments()`,
+  `removeDocument()`, `replaceDocument()` now respond with JSON when the
+  caller asks for it (`$request->wantsJson()`) — the existing synchronous
+  form-POST-redirect behaviour is untouched for any caller that doesn't
+  ask for JSON (there isn't one left after this change, but nothing was
+  removed — this is additive). Validation failures already return 422
+  JSON automatically under Laravel's own default behaviour once the
+  request wants JSON — no extra code needed for that half.
+- `show.blade.php`'s Alpine component (`rentalApplicationForm()`) now
+  owns the document list as reactive state (`documents`, `uploading`),
+  with `uploadFile()`/`onFilesSelected()`/`removeDoc()`/`replaceDoc()`
+  driving fetch calls that update the DOM in place — zero navigation.
+  Per-file upload progress and per-file error text render inline.
+- **Belt-and-braces safety net kept, as instructed:** `beforeSubmit()`
+  first uploads anything still sitting in the file picker, then awaits
+  any upload still in flight, then — if anything failed — blocks Submit
+  entirely and names which file and why. Nothing typed is touched by any
+  of this, since none of it involves a page load.
+- **Submit moved below the documents section** (both in markup order and
+  visually) — the button now lives outside the `<form>` tag and
+  associates via the HTML5 `form=` attribute (the same technique already
+  used for the agent-side header's Save button), so the DOM could be
+  reordered freely without restructuring the actual `<form>` boundaries.
+
+**Full input-loss sweep, both forms, as instructed** — every submit,
+every button that posts, every partial save:
+- **Public form:** the signature pad was checked for any navigation/reset
+  behaviour — none exists (pure canvas-to-dataURL, no form submission of
+  its own). The three document actions were the only genuine gap, now
+  fixed. `already-submitted.blade.php` (the post-submission "add more
+  documents" page) was deliberately NOT touched — that page renders no
+  other form fields at all, so there is nothing else on it a reload could
+  lose; the defect class doesn't apply there.
+- **Agent form:** Save (header, `old()`-preserving) and Send (disabled
+  whenever the form has unsaved changes — `dirty`, from Round 2 — so
+  Send can never be clicked while anything typed is unsaved) already
+  close every path found. Archive is the one intentional exception: it's
+  an explicit "leave this record" action, not a surprise data-loss —
+  losing unsaved edits when deliberately choosing to archive is the same
+  expectation as leaving any page with unsaved changes, not the same
+  defect class as Send/Upload silently discarding input during what
+  looks like forward progress. No further gaps found.
+
+**Regression tests**
+(`tests/Feature/RentalApplications/RentalApplicationAsyncUploadTest.php`):
+`test_uploading_via_the_json_endpoint_attaches_the_document_before_submit_is_ever_called`
+(the actual "I never clicked upload... no docs arrive back" scenario,
+proven false end to end through a real submit()), `test_a_rejected_upload_via_json_reports_exactly_which_file_and_why`,
+`test_json_replace_and_remove_never_hard_delete_and_respond_without_a_redirect`.
+Agent side, added to `RentalApplicationAgentControllerTest.php`:
+`test_saving_an_email_backfills_a_contact_that_had_none`,
+`test_saving_an_email_never_overwrites_a_contacts_existing_different_email`,
+`test_email_backfill_never_crosses_agency_boundaries`,
+`test_archiving_from_the_list_soft_deletes_and_it_is_findable_and_restorable`,
+`test_the_status_filter_on_the_main_list_actually_filters`.

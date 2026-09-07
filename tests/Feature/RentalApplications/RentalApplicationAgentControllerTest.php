@@ -270,8 +270,11 @@ final class RentalApplicationAgentControllerTest extends TestCase
         $app->refresh();
         $this->assertSame('corrected@example.com', $app->email, 'The email must actually persist — it always did; this asserts it still does.');
 
-        // Sending again must now use exactly that address — not the still-empty contact email.
-        $this->assertNull($contactWithNoEmail->fresh()->email, 'This fix must not write back to the contact record — out of scope for this bug.');
+        // Superseded by the later "email should flow back to the contact"
+        // fix (Round 3): a contact that had no email IS now backfilled from
+        // this save — the assertion here used to check the opposite,
+        // before that rule existed.
+        $this->assertSame('corrected@example.com', $contactWithNoEmail->fresh()->email, 'The contact had no email — it must now be backfilled.');
         $this->actingAs($this->agent)->post(route('corex.rental-applications.send', $app))
             ->assertSessionHas('success', fn ($msg) => str_contains($msg, 'Sent to corrected@example.com'));
 
@@ -459,5 +462,113 @@ final class RentalApplicationAgentControllerTest extends TestCase
             ->assertSessionHas('success');
 
         $this->assertSame('in_progress', $app->fresh()->status, 'Resending must not reset an application that has already progressed.');
+    }
+
+    // ── Bug 2 — Johan, QA1: "once we have an email for a contact we
+    // update the contact." Fill-only: never overwrite a contact's
+    // existing, different email from this screen. ─────────────────────────
+
+    public function test_saving_an_email_backfills_a_contact_that_had_none(): void
+    {
+        $contact = Contact::create([
+            'agency_id' => $this->agency->id, 'branch_id' => $this->branch->id,
+            'first_name' => 'No', 'last_name' => 'Email', 'email' => null,
+        ]);
+        $app = $this->application($contact);
+
+        $this->actingAs($this->agent)->put(route('corex.rental-applications.update', $app), [
+            'email' => 'backfilled@example.com',
+        ])->assertRedirect();
+
+        $this->assertSame('backfilled@example.com', $contact->fresh()->email, 'A contact with no email must be backfilled from the application.');
+    }
+
+    public function test_saving_an_email_never_overwrites_a_contacts_existing_different_email(): void
+    {
+        $contact = Contact::create([
+            'agency_id' => $this->agency->id, 'branch_id' => $this->branch->id,
+            'first_name' => 'Has', 'last_name' => 'Different', 'email' => 'real-crm-email@example.com',
+        ]);
+        $app = $this->application($contact);
+
+        $this->actingAs($this->agent)->put(route('corex.rental-applications.update', $app), [
+            'email' => 'typo-or-different@example.com',
+        ])->assertRedirect();
+
+        $this->assertSame('real-crm-email@example.com', $contact->fresh()->email, 'A contact already carrying an email must never be silently overwritten from a document-edit screen.');
+        $this->assertSame('typo-or-different@example.com', $app->fresh()->email, 'The application itself still saves whatever was typed.');
+    }
+
+    public function test_email_backfill_never_crosses_agency_boundaries(): void
+    {
+        $otherAgency = Agency::create(['name' => 'A Different Agency', 'slug' => 'other-' . uniqid()]);
+        $otherBranch = Branch::create(['agency_id' => $otherAgency->id, 'name' => 'HQ']);
+        $otherContact = Contact::create([
+            'agency_id' => $otherAgency->id, 'branch_id' => $otherBranch->id,
+            'first_name' => 'Other', 'last_name' => 'Agency', 'email' => null,
+        ]);
+        $ownContact = Contact::create([
+            'agency_id' => $this->agency->id, 'branch_id' => $this->branch->id,
+            'first_name' => 'Own', 'last_name' => 'Agency', 'email' => null,
+        ]);
+        $app = $this->application($ownContact);
+
+        $this->actingAs($this->agent)->put(route('corex.rental-applications.update', $app), [
+            'email' => 'own-agency@example.com',
+        ])->assertRedirect();
+
+        $this->assertSame('own-agency@example.com', $ownContact->fresh()->email);
+        $this->assertNull($otherContact->fresh()->email, 'The backfill must only ever reach the application\'s own contact, never any other agency\'s data.');
+    }
+
+    // ── Bug 1 — Johan, QA1: "list of rental applications piling up, yet
+    // no way to remove / mark as sent / nothing here?" Full CRUD + list
+    // standard: archive, restore, and a status filter on the main list. ───
+
+    public function test_archiving_from_the_list_soft_deletes_and_it_is_findable_and_restorable(): void
+    {
+        $app = $this->application($this->contact());
+
+        $this->actingAs($this->agent)->delete(route('corex.rental-applications.destroy', $app))
+            ->assertRedirect(route('corex.rental-applications.index'));
+
+        $this->assertNotNull($app->fresh()->deleted_at, 'Archive must be a soft delete.');
+        // assertDatabaseHas()'s 3rd arg is a connection name, not a message
+        // — the row existing at all (soft-deleted or not) IS the assertion.
+        $this->assertDatabaseHas('rental_applications', ['id' => $app->id]);
+
+        // Leaves the default view.
+        $this->actingAs($this->agent)->get(route('corex.rental-applications.index'))
+            ->assertDontSee(route('corex.rental-applications.show', $app), false);
+
+        // Findable and restorable via the archived tab.
+        $archivedView = $this->actingAs($this->agent)->get(route('corex.rental-applications.index', ['archived' => 1]));
+        $archivedView->assertOk();
+        $archivedView->assertSee($app->contact->full_name);
+
+        $this->actingAs($this->agent)->post(route('corex.rental-applications.restore', $app->id))
+            ->assertRedirect();
+
+        $this->assertNull($app->fresh()->deleted_at, 'Restore must bring it back.');
+        $this->actingAs($this->agent)->get(route('corex.rental-applications.index'))
+            ->assertSee($app->contact->full_name);
+    }
+
+    public function test_the_status_filter_on_the_main_list_actually_filters(): void
+    {
+        $draftApp = $this->application($this->contact(), ['status' => 'draft']);
+        $sentContact = Contact::create([
+            'agency_id' => $this->agency->id, 'branch_id' => $this->branch->id,
+            'first_name' => 'Sent', 'last_name' => 'One', 'email' => 'sent@example.com',
+        ]);
+        $sentApp = $this->application($sentContact, ['status' => 'sent']);
+
+        $draftOnly = $this->actingAs($this->agent)->get(route('corex.rental-applications.index', ['status' => 'draft']));
+        $draftOnly->assertSee($draftApp->contact->full_name);
+        $draftOnly->assertDontSee($sentApp->contact->full_name);
+
+        $sentOnly = $this->actingAs($this->agent)->get(route('corex.rental-applications.index', ['status' => 'sent']));
+        $sentOnly->assertSee($sentApp->contact->full_name);
+        $sentOnly->assertDontSee($draftApp->contact->full_name);
     }
 }
