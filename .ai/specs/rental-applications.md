@@ -2232,3 +2232,154 @@ why and attaches nothing, the detail page shows both an applicant
 document ("from applicant") and an agent-added one ("added by Johan
 Reichel") side by side, the upload widget itself renders, and a
 cross-agency attempt is blocked with a 404.
+
+## Round 7 — four defects from independent testing (cc5)
+
+cc5 walked the whole flow as a real user and found four real defects,
+alongside confirming a lot of earlier work genuinely holds up
+(double-submit blocking, the post-submission document lock, assessment
+autosave, cross-agency scoping, send-without-email refused
+server-side). All four below fixed, each proven via real HTTP: a real
+local server (`php artisan serve`), a real login (`POST /login` with a
+scraped CSRF token and a real session cookie), then the actual feature
+routes with their own scraped CSRF tokens — never `Route::
+dispatchToRoute()` or any other kernel-bypassing shortcut, and never
+verified from rendered markup alone without an independent direct
+database read. This distinction is not academic: cc6 reported
+highlighting working the same night when it was completely broken,
+because that check exercised a path a real browser never uses.
+
+### RA-01 — a draft application's public link was already fully fillable
+
+`RentalApplicationSigningController::show()` generated the token at
+creation (an earlier round's own fix, so a link exists to share even
+before Send) — which is exactly what made a never-sent application's
+form reachable and fillable, with nothing telling the applicant the
+agent hadn't actually sent it yet.
+
+**Decision: show the same "not ready" page the expired-token case
+already uses, with a `not_sent`-specific message, rather than a bare
+404.** A 404 would be less honest — the link is real and will work the
+moment the agent sends it — and reusing the one existing "can't fill
+this in right now" page (`unavailable.blade.php`, now branching on
+`$reason`) keeps one consistent unavailable experience instead of
+inventing a second.
+
+Guarded in all five places a draft application's token could otherwise
+be interacted with: `show()`, `submit()`, `uploadDocuments()`,
+`removeDocument()`, `replaceDocument()` — a crafted direct POST bypassing
+the UI is refused exactly the same as using the page normally.
+
+**Proven live:** GET on a draft's token → "isn't ready yet", no form
+fields, no Submit button. A direct POST to `/submit` with a real,
+valid CSRF token still saves nothing (confirmed via `withoutGlobalScopes()
+->find()` reading the row directly — `status` stayed `draft`, `full_name`
+and `submitted_at` stayed `NULL`). A real, authenticated `POST .../send`
+flips it to `sent` — the SAME token then serves the real fillable form.
+
+### RA-02 — numeric fields rejected comma-formatted South African money
+
+`RentalApplication::fieldValidationRules()`'s numeric fields
+(`current_rental_amount`, `monthly_salary`, `adults`, `children`) were
+validated raw — "15,000" or "R 8,500.50" failed as "must be a number"
+with no explanation, even though input was correctly preserved.
+
+Fixed the class: `RentalApplication::NUMERIC_FIELDS` (all four) +
+`RentalApplication::sanitizeNumericInput()` strips a leading `R`
+currency prefix, thousand-separator commas, and stray spaces before
+validation ever runs. Called via `$request->merge(...)` in both
+`RentalApplicationController::update()` and
+`RentalApplicationSigningController::submit()` — the one shared
+validation ruleset, sanitized identically on both forms. A genuinely
+invalid value (`"not money at all"`) is still rejected after sanitizing.
+
+**Proven live:** real `PUT`/`POST` with `monthly_salary=15,000`,
+`current_rental_amount=R 8,500.50` / `R6 200` / `22,750` — every case
+read back from the database afterward as the correct clean decimal
+(`15000.00`, `8500.50`, `6200.00`, `22750.00`), on both the public
+submit form and the agent edit form.
+
+### RA-03 — a document added after submission looked identical to one submitted originally
+
+`show.blade.php`'s document list showed no distinction at all. Johan's
+own requirement, agreed with cc3 using `created_at >= submitted_at` —
+confirmed still missing.
+
+Added a badge + timestamp to the existing document list, both for the
+initial server-rendered list and for documents added live through the
+async upload widget (Round 6) — anything added right now on an
+already-submitted application is, by definition, after submission.
+**Coordinated with cc6** so the review screen gets the identical
+treatment (same badge text, same condition) rather than two different
+ones — see the Round 6 section above for the handoff.
+
+Hit and fixed a real Blade compile bug while building this: an
+`@php ... @endphp` block nested directly inside a `@foreach` failed to
+compile as a directive at all (the literal text `@php` survived into
+the compiled output, and `@endphp` compiled to a bare `?>` that closed
+the loop's PHP block early, corrupting everything after it into a real
+`ParseError`) — caught by actually rendering the page in a test, not by
+`php -l`. Fixed by inlining the boolean condition directly into the
+`@if(...)`, removing the intermediate `@php` block entirely rather than
+chasing why the nesting failed.
+
+**Proven live:** real agent upload onto a returned application via the
+JSON endpoint, confirmed via direct DB read that the new document's
+`created_at` is `>=` the application's `submitted_at`, THEN confirmed
+the real rendered page shows both "added by {agent}" and the "Added
+after submission" badge with a timestamp matching the DB exactly.
+
+### RA-05 — two tabs, second save silently blanked the first tab's genuine save
+
+`RentalApplicationController::update()` was plain last-write-wins, like
+every multi-agent-editable module in CoreX (checked before building
+anything — Deals, Contacts, Properties, Compliance controllers all have
+the same gap; none of them are being touched here, out of scope).
+
+**No existing "hidden updated_at, compare on submit" mechanism exists
+anywhere in this codebase.** The closest analogue —
+`Property::galleryFingerprint()` + `PropertyController::reorderImages()`
+— hard-blocks on a content-hash mismatch (409, no merge) rather than
+warning-then-saving. Modeled on that same hard-block shape, using
+`updated_at` directly (simpler than a field hash, and correctly means
+"changed since I opened this" for a plain Blade form): a hidden
+`expected_updated_at` seeded from `old('expected_updated_at',
+$rentalApplication->updated_at->timestamp)` when the page loads,
+compared against the record's actual current `updated_at` before any
+write happens in `update()`. On mismatch, the save is refused outright
+— `back()->withInput()->with('error', ...)` — never silently merged,
+never saved-with-a-toast. `old()` preserves everything the blocked tab
+typed, so reloading and redoing the edit costs nothing.
+
+The check only fires when `expected_updated_at` is present and
+non-empty, so it's opt-in at the transport level — no existing caller
+of `update()` needed to change, and no new required field broke
+anything already relying on this route.
+
+**Precision note surfaced while proving this:** `updated_at` is
+second-precision (a plain `timestamps()` column) — a genuine two-tab
+race always has real human reaction time between two saves, but a fast
+automated check (test or curl script) can execute both requests inside
+the same wall-clock second, which would falsely show no conflict. The
+regression test uses `Carbon::setTestNow()` to force real separation;
+the live proof used an actual 2-second `sleep`. This is not a
+production gap — it reflects how the mechanism is genuinely meant to
+work.
+
+**Proven live:** real two-tab simulation — two real page loads capturing
+the same `expected_updated_at`, a real 2-second pause, Tab 1's real PUT
+succeeds, Tab 2's real PUT (same stale value) is refused with the exact
+warning message, and Tab 2's typed value is still shown on the
+redisplayed page for retry. Confirmed via direct DB read: Tab 1's save
+(`Saved By Real Tab One`) survived; Tab 2's attempted overwrite never
+landed.
+
+**Regression tests**, added across three existing files:
+`RentalApplicationAsyncUploadTest.php` (RA-01, 4 tests),
+`RentalApplicationInputPreservationTest.php` (RA-02, 3 tests),
+`RentalApplicationAgentControllerTest.php` (RA-02 agent side is covered
+by the input-preservation file; RA-03, 2 tests; RA-05, 3 tests, one
+using `Carbon::setTestNow()` with a `tearDown()` backstop so a failed
+assertion never leaks fake time into a later test). Full
+`tests/Feature/RentalApplications/` suite: 73 passed, 402 assertions,
+zero regressions.

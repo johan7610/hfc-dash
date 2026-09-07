@@ -64,6 +64,38 @@ class RentalApplication extends Model
      * MALFORMED value is rejected rather than allowed through to crash a
      * date/decimal cast at save() time (BUILD_STANDARD §2/§4).
      */
+    /**
+     * Every field validated as numeric/integer in fieldValidationRules()
+     * below — kept as one list so sanitizeNumericInput() can never drift
+     * out of sync with which fields actually need it.
+     */
+    public const NUMERIC_FIELDS = ['current_rental_amount', 'monthly_salary', 'adults', 'children'];
+
+    /**
+     * AT-392 — Johan, independent testing (cc5), RA-02: "a real person
+     * types 15,000 because that is how South Africans write money, and
+     * gets 'must be a number' with no explanation." Fixing the class, not
+     * the instance: EVERY numeric field on both forms, not just the two
+     * cc5 happened to hit. Strips thousand-separator commas, spaces
+     * (either as a separator or from "R 15 000"), and a leading "R"
+     * currency prefix before validation ever sees the value — a human
+     * writing money the way South Africans actually write it must never
+     * be told it's invalid.
+     */
+    public static function sanitizeNumericInput(array $input): array
+    {
+        foreach (self::NUMERIC_FIELDS as $field) {
+            if (isset($input[$field]) && is_string($input[$field]) && $input[$field] !== '') {
+                $value = trim($input[$field]);
+                $value = preg_replace('/^R\s*/i', '', $value);
+                $value = str_replace([',', ' '], '', $value);
+                $input[$field] = $value;
+            }
+        }
+
+        return $input;
+    }
+
     public static function fieldValidationRules(): array
     {
         return [

@@ -108,7 +108,24 @@ class RentalApplicationDocumentHighlightService
         $normalized = $this->normalizeForStorage($marksByPage);
         $flatCount = array_sum(array_map('count', $normalized));
 
-        $highlight = RentalApplicationDocumentHighlight::firstOrNew(['document_id' => $document->id]);
+        // RA-06, 2026-09-08 — `document_id` is uniquely constrained (one
+        // highlight-state row per document, ever — never two live rows for
+        // the same document). A plain firstOrNew() only queries through the
+        // SoftDeletes global scope, so it can never see a row that was
+        // previously soft-deleted (e.g. an admin "clear this document's
+        // marks" action, or a support cleanup) — it builds a NEW instance,
+        // and the later INSERT collides with the still-physically-present
+        // trashed row, raising a raw QueryException. Restoring (not scoping
+        // the index to exclude trashed rows) is correct here: a re-created
+        // row for the same document_id is always logically the SAME
+        // highlight-state record returning, never a distinct one — that is
+        // exactly what the unique constraint is encoding. Excluding trashed
+        // rows from the index would let two rows exist for one document,
+        // which defeats the constraint's purpose instead of fixing the bug.
+        $highlight = RentalApplicationDocumentHighlight::withTrashed()->firstOrNew(['document_id' => $document->id]);
+        if ($highlight->trashed()) {
+            $highlight->restore();
+        }
         $highlight->agency_id = $agencyId;
         $highlight->updated_by_user_id = $userId;
         $highlight->marks_json = $normalized;
