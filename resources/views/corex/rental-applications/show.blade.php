@@ -110,15 +110,21 @@
             <div>
                 <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Set status to</label>
                 <select name="status" class="rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">
-                    <option value="returned" disabled @selected($rentalApplication->status === 'returned')>Returned (awaiting review)</option>
+                    <option value="returned" disabled @selected(old('status', $rentalApplication->status) === 'returned')>Returned (awaiting review)</option>
                     @foreach(\App\Models\RentalApplication::AGENT_SETTABLE_STATUSES as $s)
-                        <option value="{{ $s }}" @selected($rentalApplication->status === $s)>{{ str_replace('_', ' ', ucfirst($s)) }}</option>
+                        <option value="{{ $s }}" @selected(old('status', $rentalApplication->status) === $s)>{{ str_replace('_', ' ', ucfirst($s)) }}</option>
                     @endforeach
                 </select>
+                @error('status')
+                    <p class="text-xs mt-1" style="color: var(--ds-red, #dc2626);">{{ $message }}</p>
+                @enderror
             </div>
             <div class="flex-1 min-w-[200px]">
                 <label class="block text-xs font-medium mb-1" style="color: var(--text-secondary);">Note (optional)</label>
-                <input type="text" name="note" maxlength="1000" placeholder="Reason for this decision..." class="w-full rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">
+                <input type="text" name="note" value="{{ old('note') }}" maxlength="1000" placeholder="Reason for this decision..." class="w-full rounded-md px-3 py-2 text-sm" style="border: 1px solid var(--border);">
+                @error('note')
+                    <p class="text-xs mt-1" style="color: var(--ds-red, #dc2626);">{{ $message }}</p>
+                @enderror
             </div>
             <button type="submit" class="corex-btn-primary text-xs">Update Status</button>
         </form>

@@ -128,9 +128,22 @@ class RentalApplicationController extends Controller
         return view('corex.rental-applications.returned', compact('applications'));
     }
 
+    /**
+     * AT-392 — Johan, QA1: "no user action... may EVER discard typed
+     * input." A failed store() (e.g. a stale contact/property id) redirects
+     * back here with old() flashed — but the contact/property picker is
+     * Alpine state seeded from nothing, so the agent's search-and-select
+     * work was silently wiped even though old() had the ids all along.
+     * Resolved server-side (through the same agency-scoped models, so a
+     * stale/foreign id just resolves to null rather than leaking anything)
+     * and handed to the view to seed the Alpine component's initial state.
+     */
     public function create(): View
     {
-        return view('corex.rental-applications.create');
+        $oldContact = old('contact_id') ? Contact::find(old('contact_id')) : null;
+        $oldProperty = old('property_id') ? Property::find(old('property_id')) : null;
+
+        return view('corex.rental-applications.create', compact('oldContact', 'oldProperty'));
     }
 
     /**
@@ -282,7 +295,7 @@ class RentalApplicationController extends Controller
         ]);
 
         if (! in_array($rentalApplication->status, RentalApplication::POST_RETURN_STATUSES, true)) {
-            return back()->with('error', "This application hasn't been submitted yet — there's nothing to assess.");
+            return back()->withInput()->with('error', "This application hasn't been submitted yet — there's nothing to assess.");
         }
 
         $from = $rentalApplication->status;

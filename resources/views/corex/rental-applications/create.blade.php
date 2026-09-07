@@ -2,7 +2,12 @@
 @extends('layouts.corex')
 
 @section('corex-content')
-<div class="w-full space-y-5" x-data="rentalApplicationCreate()">
+<div class="w-full space-y-5" x-data="rentalApplicationCreate({{ Js::from([
+    'contactId' => old('contact_id', ''),
+    'contactName' => $oldContact ? trim($oldContact->first_name . ' ' . $oldContact->last_name) : '',
+    'propertyId' => old('property_id', ''),
+    'propertyLabel' => $oldProperty ? ($oldProperty->title ?: trim($oldProperty->address . ', ' . $oldProperty->suburb, ', ')) : '',
+]) }})">
     <div class="rounded-md px-6 py-5 corex-page-banner">
         <h1 class="text-base font-bold leading-tight" style="color: var(--text-primary);">New Rental Application</h1>
         <p class="text-xs" style="color: var(--text-muted);">Pick a contact — everything else is optional and can be filled in later or by the applicant themselves.</p>
@@ -56,10 +61,11 @@
 </div>
 
 <script>
-function rentalApplicationCreate() {
+function rentalApplicationCreate(old) {
+    old = old || {};
     return {
-        contactQuery: '', contactResults: [], selectedContactId: '', selectedContactName: '',
-        propertyQuery: '', propertyResults: [], selectedPropertyId: '', selectedPropertyLabel: '',
+        contactQuery: old.contactName || '', contactResults: [], selectedContactId: old.contactId || '', selectedContactName: old.contactName || '',
+        propertyQuery: old.propertyLabel || '', propertyResults: [], selectedPropertyId: old.propertyId || '', selectedPropertyLabel: old.propertyLabel || '',
         async searchContacts() {
             if (this.contactQuery.length < 2) { this.contactResults = []; return; }
             const res = await fetch('{{ route('corex.properties.contacts.search-global') }}?q=' + encodeURIComponent(this.contactQuery));

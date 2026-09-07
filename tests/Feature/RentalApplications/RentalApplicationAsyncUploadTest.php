@@ -159,4 +159,41 @@ final class RentalApplicationAsyncUploadTest extends TestCase
         $this->assertNotNull(\App\Models\Document::withTrashed()->find($newDocId)->deleted_at);
         $this->assertDatabaseHas('documents', ['id' => $newDocId]); // still exists — soft delete only
     }
+
+    // ── already-submitted.blade.php — found during the input-loss sweep:
+    // this page still used the OLD synchronous form-POST-and-reload upload,
+    // the exact mechanism the main show.blade.php form was already fixed
+    // away from. Same fix, same reasoning: a partial multi-file failure
+    // must never force reselecting files that already succeeded. ─────────
+
+    public function test_the_already_submitted_page_renders_and_uploads_via_the_json_endpoint_with_no_redirect(): void
+    {
+        $application = $this->application(['status' => 'returned', 'submitted_at' => now()]);
+
+        $show = $this->get(route('rental-applications.public.show', $application->token));
+        $show->assertOk();
+        $show->assertSee('Application already received');
+        $show->assertDontSee('enctype="multipart/form-data"', false); // no more plain sync upload form
+
+        $response = $this->postJson(route('rental-applications.public.documents', $application->token), [
+            'supporting_files' => [UploadedFile::fake()->create('bank-statement.pdf', 100, 'application/pdf')],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonStructure(['documents' => [['id', 'name', 'view_url']]]);
+        $this->assertSame(1, $application->refresh()->documents()->count());
+    }
+
+    public function test_the_already_submitted_page_lists_existing_documents_as_locked(): void
+    {
+        $application = $this->application(['status' => 'returned', 'submitted_at' => now()]);
+        $this->postJson(route('rental-applications.public.documents', $application->token), [
+            'supporting_files' => [UploadedFile::fake()->create('id-copy.pdf', 100, 'application/pdf')],
+        ]);
+
+        $show = $this->get(route('rental-applications.public.show', $application->token));
+        $show->assertOk();
+        $show->assertSee('id-copy.pdf');
+        $show->assertSee('Submitted — locked');
+    }
 }

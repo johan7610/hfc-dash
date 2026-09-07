@@ -7,7 +7,17 @@
     Produces the same payload shape the backend expects either way:
     a `data:image/png;base64,...` string in the named hidden input.
 --}}
-@php $canvasId = 'sig-canvas-' . $field; @endphp
+@php $canvasId = 'sig-canvas-' . $field; $oldSignature = old($field); @endphp
+{{--
+    Johan, QA1 — "no user action may EVER discard typed input." A
+    validation failure on an UNRELATED field used to wipe both signature
+    canvases on redisplay: nothing restored the drawing, and the hidden
+    input carried no old() either, so a re-drawn signature was needed even
+    though the applicant had already signed. old() now seeds the hidden
+    input (so the DATA survives a resubmit even untouched) and, if present,
+    is drawn back onto the canvas on load so the applicant sees their own
+    signature still there, not a blank pad.
+--}}
 <div class="border-2 border-slate-300 rounded-xl bg-white overflow-hidden" style="touch-action:none;">
     <canvas id="{{ $canvasId }}" width="600" height="150" class="w-full block" style="height:120px; cursor:crosshair;"></canvas>
 </div>
@@ -31,6 +41,13 @@
         ctx.lineWidth = 2;
         ctx.lineCap = 'round';
         ctx.strokeStyle = '#1a365d';
+
+        const oldSignature = @js($oldSignature ?: '');
+        if (oldSignature) {
+            const img = new Image();
+            img.onload = () => ctx.drawImage(img, 0, 0, canvas.clientWidth, canvas.clientHeight);
+            img.src = oldSignature;
+        }
 
         let drawing = false;
 
