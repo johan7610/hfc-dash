@@ -350,4 +350,111 @@ final class RentalApplicationAgentControllerTest extends TestCase
         $this->assertSame('business_owner_personal_account', $app->employment_type);
         $this->assertSame(3, $app->adults);
     }
+
+    // ── Defect 1 — Johan, QA1: "have not even sent anything, yet top left
+    // shows sent?" The column defaulted to 'sent' on insert; there was no
+    // status value at all for "created, not yet sent." ───────────────────
+
+    public function test_a_brand_new_application_is_draft_not_sent(): void
+    {
+        $contact = Contact::create([
+            'agency_id' => $this->agency->id, 'branch_id' => $this->branch->id,
+            'first_name' => 'No', 'last_name' => 'Email', 'email' => null,
+        ]);
+
+        $response = $this->actingAs($this->agent)->post(route('corex.rental-applications.store'), [
+            'contact_id' => $contact->id,
+        ]);
+
+        $app = RentalApplication::where('contact_id', $contact->id)->latest('id')->first();
+        $response->assertRedirect(route('corex.rental-applications.show', $app));
+
+        $this->assertSame('draft', $app->status, 'A newly created application must never claim to be sent.');
+        $this->assertNotNull($app->token, 'The token/link must exist from creation so it can be shared manually even before an email is added.');
+
+        $show = $this->actingAs($this->agent)->get(route('corex.rental-applications.show', $app));
+        $show->assertSee('draft');
+        $show->assertDontSee('>sent<', false);
+    }
+
+    // ── Defect 2 — "before clicking send - no email in mailbox arrived?"
+    // Confirmed: correct behaviour when nothing was ever sent. This locks
+    // in the OTHER half — a genuine send attempt with no email on record
+    // must be refused server-side (never trust the disabled button alone)
+    // and must never claim the application was sent. ─────────────────────
+
+    public function test_send_is_refused_server_side_without_a_saved_email(): void
+    {
+        Mail::fake();
+        $noEmailContact = Contact::create([
+            'agency_id' => $this->agency->id, 'branch_id' => $this->branch->id,
+            'first_name' => 'No', 'last_name' => 'Email', 'email' => null,
+        ]);
+        $app = $this->application($noEmailContact, ['status' => 'draft']);
+
+        $response = $this->actingAs($this->agent)->post(route('corex.rental-applications.send', $app));
+
+        $response->assertRedirect(route('corex.rental-applications.show', $app));
+        $response->assertSessionHas('error');
+        Mail::assertNothingSent();
+
+        $app->refresh();
+        $this->assertSame('draft', $app->status, 'A refused send must never flip status to sent.');
+    }
+
+    // ── Defect 3 — "i enter the email, hit send and it goes - no email
+    // present and resets the form because of bad design." Structural fix:
+    // Send requires an email already ON RECORD (Save must happen first),
+    // so there is no path where clicking Send can discard an unsaved typed
+    // value — proven end to end: add email, save, THEN send succeeds, and
+    // status only becomes 'sent' once mail genuinely goes. ───────────────
+
+    public function test_full_send_flow_only_marks_sent_after_mail_actually_leaves(): void
+    {
+        Mail::fake();
+        $noEmailContact = Contact::create([
+            'agency_id' => $this->agency->id, 'branch_id' => $this->branch->id,
+            'first_name' => 'No', 'last_name' => 'Email', 'email' => null,
+        ]);
+        $app = $this->application($noEmailContact, ['status' => 'draft']);
+
+        // Send blocked before the email is saved.
+        $this->actingAs($this->agent)->post(route('corex.rental-applications.send', $app))
+            ->assertSessionHas('error');
+        Mail::assertNothingSent();
+        $this->assertSame('draft', $app->fresh()->status);
+
+        // Save the email (the header's Save button, same update() route).
+        $this->actingAs($this->agent)->put(route('corex.rental-applications.update', $app), [
+            'email' => 'now-has-email@example.com',
+        ])->assertRedirect(route('corex.rental-applications.show', $app));
+
+        $this->assertSame('now-has-email@example.com', $app->fresh()->email);
+        $this->assertSame('draft', $app->fresh()->status, 'Saving alone must never mark the application sent.');
+
+        // Now Send succeeds.
+        $this->actingAs($this->agent)->post(route('corex.rental-applications.send', $app))
+            ->assertSessionHas('success', fn ($msg) => str_contains($msg, 'now-has-email@example.com'));
+
+        Mail::assertSent(RentalApplicationInviteMail::class, fn ($mail) => $mail->hasTo('now-has-email@example.com'));
+        $this->assertSame('sent', $app->fresh()->status);
+    }
+
+    // ── A resend of an application the applicant has already progressed
+    // past 'sent' must not regress its status. ────────────────────────────
+
+    public function test_resending_an_in_progress_application_does_not_regress_its_status(): void
+    {
+        Mail::fake();
+        $contact = Contact::create([
+            'agency_id' => $this->agency->id, 'branch_id' => $this->branch->id,
+            'first_name' => 'Has', 'last_name' => 'Email', 'email' => 'has-email@example.com',
+        ]);
+        $app = $this->application($contact, ['status' => 'in_progress', 'email' => 'has-email@example.com']);
+
+        $this->actingAs($this->agent)->post(route('corex.rental-applications.send', $app))
+            ->assertSessionHas('success');
+
+        $this->assertSame('in_progress', $app->fresh()->status, 'Resending must not reset an application that has already progressed.');
+    }
 }
